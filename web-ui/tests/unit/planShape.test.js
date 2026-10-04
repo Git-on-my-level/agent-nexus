@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   classifyPlanShape,
+  planComponents,
+  planTreeGeometry,
+  todayMarkerIndex,
   criticalPath,
   DEFAULT_STALLED_DAYS,
   effectiveStepStatus,
@@ -147,6 +150,15 @@ describe("classifyPlanShape", () => {
 
   it("treats an empty plan as a chain", () => {
     expect(classifyPlanShape([])).toBe("chain");
+  });
+
+  it("classifies a dependency loop as a dag, not a chain beside the rest", () => {
+    // Each step in a two-step loop has exactly one dependency, so the degree
+    // test alone would call this a chain and the loop would never be parked.
+    const { steps } = normalizePlanSteps(
+      plan([step("ok"), step("a", ["b"]), step("b", ["a"])]),
+    );
+    expect(classifyPlanShape(steps)).toBe("dag");
   });
 });
 
@@ -493,5 +505,160 @@ describe("planLayout", () => {
       progress: { done: 0, total: 0 },
       next: [],
     });
+  });
+});
+
+describe("planComponents", () => {
+  it("groups linked steps and leaves separate runs apart", () => {
+    const { steps } = normalizePlanSteps(
+      plan([step("a"), step("b", ["a"]), step("x"), step("y", ["x"])]),
+    );
+    expect(planComponents(steps)).toEqual([
+      ["a", "b"],
+      ["x", "y"],
+    ]);
+  });
+
+  it("treats a merge as one component", () => {
+    const { steps } = normalizePlanSteps(
+      plan([step("a"), step("b"), step("c", ["a", "b"])]),
+    );
+    expect(planComponents(steps)).toHaveLength(1);
+  });
+
+  it("gives each unlinked step its own group", () => {
+    const { steps } = normalizePlanSteps(plan([step("a"), step("b")]));
+    expect(planComponents(steps)).toEqual([["a"], ["b"]]);
+  });
+});
+
+describe("planLayout lanes", () => {
+  it("reports the lanes alongside the shape", () => {
+    const layout = planLayout(
+      plan([step("a"), step("b", ["a"]), step("x"), step("y", ["x"])]),
+    );
+    expect(layout.shape).toBe("lanes");
+    expect(layout.lanes).toEqual([
+      ["a", "b"],
+      ["x", "y"],
+    ]);
+  });
+});
+
+describe("planTreeGeometry", () => {
+  const branching = () =>
+    planLayout(plan([step("a"), step("b", ["a"]), step("c", ["a"])]));
+
+  it("places a node from its layer and row with nothing measured", () => {
+    const geometry = planTreeGeometry(branching(), {
+      nodeWidth: 100,
+      nodeHeight: 50,
+      gapX: 40,
+      gapY: 10,
+    });
+    const at = (id) => geometry.nodes.find((node) => node.id === id);
+    expect(at("a")).toMatchObject({ x: 0, y: 0, width: 100, height: 50 });
+    expect(at("b")).toMatchObject({ x: 140, y: 0 });
+    expect(at("c")).toMatchObject({ x: 140, y: 60 });
+  });
+
+  it("sizes the canvas to the widest layer and the longest chain", () => {
+    const geometry = planTreeGeometry(branching(), {
+      nodeWidth: 100,
+      nodeHeight: 50,
+      gapX: 40,
+      gapY: 10,
+    });
+    // Two columns, two rows.
+    expect(geometry.width).toBe(240);
+    expect(geometry.height).toBe(110);
+  });
+
+  it("is deterministic for the same plan", () => {
+    expect(planTreeGeometry(branching())).toEqual(
+      planTreeGeometry(branching()),
+    );
+  });
+
+  it("draws an edge between the boxes it joins and marks the critical one", () => {
+    const geometry = planTreeGeometry(branching(), {
+      nodeWidth: 100,
+      nodeHeight: 50,
+      gapX: 40,
+      gapY: 10,
+    });
+    const edge = geometry.edges.find((entry) => entry.to === "b");
+    // Leaves a's right edge at its vertical centre and enters b's left edge.
+    expect(edge.path.startsWith("M 100 25 C")).toBe(true);
+    expect(edge.path.endsWith("140 25")).toBe(true);
+    expect(edge.onCriticalPath).toBe(true);
+    expect(
+      geometry.edges.find((entry) => entry.to === "c").onCriticalPath,
+    ).toBe(false);
+  });
+
+  it("parks cyclic steps in a column of their own", () => {
+    const layout = planLayout(
+      plan([step("ok"), step("a", ["b"]), step("b", ["a"])]),
+    );
+    const geometry = planTreeGeometry(layout, {
+      nodeWidth: 100,
+      nodeHeight: 50,
+      gapX: 40,
+      gapY: 10,
+    });
+    const at = (id) => geometry.nodes.find((node) => node.id === id);
+    expect(at("ok").x).toBe(0);
+    expect(at("a").x).toBe(140);
+    expect(at("b").x).toBe(140);
+    expect(geometry.width).toBe(240);
+  });
+
+  it("returns an empty canvas for a plan with no steps", () => {
+    expect(planTreeGeometry(planLayout(null))).toMatchObject({
+      width: 0,
+      height: 0,
+      nodes: [],
+      edges: [],
+    });
+  });
+});
+
+describe("todayMarkerIndex", () => {
+  const now = Date.parse("2026-10-04T12:00:00Z");
+
+  it("marks before the first step still to come", () => {
+    const nodes = [
+      { id: "a", due: "2026-10-01" },
+      { id: "b", due: "2026-10-09" },
+      { id: "c", due: "2026-10-20" },
+    ];
+    expect(todayMarkerIndex(nodes, now)).toBe(1);
+  });
+
+  it("marks at the end when every dated step has passed", () => {
+    const nodes = [
+      { id: "a", due: "2026-09-01" },
+      { id: "b", due: "2026-09-20" },
+    ];
+    expect(todayMarkerIndex(nodes, now)).toBe(2);
+  });
+
+  it("marks at the start when nothing is due yet", () => {
+    expect(todayMarkerIndex([{ id: "a", due: "2026-12-01" }], now)).toBe(0);
+  });
+
+  it("gives no marker when no step carries a date", () => {
+    expect(todayMarkerIndex([{ id: "a" }, { id: "b", due: "" }], now)).toBe(-1);
+    expect(todayMarkerIndex([], now)).toBe(-1);
+  });
+
+  it("ignores undated steps when deciding where today falls", () => {
+    const nodes = [
+      { id: "a", due: "2026-10-01" },
+      { id: "undated" },
+      { id: "c", due: "2026-10-20" },
+    ];
+    expect(todayMarkerIndex(nodes, now)).toBe(2);
   });
 });

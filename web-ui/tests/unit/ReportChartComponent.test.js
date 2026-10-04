@@ -25,9 +25,19 @@ let instance;
 let observed;
 let disconnected;
 let resizeCallback;
+let handlers;
 beforeEach(() => {
   vi.clearAllMocks();
-  instance = { setOption: vi.fn(), resize: vi.fn(), dispose: vi.fn() };
+  handlers = {};
+  instance = {
+    setOption: vi.fn(),
+    resize: vi.fn(),
+    dispose: vi.fn(),
+    dispatchAction: vi.fn(),
+    on: vi.fn((event, handler) => {
+      handlers[event] = handler;
+    }),
+  };
   createReportChart.mockReturnValue(instance);
   observed = vi.fn();
   disconnected = vi.fn();
@@ -121,5 +131,241 @@ describe("ReportChart", () => {
     ).toBeTruthy();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(createReportChart).not.toHaveBeenCalled();
+  });
+});
+
+describe("ReportChart legend and tooltip", () => {
+  /** Two series, so the legend is not just repeating the panel title. */
+  const twoSeries = () => ({
+    option: {
+      xAxis: { type: "category", data: ["Mon", "Tue"] },
+      yAxis: { type: "value" },
+      series: [
+        { type: "line", name: "Opened", data: [2, 6] },
+        { type: "line", name: "Closed", data: [1, 3] },
+      ],
+    },
+  });
+
+  const mount = (chartData = twoSeries()) =>
+    render(ReportChart, { data: chartData, title: "Flow" });
+
+  it("renders a wrapping legend of real buttons, one per series", async () => {
+    const { container } = mount();
+    await waitFor(() => expect(instance.setOption).toHaveBeenCalledOnce());
+    const items = container.querySelectorAll(".chart-legend__item");
+    expect(items).toHaveLength(2);
+    expect(items[0].tagName).toBe("BUTTON");
+    expect(items[0].textContent).toContain("Opened");
+    expect(items[1].textContent).toContain("Closed");
+    // Wrapping, not paginating: there is no pager control to find.
+    expect(container.querySelector(".chart-legend")).not.toBeNull();
+  });
+
+  it("does not render a legend that would only repeat the panel title", async () => {
+    const single = twoSeries();
+    single.option.series = [single.option.series[0]];
+    const { container } = mount(single);
+    await waitFor(() => expect(instance.setOption).toHaveBeenCalledOnce());
+    expect(container.querySelector(".chart-legend")).toBeNull();
+  });
+
+  it("pins a series on click and unpins it on a second click", async () => {
+    const { container } = mount();
+    await waitFor(() => expect(instance.setOption).toHaveBeenCalledOnce());
+    const [opened] = container.querySelectorAll(".chart-legend__item");
+
+    expect(opened.getAttribute("aria-pressed")).toBe("false");
+    await fireEvent.click(opened);
+    expect(opened.getAttribute("aria-pressed")).toBe("true");
+    await waitFor(() =>
+      expect(instance.dispatchAction).toHaveBeenCalledWith({
+        type: "highlight",
+        seriesIndex: 0,
+      }),
+    );
+    // The other series is muted, not hidden: no legendToggleSelect anywhere.
+    expect(instance.dispatchAction).toHaveBeenCalledWith({
+      type: "downplay",
+      seriesIndex: 1,
+    });
+
+    instance.dispatchAction.mockClear();
+    await fireEvent.click(opened);
+    expect(opened.getAttribute("aria-pressed")).toBe("false");
+    await waitFor(() =>
+      expect(instance.dispatchAction).toHaveBeenCalledWith({
+        type: "downplay",
+        seriesIndex: 0,
+      }),
+    );
+  });
+
+  it("never hides a series the way the built-in legend did", async () => {
+    const { container } = mount();
+    await waitFor(() => expect(instance.setOption).toHaveBeenCalledOnce());
+    await fireEvent.click(container.querySelector(".chart-legend__item"));
+    await waitFor(() => expect(instance.dispatchAction).toHaveBeenCalled());
+    for (const [action] of instance.dispatchAction.mock.calls) {
+      expect(action.type).not.toContain("legend");
+    }
+  });
+
+  it("highlights on hover and on keyboard focus", async () => {
+    const { container } = mount();
+    await waitFor(() => expect(instance.setOption).toHaveBeenCalledOnce());
+    const [, closed] = container.querySelectorAll(".chart-legend__item");
+
+    instance.dispatchAction.mockClear();
+    await fireEvent.mouseEnter(closed);
+    await waitFor(() =>
+      expect(instance.dispatchAction).toHaveBeenCalledWith({
+        type: "highlight",
+        seriesIndex: 1,
+      }),
+    );
+
+    // Leaving drops the highlight, so the chart is not left emphasised.
+    instance.dispatchAction.mockClear();
+    await fireEvent.mouseLeave(closed);
+    await waitFor(() =>
+      expect(instance.dispatchAction).toHaveBeenCalledWith({
+        type: "downplay",
+        seriesIndex: 1,
+      }),
+    );
+
+    instance.dispatchAction.mockClear();
+    await fireEvent.focus(closed);
+    await waitFor(() =>
+      expect(instance.dispatchAction).toHaveBeenCalledWith({
+        type: "highlight",
+        seriesIndex: 1,
+      }),
+    );
+  });
+
+  it("lists pie slices rather than the one pie series", async () => {
+    const { container } = mount({
+      option: {
+        series: [
+          {
+            type: "pie",
+            name: "Share",
+            radius: ["40%", "65%"],
+            data: [
+              { name: "Done", value: 3 },
+              { name: "Open", value: 2 },
+            ],
+          },
+        ],
+      },
+    });
+    await waitFor(() => expect(instance.setOption).toHaveBeenCalledOnce());
+    expect(
+      [...container.querySelectorAll(".chart-legend__name")].map(
+        (node) => node.textContent,
+      ),
+    ).toEqual(["Done", "Open"]);
+  });
+
+  it("gives ECharts a tooltip formatter that leads with the hovered series", async () => {
+    mount();
+    await waitFor(() => expect(instance.setOption).toHaveBeenCalledOnce());
+    const { formatter } = instance.setOption.mock.calls[0][0].tooltip;
+    expect(typeof formatter).toBe("function");
+
+    // Hovering the second series makes it the lead, over the larger first one.
+    handlers.mouseover({ seriesIndex: 1 });
+    const element = formatter([
+      {
+        seriesIndex: 0,
+        seriesName: "Opened",
+        value: 6,
+        color: "#111111",
+        axisValueLabel: "Tue",
+        dataIndex: 1,
+      },
+      {
+        seriesIndex: 1,
+        seriesName: "Closed",
+        value: 3,
+        color: "#222222",
+        axisValueLabel: "Tue",
+        dataIndex: 1,
+      },
+    ]);
+
+    const lead = element.querySelector(".report-tooltip__lead");
+    expect(lead.textContent).toContain("Closed");
+    expect(lead.textContent).toContain("3");
+    expect(lead.textContent).toContain("33% of total");
+    // Previous point in the same series is 1, so +2 on a base of 1.
+    expect(element.querySelector(".report-tooltip__delta").textContent).toBe(
+      "+2 (+200%) vs previous",
+    );
+    expect(
+      element.querySelector(".report-tooltip__rest").textContent,
+    ).toContain("Opened");
+  });
+
+  it("builds tooltip text as text, never as markup", async () => {
+    mount({
+      option: {
+        xAxis: { type: "category", data: ["Mon"] },
+        yAxis: { type: "value" },
+        series: [
+          { type: "line", name: "<img src=x onerror=alert(1)>", data: [1] },
+          { type: "line", name: "Closed", data: [2] },
+        ],
+      },
+    });
+    await waitFor(() => expect(instance.setOption).toHaveBeenCalledOnce());
+    const { formatter } = instance.setOption.mock.calls[0][0].tooltip;
+    const element = formatter([
+      {
+        seriesIndex: 0,
+        seriesName: "<img src=x onerror=alert(1)>",
+        value: 1,
+        color: "#111111",
+        axisValueLabel: "Mon",
+        dataIndex: 0,
+      },
+    ]);
+    // The name survives as readable text and creates no element.
+    expect(element.querySelector(".report-tooltip__name").textContent).toBe(
+      "<img src=x onerror=alert(1)>",
+    );
+    expect(element.querySelector("img")).toBeNull();
+  });
+
+  it("drops the hovered series when the pointer leaves the chart", async () => {
+    mount();
+    await waitFor(() => expect(instance.setOption).toHaveBeenCalledOnce());
+    const { formatter } = instance.setOption.mock.calls[0][0].tooltip;
+    handlers.mouseover({ seriesIndex: 1 });
+    handlers.globalout();
+    const element = formatter([
+      {
+        seriesIndex: 0,
+        seriesName: "Opened",
+        value: 6,
+        color: "#111111",
+        axisValueLabel: "Tue",
+        dataIndex: 1,
+      },
+      {
+        seriesIndex: 1,
+        seriesName: "Closed",
+        value: 3,
+        color: "#222222",
+        axisValueLabel: "Tue",
+        dataIndex: 1,
+      },
+    ]);
+    // With no hover, the largest value at that point leads.
+    expect(
+      element.querySelector(".report-tooltip__lead").textContent,
+    ).toContain("Opened");
   });
 });

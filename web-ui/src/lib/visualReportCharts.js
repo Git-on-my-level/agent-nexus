@@ -29,17 +29,22 @@ export const REPORT_CHART_LIMITS = Object.freeze({
 /**
  * Series colours, per palette and per theme.
  *
- * Two rules shape these ramps, and the previous single-ramp set broke both:
+ * Two rules shape these ramps:
  *
  * 1. **Lightness, not hue alone.** Every ramp descends in relative luminance,
  *    so series stay apart in greyscale, for a colour-blind reader, and in a
- *    printout. The old ramps put two series 1.01:1 apart — the same lightness
- *    in different hues, which is no separation at all.
- * 2. **Per theme.** Chart chrome already follows the theme tokens, but the
- *    series colours were fixed pastels that sat at 1.44:1 against a light
- *    background. Each palette now carries a ramp for each surface, and every
- *    colour clears 3:1 against its own background (WCAG 1.4.11, the bar for
- *    graphical marks).
+ *    printout. This is the live fix: the old ramps put two series 1.01:1 apart
+ *    — the same lightness in different hues, which is no separation at all.
+ * 2. **Per surface.** Every colour clears 3:1 against the background it is
+ *    drawn on (WCAG 1.4.11, the bar for graphical marks).
+ *
+ * The second rule is groundwork, not a fix for something a reader sees today:
+ * `app.css` currently defines one dark token set and the app has no light
+ * theme, so only the dark ramps are ever drawn. The old single ramp would have
+ * sat at ~1.44:1 on a light surface, which is the bug a light theme would have
+ * shipped with. `reportSeriesColors` picks from the actual background, so the
+ * day a light theme lands the series colours follow it instead of needing this
+ * fixed a second time.
  *
  * The four names are contract — `contracts/visualreport/chart.go` validates
  * them — so the names stay fixed and only the values here change. Each name

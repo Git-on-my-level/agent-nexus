@@ -181,8 +181,11 @@ export function layerSteps(steps) {
   };
 }
 
-/** Undirected connected components over `after` edges, in declaration order. */
-function connectedComponents(steps) {
+/**
+ * Undirected connected components over `after` edges, in declaration order.
+ * These are the lanes: separate runs of work with nothing joining them.
+ */
+export function planComponents(steps) {
   const neighbours = new Map(steps.map((step) => [step.id, new Set()]));
   for (const step of steps) {
     for (const dependency of step.after) {
@@ -224,6 +227,12 @@ function connectedComponents(steps) {
  * far more cheaply than a lane per step. `lanes` therefore needs at least one
  * component that actually links two steps together.
  *
+ * A plan containing a dependency loop is a `dag`. Every step in a loop has a
+ * single dependency, so the degree test alone would read a two-step loop as a
+ * chain beside the rest of the plan — and the tree is the only view that knows
+ * how to park steps it cannot order, so sending a loop anywhere else loses
+ * them.
+ *
  * @param {Array<{id: string, after: string[]}>} steps
  * @returns {"chain"|"dag"|"lanes"}
  */
@@ -243,7 +252,8 @@ export function classifyPlanShape(steps) {
   }
 
   if (edges === 0) return "chain";
-  const components = connectedComponents(steps);
+  if (layerSteps(steps).cyclic.length) return "dag";
+  const components = planComponents(steps);
   return components.length > 1 ? "lanes" : "chain";
 }
 
@@ -430,9 +440,102 @@ export function planLayout(plan, options = {}) {
     edges,
     layers,
     cyclic,
+    lanes: planComponents(steps),
     criticalPath: path,
     progress: { done, total: steps.length },
     next,
     issues,
   };
+}
+
+/**
+ * Pixel geometry for the tech tree.
+ *
+ * Node boxes are a fixed size and the gaps are constants, so positions come
+ * straight from each node's layer and row with nothing measured. That keeps the
+ * layout deterministic — the same plan always draws the same diagram, and the
+ * geometry can be unit-tested without a browser — and it is why the tree needs
+ * no layout library.
+ *
+ * Coordinates are a plain left-to-right grid; the caller scrolls horizontally
+ * when `width` exceeds the viewport.
+ *
+ * @param {ReturnType<typeof planLayout>} layout
+ * @param {{nodeWidth?: number, nodeHeight?: number, gapX?: number, gapY?: number}} [options]
+ */
+export function planTreeGeometry(layout, options = {}) {
+  const nodeWidth = options.nodeWidth ?? 168;
+  const nodeHeight = options.nodeHeight ?? 52;
+  const gapX = options.gapX ?? 48;
+  const gapY = options.gapY ?? 14;
+
+  const nodes = (layout?.nodes ?? []).map((node) => ({
+    id: node.id,
+    x: node.layer * (nodeWidth + gapX),
+    y: node.row * (nodeHeight + gapY),
+    width: nodeWidth,
+    height: nodeHeight,
+    onCriticalPath: Boolean(node.onCriticalPath),
+  }));
+  const positionById = new Map(nodes.map((node) => [node.id, node]));
+
+  const edges = [];
+  for (const edge of layout?.edges ?? []) {
+    const from = positionById.get(edge.from);
+    const to = positionById.get(edge.to);
+    if (!from || !to) continue;
+    const startX = from.x + from.width;
+    const startY = from.y + from.height / 2;
+    const endX = to.x;
+    const endY = to.y + to.height / 2;
+    // A horizontal-tangent cubic: the control points sit halfway between the
+    // boxes, so edges leave and enter level with the node they touch.
+    const bend = Math.max(12, (endX - startX) / 2);
+    edges.push({
+      from: edge.from,
+      to: edge.to,
+      onCriticalPath: Boolean(edge.onCriticalPath),
+      path: `M ${startX} ${startY} C ${startX + bend} ${startY}, ${endX - bend} ${endY}, ${endX} ${endY}`,
+    });
+  }
+
+  const layerCount = layout?.layers?.length ?? 0;
+  const widestLayer = (layout?.layers ?? []).reduce(
+    (widest, layer) => Math.max(widest, layer.length),
+    0,
+  );
+  // Cyclic steps are parked in one extra column after the layered ones.
+  const columns = layerCount + (layout?.cyclic?.length ? 1 : 0);
+  const rows = Math.max(widestLayer, layout?.cyclic?.length ?? 0);
+
+  return {
+    width: columns > 0 ? columns * nodeWidth + (columns - 1) * gapX : 0,
+    height: rows > 0 ? rows * nodeHeight + (rows - 1) * gapY : 0,
+    nodes,
+    edges,
+  };
+}
+
+/**
+ * Where the today marker belongs in a timeline: before the first step whose due
+ * date has not passed. A plan with no dates gets no marker rather than one
+ * parked arbitrarily.
+ *
+ * @param {Array<{id: string, due?: string}>} orderedNodes
+ * @param {number} [now]
+ * @returns {number} index to insert before, or -1 for no marker
+ */
+export function todayMarkerIndex(orderedNodes = [], now = Date.now()) {
+  const dated = orderedNodes.filter((node) => {
+    const due = Date.parse(node?.due ?? "");
+    return Number.isFinite(due);
+  });
+  if (!dated.length) return -1;
+
+  for (let index = 0; index < orderedNodes.length; index += 1) {
+    const due = Date.parse(orderedNodes[index]?.due ?? "");
+    if (Number.isFinite(due) && due >= Number(now)) return index;
+  }
+  // Every dated step is in the past, so today sits after all of them.
+  return orderedNodes.length;
 }
