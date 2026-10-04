@@ -334,13 +334,22 @@ func (c Catalog) MatchingRule(cwd, home string) (string, string, error) {
 	}
 	rules := []rule{}
 	cwd = canonicalPath(cwd)
+	insensitive := caseInsensitivePath(cwd)
+	matchCWD := cwd
+	if insensitive {
+		matchCWD = strings.ToLower(matchCWD)
+	}
 	for raw := range c.File.Rules {
 		normalized, err := NormalizeGlob(raw, home)
 		if err != nil {
 			return "", "", err
 		}
 		normalized = canonicalGlob(normalized)
-		if !matchSegments(strings.Split(normalized, string(filepath.Separator)), strings.Split(filepath.Clean(cwd), string(filepath.Separator))) {
+		matchPattern := normalized
+		if insensitive {
+			matchPattern = strings.ToLower(matchPattern)
+		}
+		if !matchSegments(strings.Split(matchPattern, string(filepath.Separator)), strings.Split(matchCWD, string(filepath.Separator))) {
 			continue
 		}
 		prefix := len(normalized)

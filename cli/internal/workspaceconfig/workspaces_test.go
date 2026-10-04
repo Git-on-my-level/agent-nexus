@@ -183,3 +183,44 @@ func TestDirectoryRulesRespectFilesystemCaseSemantics(t *testing.T) {
 		t.Log("verified case-sensitive filesystem distinction")
 	}
 }
+
+func TestDirectoryRulesRespectCaseAfterWildcards(t *testing.T) {
+	root := t.TempDir()
+	actual := filepath.Join(root, "work", "CamelCase")
+	if err := os.MkdirAll(filepath.Join(actual, "Child"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	actualInfo, err := os.Stat(actual)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lowerInfo, lowerErr := os.Stat(filepath.Join(root, "work", "camelcase"))
+	insensitive := lowerErr == nil && os.SameFile(actualInfo, lowerInfo)
+	for _, pattern := range []string{
+		filepath.Join(root, "*", "camelcase", "**"), // Reported repro.
+		filepath.Join(root, "*", "camel*", "**"),
+		filepath.Join(root, "*", "[a-z]amel?ase", "**"),
+		filepath.Join(root, "**", "camelcase", "child"),
+		"~/work/*/child",
+	} {
+		t.Run(pattern, func(t *testing.T) {
+			c := Catalog{File: File{Default: "https://a.example", Rules: map[string]string{pattern: "https://b.example"}}}
+			base, source, err := c.Resolve(filepath.Join(actual, "Child"), root)
+			wantBase, wantSource := "https://a.example", "config:default"
+			if insensitive {
+				wantBase, wantSource = "https://b.example", "config:directory-rule:"+pattern
+			}
+			if err != nil || base != wantBase || source != wantSource {
+				t.Fatalf("case-insensitive=%v: got %s via %s (err=%v), want %s via %s", insensitive, base, source, err, wantBase, wantSource)
+			}
+		})
+	}
+	// Correctly cased patterns must also keep working on case-sensitive volumes.
+	exact := filepath.Join(root, "*", "CamelCase", "**")
+	c := Catalog{File: File{Default: "https://a.example", Rules: map[string]string{exact: "https://b.example"}}}
+	base, source, err := c.Resolve(filepath.Join(actual, "Child"), root)
+	if err != nil || base != "https://b.example" || source != "config:directory-rule:"+exact {
+		t.Fatalf("exact case: %s via %s err=%v", base, source, err)
+	}
+	t.Logf("verified wildcard matching with case-insensitive=%v", insensitive)
+}
