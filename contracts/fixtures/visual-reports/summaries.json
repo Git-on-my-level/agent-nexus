@@ -132,5 +132,15 @@
       "total": 1
     },
     "needs": []
+  },
+  {
+    "name": "four-space indented task and Needs example is code",
+    "markdown": "    - [x] Example\n    Needs David: example\n- [ ] Real task",
+    "summary": "",
+    "progress": {
+      "done": 0,
+      "total": 1
+    },
+    "needs": []
   }
 ]
