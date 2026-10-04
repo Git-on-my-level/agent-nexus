@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 195
+- Command count: 197
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -11,7 +11,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | Group | Commands |
 | --- | --- |
 | actors | 2 |
-| agent | 4 |
+| agent | 6 |
 | agents | 4 |
 | artifacts | 10 |
 | auth | 17 |
@@ -44,8 +44,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 73 |
-| exposed_write | 65 |
+| exposed_read | 74 |
+| exposed_write | 66 |
 | gated_admin | 24 |
 | gated_sensitive | 12 |
 | unsupported_bootstrap_auth | 9 |
@@ -58,8 +58,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 138 | exposed_read + exposed_write + adapted |
-| hosted default | 62 | explicit read-only private-app allowlist |
+| standalone default | 140 | exposed_read + exposed_write + adapted |
+| hosted default | 63 | explicit read-only private-app allowlist |
 | gated | 36 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
 | unsupported | 21 | not represented as direct MCP tools in v1 |
@@ -70,6 +70,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | --- | --- | --- | --- | --- | --- |
 | actors.create | actors | POST | /actors | unsupported_bootstrap_auth | dev-only actor registration is not an MCP auth path |
 | actors.list | actors | GET | /actors | gated_admin | actor inventory is auth-administrative |
+| agent.inbox.answers.read | agent | POST | /agent-inbox/answers/read | exposed_write | ordinary authenticated agent per-answer read state write |
+| agent.inbox.asks.list | agent | GET | /agent-inbox/asks | exposed_read | requester-scoped, keyset-paginated human attention inbox projection |
 | agent.notification-receipts.stream | agent | GET | /stream/agent-notification-receipts | unsupported_streaming | SSE stream needs a bounded read adapter before MCP exposure |
 | agent.notifications.dismiss | agent | POST | /agent-notifications/dismiss | exposed_write | ordinary authenticated agent notification state write |
 | agent.notifications.list | agent | GET | /agent-notifications | exposed_read | bounded authenticated agent notification projection |
@@ -153,7 +155,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | docs.trash | docs | POST | /docs/{document_id}/trash | exposed_write | ordinary reversible document lifecycle write |
 | docs.unarchive | docs | POST | /docs/{document_id}/unarchive | exposed_write | ordinary reversible document lifecycle write |
 | events.archive | events | POST | /events/{event_id}/archive | exposed_write | ordinary reversible event lifecycle write |
-| events.create | events | POST | /events | exposed_write | ordinary event creation |
+| events.create | events | POST | /events | exposed_write | ask withdrawal is an agent write restricted by the server to the requester's own open asks |
 | events.get | events | GET | /events/{event_id} | exposed_read | event read |
 | events.list | events | GET | /events | exposed_read | bounded event inventory read |
 | events.restore | events | POST | /events/{event_id}/restore | exposed_write | ordinary reversible event lifecycle write |
@@ -179,7 +181,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | hosts.tokens.revoke | host | POST | /auth/hosts/enrollment-tokens/{token_id}/revoke | gated_admin | enrollment token revocation is auth administration |
 | inbox.get | inbox | GET | /inbox/{inbox_id} | exposed_read | inbox item read |
 | inbox.list | inbox | GET | /inbox | exposed_read | bounded inbox inventory read |
-| inbox.respond | inbox | POST | /inbox/{inbox_id}/respond | unsupported_interactive | human response submission requires human judgment |
+| inbox.respond | inbox | POST | /inbox/{inbox_id}/respond | unsupported_interactive | human-only response submission requires human judgment |
 | inbox.stream | inbox | GET | /stream/inbox | unsupported_streaming | SSE stream needs a bounded read adapter before MCP exposure |
 | meta.commands.get | meta | GET | /meta/commands/{command_id} | exposed_read | command metadata read |
 | meta.commands.list | meta | GET | /meta/commands | exposed_read | command metadata inventory read |
