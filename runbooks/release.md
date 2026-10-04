@@ -57,11 +57,19 @@ make release-patch
 
 That flow:
 
+- rejects dirty/untracked files and missing or broken active repo hook tooling before running checks (run `make setup` in each fresh worktree)
 - fetches `origin/main` and tags
 - computes the next patch version from the latest tag on `origin/main`
 - verifies the checkout is clean and exactly matches `origin/main`
 - runs `make check`, `make e2e-smoke`, and local release artifact validation
 - updates version metadata, commits the release prep, pushes `main`, tags the release, and waits for the `Release CLI` workflow to publish it
+
+Keep release logs outside the checkout (or in an already ignored directory).
+The script checks cleanliness again after checks and before changing versions,
+so generated changes can be inspected separately. It does not automatically
+discard version edits after later failures or undo published commits/tags.
+`--dry-run` does not require commit hook tooling. Offline preflight regression
+tests run with `python3 scripts/tests/test_release_preflight.py`.
 
 Useful variants:
 
