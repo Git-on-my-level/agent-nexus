@@ -411,6 +411,36 @@ export function buildInboxRows({
     }
   }
   const titleFor = (ref) => titles.get(String(ref ?? "").trim()) || "";
+  // A blocked card with an explicit ask is already represented by that ask.
+  // Keep the card out of Needs you after the ask is answered too: the answer
+  // releases the human, while the agent still owns moving the card forward.
+  const openAskedCardRefs = new Set();
+  const answeredAskAtByCardRef = new Map();
+  for (const raw of inboxItems) {
+    const item = enrichInboxItem(raw);
+    if (String(item?.kind ?? item?.category ?? "").trim() !== "ask") continue;
+    const subject = inboxItemSubject(item, { titleFor, work });
+    if (subject?.kind !== "card") continue;
+    const task = subject.work;
+    const refs = [
+      subject.ref,
+      task ? workKey(task) : "",
+      task?.id ? `card:${task.id}` : "",
+      task?.handle ? `card:${task.handle}` : "",
+    ].filter(Boolean);
+    if (inboxItemNeedsResponse(item)) {
+      for (const ref of refs) openAskedCardRefs.add(ref);
+      continue;
+    }
+    const answeredAt = Date.parse(item.responded_at || item.completed_at || "");
+    if (!Number.isFinite(answeredAt)) continue;
+    for (const ref of refs) {
+      answeredAskAtByCardRef.set(
+        ref,
+        Math.max(answeredAskAtByCardRef.get(ref) || 0, answeredAt),
+      );
+    }
+  }
   const nameFor = (id) => {
     const raw = String(id ?? "").trim();
     return raw ? String(actorName(raw) ?? "").trim() : "";
@@ -442,6 +472,26 @@ export function buildInboxRows({
     });
   }
   for (const item of work) {
+    const taskRefs = [
+      workKey(item),
+      item.ref,
+      item.id ? `card:${item.id}` : "",
+      item.handle ? `card:${item.handle}` : "",
+    ];
+    if (item.phase === "blocked") {
+      const hasOpenAsk = taskRefs.some(
+        (ref) => ref && openAskedCardRefs.has(ref),
+      );
+      const answeredAt = Math.max(
+        0,
+        ...taskRefs.map((ref) => answeredAskAtByCardRef.get(ref) || 0),
+      );
+      const updatedAt = Date.parse(item.updated_at || "");
+      const unchangedSinceAnswer =
+        answeredAt > 0 &&
+        (!Number.isFinite(updatedAt) || updatedAt <= answeredAt);
+      if (hasOpenAsk || unchangedSinceAnswer) continue;
+    }
     // A native task has no source worth naming; who owns it is the signal.
     const ownerId = String(item.owner ?? "").replace(/^actor:/, "");
     const owner =

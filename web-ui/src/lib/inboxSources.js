@@ -23,13 +23,13 @@ export async function listAllPages(fetchPage, key, maxPages = 8) {
  * on its own so one failing list does not blank the others.
  *
  * @param {{ withHistory?: boolean, client?: object }} [options]
- *   `withHistory: false` skips the Handled and Watching-only sources
- *   (completed items, unread updates); the sidebar count needs only what
- *   can land in Needs you. `client` defaults to the browser core client;
+ *   `withHistory: false` skips unread updates. Completed asks remain loaded so
+ *   a blocked card does not return to Needs you after its ask is answered.
+ *   `client` defaults to the browser core client;
  *   a server load passes its own.
  * @returns {Promise<PromiseSettledResult<any>[]>} decisions, actions, work,
- *   open items, completed items, unread updates (the last two resolve to
- *   empty lists when skipped)
+ *   open items, completed items, unread updates (unread updates resolve to
+ *   null when skipped)
  */
 export function loadInboxSources({
   withHistory = true,
@@ -46,10 +46,15 @@ export function loadInboxSources({
       "items",
     ),
     listAllPages((cursor) => client.listWork({ limit: 50, cursor }), "work"),
-    client.listInboxItems({ status: "open", limit: 50 }),
-    withHistory
-      ? client.listInboxItems({ status: "completed", limit: 50 })
-      : skipped,
+    listAllPages(
+      (cursor) => client.listInboxItems({ status: "open", limit: 50, cursor }),
+      "items",
+    ),
+    listAllPages(
+      (cursor) =>
+        client.listInboxItems({ status: "completed", limit: 50, cursor }),
+      "items",
+    ),
     withHistory ? client.getHomeUnread() : skipped,
   ]);
 }

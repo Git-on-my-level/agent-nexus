@@ -108,6 +108,93 @@ describe("inbox mailboxes", () => {
     expect(filterMailbox(rows, "handled")).toEqual([]);
   });
 
+  it("shows the ask instead of its blocked card, before and after the answer", () => {
+    const work = [
+      {
+        ref: "card:launch",
+        id: "launch-id",
+        title: "Ship the launch",
+        phase: "blocked",
+        next_actor: "human:operator",
+        updated_at: "2026-10-04T10:00:00Z",
+        source: { authority: "nexus" },
+      },
+    ];
+    const ask = {
+      id: "inbox:ask-1",
+      kind: "ask",
+      status: "open",
+      subject_ref: "card:launch-id",
+      title: "Which launch date?",
+      related_refs: ["card:launch-id"],
+    };
+    const openRows = buildInboxRows({ work, inboxItems: [ask] });
+    expect(filterMailbox(openRows, "needs-you").map((row) => row.kind)).toEqual(
+      ["inbox"],
+    );
+
+    const completedRows = buildInboxRows({
+      work,
+      inboxItems: [
+        {
+          ...ask,
+          id: "completed:ask-1",
+          status: "completed",
+          responded_at: "2026-10-04T11:00:00Z",
+        },
+      ],
+    });
+    expect(filterMailbox(completedRows, "needs-you")).toEqual([]);
+    expect(
+      filterMailbox(completedRows, "handled").map((row) => row.kind),
+    ).toEqual(["inbox"]);
+  });
+
+  it("shows a blocked card again if it changed after its ask was answered", () => {
+    const rows = buildInboxRows({
+      work: [
+        {
+          ref: "card:launch",
+          id: "launch-id",
+          title: "Ship the launch",
+          phase: "blocked",
+          updated_at: "2026-10-04T12:00:00Z",
+          source: { authority: "nexus" },
+        },
+      ],
+      inboxItems: [
+        {
+          id: "completed:ask-1",
+          kind: "ask",
+          status: "completed",
+          subject_ref: "card:launch-id",
+          responded_at: "2026-10-04T11:00:00Z",
+          related_refs: ["card:launch-id"],
+        },
+      ],
+    });
+    expect(filterMailbox(rows, "needs-you").map((row) => row.kind)).toEqual([
+      "task",
+    ]);
+  });
+
+  it("keeps a blocked card in Needs you when no ask names it", () => {
+    const rows = buildInboxRows({
+      work: [
+        {
+          ref: "card:blocked",
+          title: "Stuck task",
+          phase: "blocked",
+          next_actor: "human:operator",
+          source: { authority: "nexus" },
+        },
+      ],
+    });
+    expect(filterMailbox(rows, "needs-you").map((row) => row.kind)).toEqual([
+      "task",
+    ]);
+  });
+
   it("never puts a raw ref in a row's list line", () => {
     const rows = buildInboxRows({
       work: [
