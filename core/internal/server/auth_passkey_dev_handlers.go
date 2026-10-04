@@ -34,6 +34,10 @@ func handlePasskeyDevRegister(w http.ResponseWriter, r *http.Request, opts handl
 		return
 	}
 
+	if !allowHumanCredentialCeremony(w, r, opts) {
+		return
+	}
+
 	var req struct {
 		DisplayName     string `json:"display_name"`
 		BootstrapToken  string `json:"bootstrap_token"`
@@ -95,6 +99,10 @@ func handlePasskeyDevRegister(w http.ResponseWriter, r *http.Request, opts handl
 // When username and display_name are both empty, the workspace must have exactly one passkey principal.
 func handlePasskeyDevLogin(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	if !requireDevPasskeyBypass(w, opts) {
+		return
+	}
+
+	if !allowHumanCredentialCeremony(w, r, opts) {
 		return
 	}
 

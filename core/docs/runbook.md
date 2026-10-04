@@ -281,3 +281,35 @@ docker run --rm \
 
 It starts a server in a temporary workspace, checks `/readyz` and `/version`,
 then shuts down cleanly.
+
+## Agent administration and fleet enrollment
+
+Humans retain workspace administration rights. An agent receives them only through
+an explicit human grant on the Access page or `anx auth admins grant <principal>`.
+The grant is stored on the agent principal, never the host, and is checked against
+durable state on each request. `auth admins revoke` immediately removes subsequent
+administration access, without interrupting ordinary workspace reads.
+
+Granting an agent on host X trusts every process that can read X's shared host
+key and derive a token for that agent name. This is a shared host credential
+boundary, even though the grant targets one exact principal. Grant/revoke audit
+events include host ID, slug, and agent name. Administration writes revalidate
+durable authority inside the write transaction after body decoding.
+
+Only a human can create human invitations. Both invite resolution and credential
+creation reject invitations issued by an agent, including historical invitations
+and previously issued registration sessions. Agent bearer credentials cannot
+authorize human registration, login, or external human-grant exchange. Anonymous
+human ceremonies still require independently provisioned bootstrap/invite,
+WebAuthn, or trusted external issuer proof; those credentials must not be shared
+with agents. WebAuthn does not prove that a software client is a biological person.
+
+Granted agents can list/approve/deny pending host enrollments, create/list/revoke
+headless enrollment tokens, and revoke other hosts. They cannot revoke their own
+host, change grants, edit hosts through an agent bearer, or bypass any other
+human-only action. Host enrollment token creation, revocation, and consumption
+are audited with principal IDs and the destination host on consumption. Tokens
+are separate one-time grants; revoke outstanding tokens separately if necessary.
+
+Use the stdin-over-SSH flow in [the CLI runbook](../../cli/docs/runbook.md#fleet-enrollment-by-an-auth-admin-agent)
+for fleet enrollment. Logs and token lists never contain enrollment secrets.

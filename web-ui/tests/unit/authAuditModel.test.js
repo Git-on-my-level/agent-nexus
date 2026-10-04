@@ -9,6 +9,31 @@ const options = {
 };
 
 describe("auth audit sentences", () => {
+  it("identifies the token issuer separately from unauthenticated consumption", () => {
+    expect(
+      describeAuthAuditEvent(
+        {
+          event_type: "host_enrollment_token_consumed",
+          metadata: {
+            host_id: "host-1",
+            token_id: "token-1",
+            issuer_principal_id: "agent-codex",
+          },
+        },
+        options,
+      ),
+    ).toBe("m5-mbp enrolled using a token issued by codex on m5-mbp");
+    expect(
+      describeAuthAuditEvent(
+        {
+          event_type: "host_enrollment_token_consumed",
+          actor_actor_id: "actor-maya",
+          metadata: { host_id: "host-1" },
+        },
+        options,
+      ),
+    ).toBe("m5-mbp enrolled using an enrollment token");
+  });
   it("uses names and host slugs, never raw ids", () => {
     expect(
       describeAuthAuditEvent(

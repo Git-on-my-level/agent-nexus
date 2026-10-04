@@ -187,6 +187,11 @@ func (s *Store) CreateInvite(ctx context.Context, createdBy Principal, input Cre
 		return Invite{}, "", fmt.Errorf("begin create invite transaction: %w", err)
 	}
 
+	defer tx.Rollback()
+	if err := requireAdministrationTx(ctx, tx, createdBy, true); err != nil {
+		return Invite{}, "", err
+	}
+
 	_, err = tx.ExecContext(
 		ctx,
 		`INSERT INTO auth_invites(
@@ -324,6 +329,11 @@ func (s *Store) RevokeInvite(ctx context.Context, inviteID string, revokedBy Pri
 		return Invite{}, fmt.Errorf("begin revoke invite transaction: %w", err)
 	}
 
+	defer tx.Rollback()
+	if err := requireAdministrationTx(ctx, tx, revokedBy, true); err != nil {
+		return Invite{}, err
+	}
+
 	result, err := tx.ExecContext(
 		ctx,
 		`UPDATE auth_invites
@@ -452,7 +462,7 @@ func (s *Store) resolveInviteClaim(ctx context.Context, inviteToken string, prin
 		ctx,
 		`SELECT id, kind, expires_at, consumed_at, revoked_at
 		 FROM auth_invites
-		 WHERE token_hash = ?`,
+		 WHERE token_hash = ? AND EXISTS (SELECT 1 FROM agents issuer WHERE issuer.id=auth_invites.created_by_agent_id AND `+principalKindExpr("issuer")+`='human')`,
 		hashToken(inviteToken),
 	).Scan(&inviteID, &kind, &expiresAt, &consumedAt, &revokedAt)
 	if err != nil {
@@ -489,6 +499,9 @@ func (s *Store) resolveInviteClaim(ctx context.Context, inviteToken string, prin
 }
 
 func (s *Store) consumeOnboardingClaimTx(ctx context.Context, tx *sql.Tx, claim OnboardingClaim, agentID string, actorID string, now time.Time) error {
+	if claim.PrincipalKind != PrincipalKindHuman {
+		return ErrInvalidToken
+	}
 	switch claim.Mode {
 	case OnboardingModeBootstrap:
 		if strings.TrimSpace(s.bootstrapTokenHash) == "" || claim.TokenHash != s.bootstrapTokenHash {
@@ -540,7 +553,8 @@ func (s *Store) consumeOnboardingClaimTx(ctx context.Context, tx *sql.Tx, claim 
 			   AND consumed_at IS NULL
 			   AND revoked_at IS NULL
 			   AND (expires_at IS NULL OR expires_at > ?)
-			   AND (kind = ? OR kind = ?)`,
+			   AND (kind = ? OR kind = ?)
+		   AND EXISTS (SELECT 1 FROM agents issuer WHERE issuer.id=auth_invites.created_by_agent_id AND `+principalKindExpr("issuer")+`='human')`,
 			now.Format(time.RFC3339Nano),
 			agentID,
 			actorID,

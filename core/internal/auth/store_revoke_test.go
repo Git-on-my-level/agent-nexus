@@ -23,7 +23,7 @@ func TestRevokeAgentIsIdempotentAndAudited(t *testing.T) {
 	defer workspace.Close()
 
 	store := NewStore(workspace.DB())
-	admin := insertAuthAgentForRevokeTest(t, ctx, workspace.DB(), "agent-admin", "actor-admin", "admin.user")
+	admin := insertAuthHumanForRevokeTest(t, ctx, workspace.DB(), "agent-admin", "actor-admin", "admin.user")
 	member := insertAuthAgentForRevokeTest(t, ctx, workspace.DB(), "agent-member", "actor-member", "member.user")
 
 	first, err := store.RevokeAgent(ctx, member.AgentID, RevokeAgentInput{
@@ -92,13 +92,16 @@ func TestRevokeAgentBlocksLastActiveHumanButNotMachine(t *testing.T) {
 	store := NewStore(workspace.DB())
 	human := insertAuthHumanForRevokeTest(t, ctx, workspace.DB(), "agent-human", "actor-human", "human.user")
 	machine := insertAuthAgentForRevokeTest(t, ctx, workspace.DB(), "agent-machine", "actor-machine", "machine.user")
+	if _, err := store.SetAuthAdmin(ctx, machine.AgentID, true, human); err != nil {
+		t.Fatal(err)
+	}
 
 	_, err = store.RevokeAgent(ctx, human.AgentID, RevokeAgentInput{
 		Actor: machine,
 		Mode:  RevocationModeAdmin,
 	})
-	if err == nil || err != ErrLastActivePrincipal {
-		t.Fatalf("expected ErrLastActivePrincipal, got %v", err)
+	if err != ErrHumanRequired {
+		t.Fatalf("expected ErrHumanRequired, got %v", err)
 	}
 
 	summary, err := store.GetPrincipalSummary(ctx, human.AgentID)
@@ -189,11 +192,18 @@ func TestRevokeAgentAllowsNonFinalHumanWithMachinePresent(t *testing.T) {
 	store := NewStore(workspace.DB())
 	admin := insertAuthAgentForRevokeTest(t, ctx, workspace.DB(), "agent-admin", "actor-admin", "admin.user")
 	humanA := insertAuthHumanForRevokeTest(t, ctx, workspace.DB(), "agent-human-a", "actor-human-a", "human-a.user")
-	_ = insertAuthHumanForRevokeTest(t, ctx, workspace.DB(), "agent-human-b", "actor-human-b", "human-b.user")
+	humanB := insertAuthHumanForRevokeTest(t, ctx, workspace.DB(), "agent-human-b", "actor-human-b", "human-b.user")
+	if _, err := store.SetAuthAdmin(ctx, admin.AgentID, true, humanB); err != nil {
+		t.Fatal(err)
+	}
 	_ = insertAuthAgentForRevokeTest(t, ctx, workspace.DB(), "agent-machine", "actor-machine", "machine.user")
 
+	_, err = store.RevokeAgent(ctx, humanA.AgentID, RevokeAgentInput{Actor: admin, Mode: RevocationModeAdmin})
+	if err != ErrHumanRequired {
+		t.Fatalf("granted agent revoked a non-final human: %v", err)
+	}
 	result, err := store.RevokeAgent(ctx, humanA.AgentID, RevokeAgentInput{
-		Actor: admin,
+		Actor: humanB,
 		Mode:  RevocationModeAdmin,
 	})
 	if err != nil {

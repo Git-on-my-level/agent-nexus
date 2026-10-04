@@ -21,6 +21,8 @@ func (a *App) runAuth(ctx context.Context, args []string, cfg config.Resolved) (
 	service := authcli.New(cfg)
 	subcommand := authSubcommandSpec.normalize(args[0])
 	switch subcommand {
+	case "admins":
+		return a.runAuthAdmins(ctx, args[1:], cfg)
 	case "whoami":
 		result, err := a.runHostWhoAmI(ctx, cfg)
 		return result, "auth whoami", err

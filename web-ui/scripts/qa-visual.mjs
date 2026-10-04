@@ -16,6 +16,7 @@ import {
   QA_ARTIFACTS,
   QA_ASK_ITEM,
   QA_AUTH_AUDIT,
+  QA_AUTH_ADMINS,
   QA_AUTH_AGENT,
   QA_DOCUMENTS,
   QA_EVENTS,
@@ -314,8 +315,11 @@ export const QA_SCENES = [
     workspaceMode: "workspace-default",
     thresholdRatio: 0.035,
     waitFor: async (page) => {
-      await page.waitForSelector("text=Waiting for approval");
+      await page.waitForSelector('[data-host-enrollment="henr_qa_ci"]');
       await page.waitForSelector("text=reviewer");
+      await page
+        .getByRole("button", { name: "Revoke administration", exact: true })
+        .waitFor();
     },
   },
   {
@@ -1358,6 +1362,11 @@ async function handleWorkspaceApiRoute(
         actors: sliceByLimit(items, url.searchParams),
       }),
     );
+    return;
+  }
+
+  if (pathname === "/auth/admins" && request.method() === "GET") {
+    await route.fulfill(jsonResponse(200, { admins: QA_AUTH_ADMINS }));
     return;
   }
 

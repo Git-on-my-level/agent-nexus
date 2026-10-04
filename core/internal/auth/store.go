@@ -641,18 +641,30 @@ func (s *Store) RevokeAgent(ctx context.Context, agentID string, input RevokeAge
 		return RevokeAgentResult{}, fmt.Errorf("begin revoke agent transaction: %w", err)
 	}
 
+	defer tx.Rollback()
+	if input.Mode == RevocationModeAdmin || input.AllowHumanLockout {
+		if err := requireAdministrationTx(ctx, tx, input.Actor, true); err != nil {
+			return RevokeAgentResult{}, err
+		}
+	}
+
+	if input.Mode == RevocationModeSelf && input.Actor.AgentID != agentID {
+		return RevokeAgentResult{}, ErrAuthRequired
+	}
+
 	var (
 		subjectActorID  string
 		existingRevoked sql.NullString
 		principal       AuthPrincipalSummary
+		subjectKind     string
 	)
 	err = tx.QueryRowContext(
 		ctx,
-		`SELECT actor_id, revoked_at
-		 FROM agents
+		`SELECT actor_id, revoked_at, `+principalKindExpr("a")+`
+		 FROM agents a
 		 WHERE id = ?`,
 		agentID,
-	).Scan(&subjectActorID, &existingRevoked)
+	).Scan(&subjectActorID, &existingRevoked, &subjectKind)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -661,6 +673,11 @@ func (s *Store) RevokeAgent(ctx context.Context, agentID string, input RevokeAge
 			return RevokeAgentResult{}, ErrAgentNotFound
 		}
 		return RevokeAgentResult{}, fmt.Errorf("query agent revoke state: %w", err)
+	}
+	if subjectKind == string(PrincipalKindHuman) {
+		if err := requireAdministrationTx(ctx, tx, input.Actor, true); err != nil {
+			return RevokeAgentResult{}, err
+		}
 	}
 	if existingRevoked.Valid {
 		principal, loadErr := s.getPrincipalSummaryTx(ctx, tx, agentID)

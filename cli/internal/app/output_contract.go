@@ -42,6 +42,9 @@ func commandSideEffectClass(command string) string {
 	if parts[0] == "orient" || parts[0] == "await" {
 		return "read_only"
 	}
+	if command == "host revoke" || command == "host enrollments approve" || command == "host enrollments deny" || command == "host tokens create" || command == "host tokens revoke" || command == "auth admins grant" || command == "auth admins revoke" {
+		return "remote_coordination_write"
+	}
 	if command == "host token" {
 		return "local_operational_write"
 	}

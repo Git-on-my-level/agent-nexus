@@ -357,7 +357,7 @@ func expired(raw string) bool {
 	return e != nil || !time.Now().UTC().Before(t)
 }
 func (s *Store) PendingHostEnrollments(ctx context.Context) ([]HostEnrollment, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM host_enrollments WHERE status='pending' AND expires_at>? ORDER BY created_at`, hostNow())
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM host_enrollments WHERE status IN ('pending','approved') AND expires_at>? ORDER BY created_at`, hostNow())
 	if err != nil {
 		return nil, err
 	}
@@ -386,6 +386,9 @@ func (s *Store) DecideHostEnrollment(ctx context.Context, id string, approve boo
 		return HostEnrollment{}, err
 	}
 	defer tx.Rollback()
+	if err := requireAdministrationTx(ctx, tx, admin, false); err != nil {
+		return HostEnrollment{}, err
+	}
 	if err := expireHostEnrollmentsTx(ctx, tx); err != nil {
 		return HostEnrollment{}, err
 	}
@@ -396,7 +399,7 @@ func (s *Store) DecideHostEnrollment(ctx context.Context, id string, approve boo
 	if expired(e.ExpiresAt) {
 		return e, ErrEnrollmentExpired
 	}
-	if e.Status != "pending" {
+	if e.Status != "pending" && (approve || e.Status != "approved") {
 		return e, ErrEnrollmentConsumed
 	}
 	if approve {
@@ -407,7 +410,7 @@ func (s *Store) DecideHostEnrollment(ctx context.Context, id string, approve boo
 	} else {
 		e.Status = "denied"
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE host_enrollments SET status=? WHERE id=? AND status='pending'`, e.Status, id)
+	_, err = tx.ExecContext(ctx, `UPDATE host_enrollments SET status=? WHERE id=? AND status IN ('pending','approved')`, e.Status, id)
 	if err != nil {
 		return e, err
 	}
@@ -421,7 +424,13 @@ func (s *Store) DecideHostEnrollment(ctx context.Context, id string, approve boo
 	return e, tx.Commit()
 }
 func (s *Store) CreateHostEnrollmentToken(ctx context.Context, label string, expiry time.Time, admin Principal) (HostEnrollmentToken, string, error) {
+	return s.createHostEnrollmentTokenAt(ctx, label, expiry, admin, time.Now().UTC())
+}
+func (s *Store) CreateHostEnrollmentTokenWithTTL(ctx context.Context, label string, ttl time.Duration, admin Principal) (HostEnrollmentToken, string, error) {
 	now := time.Now().UTC()
+	return s.createHostEnrollmentTokenAt(ctx, label, now.Add(ttl), admin, now)
+}
+func (s *Store) createHostEnrollmentTokenAt(ctx context.Context, label string, expiry time.Time, admin Principal, now time.Time) (HostEnrollmentToken, string, error) {
 	if strings.TrimSpace(label) == "" || len(label) > 120 || expiry.Before(now.Add(10*time.Minute)) || expiry.After(now.Add(24*time.Hour)) {
 		return HostEnrollmentToken{}, "", ErrInvalidRequest
 	}
@@ -430,8 +439,22 @@ func (s *Store) CreateHostEnrollmentToken(ctx context.Context, label string, exp
 		return HostEnrollmentToken{}, "", err
 	}
 	t := HostEnrollmentToken{ID: "htok_" + uuid.NewString(), Label: label, CreatedAt: now.Format(time.RFC3339Nano), ExpiresAt: expiry.UTC().Format(time.RFC3339Nano)}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO host_enrollment_tokens(id,label,token_hash,created_at,expires_at,created_by_agent_id) VALUES(?,?,?,?,?,?)`, t.ID, t.Label, tokenHash(secret), t.CreatedAt, t.ExpiresAt, admin.AgentID)
-	return t, secret, err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return HostEnrollmentToken{}, "", err
+	}
+	defer tx.Rollback()
+	if err := requireAdministrationTx(ctx, tx, admin, false); err != nil {
+		return HostEnrollmentToken{}, "", err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO host_enrollment_tokens(id,label,token_hash,created_at,expires_at,created_by_agent_id) VALUES(?,?,?,?,?,?)`, t.ID, t.Label, tokenHash(secret), t.CreatedAt, t.ExpiresAt, admin.AgentID)
+	if err != nil {
+		return HostEnrollmentToken{}, "", err
+	}
+	if err = s.recordAuthAuditEventTx(ctx, tx, AuthAuditEventInput{EventType: "host_enrollment_token_created", ActorAgentID: admin.AgentID, ActorActorID: admin.ActorID, Metadata: map[string]any{"token_id": t.ID, "label": t.Label, "expires_at": t.ExpiresAt}}); err != nil {
+		return HostEnrollmentToken{}, "", err
+	}
+	return t, secret, tx.Commit()
 }
 func (s *Store) ListHostEnrollmentTokens(ctx context.Context) ([]HostEnrollmentToken, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id,label,created_at,expires_at,consumed_at,revoked_at FROM host_enrollment_tokens ORDER BY created_at DESC`)
@@ -456,8 +479,16 @@ func (s *Store) ListHostEnrollmentTokens(ctx context.Context) ([]HostEnrollmentT
 	}
 	return out, rows.Err()
 }
-func (s *Store) RevokeHostEnrollmentToken(ctx context.Context, id string) (HostEnrollmentToken, error) {
-	res, err := s.db.ExecContext(ctx, `UPDATE host_enrollment_tokens SET revoked_at=? WHERE id=? AND consumed_at IS NULL AND revoked_at IS NULL`, hostNow(), id)
+func (s *Store) RevokeHostEnrollmentToken(ctx context.Context, id string, admin Principal) (HostEnrollmentToken, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return HostEnrollmentToken{}, err
+	}
+	defer tx.Rollback()
+	if err := requireAdministrationTx(ctx, tx, admin, false); err != nil {
+		return HostEnrollmentToken{}, err
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE host_enrollment_tokens SET revoked_at=? WHERE id=? AND consumed_at IS NULL AND revoked_at IS NULL`, hostNow(), id)
 	if err != nil {
 		return HostEnrollmentToken{}, err
 	}
@@ -465,7 +496,16 @@ func (s *Store) RevokeHostEnrollmentToken(ctx context.Context, id string) (HostE
 	if n == 0 {
 		return HostEnrollmentToken{}, ErrHostNotFound
 	}
+	if err = s.recordAuthAuditEventTx(ctx, tx, AuthAuditEventInput{EventType: "host_enrollment_token_revoked", ActorAgentID: admin.AgentID, ActorActorID: admin.ActorID, Metadata: map[string]any{"token_id": id}}); err != nil {
+		return HostEnrollmentToken{}, err
+	}
+	if err = tx.Commit(); err != nil {
+		return HostEnrollmentToken{}, err
+	}
 	items, err := s.ListHostEnrollmentTokens(ctx)
+	if err != nil {
+		return HostEnrollmentToken{}, err
+	}
 	for _, t := range items {
 		if t.ID == id {
 			return t, err
@@ -541,9 +581,9 @@ func (s *Store) CompleteHeadlessHostEnrollment(ctx context.Context, in HostEnrol
 	if err := expireHostEnrollmentsTx(ctx, tx); err != nil {
 		return Host{}, err
 	}
-	var id, expiry string
+	var id, expiry, creatorID, creatorActorID string
 	var consumed, revoked sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT id,expires_at,consumed_at,revoked_at FROM host_enrollment_tokens WHERE token_hash=?`, tokenHash(in.EnrollmentToken)).Scan(&id, &expiry, &consumed, &revoked)
+	err = tx.QueryRowContext(ctx, `SELECT t.id,t.expires_at,t.consumed_at,t.revoked_at,t.created_by_agent_id,COALESCE(a.actor_id,'') FROM host_enrollment_tokens t LEFT JOIN agents a ON a.id=t.created_by_agent_id WHERE t.token_hash=?`, tokenHash(in.EnrollmentToken)).Scan(&id, &expiry, &consumed, &revoked, &creatorID, &creatorActorID)
 	if err != nil || consumed.Valid || revoked.Valid || expired(expiry) {
 		return Host{}, ErrInvalidToken
 	}
@@ -553,6 +593,9 @@ func (s *Store) CompleteHeadlessHostEnrollment(ctx context.Context, in HostEnrol
 	}
 	_, err = tx.ExecContext(ctx, `UPDATE host_enrollment_tokens SET consumed_at=? WHERE id=? AND consumed_at IS NULL`, hostNow(), id)
 	if err != nil {
+		return Host{}, err
+	}
+	if err = s.recordAuthAuditEventTx(ctx, tx, AuthAuditEventInput{EventType: "host_enrollment_token_consumed", Metadata: map[string]any{"token_id": id, "host_id": h.ID, "host_key_id": h.KeyID, "slug": in.RequestedSlug, "issuer_principal_id": creatorID, "issuer_actor_id": creatorActorID}}); err != nil {
 		return Host{}, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -843,14 +886,26 @@ func (s *Store) RevokeHost(ctx context.Context, id string, admin Principal) (Hos
 	if err != nil {
 		return h, err
 	}
-	if h.RevokedAt != nil {
-		return h, nil
+	if admin.PrincipalKind != string(PrincipalKindHuman) {
+		actorHost, err := s.AgentHost(ctx, admin.AgentID)
+		if err != nil && !errors.Is(err, ErrHostNotFound) {
+			return h, err
+		}
+		if actorHost == h.ID {
+			return h, ErrHostSelfRevoke
+		}
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return h, err
 	}
 	defer tx.Rollback()
+	if err := requireAdministrationTx(ctx, tx, admin, false); err != nil {
+		return h, err
+	}
+	if h.RevokedAt != nil {
+		return h, nil
+	}
 	now := hostNow()
 	for _, q := range []string{
 		`UPDATE hosts SET revoked_at=? WHERE id=?`,

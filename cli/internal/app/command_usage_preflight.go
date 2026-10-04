@@ -97,6 +97,14 @@ func preflightKnownCommandShape(args []string) error {
 
 	switch root {
 	case "host":
+		if len(args) >= 2 {
+			switch args[1] {
+			case "enrollments":
+				return preflightSubcommand(args[2:], hostEnrollmentsSubcommandSpec)
+			case "tokens":
+				return preflightSubcommand(args[2:], hostTokensSubcommandSpec)
+			}
+		}
 		if len(args) > 2 && args[1] == "discover" && !hasHelpToken(args[2:]) {
 			return errnorm.Usage("invalid_args", "host discover takes no arguments")
 		}
@@ -117,6 +125,8 @@ func preflightKnownCommandShape(args []string) error {
 				return preflightSubcommand(args[2:], authBootstrapSubcommandSpec)
 			case "principals":
 				return preflightSubcommand(args[2:], authPrincipalsSubcommandSpec)
+			case "admins":
+				return preflightSubcommand(args[2:], authAdminsSubcommandSpec)
 			case "audit":
 				return preflightSubcommand(args[2:], authAuditSubcommandSpec)
 			}
@@ -391,7 +401,11 @@ func preflightRootCommands() map[string]struct{} {
 }
 
 func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
-	specs := map[string]map[string]preflightFlagSpec{}
+	specs := map[string]map[string]preflightFlagSpec{
+		"host enroll": {"name": {kind: preflightFlagString}, "exclude": {kind: preflightFlagString}, "token": {kind: preflightFlagString}, "token-stdin": {kind: preflightFlagBool}, "plan": {kind: preflightFlagBool}},
+		"host revoke": {}, "host enrollments list": {}, "host enrollments approve": {}, "host enrollments deny": {},
+		"host tokens list": {}, "host tokens revoke": {}, "auth admins list": {}, "auth admins grant": {}, "auth admins revoke": {},
+	}
 	addLayer := func(layer map[string]map[string]preflightFlagSpec) {
 		for path, flags := range layer {
 			current := specs[path]

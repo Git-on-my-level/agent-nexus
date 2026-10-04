@@ -584,7 +584,11 @@ func seedNotificationTestAgent(t *testing.T, env authIntegrationEnv, username st
 		if err != nil {
 			t.Fatal(err)
 		}
-		token, secret, err := env.authStore.CreateHostEnrollmentToken(context.Background(), "notification test", time.Now().Add(20*time.Minute), auth.Principal{AgentID: "test-admin"})
+		// Token creation now checks real durable authority, including direct store calls.
+		if _, err := env.workspace.DB().Exec(`INSERT OR IGNORE INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) VALUES('test-admin','test-admin','test-admin',?,?, '{"principal_kind":"human"}')`, time.Now().UTC().Format(time.RFC3339Nano), time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+			t.Fatal(err)
+		}
+		token, secret, err := env.authStore.CreateHostEnrollmentToken(context.Background(), "notification test", time.Now().Add(20*time.Minute), auth.Principal{AgentID: "test-admin", ActorID: "test-admin"})
 		if err != nil {
 			t.Fatal(err)
 		}

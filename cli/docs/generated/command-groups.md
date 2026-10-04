@@ -72,8 +72,11 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `auth`
 
-- Commands: `14`
+- Commands: `17`
 - Command IDs:
+  - `auth.admins.grant` (`auth admins grant`)
+  - `auth.admins.list` (`auth admins list`)
+  - `auth.admins.revoke` (`auth admins revoke`)
   - `auth.audit.list` (`auth audit list`)
   - `auth.bootstrap.status` (`auth bootstrap status`)
   - `auth.invites.create` (`auth invites create`)
@@ -173,11 +176,11 @@ Generated from `contracts/anx-openapi.yaml`.
 - Commands: `15`
 - Command IDs:
   - `hosts.bridge.check_in` (`host bridge check-in`)
-  - `hosts.enroll.approve` (`host enroll approve`)
+  - `hosts.enroll.approve` (`host enrollments approve`)
   - `hosts.enroll.complete` (`host enroll complete`)
-  - `hosts.enroll.deny` (`host enroll deny`)
+  - `hosts.enroll.deny` (`host enrollments deny`)
   - `hosts.enroll.headless` (`host enroll headless`)
-  - `hosts.enroll.pending` (`host enroll pending`)
+  - `hosts.enroll.pending` (`host enrollments list`)
   - `hosts.enroll.poll` (`host enroll poll`)
   - `hosts.enroll.start` (`host enroll start`)
   - `hosts.get` (`host get`)

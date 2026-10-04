@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 186
+- Command count: 189
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -14,7 +14,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | agent | 4 |
 | agents | 4 |
 | artifacts | 10 |
-| auth | 14 |
+| auth | 17 |
 | boards | 13 |
 | cards | 13 |
 | derived | 1 |
@@ -42,7 +42,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | --- | --- |
 | exposed_read | 69 |
 | exposed_write | 63 |
-| gated_admin | 21 |
+| gated_admin | 24 |
 | gated_sensitive | 12 |
 | unsupported_bootstrap_auth | 9 |
 | unsupported_interactive | 5 |
@@ -56,7 +56,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | --- | --- | --- |
 | standalone default | 132 | exposed_read + exposed_write + adapted |
 | hosted default | 60 | explicit read-only private-app allowlist |
-| gated | 33 | requires explicit admin/sensitive policy scope |
+| gated | 36 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
 | unsupported | 21 | not represented as direct MCP tools in v1 |
 
@@ -85,6 +85,9 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | artifacts.restore | artifacts | POST | /artifacts/{artifact_id}/restore | exposed_write | ordinary reversible artifact lifecycle write |
 | artifacts.trash | artifacts | POST | /artifacts/{artifact_id}/trash | exposed_write | ordinary reversible artifact lifecycle write |
 | artifacts.unarchive | artifacts | POST | /artifacts/{artifact_id}/unarchive | exposed_write | ordinary reversible artifact lifecycle write |
+| auth.admins.grant | auth | POST | /auth/admins/{principal_id}/grant | gated_admin | delegating auth-admin requires a human principal |
+| auth.admins.list | auth | GET | /auth/admins | gated_admin | explicit agent grant inventory is administrative |
+| auth.admins.revoke | auth | POST | /auth/admins/{principal_id}/revoke | gated_admin | withdrawing auth-admin requires a human principal |
 | auth.audit.list | auth | GET | /auth/audit | gated_admin | auth audit inventory is administrative |
 | auth.bootstrap.status | auth | GET | /auth/bootstrap/status | unsupported_bootstrap_auth | bootstrap status is part of registration ceremony |
 | auth.invites.create | auth | POST | /auth/invites | gated_admin | invite issuance is administrative |

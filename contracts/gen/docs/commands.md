@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `186`
+- Commands: `189`
 
 ## `actors.create`
 
@@ -263,6 +263,45 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ artifact }`.
 
+## `auth.admins.grant`
+
+- CLI path: `auth admins grant`
+- HTTP: `POST /auth/admins/{principal_id}/grant`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Manage explicit workspace administration authority for agents.
+- Concepts: `auth`
+- Error codes: `auth_required`, `invalid_token`, `human_required`, `invalid_request`, `not_found`
+- Output: Returns `AuthAdminResponse`.
+- Agent notes: Only a human can change a grant. No default grant is assigned to agents or hosts.
+
+## `auth.admins.list`
+
+- CLI path: `auth admins list`
+- HTTP: `GET /auth/admins`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Manage explicit workspace administration authority for agents.
+- Concepts: `auth`
+- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`
+- Output: Returns `AuthAdminsResponse`.
+- Agent notes: Only a human can change a grant. No default grant is assigned to agents or hosts.
+
+## `auth.admins.revoke`
+
+- CLI path: `auth admins revoke`
+- HTTP: `POST /auth/admins/{principal_id}/revoke`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Manage explicit workspace administration authority for agents.
+- Concepts: `auth`
+- Error codes: `auth_required`, `invalid_token`, `human_required`, `invalid_request`, `not_found`
+- Output: Returns `AuthAdminResponse`.
+- Agent notes: Only a human can change a grant. No default grant is assigned to agents or hosts.
+
 ## `auth.audit.list`
 
 - CLI path: `auth audit list`
@@ -295,7 +334,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Issue a one-time invite for a human principal; kind must be human.
 - Concepts: `auth`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `forbidden`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `human_required`
 - Output: Returns `{ invite, token }`.
 
 ## `auth.invites.list`
@@ -319,7 +358,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Invalidate an outstanding invite by id.
 - Concepts: `auth`
-- Error codes: `auth_required`, `invalid_request`, `not_found`, `invalid_token`
+- Error codes: `human_required`, `auth_required`, `invalid_request`, `not_found`, `invalid_token`
 - Output: Returns `{ invite }`.
 
 ## `auth.passkey.dev.login`
@@ -355,7 +394,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: WebAuthn assertion challenge for returning principals.
 - Concepts: `auth`, `passkeys`
-- Error codes: `invalid_request`
+- Error codes: `invalid_request`, `human_required`
 - Output: Returns `{ session_id, options }`.
 
 ## `auth.passkey.login.verify`
@@ -367,7 +406,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Verify WebAuthn assertion and issue tokens.
 - Concepts: `auth`, `passkeys`
-- Error codes: `invalid_request`, `invalid_token`
+- Error codes: `invalid_request`, `invalid_token`, `human_required`
 - Output: Returns `{ agent, tokens }`.
 
 ## `auth.passkey.register.options`
@@ -379,7 +418,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: WebAuthn registration challenge for workspace humans.
 - Concepts: `auth`, `passkeys`
-- Error codes: `invalid_request`
+- Error codes: `invalid_request`, `human_required`
 - Output: Returns `{ session_id, options }`.
 
 ## `auth.passkey.register.verify`
@@ -391,7 +430,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Verify WebAuthn attestation and issue tokens.
 - Concepts: `auth`, `passkeys`
-- Error codes: `invalid_request`, `invalid_token`
+- Error codes: `invalid_request`, `invalid_token`, `human_required`
 - Output: Returns `{ agent, tokens }` for a human passkey principal.
 
 ## `auth.principals.list`
@@ -415,7 +454,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Administrative revocation of a principal linkage.
 - Concepts: `auth`
-- Error codes: `auth_required`, `invalid_request`, `not_found`, `invalid_token`, `conflict`
+- Error codes: `human_required`, `auth_required`, `invalid_request`, `not_found`, `invalid_token`, `conflict`
 - Output: Returns result JSON.
 
 ## `auth.token`
@@ -1161,14 +1200,14 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `hosts.enroll.approve`
 
-- CLI path: `host enroll approve`
+- CLI path: `host enrollments approve`
 - HTTP: `POST /auth/hosts/enrollments/{enrollment_id}/approve`
 - Stability: `beta`
 - Surface: `utility`
 - Input mode: `none`
 - Why: Approve a verified machine.
 - Concepts: `auth`, `hosts`
-- Error codes: `auth_required`, `invalid_token`, `forbidden`, `not_found`, `enrollment_expired`, `enrollment_consumed`, `host_slug_taken`
+- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `not_found`, `enrollment_expired`, `enrollment_consumed`, `host_slug_taken`
 - Output: Returns `HostEnrollmentStatusResponse`.
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
 
@@ -1187,14 +1226,14 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `hosts.enroll.deny`
 
-- CLI path: `host enroll deny`
+- CLI path: `host enrollments deny`
 - HTTP: `POST /auth/hosts/enrollments/{enrollment_id}/deny`
 - Stability: `beta`
 - Surface: `utility`
 - Input mode: `none`
 - Why: Reject an untrusted machine.
 - Concepts: `auth`, `hosts`
-- Error codes: `auth_required`, `invalid_token`, `forbidden`, `not_found`, `enrollment_expired`, `enrollment_consumed`
+- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `not_found`, `enrollment_expired`, `enrollment_consumed`
 - Output: Returns `HostEnrollmentStatusResponse`.
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
 
@@ -1213,14 +1252,14 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `hosts.enroll.pending`
 
-- CLI path: `host enroll pending`
+- CLI path: `host enrollments list`
 - HTTP: `GET /auth/hosts/enrollments/pending`
 - Stability: `beta`
 - Surface: `utility`
 - Input mode: `none`
 - Why: Review host enrollment requests.
 - Concepts: `auth`, `hosts`
-- Error codes: `auth_required`, `invalid_token`, `forbidden`
+- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`
 - Output: Returns `{ enrollments }`.
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
 
@@ -1298,7 +1337,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Cut off a compromised machine.
 - Concepts: `hosts`, `auth`
-- Error codes: `auth_required`, `invalid_token`, `forbidden`, `not_found`
+- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `host_self_revoke`, `not_found`
 - Output: Returns `{ host }`.
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
 
@@ -1311,7 +1350,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Authorize one headless host enrollment.
 - Concepts: `auth`, `hosts`
-- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`
+- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `invalid_request`
 - Output: Returns `{ enrollment_token, token }` once.
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
 
@@ -1324,7 +1363,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Inspect headless host enrollment grants.
 - Concepts: `auth`, `hosts`
-- Error codes: `auth_required`, `invalid_token`, `forbidden`
+- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`
 - Output: Returns `{ enrollment_tokens }` without secrets.
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
 
@@ -1337,7 +1376,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Invalidate an unused headless grant.
 - Concepts: `auth`, `hosts`
-- Error codes: `auth_required`, `invalid_token`, `forbidden`, `not_found`
+- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `not_found`
 - Output: Returns `{ enrollment_token }` without secret.
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
 

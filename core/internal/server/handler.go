@@ -931,6 +931,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	})
 
+	registerRoute("/auth/admins", authAdminRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleAuthAdminRoutes(w, r, opts) })
+	registerRoute("/auth/admins/", authAdminRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleAuthAdminRoutes(w, r, opts) })
+
 	registerRoute("/auth/principals", exactRouteAccess(routeAccessAuthenticatedPrincipal, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")

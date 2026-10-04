@@ -513,6 +513,17 @@ const adapterCommandTable = [
     (principalId, payload = {}) =>
       pb(pathParams({ principal_id: principalId }), payload),
   ],
+  ["listAuthAdmins", "auth.admins.list"],
+  [
+    "grantAuthAdmin",
+    "auth.admins.grant",
+    (principalId) => p(pathParams({ principal_id: principalId })),
+  ],
+  [
+    "revokeAuthAdmin",
+    "auth.admins.revoke",
+    (principalId) => p(pathParams({ principal_id: principalId })),
+  ],
   ["listAuthAudit", "auth.audit.list", (filters) => ({ options: q(filters) })],
   ["listSecrets", "secrets.list"],
   ["createSecret", "secrets.create", (payload) => ({ options: b(payload) })],

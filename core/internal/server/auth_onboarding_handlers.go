@@ -28,7 +28,7 @@ func handleBootstrapStatus(w http.ResponseWriter, r *http.Request, opts handlerO
 }
 
 func handleCreateInvite(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
-	principal, ok := requireAuthAdminPrincipal(w, r, opts)
+	principal, ok := requireHumanPrincipal(w, r, opts)
 	if !ok {
 		return
 	}
@@ -58,6 +58,8 @@ func handleCreateInvite(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	})
 	if err != nil {
 		switch {
+		case errors.Is(err, auth.ErrHumanRequired):
+			writeError(w, 403, "human_required", "only a human can issue human invitations")
 		case errors.Is(err, auth.ErrInvalidRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", sanitizeAuthError(err))
 		case errors.Is(err, auth.ErrAuthRequired):
@@ -89,7 +91,7 @@ func handleListInvites(w http.ResponseWriter, r *http.Request, opts handlerOptio
 }
 
 func handleRevokeInvite(w http.ResponseWriter, r *http.Request, opts handlerOptions, inviteID string) {
-	principal, ok := requireAuthAdminPrincipal(w, r, opts)
+	principal, ok := requireHumanPrincipal(w, r, opts)
 	if !ok {
 		return
 	}
@@ -97,6 +99,8 @@ func handleRevokeInvite(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	invite, err := opts.authStore.RevokeInvite(r.Context(), inviteID, *principal)
 	if err != nil {
 		switch {
+		case errors.Is(err, auth.ErrHumanRequired):
+			writeError(w, 403, "human_required", "an active human principal is required")
 		case errors.Is(err, auth.ErrInvalidRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", sanitizeAuthError(err))
 		case errors.Is(err, auth.ErrAuthRequired):

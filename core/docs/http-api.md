@@ -208,3 +208,19 @@ projection; clients should inspect sessions/participants for this activity signa
 All routes remain subject to existing rate limits, request limits, revocation,
 and workspace read-only enforcement. Bearer authentication remains required in
 development mode. See the canonical OpenAPI for request/response envelopes.
+
+### Explicit agent auth-admin grants
+
+- `GET /auth/admins`: humans or auth-admin agents list active explicit agent grants (`{ admins: [{ principal_id, actor_id, username, auth_admin }] }`).
+- Host-backed grants also include `host_id`, `host_slug`, and `agent_name`. Granting one trusts every process that can read that shared host key and derive the named agent's bearer. Grant/revoke audit metadata records that scope.
+- `POST /auth/principals/{principal_id}/revoke` (including the human lockout override) and `POST /auth/invites/{invite_id}/revoke` require active human authorization in their mutation transactions. Agent grants provide fleet writes and inventory/audit reads only.
+- `POST /auth/invites` is human-only. Human credential creation validates a human invite issuer inside its transaction, so historical agent-issued invites cannot mint human identities. Agent bearers cannot authorize human credential ceremonies.
+- `POST /auth/admins/{principal_id}/grant` and `/revoke`: human-only; target is an active agent ID or exact username. Returns `{ admin }`. Changes are audited and idempotent. Humans cannot be targets.
+- `GET /auth/principals` summaries include `auth_admin` (the explicit metadata flag).
+- Host administration accepts humans or explicitly granted auth-admin agents for pending list/approve/deny, token create/list/revoke, and `DELETE /hosts/{host_id}`. Self-host revocation by an agent returns `403 host_self_revoke`, with canonical ID and slug both protected. `PATCH /hosts/{host_id}` retains human bearer or signed host proof authorization.
+- Token creation accepts either `expires_at` or `expires_in_seconds` (600–86400), with `label`. Core measures relative expiry itself. Only the create response includes `token`; lists and audit records never do.
+
+- Removing an auth-admin grant does not invalidate already-issued enrollment tokens or approved ceremonies. Revoke unused tokens at `POST /auth/hosts/enrollment-tokens/{token_id}/revoke`. Deny pending or approved ceremonies at `POST /auth/hosts/enrollments/{enrollment_id}/deny` before completion; the protected pending list includes both statuses. After completion, revoke the host instead.
+- `host_enrollment_token_consumed` has no authenticated principal actor: metadata identifies `token_id`, destination `host_id` and `host_key_id`, with `issuer_principal_id` and `issuer_actor_id` recorded separately. No token secret or public key bytes enter audit metadata.
+
+The canonical shapes and error codes are in `contracts/anx-openapi.yaml`. See the CLI runbook for the default fleet setup flow.

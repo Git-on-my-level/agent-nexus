@@ -1145,7 +1145,7 @@ func helpTopicTextRaw(topic string) (string, bool) {
 	if topic == "auth principals" {
 		return strings.TrimSpace(`Auth principal administration
 
-Use this group to inspect workspace-local principals and revoke principals when you are acting with auth-admin authority.
+Use this group to inspect workspace-local principals and revoke principals when you are authenticated as a human. Granted agents may read the inventory.
 
 Core commands:
   auth principals list      List principals; use --handles-only for mentionable handles.
@@ -1523,7 +1523,7 @@ Canonical card workflow:
    Tip: use ` + "`cards message card:<handle> --body-file update.md`" + ` for ordinary status updates. Use raw ` + "`events create`" + ` only for contract-level writes or unusual integrations.
    Board context is an input (` + "`--board`" + `) or filter (` + "`--board`" + `), not the card command namespace.`)
 	case "auth":
-		return "auth whoami  Show enrolled host, derived agent and identity resolution source.\n"
+		return "auth whoami  Show enrolled host, derived agent and identity resolution source.\nauth admins list|grant|revoke  Human-controlled agent administration grants.\n"
 
 	default:
 		return ""
@@ -1920,7 +1920,8 @@ func runtimeSupportedCommandIDs() map[string]struct{} {
 func runtimeGeneratedHelpSpecs() []subcommandSpec {
 	specs := []subcommandSpec{
 		{command: "runs", valid: []string{"list", "get", "ingest"}},
-		{command: "host", valid: []string{"list"}},
+		{command: "host", valid: []string{"list", "revoke"}},
+		authAdminsSubcommandSpec, hostEnrollmentsSubcommandSpec, hostTokensSubcommandSpec,
 		authInvitesSubcommandSpec,
 		authBootstrapSubcommandSpec,
 		authPrincipalsSubcommandSpec,
@@ -2014,7 +2015,7 @@ func onboardingHelpText() string {
 
 Every ANX reader is a CEO by default: group execution detail into a small set of outcome cards, with status in a summary, checklist or visual report.
 
-1. Enroll this machine once per workspace with anx host enroll; a human approves it.
+1. Enroll this machine once per workspace with anx host enroll; a human or granted auth-admin agent approves it.
 2. Run anx config workspaces when unsure; set a default with anx config use <alias>. Do not hardcode --base-url in agent prompts. Let agentctl supply adapter context, or select ANX_AS / --as.
 3. Run anx orient. Confirm your handle, host, assigned work and next actions.
 4. Run anx work start card:<slug>, then anx work note "Progress" as you go.

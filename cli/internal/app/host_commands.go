@@ -172,9 +172,20 @@ func adoptionProofs(candidates []localAdoption, nonce, public string) ([]any, er
 
 func (a *App) runHost(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 {
-		return nil, "host", errnorm.Usage("subcommand_required", "use anx host enroll|status|list|token|exclude|include")
+		return nil, "host", errnorm.Usage("subcommand_required", "use anx host enroll|status|list|token|exclude|include|enrollments|tokens|revoke")
 	}
 	switch args[0] {
+	case "enrollments":
+		return a.runHostEnrollments(ctx, args[1:], cfg)
+	case "tokens":
+		return a.runHostTokens(ctx, args[1:], cfg)
+	case "revoke":
+		target, err := adminTarget(args[1:])
+		if err != nil {
+			return nil, "host revoke", err
+		}
+		r, e := a.invokeRawJSON(ctx, cfg, "host revoke", "DELETE", "/hosts/"+url.PathEscape(target), nil)
+		return r, "host revoke", e
 	case "discover":
 		if len(args) != 1 {
 			return nil, "host discover", errnorm.Usage("invalid_args", "host discover takes no arguments")
@@ -220,16 +231,31 @@ func (a *App) hostEnroll(ctx context.Context, args []string, cfg config.Resolved
 	fs := newSilentFlagSet("host enroll")
 	var name, token trackedString
 	var excludes trackedStrings
-	var plan bool
+	var plan, tokenStdin bool
 	fs.Var(&name, "name", "Host slug")
 	fs.Var(&token, "token", "Headless enrollment token")
 	fs.Var(&excludes, "exclude", "Profile to leave standalone")
+	fs.BoolVar(&tokenStdin, "token-stdin", false, "Read the headless enrollment token from stdin")
 	fs.BoolVar(&plan, "plan", false, "Show adoption plan")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) != 0 {
 		return nil, errnorm.Usage("invalid_args", "unexpected arguments")
+	}
+	if tokenStdin {
+		if token.set || plan {
+			return nil, errnorm.Usage("invalid_flags", "--token-stdin cannot be combined with --token or --plan")
+		}
+		if a.StdinIsTTY != nil && a.StdinIsTTY() {
+			return nil, errnorm.Usage("invalid_args", "--token-stdin requires piped input")
+		}
+		raw, err := io.ReadAll(io.LimitReader(a.Stdin, 4097))
+		if err != nil || len(raw) > 4096 || strings.TrimSpace(string(raw)) == "" {
+			return nil, errnorm.Usage("invalid_args", "stdin must contain one enrollment token")
+		}
+		token.value = strings.TrimSpace(string(raw))
+		token.set = true
 	}
 	hostname, _ := os.Hostname()
 	slug := name.value

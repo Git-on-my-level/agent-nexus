@@ -210,6 +210,17 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `docs messages` (local-helper): List messages from a Document conversation.
 - `docs message` (local-helper): Post a message to a Document conversation without hand-authoring event JSON.
 - `docs reply` (local-helper): Reply to an existing Document message.
+- `host enroll` (local-helper): Enroll this machine with interactive approval or a one-time fleet token.
+- `auth admins list` (local-helper): Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
+- `auth admins grant` (local-helper): Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents. Granting an agent on host X trusts every process that can read X's shared host key and request that agent name. Agents cannot issue or revoke human invitations, revoke principals, or use the human lockout override.
+- `auth admins revoke` (local-helper): Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
+- `host enrollments list` (local-helper): Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
+- `host enrollments approve` (local-helper): Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
+- `host enrollments deny` (local-helper): Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents. Deny a pending request or cancel an approval before completion; list includes both statuses.
+- `host tokens create` (local-helper): Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
+- `host tokens list` (local-helper): Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
+- `host tokens revoke` (local-helper): Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
+- `host revoke` (local-helper): Revoke a host by ID or slug. Agents cannot revoke their own host.
 - `meta skill` (local-helper): Render the bundled participant or PM skill.
 - `install skill` (local-helper): Install the bundled opinionated ANX agent skill to a specific file path.
 - `bridge install` (local-helper): Install the host bridge runtime.
@@ -250,7 +261,7 @@ Onboarding: daily loop
 
 Every ANX reader is a CEO by default: group execution detail into a small set of outcome cards, with status in a summary, checklist or visual report.
 
-1. Enroll this machine once per workspace with anx host enroll; a human approves it.
+1. Enroll this machine once per workspace with anx host enroll; a human or granted auth-admin agent approves it.
 2. Run anx config workspaces when unsure; set a default with anx config use <alias>. Do not hardcode --base-url in agent prompts. Let agentctl supply adapter context, or select ANX_AS / --as.
 3. Run anx orient. Confirm your handle, host, assigned work and next actions.
 4. Run anx work start card:<slug>, then anx work note "Progress" as you go.
@@ -355,7 +366,9 @@ Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence
 
 Setup and identity
 
-- Enroll a host once per workspace and machine with `anx host enroll`. A human approves the enrollment. Other agents on that host use the same host enrollment.
+- Enroll a host once per workspace and machine with `anx host enroll`. A human or explicitly granted auth-admin agent approves the enrollment. Other agents on that host use the same host enrollment.
+- Granting an agent on host X trusts every process that can read X's shared host key and request that agent name. Protect that key as an administration credential. Human invitations and human identity creation remain human-only.
+- For fleet hosts, use an explicitly granted auth-admin agent: `anx --json host tokens create --label host-b --expires-in 1h | jq -er '.result.token' | ssh host-b 'anx host enroll --name host-b --token-stdin'`. Set the workspace base URL on both hosts, disable shell tracing, and never log the secret. Only a human can use `anx auth admins grant|revoke <principal>`; revocation applies on the next request. Agents cannot revoke their own host.
 - Run `anx config workspaces` when unsure which workspace applies. Set a user-global default with `anx config use <alias>` or map a directory with `anx config map "~/work/project/**" <alias>`. Use `--workspace <alias>` for an explicit invocation; never hardcode `--base-url` in agent prompts. Preferences live outside git repositories.
 - Set `ANX_AS=<name>` or pass `--as <name>` to select an explicit stable principal. Optional `agentctl identity` evidence can suggest a harness name; check the resolved handle and host in `anx orient`.
 - `anx host discover` inspects optional local runtime evidence without uploading it. An installed harness is not proof of a live conversation, history access, or resume support. Generic registration does not require agentctl.
@@ -406,6 +419,8 @@ Host enrollment and derived-agent identity resolution.
 Host identity
 
 Enroll once per workspace with anx host enroll. The owner-only host key lives below ~/.config/anx/hosts/<workspace-key>/.
+For fleet hosts, a granted auth-admin agent runs anx --json host tokens create --label host-b --expires-in 1h and pipes .result.token securely to anx host enroll --token-stdin on host B. Configure the workspace base URL on both hosts; never log the token.
+Only a human can anx auth admins grant|revoke <principal>. Granted agents can anx host enrollments list|approve|deny, host tokens create|list|revoke, and host revoke <host>. An agent cannot revoke its own host.
 Enrollment stores that workspace core in host.json, persists a workspace alias and prints anx config use <alias> to make it default. Enrollment never changes the configured default.
 Run anx config workspaces to inspect aliases, enrolled workspaces and the directory rule for cwd. Selection follows --base-url or --workspace, ANX_BASE_URL, directory rule, configured default, then a single enrolled host (source bridge:auto-single). With several enrolled workspaces and no selection, commands fail with repair instructions.
 Use --as <name> or ANX_AS to select a derived agent; agentctl run context and verified harness detection are automatic. anx auth whoami reports the selected host, agent and resolution source.
@@ -1345,7 +1360,7 @@ Generated Help: host list
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `hosts`, `agents`
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-- Adjacent commands: `host bridge check-in`, `host enroll approve`, `host enroll complete`, `host enroll deny`, `host enroll headless`, `host enroll pending`, `host enroll poll`, `host enroll start`, `host get`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
+- Adjacent commands: `host bridge check-in`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
 
 
 Global flags:
@@ -1371,7 +1386,7 @@ Generated Help: auth invites list
 - Output: Returns `{ invites }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `auth`
-- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 
 Global flags:
@@ -1395,9 +1410,9 @@ Generated Help: auth invites create
 - Input mode: `json-body`
 - Why: Issue a one-time invite for a human principal; kind must be human.
 - Output: Returns `{ invite, token }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `forbidden`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `human_required`
 - Concepts: `auth`
-- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 Inputs:
   Required:
@@ -1427,9 +1442,9 @@ Generated Help: auth invites revoke
 - Input mode: `json-body`
 - Why: Invalidate an outstanding invite by id.
 - Output: Returns `{ invite }`.
-- Error codes: `auth_required`, `invalid_request`, `not_found`, `invalid_token`
+- Error codes: `human_required`, `auth_required`, `invalid_request`, `not_found`, `invalid_token`
 - Concepts: `auth`
-- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 Inputs:
   Required:
@@ -1457,7 +1472,7 @@ Generated Help: auth bootstrap status
 - Why: Report whether first-human passkey bootstrap registration is still available; hosts cannot bootstrap.
 - Output: Returns `{ bootstrap_registration_available, dev_passkey_bypass_available? }`, where the dev bypass field reflects the effective local-only passkey bypass capability.
 - Concepts: `auth`
-- Adjacent commands: `auth audit list`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 
 Global flags:
@@ -1483,7 +1498,7 @@ Generated Help: auth principals list
 - Output: Returns principal list JSON.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `auth`
-- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals revoke`, `auth token`
 
 
 Global flags:
@@ -1507,9 +1522,9 @@ Generated Help: auth principals revoke
 - Input mode: `json-body`
 - Why: Administrative revocation of a principal linkage.
 - Output: Returns result JSON.
-- Error codes: `auth_required`, `invalid_request`, `not_found`, `invalid_token`, `conflict`
+- Error codes: `human_required`, `auth_required`, `invalid_request`, `not_found`, `invalid_token`, `conflict`
 - Concepts: `auth`
-- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth token`
+- Adjacent commands: `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth token`
 
 Inputs:
   Required:
@@ -1538,7 +1553,7 @@ Generated Help: auth audit list
 - Output: Returns audit list JSON.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `auth`, `audit`
-- Adjacent commands: `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 
 Global flags:
@@ -7458,6 +7473,427 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs reply ... ; anx --json docs reply ... ; anx docs reply ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `host enroll`
+
+Enroll this machine with interactive approval or a one-time fleet token.
+
+```text
+Local Help: host enroll
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Enroll this machine with interactive approval or a one-time fleet token.
+- Examples:
+  - `anx host enroll --name host-b`
+  - `anx --json host tokens create --label host-b --expires-in 1h | jq -er '.result.token' | ssh host-b 'anx host enroll --name host-b --token-stdin'`
+
+Flags:
+  --name <slug>                Workspace-local host slug.
+  --token-stdin                Read the one-time enrollment token from piped stdin; mutually exclusive with --token and --plan.
+  --token <secret>             Headless token (prefer --token-stdin to keep secrets out of argv).
+  --exclude <name>             Leave this legacy profile standalone; repeatable.
+  --plan                       Show the adoption plan without enrolling.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx host enroll ... ; anx --json host enroll ... ; anx host enroll ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth admins list`
+
+Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
+
+```text
+Generated Help: auth admins list
+
+- Command ID: `auth.admins.list`
+- CLI path: `auth admins list`
+- HTTP: `GET /auth/admins`
+- Side effect class: `read_only`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Manage explicit workspace administration authority for agents.
+- Output: Returns `AuthAdminsResponse`.
+- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`
+- Concepts: `auth`
+- Agent notes: Only a human can change a grant. No default grant is assigned to agents or hosts.
+- Adjacent commands: `auth admins grant`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+
+Local Help: auth admins list
+
+- Kind: `local helper`
+- Side effect class: `read_only`
+- Summary: Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
+- Examples:
+  - `anx auth admins list`
+  - `anx auth admins grant codex.host-a`
+  - `anx auth admins revoke codex.host-a`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx auth admins list ... ; anx --json auth admins list ... ; anx auth admins list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth admins grant`
+
+Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents. Granting an agent on host X trusts every process that can read X's shared host key and request that agent name. Agents cannot issue or revoke human invitations, revoke principals, or use the human lockout override.
+
+```text
+Generated Help: auth admins grant
+
+- Command ID: `auth.admins.grant`
+- CLI path: `auth admins grant`
+- HTTP: `POST /auth/admins/{principal_id}/grant`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Manage explicit workspace administration authority for agents.
+- Output: Returns `AuthAdminResponse`.
+- Error codes: `auth_required`, `invalid_token`, `human_required`, `invalid_request`, `not_found`
+- Concepts: `auth`
+- Agent notes: Only a human can change a grant. No default grant is assigned to agents or hosts.
+- Adjacent commands: `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+
+Inputs:
+  Required:
+  - path `principal_id`
+
+Local Help: auth admins grant
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents. Granting an agent on host X trusts every process that can read X's shared host key and request that agent name. Agents cannot issue or revoke human invitations, revoke principals, or use the human lockout override.
+- Examples:
+  - `anx auth admins list`
+  - `anx auth admins grant codex.host-a`
+  - `anx auth admins revoke codex.host-a`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx auth admins grant ... ; anx --json auth admins grant ... ; anx auth admins grant ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth admins revoke`
+
+Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
+
+```text
+Generated Help: auth admins revoke
+
+- Command ID: `auth.admins.revoke`
+- CLI path: `auth admins revoke`
+- HTTP: `POST /auth/admins/{principal_id}/revoke`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Manage explicit workspace administration authority for agents.
+- Output: Returns `AuthAdminResponse`.
+- Error codes: `auth_required`, `invalid_token`, `human_required`, `invalid_request`, `not_found`
+- Concepts: `auth`
+- Agent notes: Only a human can change a grant. No default grant is assigned to agents or hosts.
+- Adjacent commands: `auth admins grant`, `auth admins list`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+
+Inputs:
+  Required:
+  - path `principal_id`
+
+Local Help: auth admins revoke
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
+- Examples:
+  - `anx auth admins list`
+  - `anx auth admins grant codex.host-a`
+  - `anx auth admins revoke codex.host-a`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx auth admins revoke ... ; anx --json auth admins revoke ... ; anx auth admins revoke ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `host enrollments list`
+
+Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
+
+```text
+Generated Help: host enrollments list
+
+- Command ID: `hosts.enroll.pending`
+- CLI path: `host enrollments list`
+- HTTP: `GET /auth/hosts/enrollments/pending`
+- Side effect class: `read_only`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Review host enrollment requests.
+- Output: Returns `{ enrollments }`.
+- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`
+- Concepts: `auth`, `hosts`
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+- Adjacent commands: `host bridge check-in`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
+
+Local Help: host enrollments list
+
+- Kind: `local helper`
+- Side effect class: `read_only`
+- Summary: Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
+- Examples:
+  - `anx host enrollments list`
+  - `anx host enrollments approve ABCD-EFGH`
+  - `anx host enrollments deny ABCD-EFGH`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx host enrollments list ... ; anx --json host enrollments list ... ; anx host enrollments list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `host enrollments approve`
+
+Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
+
+```text
+Generated Help: host enrollments approve
+
+- Command ID: `hosts.enroll.approve`
+- CLI path: `host enrollments approve`
+- HTTP: `POST /auth/hosts/enrollments/{enrollment_id}/approve`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Approve a verified machine.
+- Output: Returns `HostEnrollmentStatusResponse`.
+- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `not_found`, `enrollment_expired`, `enrollment_consumed`, `host_slug_taken`
+- Concepts: `auth`, `hosts`
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+- Adjacent commands: `host bridge check-in`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
+
+Inputs:
+  Required:
+  - path `enrollment_id`
+
+Local Help: host enrollments approve
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
+- Examples:
+  - `anx host enrollments list`
+  - `anx host enrollments approve ABCD-EFGH`
+  - `anx host enrollments deny ABCD-EFGH`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx host enrollments approve ... ; anx --json host enrollments approve ... ; anx host enrollments approve ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `host enrollments deny`
+
+Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents. Deny a pending request or cancel an approval before completion; list includes both statuses.
+
+```text
+Generated Help: host enrollments deny
+
+- Command ID: `hosts.enroll.deny`
+- CLI path: `host enrollments deny`
+- HTTP: `POST /auth/hosts/enrollments/{enrollment_id}/deny`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Reject an untrusted machine.
+- Output: Returns `HostEnrollmentStatusResponse`.
+- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `not_found`, `enrollment_expired`, `enrollment_consumed`
+- Concepts: `auth`, `hosts`
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+- Adjacent commands: `host bridge check-in`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
+
+Inputs:
+  Required:
+  - path `enrollment_id`
+
+Local Help: host enrollments deny
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents. Deny a pending request or cancel an approval before completion; list includes both statuses.
+- Examples:
+  - `anx host enrollments list`
+  - `anx host enrollments approve ABCD-EFGH`
+  - `anx host enrollments deny ABCD-EFGH`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx host enrollments deny ... ; anx --json host enrollments deny ... ; anx host enrollments deny ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `host tokens create`
+
+Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
+
+```text
+Generated Help: host tokens create
+
+- Command ID: `hosts.tokens.create`
+- CLI path: `host tokens create`
+- HTTP: `POST /auth/hosts/enrollment-tokens`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Authorize one headless host enrollment.
+- Output: Returns `{ enrollment_token, token }` once.
+- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `invalid_request`
+- Concepts: `auth`, `hosts`
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+- Adjacent commands: `host bridge check-in`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens list`, `host tokens revoke`
+
+Inputs:
+  Required:
+  - body `label` (string)
+  Optional:
+  - body `expires_at` (datetime)
+  - body `expires_in_seconds` (integer)
+
+Local Help: host tokens create
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
+- Examples:
+  - `anx host tokens create --label fleet --expires-in 1h`
+  - `anx host tokens list`
+  - `anx host tokens revoke <token-id>`
+
+Flags:
+  --label <label>              Audit label for this one-time token.
+  --expires-in <duration>      Lifetime from 10m to 24h; default 1h.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx host tokens create ... ; anx --json host tokens create ... ; anx host tokens create ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `host tokens list`
+
+Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
+
+```text
+Generated Help: host tokens list
+
+- Command ID: `hosts.tokens.list`
+- CLI path: `host tokens list`
+- HTTP: `GET /auth/hosts/enrollment-tokens`
+- Side effect class: `read_only`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Inspect headless host enrollment grants.
+- Output: Returns `{ enrollment_tokens }` without secrets.
+- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`
+- Concepts: `auth`, `hosts`
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+- Adjacent commands: `host bridge check-in`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens revoke`
+
+Local Help: host tokens list
+
+- Kind: `local helper`
+- Side effect class: `read_only`
+- Summary: Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
+- Examples:
+  - `anx host tokens create --label fleet --expires-in 1h`
+  - `anx host tokens list`
+  - `anx host tokens revoke <token-id>`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx host tokens list ... ; anx --json host tokens list ... ; anx host tokens list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `host tokens revoke`
+
+Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
+
+```text
+Generated Help: host tokens revoke
+
+- Command ID: `hosts.tokens.revoke`
+- CLI path: `host tokens revoke`
+- HTTP: `POST /auth/hosts/enrollment-tokens/{token_id}/revoke`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Invalidate an unused headless grant.
+- Output: Returns `{ enrollment_token }` without secret.
+- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `not_found`
+- Concepts: `auth`, `hosts`
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+- Adjacent commands: `host bridge check-in`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`
+
+Inputs:
+  Required:
+  - path `token_id`
+
+Local Help: host tokens revoke
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
+- Examples:
+  - `anx host tokens create --label fleet --expires-in 1h`
+  - `anx host tokens list`
+  - `anx host tokens revoke <token-id>`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx host tokens revoke ... ; anx --json host tokens revoke ... ; anx host tokens revoke ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `host revoke`
+
+Revoke a host by ID or slug. Agents cannot revoke their own host.
+
+```text
+Generated Help: host revoke
+
+- Command ID: `hosts.revoke`
+- CLI path: `host revoke`
+- HTTP: `DELETE /hosts/{host_id}`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Cut off a compromised machine.
+- Output: Returns `{ host }`.
+- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `host_self_revoke`, `not_found`
+- Concepts: `hosts`, `auth`
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+- Adjacent commands: `host bridge check-in`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host tokens create`, `host tokens list`, `host tokens revoke`
+
+Inputs:
+  Required:
+  - path `host_id`
+
+Local Help: host revoke
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Revoke a host by ID or slug. Agents cannot revoke their own host.
+- Examples:
+  - `anx host revoke host-b`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx host revoke ... ; anx --json host revoke ... ; anx host revoke ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 

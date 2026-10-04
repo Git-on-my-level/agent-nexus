@@ -246,13 +246,26 @@ export const QA_AUTH_AGENT = {
 };
 
 export const QA_PRINCIPALS = [
-  QA_AUTH_AGENT,
+  { ...QA_AUTH_AGENT, auth_admin: false },
   {
     agent_id: "principal_zara_agent",
     actor_id: "actor-zara-ops",
     username: "codex.qa-mbp",
     principal_kind: "agent",
     auth_method: "host_assertion",
+    auth_admin: true,
+  },
+];
+
+export const QA_AUTH_ADMINS = [
+  {
+    principal_id: "principal_zara_agent",
+    actor_id: "actor-zara-ops",
+    username: "codex.qa-mbp",
+    auth_admin: true,
+    host_id: "host_qa_mbp",
+    host_slug: "qa-mbp",
+    agent_name: "codex",
   },
 ];
 

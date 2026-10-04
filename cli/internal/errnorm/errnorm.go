@@ -118,7 +118,7 @@ func ExitCode(err error) int {
 		return 3
 	case "conflict", "source_revision_changed", "lease_mismatch", "actor_exists", "username_taken":
 		return 4
-	case "auth_required", "authentication_required", "authorization_denied", "forbidden", "invalid_token", "key_mismatch", "agent_revoked", "wake_proof_required":
+	case "auth_admin_required", "human_required", "host_self_revoke", "auth_required", "authentication_required", "authorization_denied", "forbidden", "invalid_token", "key_mismatch", "agent_revoked", "wake_proof_required":
 		return 5
 	case "network_error", "request_failed", "stream_connect_failed", "stream_read_failed", "storage_unavailable", "primitives_unavailable", "schema_unavailable", "meta_unavailable":
 		return 6
@@ -217,6 +217,9 @@ var defaultMetadataByCode = map[string]Metadata{
 	"actor_exists":                  {Recoverable: true, Hint: "Use a different actor id or load the existing actor with `anx actors list`."},
 	"agent_revoked":                 {Recoverable: false, Hint: "Ask a human auth-admin to review host enrollment and agent access."},
 	"auth_registration_unavailable": {Recoverable: true, Hint: "Core auth may still be starting. Retry `anx host enroll` in a few seconds, or run `anx api call --path /readyz` to confirm readiness."},
+	"auth_admin_required":           {Recoverable: false, Hint: "A human must grant this agent administration access through Access or anx auth admins grant <principal>."},
+	"human_required":                {Recoverable: false, Hint: "Use the human's own credentials for this action."},
+	"host_self_revoke":              {Recoverable: false, Hint: "Ask a human or an auth-admin on another host to revoke this host."},
 	"auth_required":                 {Recoverable: true, Hint: "Run `anx --as <name> auth whoami` to verify host credentials, then retry."},
 	"busy":                          {Recoverable: true, Hint: "Wait and retry; this is a temporary capacity, queue, or conversation limit."},
 	"cli_outdated":                  {Recoverable: true, Hint: "Run `anx update`, then retry."},

@@ -137,6 +137,15 @@ commands:
   "artifacts.unarchive":
     classification: exposed_write
     reason: "ordinary reversible artifact lifecycle write"
+  "auth.admins.grant":
+    classification: gated_admin
+    reason: "delegating auth-admin requires a human principal"
+  "auth.admins.list":
+    classification: gated_admin
+    reason: "explicit agent grant inventory is administrative"
+  "auth.admins.revoke":
+    classification: gated_admin
+    reason: "withdrawing auth-admin requires a human principal"
   "auth.audit.list":
     classification: gated_admin
     reason: "auth audit inventory is administrative"

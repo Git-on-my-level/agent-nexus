@@ -131,6 +131,10 @@ func hostRouteAccess(r *http.Request) routeAccessRequirement {
 func hostError(w http.ResponseWriter, err error) {
 	status, code := http.StatusInternalServerError, "internal_error"
 	switch {
+	case errors.Is(err, auth.ErrAuthAdminRequired):
+		status, code = http.StatusForbidden, "auth_admin_required"
+	case errors.Is(err, auth.ErrHostSelfRevoke):
+		status, code = http.StatusForbidden, "host_self_revoke"
 	case errors.Is(err, auth.ErrInvalidRequest):
 		status, code = http.StatusBadRequest, "invalid_request"
 	case errors.Is(err, auth.ErrInvalidToken):
@@ -167,6 +171,11 @@ func hostError(w http.ResponseWriter, err error) {
 	writeError(w, status, code, code)
 }
 func hostAdmin(w http.ResponseWriter, r *http.Request, opts handlerOptions) (*auth.Principal, bool) {
+	return requireAuthAdminPrincipal(w, r, opts)
+}
+
+// Host patch retains its pre-existing human-only bearer policy.
+func humanHostAdmin(w http.ResponseWriter, r *http.Request, opts handlerOptions) (*auth.Principal, bool) {
 	p, ok := requireAuthAdminPrincipal(w, r, opts)
 	if !ok {
 		return nil, false
@@ -267,18 +276,35 @@ func handleHostAuthRoutes(w http.ResponseWriter, r *http.Request, opts handlerOp
 			return
 		case http.MethodPost:
 			var in struct {
-				Label     string `json:"label"`
-				ExpiresAt string `json:"expires_at"`
+				Label            string  `json:"label"`
+				ExpiresAt        *string `json:"expires_at"`
+				ExpiresInSeconds *int64  `json:"expires_in_seconds"`
 			}
 			if !decodeJSONBody(w, r, &in) {
 				return
 			}
-			expiry, err := time.Parse(time.RFC3339, in.ExpiresAt)
-			if err != nil {
-				hostError(w, auth.ErrInvalidRequest)
-				return
+			var item auth.HostEnrollmentToken
+			var secret string
+			var err error
+			if in.ExpiresInSeconds != nil {
+				if in.ExpiresAt != nil || *in.ExpiresInSeconds < 600 || *in.ExpiresInSeconds > 86400 {
+					hostError(w, auth.ErrInvalidRequest)
+					return
+				}
+				item, secret, err = opts.authStore.CreateHostEnrollmentTokenWithTTL(r.Context(), in.Label, time.Duration(*in.ExpiresInSeconds)*time.Second, *admin)
+			} else {
+				var expiry time.Time
+				if in.ExpiresAt == nil {
+					hostError(w, auth.ErrInvalidRequest)
+					return
+				}
+				expiry, err = time.Parse(time.RFC3339, *in.ExpiresAt)
+				if err != nil {
+					hostError(w, auth.ErrInvalidRequest)
+					return
+				}
+				item, secret, err = opts.authStore.CreateHostEnrollmentToken(r.Context(), in.Label, expiry, *admin)
 			}
-			item, secret, err := opts.authStore.CreateHostEnrollmentToken(r.Context(), in.Label, expiry, *admin)
 			if err != nil {
 				hostError(w, err)
 				return
@@ -290,10 +316,11 @@ func handleHostAuthRoutes(w http.ResponseWriter, r *http.Request, opts handlerOp
 	if strings.HasPrefix(path, "/auth/hosts/enrollment-tokens/") {
 		parts := strings.Split(strings.TrimPrefix(path, "/auth/hosts/enrollment-tokens/"), "/")
 		if len(parts) == 2 && parts[1] == "revoke" && r.Method == http.MethodPost {
-			if _, ok := hostAdmin(w, r, opts); !ok {
+			admin, ok := hostAdmin(w, r, opts)
+			if !ok {
 				return
 			}
-			out, err := opts.authStore.RevokeHostEnrollmentToken(r.Context(), parts[0])
+			out, err := opts.authStore.RevokeHostEnrollmentToken(r.Context(), parts[0], *admin)
 			if err != nil {
 				hostError(w, err)
 				return
@@ -433,7 +460,7 @@ func handleHostRoutes(w http.ResponseWriter, r *http.Request, opts handlerOption
 		}
 		var admin *auth.Principal
 		if r.Header.Get("Authorization") != "" {
-			admin, ok = hostAdmin(w, r, opts)
+			admin, ok = humanHostAdmin(w, r, opts)
 			if !ok {
 				return
 			}
