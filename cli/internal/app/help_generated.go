@@ -88,6 +88,22 @@ var localHelperTopics = []localHelperTopic{
 		Flags:       []localHelperFlag{},
 	},
 	{
+		Path:        "move",
+		Summary:     "Move a Card or Topic and its related Boards, Cards, and Docs between enrolled workspaces.",
+		JSONShape:   "Returns a stable move id, source/destination refs, and the exact planned or completed resource actions.",
+		Composition: "Uses user-global workspace aliases and separate workspace-local host credentials. A source revision journal fences resumable moves until the complete destination set is verified.",
+		Examples: []string{
+			"anx move card card:launch-checklist --to archive",
+			"anx move topic topic:launch --to archive --dry-run",
+		},
+		Flags: []localHelperFlag{
+			{Name: "<ref>", Description: "Source card or topic ref, handle, or id."},
+			{Name: "--to <workspace-alias>", Description: "Destination alias from ~/.config/anx/workspaces.json."},
+			{Name: "--connection-map <source-id>=<destination-id>", Description: "Explicitly bind source-backed cards to a destination-local connection; repeat for each source connection."},
+			{Name: "--dry-run", Description: "Read both workspaces and show the exact create, archive, and tombstone actions."},
+		},
+	},
+	{
 		Path:        "lifecycle verbs",
 		Summary:     "Uniform lifecycle surface for archive, unarchive, trash, restore, and purge across artifacts, boards, docs, events, cards, and topics.",
 		JSONShape:   "Optional `--from-file` JSON object body; `--reason`, `--actor-id` (except purge), and `--dry-run` augment or replace JSON fields.",
@@ -1045,6 +1061,7 @@ Core Commands:
   pm            Query PM context, decisions, conversations and action receipts
   workspace     Summarize workspace boards and counts for first-run orientation
   report        Validate and publish visual report documents
+  move          Move cards and topics between configured workspaces
   read          Read an ANX resource from a URL or typed ref
   url           Print a shareable ANX URL for a resource
   api call      Perform an arbitrary HTTP API request
@@ -1118,6 +1135,9 @@ func helpTopicTextRaw(topic string) (string, bool) {
 	topic = strings.TrimSpace(topic)
 	if strings.HasPrefix(topic, "debug ") {
 		topic = strings.TrimPrefix(topic, "debug ")
+	}
+	if topic == "move" || topic == "move card" || topic == "move topic" {
+		return "anx move card <ref> --to <workspace-alias> [--connection-map <source-id>=<destination-id>] [--dry-run]; anx move topic <ref> --to <workspace-alias> [--connection-map <source-id>=<destination-id>] [--dry-run]. Topic moves journal source revisions, rewrite refs, verify every destination resource, and only then archive or tombstone the source.\n", true
 	}
 	if topic == "work" {
 		return "Daily work: anx work start [card]; anx work note <text> [card]; anx work block <why> [card] [--ask --recommend <answer>]; anx work done [card] --evidence <url|ref>. Omitted cards use presence. For inventory use anx work list.\n", true

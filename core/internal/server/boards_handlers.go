@@ -170,7 +170,13 @@ func handleCreateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 
-	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardCreatedEvent(board))
+	createdEvent := buildBoardCreatedEvent(board)
+	if move, ok := req.Board["workspace_move"]; ok {
+		if payload, ok := createdEvent["payload"].(map[string]any); ok {
+			payload["workspace_move"] = move
+		}
+	}
+	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, createdEvent)
 
 	summary, summaryErr := opts.primitiveStore.GetBoardSummary(r.Context(), board["id"].(string))
 	response := map[string]any{"board": board}
@@ -337,16 +343,24 @@ func handleArchiveBoard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 	var req struct {
-		ActorID string `json:"actor_id"`
+		ActorID     string  `json:"actor_id"`
+		IfUpdatedAt *string `json:"if_updated_at"`
 	}
 	if !decodeJSONBody(w, r, &req) {
 		return
+	}
+	if req.IfUpdatedAt != nil {
+		normalized, ok := normalizeRequiredTimestamp(w, req.IfUpdatedAt, "if_updated_at")
+		if !ok {
+			return
+		}
+		req.IfUpdatedAt = &normalized
 	}
 	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
 	if !ok {
 		return
 	}
-	board, err := opts.primitiveStore.ArchiveBoard(r.Context(), actorID, boardID)
+	board, err := opts.primitiveStore.ArchiveBoardIfUpdatedAt(r.Context(), actorID, boardID, req.IfUpdatedAt)
 	if err != nil {
 		if writeBoardLifecycleStoreError(w, err) {
 			return
@@ -1194,6 +1208,7 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 	var req struct {
 		ActorID          string  `json:"actor_id"`
 		IfBoardUpdatedAt *string `json:"if_board_updated_at"`
+		IfWorkVersion    *int64  `json:"if_version"`
 	}
 	if !decodeJSONBody(w, r, &req) {
 		return
@@ -1205,12 +1220,17 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 		}
 		req.IfBoardUpdatedAt = &normalized
 	}
+	if req.IfWorkVersion != nil && *req.IfWorkVersion < 0 {
+		writeError(w, http.StatusBadRequest, "invalid_request", "if_version must be non-negative")
+		return
+	}
 	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
 	if !ok {
 		return
 	}
 	result, err := opts.primitiveStore.ArchiveBoardCard(r.Context(), actorID, boardID, identifier, primitives.RemoveBoardCardInput{
 		IfBoardUpdatedAt: req.IfBoardUpdatedAt,
+		IfWorkVersion:    req.IfWorkVersion,
 	})
 	if err != nil {
 		switch {

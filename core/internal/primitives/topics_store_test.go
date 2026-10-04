@@ -51,6 +51,32 @@ func TestTopicPatchAndLifecycleDoNotPersistPublicIdentityInExtensions(t *testing
 	assertTopicExtensionsOmitPublicIdentity(t, ws, topicID)
 }
 
+func TestTopicCreationEventCarriesWorkspaceMoveMarker(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	store := NewTestStore(ws.DB(), "")
+	marker := map[string]any{"move_id": "mv_topic", "source_ref": "topic:source", "source_url": "https://src.example/topics/source"}
+	created, err := store.CreateTopic(ctx, "actor-1", map[string]any{
+		"title": "Copied topic", "summary": "Moved context", "workspace_move": marker,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := created.Event["payload"].(map[string]any)
+	if got := payload["workspace_move"].(map[string]any)["move_id"]; got != "mv_topic" {
+		t.Fatalf("topic creation event omitted move marker: %#v", payload)
+	}
+	loaded, err := store.GetTopic(ctx, created.Topic["id"].(string))
+	if err != nil || loaded["workspace_move"].(map[string]any)["source_ref"] != "topic:source" {
+		t.Fatalf("topic marker did not persist: %#v %v", loaded, err)
+	}
+}
+
 func assertTopicExtensionsOmitPublicIdentity(t *testing.T, ws *storage.Workspace, topicID string) {
 	t.Helper()
 	var raw string

@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -88,12 +89,13 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 	}
 
 	var req struct {
-		ActorID     string         `json:"actor_id"`
-		RequestKey  string         `json:"request_key"`
-		Document    map[string]any `json:"document"`
-		Content     any            `json:"content"`
-		ContentType string         `json:"content_type"`
-		Refs        any            `json:"refs"`
+		ActorID       string         `json:"actor_id"`
+		RequestKey    string         `json:"request_key"`
+		Document      map[string]any `json:"document"`
+		Content       any            `json:"content"`
+		ContentBase64 *string        `json:"content_base64"`
+		ContentType   string         `json:"content_type"`
+		Refs          any            `json:"refs"`
 	}
 	if !decodeJSONBody(w, r, &req) {
 		return
@@ -102,13 +104,25 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		writeError(w, http.StatusBadRequest, "invalid_request", "document is required")
 		return
 	}
-	if req.Content == nil {
+	if req.Content == nil && req.ContentBase64 == nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "content is required")
 		return
 	}
 	if err := validateDocumentContentType(req.ContentType); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
+	}
+	if req.ContentBase64 != nil {
+		if req.ContentType != "binary" || req.Content != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "content_base64 is supported only for binary content and cannot be combined with content")
+			return
+		}
+		decoded, err := base64.StdEncoding.DecodeString(*req.ContentBase64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "content_base64 must be valid standard base64")
+			return
+		}
+		req.Content = decoded
 	}
 	if _, has := req.Document["labels"]; has {
 		writeError(w, http.StatusBadRequest, "invalid_request", "document.labels is not supported")
@@ -756,10 +770,18 @@ func handleArchiveDocument(w http.ResponseWriter, r *http.Request, opts handlerO
 	}
 
 	var req struct {
-		ActorID string `json:"actor_id"`
+		ActorID     string  `json:"actor_id"`
+		IfUpdatedAt *string `json:"if_updated_at"`
 	}
 	if !decodeJSONBody(w, r, &req) {
 		return
+	}
+	if req.IfUpdatedAt != nil {
+		normalized, ok := normalizeRequiredTimestamp(w, req.IfUpdatedAt, "if_updated_at")
+		if !ok {
+			return
+		}
+		req.IfUpdatedAt = &normalized
 	}
 
 	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
@@ -767,7 +789,7 @@ func handleArchiveDocument(w http.ResponseWriter, r *http.Request, opts handlerO
 		return
 	}
 
-	document, revision, err := opts.primitiveStore.ArchiveDocument(r.Context(), actorID, documentID)
+	document, revision, err := opts.primitiveStore.ArchiveDocumentIfUpdatedAt(r.Context(), actorID, documentID, req.IfUpdatedAt)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "document not found")

@@ -125,6 +125,7 @@ type PrimitiveStore interface {
 	GetTopic(ctx context.Context, topicID string) (map[string]any, error)
 	PatchTopic(ctx context.Context, actorID string, topicID string, patch map[string]any, ifUpdatedAt *string) (primitives.TopicPatchResult, error)
 	ArchiveTopic(ctx context.Context, actorID string, topicID string) (map[string]any, error)
+	ArchiveTopicIfUpdatedAt(ctx context.Context, actorID string, topicID string, ifUpdatedAt *string) (map[string]any, error)
 	UnarchiveTopic(ctx context.Context, actorID string, topicID string) (map[string]any, error)
 	TrashTopic(ctx context.Context, actorID string, topicID string, reason string) (map[string]any, error)
 	RestoreTopic(ctx context.Context, actorID string, topicID string) (map[string]any, error)
@@ -148,6 +149,7 @@ type PrimitiveStore interface {
 	PurgeTrashedArtifact(ctx context.Context, artifactID string) error
 	TrashDocument(ctx context.Context, actorID string, documentID string, reason string) (map[string]any, map[string]any, error)
 	ArchiveDocument(ctx context.Context, actorID string, documentID string) (map[string]any, map[string]any, error)
+	ArchiveDocumentIfUpdatedAt(ctx context.Context, actorID string, documentID string, ifUpdatedAt *string) (map[string]any, map[string]any, error)
 	UnarchiveDocument(ctx context.Context, actorID string, documentID string) (map[string]any, map[string]any, error)
 	RestoreDocument(ctx context.Context, actorID string, documentID string, reason string) (map[string]any, map[string]any, error)
 	PurgeDocument(ctx context.Context, documentID string) error
@@ -157,6 +159,7 @@ type PrimitiveStore interface {
 	RestoreThread(ctx context.Context, actorID string, threadID string) (map[string]any, error)
 	PurgeThread(ctx context.Context, threadID string) error
 	ArchiveBoard(ctx context.Context, actorID string, boardID string) (map[string]any, error)
+	ArchiveBoardIfUpdatedAt(ctx context.Context, actorID string, boardID string, ifUpdatedAt *string) (map[string]any, error)
 	UnarchiveBoard(ctx context.Context, actorID string, boardID string) (map[string]any, error)
 	TrashBoard(ctx context.Context, actorID string, boardID string, reason string) (map[string]any, error)
 	RestoreBoard(ctx context.Context, actorID string, boardID string) (map[string]any, error)

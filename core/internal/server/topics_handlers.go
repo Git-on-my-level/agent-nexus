@@ -308,11 +308,19 @@ func handleTopicLifecycleWithReason(w http.ResponseWriter, r *http.Request, opts
 	}
 
 	var req struct {
-		ActorID string `json:"actor_id"`
-		Reason  string `json:"reason"`
+		ActorID     string  `json:"actor_id"`
+		Reason      string  `json:"reason"`
+		IfUpdatedAt *string `json:"if_updated_at"`
 	}
 	if !decodeJSONBody(w, r, &req) {
 		return
+	}
+	if action == "archive" && req.IfUpdatedAt != nil {
+		normalized, ok := normalizeRequiredTimestamp(w, req.IfUpdatedAt, "if_updated_at")
+		if !ok {
+			return
+		}
+		req.IfUpdatedAt = &normalized
 	}
 
 	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
@@ -326,7 +334,7 @@ func handleTopicLifecycleWithReason(w http.ResponseWriter, r *http.Request, opts
 	)
 	switch action {
 	case "archive":
-		topic, err = opts.primitiveStore.ArchiveTopic(r.Context(), actorID, topicID)
+		topic, err = opts.primitiveStore.ArchiveTopicIfUpdatedAt(r.Context(), actorID, topicID, req.IfUpdatedAt)
 	case "unarchive":
 		topic, err = opts.primitiveStore.UnarchiveTopic(r.Context(), actorID, topicID)
 	case "trash":

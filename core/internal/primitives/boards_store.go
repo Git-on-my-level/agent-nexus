@@ -238,6 +238,7 @@ type MoveBoardCardInput struct {
 
 type RemoveBoardCardInput struct {
 	IfBoardUpdatedAt *string
+	IfWorkVersion    *int64
 }
 
 type BoardCardMutationResult struct {
@@ -912,6 +913,10 @@ func (s *Store) GetBoardSummary(ctx context.Context, boardID string) (map[string
 }
 
 func (s *Store) ArchiveBoard(ctx context.Context, actorID, boardID string) (map[string]any, error) {
+	return s.ArchiveBoardIfUpdatedAt(ctx, actorID, boardID, nil)
+}
+
+func (s *Store) ArchiveBoardIfUpdatedAt(ctx context.Context, actorID, boardID string, ifUpdatedAt *string) (map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -926,6 +931,9 @@ func (s *Store) ArchiveBoard(ctx context.Context, actorID, boardID string) (map[
 	if err != nil {
 		return nil, err
 	}
+	if err := ensureUpdatedAtMatches(row.UpdatedAt, ifUpdatedAt); err != nil {
+		return nil, err
+	}
 	if row.TrashedAt.Valid && strings.TrimSpace(row.TrashedAt.String) != "" {
 		return nil, ErrAlreadyTrashed
 	}
@@ -933,11 +941,24 @@ func (s *Store) ArchiveBoard(ctx context.Context, actorID, boardID string) (map[
 		return boardRowToAPI(ctx, s.db, row)
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := s.db.ExecContext(ctx,
-		`UPDATE boards SET archived_at = ?, archived_by = ? WHERE id = ?`,
-		now, strings.TrimSpace(actorID), boardID,
-	); err != nil {
+	query := `UPDATE boards SET archived_at = ?, archived_by = ? WHERE id = ?`
+	args := []any{now, strings.TrimSpace(actorID), boardID}
+	if ifUpdatedAt != nil {
+		query += ` AND updated_at = ?`
+		args = append(args, *ifUpdatedAt)
+	}
+	result, err := s.db.ExecContext(ctx, query, args...)
+	if err != nil {
 		return nil, fmt.Errorf("archive board: %w", err)
+	}
+	if ifUpdatedAt != nil {
+		rows, rowsErr := result.RowsAffected()
+		if rowsErr != nil {
+			return nil, rowsErr
+		}
+		if rows != 1 {
+			return nil, ErrConflict
+		}
 	}
 	row, err = s.getBoardRow(ctx, boardID)
 	if err != nil {
@@ -2299,6 +2320,16 @@ func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifi
 		}
 		return BoardCardMutationResult{}, err
 	}
+	if input.IfWorkVersion != nil {
+		var currentVersion int64
+		versionErr := tx.QueryRowContext(ctx, `SELECT version FROM work_metadata WHERE card_id = ?`, cardRow.CardID).Scan(&currentVersion)
+		if versionErr != nil || currentVersion != *input.IfWorkVersion {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
+			return BoardCardMutationResult{}, ErrConflict
+		}
+	}
 	if cardRow.TrashedAt.Valid && strings.TrimSpace(cardRow.TrashedAt.String) != "" {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -2327,11 +2358,30 @@ func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifi
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := tx.ExecContext(ctx, `UPDATE cards SET archived_at = ?, archived_by = ? WHERE id = ?`, now, actorID, cardRow.CardID); err != nil {
+	archiveQuery := `UPDATE cards SET archived_at = ?, archived_by = ? WHERE id = ?`
+	archiveArgs := []any{now, actorID, cardRow.CardID}
+	if input.IfWorkVersion != nil {
+		archiveQuery += ` AND EXISTS (SELECT 1 FROM work_metadata WHERE card_id = ? AND version = ?)`
+		archiveArgs = append(archiveArgs, cardRow.CardID, *input.IfWorkVersion)
+	}
+	archiveResult, err := tx.ExecContext(ctx, archiveQuery, archiveArgs...)
+	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
 		return BoardCardMutationResult{}, fmt.Errorf("archive board card: %w", err)
+	}
+	if input.IfWorkVersion != nil {
+		rows, rowsErr := archiveResult.RowsAffected()
+		if rowsErr != nil || rows != 1 {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
+			if rowsErr != nil {
+				return BoardCardMutationResult{}, rowsErr
+			}
+			return BoardCardMutationResult{}, ErrConflict
+		}
 	}
 	boardRow, err = touchBoardRow(ctx, tx, boardRow, actorID)
 	if err != nil {

@@ -743,6 +743,10 @@ export const commandRegistry = [
                 {
                     "name": "actor_id",
                     "type": "string"
+                },
+                {
+                    "name": "if_updated_at",
+                    "type": "datetime"
                 }
             ]
         },
@@ -1072,6 +1076,10 @@ export const commandRegistry = [
                 {
                     "name": "actor_id",
                     "type": "string"
+                },
+                {
+                    "name": "if_updated_at",
+                    "type": "datetime"
                 }
             ]
         },
@@ -1181,6 +1189,10 @@ export const commandRegistry = [
                 {
                     "name": "actor_id",
                     "type": "string"
+                },
+                {
+                    "name": "if_updated_at",
+                    "type": "datetime"
                 }
             ]
         },
@@ -2098,6 +2110,10 @@ export const commandRegistry = [
                 {
                     "name": "actor_id",
                     "type": "string"
+                },
+                {
+                    "name": "if_updated_at",
+                    "type": "datetime"
                 }
             ]
         },
@@ -2328,6 +2344,14 @@ export const commandRegistry = [
             ],
             "optional": [
                 {
+                    "name": "board.column_schema",
+                    "type": "object"
+                },
+                {
+                    "name": "board.id",
+                    "type": "string"
+                },
+                {
                     "name": "board.primary_topic_ref",
                     "type": "string"
                 },
@@ -2342,6 +2366,14 @@ export const commandRegistry = [
                 {
                     "name": "board.summary",
                     "type": "string"
+                },
+                {
+                    "name": "board.thread_id",
+                    "type": "string"
+                },
+                {
+                    "name": "board.workspace_move",
+                    "type": "object"
                 }
             ]
         },
@@ -2623,6 +2655,10 @@ export const commandRegistry = [
                 {
                     "name": "actor_id",
                     "type": "string"
+                },
+                {
+                    "name": "if_updated_at",
+                    "type": "datetime"
                 }
             ]
         },
@@ -2739,6 +2775,10 @@ export const commandRegistry = [
                 {
                     "name": "actor_id",
                     "type": "string"
+                },
+                {
+                    "name": "if_updated_at",
+                    "type": "datetime"
                 }
             ]
         },
@@ -2844,6 +2884,10 @@ export const commandRegistry = [
                 {
                     "name": "if_board_updated_at",
                     "type": "datetime"
+                },
+                {
+                    "name": "if_version",
+                    "type": "integer"
                 }
             ]
         },
@@ -3798,6 +3842,10 @@ export const commandRegistry = [
                 {
                     "name": "actor_id",
                     "type": "string"
+                },
+                {
+                    "name": "if_updated_at",
+                    "type": "datetime"
                 }
             ]
         },
@@ -4218,10 +4266,6 @@ export const commandRegistry = [
         "body_schema": {
             "required": [
                 {
-                    "name": "content",
-                    "type": "any"
-                },
-                {
                     "name": "content_type",
                     "type": "string",
                     "enum_values": [
@@ -4238,6 +4282,18 @@ export const commandRegistry = [
             "optional": [
                 {
                     "name": "actor_id",
+                    "type": "string"
+                },
+                {
+                    "name": "content",
+                    "type": "any"
+                },
+                {
+                    "name": "content_base64",
+                    "type": "string"
+                },
+                {
+                    "name": "document.document_id",
                     "type": "string"
                 },
                 {
@@ -4281,8 +4337,16 @@ export const commandRegistry = [
                     "type": "list\u003cstring\u003e"
                 },
                 {
+                    "name": "document.thread_id",
+                    "type": "string"
+                },
+                {
                     "name": "document.verified_at",
                     "type": "datetime"
+                },
+                {
+                    "name": "document.workspace_move",
+                    "type": "object"
                 },
                 {
                     "name": "refs",
@@ -5170,6 +5234,10 @@ export const commandRegistry = [
                 {
                     "name": "actor_id",
                     "type": "string"
+                },
+                {
+                    "name": "if_updated_at",
+                    "type": "datetime"
                 }
             ]
         },
@@ -5231,6 +5299,10 @@ export const commandRegistry = [
                 {
                     "name": "actor_id",
                     "type": "string"
+                },
+                {
+                    "name": "if_updated_at",
+                    "type": "datetime"
                 }
             ]
         },
@@ -5472,6 +5544,10 @@ export const commandRegistry = [
                 {
                     "name": "actor_id",
                     "type": "string"
+                },
+                {
+                    "name": "if_updated_at",
+                    "type": "datetime"
                 }
             ]
         },
@@ -5613,6 +5689,10 @@ export const commandRegistry = [
                 {
                     "name": "actor_id",
                     "type": "string"
+                },
+                {
+                    "name": "if_updated_at",
+                    "type": "datetime"
                 }
             ]
         },
@@ -10243,6 +10323,10 @@ export const commandRegistry = [
                 {
                     "name": "actor_id",
                     "type": "string"
+                },
+                {
+                    "name": "if_updated_at",
+                    "type": "datetime"
                 }
             ]
         },
@@ -10322,12 +10406,28 @@ export const commandRegistry = [
             ],
             "optional": [
                 {
+                    "name": "request_key",
+                    "type": "string"
+                },
+                {
+                    "name": "topic.id",
+                    "type": "string"
+                },
+                {
                     "name": "topic.provenance.by_field",
                     "type": "object"
                 },
                 {
                     "name": "topic.provenance.notes",
                     "type": "string"
+                },
+                {
+                    "name": "topic.thread_id",
+                    "type": "string"
+                },
+                {
+                    "name": "topic.workspace_move",
+                    "type": "object"
                 }
             ]
         },
@@ -10494,6 +10594,10 @@ export const commandRegistry = [
                 {
                     "name": "patch.title",
                     "type": "string"
+                },
+                {
+                    "name": "patch.workspace_move",
+                    "type": "object"
                 }
             ]
         },
@@ -10551,6 +10655,10 @@ export const commandRegistry = [
                 {
                     "name": "actor_id",
                     "type": "string"
+                },
+                {
+                    "name": "if_updated_at",
+                    "type": "datetime"
                 }
             ]
         },
@@ -10720,6 +10828,10 @@ export const commandRegistry = [
                 {
                     "name": "actor_id",
                     "type": "string"
+                },
+                {
+                    "name": "if_updated_at",
+                    "type": "datetime"
                 }
             ]
         },
@@ -10904,12 +11016,20 @@ export const commandRegistry = [
                     "type": "list\u003cstring\u003e"
                 },
                 {
+                    "name": "document_ref",
+                    "type": "string"
+                },
+                {
                     "name": "due_at",
                     "type": "string"
                 },
                 {
                     "name": "executions",
                     "type": "list\u003cobject\u003e"
+                },
+                {
+                    "name": "id",
+                    "type": "string"
                 },
                 {
                     "name": "next_action",
@@ -10928,6 +11048,10 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
+                    "name": "plan",
+                    "type": "any"
+                },
+                {
                     "name": "priority",
                     "type": "string"
                 },
@@ -10936,8 +11060,22 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
+                    "name": "related_refs",
+                    "type": "list\u003cany\u003e"
+                },
+                {
                     "name": "relations",
                     "type": "list\u003cobject\u003e"
+                },
+                {
+                    "name": "risk",
+                    "type": "string",
+                    "enum_values": [
+                        "critical",
+                        "high",
+                        "low",
+                        "medium"
+                    ]
                 },
                 {
                     "name": "source.authority",
@@ -10972,8 +11110,16 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
+                    "name": "topic_ref",
+                    "type": "string"
+                },
+                {
                     "name": "wake_condition",
                     "type": "string"
+                },
+                {
+                    "name": "workspace_move",
+                    "type": "object"
                 }
             ]
         },
@@ -11458,6 +11604,10 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
+                    "name": "patch.plan",
+                    "type": "any"
+                },
+                {
                     "name": "patch.priority",
                     "type": "string"
                 },
@@ -11476,6 +11626,10 @@ export const commandRegistry = [
                 {
                     "name": "patch.wake_condition",
                     "type": "string"
+                },
+                {
+                    "name": "patch.workspace_move",
+                    "type": "object"
                 }
             ]
         },

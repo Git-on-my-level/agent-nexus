@@ -174,6 +174,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `adapters token` (local-helper): Exchange owner identity for a short-lived, push-only token.
 - `inbox list` (local-helper): List asks addressed to the active agent, including answer and per-answer read state.
 - `inbox read` (local-helper): Mark one answer to your ask as read, including before its wake is delivered.
+- `move` (local-helper): Move a Card or Topic and its related Boards, Cards, and Docs between enrolled workspaces.
 - `lifecycle verbs` (local-helper): Uniform lifecycle surface for archive, unarchive, trash, restore, and purge across artifacts, boards, docs, events, cards, and topics.
 - `topics create` (local-helper): Create a topic from plain flags, or from advanced JSON.
 - `topics patch` (local-helper): Patch a topic from scalar flags, or from advanced JSON.
@@ -1834,6 +1835,7 @@ Inputs:
   - path `topic_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 CLI input:
   - JSON body is optional; `--from-file` remains available for advanced request bodies.
@@ -1868,6 +1870,7 @@ Inputs:
   - path `topic_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 CLI input:
   - JSON body is optional; `--from-file` remains available for advanced request bodies.
@@ -1902,6 +1905,7 @@ Inputs:
   - path `topic_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 CLI input:
   - JSON body is optional; `--from-file` remains available for advanced request bodies.
@@ -2030,6 +2034,7 @@ Inputs:
   - path `board_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2061,6 +2066,7 @@ Inputs:
   - path `board_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2124,6 +2130,7 @@ Inputs:
   - path `board_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2368,6 +2375,7 @@ Inputs:
   - path `document_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2401,6 +2409,7 @@ Inputs:
   - path `document_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2588,6 +2597,7 @@ Inputs:
   Optional:
   - body `actor_id` (string)
   - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-ref-or-handle>`, `anx boards workspace <board-ref-or-handle>`, or the latest board mutation response.
+  - body `if_version` (integer): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2978,6 +2988,7 @@ Inputs:
   - path `event_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3009,6 +3020,7 @@ Inputs:
   - path `event_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3072,6 +3084,7 @@ Inputs:
   - path `event_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3336,6 +3349,7 @@ Inputs:
   - path `artifact_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3367,6 +3381,7 @@ Inputs:
   - path `artifact_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3430,6 +3445,7 @@ Inputs:
   - path `artifact_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -4715,15 +4731,20 @@ Inputs:
   - body `blockers` (list<string>)
   - body `board_ref` (string)
   - body `definition_of_done` (list<string>)
+  - body `document_ref` (string)
   - body `due_at` (string)
   - body `executions` (list<object>)
+  - body `id` (string)
   - body `next_action` (string)
   - body `next_actor` (string)
   - body `owner` (string)
   - body `phase` (string)
+  - body `plan` (any)
   - body `priority` (string)
   - body `project_ref` (string)
+  - body `related_refs` (list<any>)
   - body `relations` (list<object>)
+  - body `risk` (string)
   - body `source.authority` (string)
   - body `source.connection_id` (string)
   - body `source.native_id` (string)
@@ -4732,7 +4753,10 @@ Inputs:
   - body `source.url` (string)
   - body `start_at` (string)
   - body `summary` (string)
+  - body `topic_ref` (string)
   - body `wake_condition` (string)
+  - body `workspace_move` (object)
+  Enum values: risk: critical, high, low, medium
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
@@ -4852,11 +4876,13 @@ Inputs:
   - body `patch.executions` (list<object>)
   - body `patch.next_action` (string)
   - body `patch.next_actor` (string)
+  - body `patch.plan` (any)
   - body `patch.priority` (string)
   - body `patch.project_ref` (string)
   - body `patch.relations` (list<object>)
   - body `patch.start_at` (string)
   - body `patch.wake_condition` (string)
+  - body `patch.workspace_move` (object)
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
@@ -5821,6 +5847,14 @@ Global flags:
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
+## `move`
+
+Move a Card or Topic and its related Boards, Cards, and Docs between enrolled workspaces.
+
+```text
+anx move card <ref> --to <workspace-alias> [--connection-map <source-id>=<destination-id>] [--dry-run]; anx move topic <ref> --to <workspace-alias> [--connection-map <source-id>=<destination-id>] [--dry-run]. Topic moves journal source revisions, rewrite refs, verify every destination resource, and only then archive or tombstone the source.
+```
+
 ## `lifecycle verbs`
 
 Uniform lifecycle surface for archive, unarchive, trash, restore, and purge across artifacts, boards, docs, events, cards, and topics.
@@ -5881,8 +5915,12 @@ Inputs:
   - body `topic.summary` (string)
   - body `topic.title` (string)
   Optional:
+  - body `request_key` (string)
+  - body `topic.id` (string)
   - body `topic.provenance.by_field` (object)
   - body `topic.provenance.notes` (string)
+  - body `topic.thread_id` (string)
+  - body `topic.workspace_move` (object)
 
 Local Help: topics create
 
@@ -5946,6 +5984,7 @@ Inputs:
   - body `patch.related_refs` (list<any>)
   - body `patch.summary` (string)
   - body `patch.title` (string)
+  - body `patch.workspace_move` (object)
 
 Local Help: topics patch
 
@@ -6153,10 +6192,14 @@ Inputs:
   - body `board.provenance.sources` (list<string>)
   - body `board.title` (string)
   Optional:
+  - body `board.column_schema` (object)
+  - body `board.id` (string)
   - body `board.primary_topic_ref` (string)
   - body `board.provenance.by_field` (object)
   - body `board.provenance.notes` (string)
   - body `board.summary` (string)
+  - body `board.thread_id` (string)
+  - body `board.workspace_move` (object)
 
 Local Help: boards create
 
@@ -6280,11 +6323,13 @@ Generated Help: docs create
 
 Inputs:
   Required:
-  - body `content` (any)
   - body `content_type` (string)
   - body `document.title` (string)
   Optional:
   - body `actor_id` (string)
+  - body `content` (any)
+  - body `content_base64` (string)
+  - body `document.document_id` (string)
   - body `document.handle` (string)
   - body `document.hosts` (list<string>)
   - body `document.provenance.by_field` (object)
@@ -6295,7 +6340,9 @@ Inputs:
   - body `document.subject_ref` (string)
   - body `document.summary` (string)
   - body `document.tags` (list<string>)
+  - body `document.thread_id` (string)
   - body `document.verified_at` (datetime)
+  - body `document.workspace_move` (object)
   - body `refs` (list<any>)
   - body `request_key` (string)
   Enum values: content_type: binary, structured, text

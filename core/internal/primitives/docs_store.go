@@ -539,6 +539,9 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		"revision_number":  revisionNumber,
 		"prev_revision_id": nil,
 	}
+	if move, ok := document["workspace_move"]; ok {
+		artifactMetadata["workspace_move"] = move
+	}
 	if title != "" {
 		artifactMetadata["summary"] = title
 	}
@@ -697,7 +700,12 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		artifactID,
 		revisionNumber,
 		title,
-		nil,
+		func() map[string]any {
+			if move, ok := document["workspace_move"]; ok {
+				return map[string]any{"workspace_move": move}
+			}
+			return nil
+		}(),
 	))
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
@@ -1597,6 +1605,10 @@ func (s *Store) TrashDocument(ctx context.Context, actorID string, documentID st
 }
 
 func (s *Store) ArchiveDocument(ctx context.Context, actorID, documentID string) (map[string]any, map[string]any, error) {
+	return s.ArchiveDocumentIfUpdatedAt(ctx, actorID, documentID, nil)
+}
+
+func (s *Store) ArchiveDocumentIfUpdatedAt(ctx context.Context, actorID, documentID string, ifUpdatedAt *string) (map[string]any, map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, nil, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -1611,6 +1623,9 @@ func (s *Store) ArchiveDocument(ctx context.Context, actorID, documentID string)
 
 	doc, err := s.loadDocumentRow(ctx, documentID)
 	if err != nil {
+		return nil, nil, err
+	}
+	if err := ensureUpdatedAtMatches(doc.UpdatedAt, ifUpdatedAt); err != nil {
 		return nil, nil, err
 	}
 	if doc.TrashedAt.Valid && strings.TrimSpace(doc.TrashedAt.String) != "" {
@@ -1634,12 +1649,25 @@ func (s *Store) ArchiveDocument(ctx context.Context, actorID, documentID string)
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err = s.db.ExecContext(ctx,
-		`UPDATE documents SET archived_at = ?, archived_by = ? WHERE id = ?`,
-		now, actorID, documentID,
-	)
+	query := `UPDATE documents SET archived_at = ?, archived_by = ? WHERE id = ?`
+	args := []any{now, actorID, documentID}
+	if ifUpdatedAt != nil {
+		query += ` AND updated_at = ?`
+		args = append(args, *ifUpdatedAt)
+	}
+	var result sql.Result
+	result, err = s.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("archive document: %w", err)
+	}
+	if ifUpdatedAt != nil {
+		rows, rowsErr := result.RowsAffected()
+		if rowsErr != nil {
+			return nil, nil, rowsErr
+		}
+		if rows != 1 {
+			return nil, nil, ErrConflict
+		}
 	}
 
 	doc.ArchivedAt = nullableString(now)
