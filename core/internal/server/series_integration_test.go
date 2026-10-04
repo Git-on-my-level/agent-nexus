@@ -51,7 +51,7 @@ func TestSeriesTokenOnlyPushesDeclaredPointsAndReportMaterialization(t *testing.
 	if err != nil || principal.AuthAdmin {
 		t.Fatalf("scoped credential inherited administrator powers: %#v %v", principal, err)
 	}
-	for _, item := range []struct{ method, path string }{{"GET", "/series"}, {"GET", "/cards"}, {"POST", "/topics"}, {"GET", "/adapters"}, {"POST", "/adapters/github/revoke"}, {"POST", "/auth/token"}, {"POST", "/adapters/github/token"}, {"POST", "/sessions"}, {"GET", "/events/stream"}, {"GET", "/health"}, {"POST", "/series/not-declared/points"}} {
+	for _, item := range []struct{ method, path string }{{"GET", "/series"}, {"GET", "/cards"}, {"POST", "/topics"}, {"GET", "/adapters"}, {"POST", "/adapters/github/revoke"}, {"GET", "/auth/admins"}, {"POST", "/auth/admins/series-owner/grant"}, {"POST", "/auth/token"}, {"POST", "/adapters/github/token"}, {"POST", "/sessions"}, {"GET", "/events/stream"}, {"GET", "/health"}, {"POST", "/series/not-declared/points"}} {
 		status, out := hostHTTP(t, item.method, env.server.URL+item.path, token, map[string]any{"value": 1})
 		hostStatus(t, status, 403, out)
 	}
