@@ -1,3 +1,4 @@
+import { isHumanNextActor } from "./humanActors.js";
 import { updateDigest } from "./inboxDigest.js";
 import {
   enrichInboxItem,
@@ -162,7 +163,7 @@ export function classifyInboxRow(row, now = Date.now()) {
     return "handled";
   }
   if (row.kind === "task") {
-    if (taskIsBlocked(row)) {
+    if (taskIsBlocked(row) || row.humanNext) {
       return "needs-you";
     }
     const freshness = workFreshness(row.item || row, now);
@@ -384,6 +385,7 @@ export function buildInboxRows({
   currentActorId = "",
   actorName = () => "",
   agentName = () => "",
+  humanIds = new Set(),
 } = {}) {
   const rows = [];
   const titles = new Map();
@@ -499,6 +501,9 @@ export function buildInboxRows({
     rows.push({
       id: `task:${workKey(item)}`,
       kind: "task",
+      humanNext:
+        !["done", "cancelled"].includes(item.phase) &&
+        isHumanNextActor(item, humanIds),
       title: item.title || "Untitled task",
       source:
         String(item.source?.authority ?? "").toLowerCase() === "nexus"
@@ -565,6 +570,8 @@ export function buildInboxRows({
       actorName: (id) => nameFor(id) || shortIdLabel(id),
       titleFor,
       unreadCount: Number(group.unread_count) || 0,
+      groupRef: group.group_ref,
+      isAgent: (id) => Boolean(agentName(id)),
       selfId: currentActorId,
     });
     rows.push({
@@ -583,7 +590,37 @@ export function buildInboxRows({
   const classified = rows
     .map((row) => ({ ...row, mailbox: classifyInboxRow(row, now) }))
     .filter((row) => row.mailbox !== null)
-    .sort((a, b) => rowTime(b) - rowTime(a));
+    .sort((a, b) => {
+      if (a.mailbox === "watching" && b.mailbox === "watching") {
+        const importance = (row) =>
+          row.kind === "decision"
+            ? 3
+            : row.kind === "task"
+              ? 2
+              : Math.max(
+                  0,
+                  ...(row.item?.events || []).map((event) => {
+                    if (
+                      [
+                        "human_attention_requested",
+                        "human_attention_responded",
+                      ].includes(event.type)
+                    )
+                      return 3;
+                    if (
+                      event.type === "card_resolved" ||
+                      (event.type === "card_moved" &&
+                        ["done", "blocked"].includes(event.payload?.column_key))
+                    )
+                      return 2;
+                    return 0;
+                  }),
+                );
+        const delta = importance(b) - importance(a);
+        if (delta) return delta;
+      }
+      return rowTime(b) - rowTime(a);
+    });
   const needsYou = classified
     .filter((row) => row.mailbox === "needs-you")
     .sort(compareNeedsYou);

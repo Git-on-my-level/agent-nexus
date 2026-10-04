@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `192`
+- Commands: `195`
 
 ## `actors.create`
 
@@ -1567,6 +1567,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`
 - Output: Returns usage envelope JSON.
 
+## `overview.get`
+
+- CLI path: `overview`
+- HTTP: `GET /overview`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Read the same active-work Overview projection used by the web UI.
+- Concepts: `home`, `documents`, `cards`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Output: Returns the workspace Overview projection.
+- Agent notes: Use anx overview --json to inspect the same executive projection as the web UI.
+
 ## `plan.set`
 
 - CLI path: `plan set`
@@ -2420,4 +2433,30 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Output: Returns `WorkRefreshResponse`.
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+
+## `workspace.dashboard.list`
+
+- CLI path: `workspace dashboard list`
+- HTTP: `GET /workspace/dashboard/reports`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Defer selector-only report reads until the user or agent requests candidates.
+- Concepts: `home`, `documents`
+- Error codes: `auth_required`, `invalid_token`
+- Output: Returns the dashboard report selector projection.
+- Agent notes: Overview returns its selected dashboard only. Use this read for other pin candidates.
+
+## `workspace.dashboard.set`
+
+- CLI path: `workspace dashboard set`
+- HTTP: `PUT /workspace/dashboard`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `json-body`
+- Why: Pin an active visual-report document as the workspace dashboard; null clears the pin.
+- Concepts: `home`, `documents`, `cards`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Output: Returns the workspace Overview projection.
+- Agent notes: Pass a document ref to pin it; pass null to return to newest-report selection.
 

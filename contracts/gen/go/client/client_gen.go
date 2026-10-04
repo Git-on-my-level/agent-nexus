@@ -1576,6 +1576,16 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:  []string{"ops.blob.usage.rebuild", "ops.health"},
 	},
 	{
+		CommandID: "overview.get",
+		CLIPath:   "overview",
+		Group:     "overview",
+		Method:    "GET",
+		Path:      "/overview",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"home", "documents", "cards"},
+	},
+	{
 		CommandID:  "plan.set",
 		CLIPath:    "plan set",
 		Group:      "plan",
@@ -2351,6 +2361,28 @@ var CommandRegistry = []CommandSpec{
 		Concepts:   []string{"cards", "evidence"},
 		Adjacent:   []string{"work.capabilities", "work.create", "work.get", "work.list", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get"},
 	},
+	{
+		CommandID: "workspace.dashboard.list",
+		CLIPath:   "workspace dashboard list",
+		Group:     "workspace",
+		Method:    "GET",
+		Path:      "/workspace/dashboard/reports",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"home", "documents"},
+		Adjacent:  []string{"workspace.dashboard.set"},
+	},
+	{
+		CommandID: "workspace.dashboard.set",
+		CLIPath:   "workspace dashboard set",
+		Group:     "workspace",
+		Method:    "PUT",
+		Path:      "/workspace/dashboard",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"home", "documents", "cards"},
+		Adjacent:  []string{"workspace.dashboard.list"},
+	},
 }
 
 var commandIndex = func() map[string]CommandSpec {
@@ -2979,6 +3011,10 @@ func (c *Client) OpsUsageSummary(ctx context.Context, opts RequestOptions) (*htt
 	return c.Invoke(ctx, "ops.usage.summary", nil, opts)
 }
 
+func (c *Client) OverviewGet(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "overview.get", nil, opts)
+}
+
 func (c *Client) PlanSet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "plan.set", pathParams, opts)
 }
@@ -3245,4 +3281,12 @@ func (c *Client) WorkRefreshGet(ctx context.Context, pathParams map[string]strin
 
 func (c *Client) WorkRefreshRequest(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "work.refresh.request", pathParams, opts)
+}
+
+func (c *Client) WorkspaceDashboardList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "workspace.dashboard.list", nil, opts)
+}
+
+func (c *Client) WorkspaceDashboardSet(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "workspace.dashboard.set", nil, opts)
 }

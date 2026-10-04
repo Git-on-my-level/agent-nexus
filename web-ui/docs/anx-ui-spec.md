@@ -442,3 +442,17 @@ Agent Nexus web UI v0 is complete when it can:
 - Post messages on a thread or topic-backed timeline.
 - Render provenance with visual distinction between evidence-backed and inferred sources.
 - Parse typed reference strings across all surfaces (`board:` refs may stay inert in the operator UI).
+
+### Executive Overview
+
+Overview reads the core `/overview` projection shared with agents: Needs you,
+Dashboard, Initiatives, then collapsed Work detail (counts, freshness and agent
+presence). Initiatives use the same live-initiatives renderer and projection
+as document reports (`progress.done/total`, `needs[]`). Rows show the first summary line, Markdown checklist
+progress, priority and all human asks outside fenced examples. A report can be pinned as the persistent
+workspace dashboard or reset to newest-report selection. Inline reports show
+the title and panels; project/freshness filters, panel counts and provenance
+inspection remain in Open document. Archive in the
+secondary navigation contains archived boards, cards, topics and documents.
+Watching aggregates routine agent edits by board and distinct card, prioritizes
+asks/answers and done/blocked transitions, keeps every material clause visible in the digest, and excludes archived subjects including cards on archived project topics. Report choices load when the selector opens.

@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Concepts: `34`
+- Concepts: `35`
 
 ## `actors`
 
@@ -113,7 +113,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `60`
+- Commands: `62`
 - Command IDs:
   - `agents.get`
   - `agents.me.presence`
@@ -133,6 +133,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `cards.revisions.list`
   - `cards.timeline`
   - `cards.trash`
+  - `overview.get`
   - `plan.set`
   - `plan.show`
   - `pm.actions.acknowledge`
@@ -175,6 +176,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `work.patch`
   - `work.refresh.get`
   - `work.refresh.request`
+  - `workspace.dashboard.set`
 
 ## `compatibility`
 
@@ -220,6 +222,14 @@ Generated from `contracts/anx-openapi.yaml`.
   - `docs.trash`
   - `docs.unarchive`
   - `report.render`
+
+## `documents`
+
+- Commands: `3`
+- Command IDs:
+  - `overview.get`
+  - `workspace.dashboard.list`
+  - `workspace.dashboard.set`
 
 ## `events`
 
@@ -290,10 +300,13 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `home`
 
-- Commands: `2`
+- Commands: `5`
 - Command IDs:
   - `home.read`
   - `home.unread`
+  - `overview.get`
+  - `workspace.dashboard.list`
+  - `workspace.dashboard.set`
 
 ## `hosts`
 

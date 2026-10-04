@@ -108,6 +108,16 @@ export function describeUpdateEvent(event, { titleFor = () => "" } = {}) {
       objectTitle: cardTitle,
     };
   }
+  if (type === "card_resolved") {
+    return {
+      ...base,
+      key: "card_resolved",
+      verb: "resolved",
+      plural: "resolved {n} tasks",
+      objectRef: cardRef,
+      objectTitle: cardTitle,
+    };
+  }
   if (type.startsWith("card_")) {
     const done = type.slice("card_".length).replace(/_/g, " ");
     const verb =
@@ -283,19 +293,64 @@ export function updateDigest(events, options = {}) {
     if (!byActor.has(actor)) byActor.set(actor, new Map());
     const verbs = byActor.get(actor);
     const entry = verbs.get(described.key);
-    if (entry) entry.count += 1;
-    else verbs.set(described.key, { count: 1, sample: described });
+    if (entry) {
+      const identity =
+        described.objectRef || text(event?.id) || String(entry.count);
+      if (!entry.objects.has(identity)) {
+        entry.objects.add(identity);
+        entry.count += 1;
+      }
+    } else
+      verbs.set(described.key, {
+        count: 1,
+        sample: described,
+        objects: new Set([described.objectRef || text(event?.id)]),
+      });
   }
+  const important = (entry) =>
+    entry.sample.key.startsWith("ask:") ||
+    [
+      "answered",
+      "card_resolved",
+      "card_moved:done",
+      "card_moved:blocked",
+    ].includes(entry.sample.key);
+  const actorHasImportant = ([, verbs]) => [...verbs.values()].some(important);
+  // Keep every material event and every actor who produced one. Routine edits
+  // alone are capped; neither clause nor actor limits hide asks or transitions.
+  const actors = [...byActor].sort(
+    (a, b) => Number(actorHasImportant(b)) - Number(actorHasImportant(a)),
+  );
   const parts = [];
-  for (const [actorId, verbs] of byActor) {
-    if (parts.length >= maxActors) break;
+  for (const [actorId, verbs] of actors) {
+    const entries = [...verbs.values()];
+    const material = entries.filter(important);
+    if (parts.length >= maxActors && !material.length) continue;
     const who =
       selfId && actorId === selfId
         ? "You"
         : shortActorName(actorName(actorId)) || "Someone";
-    const clauses = [...verbs.values()].slice(0, 2).map(countPhrase);
-    const rest = verbs.size - 2;
-    if (rest > 0) clauses.push(`${rest} more`);
+    const routine = entries.filter(
+      (entry) =>
+        entry.sample.key === "card:updated" ||
+        entry.sample.key === "card_created",
+    );
+    const cards = new Set(routine.flatMap((entry) => [...entry.objects]));
+    let clauses;
+    if (
+      options.isAgent?.(actorId) === true &&
+      cards.size > 1 &&
+      routine.length === verbs.size
+    ) {
+      clauses = [
+        `reorganized ${titleFor(options.groupRef) || "initiatives"}: ${cards.size} cards`,
+      ];
+    } else {
+      const ordinary = entries.filter((entry) => !important(entry));
+      clauses = [...material, ...ordinary.slice(0, 2)].map(countPhrase);
+      if (ordinary.length > 2)
+        clauses.push(`${ordinary.length - 2} more routine changes`);
+    }
     parts.push(`${who} ${joinClauses(clauses)}`);
   }
   const hiddenActors = byActor.size - parts.length;

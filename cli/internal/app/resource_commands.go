@@ -411,6 +411,21 @@ func (a *App) runWorkspaceCommand(ctx context.Context, args []string, cfg config
 		return nil, "workspace", errnorm.Usage("missing_subcommand", "`anx workspace` defaults to `summary`; run `anx workspace summary` explicitly for help examples")
 	}
 	sub := strings.TrimSpace(args[0])
+	if sub == "dashboard" {
+		if len(args) == 2 && args[1] == "list" {
+			result, err := a.invokeTypedJSON(ctx, cfg, "workspace dashboard list", "workspace.dashboard.list", nil, nil, nil)
+			return result, "workspace dashboard list", err
+		}
+		if len(args) != 3 || args[1] != "set" {
+			return nil, "workspace dashboard set", errnorm.Usage("invalid_args", "usage: anx workspace dashboard set <doc|none>")
+		}
+		var ref any = args[2]
+		if args[2] == "none" {
+			ref = nil
+		}
+		result, err := a.invokeTypedJSON(ctx, cfg, "workspace dashboard set", "workspace.dashboard.set", nil, nil, map[string]any{"document_ref": ref})
+		return result, "workspace dashboard set", err
+	}
 	if sub != "summary" {
 		return nil, "workspace", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown `anx workspace` subcommand %q; expected `summary`", sub))
 	}

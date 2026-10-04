@@ -6865,6 +6865,37 @@ export const commandRegistry = [
         "ts_method": "opsUsageSummary"
     },
     {
+        "command_id": "overview.get",
+        "cli_path": "overview",
+        "group": "overview",
+        "method": "GET",
+        "path": "/overview",
+        "operation_id": "getOverview",
+        "summary": "Read the same active-work Overview projection used by the web UI.",
+        "why": "Read the same active-work Overview projection used by the web UI.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns the workspace Overview projection.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found"
+        ],
+        "concepts": [
+            "home",
+            "documents",
+            "cards"
+        ],
+        "stability": "beta",
+        "surface": "projection",
+        "agent_notes": "Use anx overview --json to inspect the same executive projection as the web UI.",
+        "go_method": "OverviewGet",
+        "ts_method": "overviewGet"
+    },
+    {
         "command_id": "plan.set",
         "cli_path": "plan set",
         "group": "plan",
@@ -11024,6 +11055,85 @@ export const commandRegistry = [
         ],
         "go_method": "WorkRefreshRequest",
         "ts_method": "workRefreshRequest"
+    },
+    {
+        "command_id": "workspace.dashboard.list",
+        "cli_path": "workspace dashboard list",
+        "group": "workspace",
+        "method": "GET",
+        "path": "/workspace/dashboard/reports",
+        "operation_id": "listWorkspaceDashboardReports",
+        "summary": "Load validated dashboard report candidates when opening the selector.",
+        "why": "Defer selector-only report reads until the user or agent requests candidates.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns the dashboard report selector projection.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token"
+        ],
+        "concepts": [
+            "home",
+            "documents"
+        ],
+        "stability": "beta",
+        "surface": "projection",
+        "agent_notes": "Overview returns its selected dashboard only. Use this read for other pin candidates.",
+        "adjacent_commands": [
+            "workspace.dashboard.set"
+        ],
+        "go_method": "WorkspaceDashboardList",
+        "ts_method": "workspaceDashboardList"
+    },
+    {
+        "command_id": "workspace.dashboard.set",
+        "cli_path": "workspace dashboard set",
+        "group": "workspace",
+        "method": "PUT",
+        "path": "/workspace/dashboard",
+        "operation_id": "setWorkspaceDashboard",
+        "summary": "Pin an active visual-report document as the workspace dashboard; null clears the pin.",
+        "why": "Pin an active visual-report document as the workspace dashboard; null clears the pin.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns the workspace Overview projection.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found"
+        ],
+        "concepts": [
+            "home",
+            "documents",
+            "cards"
+        ],
+        "stability": "beta",
+        "surface": "projection",
+        "agent_notes": "Pass a document ref to pin it; pass null to return to newest-report selection.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "document_ref",
+                    "type": "string"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "adjacent_commands": [
+            "workspace.dashboard.list"
+        ],
+        "go_method": "WorkspaceDashboardSet",
+        "ts_method": "workspaceDashboardSet"
     }
 ];
 const commandIndex = new Map(commandRegistry.map((command) => [command.command_id, command]));
@@ -11463,6 +11573,9 @@ export class AnxClient {
     opsUsageSummary(options = {}) {
         return this.invoke("ops.usage.summary", {}, options);
     }
+    overviewGet(options = {}) {
+        return this.invoke("overview.get", {}, options);
+    }
     planSet(pathParams, options = {}) {
         return this.invoke("plan.set", pathParams, options);
     }
@@ -11663,5 +11776,11 @@ export class AnxClient {
     }
     workRefreshRequest(pathParams, options = {}) {
         return this.invoke("work.refresh.request", pathParams, options);
+    }
+    workspaceDashboardList(options = {}) {
+        return this.invoke("workspace.dashboard.list", {}, options);
+    }
+    workspaceDashboardSet(options = {}) {
+        return this.invoke("workspace.dashboard.set", {}, options);
     }
 }

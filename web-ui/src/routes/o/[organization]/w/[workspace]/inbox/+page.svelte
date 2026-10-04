@@ -1,4 +1,5 @@
 <script>
+  import { humanActorIdSet } from "$lib/humanActors.js";
   import { onMount, tick, untrack } from "svelte";
   import { page } from "$app/stores";
   import { beforeNavigate, goto } from "$app/navigation";
@@ -146,6 +147,7 @@
       updates,
       now,
       currentActorId: $selectedActorId || "",
+      humanIds: humanActorIdSet($actorRegistry, $principalRegistry),
       actorName,
       agentName: (id) => findAgentSummary(id, $agentRegistry)?.display_name,
     }),

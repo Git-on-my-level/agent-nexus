@@ -256,6 +256,15 @@ func preflightWorkspaceSubcommand(args []string) error {
 	if len(args) == 0 || isHelpToken(args[0]) {
 		return nil
 	}
+	if args[0] == "dashboard" {
+		if len(args) == 2 && args[1] == "list" {
+			return nil
+		}
+		if len(args) != 3 || args[1] != "set" || strings.HasPrefix(args[2], "-") {
+			return errnorm.Usage("invalid_args", "usage: anx workspace dashboard set <doc|none>")
+		}
+		return nil
+	}
 	sub := strings.TrimSpace(args[0])
 	if sub == "summary" {
 		return nil
@@ -405,7 +414,7 @@ func preflightDocsIngestArgs(args []string) error {
 func preflightRootCommands() map[string]struct{} {
 	return map[string]struct{}{
 		"version": {}, "doctor": {}, "update": {}, "bridge": {}, "auth": {}, "host": {}, "runs": {}, "config": {}, "debug": {}, "notifications": {},
-		"import": {}, "install": {}, "skills": {}, "draft": {}, "provenance": {}, "orient": {}, "ask": {}, "review": {}, "escalate": {}, "await": {}, "secret": {}, "workspace": {}, "read": {}, "url": {}, "concepts": {}, "primitives": {},
+		"import": {}, "install": {}, "skills": {}, "draft": {}, "provenance": {}, "orient": {}, "ask": {}, "review": {}, "escalate": {}, "await": {}, "secret": {}, "workspace": {}, "overview": {}, "read": {}, "url": {}, "concepts": {}, "primitives": {},
 		"topics": {}, "cards": {}, "artifacts": {}, "boards": {}, "docs": {},
 		"api": {}, "report": {}, "help": {}, "--help": {}, "-h": {},
 	}
@@ -779,12 +788,14 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"from-file":           valueFlag,
 			"dry-run":             boolFlag,
 		},
-		"cards reopen":      {"card-id": valueFlag},
-		"threads message":   {"thread": valueFlag, "thread-id": valueFlag},
-		"threads reply":     {"thread": valueFlag, "thread-id": valueFlag},
-		"boards workspace":  {"board-id": valueFlag},
-		"boards cards list": {"board-id": valueFlag},
-		"workspace summary": {"full-id": boolFlag},
+		"cards reopen":            {"card-id": valueFlag},
+		"threads message":         {"thread": valueFlag, "thread-id": valueFlag},
+		"threads reply":           {"thread": valueFlag, "thread-id": valueFlag},
+		"boards workspace":        {"board-id": valueFlag},
+		"boards cards list":       {"board-id": valueFlag},
+		"workspace summary":       {"full-id": boolFlag},
+		"overview":                {},
+		"workspace dashboard set": {},
 	}
 }
 

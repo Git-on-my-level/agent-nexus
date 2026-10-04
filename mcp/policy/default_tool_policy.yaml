@@ -37,6 +37,8 @@ hosted_default_commands:
   - "events.get"
   - "events.list"
   - "home.unread"
+  - "overview.get"
+  - "workspace.dashboard.list"
   - "inbox.get"
   - "inbox.list"
   - "meta.commands.get"
@@ -650,3 +652,13 @@ commands:
   "work.refresh.request":
     classification: exposed_write
     reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+
+  "overview.get":
+    classification: exposed_read
+    reason: "Executive Overview projection shared with the web UI and CLI."
+  "workspace.dashboard.list":
+    classification: exposed_read
+    reason: "Validated dashboard report selector candidates."
+  "workspace.dashboard.set":
+    classification: exposed_write
+    reason: "Reversible workspace dashboard document pin."

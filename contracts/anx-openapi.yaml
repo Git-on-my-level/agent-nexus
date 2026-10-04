@@ -4532,6 +4532,101 @@ paths:
         '401':
           $ref: '#/components/responses/ErrorResponse'
 
+  /overview:
+    get:
+      operationId: getOverview
+      summary: Read the same active-work Overview projection used by the web UI.
+      tags: [home]
+      x-anx-surface: projection
+      x-anx-command-id: overview.get
+      x-anx-agent-notes: Use anx overview --json to inspect the same executive projection as the web UI.
+      x-anx-cli-path: overview
+      x-anx-why: Read the same active-work Overview projection used by the web UI.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns the workspace Overview projection."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-anx-concepts: [home, documents, cards]
+      x-anx-stability: beta
+      responses:
+        '200':
+          description: Workspace projection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OverviewResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /workspace/dashboard/reports:
+    get:
+      operationId: listWorkspaceDashboardReports
+      summary: Load validated dashboard report candidates when opening the selector.
+      tags: [home]
+      x-anx-surface: projection
+      x-anx-command-id: workspace.dashboard.list
+      x-anx-agent-notes: Overview returns its selected dashboard only. Use this read for other pin candidates.
+      x-anx-cli-path: workspace dashboard list
+      x-anx-why: Defer selector-only report reads until the user or agent requests candidates.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns the dashboard report selector projection."
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [home, documents]
+      x-anx-stability: beta
+      responses:
+        '200':
+          description: Validated report candidates, pinned first then newest first.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OverviewDashboard' }
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /workspace/dashboard:
+    put:
+      operationId: setWorkspaceDashboard
+      summary: Pin an active visual-report document as the workspace dashboard; null clears the pin.
+      tags: [home]
+      x-anx-surface: projection
+      x-anx-command-id: workspace.dashboard.set
+      x-anx-agent-notes: Pass a document ref to pin it; pass null to return to newest-report selection.
+      x-anx-cli-path: workspace dashboard set
+      x-anx-why: Pin an active visual-report document as the workspace dashboard; null clears the pin.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns the workspace Overview projection."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-anx-concepts: [home, documents, cards]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [document_ref]
+              properties:
+                document_ref: { type: string, nullable: true }
+                actor_id: { type: string }
+      responses:
+        '200':
+          description: Workspace projection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OverviewResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
   /home/unread:
     get:
       operationId: getHomeUnread
@@ -8927,6 +9022,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Work'
+        archived_refs:
+          type: array
+          items: { type: string }
+          description: Card refs and aliases hidden by card, parent-board or project-topic lifecycle, for excluding associated Watching decisions. These are excluded from work and its counts.
         next_cursor:
           type: string
       required:
@@ -10852,6 +10951,97 @@ components:
         next_cursor: { type: string }
         has_more: { type: boolean }
       required: [has_more]
+
+    OverviewResponse:
+      type: object
+      required: [generated_at, work, initiatives, needs_you, dashboard, agents]
+      additionalProperties: true
+      properties:
+        generated_at: { type: string, format: date-time }
+        work:
+          type: object
+          required: [status, total, human_count, items]
+          properties:
+            status: { type: string }
+            total: { type: integer }
+            human_count: { type: integer }
+            items: { type: array, items: { $ref: '#/components/schemas/Work' } }
+          description: Active cards on active boards and active project topics with exact counts and full work records.
+        initiatives:
+          type: object
+          required: [status, count, items]
+          properties:
+            status: { type: string }
+            count: { type: integer }
+            items: { type: array, items: { $ref: '#/components/schemas/OverviewInitiative' } }
+        needs_you:
+          type: object
+          required: [status, count, rows, href]
+          properties:
+            status: { type: string, enum: [ok, unavailable] }
+            count: { type: integer }
+            href: { type: string }
+            message: { type: string }
+            rows: { type: array, items: { $ref: '#/components/schemas/OverviewAttentionRow' } }
+          description: Open asks, blocked work, human next actors and actionable PM decisions, respecting the reader's existing permissions.
+        dashboard: { $ref: '#/components/schemas/OverviewDashboard' }
+        agents:
+          type: object
+          required: [status]
+          additionalProperties: true
+          properties:
+            status: { type: string, enum: [ok, unavailable] }
+            message: { type: string }
+            items: { type: array, items: { type: object, additionalProperties: true } }
+    OverviewDashboard:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok, unavailable] }
+        has_more: { type: boolean, description: Unread candidate documents may contain more reports. }
+        pinned_ref: { type: string, nullable: true }
+        warning: { type: string }
+        message: { type: string }
+        reports: { type: array, items: { $ref: '#/components/schemas/OverviewReport' } }
+      description: Fully validated active report, pinned first or newest valid fallback. Overview loads only the selected report; selector candidates load separately.
+
+    OverviewInitiative:
+      type: object
+      required: [ref, title, summary, progress, priority, needs, phase, board_ref, updated_at]
+      properties:
+        ref: { type: string }
+        title: { type: string }
+        summary: { type: string, description: First prose line outside fenced examples, using the shared report summary parser. }
+        priority: { type: string }
+        needs: { type: array, items: { type: string }, description: Human asks parsed outside fenced examples, preserving every matching line. }
+        phase: { type: string }
+        board_ref: { type: string }
+        updated_at: { type: string, format: date-time }
+        progress:
+          type: object
+          required: [done, total]
+          properties:
+            done: { type: integer }
+            total: { type: integer }
+    OverviewAttentionRow:
+      type: object
+      required: [id, title, source, href]
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        title: { type: string }
+        source: { type: string }
+        href: { type: string }
+    OverviewReport:
+      type: object
+      required: [id, ref, segment, title, updated_at, report]
+      properties:
+        id: { type: string }
+        ref: { type: string }
+        segment: { type: string }
+        title: { type: string }
+        updated_at: { type: string, format: date-time }
+        report: { type: object, additionalProperties: true, description: anx.visual-report v1 body; validated by the shared Go validator with renderer conformance tests. }
 
     HomeUnreadResponse:
       type: object

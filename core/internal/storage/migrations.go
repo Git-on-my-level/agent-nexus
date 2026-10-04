@@ -887,6 +887,7 @@ var migrations = []migration{
 	},
 	{Version: 43, AfterApply: applyMigration43ReportIndexes},
 	{Version: 44, AfterApply: applyMigration44CardPlans},
+	{Version: 45, Statements: []string{`CREATE TABLE workspace_dashboard (singleton INTEGER PRIMARY KEY CHECK(singleton=1), document_id TEXT, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL);`}},
 }
 
 func applyMigration44CardPlans(ctx context.Context, tx *sql.Tx) error {

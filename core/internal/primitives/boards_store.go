@@ -1365,12 +1365,38 @@ func (s *Store) ListBoardCards(ctx context.Context, boardID string) ([]map[strin
 	return out, nil
 }
 
+// Card visibility follows both its board and its project topic. All workspace
+// projections use this predicate, including Archive and hidden event refs.
+const cardVisibilityJoins = ` LEFT JOIN boards b ON b.id = c.board_id
+ LEFT JOIN work_metadata wm ON wm.card_id = c.id `
+
+func cardLifecycleWhere(states []string) string {
+	topicHidden := func(field string) string {
+		return `EXISTS (SELECT 1 FROM topics pt WHERE
+          json_extract(wm.metadata_json, '$.project_ref') IN ('topic:' || pt.id, 'topic:' || pt.handle)
+          AND COALESCE(pt.` + field + `, '') <> '')`
+	}
+	boardActive := `(COALESCE(b.archived_at, '') = '' AND COALESCE(b.trashed_at, '') = '')`
+	notTrashed := `COALESCE(c.trashed_at, '') = '' AND COALESCE(b.trashed_at, '') = '' AND NOT ` + topicHidden("trashed_at")
+	clauses := []string{}
+	for _, state := range NormalizeListLifecycleStates(states) {
+		switch state {
+		case "active":
+			clauses = append(clauses, `(`+LifecycleStatesOrGroup("c.archived_at", "c.trashed_at", []string{"active"})+` AND `+boardActive+` AND NOT `+topicHidden("archived_at")+` AND NOT `+topicHidden("trashed_at")+`)`)
+		case "archived":
+			clauses = append(clauses, `(`+notTrashed+` AND (COALESCE(c.archived_at, '') <> '' OR COALESCE(b.archived_at, '') <> '' OR `+topicHidden("archived_at")+`))`)
+		default:
+			clauses = append(clauses, LifecycleStatesOrGroup("c.archived_at", "c.trashed_at", []string{state}))
+		}
+	}
+	return `(` + strings.Join(clauses, ` OR `) + `)`
+}
+
 func (s *Store) ListCards(ctx context.Context, filter CardListFilter) ([]map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
-	filter.States = NormalizeListLifecycleStates(filter.States)
-	whereSQL := LifecycleStatesOrGroup("c.archived_at", "c.trashed_at", filter.States)
+	whereSQL := cardLifecycleWhere(filter.States)
 	rows, err := s.db.QueryContext(
 		ctx,
 		`SELECT c.board_id, b.handle, c.id, c.handle, c.column_key, c.rank, c.title, c.summary, c.version, c.head_revision_id, c.head_revision_number, c.thread_id, c.parent_thread_id, c.due_at,
@@ -1378,7 +1404,7 @@ func (s *Store) ListCards(ctx context.Context, filter CardListFilter) ([]map[str
 		        c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by,
 		        c.trashed_at, c.trashed_by, c.trash_reason
 		   FROM cards c
-		   LEFT JOIN boards b ON b.id = c.board_id
+		   `+cardVisibilityJoins+`
 		  WHERE `+whereSQL+`
 		  ORDER BY c.board_id ASC, `+boardColumnOrderSQL("c.column_key")+`, c.rank ASC, c.id ASC`,
 	)

@@ -2657,6 +2657,10 @@ func (s *Store) ListHomeUnread(ctx context.Context, readerID string) ([]HomeUnre
 	if err != nil {
 		return nil, 0, err
 	}
+	hidden, err := s.HiddenSubjectRefs(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
 	cursorByGroup, err := s.homeReadCursors(ctx, readerID)
 	if err != nil {
 		return nil, 0, err
@@ -2681,6 +2685,9 @@ func (s *Store) ListHomeUnread(ctx context.Context, readerID string) ([]HomeUnre
 			return nil, 0, err
 		}
 		for _, event := range eventsPage.Events {
+			if refsHidden(anyStringSlice(event["refs"]), hidden) || hidden["thread:"+anyStringValue(event["thread_id"])] {
+				continue
+			}
 			groupRef := homeGroupForEvent(event, lookup)
 			if groupRef == "" {
 				continue
@@ -2721,6 +2728,9 @@ func (s *Store) ListHomeUnread(ctx context.Context, readerID string) ([]HomeUnre
 	sort.SliceStable(groups, func(i, j int) bool {
 		left := groups[i]
 		right := groups[j]
+		if lr, rr := homeImportance(left.Events), homeImportance(right.Events); lr != rr {
+			return lr > rr
+		}
 		leftTS := anyStringValue(left.NewestEvent["ts"])
 		rightTS := anyStringValue(right.NewestEvent["ts"])
 		if leftTS == rightTS {
@@ -2933,7 +2943,7 @@ func (s *Store) homeGroupLookup(ctx context.Context) (*homeGroupLookup, error) {
 }
 
 func (s *Store) loadTopicGroups(ctx context.Context, lookup *homeGroupLookup) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, COALESCE(handle, ''), title, summary, thread_id, updated_at, extensions_json, archived_at, trashed_at FROM topics WHERE COALESCE(trashed_at, '') = ''`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, COALESCE(handle, ''), title, summary, thread_id, updated_at, extensions_json, archived_at, trashed_at FROM topics WHERE COALESCE(trashed_at, '') = '' AND COALESCE(archived_at, '') = ''`)
 	if err != nil {
 		return fmt.Errorf("query home topics: %w", err)
 	}
@@ -2972,7 +2982,7 @@ func (s *Store) loadTopicGroups(ctx context.Context, lookup *homeGroupLookup) er
 }
 
 func (s *Store) loadBoardGroups(ctx context.Context, lookup *homeGroupLookup) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, COALESCE(handle, ''), title, thread_id FROM boards WHERE COALESCE(trashed_at, '') = ''`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, COALESCE(handle, ''), title, thread_id FROM boards WHERE COALESCE(trashed_at, '') = '' AND COALESCE(archived_at, '') = ''`)
 	if err != nil {
 		return fmt.Errorf("query home boards: %w", err)
 	}
@@ -3007,7 +3017,7 @@ func (s *Store) loadBoardGroups(ctx context.Context, lookup *homeGroupLookup) er
 
 func homeCardEventPrefersBoardGroup(eventType string) bool {
 	switch strings.TrimSpace(strings.ToLower(eventType)) {
-	case "card_created", "card_moved", "card_resolved", "card_archived", "card_trashed":
+	case "card_created", "card_updated", "card_moved", "card_resolved", "card_archived", "card_trashed":
 		return true
 	default:
 		return false

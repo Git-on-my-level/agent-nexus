@@ -34,3 +34,13 @@ See `docs/runbook.md` for command, integration-test, and Pi dogfood details.
 The manual agent-ergonomics dogfood lane lives under `dogfood/pi/`. It is an
 intentional CLI-owned support package with its own docs, scenario seed data,
 and runner tests; it is not part of the shipped `anx` runtime surface.
+
+Read the same executive projection as the web UI with `anx overview --json`.
+Pin a visual-report document with `anx workspace dashboard set document:<handle>`;
+use `anx workspace dashboard set none` to return to the newest report. Workspace
+summary counts exclude cards on archived boards. The web UI Archive view keeps
+those cards accessible.
+
+`anx workspace dashboard list` reads validated pin candidates on demand; Overview
+returns only the selected dashboard. Cards attached to archived project topics
+are excluded along with cards on archived boards.

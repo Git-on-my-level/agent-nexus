@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Groups: `26`
+- Groups: `28`
 
 ## `topics`
 
@@ -222,6 +222,12 @@ Generated from `contracts/anx-openapi.yaml`.
   - `ops.health` (`ops health`)
   - `ops.usage.summary` (`ops usage summary`)
 
+## `overview`
+
+- Commands: `1`
+- Command IDs:
+  - `overview.get` (`overview`)
+
 ## `plan`
 
 - Commands: `2`
@@ -324,4 +330,11 @@ Generated from `contracts/anx-openapi.yaml`.
   - `work.patch` (`work patch`)
   - `work.refresh.get` (`work refresh get`)
   - `work.refresh.request` (`work refresh request`)
+
+## `workspace`
+
+- Commands: `2`
+- Command IDs:
+  - `workspace.dashboard.list` (`workspace dashboard list`)
+  - `workspace.dashboard.set` (`workspace dashboard set`)
 

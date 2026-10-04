@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -119,7 +120,23 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 		for _, item := range page.Work {
 			items = append(items, publicWork(item))
 		}
-		writeJSON(w, 200, map[string]any{"work": items, "next_cursor": page.NextCursor})
+		archivedRefs := []string{}
+		if visibility, ok := store.(interface {
+			HiddenSubjectRefs(context.Context) (map[string]bool, error)
+		}); ok {
+			hidden, err := visibility.HiddenSubjectRefs(r.Context())
+			if err != nil {
+				workStoreError(w, err)
+				return
+			}
+			for ref := range hidden {
+				if strings.HasPrefix(ref, "card:") {
+					archivedRefs = append(archivedRefs, ref)
+				}
+			}
+			sort.Strings(archivedRefs)
+		}
+		writeJSON(w, 200, map[string]any{"work": items, "next_cursor": page.NextCursor, "archived_refs": archivedRefs})
 		return
 	}
 	var raw map[string]any

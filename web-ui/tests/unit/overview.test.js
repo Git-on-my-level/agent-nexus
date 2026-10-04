@@ -221,7 +221,7 @@ describe("overview report selection", () => {
     report: { title: "Fleet" },
   };
 
-  it("prefers a Dashboard title over a newer report", () => {
+  it("uses newest report regardless of title", () => {
     expect(isPreferredDashboardTitle("Dashboard notes")).toBe(true);
     expect(isPreferredDashboardTitle("fleet dashboard weekly")).toBe(true);
     expect(isPreferredDashboardTitle("Dashboarding")).toBe(false);
@@ -230,7 +230,7 @@ describe("overview report selection", () => {
       selectVisualReports([newer, { ...older, report: null }, preferred]).map(
         (entry) => entry.id,
       ),
-    ).toEqual(["fleet", "newer"]);
+    ).toEqual(["newer", "fleet"]);
   });
 
   it("orders the rest newest first", () => {
@@ -239,7 +239,7 @@ describe("overview report selection", () => {
     ).toEqual(["newer", "older"]);
   });
 
-  it("reads a preferred dashboard first and stops once one report is valid", async () => {
+  it("reads newest documents first and stops at a valid report", async () => {
     expect(DOC_SCAN_CAP).toBe(20);
     const documents = [
       {
@@ -259,27 +259,27 @@ describe("overview report selection", () => {
       },
     ];
     expect(orderDocumentsForReportScan(documents).map((doc) => doc.id)).toEqual(
-      ["fleet", "notes", "other"],
+      ["notes", "other", "fleet"],
     );
     const reads = [];
     const scanned = await collectVisualReports(documents, async (doc) => {
       reads.push(doc.id);
-      return doc.id === "fleet"
+      return doc.id === "notes"
         ? { id: doc.id, title: doc.title, report: { title: "Fleet" } }
         : { id: doc.id, title: doc.title, report: null };
     });
-    expect(reads).toEqual(["fleet"]);
-    expect(scanned.reports.map((entry) => entry.id)).toEqual(["fleet"]);
-    expect(scanned.pending.map((doc) => doc.id)).toEqual(["notes", "other"]);
+    expect(reads).toEqual(["notes"]);
+    expect(scanned.reports.map((entry) => entry.id)).toEqual(["notes"]);
+    expect(scanned.pending.map((doc) => doc.id)).toEqual(["other", "fleet"]);
     expect(scanned.scanned).toBe(1);
   });
 
-  it("keeps reading when the preferred document is not a report", async () => {
+  it("keeps reading when the newest document is not a report", async () => {
     const documents = [
       {
         id: "fleet",
         title: "Dashboard notes",
-        updated_at: "2026-10-01T00:00:00Z",
+        updated_at: "2026-10-06T00:00:00Z",
       },
       {
         id: "notes",

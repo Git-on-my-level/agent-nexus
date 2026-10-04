@@ -370,8 +370,8 @@ func (s *Store) GetWork(ctx context.Context, identifier string) (map[string]any,
 	return projectWork(card, m, version, latest, attempt, refresh), nil
 }
 
-// projectWork shares canonical projection logic with batched report hydration.
-// It performs no I/O; general ListWork retains its existing read path.
+// projectWork shares canonical projection logic with bulk work and report reads.
+// It performs no I/O.
 func projectWork(card, m map[string]any, version int64, latest, attempt, refresh map[string]any) map[string]any {
 	source := workMap(m["source"])
 	out := workClone(card)
@@ -451,6 +451,78 @@ func projectWork(card, m map[string]any, version int64, latest, attempt, refresh
 	return out
 }
 
+// ListAllWork uses two bulk reads regardless of card count. Projection rules are
+// shared with GetWork so observations, freshness and source overlays stay equal.
+func (s *Store) ListAllWork(ctx context.Context) ([]map[string]any, error) {
+	cards, err := s.ListCards(ctx, CardListFilter{})
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT c.id, COALESCE(wm.metadata_json, '{"source":{"authority":"nexus"}}'),
+        COALESCE(wm.version, 0), COALESCE(wm.refresh_json, '{"state":"idle"}'),
+        COALESCE(latest.body_json, 'null'), COALESCE(attempt.body_json, 'null')
+        FROM cards c `+cardVisibilityJoins+`
+        LEFT JOIN work_observations latest ON latest.id = wm.latest_observation_id
+        LEFT JOIN work_observations attempt ON attempt.id = wm.latest_attempt_id
+        WHERE `+cardLifecycleWhere([]string{"active"}))
+	if err != nil {
+		return nil, err
+	}
+	type metadata struct {
+		body, refresh, latest, attempt map[string]any
+		version                        int64
+	}
+	byID := map[string]metadata{}
+	for rows.Next() {
+		var id, body, refresh, latest, attempt string
+		var m metadata
+		if err = rows.Scan(&id, &body, &m.version, &refresh, &latest, &attempt); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		for _, value := range []struct {
+			raw    string
+			target *map[string]any
+		}{
+			{body, &m.body}, {refresh, &m.refresh}, {latest, &m.latest}, {attempt, &m.attempt},
+		} {
+			if err = json.Unmarshal([]byte(value.raw), value.target); err != nil {
+				rows.Close()
+				return nil, err
+			}
+		}
+		byID[id] = m
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	work := make([]map[string]any, 0, len(cards))
+	updated := map[string]time.Time{}
+	for _, card := range cards {
+		id := workString(card["id"])
+		m, ok := byID[id]
+		if !ok {
+			continue
+		} // archived concurrently between the two reads
+		at, err := workTimestamp(card["updated_at"])
+		if err != nil {
+			return nil, err
+		}
+		updated[id] = at
+		work = append(work, projectWork(card, m.body, m.version, m.latest, m.attempt, m.refresh))
+	}
+	sort.Slice(work, func(i, j int) bool {
+		left, right := workString(work[i]["id"]), workString(work[j]["id"])
+		if updated[left].Equal(updated[right]) {
+			return left > right
+		}
+		return updated[left].After(updated[right])
+	})
+	return work, nil
+}
+
 // ReportWorkFilter selects a bounded candidate set before projection. BoardIDs
 // are resolved IDs, not authored SQL or handles. Each scope needs only one read.
 type ReportWorkFilter struct {
@@ -476,7 +548,7 @@ func reportWorkQuery(filter ReportWorkFilter) (string, []any) {
 		limit = 2000
 	}
 	from := `cards c JOIN boards b ON b.id=c.board_id LEFT JOIN work_metadata m ON m.card_id=c.id`
-	where := `c.archived_at IS NULL AND c.trashed_at IS NULL AND b.archived_at IS NULL AND b.trashed_at IS NULL`
+	where := strings.ReplaceAll(cardLifecycleWhere([]string{"active"}), "wm.metadata_json", "m.metadata_json")
 	args := []any{}
 	if filter.ProjectRef != "" {
 		// Lead with the expression index, avoiding a workspace-wide card read for
@@ -575,33 +647,22 @@ func (s *Store) ListWork(ctx context.Context, f WorkListFilter) (WorkPage, error
 			return page, ErrInvalidCursor
 		}
 	}
-	cards, err := s.ListCards(ctx, CardListFilter{})
+	work, err := s.ListAllWork(ctx)
 	if err != nil {
 		return page, err
 	}
-	updated := make(map[string]time.Time, len(cards))
-	for _, card := range cards {
-		at, err := workTimestamp(card["updated_at"])
+	updated := make(map[string]time.Time, len(work))
+	for _, w := range work {
+		at, err := workTimestamp(w["updated_at"])
 		if err != nil {
 			return page, err
 		}
-		updated[workString(card["id"])] = at
+		updated[workString(w["id"])] = at
 	}
-	sort.Slice(cards, func(i, j int) bool {
-		left, right := workString(cards[i]["id"]), workString(cards[j]["id"])
-		if updated[left].Equal(updated[right]) {
-			return left > right
-		}
-		return updated[left].After(updated[right])
-	})
-	for _, card := range cards {
-		id := workString(card["id"])
+	for _, w := range work {
+		id := workString(w["id"])
 		if before.ID != "" && (updated[id].After(before.UpdatedAt) || (updated[id].Equal(before.UpdatedAt) && id >= before.ID)) {
 			continue
-		}
-		w, err := s.GetWork(ctx, id)
-		if err != nil {
-			return page, err
 		}
 		if f.ProjectRef != "" && workString(w["project_ref"]) != f.ProjectRef {
 			continue
