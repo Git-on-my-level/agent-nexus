@@ -1,3 +1,4 @@
+import { clearAllWorkspaceAuthSessions } from "$lib/authSession.js";
 /**
  * Same-origin proxy to the control plane (see /hosted/api/*). Available when
  * web-ui is running in hosted mode (`ANX_CONTROL_BASE_URL` configured).
@@ -39,6 +40,7 @@ export async function persistHostedCpAccessToken(accessToken) {
   if (!token || !browser) {
     return;
   }
+  await clearAllWorkspaceAuthSessions();
   if (dev) {
     document.cookie = `${CP_DEV_ACCESS_TOKEN_COOKIE}=${encodeURIComponent(token)}; Path=/; Max-Age=${CP_TOKEN_MAX_AGE_SEC}; SameSite=Lax`;
     return;
@@ -56,6 +58,7 @@ export async function persistHostedCpAccessToken(accessToken) {
 }
 
 export async function clearHostedCpAccessToken() {
+  await clearAllWorkspaceAuthSessions();
   if (!browser) {
     return;
   }

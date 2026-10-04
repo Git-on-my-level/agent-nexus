@@ -177,23 +177,24 @@ describe("outOfWorkspace hosted provider", () => {
     expect(result).toEqual({ kind: "unauthenticated" });
   });
 
-  it("creates launch session redirect on happy path", async () => {
+  it("falls back to a launch redirect only for an older control plane", async () => {
     const provider = createHosted({
       ANX_CONTROL_PLANE_DEV_ACCESS_TOKEN: "tok",
     });
-    const fetchFn = vi.fn(
-      async () =>
-        new Response(
-          JSON.stringify({
-            launch_session: {
-              finish_url: "/workspaces/ws-cp-1/launch-finish?lid=abc",
+    const fetchFn = vi.fn(async (url) =>
+      String(url).endsWith("/session-grants")
+        ? new Response("{}", { status: 404 })
+        : new Response(
+            JSON.stringify({
+              launch_session: {
+                finish_url: "/workspaces/ws-cp-1/launch-finish?lid=abc",
+              },
+            }),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" },
             },
-          }),
-          {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          },
-        ),
+          ),
     );
     const result = await provider.beginLaunchSession({
       event: /** @type {any} */ (eventWithFetch(fetchFn)),

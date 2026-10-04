@@ -31,7 +31,18 @@ async function readResponseBody(response) {
   return {};
 }
 
-async function requestJSON(event, url, init = {}) {
+function requestJSON(event, url, init = {}) {
+  if ((init.method ?? "GET") !== "GET" || !event?.locals)
+    return fetchJSON(event, url, init);
+  // Only coalesce reads within one SvelteKit request; never cache authorization
+  // across requests, sessions or users.
+  const cache = (event.locals.__anxCpReads ??= new Map());
+  const key = `${url}\n${new Headers(init.headers).get("authorization") ?? ""}`;
+  if (!cache.has(key)) cache.set(key, fetchJSON(event, url, init));
+  return cache.get(key);
+}
+
+async function fetchJSON(event, url, init = {}) {
   const fetchFn = event?.fetch ?? fetch;
   try {
     const response = await fetchFn(url, init);

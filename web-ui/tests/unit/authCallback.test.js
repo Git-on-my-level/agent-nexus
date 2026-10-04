@@ -82,6 +82,26 @@ describe("auth callback POST (+server)", () => {
     workspaceResolverMocks.resolveWorkspaceInRoute.mockReset();
   });
 
+  it("does not bind a previous login's launch grant to the current adapter scope", async () => {
+    const exchangeLaunchSession = vi.fn();
+    const event = createEvent(
+      {
+        exchange_token: "old-A-launch",
+        state: "old-A-state",
+        workspace_id: WORKSPACE_ID,
+        return_path: "/threads",
+      },
+      mockHostedProvider({ exchangeLaunchSession }),
+    );
+    event.locals.sessionAdapter = {};
+    await expect(POST(event)).rejects.toMatchObject({
+      status: 303,
+      location: "/o/local/w/alpha/threads",
+    });
+    expect(exchangeLaunchSession).not.toHaveBeenCalled();
+    expect(event.cookieCalls).toEqual([]);
+  });
+
   it("redirects on happy path, sets workspace cookies, uses sanitized return_path", async () => {
     const fetchMock = vi.fn(async (url) => {
       const u = String(url);

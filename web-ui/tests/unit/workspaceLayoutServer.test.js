@@ -180,7 +180,7 @@ describe("workspace +layout.server.js", () => {
     );
   });
 
-  it("runs silent hosted launch bridge when no workspace auth cookies are present", async () => {
+  it("keeps unvisited hosted workspace preloads read-only", async () => {
     const beginLaunchSession = vi.fn(async () => ({
       kind: "redirect",
       finishUrl: "/hosted/api/workspaces/ws-1/launch-finish?lid=abc",
@@ -205,15 +205,10 @@ describe("workspace +layout.server.js", () => {
       pathname: "/o/my-org/w/my-ws/threads/123?tab=notes",
     });
 
-    await expect(load(event)).rejects.toMatchObject({
-      status: 303,
-      location: "/hosted/api/workspaces/ws-1/launch-finish?lid=abc",
-    });
-    expect(beginLaunchSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        workspaceId: "ws-1",
-        returnPath: "/threads/123?tab=notes",
-      }),
-    );
+    const result = await load(event);
+    expect(result.workspaceSession.agent).toBeNull();
+    expect(beginLaunchSession).not.toHaveBeenCalled();
+    expect(event.cookies.set).not.toHaveBeenCalled();
+    expect(event.cookies.delete).not.toHaveBeenCalled();
   });
 });

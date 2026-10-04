@@ -70,6 +70,10 @@ export function getAuthAccessCookieName(organizationSlug, workspaceSlug) {
   return `anx_ui_access_${org}__${ws}`;
 }
 
+function getAccessExpiryCookieName(organizationSlug, workspaceSlug) {
+  return `${getAuthAccessCookieName(organizationSlug, workspaceSlug)}_expires`;
+}
+
 function getRetryableAuthFailureCookieName(organizationSlug, workspaceSlug) {
   const org = getOrganizationSlug(organizationSlug);
   const ws = getWorkspaceSlug(workspaceSlug);
@@ -101,6 +105,7 @@ function maybeMigrateWorkspaceAuthCookiesFromLegacy(
   organizationSlug,
   workspaceSlug,
 ) {
+  if (event.locals?.sessionCookieScope) return;
   const org = getOrganizationSlug(organizationSlug);
   const ws = getWorkspaceSlug(workspaceSlug);
   const nextSession = getAuthSessionCookieName(org, ws);
@@ -283,6 +288,7 @@ function applyRefreshResult(event, organizationSlug, workspaceSlug, tokens) {
       organizationSlug,
       workspaceSlug,
       tokens.accessToken,
+      tokens.expiresAt,
     );
   }
   return tokens;
@@ -348,6 +354,7 @@ export function writeWorkspaceAccessToken(
   organizationSlug,
   workspaceSlug,
   accessToken,
+  expiresAt = Date.now() + ACCESS_TOKEN_TTL_SECONDS * 1000,
 ) {
   const normalized = String(accessToken ?? "").trim();
   if (!normalized) {
@@ -363,6 +370,13 @@ export function writeWorkspaceAccessToken(
       maxAge: ACCESS_TOKEN_COOKIE_MAX_AGE_SECONDS,
     }),
   );
+  event.cookies.set(
+    getAccessExpiryCookieName(organizationSlug, workspaceSlug),
+    String(expiresAt),
+    buildAuthSessionCookieOptions(event, {
+      maxAge: ACCESS_TOKEN_COOKIE_MAX_AGE_SECONDS,
+    }),
+  );
   clearLegacyWorkspaceAuthCookiesForSlug(event, workspaceSlug);
 }
 
@@ -371,6 +385,10 @@ export function clearWorkspaceAccessToken(
   organizationSlug,
   workspaceSlug,
 ) {
+  event.cookies.delete(
+    getAccessExpiryCookieName(organizationSlug, workspaceSlug),
+    { path: "/" },
+  );
   event.cookies.delete(
     getAuthAccessCookieName(organizationSlug, workspaceSlug),
     {
@@ -643,6 +661,9 @@ export async function refreshWorkspaceAuthSession({
       const issuedTokens = {
         refreshToken: nextRefreshToken,
         accessToken,
+        expiresAt:
+          Date.now() +
+          (Number(nextTokens.expires_in) || ACCESS_TOKEN_TTL_SECONDS) * 1000,
       };
       cacheRecentRefreshResult(dedupeKey, issuedTokens);
       return issuedTokens;
@@ -765,9 +786,31 @@ export async function loadWorkspaceAuthenticatedAgent({
   workspaceSlug,
   coreBaseUrl,
   headers = {},
+  readOnly = false,
 }) {
   if (!coreBaseUrl) {
     return null;
+  }
+
+  let accessToken = readWorkspaceAccessToken(
+    event,
+    organizationSlug,
+    workspaceSlug,
+  );
+
+  // Speculative route loads must never rotate sessions or mutate cookies.
+  if (readOnly) {
+    if (!accessToken) return null;
+    try {
+      const payload = await requestCoreJSON(coreBaseUrl, "/agents/me", {
+        token: accessToken,
+        headers,
+      });
+      return payload.agent ?? null;
+    } catch (failure) {
+      if (failure?.status === 401 || failure?.status === 503) return null;
+      throw failure;
+    }
   }
 
   const refreshToken = readWorkspaceRefreshToken(
@@ -775,7 +818,9 @@ export async function loadWorkspaceAuthenticatedAgent({
     organizationSlug,
     workspaceSlug,
   );
-  let accessToken = readWorkspaceAccessToken(
+
+  // Native legacy migration may have populated access while reading refresh.
+  accessToken = readWorkspaceAccessToken(
     event,
     organizationSlug,
     workspaceSlug,
@@ -785,6 +830,21 @@ export async function loadWorkspaceAuthenticatedAgent({
     clearWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
     return null;
   }
+
+  // Core access tokens are opaque. This httpOnly timestamp is only a refresh
+  // scheduling hint; /agents/me remains the authority for token validity.
+  const expiresAt = Number(
+    event.cookies.get(
+      getAccessExpiryCookieName(organizationSlug, workspaceSlug),
+    ),
+  );
+  if (
+    accessToken &&
+    refreshToken &&
+    expiresAt > 0 &&
+    expiresAt <= Date.now() + 120_000
+  )
+    accessToken = "";
 
   async function fetchCurrentAgent(token) {
     const agentResponse = await requestCoreJSON(coreBaseUrl, "/agents/me", {

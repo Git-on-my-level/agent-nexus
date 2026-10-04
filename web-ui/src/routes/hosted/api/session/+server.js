@@ -68,6 +68,13 @@ function enforceSameOriginJsonMutation(event) {
   return null;
 }
 
+function clearWorkspaceCookies(event) {
+  for (const { name } of event.cookies.getAll?.() ?? []) {
+    if (/^anx_ui_(session|access|auth_retry)_/.test(name))
+      event.cookies.delete(name, { path: "/" });
+  }
+}
+
 export async function POST(event) {
   if (dev) {
     return jsonError(
@@ -94,6 +101,10 @@ export async function POST(event) {
     return jsonError(400, "missing_token", "access_token is required.");
   }
 
+  // A different hosted login must not reuse the previous account's core identity.
+  if (event.cookies.get?.(CP_ACCESS_TOKEN_COOKIE) !== token)
+    clearWorkspaceCookies(event);
+
   // Non-dev only (see `if (dev)` above). Do not infer Secure from
   // `event.url.protocol`: behind TLS termination the app often sees `http:`
   // on the internal hop, which would clear Secure and allow insecure delivery.
@@ -115,6 +126,7 @@ export async function DELETE(event) {
     return mutationError;
   }
 
+  clearWorkspaceCookies(event);
   event.cookies.delete(CP_ACCESS_TOKEN_COOKIE, { path: "/" });
   event.cookies.delete(CP_DEV_ACCESS_TOKEN_COOKIE, { path: "/" });
   return json({ ok: true });

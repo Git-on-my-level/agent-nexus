@@ -8,17 +8,13 @@ import {
 } from "$lib/anxCoreClient";
 import { WORKSPACE_HEADER_CONSTANTS } from "$lib/compat/workspaceCompat";
 import { sanitizeHostedReturnPath } from "$lib/hosted/launchFlow.js";
-import {
-  getAuthAccessCookieName,
-  getAuthSessionCookieName,
-} from "$lib/server/authSession.js";
+import { loadWorkspaceAuthenticatedAgent } from "$lib/server/authSession.js";
 import { logServerEvent } from "$lib/server/devLog";
 import {
   hostedWorkspaceCoreBaseUrl,
   hostedWorkspaceCoreProxyHeaders,
 } from "$lib/server/hostedWorkspaceCore.js";
 import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
-import { handleLaunchInstruction } from "$lib/server/outOfWorkspace/launchSession.js";
 import {
   LAST_WORKSPACE_COOKIE,
   lastWorkspaceCookieValue,
@@ -89,20 +85,6 @@ function isSecureCookieRequest(event) {
   return event.url.protocol === "https:";
 }
 
-function workspaceHasCoreSession(event, organizationSlug, workspaceSlug) {
-  const refreshToken = String(
-    event.cookies.get(
-      getAuthSessionCookieName(organizationSlug, workspaceSlug),
-    ) ?? "",
-  ).trim();
-  const accessToken = String(
-    event.cookies.get(
-      getAuthAccessCookieName(organizationSlug, workspaceSlug),
-    ) ?? "",
-  ).trim();
-  return refreshToken !== "" || accessToken !== "";
-}
-
 function workspaceRelativeReturnPath(event, organizationSlug, workspaceSlug) {
   const appPath = stripWorkspacePath(
     event.url.pathname,
@@ -123,6 +105,8 @@ function workspaceRelativeReturnPath(event, organizationSlug, workspaceSlug) {
 export async function load(event) {
   const provider =
     event.locals?.outOfWorkspace ?? getOutOfWorkspaceProvider(privateEnv);
+  if (provider.mode === "hosted")
+    event.setHeaders?.({ "cache-control": "private, no-store" });
   const resolved = await resolveWorkspaceInRoute({
     event,
     organizationSlug: event.params.organization,
@@ -173,47 +157,25 @@ export async function load(event) {
     throw error(resolved.error.status, { message, code });
   }
 
-  event.cookies.set(
-    LAST_WORKSPACE_COOKIE,
-    lastWorkspaceCookieValue(
-      resolved.workspace.organizationSlug,
-      resolved.workspace.slug,
-    ),
-    {
-      path: "/",
-      httpOnly: true,
-      sameSite: "lax",
-      secure: !dev || isSecureCookieRequest(event),
-      maxAge: 60 * 60 * 24 * 180,
-    },
-  );
+  if (provider.mode !== "hosted")
+    event.cookies.set(
+      LAST_WORKSPACE_COOKIE,
+      lastWorkspaceCookieValue(
+        resolved.workspace.organizationSlug,
+        resolved.workspace.slug,
+      ),
+      {
+        path: "/",
+        httpOnly: true,
+        sameSite: "lax",
+        secure: !dev || isSecureCookieRequest(event),
+        maxAge: 60 * 60 * 24 * 180,
+      },
+    );
 
   const workspaceId = String(
     resolved.workspace.workspaceId ?? resolved.workspace.id ?? "",
   ).trim();
-  if (
-    provider.mode === "hosted" &&
-    workspaceId &&
-    !workspaceHasCoreSession(
-      event,
-      resolved.workspace.organizationSlug,
-      resolved.workspace.slug,
-    )
-  ) {
-    const instruction = await provider.beginLaunchSession({
-      event,
-      workspaceId,
-      organizationSlug: resolved.workspace.organizationSlug,
-      workspaceSlug: resolved.workspace.slug,
-      returnPath: workspaceRelativeReturnPath(
-        event,
-        resolved.workspace.organizationSlug,
-        resolved.workspace.slug,
-      ),
-    });
-    handleLaunchInstruction(instruction);
-  }
-
   const catalog = await resolveWorkspaceCatalog(event, {
     prefetchedResolved: resolved,
   });
@@ -229,6 +191,26 @@ export async function load(event) {
         })
       : coreBaseUrl;
 
+  // Validate existing cookies while the compatibility check runs, not after hydration.
+  const sessionPromise =
+    provider.mode === "hosted"
+      ? loadWorkspaceAuthenticatedAgent({
+          readOnly: true,
+          event,
+          organizationSlug: workOrg,
+          workspaceSlug: workSlug,
+          coreBaseUrl: schemaCoreBaseUrl,
+          headers: {
+            ...hostedWorkspaceCoreProxyHeaders(event),
+            purpose: "prefetch",
+          },
+        })
+      : Promise.resolve(undefined);
+  // Attach a rejection handler immediately while the schema check is pending.
+  const sessionResult = sessionPromise.then(
+    (agent) => ({ agent }),
+    (failure) => ({ failure }),
+  );
   let coreSchemaCheckWarning = "";
 
   if (
@@ -245,7 +227,7 @@ export async function load(event) {
           [WORKSPACE_HEADER]: workSlug,
           [WORKSPACE_HEADER_CONSTANTS.ORGANIZATION_HEADER]: workOrg,
           ...(provider.mode === "hosted"
-            ? hostedWorkspaceCoreProxyHeaders(event)
+            ? { ...hostedWorkspaceCoreProxyHeaders(event), purpose: "prefetch" }
             : {}),
         }),
       });
@@ -253,6 +235,10 @@ export async function load(event) {
         .then(() => "")
         .catch((error) => {
           schemaCheckPromises.delete(cacheKey);
+          // Passive reads cannot wake a sleeping runtime. Activation checks the
+          // schema after establishing the selected workspace's session.
+          if (provider.mode === "hosted" && error?.coreHttpStatus === 503)
+            return "";
           if (shouldDegradeCoreSchemaCheckInDev(error)) {
             logServerEvent("workspace.layout.schema_check_degraded", {
               org: workOrg,
@@ -267,7 +253,16 @@ export async function load(event) {
     coreSchemaCheckWarning = await schemaCheckPromises.get(cacheKey);
   }
 
+  const session = await sessionResult;
+  if (session.failure)
+    throw error(
+      session.failure.status || 503,
+      "Could not validate workspace session.",
+    );
   return {
+    ...(provider.mode === "hosted"
+      ? { workspaceSession: { agent: session.agent ?? null } }
+      : {}),
     ...toPublicWorkspaceCatalog(catalog),
     workspace: {
       organizationSlug: workOrg,

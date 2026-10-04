@@ -1,3 +1,4 @@
+import { initializeSessionAdapter } from "$lib/server/sessionAdapter.js";
 import { dev } from "$app/environment";
 import { env as privateEnv } from "$env/dynamic/private";
 import { AuthErrorCode } from "$lib/authErrorCodes.js";
@@ -372,8 +373,18 @@ function buildCSPDirectives(env = privateEnv) {
   };
 }
 
-function buildCSPHeader() {
-  return Object.entries(buildCSPDirectives())
+function buildCSPHeader(generatedPolicy = "") {
+  const directives = buildCSPDirectives();
+  // Keep Kit's per-response nonce/hash that authorizes its inline bootstrap.
+  const generatedScript = generatedPolicy
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith("script-src "));
+  const bootstrapSources = (
+    generatedScript?.split(/\s+/).slice(1) ?? []
+  ).filter((source) => /^'(nonce-|sha(256|384|512)-)/.test(source));
+  directives["script-src"].push(...bootstrapSources);
+  return Object.entries(directives)
     .map(([directive, values]) => `${directive} ${values.join(" ")}`)
     .join("; ");
 }
@@ -382,10 +393,25 @@ export async function handle({ event, resolve }) {
   if (!event.locals) {
     event.locals = {};
   }
+  await initializeSessionAdapter(event, privateEnv, dev);
   event.locals.outOfWorkspace = getOutOfWorkspaceProvider(privateEnv);
 
   const pathname = stripBasePath(event.url.pathname);
   const method = event.request.method;
+  if (
+    event.locals.sessionAdapter &&
+    (pathname === "/auth/dev/session" ||
+      /^\/auth\/passkey\/(login|register)\/verify$/.test(pathname))
+  ) {
+    return new Response(JSON.stringify({ error: "use_session_adapter" }), {
+      status: 409,
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "private, no-store",
+      },
+    });
+  }
+
   if (isHostedWorkspaceProxyPath(pathname)) {
     if (
       shouldProxyHostedWorkspaceStreamInDev() &&
@@ -539,7 +565,10 @@ export async function handle({ event, resolve }) {
   response.headers.set("X-ANX-UI-Version", CURRENT_VERSION);
 
   if (documentNavigation) {
-    response.headers.set("Content-Security-Policy", buildCSPHeader());
+    response.headers.set(
+      "Content-Security-Policy",
+      buildCSPHeader(response.headers.get("Content-Security-Policy") ?? ""),
+    );
     response.headers.set("X-Frame-Options", "DENY");
     response.headers.set("X-Content-Type-Options", "nosniff");
     response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");

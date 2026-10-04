@@ -231,21 +231,35 @@ describe("workspace +layout.server.js (integration with real resolver)", () => {
       ],
     });
 
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              agent: { agent_id: "human", principal_kind: "human" },
+            }),
+          ),
+      ),
+    );
     const event = createEvent({ fetchFn });
     event.cookies.get = vi.fn((name) =>
-      name === "anx_ui_session_my-org__my-ws" ? "refresh-token" : "",
+      name === "anx_ui_access_my-org__my-ws" ? "access-token" : "",
     );
     const result = await load(event);
+
+    vi.unstubAllGlobals();
+    expect(result.workspaceSession.agent.agent_id).toBe("human");
+    const config =
+      anxCoreClientIntegrationMocks.createAnxCoreClient.mock.calls.at(-1)[0];
+    expect(config.requestContextHeadersProvider().purpose).toBe("prefetch");
 
     expect(result.workspace).toMatchObject({
       slug: "my-ws",
       organizationSlug: "my-org",
       coreBaseUrl: "http://127.0.0.1:18001",
     });
-    expect(event.cookies.set).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.stringContaining("my-org"),
-      expect.objectContaining({ path: "/", httpOnly: true }),
-    );
+    expect(event.cookies.set).not.toHaveBeenCalled();
+    expect(event.cookies.delete).not.toHaveBeenCalled();
   });
 });

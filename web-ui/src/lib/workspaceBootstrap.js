@@ -1,3 +1,4 @@
+import { requestWorkspaceActivation } from "./workspaceActivation.js";
 import { get } from "svelte/store";
 
 import { goto } from "$app/navigation";
@@ -6,9 +7,11 @@ import { dev } from "$app/environment";
 
 import {
   authenticatedAgent,
+  completeAuthSession,
   authSessionReady,
   clearAuthSession,
   initializeAuthSession,
+  getSessionEpoch,
   isHumanWorkspacePrincipal,
 } from "$lib/authSession";
 import {
@@ -428,17 +431,45 @@ export async function refreshWorkspacePrincipals({
 
 export async function hydrateWorkspaceBootstrap({
   workspaceSlug,
+  hostedSession,
   workspaceHeader,
   organizationSlug = "",
   coreClient,
   storage,
   fetchFn = globalThis.fetch.bind(globalThis),
+  onActivationRetry = () => {},
   onActorError = () => {},
   onLoadingActors = () => {},
   onDevPersonaBusy = () => {},
   onDevFixturePersonas = () => {},
   refreshActors,
 }) {
+  // Adapter-managed activation runs independently of optional directories.
+  if (hostedSession !== undefined) {
+    // Actual activation only: cached/preloaded route data is never an auth authority.
+    const epoch = getSessionEpoch();
+    hostedSession = await requestWorkspaceActivation({
+      url: appPath("/auth/workspace-session"),
+      input: { organizationSlug, workspaceSlug },
+      fetchFn,
+      onRetry: onActivationRetry,
+      isCurrent: () => epoch === getSessionEpoch(),
+    });
+    if (!hostedSession || epoch !== getSessionEpoch()) return false;
+    initializeActorSession(storage, workspaceSlug);
+    completeAuthSession(hostedSession.agent, workspaceSlug, {
+      organizationSlug,
+    });
+    setDevActorMode(false);
+    setDevActorModeReady(true);
+    replacePrincipalRegistry(
+      hostedSession.agent ? [hostedSession.agent] : [],
+      workspaceSlug,
+    );
+    onDevFixturePersonas([]);
+    void refreshActors(workspaceSlug);
+    return;
+  }
   setDevActorModeReady(false);
   initializeActorSession(storage, workspaceSlug);
   let agent = await initializeAuthSession({

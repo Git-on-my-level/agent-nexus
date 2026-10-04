@@ -84,3 +84,10 @@ pnpm run screenshot -- \
   --capture messages='/o/local/w/local/topics/0ae18e22-f?qa=1' \
   --out .screenshots
 ```
+
+
+### Deployment session adapter
+
+Native single-workspace authentication is unchanged when `ANX_UI_SESSION_ADAPTER` is unset. A deployment can provide an absolute `file://` URL for a server-only Node module (Node >=22.13, no top-level await) exporting `createSessionContext({ event, env, dev })`. It returns an immutable request `scope` (64 lowercase hex characters), optional `encodeCookie(name, value)` / `decodeCookie(name, value)` integrity codecs, `sessionTarget(workspace)` (core URL and server-only headers), and `establishSession(workspace)` (core tokens and public agent). Capture the authenticated login context before asynchronous work; never derive the scope from a client-supplied generation marker. The module is loaded at runtime and is not bundled into browser or OSS artifacts.
+
+The shell calls the generic same-origin JSON `POST /auth/workspace-session` only on activation. Layout preloads are read-only. Workspace token cookies are isolated by the captured scope, including delayed refresh/issuance responses; integrity codecs can additionally bind values to their exact names and login. Adapter deployments own session establishment: old launch callbacks redirect to activation, and native passkey/dev cookie-establishment endpoints are disabled. Deployment adapters must validate membership and revocation on every protected request; cookie scoping is not a replacement for authorization.

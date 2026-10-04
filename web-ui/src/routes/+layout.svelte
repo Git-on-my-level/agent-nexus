@@ -1,6 +1,6 @@
 <script>
   import { browser } from "$app/environment";
-  import { goto } from "$app/navigation";
+  import { goto, preloadData } from "$app/navigation";
   import { page } from "$app/stores";
   import { tick } from "svelte";
   import { get } from "svelte/store";
@@ -26,6 +26,7 @@
     isHumanWorkspacePrincipal,
     logoutAuthSession,
     sessionEndedByAccountStatus,
+    startWorkspaceSessionMaintenance,
   } from "$lib/authSession";
   import SessionEndedOverlay from "$lib/components/SessionEndedOverlay.svelte";
   import CommandPalette from "$lib/components/CommandPalette.svelte";
@@ -84,6 +85,9 @@
   let creatingActor = $state(false);
   let newActorName = $state("");
   let hydratedWorkspaceSlug = $state("");
+  let activationError = $state("");
+  let activationPending = $state(false);
+  const hydration = { attemptPath: "", sequence: 0 };
   let workspacePickerOpen = $state(false);
   let commandPaletteOpen = $state(false);
   let accountMenuOpen = $state(false);
@@ -329,17 +333,23 @@
       return;
     }
 
-    setCurrentWorkspaceSlug(workspaceSlug);
     setCurrentOrganizationSlug(
       activeOrganizationSlug || $page.params?.organization || "",
     );
+    setCurrentWorkspaceSlug(workspaceSlug);
     setCurrentCoreBaseUrl(activeWorkspace?.coreBaseUrl ?? "");
-    if (hydratedWorkspaceSlug === workspaceSlug) {
+    const workspaceKey = `${activeOrganizationSlug}/${workspaceSlug}`;
+    if (hydratedWorkspaceSlug === workspaceKey) {
+      hydration.sequence += 1;
+      activationError = "";
+      activationPending = false;
       return;
     }
 
-    hydratedWorkspaceSlug = workspaceSlug;
-    void hydrateWorkspace(workspaceSlug);
+    const attemptPath = `${workspaceKey}:${$page.url.pathname}`;
+    if (hydration.attemptPath === attemptPath) return;
+    hydration.attemptPath = attemptPath;
+    void activateCurrentWorkspace();
   });
 
   $effect(() => {
@@ -441,9 +451,43 @@
     }
   }
 
-  async function hydrateWorkspace(workspaceSlug) {
-    await hydrateWorkspaceBootstrap({
+  async function activateCurrentWorkspace() {
+    const sequence = ++hydration.sequence;
+    const key = `${activeOrganizationSlug}/${activeWorkspaceSlug}`;
+    activationError = "";
+    activationPending = true;
+    try {
+      const result = await hydrateWorkspace(activeWorkspaceSlug, (message) => {
+        if (
+          sequence === hydration.sequence &&
+          key === `${activeOrganizationSlug}/${activeWorkspaceSlug}`
+        )
+          activationError = message;
+      });
+      if (
+        sequence === hydration.sequence &&
+        key === `${activeOrganizationSlug}/${activeWorkspaceSlug}` &&
+        result !== false
+      ) {
+        hydratedWorkspaceSlug = key;
+        activationError = "";
+      }
+    } catch {
+      if (
+        sequence === hydration.sequence &&
+        key === `${activeOrganizationSlug}/${activeWorkspaceSlug}`
+      )
+        activationError = "Could not open this workspace. Please try again.";
+    } finally {
+      if (sequence === hydration.sequence) activationPending = false;
+    }
+  }
+
+  async function hydrateWorkspace(workspaceSlug, onActivationRetry = () => {}) {
+    return hydrateWorkspaceBootstrap({
+      onActivationRetry,
       workspaceSlug,
+      hostedSession: hostedMode ? $page.data.workspaceSession : undefined,
       workspaceHeader: WORKSPACE_HEADER,
       organizationSlug: activeOrganizationSlug,
       coreClient,
@@ -570,25 +614,46 @@
   }
 
   function isActive(href) {
-    return currentAppPath === href || currentAppPath.startsWith(`${href}/`);
+    return (
+      (href === "/overview" && currentAppPath === "/") ||
+      currentAppPath === href ||
+      currentAppPath.startsWith(`${href}/`)
+    );
   }
 
   let workspaceHref = $derived(
     bindWorkspaceHref(activeOrganizationSlug, activeWorkspaceSlug),
   );
 
-  async function switchWorkspace(nextWorkspaceSlug) {
-    if (!nextWorkspaceSlug || nextWorkspaceSlug === activeWorkspaceSlug) {
-      return;
-    }
-
-    const entry = (data.workspaces ?? []).find(
-      (w) => w.slug === nextWorkspaceSlug,
+  function switchDestination(workspace) {
+    // Resource IDs belong to one workspace. Switch to the corresponding list.
+    const section = currentAppPath.split("/")[1] || "overview";
+    return workspacePath(
+      workspace.organizationSlug,
+      workspace.slug,
+      `/${section}`,
     );
-    const nextOrg = entry?.organizationSlug ?? activeOrganizationSlug;
-    const destination = `${workspacePath(nextOrg, nextWorkspaceSlug, currentAppPath)}${$page.url.search}${$page.url.hash}`;
-    await goto(destination);
   }
+
+  async function switchWorkspace(workspace) {
+    if (
+      !workspace ||
+      (workspace.slug === activeWorkspaceSlug &&
+        workspace.organizationSlug === activeOrganizationSlug)
+    )
+      return;
+    await goto(switchDestination(workspace));
+  }
+
+  function preloadWorkspace(workspace) {
+    if (!workspace._loadFailed)
+      void preloadData(switchDestination(workspace)).catch(() => {});
+  }
+
+  $effect(() => {
+    if (!browser || !hostedMode) return;
+    return startWorkspaceSessionMaintenance();
+  });
 
   /** @param {string} href */
   function dataTourForNav(href) {
@@ -731,7 +796,7 @@
 <div class="shell-root">
   {#if !activeWorkspaceSlug}
     {@render children()}
-  {:else if !identityReady || workspaceBootstrapPending}
+  {:else if (!identityReady || workspaceBootstrapPending) && !hostedMode}
     <main class="shell-loading" aria-live="polite">
       <div class="shell-loading-card">
         <svg
@@ -929,8 +994,9 @@
                       class:workspace-switcher-option--active={isCurrent}
                       role="option"
                       aria-selected={isCurrent}
-                      onclick={() =>
-                        !loadFailed && pickWorkspace(workspace.slug)}
+                      onclick={() => !loadFailed && pickWorkspace(workspace)}
+                      onpointerenter={() => preloadWorkspace(workspace)}
+                      onfocus={() => preloadWorkspace(workspace)}
                       disabled={loadFailed}
                       type="button"
                     >
@@ -1009,13 +1075,17 @@
                 {#if item.count === "inbox-needs-you"}
                   <InboxNavCount
                     workspace={activeWorkspaceSlug}
-                    enabled={identityReady}
+                    enabled={identityReady &&
+                      !workspaceBootstrapPending &&
+                      !shouldRedirectToLogin}
                   />
                 {/if}
                 {#if item.count === "agents-working"}
                   <AgentsNavCount
                     workspace={activeWorkspaceSlug}
-                    enabled={identityReady}
+                    enabled={identityReady &&
+                      !workspaceBootstrapPending &&
+                      !shouldRedirectToLogin}
                   />
                 {/if}
               </a>
@@ -1247,7 +1317,32 @@
             class={`shell-content shell-content--${shellContentConfig.mode}`}
             style={`--shell-content-max: ${shellContentConfig.maxWidth}`}
           >
-            {@render children?.()}
+            {#if activationError}
+              <div class="p-6" role="alert" data-workspace-activation-error>
+                <p>{activationError}</p>
+                <button
+                  class="btn-secondary mt-3"
+                  type="button"
+                  disabled={activationPending}
+                  onclick={() => void activateCurrentWorkspace()}
+                >
+                  {activationPending ? "Retrying…" : "Retry"}
+                </button>
+              </div>
+            {:else if !identityReady || workspaceBootstrapPending || shouldRedirectToLogin || hydratedWorkspaceSlug !== `${activeOrganizationSlug}/${activeWorkspaceSlug}`}
+              <div
+                class="p-6"
+                aria-label="Loading workspace content"
+                aria-busy="true"
+              >
+                <div class="h-6 w-48 rounded bg-slate-200/20"></div>
+                <div class="mt-6 h-40 rounded bg-slate-200/10"></div>
+              </div>
+            {:else}
+              {#key `${activeOrganizationSlug}/${activeWorkspaceSlug}`}
+                {@render children?.()}
+              {/key}
+            {/if}
           </div>
         </main>
       </div>
@@ -1280,14 +1375,18 @@
           {#if item.count === "inbox-needs-you"}
             <InboxNavCount
               workspace={activeWorkspaceSlug}
-              enabled={identityReady}
+              enabled={identityReady &&
+                !workspaceBootstrapPending &&
+                !shouldRedirectToLogin}
               variant="bottom"
             />
           {/if}
           {#if item.count === "agents-working"}
             <AgentsNavCount
               workspace={activeWorkspaceSlug}
-              enabled={identityReady}
+              enabled={identityReady &&
+                !workspaceBootstrapPending &&
+                !shouldRedirectToLogin}
               variant="bottom"
             />
           {/if}

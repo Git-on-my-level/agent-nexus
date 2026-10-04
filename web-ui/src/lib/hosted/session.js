@@ -1,3 +1,4 @@
+import { clearAllWorkspaceAuthSessions } from "$lib/authSession.js";
 /**
  * Hosted SaaS session helpers — small client-side store for the signed-in
  * account and the active organization. Used by the hosted shell to render
@@ -241,6 +242,7 @@ export function upsertHostedOrganization(org, options = {}) {
 
 /** Sign out — clears server session cookie + local token + store. */
 export async function signOutHostedSession() {
+  await clearAllWorkspaceAuthSessions();
   try {
     await hostedCpFetch("account/sessions/current", { method: "DELETE" });
   } catch {

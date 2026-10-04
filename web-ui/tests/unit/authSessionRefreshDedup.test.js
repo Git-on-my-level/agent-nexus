@@ -66,3 +66,50 @@ describe("refreshWorkspaceAuthSession dedup", () => {
     expect(maxConcurrent).toBe(1);
   });
 });
+
+it("refreshes near-expiry access cookies before core rejects them, preserving other workspaces", async () => {
+  const { loadWorkspaceAuthenticatedAgent } =
+    await import("../../src/lib/server/authSession.js");
+  const token = "opaque-access-token";
+  const cookies = new Map([
+    ["anx_ui_access_org__personal", token],
+    ["anx_ui_access_org__personal_expires", String(Date.now() + 90_000)],
+    ["anx_ui_session_org__personal", "personal-refresh"],
+    ["anx_ui_access_org__omi", "omi-access"],
+    ["anx_ui_session_org__omi", "omi-refresh"],
+  ]);
+  const fetch = vi.fn(
+    async (url) =>
+      new Response(
+        JSON.stringify(
+          String(url).endsWith("/auth/token")
+            ? { tokens: { access_token: "fresh", refresh_token: "rotated" } }
+            : { agent: { agent_id: "human" } },
+        ),
+      ),
+  );
+  vi.stubGlobal("fetch", fetch);
+  try {
+    const event = {
+      url: new URL("https://ui.test/"),
+      cookies: {
+        get: (name) => cookies.get(name),
+        set: (name, value) => cookies.set(name, value),
+        delete: (name) => cookies.delete(name),
+      },
+    };
+    await loadWorkspaceAuthenticatedAgent({
+      event,
+      organizationSlug: "org",
+      workspaceSlug: "personal",
+      coreBaseUrl: "https://core.test",
+    });
+    expect(String(fetch.mock.calls[0][0])).toContain("/auth/token");
+    expect(String(fetch.mock.calls[1][0])).toContain("/agents/me");
+    expect(cookies.get("anx_ui_session_org__personal")).toBe("rotated");
+    expect(cookies.get("anx_ui_session_org__omi")).toBe("omi-refresh");
+  } finally {
+    vi.unstubAllGlobals();
+    resetWorkspaceAuthRefreshStateForTests();
+  }
+});

@@ -12,10 +12,7 @@ import {
 } from "$lib/workspacePaths.js";
 
 import { allowHostedControlPlanePath } from "../hostedControlPlaneAllowlist.js";
-import {
-  readHostedControlPlaneProxyBearer,
-  renewHostedControlPlaneSessionCookie,
-} from "./cpSessionCookie.js";
+import { readHostedControlPlaneProxyBearer } from "./cpSessionCookie.js";
 
 import { createControlPlaneClient } from "./cpClient.js";
 
@@ -298,9 +295,6 @@ export function createHostedProvider({ controlPlaneBaseUrl, env }) {
       }
 
       const response = await fetch(target, init);
-      if (cookieToken && response.ok) {
-        renewHostedControlPlaneSessionCookie(event, cookieToken);
-      }
       const outHeaders = new Headers(response.headers);
       outHeaders.delete("content-encoding");
       outHeaders.delete("transfer-encoding");

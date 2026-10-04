@@ -306,6 +306,15 @@ export async function runWorkspaceAuthCallbackPost(
   const exchangeToken = String(form.get("exchange_token") ?? "").trim();
   const state = String(form.get("state") ?? "").trim();
   const returnPath = sanitizeHostedReturnPath(form.get("return_path") ?? "/");
+  // A deployment adapter owns session identity. Never import an older launch's
+  // credential into the current login scope; activation establishes it afresh.
+  if (event.locals?.sessionAdapter) {
+    throw redirect(
+      303,
+      workspacePath(resolvedOrganizationSlug, workspaceSlug, returnPath),
+    );
+  }
+
   if (!exchangeToken || !state) {
     return respondWithCallbackError(
       event,
