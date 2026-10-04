@@ -5,6 +5,7 @@
   import ReportChart from "./ReportChart.svelte";
   import ReportDetails from "./ReportDetails.svelte";
   import ActorLabel from "$lib/components/ActorLabel.svelte";
+  import RefText from "$lib/components/RefText.svelte";
   import { safeReportUrl } from "$lib/visualReports.js";
 
   let {
@@ -14,7 +15,24 @@
     freshness,
     evidenceOpen = false,
     oninspect,
+    /**
+     * Page-level ref resolution and the shared preview. A ref written in a
+     * cell, a callout, a milestone or a node renders as a chip from this;
+     * nothing here fetches.
+     */
+    resolved = new Map(),
+    organizationSlug = "",
+    workspaceSlug = "",
+    onpreview = null,
+    onpreviewclose = null,
   } = $props();
+  const refProps = () => ({
+    resolved,
+    organizationSlug,
+    workspaceSlug,
+    onpreview,
+    onpreviewclose,
+  });
   const typeLabels = {
     "live-initiatives": "Initiatives",
     "live-asks": "Needs an answer",
@@ -120,9 +138,11 @@
       {:else if panel.type === "metric"}
         <p class="text-title">{panel.data.value} {panel.data.unit ?? ""}</p>
       {:else if ["metric-strip", "callout", "comparison"].includes(panel.type)}
-        <ReportDetails {panel} />
+        <ReportDetails {panel} {...refProps()} />
       {:else if panel.type === "explanation"}
-        <p class="report-explanation">{panel.data.text}</p>
+        <p class="report-explanation">
+          <RefText text={panel.data.text} {...refProps()} />
+        </p>
       {:else if ["evidence-table", "table"].includes(panel.type)}
         <!-- Keyboard access is required for horizontally scrollable tables. -->
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -142,7 +162,9 @@
             >
             <tbody
               >{#each panel.data.rows as row}<tr
-                  >{#each row.cells as cell}<td>{cell}</td>{/each}</tr
+                  >{#each row.cells as cell}<td
+                      ><RefText text={cell} {...refProps()} /></td
+                    >{/each}</tr
                 >{/each}</tbody
             >
           </table>
@@ -161,13 +183,17 @@
                 <div
                   class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1"
                 >
-                  <h4 class="font-medium text-fg">{item.label}</h4>
+                  <h4 class="font-medium text-fg">
+                    <RefText text={item.label} {...refProps()} />
+                  </h4>
                   <span class="report-status-label">{item.status}</span>
                 </div>
                 <p class="mt-1 text-micro text-fg-muted">
                   {item.date ?? "Date not established"}
                 </p>
-                <p class="mt-1 text-meta text-fg-muted">{item.detail}</p>
+                <p class="mt-1 text-meta text-fg-muted">
+                  <RefText text={item.detail} {...refProps()} />
+                </p>
               </div>
             </li>
           {/each}
@@ -180,7 +206,7 @@
               class:report-dependency-complete={node.status === "complete"}
             >
               <span class="text-micro text-fg-muted">{node.status}</span><strong
-                >{node.label}</strong
+                ><RefText text={node.label} {...refProps()} /></strong
               >
             </div>
           {/each}
@@ -199,7 +225,9 @@
               </span><span
                 >{panel.data.nodes.find((node) => node.id === edge.to)
                   ?.label}</span
-              ><span class="block text-micro text-fg-muted">{edge.label}</span>
+              ><span class="block text-micro text-fg-muted"
+                ><RefText text={edge.label} {...refProps()} /></span
+              >
             </li>
           {/each}
         </ul>

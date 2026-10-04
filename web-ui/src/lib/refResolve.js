@@ -357,15 +357,44 @@ export function refChipModel(ref, resolved, context = {}) {
   };
 }
 
+/**
+ * Destinations a chip is allowed to link to: an absolute http(s) URL, or a
+ * workspace-relative path. Anything else — `javascript:`, `data:`, a
+ * protocol-relative `//host` that leaves the origin — is refused and the chip
+ * renders unlinked rather than becoming an executable anchor.
+ *
+ * Resolved refs come from core today, but a chip is a generic renderer and the
+ * cost of being wrong here is an executable link, so the check lives at the
+ * point of rendering rather than relying on the producer.
+ */
+export function safeRefDestination(value) {
+  const url = asText(value);
+  if (!url) return "";
+  if (/^https?:\/\//i.test(url)) return url;
+  // A single leading slash only: `//evil.test` is a protocol-relative URL.
+  if (/^\/(?!\/)/.test(url)) return url;
+  return "";
+}
+
 function refHref({ raw, prefix, value, hit, external, context, resolvable }) {
   // Nothing to open: a "not found" chip must not offer a link into a 404.
   if (!resolvable) return "";
-  if (external) return raw;
-  const explicit = asText(hit?.url);
-  if (explicit) return explicit;
+  if (external) return safeRefDestination(raw);
 
   const org = asText(context.organizationSlug);
   const workspace = asText(context.workspaceSlug);
+
+  // Core returns a path relative to the workspace (`/tasks/<handle>`), not a
+  // routable one. The UI's routes are `/o/<org>/w/<workspace>/…` under the app
+  // base path, so a server path has to be rebased or it navigates out of the
+  // workspace the reader is looking at.
+  const explicit = safeRefDestination(hit?.url);
+  if (explicit) {
+    if (/^https?:\/\//i.test(explicit)) return explicit;
+    if (!org || !workspace) return "";
+    return workspacePath(org, workspace, explicit);
+  }
+
   if (!org || !workspace || !value) return "";
 
   if (prefix === "card") {

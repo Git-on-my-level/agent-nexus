@@ -202,27 +202,27 @@ describe("initiativeTiles", () => {
 });
 
 describe("inboxWaitingLine", () => {
-  it("summarises waiting decisions as one line", () => {
+  it("summarises what is waiting as one line, without calling it all decisions", () => {
     expect(
       inboxWaitingLine({ status: "ok", count: 3, href: "/inbox" }),
     ).toEqual({
       count: 3,
       href: "/inbox",
-      label: "3 decisions waiting in Inbox",
+      label: "3 items need you",
     });
   });
 
-  it("says decision in the singular", () => {
+  it("says item in the singular", () => {
     expect(
       inboxWaitingLine({ status: "ok", count: 1, href: "/inbox" }).label,
-    ).toBe("1 decision waiting in Inbox");
+    ).toBe("1 item needs you");
   });
 
   it("marks a truncated count", () => {
     expect(
       inboxWaitingLine({ status: "ok", count: 50, truncated: true, href: "/i" })
         .label,
-    ).toBe("50+ decisions waiting in Inbox");
+    ).toBe("50+ items need you");
   });
 
   it("shows nothing when nothing waits or the read failed", () => {

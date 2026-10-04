@@ -6,6 +6,9 @@
   import { isLivePanel, withLiveObservation } from "$lib/liveReports.js";
   import { getPanelFreshness } from "$lib/visualReports.js";
   import VisualReportPanel from "./VisualReportPanel.svelte";
+  import AnxRefPreview from "$lib/components/AnxRefPreview.svelte";
+  import { collectPageRefs, indexResolvedRefs } from "$lib/refResolve.js";
+  import { reportRefStrings } from "./reportRefs.js";
   import ReportLayout from "./ReportLayout.svelte";
   import { layoutPanelIds } from "./reportLayout.js";
 
@@ -18,6 +21,43 @@
     ),
   );
   let now = $state(Date.now());
+
+  /**
+   * Every ref written anywhere in the report, resolved in one request so chips
+   * in table cells, callouts, timelines and diagram nodes render without a
+   * fetch each.
+   */
+  let refPreview = $state();
+  let resolvedRefs = $state(new Map());
+  $effect(() => {
+    const refs = collectPageRefs(reportRefStrings(report?.panels ?? []));
+    if (!refs.length) {
+      resolvedRefs = new Map();
+      return;
+    }
+    let cancelled = false;
+    void coreClient
+      .resolveRefs(refs)
+      .then((result) => {
+        if (!cancelled) resolvedRefs = indexResolvedRefs(result, refs);
+      })
+      .catch(() => {
+        // Unresolved refs still render, as "not found" chips.
+        if (!cancelled) resolvedRefs = indexResolvedRefs({}, refs);
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
+  const refProps = () => ({
+    resolved: resolvedRefs,
+    // A report can render outside a workspace route; without a workspace a
+    // chip simply does not link rather than throwing.
+    organizationSlug: $page?.params?.organization ?? "",
+    workspaceSlug: $page?.params?.workspace ?? "",
+    onpreview: (model, anchor) => refPreview?.open(model, anchor),
+    onpreviewclose: () => refPreview?.requestClose(),
+  });
   const freshnessOptions = [
     "all",
     "current",
@@ -230,6 +270,7 @@
         {evidence}
         {tabSelections}
         oninspect={inspectPanel}
+        {...refProps()}
         ontab={(id, value) => setFilter(`reportTab.${id}`, value)}
       />
     {/if}
@@ -243,6 +284,7 @@
             freshness={getPanelFreshness(panel, now)}
             evidenceOpen={evidence === panel.id}
             oninspect={inspectPanel}
+            {...refProps()}
           />
         {/each}
       </div>
@@ -262,6 +304,9 @@
         : "Agent-assembled report · Source-linked claims · No automatic source refresh"}
     </p>{/if}
 </section>
+
+<!-- One preview layer for every chip in this report. -->
+<AnxRefPreview bind:this={refPreview} />
 
 <style>
   .visual-report {

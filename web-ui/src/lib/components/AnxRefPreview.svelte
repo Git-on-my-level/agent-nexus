@@ -28,16 +28,47 @@
   let position = $state({ top: 0, left: 0 });
   let card = $state();
 
+  /**
+   * Closing is deferred by a beat so the preview survives the gap between
+   * leaving the chip and arriving on the card — and the gap between the chip
+   * losing focus and a control inside the card gaining it. Without that, Open
+   * and Copy ref could be seen but never reached: the preview vanished on the
+   * way to them.
+   */
+  let closeTimer = null;
+
+  function cancelClose() {
+    if (closeTimer) {
+      clearTimeout(closeTimer);
+      closeTimer = null;
+    }
+  }
+
   export function open(nextModel, nextAnchor) {
+    cancelClose();
     model = nextModel;
     anchor = nextAnchor;
     registerContextMenu(ID, close);
   }
 
+  /** Leave it open long enough to travel to it. */
+  export function requestClose(delay = 180) {
+    cancelClose();
+    closeTimer = setTimeout(() => {
+      closeTimer = null;
+      close();
+    }, delay);
+  }
+
   export function close() {
+    cancelClose();
+    const returnFocus = card?.contains(document.activeElement) ? anchor : null;
     model = null;
     anchor = null;
     clearContextMenu(ID);
+    // Escape from inside the card puts the reader back on the chip they came
+    // from, rather than dropping focus to the top of the document.
+    returnFocus?.focus?.();
   }
 
   /**
@@ -68,9 +99,17 @@
 
   onMount(() => {
     const onScrollOrResize = () => (model ? close() : undefined);
+    const onKeydown = (event) => {
+      if (model && event.key === "Escape") {
+        event.stopPropagation();
+        close();
+      }
+    };
     window.addEventListener("scroll", onScrollOrResize, true);
     window.addEventListener("resize", onScrollOrResize);
+    document.addEventListener("keydown", onKeydown, true);
     return () => {
+      document.removeEventListener("keydown", onKeydown, true);
       window.removeEventListener("scroll", onScrollOrResize, true);
       window.removeEventListener("resize", onScrollOrResize);
       clearContextMenu(ID);
@@ -96,16 +135,22 @@
 
 {#if model}
   <!--
-    `role="tooltip"` rather than a dialog: it does not take focus, and it
-    follows the chip the reader is already on.
+    A dialog, not a tooltip: it holds Open and Copy ref, so it is interactive
+    content a reader can move into. `aria-modal` stays off — it does not trap
+    focus or block the page; Escape closes it and returns focus to the chip.
   -->
   <div
     bind:this={card}
     class="anx-ref-preview"
     style:top="{position.top}px"
     style:left="{position.left}px"
-    role="tooltip"
-    aria-live="polite"
+    role="dialog"
+    aria-label={`${model.kindLabel || "Ref"}: ${model.title}`}
+    tabindex="-1"
+    onmouseenter={cancelClose}
+    onfocusin={cancelClose}
+    onmouseleave={() => requestClose()}
+    onfocusout={() => requestClose()}
   >
     <p class="anx-ref-preview__title">{model.title}</p>
     <p class="anx-ref-preview__meta">

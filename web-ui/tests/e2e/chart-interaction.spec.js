@@ -227,3 +227,37 @@ test("series colours follow the surface, ready for a light theme", async ({
   );
   await expect.poll(async () => swatch(), { timeout: 10_000 }).not.toBe(onDark);
 });
+
+/**
+ * The *identity* of the leading series is pinned in
+ * `tests/unit/ReportChartComponent.test.js`, where the hover event and the
+ * formatter can be driven directly. In a real browser ECharts puts an invisible
+ * capture layer over the marks, so there is no reliable way to ask the page
+ * which band is under the cursor — this covers what the browser can answer:
+ * that the tooltip tracks the pointer and always names a real series.
+ */
+test("the tooltip follows the pointer and names a real series", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await openReport(page);
+
+  const surface = chartPanel(page).locator(".chart-surface");
+  // Mouse coordinates are viewport-relative, and this panel sits below the fold.
+  await surface.scrollIntoViewIfNeeded();
+  const box = await surface.boundingBox();
+  const lead = page.locator(".report-tooltip__lead .report-tooltip__name");
+
+  const seen = new Set();
+  for (const fraction of [0.74, 0.62, 0.5, 0.38]) {
+    await page.mouse.move(
+      box.x + box.width * 0.6,
+      box.y + box.height * fraction,
+    );
+    await expect(page.locator(".report-tooltip")).toBeVisible();
+    const name = (await lead.textContent())?.trim();
+    expect(SERIES_NAMES).toContain(name);
+    seen.add(name);
+  }
+  expect(seen.size).toBeGreaterThan(1);
+});

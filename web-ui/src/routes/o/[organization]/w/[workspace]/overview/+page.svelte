@@ -190,10 +190,11 @@
     </div>
   {:else}
     <!--
-      One line, not a second Inbox. The dashboard says how many decisions are
-      waiting and links across; which initiative each belongs to is a pill on
-      that initiative's tile. Restating the Inbox here was the duplication the
-      brief rules out.
+      One line, not a second Inbox. The dashboard says how much is waiting and
+      links across; which initiative an item belongs to is a pill on that
+      initiative's tile. Restating the Inbox here was the duplication the brief
+      rules out. "Items", not "decisions": the count mixes decisions with tasks
+      that need a person.
     -->
     <section
       class="rounded-md border border-line bg-panel"

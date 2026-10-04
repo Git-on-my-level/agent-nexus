@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, waitFor } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import AnxRefPreview from "../../src/lib/components/AnxRefPreview.svelte";
@@ -252,5 +252,95 @@ describe("AnxRefPreview", () => {
     // The rule bans a translucent fill on a fixed layer; this uses --panel.
     const styles = container.querySelector(".anx-ref-preview").outerHTML;
     expect(styles).not.toContain("transparent");
+  });
+});
+
+describe("AnxRefPreview stays reachable", () => {
+  it("is a dialog, not a tooltip: it holds controls a reader moves into", async () => {
+    const { container, component } = render(AnxRefPreview);
+    component.open(model("card:initiative-plans"), anchor());
+    await waitFor(() =>
+      expect(container.querySelector(".anx-ref-preview")).not.toBeNull(),
+    );
+    const card = container.querySelector(".anx-ref-preview");
+    expect(card.getAttribute("role")).toBe("dialog");
+    expect(card.getAttribute("aria-label")).toContain(
+      "Initiative plans on cards",
+    );
+  });
+
+  it("survives the gap between leaving the chip and reaching the card", async () => {
+    vi.useFakeTimers();
+    try {
+      const { container, component } = render(AnxRefPreview);
+      component.open(model("card:initiative-plans"), anchor());
+      await Promise.resolve();
+
+      // The chip asks to close as the pointer leaves it.
+      component.requestClose();
+      // Partway there the card is still on screen, which is the whole point:
+      // closing immediately made Open and Copy ref impossible to reach.
+      vi.advanceTimersByTime(60);
+      await Promise.resolve();
+      expect(container.querySelector(".anx-ref-preview")).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stays open once the pointer arrives on the card", async () => {
+    vi.useFakeTimers();
+    try {
+      const { container, component } = render(AnxRefPreview);
+      component.open(model("card:initiative-plans"), anchor());
+      await Promise.resolve();
+      component.requestClose();
+
+      const card = container.querySelector(".anx-ref-preview");
+      await fireEvent.mouseEnter(card);
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+      expect(container.querySelector(".anx-ref-preview")).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("closes once the pointer leaves without arriving", async () => {
+    vi.useFakeTimers();
+    try {
+      const { container, component } = render(AnxRefPreview);
+      component.open(model("card:initiative-plans"), anchor());
+      await Promise.resolve();
+      component.requestClose();
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+      await waitFor(() =>
+        expect(container.querySelector(".anx-ref-preview")).toBeNull(),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("closes on Escape and hands focus back to the chip", async () => {
+    const { container, component } = render(AnxRefPreview);
+    const chip = anchor();
+    chip.tabIndex = 0;
+    component.open(model("card:initiative-plans"), chip);
+    await waitFor(() =>
+      expect(container.querySelector(".anx-ref-preview")).not.toBeNull(),
+    );
+
+    // Focus a control inside the card, as Tab would.
+    const copy = container.querySelector(".anx-ref-preview__actions button");
+    copy.focus();
+    expect(document.activeElement).toBe(copy);
+
+    await fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() =>
+      expect(container.querySelector(".anx-ref-preview")).toBeNull(),
+    );
+    expect(document.activeElement).toBe(chip);
   });
 });

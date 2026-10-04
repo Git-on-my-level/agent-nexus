@@ -148,8 +148,13 @@ export function initiativeTiles(items = [], options = {}) {
  * The single Inbox line the Overview is allowed.
  *
  * The brief is explicit that a dashboard must not restate the Inbox: at most
- * one link saying how many decisions are waiting, plus a pill on the tile the
- * decision belongs to. This replaces a per-item list.
+ * one link saying how much is waiting, plus a pill on the tile it belongs to.
+ * This replaces a per-item list.
+ *
+ * It says "items", not "decisions". Core's `needs_you` count mixes decisions
+ * with human-assigned and blocked tasks and other Inbox entries, so calling
+ * them all decisions would claim something is waiting for an answer when it is
+ * a task waiting to be picked up.
  *
  * @param {{ status?: string, count?: number, truncated?: boolean, href?: string }} needsYou
  */
@@ -161,6 +166,6 @@ export function inboxWaitingLine(needsYou) {
   return {
     count,
     href: asText(needsYou.href),
-    label: `${count}${suffix} ${count === 1 ? "decision" : "decisions"} waiting in Inbox`,
+    label: `${count}${suffix} ${count === 1 ? "item needs" : "items need"} you`,
   };
 }

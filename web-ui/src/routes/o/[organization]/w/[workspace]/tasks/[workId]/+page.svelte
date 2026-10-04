@@ -418,7 +418,7 @@
                   organizationSlug={$page.params.organization}
                   workspaceSlug={$page.params.workspace}
                   onpreview={(model, anchor) => refPreview?.open(model, anchor)}
-                  onpreviewclose={() => refPreview?.close()}
+                  onpreviewclose={() => refPreview?.requestClose()}
                 />
               </div>
             {/if}

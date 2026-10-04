@@ -60,6 +60,15 @@
     blocked: "Blocked",
     not_started: "Not started",
   };
+  /** Core computes status; an uncomputed step says so rather than guessing. */
+  const statusLabel = (status) => STATUS_LABELS[status] ?? "Status unknown";
+
+  /**
+   * The shape core computed picks the view. With no computed shape — an unsaved
+   * plan, or a `dependency-diagram` panel — the timeline is the fallback,
+   * because it is the view that assumes least about an unclassified graph.
+   */
+  let shape = $derived(layout.shape || "chain");
 
   function laneSteps(lane) {
     // Dependency order, then anything the layering could not place. A step must
@@ -80,8 +89,8 @@
 {#if !layout.nodes.length}
   <p class="plan-empty">No plan yet.</p>
 {:else}
-  <div class="plan" data-plan-shape={layout.shape}>
-    {#if layout.shape === "dag"}
+  <div class="plan" data-plan-shape={shape}>
+    {#if shape === "dag"}
       <!-- Horizontal scroll on a narrow screen; the region takes focus so it
            can be scrolled from the keyboard. -->
       <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -136,13 +145,13 @@
                 <span class="plan-node__title">{node.title}</span>
               {/if}
               <span class="plan-node__status">
-                {STATUS_LABELS[node.status] ?? node.status}
+                {statusLabel(node.status)}
               </span>
             </div>
           {/each}
         </div>
       </div>
-    {:else if layout.shape === "lanes"}
+    {:else if shape === "lanes"}
       <div class="plan-lanes">
         {#each layout.lanes as lane, index (lane.join("+"))}
           <section class="plan-lane" aria-label={`Lane ${index + 1}`}>
@@ -164,7 +173,7 @@
                     <span class="plan-node__title">{node.title}</span>
                   {/if}
                   <span class="plan-node__status"
-                    >{STATUS_LABELS[node.status] ?? node.status}</span
+                    >{statusLabel(node.status)}</span
                   >
                 </li>
               {/each}
@@ -199,9 +208,7 @@
             {:else}
               <span class="plan-node__title">{node.title}</span>
             {/if}
-            <span class="plan-node__status"
-              >{STATUS_LABELS[node.status] ?? node.status}</span
-            >
+            <span class="plan-node__status">{statusLabel(node.status)}</span>
             {#if node.due}<span class="plan-node__due">{node.due}</span>{/if}
           </li>
         {/each}
@@ -232,9 +239,7 @@
         {#each layout.nodes as node (node.id)}
           <li>
             <span class="plan-node__title">{node.title}</span>
-            <span class="plan-node__status"
-              >{STATUS_LABELS[node.status] ?? node.status}</span
-            >
+            <span class="plan-node__status">{statusLabel(node.status)}</span>
             {#if node.due}<span class="plan-node__due">due {node.due}</span
               >{/if}
             {#if node.after.length}

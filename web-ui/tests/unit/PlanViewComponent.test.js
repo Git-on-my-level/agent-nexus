@@ -16,6 +16,24 @@ const step = (id, after = [], extra = {}) => ({
   ...extra,
 });
 
+/**
+ * Core computes shape, status and the critical path; the view only draws them.
+ * These helpers state what core would have said so a case can be about layout.
+ */
+const stateFor = (plan, overrides = {}) => ({
+  steps: (plan?.steps ?? []).map((entry) => ({
+    id: entry.id,
+    status: entry.status ?? "not_started",
+    resolvable: Boolean(entry.ref),
+  })),
+  progress: { done: 0, total: (plan?.steps ?? []).length },
+  critical_path: [],
+  next_steps: [],
+  shape: "chain",
+  health: "on_track",
+  ...overrides,
+});
+
 const mount = (plan, props = {}) =>
   render(PlanView, {
     plan,
@@ -37,9 +55,10 @@ describe("PlanView", () => {
   });
 
   it("renders a chain as a timeline", () => {
-    const { container } = mount({
+    const plan = {
       steps: [step("spec"), step("build", ["spec"]), step("ship", ["build"])],
-    });
+    };
+    const { container } = mount(plan, { planState: stateFor(plan) });
     expect(container.querySelector("[data-plan-shape]").dataset.planShape).toBe(
       "chain",
     );
@@ -48,8 +67,9 @@ describe("PlanView", () => {
   });
 
   it("renders a branch as a tech tree with edges and a scrollable region", () => {
-    const { container } = mount({
-      steps: [step("a"), step("b", ["a"]), step("c", ["a"])],
+    const plan = { steps: [step("a"), step("b", ["a"]), step("c", ["a"])] };
+    const { container } = mount(plan, {
+      planState: stateFor(plan, { shape: "dag" }),
     });
     expect(container.querySelector("[data-plan-shape]").dataset.planShape).toBe(
       "dag",
@@ -62,16 +82,20 @@ describe("PlanView", () => {
   });
 
   it("highlights the critical path on nodes and edges", () => {
-    const { container } = mount({
-      steps: [step("a"), step("b", ["a"]), step("side", ["a"])],
+    const plan = { steps: [step("a"), step("b", ["a"]), step("side", ["a"])] };
+    const { container } = mount(plan, {
+      planState: stateFor(plan, { shape: "dag", critical_path: ["a", "b"] }),
     });
     expect(container.querySelectorAll(".plan-node--critical")).toHaveLength(2);
     expect(container.querySelectorAll(".plan-edge--critical")).toHaveLength(1);
   });
 
   it("renders separate runs as lanes", () => {
-    const { container } = mount({
+    const plan = {
       steps: [step("a"), step("b", ["a"]), step("x"), step("y", ["x"])],
+    };
+    const { container } = mount(plan, {
+      planState: stateFor(plan, { shape: "lanes" }),
     });
     expect(container.querySelector("[data-plan-shape]").dataset.planShape).toBe(
       "lanes",
@@ -79,19 +103,39 @@ describe("PlanView", () => {
     expect(container.querySelectorAll(".plan-lane")).toHaveLength(2);
   });
 
-  it("turns a timeline into a tree when a step adds an after", () => {
-    const chain = [step("a"), step("b", ["a"]), step("c", ["b"])];
-    const { container, unmount } = mount({ steps: chain });
+  it("follows core when one added step turns a timeline into a tree", () => {
+    // The shape is core's answer; adding `after:` is what changes core's
+    // answer, and the view follows it rather than deciding for itself.
+    const chain = { steps: [step("a"), step("b", ["a"]), step("c", ["b"])] };
+    const { container, unmount } = mount(chain, {
+      planState: stateFor(chain),
+    });
     expect(container.querySelector("[data-plan-shape]").dataset.planShape).toBe(
       "chain",
     );
     unmount();
 
-    const { container: branched } = mount({
-      steps: [...chain, step("d", ["a"])],
+    const branched = { steps: [...chain.steps, step("d", ["a"])] };
+    const { container: tree } = mount(branched, {
+      planState: stateFor(branched, { shape: "dag" }),
     });
-    expect(branched.querySelector("[data-plan-shape]").dataset.planShape).toBe(
+    expect(tree.querySelector("[data-plan-shape]").dataset.planShape).toBe(
       "dag",
+    );
+  });
+
+  it("falls back to a timeline when core computed no shape", () => {
+    const { container } = mount({ steps: [step("a"), step("b", ["a"])] });
+    expect(container.querySelector("[data-plan-shape]").dataset.planShape).toBe(
+      "chain",
+    );
+  });
+
+  it("says a status is unknown rather than inventing one", () => {
+    const { container } = mount({ steps: [step("a", [], { status: "done" })] });
+    // `status` on an authored step is core's input, not its answer.
+    expect(container.querySelector(".plan-node__status").textContent).toContain(
+      "Status unknown",
     );
   });
 
@@ -121,12 +165,20 @@ describe("PlanView", () => {
     expect(undated.container.querySelector(".plan-today")).toBeNull();
   });
 
-  it("renders a step's ref as a chip and takes its status from the ref", () => {
-    const { container } = mount({
+  it("renders a step's ref as a chip and its status from core's plan state", () => {
+    const plan = {
       steps: [
         step("done-step", [], { ref: "card:shared-report-contracts" }),
         step("blocked-step", ["done-step"], { ref: "card:pushed-series" }),
       ],
+    };
+    const { container } = mount(plan, {
+      planState: stateFor(plan, {
+        steps: [
+          { id: "done-step", status: "done", resolvable: true },
+          { id: "blocked-step", status: "blocked", resolvable: true },
+        ],
+      }),
     });
     const chips = container.querySelectorAll("[data-anx-ref]");
     expect(chips).toHaveLength(2);
@@ -154,8 +206,9 @@ describe("PlanView", () => {
   });
 
   it("always offers the step list, which is the diagram's fallback", () => {
-    const { container } = mount({
-      steps: [step("a"), step("b", ["a"]), step("c", ["a"])],
+    const plan = { steps: [step("a"), step("b", ["a"]), step("c", ["a"])] };
+    const { container } = mount(plan, {
+      planState: stateFor(plan, { shape: "dag", critical_path: ["a", "b"] }),
     });
     const details = container.querySelector(".plan-steps");
     expect(details.querySelector("summary").textContent).toContain(
@@ -175,12 +228,15 @@ describe("PlanView", () => {
   });
 
   it("hides only the edge layer from assistive tech, never the nodes", () => {
-    const { container } = mount({
+    const plan = {
       steps: [
         step("a", [], { ref: "card:initiative-plans" }),
         step("b", ["a"]),
         step("c", ["a"]),
       ],
+    };
+    const { container } = mount(plan, {
+      planState: stateFor(plan, { shape: "dag" }),
     });
     expect(
       container.querySelector(".plan-tree__edges").getAttribute("aria-hidden"),
@@ -192,8 +248,9 @@ describe("PlanView", () => {
   });
 
   it("reports a dependency loop and still draws the rest", () => {
-    const { container } = mount({
-      steps: [step("ok"), step("a", ["b"]), step("b", ["a"])],
+    const plan = { steps: [step("ok"), step("a", ["b"]), step("b", ["a"])] };
+    const { container } = mount(plan, {
+      planState: stateFor(plan, { shape: "dag" }),
     });
     expect(container.querySelector(".plan-issues").textContent).toContain(
       "depend on each other in a loop",

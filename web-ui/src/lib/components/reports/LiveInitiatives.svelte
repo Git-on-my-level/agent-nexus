@@ -59,7 +59,7 @@
             <span
               class="tile-bar"
               role="img"
-              aria-label={`${tile.progress?.done ?? 0} of ${tile.progress?.total ?? 0} steps done`}
+              aria-label={`${tile.title} checklist: ${tile.progress?.done ?? 0} of ${tile.progress?.total ?? 0} steps done`}
             >
               {#each tile.segments as segment (segment.id)}
                 <span
@@ -79,7 +79,10 @@
           </span>
         {:else if tile.progress}
           <span class="tile-viz">
-            <progress value={tile.progress.done} max={tile.progress.total}
+            <progress
+              value={tile.progress.done}
+              max={tile.progress.total}
+              aria-label={`${tile.title} checklist`}
             ></progress>
             <span class="tile-meta"
               >{tile.progress.done}/{tile.progress.total}</span

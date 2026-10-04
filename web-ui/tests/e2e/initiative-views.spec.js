@@ -376,7 +376,7 @@ for (const viewport of [
 
     // One Inbox line, not a restatement of the Inbox.
     await expect(
-      page.getByRole("link", { name: "2 decisions waiting in Inbox →" }),
+      page.getByRole("link", { name: "2 items need you →" }),
     ).toBeVisible();
 
     const section = page.locator('[data-overview-section="initiatives"]');

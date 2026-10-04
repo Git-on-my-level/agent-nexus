@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  safeRefDestination,
   CHIP_REF_PREFIXES,
   classifyWorkUrl,
   collectPageRefs,
@@ -377,5 +378,91 @@ describe("formatMovedAgo", () => {
     expect(formatMovedAgo(null, now)).toBe("");
     expect(formatMovedAgo("not a date", now)).toBe("");
     expect(formatMovedAgo(new Date(now + 60_000).toISOString(), now)).toBe("");
+  });
+});
+
+describe("workspace-relative URLs from core", () => {
+  const context = { organizationSlug: "scaling", workspaceSlug: "anx" };
+  const withUrl = (url) =>
+    indexResolvedRefs({
+      items: [{ ref: "card:a", title: "A", url, resolvable: true }],
+    });
+
+  it("rebases a core path onto the workspace route", () => {
+    // Core returns `/tasks/<handle>`, which is relative to the workspace. The
+    // UI's routes live under /o/<org>/w/<workspace>/, so a verbatim href would
+    // navigate out of the workspace the reader is in.
+    expect(
+      refChipModel("card:a", withUrl("/tasks/release-b"), context).href,
+    ).toBe("/o/scaling/w/anx/tasks/release-b");
+    expect(refChipModel("card:a", withUrl("/docs/plan"), context).href).toBe(
+      "/o/scaling/w/anx/docs/plan",
+    );
+  });
+
+  it("leaves an absolute http(s) URL alone", () => {
+    expect(
+      refChipModel("card:a", withUrl("https://github.com/o/r/pull/1"), context)
+        .href,
+    ).toBe("https://github.com/o/r/pull/1");
+  });
+
+  it("yields no link for a core path without a workspace in context", () => {
+    expect(refChipModel("card:a", withUrl("/tasks/release-b"), {}).href).toBe(
+      "",
+    );
+  });
+});
+
+describe("safeRefDestination", () => {
+  it("allows http, https and workspace-relative paths", () => {
+    expect(safeRefDestination("https://example.test/x")).toBe(
+      "https://example.test/x",
+    );
+    expect(safeRefDestination("http://example.test/x")).toBe(
+      "http://example.test/x",
+    );
+    expect(safeRefDestination("/tasks/release-b")).toBe("/tasks/release-b");
+  });
+
+  it("refuses a scheme that would execute", () => {
+    for (const url of [
+      "javascript:alert(1)",
+      "JavaScript:alert(1)",
+      "data:text/html,<script>alert(1)</script>",
+      "vbscript:msgbox(1)",
+    ]) {
+      expect(safeRefDestination(url)).toBe("");
+    }
+  });
+
+  it("refuses a protocol-relative URL that would leave the origin", () => {
+    expect(safeRefDestination("//evil.test/x")).toBe("");
+  });
+
+  it("refuses anything it does not recognise", () => {
+    expect(safeRefDestination("mailto:a@b.test")).toBe("");
+    expect(safeRefDestination("tasks/release-b")).toBe("");
+    expect(safeRefDestination("")).toBe("");
+  });
+
+  it("keeps an unsafe server URL out of a chip", () => {
+    const context = { organizationSlug: "scaling", workspaceSlug: "anx" };
+    const unsafe = (ref) =>
+      indexResolvedRefs({
+        items: [
+          { ref, title: "A", url: "javascript:alert(1)", resolvable: true },
+        ],
+      });
+
+    // A card has a destination we can derive ourselves, so the hostile URL is
+    // dropped and the chip still goes somewhere real.
+    const card = refChipModel("card:a", unsafe("card:a"), context);
+    expect(card.href).toBe("/o/scaling/w/anx/tasks/card%3Aa");
+    expect(card.href).not.toContain("javascript");
+
+    // A board has no derivable destination, so the chip simply does not link
+    // rather than becoming an executable anchor.
+    expect(refChipModel("board:a", unsafe("board:a"), context).href).toBe("");
   });
 });

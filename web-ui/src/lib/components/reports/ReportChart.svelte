@@ -41,6 +41,8 @@
    * has been hovered.
    */
   let hoveredSeriesIndex = $state(null);
+  /** Guards the re-show below from re-entering its own mouseover handler. */
+  let refreshingTip = false;
 
   function tooltipFormatter(params) {
     const points = Array.isArray(params) ? params : [params];
@@ -135,9 +137,32 @@
         { notMerge: true },
       );
       instance.on("mouseover", (event) => {
-        hoveredSeriesIndex = Number.isInteger(event?.seriesIndex)
+        const next = Number.isInteger(event?.seriesIndex)
           ? event.seriesIndex
           : null;
+        if (next === hoveredSeriesIndex) return;
+        hoveredSeriesIndex = next;
+        // ECharts has already built the tooltip by the time this fires, so the
+        // content on screen was formatted against the *previous* hovered
+        // series and would stay wrong for as long as the pointer rested here.
+        // Re-showing the tip runs the formatter again with the series actually
+        // under the cursor. The guard stops that re-show from recursing.
+        if (
+          !refreshingTip &&
+          next !== null &&
+          Number.isInteger(event?.dataIndex)
+        ) {
+          refreshingTip = true;
+          try {
+            instance.dispatchAction({
+              type: "showTip",
+              seriesIndex: next,
+              dataIndex: event.dataIndex,
+            });
+          } finally {
+            refreshingTip = false;
+          }
+        }
       });
       instance.on("globalout", () => {
         hoveredSeriesIndex = null;
@@ -270,6 +295,10 @@
    * component that owns them, rather than moving to app.css.
    */
   :global(.report-tooltip) {
+    /* The tooltip follows the cursor, so it must not sit between the cursor and
+       the mark being hovered: catching the pointer there makes the chart flicker
+       and hides which series is underneath. */
+    pointer-events: none;
     display: grid;
     gap: 2px;
     min-width: 11rem;

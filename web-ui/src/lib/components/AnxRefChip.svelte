@@ -25,7 +25,11 @@
     showKind = true,
     /** Called with the model and the anchor element when the preview should open. */
     onpreview = null,
-    /** Called when the preview should close. */
+    /**
+     * Called when the preview should close. The preview defers the close, so
+     * the reader can travel from the chip to the card's Open / Copy ref
+     * controls without it disappearing on the way.
+     */
     onpreviewclose = null,
     class: extraClass = "",
   } = $props();

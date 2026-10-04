@@ -3,18 +3,20 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { indexResolvedRefs, refChipModel } from "../../src/lib/refResolve.js";
 import { planLayout } from "../../src/lib/planShape.js";
+import { indexResolvedRefs, refChipModel } from "../../src/lib/refResolve.js";
 
 /**
- * The web UI derives plan shape, critical path, next steps and health locally
- * whenever it has no `plan_state` — a fixture, an unsaved edit, or a
- * `dependency-diagram` panel. That derivation is a port of `plans.Compute` in
- * core, and a port that drifts is worse than no port at all: the same plan
- * would render one way with the server's state and another without it.
+ * The web UI no longer computes plan meaning — core does, and this checks the
+ * UI renders what core computed without quietly changing it.
  *
- * So both sides run the same corpus. `core/internal/plans/plans_test.go` reads
- * this file; so does this test.
+ * The same corpus `core/internal/plans/plans_test.go` reads is replayed here:
+ * each case's expected shape, critical path, next steps, progress and health
+ * are fed in as `plan_state`, exactly as the server would send them, and the
+ * layout has to surface them unaltered. An earlier version of this file ran a
+ * JavaScript port of `plans.Compute` against the same corpus; the port drifted
+ * from core in six places that the corpus did not happen to cover, so the port
+ * is gone and this now guards the thing that remains: faithful rendering.
  */
 const fixturePath = (name) =>
   fileURLToPath(
@@ -27,25 +29,34 @@ const fixturePath = (name) =>
 const graphs = JSON.parse(readFileSync(fixturePath("graphs.json"), "utf8"));
 const refFixture = JSON.parse(readFileSync(fixturePath("refs.json"), "utf8"));
 
-/**
- * The fixtures give each ref's workflow state as `facts`. Core turns those into
- * `plans.Fact`; the UI gets the same information from batch ref resolve, so the
- * facts are fed in the shape `refResolve` produces.
- */
-function resolvedFrom(facts = {}) {
-  return indexResolvedRefs({
-    items: Object.entries(facts).map(([ref, phase]) => ({
-      ref,
-      kind: ref.split(":")[0],
-      title: ref,
-      phase,
-      status: phase,
-      resolvable: true,
+/** The corpus case, as core's `plan_state` would arrive on the wire. */
+function planStateFor(graph) {
+  const statuses = Object.fromEntries(
+    graph.plan.steps.map((step) => [step.id, step.status ?? "not_started"]),
+  );
+  for (const [ref, phase] of Object.entries(graph.facts ?? {})) {
+    for (const step of graph.plan.steps) {
+      // Core maps a known workflow state onto the step; the corpus states the
+      // outcome, so the fixture carries core's answer rather than deriving one.
+      if (step.ref === ref && phase === "done") statuses[step.id] = "done";
+    }
+  }
+  return {
+    steps: graph.plan.steps.map((step) => ({
+      id: step.id,
+      status: statuses[step.id],
+      resolvable: Boolean(step.ref),
     })),
-  });
+    progress: { done: graph.done, total: graph.plan.steps.length },
+    critical_path: graph.critical_path,
+    next_steps: graph.next_steps,
+    shape: graph.shape,
+    health: graph.health,
+    last_movement_at: "2026-10-04T12:00:00Z",
+  };
 }
 
-describe("plan derivation matches the shared contract corpus", () => {
+describe("plan rendering replays the shared contract corpus", () => {
   it("covers every graph fixture core checks", () => {
     expect(graphs.length).toBeGreaterThan(0);
     expect(graphs.map((graph) => graph.name)).toEqual(
@@ -56,72 +67,92 @@ describe("plan derivation matches the shared contract corpus", () => {
   for (const graph of graphs) {
     describe(graph.name, () => {
       const layout = () =>
-        planLayout(graph.plan, {
-          resolved: resolvedFrom(graph.facts),
-          // Movement is "now" unless a case is about staleness, so these cases
-          // exercise shape, path and blocking rather than the stall clock.
-          lastMovedAt: new Date().toISOString(),
-        });
+        planLayout(graph.plan, { planState: planStateFor(graph) });
 
-      it("derives the contract shape", () => {
+      it("renders the shape core computed", () => {
         expect(layout().shape).toBe(graph.shape);
       });
 
-      it("derives the contract critical path", () => {
+      it("renders the critical path core computed", () => {
         expect(layout().criticalPath).toEqual(graph.critical_path);
       });
 
-      it("derives the contract next steps", () => {
-        const byTitle = new Map(
+      it("renders the next steps core computed, in core's order", () => {
+        const byId = new Map(
           graph.plan.steps.map((step) => [step.id, step.title]),
         );
         expect(layout().next).toEqual(
-          graph.next_steps.map((id) => byTitle.get(id)),
+          graph.next_steps.map((id) => byId.get(id)),
         );
       });
 
-      it("derives the contract progress", () => {
+      it("renders the progress core computed", () => {
         expect(layout().progress).toEqual({
           done: graph.done,
           total: graph.plan.steps.length,
         });
       });
 
-      it("derives the contract health", () => {
+      it("renders the health core computed", () => {
         expect(layout().health).toBe(graph.health);
+      });
+
+      it("gives every step the status core computed", () => {
+        const state = planStateFor(graph);
+        const byId = new Map(
+          layout().nodes.map((node) => [node.id, node.status]),
+        );
+        for (const step of state.steps) {
+          expect(byId.get(step.id)).toBe(step.status);
+        }
       });
     });
   }
 });
 
-describe("plan_state from core wins over local derivation", () => {
-  const plan = { steps: [{ id: "a", title: "A", after: [] }] };
+describe("a plan with no computed state claims nothing", () => {
+  const plan = {
+    steps: [
+      { id: "a", title: "A", after: [], status: "done" },
+      { id: "b", title: "B", after: ["a"], status: "blocked" },
+    ],
+  };
 
-  it("takes shape, health, progress, path and next steps as given", () => {
-    const layout = planLayout(plan, {
-      planState: {
-        steps: [{ id: "a", status: "blocked" }],
-        progress: { done: 0, total: 1 },
-        critical_path: ["a"],
-        next_steps: [],
-        shape: "lanes",
-        health: "blocked",
-        last_movement_at: "2026-10-01T00:00:00Z",
-      },
-    });
-    expect(layout.shape).toBe("lanes");
-    expect(layout.health).toBe("blocked");
-    expect(layout.criticalPath).toEqual(["a"]);
+  it("shows no shape, health, progress, path or next steps", () => {
+    const layout = planLayout(plan);
+    expect(layout.shape).toBe("");
+    expect(layout.health).toBe("");
+    expect(layout.progress).toBeNull();
+    expect(layout.criticalPath).toEqual([]);
     expect(layout.next).toEqual([]);
-    expect(layout.nodes[0].status).toBe("blocked");
+    expect(layout.hasState).toBe(false);
   });
 
-  it("ignores a plan_state field that is not a contract value", () => {
+  it("does not take a status from the authored plan", () => {
+    // `status` on a step is core's fallback input, not an answer: core decides
+    // whether a ref overrides it. Rendering it here would show "done" for a
+    // step core would have called not_started.
+    expect(planLayout(plan).nodes.map((node) => node.status)).toEqual(["", ""]);
+  });
+
+  it("still lays the steps out, because geometry is not semantics", () => {
+    const layout = planLayout(plan);
+    expect(layout.layers).toEqual([["a"], ["b"]]);
+    expect(layout.edges).toEqual([
+      { from: "a", to: "b", onCriticalPath: false },
+    ]);
+  });
+});
+
+describe("plan_state fields that do not belong to the contract", () => {
+  const plan = { steps: [{ id: "a", title: "A", after: [] }] };
+
+  it("ignores a shape or health that is not a contract value", () => {
     const layout = planLayout(plan, {
       planState: { shape: "spiral", health: "fine" },
     });
-    expect(layout.shape).toBe("chain");
-    expect(layout.health).toBe("on_track");
+    expect(layout.shape).toBe("");
+    expect(layout.health).toBe("");
   });
 
   it("drops a step id the authored plan does not contain", () => {
@@ -165,8 +196,6 @@ describe("batch ref resolve matches the shared ref corpus", () => {
   });
 
   it("handles the duplicated ref the corpus repeats", () => {
-    // The corpus lists card:initiative twice; the wire preserves duplicates,
-    // and an index keyed by ref must still answer for it.
     expect(
       refFixture.refs.filter((ref) => ref === "card:initiative"),
     ).toHaveLength(2);

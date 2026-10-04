@@ -207,7 +207,7 @@ test("seeded CEO Overview screenshot and section order", async ({ page }) => {
   // The dashboard no longer restates the Inbox decision by decision: one line
   // says how many are waiting, and the affected initiative carries the pill.
   await expect(
-    page.getByRole("link", { name: "2 decisions waiting in Inbox →" }),
+    page.getByRole("link", { name: "2 items need you →" }),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Choose the launch date" }),

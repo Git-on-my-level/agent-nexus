@@ -368,4 +368,58 @@ describe("ReportChart legend and tooltip", () => {
       element.querySelector(".report-tooltip__lead").textContent,
     ).toContain("Opened");
   });
+
+  it("re-leads the tooltip with the series the pointer moved onto", async () => {
+    mount();
+    await waitFor(() => expect(instance.setOption).toHaveBeenCalledOnce());
+    const { formatter } = instance.setOption.mock.calls[0][0].tooltip;
+    const points = [
+      {
+        seriesIndex: 0,
+        seriesName: "Opened",
+        value: 6,
+        color: "#111111",
+        axisValueLabel: "Tue",
+        dataIndex: 1,
+      },
+      {
+        seriesIndex: 1,
+        seriesName: "Closed",
+        value: 3,
+        color: "#222222",
+        axisValueLabel: "Tue",
+        dataIndex: 1,
+      },
+    ];
+
+    handlers.mouseover({ seriesIndex: 0, dataIndex: 1 });
+    expect(
+      formatter(points).querySelector(".report-tooltip__lead").textContent,
+    ).toContain("Opened");
+
+    // ECharts formats the tooltip *before* the hover event reaches us, so
+    // moving onto another series must re-show the tip; without that the content
+    // on screen keeps naming the series the pointer already left.
+    instance.dispatchAction.mockClear();
+    handlers.mouseover({ seriesIndex: 1, dataIndex: 1 });
+    expect(instance.dispatchAction).toHaveBeenCalledWith({
+      type: "showTip",
+      seriesIndex: 1,
+      dataIndex: 1,
+    });
+    expect(
+      formatter(points).querySelector(".report-tooltip__lead").textContent,
+    ).toContain("Closed");
+  });
+
+  it("does not re-show the tip when the hovered series has not changed", async () => {
+    mount();
+    await waitFor(() => expect(instance.setOption).toHaveBeenCalledOnce());
+    handlers.mouseover({ seriesIndex: 1, dataIndex: 1 });
+    instance.dispatchAction.mockClear();
+    handlers.mouseover({ seriesIndex: 1, dataIndex: 1 });
+    expect(instance.dispatchAction).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "showTip" }),
+    );
+  });
 });
