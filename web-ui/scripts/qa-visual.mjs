@@ -189,7 +189,8 @@ export const QA_SCENES = [
     workspaceMode: "home-first-run",
     waitFor: async (page) => {
       await page.waitForSelector("text=Enroll the machine your agents run on");
-      await page.waitForSelector("text=No tasks yet.");
+      await page.waitForSelector("text=No open initiatives.");
+      await page.locator("[data-overview-detail]:not([open])").waitFor();
     },
   },
   {
@@ -209,8 +210,11 @@ export const QA_SCENES = [
     workspaceMode: "home-empty",
     waitFor: async (page) => {
       await page.waitForSelector("text=Nothing is waiting on you.");
-      await page.waitForSelector("text=No tasks yet.");
-      await page.waitForSelector("text=No visual report in the latest documents.");
+      await page.waitForSelector("text=No open initiatives.");
+      await page.waitForSelector(
+        "text=Pin a visual report to show your workspace dashboard here.",
+      );
+      await page.locator("[data-overview-detail]:not([open])").waitFor();
     },
   },
   {
@@ -514,7 +518,8 @@ function overviewVisualReport() {
     kind: "anx.visual-report",
     schema_version: 1,
     title: "Fleet Dashboard",
-    summary: "A snapshot of work in flight. It does not establish that the fleet is healthy.",
+    summary:
+      "A snapshot of work in flight. It does not establish that the fleet is healthy.",
     generated_at: QA_FIXED_NOW_ISO,
     projects: [
       {
@@ -612,6 +617,79 @@ function overviewFirstRunInboxItem() {
     ...QA_INBOX_POPULATED[0],
     id: "inbox-first-run",
     title: "Enroll the machine your agents run on",
+  };
+}
+
+// Overview reads the shared core projection, rather than assembling these
+// legacy per-resource fixtures in the browser.
+function overviewSnapshot(scenario) {
+  const populated = scenario.overviewState === "populated";
+  const work = populated ? overviewPopulatedWork() : [];
+  const inbox =
+    scenario.overviewState === "first-run"
+      ? [overviewFirstRunInboxItem()]
+      : populated
+        ? QA_INBOX_POPULATED
+        : [];
+  const rows = inbox.map((item) => ({
+    id: `inbox:${item.id}`,
+    title: item.title,
+    source: item.requester_label || "",
+    href: `/inbox?mailbox=needs-you&item=${encodeURIComponent(`inbox:${item.id}`)}`,
+  }));
+  if (populated) {
+    rows.push({
+      id: "task:card:rollback-wording",
+      title: "Approve rollback wording",
+      source: "Waiting on you",
+      href: "/tasks/rollback-wording",
+      badge: { label: "Needs you", tone: "warn" },
+    });
+  }
+  const document = overviewFleetDocument();
+  return {
+    generated_at: QA_FIXED_NOW_ISO,
+    needs_you: {
+      status: "ok",
+      count: rows.length,
+      rows,
+      href: "/inbox?mailbox=needs-you",
+    },
+    work: {
+      status: "ok",
+      total: work.length,
+      human_count: populated ? 1 : 0,
+      items: work,
+    },
+    initiatives: {
+      status: "ok",
+      count: work.length,
+      items: work.map((item) => ({
+        ...item,
+        summary: "",
+        priority: "none",
+        progress: { done: 0, total: 0 },
+        needs: [],
+        board_ref: "board:launch",
+      })),
+    },
+    dashboard: {
+      status: "ok",
+      pinned_ref: null,
+      has_more: false,
+      reports: populated
+        ? [
+            {
+              ...document,
+              ref: `document:${document.id}`,
+              segment: document.id,
+              revision_ref: `document_revision:${document.id}-r1`,
+              report: overviewVisualReport(),
+            },
+          ]
+        : [],
+    },
+    agents: { status: "ok", items: populated ? QA_AGENTS : [] },
   };
 }
 
@@ -1336,6 +1414,11 @@ async function handleWorkspaceApiRoute(
   pathname,
   scenario,
 ) {
+  if (pathname === "/overview" && request.method() === "GET") {
+    await route.fulfill(jsonResponse(200, overviewSnapshot(scenario)));
+    return;
+  }
+
   if (pathname === "/auth/session" && request.method() === "GET") {
     await route.fulfill(jsonResponse(200, { agent: QA_AUTH_AGENT }));
     return;
