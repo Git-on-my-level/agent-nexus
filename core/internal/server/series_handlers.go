@@ -149,13 +149,7 @@ func handleSeriesRoutes(w http.ResponseWriter, r *http.Request, opts handlerOpti
 					return
 				}
 			}
-			step = window / series.MaxBuckets
-			if step < time.Second {
-				step = time.Second
-			}
-			if window > series.Retention {
-				step = 24 * time.Hour * ((window/24/time.Hour + series.MaxBuckets - 1) / series.MaxBuckets)
-			}
+			step = series.DefaultStep(window)
 			if raw := r.URL.Query().Get("step"); raw != "" {
 				step, err = series.Duration(raw)
 				if err != nil {

@@ -1106,5 +1106,7 @@ live_series:
     - Raw points older than 90 days are compacted into daily count, sum, min, max and last rollups; state rollups preserve last state.
     - Rollup update and raw deletion form one atomic idempotent checkpoint; daily rollups have no expiry.
     - Query range and step are bounded, labels are exact-match filters, and query results expose provenance and per-label freshness.
+    - Queries use read-only snapshots and indexed grouped scans; rollup compaction runs separately in maintenance, never during a query or push.
+    - Default query steps round up to fit the bucket limit; historical ranges round up to whole days before choosing a whole-day step.
     - Series are stale when now minus the latest observation exceeds twice the adapter expected_interval.
     - Chart, metric, metric-strip and table panels bind source series and may carry a timestamped static fallback.

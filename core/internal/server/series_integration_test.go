@@ -2,6 +2,7 @@ package server
 
 import (
 	"agent-nexus-core/internal/series"
+	reports "agent-nexus-visualreport"
 	"context"
 	"encoding/json"
 	"io"
@@ -12,6 +13,32 @@ import (
 	"testing"
 	"time"
 )
+
+func TestSeriesHistoricalDefaultStepForHTTPAndReportPanels(t *testing.T) {
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	seedSeriesIdentities(t, env)
+	token := declareSeriesHTTP(t, env)
+	status, out := hostHTTP(t, "POST", env.server.URL+"/series/prs/points", token, map[string]any{"value": 42})
+	hostStatus(t, status, 200, out)
+	reader := reportReader{r: httptest.NewRequest("GET", "/report", nil), opts: handlerOptions{seriesStore: &series.Store{DB: env.workspace.DB(), Auth: env.authStore}}, now: time.Now().UTC()}
+	for _, window := range []string{"2161h", "4800h", "4801h", "9600h", "9601h", "3650d"} {
+		t.Run(window, func(t *testing.T) {
+			status, out := hostHTTP(t, "GET", env.server.URL+"/series/prs/query?range="+window, "owner-token", nil)
+			hostStatus(t, status, 200, out)
+			for _, kind := range []string{"chart", "table", "metric-strip", "metric"} {
+				panel := reports.Panel{ID: "historical", Type: kind, Source: &reports.SeriesSource{Series: "prs", Range: window}}
+				got := reader.materializeSeries(panel)
+				if got["status"] != "ok" {
+					t.Fatalf("%s range=%s default step failed: %#v", kind, window, got)
+				}
+			}
+		})
+	}
+	status, out = hostHTTP(t, "GET", env.server.URL+"/series/prs/query?range=4801h&step=1d", "owner-token", nil)
+	hostStatus(t, status, 400, out) // Explicit steps still obey the 200-bucket cap.
+	status, out = hostHTTP(t, "GET", env.server.URL+"/series/prs/query?range=200s1ns", "owner-token", nil)
+	hostStatus(t, status, 200, out) // Fractional raw bucket defaults round up too.
+}
 
 func seedSeriesIdentities(t *testing.T, env authIntegrationEnv) {
 	t.Helper()

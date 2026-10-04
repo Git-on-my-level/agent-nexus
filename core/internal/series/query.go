@@ -35,6 +35,43 @@ type Result struct {
 	Resolution       string   `json:"resolution"`
 }
 
+// DefaultStep rounds up rather than truncating a fractional bucket or day.
+// Both HTTP queries and dashboard bindings use the same bounded default.
+func DefaultStep(window time.Duration) time.Duration {
+	if window > Retention {
+		days := window / (24 * time.Hour)
+		if window%(24*time.Hour) > 0 {
+			days++
+		}
+		return ((days + MaxBuckets - 1) / MaxBuckets) * 24 * time.Hour
+	}
+	step := window / MaxBuckets
+	if window%MaxBuckets > 0 {
+		step++
+	}
+	if step < time.Second {
+		step = time.Second
+	}
+	return step
+}
+
+// The primary keys index raw observations by (series, labels, ts), and daily
+// observations by (series, labels, day). Scan each requested range once, then
+// resolve at most 200 last-value rows by indexed joins, without correlated scans.
+const bucketQuery = `WITH obs AS (
+ SELECT CASE WHEN ? THEN (ts/?)*? ELSE ts END ts,1 n,value total,value low,value high,ts last_ts
+ FROM series_points WHERE series=? AND labels=? AND ts>=? AND ts<=?
+ UNION ALL SELECT day,n,total,low,high,last_ts FROM series_daily WHERE series=? AND labels=? AND day>=? AND day<=?
+), grouped AS (
+ SELECT MIN(ts) ts,SUM(n) n,SUM(total) total,MIN(low) low,MAX(high) high,MAX(last_ts) last_ts
+ FROM obs GROUP BY MIN(((ts-?)/?),?)
+)
+SELECT g.ts,g.n,g.total,g.low,g.high,COALESCE(p.value,d.last_value),COALESCE(p.state,d.last_state)
+FROM grouped g
+LEFT JOIN series_points p ON p.series=? AND p.labels=? AND p.ts=g.last_ts
+LEFT JOIN series_daily d ON d.series=? AND d.labels=? AND d.day=(g.last_ts/?)*?
+ORDER BY g.ts LIMIT 200`
+
 func (s Store) List(ctx context.Context) ([]Result, error) {
 	rows, err := s.DB.QueryContext(ctx, `SELECT s.name,s.kind,s.unit,d.name,h.slug,h.id,d.agent_id,d.expected_interval,d.last_push,d.revoked_at FROM series_definitions s JOIN series_adapters d ON d.name=s.adapter JOIN hosts h ON h.id=d.host_id ORDER BY s.name LIMIT 1000`)
 	if err != nil {
@@ -64,15 +101,14 @@ func (s Store) Query(ctx context.Context, name string, labels map[string]string,
 	if !allowed[agg] {
 		return out, ErrInvalid
 	}
-	// Reads compact first so idle adapters still honor retention on their next read.
-	tx, err := s.DB.BeginTx(ctx, nil)
+	// ReadOnly makes modernc SQLite use BEGIN (a WAL read snapshot), overriding
+	// the workspace DSN's immediate mode for writes. Maintenance compacts data
+	// independently; this snapshot sees each point in raw or rolled-up form.
+	tx, err := s.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return out, err
 	}
 	defer tx.Rollback()
-	if err = compact(ctx, tx, now); err != nil {
-		return out, err
-	}
 	err = tx.QueryRowContext(ctx, `SELECT s.name,s.kind,s.unit,d.name,h.slug,h.id,d.agent_id,d.expected_interval,d.last_push,d.revoked_at FROM series_definitions s JOIN series_adapters d ON d.name=s.adapter JOIN hosts h ON h.id=d.host_id WHERE s.name=?`, name).Scan(&out.Name, &out.Kind, &out.Unit, &out.Adapter, &out.Host, &out.HostID, &out.AgentID, &out.ExpectedInterval, &out.LastPush, &out.RevokedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out, ErrNotFound
@@ -130,7 +166,7 @@ func (s Store) Query(ctx context.Context, name string, labels map[string]string,
 			return out, err
 		}
 		var last sql.NullInt64
-		if err = tx.QueryRowContext(ctx, `SELECT MAX(ts) FROM (SELECT MAX(ts) ts FROM series_points WHERE series=? AND labels=? UNION ALL SELECT MAX(last_ts) ts FROM series_daily WHERE series=? AND labels=?)`, name, l, name, l).Scan(&last); err != nil {
+		if err = tx.QueryRowContext(ctx, `SELECT MAX(ts) FROM (SELECT MAX(ts) ts FROM series_points WHERE series=? AND labels=? UNION ALL SELECT last_ts ts FROM (SELECT last_ts FROM series_daily WHERE series=? AND labels=? ORDER BY day DESC LIMIT 1))`, name, l, name, l).Scan(&last); err != nil {
 			return out, err
 		}
 		if last.Valid {
@@ -149,14 +185,7 @@ func (s Store) Query(ctx context.Context, name string, labels map[string]string,
 		}
 		// A daily rollup is an explicit one-day observation. Historical query edges
 		// cover complete UTC days and expose resolution so clients do not imply raw precision.
-		rows, err := tx.QueryContext(ctx, `WITH obs AS (
-    SELECT ts,1 n,value total,value low,value high,ts last_ts,value last_value,state last_state FROM series_points WHERE series=? AND labels=? AND ts>=? AND ts<=?
-    UNION ALL SELECT day,n,total,low,high,last_ts,last_value,last_state FROM series_daily WHERE series=? AND labels=? AND day>=? AND day<=?
-   ), bucketed AS (SELECT *,MIN(((ts-?)/?),?) bucket FROM obs)
-   SELECT MIN(ts),SUM(n),SUM(total),MIN(low),MAX(high),
-    (SELECT b.last_value FROM bucketed b WHERE b.bucket=a.bucket ORDER BY b.last_ts DESC LIMIT 1),
-    (SELECT b.last_state FROM bucketed b WHERE b.bucket=a.bucket ORDER BY b.last_ts DESC LIMIT 1)
-   FROM bucketed a GROUP BY bucket ORDER BY bucket LIMIT 200`, name, l, since, end, name, l, since, end, since, stepNS, int((window+step-1)/step)-1)
+		rows, err := tx.QueryContext(ctx, bucketQuery, window > Retention, Day, Day, name, l, since, end, name, l, since, end, since, stepNS, int((window+step-1)/step)-1, name, l, name, l, Day, Day)
 		if err != nil {
 			return out, err
 		}

@@ -15,7 +15,7 @@ func fixture(t *testing.T) (Store, auth.Principal, auth.Principal, auth.Principa
 	return fixtureAt(t, t.TempDir())
 }
 
-func fixtureAt(t *testing.T, root string) (Store, auth.Principal, auth.Principal, auth.Principal) {
+func fixtureAt(t testing.TB, root string) (Store, auth.Principal, auth.Principal, auth.Principal) {
 	t.Helper()
 	ctx := context.Background()
 	w, err := storage.InitializeWorkspace(ctx, root)
@@ -387,6 +387,9 @@ func TestDailyRollupsPreserveAggregatesAndLastState(t *testing.T) {
 		t.Fatal(err)
 	}
 	future := now.Add(3 * 24 * time.Hour)
+	if err := s.Compact(ctx, future); err != nil {
+		t.Fatal(err)
+	}
 	for agg, want := range map[string]float64{"sum": 8, "avg": 4, "min": 2, "max": 6, "last": 6, "count": 2} {
 		r, err := s.Query(ctx, "builds", nil, 100*24*time.Hour, 24*time.Hour, agg, future)
 		if err != nil {

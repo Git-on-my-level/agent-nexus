@@ -308,9 +308,6 @@ func (s Store) Push(ctx context.Context, name string, p Point, actor auth.Princi
 	if err = requestBudget(ctx, tx, actor.SeriesAdapter, now); err != nil {
 		return err
 	}
-	if err = compact(ctx, tx, now); err != nil {
-		return err
-	}
 	var existingValue sql.NullFloat64
 	var existingState sql.NullString
 	err = tx.QueryRowContext(ctx, `SELECT value,state FROM series_points WHERE series=? AND labels=? AND ts=?`, name, labels, ts.UnixNano()).Scan(&existingValue, &existingState)
