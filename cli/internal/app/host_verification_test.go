@@ -17,7 +17,7 @@ func TestHostEnrollmentInstructionsUseOnlyConfiguredWebURL(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var out bytes.Buffer
-			writeEnrollmentInstructions(&out, map[string]any{"user_code": "ABCD-EFGH", "verification_url": tc.verify}, "")
+			writeEnrollmentInstructions(&out, map[string]any{"user_code": "ABCD-EFGH", "verification_url": tc.verify})
 			if !strings.Contains(out.String(), "user_code=ABCD-EFGH") || !strings.Contains(out.String(), tc.want) {
 				t.Fatalf("wrong instructions: %q", out.String())
 			}
@@ -27,14 +27,5 @@ func TestHostEnrollmentInstructionsUseOnlyConfiguredWebURL(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestHostEnrollmentInstructionsUseBaseURLWhenServerOmitsVerificationURL(t *testing.T) {
-	var out bytes.Buffer
-	writeEnrollmentInstructions(&out, map[string]any{"user_code": "ABCD-EFGH"}, "https://example.com/o/acme/w/main/")
-	if !strings.Contains(out.String(), "verification_url=https://example.com/o/acme/w/main/access/hosts") ||
-		!strings.Contains(out.String(), "next open https://example.com/o/acme/w/main/access/hosts") {
-		t.Fatalf("expected direct approval URL from base URL, got %q", out.String())
 	}
 }
