@@ -6916,6 +6916,98 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "opsUsageSummary"
   },
   {
+    "command_id": "plan.set",
+    "cli_path": "plan set",
+    "group": "plan",
+    "method": "PUT",
+    "path": "/cards/{card_id}/plan",
+    "operation_id": "setCardPlan",
+    "summary": "Replace a card plan with an audited edit",
+    "why": "Add linked steps rather than writing progress prose. Never select a view.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns the current principal-scoped read projection.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "cards",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "One plan per initiative. CLI --from-file contains {steps:[...]}; the CLI reads the card token before writing, or accepts --if-updated-at. Step helpers compose the same PUT. Conflicts require reconciliation; never choose a view.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "if_updated_at",
+          "type": "datetime"
+        },
+        {
+          "name": "plan.steps",
+          "type": "list\u003cany\u003e"
+        }
+      ],
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "card_id"
+    ],
+    "adjacent_commands": [
+      "plan.show"
+    ],
+    "go_method": "PlanSet",
+    "ts_method": "planSet"
+  },
+  {
+    "command_id": "plan.show",
+    "cli_path": "plan show",
+    "group": "plan",
+    "method": "GET",
+    "path": "/cards/{card_id}/plan",
+    "operation_id": "showCardPlan",
+    "summary": "Read a card plan and computed state",
+    "why": "Read live initiative steps, progress and health.",
+    "input_mode": "flags",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns the current principal-scoped read projection.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "cards",
+      "read"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Read plan_state for effective status, progress, shape, critical path and health. An unset plan returns null plan and plan_state.",
+    "path_params": [
+      "card_id"
+    ],
+    "adjacent_commands": [
+      "plan.set"
+    ],
+    "go_method": "PlanShow",
+    "ts_method": "planShow"
+  },
+  {
     "command_id": "pm.actions.acknowledge",
     "cli_path": "pm actions acknowledge",
     "group": "pm",
@@ -8726,6 +8818,44 @@ export const commandRegistry: CommandSpec[] = [
     "surface": "diagnostic",
     "go_method": "RefEdgesList",
     "ts_method": "refEdgesList"
+  },
+  {
+    "command_id": "refs.resolve",
+    "cli_path": "refs resolve",
+    "group": "refs",
+    "method": "POST",
+    "path": "/refs/resolve",
+    "operation_id": "resolveRefsBatch",
+    "summary": "Resolve up to 200 refs in input order",
+    "why": "Resolve ref chips and previews in one read request; unknown refs remain in the result.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns the current principal-scoped read projection.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "read"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Read-only POST. CLI accepts positional refs or --from-file containing {refs:[...]}. Preserve unknown refs, order and duplicates; maximum 200.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "refs",
+          "type": "list\u003cstring\u003e"
+        }
+      ]
+    },
+    "go_method": "RefsResolve",
+    "ts_method": "refsResolve"
   },
   {
     "command_id": "report.render",
@@ -11518,6 +11648,14 @@ export class AnxClient {
     return this.invoke("ops.usage.summary", {}, options);
   }
 
+  planSet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("plan.set", pathParams, options);
+  }
+
+  planShow(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("plan.show", pathParams, options);
+  }
+
   pmActionsAcknowledge(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("pm.actions.acknowledge", pathParams, options);
   }
@@ -11616,6 +11754,10 @@ export class AnxClient {
 
   refEdgesList(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("ref_edges.list", {}, options);
+  }
+
+  refsResolve(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("refs.resolve", {}, options);
   }
 
   reportRender(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {

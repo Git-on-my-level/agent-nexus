@@ -3938,6 +3938,99 @@ paths:
         '409':
           $ref: '#/components/responses/ErrorResponse'
 
+  /cards/{card_id}/plan:
+    get:
+      operationId: showCardPlan
+      summary: Read a card plan and computed state
+      tags: [cards]
+      x-anx-surface: canonical
+      x-anx-command-id: plan.show
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns the current principal-scoped read projection.
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-agent-notes: Read plan_state for effective status, progress, shape, critical path and health. An unset plan returns null plan and plan_state.
+      x-anx-cli-path: plan show
+      x-anx-why: Read live initiative steps, progress and health.
+      x-anx-input-mode: flags
+      x-anx-concepts: [cards, read]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/CardID'
+      responses:
+        '200':
+          description: Plan, computed state and card concurrency token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CardPlanResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    put:
+      operationId: setCardPlan
+      summary: Replace a card plan with an audited edit
+      tags: [cards]
+      x-anx-surface: canonical
+      x-anx-command-id: plan.set
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns the current principal-scoped read projection.
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-agent-notes: One plan per initiative. CLI --from-file contains {steps:[...]}; the CLI reads the card token before writing, or accepts --if-updated-at. Step helpers compose the same PUT. Conflicts require reconciliation; never choose a view.
+      x-anx-cli-path: plan set
+      x-anx-why: Add linked steps rather than writing progress prose. Never select a view.
+      x-anx-input-mode: json-body
+      x-anx-concepts: [cards, write]
+      x-anx-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/CardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CardPlanRequest' }
+      responses:
+        '200':
+          description: Updated plan and computed state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CardPlanResponse' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /refs/resolve:
+    post:
+      operationId: resolveRefsBatch
+      summary: Resolve up to 200 refs in input order
+      tags: [refs]
+      x-anx-surface: canonical
+      x-anx-command-id: refs.resolve
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns the current principal-scoped read projection.
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-agent-notes: Read-only POST. CLI accepts positional refs or --from-file containing {refs:[...]}. Preserve unknown refs, order and duplicates; maximum 200.
+      x-anx-cli-path: refs resolve
+      x-anx-why: Resolve ref chips and previews in one read request; unknown refs remain in the result.
+      x-anx-input-mode: json-body
+      x-anx-concepts: [read]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refs]
+              properties:
+                refs: {type: array, maxItems: 200, items: {type: string}}
+      responses:
+        '200':
+          description: Ordered resolution results including unknown refs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: {type: array, items: { $ref: '#/components/schemas/ResolvedRef' }}
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+
   /cards/{card_id}:
     get:
       operationId: getCard
@@ -8664,6 +8757,8 @@ components:
       type: object
       additionalProperties: true
       properties:
+        plan: { $ref: '#/components/schemas/InitiativePlan' }
+        plan_state: { $ref: '#/components/schemas/PlanState' }
         decision_revision:
           type: string
           readOnly: true
@@ -9330,6 +9425,76 @@ components:
       required:
         [ref, handle, title, state, document_refs, card_refs, pinned_refs, created_at, created_by, updated_at, updated_by, provenance]
 
+    PlanStep:
+      type: object
+      additionalProperties: false
+      required: [id, title]
+      properties:
+        id: {type: string, maxLength: 64, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'}
+        title: {type: string, minLength: 1, maxLength: 500}
+        ref: {type: string, maxLength: 2048}
+        after: {type: array, maxItems: 50, uniqueItems: true, items: {type: string}}
+        due: {type: string, description: RFC3339 instant or YYYY-MM-DD date}
+        status: {type: string, enum: [done, active, blocked, not_started]}
+    InitiativePlan:
+      type: object
+      additionalProperties: false
+      required: [steps]
+      properties:
+        steps: {type: array, maxItems: 200, items: { $ref: '#/components/schemas/PlanStep' }}
+    PlanState:
+      type: object
+      properties:
+        steps:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: string}
+              status: {type: string, enum: [done, active, blocked, not_started]}
+              resolvable: {type: boolean}
+        progress:
+          type: object
+          properties:
+            done: {type: integer}
+            total: {type: integer}
+        critical_path: {type: array, items: {type: string}}
+        next_steps: {type: array, items: {type: string}}
+        shape: {type: string, enum: [chain, dag, lanes]}
+        health: {type: string, enum: [on_track, stalled, blocked]}
+        last_movement_at: {type: string, format: date-time}
+    CardPlanRequest:
+      type: object
+      required: [plan, if_updated_at]
+      properties:
+        actor_id: {type: string, description: Optional dev-mode actor; authenticated principal otherwise.}
+        plan: { $ref: '#/components/schemas/InitiativePlan' }
+        if_updated_at: {type: string, format: date-time}
+    CardPlanResponse:
+      type: object
+      properties:
+        card_ref: {type: string}
+        plan: {type: object, nullable: true, allOf: [{ $ref: '#/components/schemas/InitiativePlan' }]}
+        plan_state: {type: object, nullable: true, allOf: [{ $ref: '#/components/schemas/PlanState' }]}
+        if_updated_at: {type: string, format: date-time}
+    ResolvedRef:
+      type: object
+      required: [ref, resolvable]
+      properties:
+        ref: {type: string}
+        resolvable: {type: boolean}
+        kind: {type: string}
+        title: {type: string}
+        status: {type: string}
+        phase: {type: string}
+        owner: {type: string}
+        progress:
+          type: object
+          properties:
+            done: {type: integer}
+            total: {type: integer}
+        url: {type: string}
+
     Card:
       type: object
       properties:
@@ -9349,6 +9514,8 @@ components:
         head_revision_number: { type: integer }
         title: { type: string }
         summary: { type: string }
+        plan: { $ref: '#/components/schemas/InitiativePlan' }
+        plan_state: { $ref: '#/components/schemas/PlanState' }
         column_key:
           type: string
           enum: [backlog, ready, in_progress, blocked, review, done]

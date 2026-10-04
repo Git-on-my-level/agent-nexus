@@ -886,6 +886,27 @@ var migrations = []migration{
 		},
 	},
 	{Version: 43, AfterApply: applyMigration43ReportIndexes},
+	{Version: 44, AfterApply: applyMigration44CardPlans},
+}
+
+func applyMigration44CardPlans(ctx context.Context, tx *sql.Tx) error {
+	// Legacy partial workspaces follow the same conditional migration convention
+	// as report indexes. Normal workspaces always have both primitive tables.
+	for _, item := range []struct{ table, statement string }{
+		{"cards", `CREATE TABLE card_plans (card_id TEXT PRIMARY KEY REFERENCES cards(id) ON DELETE CASCADE, body_json TEXT NOT NULL, updated_at TEXT NOT NULL);`},
+		{"work_metadata", `CREATE INDEX idx_work_source_url ON work_metadata(json_extract(metadata_json,'$.source.url'));`},
+	} {
+		exists, err := sqliteTableExists(ctx, tx, item.table)
+		if err != nil {
+			return err
+		}
+		if exists {
+			if _, err = tx.ExecContext(ctx, item.statement); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func applyMigration43ReportIndexes(ctx context.Context, tx *sql.Tx) error {

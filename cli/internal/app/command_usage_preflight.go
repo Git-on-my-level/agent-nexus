@@ -33,6 +33,17 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 		name := "work " + args[1]
 		return name, preflightFlagUsage(args[2:], preflightFlagSpecs()[name])
 	}
+	if args[0] == "plan" {
+		if len(args) == 1 || len(args) == 2 && args[1] == "step" {
+			return "plan", errnorm.Usage("subcommand_required", "run anx help plan")
+		}
+		parsed, err := parsePlanCommand(args)
+		return parsed.name, err
+	}
+	if args[0] == "refs" {
+		_, _, err := parseRefResolve(args)
+		return "refs resolve", err
+	}
 	if isWorkCommandRoot(args[0]) && !isReportLocalCommand(args) {
 		if len(args) >= 2 && args[0] == "pm" && (args[1] == "serve" || args[1] == "ask") {
 			commandName := "pm " + args[1]

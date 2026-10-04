@@ -1576,6 +1576,30 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:  []string{"ops.blob.usage.rebuild", "ops.health"},
 	},
 	{
+		CommandID:  "plan.set",
+		CLIPath:    "plan set",
+		Group:      "plan",
+		Method:     "PUT",
+		Path:       "/cards/{card_id}/plan",
+		PathParams: []string{"card_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "write"},
+		Adjacent:   []string{"plan.show"},
+	},
+	{
+		CommandID:  "plan.show",
+		CLIPath:    "plan show",
+		Group:      "plan",
+		Method:     "GET",
+		Path:       "/cards/{card_id}/plan",
+		PathParams: []string{"card_id"},
+		InputMode:  "flags",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "read"},
+		Adjacent:   []string{"plan.set"},
+	},
+	{
 		CommandID:  "pm.actions.acknowledge",
 		CLIPath:    "pm actions acknowledge",
 		Group:      "pm",
@@ -1863,6 +1887,16 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "query",
 		Stability: "beta",
 		Concepts:  []string{"refs", "inspection"},
+	},
+	{
+		CommandID: "refs.resolve",
+		CLIPath:   "refs resolve",
+		Group:     "refs",
+		Method:    "POST",
+		Path:      "/refs/resolve",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"read"},
 	},
 	{
 		CommandID:  "report.render",
@@ -2945,6 +2979,14 @@ func (c *Client) OpsUsageSummary(ctx context.Context, opts RequestOptions) (*htt
 	return c.Invoke(ctx, "ops.usage.summary", nil, opts)
 }
 
+func (c *Client) PlanSet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "plan.set", pathParams, opts)
+}
+
+func (c *Client) PlanShow(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "plan.show", pathParams, opts)
+}
+
 func (c *Client) PmActionsAcknowledge(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "pm.actions.acknowledge", pathParams, opts)
 }
@@ -3043,6 +3085,10 @@ func (c *Client) PmTurnsRelease(ctx context.Context, pathParams map[string]strin
 
 func (c *Client) RefEdgesList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "ref_edges.list", nil, opts)
+}
+
+func (c *Client) RefsResolve(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "refs.resolve", nil, opts)
 }
 
 func (c *Client) ReportRender(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

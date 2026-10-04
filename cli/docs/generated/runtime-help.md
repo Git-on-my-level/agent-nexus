@@ -241,6 +241,9 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `skills configure` (local-helper): Inspect or maintain versioned local ANX skill files.
 - `skills status` (local-helper): Inspect or maintain versioned local ANX skill files.
 - `skills verify` (local-helper): Inspect or maintain versioned local ANX skill files.
+- `plan step add` (local-helper): Edit a linked initiative step with a card concurrency token.
+- `plan step update` (local-helper): Edit a linked initiative step with a card concurrency token.
+- `plan step rm` (local-helper): Edit a linked initiative step with a card concurrency token.
 - `pm serve` (local-helper): Claim queued PM turns and run them through agentctl with the anx CLI as tools.
 - `pm ask` (local-helper): Create a PM conversation and post one human question.
 - `pm channels doctor` (local-helper): Check PM channel secrets, webhook reachability, and binding state without sending a chat message.
@@ -386,10 +389,16 @@ Participation and source authority
 Executive workspace
 
 - A card represents a human-level initiative or outcome that may span many executor tasks and outlive them. Keep issue, PR and run detail in its source; link that detail as evidence. Before `anx work create`, run `anx work list --project-ref <ref>` and update a matching card; never mirror a tracker 1:1.
-- Put status in a short plain-language card summary, checklist, or `anx.visual-report` dashboard/chart, not a stream of cards or notes. Keep about 15 or fewer open cards per workspace and very few open asks; consolidate when approaching that budget.
+- Keep one plan per initiative card. Add steps rather than writing progress prose; link steps to real refs. Never pick a view: the graph determines it. Read `anx plan show card:<slug>` for computed progress and health. Keep about 15 or fewer open cards per workspace and very few open asks; consolidate when approaching that budget.
 - For a human-facing dashboard, read `anx report schema`, then run `anx report publish <file> --topic <topic-ref> [--title <title>] [--doc <doc-ref>]`; it validates the report, writes a text document, and verifies the saved revision. `--doc` is an exact ref; use `--replace` only when intentionally replacing a non-report document.
 - Ask only for a decision that belongs to the human (direction, money, risk or an irreversible choice). Recommend one answer, give at most 2–3 alternatives, and batch related decisions into one ask. Do not also block the card or set its `next_actor` to the human for that same question; that duplicates the Inbox item. Keep `next_actor` on the agent and advance after the answer with its response event as evidence, for example `anx work done <card> --evidence event:<response_event_id>`.
-- Write for a busy executive: lead with the outcome and what needs them, then add detail. Example: 12 PRs + 4 Multica issues for one project → 1 card with a checklist and links, not 16 cards.
+- Write for a busy executive: lead with the outcome and what needs them, then add detail. Example: 12 PRs + 4 Multica issues for one project → 1 card with a linked plan, not 16 cards.
+
+
+Initiative plans
+
+Use `anx plan step add card:<slug> --step-id build --title "Build" --ref <ref-or-url>` to add a linked step. Branch with `anx plan step add card:<slug> --title "QA" --after build`. Stable ids belong to the plan; agents never select a view.
+Use `anx plan set card:<slug> --from-file plan.json` with {steps:[...]} for a full plan, or `step update <card> <step-id>` and `step rm <card> <step-id>` for edits. Writes compare the token from a fresh read; reconcile conflicts explicitly. Known refs override fallback status. Resolve chips in one request with `anx refs resolve <ref>...`.
 
 
 Daily loop
@@ -8440,6 +8449,48 @@ Supported harness delivery and auto-clean updates belong to agentctl Skill Hub
 packs. Select cli/skills/participant.json or cli/skills/pm.json from a reviewed
 ANX source revision. ANX never edits that selection automatically. Arbitrary
 agents may consume the files manually; no supported-harness registry is required.
+```
+
+## `plan step add`
+
+Edit a linked initiative step with a card concurrency token.
+
+```text
+One plan per initiative card. Add linked steps; never select a view.
+anx plan show <card>
+anx plan set <card> --from-file <path|-> [--if-updated-at <timestamp>] (JSON {steps:[]})
+anx plan step add <card> --title <title> [--step-id <slug>] [--ref <ref|url>] [--after a,b] [--due <date>] [--status done|active|blocked|not_started]
+anx plan step update <card> <step-id> [--title ...] [--ref ...] [--after a,b] [--due ...] [--status ...]
+anx plan step rm <card> <step-id>
+Writes read the latest plan then use its concurrency token. Conflicts require an explicit retry. Removing a depended-on step is rejected; update dependencies first.
+```
+
+## `plan step update`
+
+Edit a linked initiative step with a card concurrency token.
+
+```text
+One plan per initiative card. Add linked steps; never select a view.
+anx plan show <card>
+anx plan set <card> --from-file <path|-> [--if-updated-at <timestamp>] (JSON {steps:[]})
+anx plan step add <card> --title <title> [--step-id <slug>] [--ref <ref|url>] [--after a,b] [--due <date>] [--status done|active|blocked|not_started]
+anx plan step update <card> <step-id> [--title ...] [--ref ...] [--after a,b] [--due ...] [--status ...]
+anx plan step rm <card> <step-id>
+Writes read the latest plan then use its concurrency token. Conflicts require an explicit retry. Removing a depended-on step is rejected; update dependencies first.
+```
+
+## `plan step rm`
+
+Edit a linked initiative step with a card concurrency token.
+
+```text
+One plan per initiative card. Add linked steps; never select a view.
+anx plan show <card>
+anx plan set <card> --from-file <path|-> [--if-updated-at <timestamp>] (JSON {steps:[]})
+anx plan step add <card> --title <title> [--step-id <slug>] [--ref <ref|url>] [--after a,b] [--due <date>] [--status done|active|blocked|not_started]
+anx plan step update <card> <step-id> [--title ...] [--ref ...] [--after a,b] [--due ...] [--status ...]
+anx plan step rm <card> <step-id>
+Writes read the latest plan then use its concurrency token. Conflicts require an explicit retry. Removing a depended-on step is rejected; update dependencies first.
 ```
 
 ## `pm serve`

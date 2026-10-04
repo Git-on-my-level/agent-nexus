@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Concepts: `33`
+- Concepts: `34`
 
 ## `actors`
 
@@ -113,7 +113,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `58`
+- Commands: `60`
 - Command IDs:
   - `agents.get`
   - `agents.me.presence`
@@ -133,6 +133,8 @@ Generated from `contracts/anx-openapi.yaml`.
   - `cards.revisions.list`
   - `cards.timeline`
   - `cards.trash`
+  - `plan.set`
+  - `plan.show`
   - `pm.actions.acknowledge`
   - `pm.actions.get`
   - `pm.actions.list`
@@ -381,6 +383,13 @@ Generated from `contracts/anx-openapi.yaml`.
   - `ops.usage.summary`
   - `usage.summary.v1`
 
+## `read`
+
+- Commands: `2`
+- Command IDs:
+  - `plan.show`
+  - `refs.resolve`
+
 ## `readiness`
 
 - Commands: `1`
@@ -469,7 +478,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `write`
 
-- Commands: `54`
+- Commands: `55`
 - Command IDs:
   - `agent.notifications.dismiss`
   - `agent.notifications.read`
@@ -516,6 +525,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `events.unarchive`
   - `home.read`
   - `inbox.respond`
+  - `plan.set`
   - `secrets.create`
   - `secrets.delete`
   - `secrets.update`

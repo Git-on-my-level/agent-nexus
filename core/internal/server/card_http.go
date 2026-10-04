@@ -84,6 +84,11 @@ func canonicalCardView(card map[string]any) map[string]any {
 	out["updated_at"] = card["updated_at"]
 	out["updated_by"] = card["updated_by"]
 	out["provenance"] = card["provenance"]
+	for _, key := range []string{"plan", "plan_state"} {
+		if v, ok := card[key]; ok {
+			out[key] = v
+		}
+	}
 
 	if v, ok := card["archived_at"]; ok {
 		if s := strings.TrimSpace(anyString(v)); s != "" {

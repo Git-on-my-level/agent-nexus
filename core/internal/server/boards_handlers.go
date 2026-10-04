@@ -524,6 +524,9 @@ func handleListBoardCards(w http.ResponseWriter, r *http.Request, opts handlerOp
 		return
 	}
 
+	if !enrichPlans(w, r, opts, cards) {
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"board_id": boardID,
 		"cards":    publicCardsView(cards),
@@ -553,6 +556,9 @@ func handleGetBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load board card")
+		return
+	}
+	if !enrichPlans(w, r, opts, []map[string]any{card}) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"card": publicCardPayload(card)})

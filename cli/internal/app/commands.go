@@ -68,6 +68,14 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 		result, err := a.runAwait(ctx, args[1:], cfg)
 		return "await", result, err
 	}
+	if args[0] == "plan" {
+		result, name, err := a.runPlanCommand(ctx, args, cfg)
+		return name, result, err
+	}
+	if args[0] == "refs" {
+		result, err := a.runRefResolve(ctx, args, cfg)
+		return "refs resolve", result, err
+	}
 	if isWorkCommandRoot(args[0]) && !isReportLocalCommand(args) {
 		result, name, err := a.runWorkCommand(ctx, args, cfg)
 		return name, result, err

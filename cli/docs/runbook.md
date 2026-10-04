@@ -180,7 +180,7 @@ assigns and moves native work; it is not a registration shortcut. Project
 association should use clear configured evidence and ask when ambiguous. A
 successful run/session does not satisfy the task's acceptance criteria.
 
-The bundled participant skill advertises `anx.participant.v4`; explicitly
+The bundled participant skill advertises `anx.participant.v5`; explicitly
 designated PMs can load the additional `anx.pm.v3` skill. Use `anx skills
 configure|status|verify --path <skill-directory> --role participant|pm` for
 versioned local ownership, clean refresh and read-only verification. Existing
@@ -800,3 +800,17 @@ anx docs ingest /path/to/knowledge-base \
   --source https://github.com/example/knowledge-base/blob/main
 anx docs search "NOW.md" --knowledge --limit 20
 ```
+
+## Initiative plans and ref previews
+
+Keep one plan per initiative card. Add steps instead of progress prose, link each step to a real ref when possible, and never choose a view. `anx plan show card:<slug>` returns live step status, progress, critical path, next steps, shape and health. `anx plan set card:<slug> --from-file plan.json` accepts `{ "steps": [...] }`; it reads the current card token before writing. Pass `--if-updated-at` from a previous read when edits must bind to that snapshot. Step writes also read then compare the token; conflicts are returned without automatic retries.
+
+```sh
+anx plan step add card:launch --step-id build --title "Build" --ref card:implementation
+anx plan step add card:launch --step-id test --title "Test" --after build
+anx plan step add card:launch --step-id docs --title "Docs" --after build --ref doc:launch-guide
+anx plan step update card:launch test --status done
+anx refs resolve card:launch doc:launch-guide topic:release board:initiatives card:unknown
+```
+
+Use `step rm <card> <step-id>` after updating any dependent `--after` lists. Empty `--ref`, `--due`, or `--status` clears the optional field; `--after ""` clears dependencies. Known ref state overrides fallback status. Unknown URLs remain unresolved until an existing source-backed card supplies state; plan reads never fetch URLs.

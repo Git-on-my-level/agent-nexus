@@ -536,6 +536,15 @@ commands:
   "usage.summary.v1":
     classification: gated_admin
     reason: "versioned usage summary is quota/billing telemetry"
+  "plan.show":
+    classification: exposed_read
+    reason: "Read a principal-scoped initiative plan and computed state."
+  "plan.set":
+    classification: exposed_write
+    reason: "Replace a local initiative plan with a card concurrency token; no upstream source writes."
+  "refs.resolve":
+    classification: exposed_read
+    reason: "Read-only batch ref previews; core preserves unknown refs and enforces per-resource visibility."
   "pm.actions.acknowledge":
     classification: exposed_write
     reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."

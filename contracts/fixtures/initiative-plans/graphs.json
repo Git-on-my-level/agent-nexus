@@ -1,0 +1,248 @@
+[
+  {
+    "name": "chain",
+    "plan": {
+      "steps": [
+        {
+          "id": "a",
+          "title": "a",
+          "after": [],
+          "status": "done"
+        },
+        {
+          "id": "b",
+          "title": "b",
+          "after": [
+            "a"
+          ],
+          "status": "not_started"
+        },
+        {
+          "id": "c",
+          "title": "c",
+          "after": [
+            "b"
+          ],
+          "status": "not_started"
+        }
+      ]
+    },
+    "shape": "chain",
+    "critical_path": [
+      "b",
+      "c"
+    ],
+    "next_steps": [
+      "b"
+    ],
+    "done": 1,
+    "health": "on_track"
+  },
+  {
+    "name": "branch-and-merge",
+    "plan": {
+      "steps": [
+        {
+          "id": "a",
+          "title": "a",
+          "after": [],
+          "status": "not_started"
+        },
+        {
+          "id": "b",
+          "title": "b",
+          "after": [
+            "a"
+          ],
+          "status": "not_started"
+        },
+        {
+          "id": "c",
+          "title": "c",
+          "after": [
+            "a"
+          ],
+          "status": "not_started"
+        },
+        {
+          "id": "d",
+          "title": "d",
+          "after": [
+            "b",
+            "c"
+          ],
+          "status": "not_started"
+        }
+      ]
+    },
+    "shape": "dag",
+    "critical_path": [
+      "a",
+      "b",
+      "d"
+    ],
+    "next_steps": [
+      "a"
+    ],
+    "done": 0,
+    "health": "on_track"
+  },
+  {
+    "name": "lanes",
+    "plan": {
+      "steps": [
+        {
+          "id": "a",
+          "title": "a",
+          "after": [],
+          "status": "not_started"
+        },
+        {
+          "id": "b",
+          "title": "b",
+          "after": [
+            "a"
+          ],
+          "status": "not_started"
+        },
+        {
+          "id": "c",
+          "title": "c",
+          "after": [],
+          "status": "not_started"
+        },
+        {
+          "id": "d",
+          "title": "d",
+          "after": [
+            "c"
+          ],
+          "status": "not_started"
+        }
+      ]
+    },
+    "shape": "lanes",
+    "critical_path": [
+      "a",
+      "b"
+    ],
+    "next_steps": [
+      "a",
+      "c"
+    ],
+    "done": 0,
+    "health": "on_track"
+  },
+  {
+    "name": "blocked-tied-path",
+    "plan": {
+      "steps": [
+        {
+          "id": "a",
+          "title": "a",
+          "after": [],
+          "status": "not_started"
+        },
+        {
+          "id": "b",
+          "title": "b",
+          "after": [
+            "a"
+          ],
+          "status": "not_started"
+        },
+        {
+          "id": "c",
+          "title": "c",
+          "after": [],
+          "status": "blocked"
+        },
+        {
+          "id": "d",
+          "title": "d",
+          "after": [
+            "c"
+          ],
+          "status": "not_started"
+        }
+      ]
+    },
+    "shape": "lanes",
+    "critical_path": [
+      "a",
+      "b"
+    ],
+    "next_steps": [
+      "a"
+    ],
+    "done": 0,
+    "health": "blocked"
+  },
+  {
+    "name": "ref-overrides-prose",
+    "plan": {
+      "steps": [
+        {
+          "id": "a",
+          "title": "a",
+          "after": [],
+          "status": "blocked",
+          "ref": "card:done"
+        },
+        {
+          "id": "b",
+          "title": "b",
+          "after": [
+            "a"
+          ],
+          "status": "not_started"
+        }
+      ]
+    },
+    "facts": {
+      "card:done": "done"
+    },
+    "shape": "chain",
+    "critical_path": [
+      "b"
+    ],
+    "next_steps": [
+      "b"
+    ],
+    "done": 1,
+    "health": "on_track"
+  },
+  {
+    "name": "empty",
+    "plan": {
+      "steps": []
+    },
+    "shape": "chain",
+    "critical_path": [],
+    "next_steps": [],
+    "done": 0,
+    "health": "on_track"
+  },
+  {
+    "name": "context-ref-fallback",
+    "plan": {
+      "steps": [
+        {
+          "id": "brief",
+          "title": "Brief",
+          "ref": "doc:brief",
+          "status": "done",
+          "after": []
+        }
+      ]
+    },
+    "facts": {
+      "doc:brief": ""
+    },
+    "shape": "chain",
+    "critical_path": [],
+    "next_steps": [],
+    "done": 1,
+    "health": "on_track"
+  }
+]

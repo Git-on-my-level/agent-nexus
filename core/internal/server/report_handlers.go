@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/plans"
 	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/primitives"
 	reports "agent-nexus-visualreport"
@@ -230,6 +231,11 @@ func (reader *reportReader) materialize(panel reports.Panel) (map[string]any, bo
 			}
 			return map[string]any{"group_by": q.GroupBy, "total": len(work), "buckets": buckets}, reader.workPartial, nil
 		}
+		if store, ok := reader.opts.primitiveStore.(planStore); ok {
+			if err := store.EnrichCardPlans(reader.r.Context(), work, planVisibility(reader.r, reader.opts), reader.now, planStalledAfter()); err != nil {
+				return nil, false, err
+			}
+		}
 		sort.SliceStable(work, func(i, j int) bool {
 			if q.Sort == "title" && anyString(work[i]["title"]) != anyString(work[j]["title"]) {
 				return anyString(work[i]["title"]) < anyString(work[j]["title"])
@@ -260,7 +266,28 @@ func (reader *reportReader) materialize(panel reports.Panel) (map[string]any, bo
 				break
 			}
 			summary, progress, needs := reports.Summary(anyString(row["summary"]))
-			items = append(items, map[string]any{"ref": row["ref"], "title": row["title"], "summary": summary, "progress": progress, "needs": needs, "priority": anyString(row["priority"]), "phase": row["phase"], "board_ref": row["board_ref"], "updated_at": row["updated_at"]})
+			item := map[string]any{"ref": row["ref"], "title": row["title"], "summary": summary, "progress": progress, "needs": needs, "priority": anyString(row["priority"]), "phase": row["phase"], "board_ref": row["board_ref"], "updated_at": row["updated_at"]}
+			if state, ok := row["plan_state"].(plans.State); ok {
+				item["progress"] = state.Progress
+				item["plan_state"] = state
+				item["health"] = state.Health
+				blocked := map[string]bool{}
+				for _, step := range state.Steps {
+					if step.Status == "blocked" {
+						blocked[step.ID] = true
+					}
+				}
+				needs = []string{}
+				if p, ok := row["plan"].(plans.Plan); ok {
+					for _, step := range p.Steps {
+						if blocked[step.ID] {
+							needs = append(needs, step.Title)
+						}
+					}
+				}
+				item["needs"] = needs
+			}
+			items = append(items, item)
 		}
 		return map[string]any{"items": items}, partial, nil
 	case "live-asks":

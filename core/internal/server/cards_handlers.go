@@ -27,6 +27,9 @@ func handleListCards(w http.ResponseWriter, r *http.Request, opts handlerOptions
 		return
 	}
 
+	if !enrichPlans(w, r, opts, cards) {
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"cards": publicCardsView(cards)})
 }
 
