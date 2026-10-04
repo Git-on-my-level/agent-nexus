@@ -9279,7 +9279,7 @@ components:
         payload:
           type: object
           additionalProperties: true
-          description: For human_attention_responded, see HumanAttentionRespondedPayload; outcome is required on new responses.
+          description: For human_attention_responded, see HumanAttentionRespondedPayload; for human_attention_withdrawn, see HumanAttentionWithdrawnPayload.
         provenance: { $ref: '#/components/schemas/Provenance' }
       required: [ref, handle, ts, type, actor_id, refs, summary, provenance]
 
@@ -10013,7 +10013,7 @@ components:
         payload:
           type: object
           additionalProperties: true
-          description: For human_attention_responded, see HumanAttentionRespondedPayload; outcome is required on write.
+          description: For human_attention_responded, see HumanAttentionRespondedPayload; for human_attention_withdrawn, see HumanAttentionWithdrawnPayload.
         provenance: { $ref: '#/components/schemas/Provenance' }
       required: [type, actor_id, refs, summary, provenance]
 
@@ -10356,6 +10356,16 @@ components:
         outcome: { $ref: '#/components/schemas/HumanAttentionResponseOutcome' }
         responding_actor_id: { type: string }
       required: [inbox_item_id, kind, response_text, outcome, responding_actor_id]
+
+    HumanAttentionWithdrawnPayload:
+      type: object
+      description: Payload of a requester-authored human_attention_withdrawn event.
+      properties:
+        request_event_id: { type: string }
+        request_event_ref: { $ref: '#/components/schemas/TypedRef' }
+        withdrawn_by_actor_id: { type: string }
+        reason: { type: string, minLength: 1 }
+      required: [request_event_id, request_event_ref, withdrawn_by_actor_id, reason]
 
     TopicLifecycleMutationRequest:
       type: object

@@ -154,6 +154,8 @@ func TestAwaitAnswersReturnsUnreadAnswerBatch(t *testing.T) {
 			fmt.Fprint(w, `{"events":[{"id":"ask-1","payload":{"requester_actor_id":"actor-1","title":"First"}},{"id":"ask-2","payload":{"requester_actor_id":"actor-1","title":"Second"}}]}`)
 		case r.URL.Path == "/events" && r.URL.Query().Get("type") == "human_attention_responded":
 			fmt.Fprint(w, `{"events":[{"id":"response-1","payload":{"requester_actor_id":"actor-1","request_event_ref":"event:ask-1","response_text":"Yes","outcome":"answered"}},{"id":"response-2","payload":{"requester_actor_id":"actor-1","request_event_ref":"event:ask-2","response_text":"Ship it","outcome":"approved"}}]}`)
+		case r.URL.Path == "/events" && r.URL.Query().Get("type") == "human_attention_withdrawn":
+			fmt.Fprint(w, `{"events":[]}`)
 		case r.URL.Path == "/agent-notifications":
 			fmt.Fprint(w, `{"items":[{"wakeup_id":"wake-1","status":"unread","trigger_event_id":"response-2","related_refs":["event:response-1","event:response-2"]}]}`)
 		default:
@@ -182,6 +184,8 @@ func TestInboxListFiltersOpenAnsweredAllAndUnread(t *testing.T) {
 			fmt.Fprint(w, `{"events":[{"id":"ask-1","payload":{"requester_actor_id":"actor-1","title":"Answered"}},{"id":"ask-2","payload":{"requester_actor_id":"actor-1","title":"Still open"}}]}`)
 		case r.URL.Path == "/events" && r.URL.Query().Get("type") == "human_attention_responded":
 			fmt.Fprint(w, `{"events":[{"id":"response-1","payload":{"requester_actor_id":"actor-1","request_event_ref":"event:ask-1","response_text":"Yes","outcome":"answered"}}]}`)
+		case r.URL.Path == "/events" && r.URL.Query().Get("type") == "human_attention_withdrawn":
+			fmt.Fprint(w, `{"events":[]}`)
 		case r.URL.Path == "/agent-notifications":
 			fmt.Fprint(w, `{"items":[{"wakeup_id":"wake-1","status":"unread","trigger_event_id":"response-1","related_refs":["event:ask-1","event:response-1"]}]}`)
 		default:
@@ -234,6 +238,8 @@ func TestInboxReadMarksTheAnswerBatchRead(t *testing.T) {
 			fmt.Fprint(w, `{"events":[{"id":"ask-1","payload":{"requester_actor_id":"actor-1","title":"First"}}]}`)
 		case r.URL.Path == "/events" && r.URL.Query().Get("type") == "human_attention_responded":
 			fmt.Fprint(w, `{"events":[{"id":"response-1","payload":{"requester_actor_id":"actor-1","request_event_ref":"event:ask-1","response_text":"Yes","outcome":"answered"}}]}`)
+		case r.URL.Path == "/events" && r.URL.Query().Get("type") == "human_attention_withdrawn":
+			fmt.Fprint(w, `{"events":[]}`)
 		case r.Method == http.MethodGet && r.URL.Path == "/agent-notifications":
 			fmt.Fprint(w, `{"items":[{"wakeup_id":"wake-batch","status":"unread","trigger_event_id":"response-1","related_refs":["event:response-1"]}]}`)
 		case r.Method == http.MethodPost && r.URL.Path == "/agent-notifications/read":

@@ -1863,9 +1863,10 @@ func formatCommandSpecificHelpBlock(cmd registry.Command) string {
 		return strings.TrimSpace(`Common authoring types:
   Communication: direct communication or important non-structured information
   - ` + "`message_posted`" + `
-  Human attention: request and close operator attention
+  Human attention: request, answer, or withdraw operator attention
   - ` + "`human_attention_requested`" + `
   - ` + "`human_attention_responded`" + `
+  - ` + "`human_attention_withdrawn`" + `
   Topics and documents: durable subject and document lifecycle signals
   - ` + "`topic_created`" + `, ` + "`topic_updated`" + `, ` + "`topic_archived`" + `, ` + "`topic_trashed`" + `
   - ` + "`document_created`" + `, ` + "`document_revised`" + `, ` + "`document_trashed`" + `
@@ -1877,6 +1878,7 @@ func formatCommandSpecificHelpBlock(cmd registry.Command) string {
 
 Usually emitted by higher-level commands:
   - ` + "`human_attention_requested`" + `: prefer ` + "`anx ask|review|escalate`" + `
+  - ` + "`human_attention_withdrawn`" + `: prefer ` + "`anx ask withdraw`" + `
 
 Local CLI notes:
   - Prefer higher-level commands for topic, board, card, doc, and human-attention lifecycle writes.

@@ -131,6 +131,94 @@ func TestAnswerWakeMaintainerFlushesWhenNoAsksRemain(t *testing.T) {
 	}
 }
 
+func TestAnswerWakeDeadlineSurvivesRestartAndDuplicateDeliveryKeepsReadState(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	workspace, err := storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+	ask := appendAnswerWakeTestAsk(t, ctx, store, "actor-one", "restart")
+	answer := appendAnswerWakeTestResponse(t, ctx, store, "actor-one", "worker.one", ask, 2*time.Minute)
+	answerAt := answerWakeTestTimestamp(t, answer)
+	batches, err := store.ListHumanAttentionAnswerWakeBatches(ctx)
+	if err != nil || len(batches) != 1 {
+		t.Fatalf("expected one persisted batch before restart: %#v err=%v", batches, err)
+	}
+	deadline, err := time.Parse(time.RFC3339Nano, batches[0].DebounceDeadline)
+	if err != nil || !deadline.Equal(answerAt.Add(2*time.Minute)) {
+		t.Fatalf("persisted deadline=%q want %s err=%v", batches[0].DebounceDeadline, answerAt.Add(2*time.Minute), err)
+	}
+	if err := workspace.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	workspace, err = storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatalf("reopen workspace: %v", err)
+	}
+	defer workspace.Close()
+	store = primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+	maintainer := NewAnswerWakeMaintainer(AnswerWakeMaintainerConfig{
+		PrimitiveStore: store, WorkspaceID: "ws_test", QuietWindow: time.Second,
+		FlushWhenNoOpenAsks: false,
+		RecipientIsActive:   func(context.Context, string) (bool, error) { return true, nil },
+	})
+	if err := maintainer.Step(ctx, deadline.Add(-time.Nanosecond)); err != nil {
+		t.Fatal(err)
+	}
+	if wakeups, err := store.ListAgentWakeups(ctx, primitives.AgentWakeupListFilter{TargetActorID: "actor-one"}); err != nil || len(wakeups) != 0 {
+		t.Fatalf("persisted deadline was lost across restart: %#v err=%v", wakeups, err)
+	}
+	if err := maintainer.Step(ctx, deadline); err != nil {
+		t.Fatal(err)
+	}
+	wakeups, err := store.ListAgentWakeups(ctx, primitives.AgentWakeupListFilter{TargetActorID: "actor-one"})
+	if err != nil || len(wakeups) != 1 {
+		t.Fatalf("offline agent did not retain exactly one durable wake: %#v err=%v", wakeups, err)
+	}
+	if wakeups[0].Status != primitives.AgentWakeupStatusRequested || wakeups[0].NotificationStatus != primitives.AgentWakeupNotificationUnread {
+		t.Fatalf("offline wake should remain requested and unread: %#v", wakeups[0])
+	}
+	if _, err := store.MarkAgentWakeupNotification(ctx, wakeups[0].WakeupID, "actor-one", primitives.AgentWakeupNotificationRead); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate recovery after the wake row committed but before its pending batch
+	// deletion committed. The deterministic wakeup id makes the retry a no-op.
+	if err := maintainer.dispatch(ctx, batches[0]); err != nil {
+		t.Fatal(err)
+	}
+	wakeups, err = store.ListAgentWakeups(ctx, primitives.AgentWakeupListFilter{TargetActorID: "actor-one"})
+	if err != nil || len(wakeups) != 1 {
+		t.Fatalf("duplicate delivery created another wake: %#v err=%v", wakeups, err)
+	}
+	if wakeups[0].NotificationStatus != primitives.AgentWakeupNotificationRead || wakeups[0].ReadAt == "" {
+		t.Fatalf("duplicate delivery reset the separately persisted read state: %#v", wakeups[0])
+	}
+}
+
+func TestAnswerWakeMaintainerDropsPendingBatchForRevokedRecipient(t *testing.T) {
+	ctx := context.Background()
+	workspace, store := newAnswerWakeTestStore(t, ctx)
+	defer workspace.Close()
+	ask := appendAnswerWakeTestAsk(t, ctx, store, "actor-revoked", "revoked")
+	appendAnswerWakeTestResponse(t, ctx, store, "actor-revoked", "worker.revoked", ask)
+	maintainer := NewAnswerWakeMaintainer(AnswerWakeMaintainerConfig{
+		PrimitiveStore: store, WorkspaceID: "ws_test", QuietWindow: time.Minute,
+		RecipientIsActive: func(context.Context, string) (bool, error) { return false, nil },
+	})
+	if err := maintainer.Step(ctx, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if wakeups, err := store.ListAgentWakeups(ctx, primitives.AgentWakeupListFilter{TargetActorID: "actor-revoked"}); err != nil || len(wakeups) != 0 {
+		t.Fatalf("revoked recipient received a wake: %#v err=%v", wakeups, err)
+	}
+	if batches, err := store.ListHumanAttentionAnswerWakeBatches(ctx); err != nil || len(batches) != 0 {
+		t.Fatalf("revoked recipient batch was not discarded: %#v err=%v", batches, err)
+	}
+}
+
 func newAnswerWakeTestStore(t *testing.T, ctx context.Context) (*storage.Workspace, *primitives.Store) {
 	t.Helper()
 	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
@@ -157,7 +245,7 @@ func appendAnswerWakeTestAsk(t *testing.T, ctx context.Context, store *primitive
 	return event
 }
 
-func appendAnswerWakeTestResponse(t *testing.T, ctx context.Context, store *primitives.Store, targetActorID, targetHandle string, ask map[string]any) map[string]any {
+func appendAnswerWakeTestResponse(t *testing.T, ctx context.Context, store *primitives.Store, targetActorID, targetHandle string, ask map[string]any, quietWindows ...time.Duration) map[string]any {
 	t.Helper()
 	askID := fmt.Sprint(ask["id"])
 	threadID := fmt.Sprint(ask["thread_id"])
@@ -171,6 +259,12 @@ func appendAnswerWakeTestResponse(t *testing.T, ctx context.Context, store *prim
 	}, map[string]any{
 		"requested": true, "target_actor_id": targetActorID, "target_handle": targetHandle,
 		"workspace_id": "ws_test", "thread_id": threadID, "subject_ref": "thread:" + threadID,
+		"quiet_window_ns": int64(func() time.Duration {
+			if len(quietWindows) > 0 {
+				return quietWindows[0]
+			}
+			return time.Minute
+		}()),
 	})
 	if err != nil {
 		t.Fatalf("append answer: %v", err)

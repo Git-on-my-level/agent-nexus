@@ -16,6 +16,7 @@ func humanUsageText() string {
 Subject defaults to the current card. Use --from-file <path.md> for a Markdown request with frontmatter.
 The recommended response and each alternative are trimmed, empty entries are dropped, and exact duplicates are removed. Supply 1–6 distinct responses; each may contain at most 240 Unicode characters.
 Use --dry-run to validate and preview the request without sending it.
+Withdraw your still-open ask with anx ask withdraw <event:ask-id> --reason "<short reason>".
 The result contains an ask id and a runnable anx await next action. For multiple answers use anx await --answers; inspect and mark batches with anx inbox list --status answered and anx inbox read <ask-id>.`)
 }
 

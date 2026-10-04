@@ -1021,6 +1021,9 @@ func TestGeneratedCommandHelpIncludesBodySchemaAndEnums(t *testing.T) {
 	if !strings.Contains(output, "- `human_attention_responded`") {
 		t.Fatalf("expected human_attention_responded listing output=%s", output)
 	}
+	if !strings.Contains(output, "- `human_attention_withdrawn`") {
+		t.Fatalf("expected human_attention_withdrawn listing output=%s", output)
+	}
 	if !strings.Contains(output, "`message_posted`") {
 		t.Fatalf("expected message_posted discoverability note output=%s", output)
 	}

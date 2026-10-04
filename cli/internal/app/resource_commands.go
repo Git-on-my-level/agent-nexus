@@ -256,6 +256,16 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 		},
 	},
 	{
+		Type:             "human_attention_withdrawn",
+		Group:            "Inbox Lifecycle",
+		PreferredCommand: "anx ask withdraw",
+		Summary:          "Records an ask withdrawal by its requesting agent; it is not a human response or completed answer.",
+		Constraints: []string{
+			`event.refs must include "event:<request-event-id>".`,
+			`event.payload must include "request_event_id", "request_event_ref", "withdrawn_by_actor_id", and "reason".`,
+		},
+	},
+	{
 		Type:  "topic_created",
 		Group: "Topics And Documents",
 		Constraints: []string{
@@ -358,6 +368,15 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 		Constraints: []string{
 			`event.refs must include "inbox:<inbox-item-handle>".`,
 			`event.payload must include "inbox_item_id", "kind", "response_text", and "responding_actor_id".`,
+		},
+	},
+	{
+		Type:             "human_attention_withdrawn",
+		Group:            "Human Coordination",
+		PreferredCommand: "anx ask withdraw",
+		Constraints: []string{
+			`event.refs must include "event:<request-event-id>".`,
+			`event.payload must include "request_event_id", "request_event_ref", "withdrawn_by_actor_id", and "reason".`,
 		},
 	},
 }

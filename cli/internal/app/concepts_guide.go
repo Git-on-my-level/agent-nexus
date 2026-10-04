@@ -52,9 +52,9 @@ var conceptsGuidePrimitives = []conceptsPrimitive{
 	},
 	{
 		Name:        "events",
-		UseWhen:     "You need immutable facts, messages, human-attention lifecycle events, or updates in an auditable sequence. Use `human_attention_requested` and `human_attention_responded` for operator asks, reviews, escalations, and their completion history.",
+		UseWhen:     "You need immutable facts, messages, human-attention lifecycle events, or updates in an auditable sequence. Use `human_attention_requested` and `human_attention_responded` for operator asks, reviews, escalations, and their completion history; `human_attention_withdrawn` records an agent withdrawing its own open ask.",
 		NotFor:      "Replacing the current durable state of a Topic, Board, Card, or Doc.",
-		Examples:    []string{"message_posted", "human_attention_requested", "human_attention_responded", "exception_raised"},
+		Examples:    []string{"message_posted", "human_attention_requested", "human_attention_responded", "human_attention_withdrawn", "exception_raised"},
 		RelatedRead: []string{"anx events list", "anx events explain", "anx threads timeline"},
 	},
 	{

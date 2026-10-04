@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+const defaultHumanAttentionAnswerWakeQuietWindow = time.Minute
+
 // HumanAttentionAnswerWakeBatch is the durable debounce window for answers sent
 // to one requesting agent. It is stored in the workspace database so a core
 // restart does not lose a pending wake.
@@ -20,6 +22,7 @@ type HumanAttentionAnswerWakeBatch struct {
 	BatchID          string
 	FirstAnsweredAt  string
 	LastAnsweredAt   string
+	DebounceDeadline string
 	ThreadID         string
 	TriggerEventID   string
 	TriggerCreatedAt string
@@ -42,6 +45,26 @@ func queueHumanAttentionAnswerWakeBatchTx(ctx context.Context, tx *sql.Tx, sourc
 	if answerAt == "" {
 		answerAt = time.Now().UTC().Format(time.RFC3339Nano)
 	}
+	answeredAt, err := time.Parse(time.RFC3339Nano, answerAt)
+	if err != nil {
+		return fmt.Errorf("parse answer wake answer timestamp: %w", err)
+	}
+	quietWindow := defaultHumanAttentionAnswerWakeQuietWindow
+	switch value := notify["quiet_window_ns"].(type) {
+	case int64:
+		if value > 0 {
+			quietWindow = time.Duration(value)
+		}
+	case int:
+		if value > 0 {
+			quietWindow = time.Duration(value)
+		}
+	case float64:
+		if value > 0 {
+			quietWindow = time.Duration(value)
+		}
+	}
+	deadline := answeredAt.Add(quietWindow).UTC().Format(time.RFC3339Nano)
 	workspaceID := strings.TrimSpace(anyStringValue(notify["workspace_id"]))
 	if workspaceID == "" {
 		workspaceID = "ws_main"
@@ -56,7 +79,7 @@ func queueHumanAttentionAnswerWakeBatchTx(ctx context.Context, tx *sql.Tx, sourc
 	}
 
 	batch, err := scanHumanAttentionAnswerWakeBatch(tx.QueryRowContext(ctx, `SELECT target_actor_id,target_handle,workspace_id,batch_id,
-		first_answered_at,last_answered_at,thread_id,trigger_event_id,trigger_created_at,answer_count,
+		first_answered_at,last_answered_at,debounce_deadline,thread_id,trigger_event_id,trigger_created_at,answer_count,
 		ask_event_ids_json,answer_event_ids_json,refs_json
 		FROM human_attention_answer_wake_batches WHERE target_actor_id=?`, actorID))
 	if err != nil && err != ErrNotFound {
@@ -64,12 +87,13 @@ func queueHumanAttentionAnswerWakeBatchTx(ctx context.Context, tx *sql.Tx, sourc
 	}
 	if err == ErrNotFound {
 		batch = HumanAttentionAnswerWakeBatch{
-			TargetActorID:   actorID,
-			TargetHandle:    strings.TrimSpace(anyStringValue(notify["target_handle"])),
-			WorkspaceID:     workspaceID,
-			BatchID:         responseEventID,
-			FirstAnsweredAt: answerAt,
-			ThreadID:        threadID,
+			TargetActorID:    actorID,
+			TargetHandle:     strings.TrimSpace(anyStringValue(notify["target_handle"])),
+			WorkspaceID:      workspaceID,
+			BatchID:          responseEventID,
+			FirstAnsweredAt:  answerAt,
+			DebounceDeadline: deadline,
+			ThreadID:         threadID,
 		}
 	}
 	if batch.TargetHandle == "" {
@@ -82,6 +106,7 @@ func queueHumanAttentionAnswerWakeBatchTx(ctx context.Context, tx *sql.Tx, sourc
 		batch.ThreadID = ""
 	}
 	batch.LastAnsweredAt = answerAt
+	batch.DebounceDeadline = deadline
 	batch.TriggerEventID = responseEventID
 	batch.TriggerCreatedAt = answerAt
 	batch.AnswerCount++
@@ -104,17 +129,17 @@ func queueHumanAttentionAnswerWakeBatchTx(ctx context.Context, tx *sql.Tx, sourc
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO human_attention_answer_wake_batches (
-		target_actor_id,target_handle,workspace_id,batch_id,first_answered_at,last_answered_at,
+		target_actor_id,target_handle,workspace_id,batch_id,first_answered_at,last_answered_at,debounce_deadline,
 		thread_id,trigger_event_id,trigger_created_at,answer_count,ask_event_ids_json,
 		answer_event_ids_json,refs_json,updated_at
-	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 	ON CONFLICT(target_actor_id) DO UPDATE SET target_handle=excluded.target_handle,
-		workspace_id=excluded.workspace_id,last_answered_at=excluded.last_answered_at,
+		workspace_id=excluded.workspace_id,last_answered_at=excluded.last_answered_at,debounce_deadline=excluded.debounce_deadline,
 		thread_id=excluded.thread_id,trigger_event_id=excluded.trigger_event_id,
 		trigger_created_at=excluded.trigger_created_at,answer_count=excluded.answer_count,
 		ask_event_ids_json=excluded.ask_event_ids_json,answer_event_ids_json=excluded.answer_event_ids_json,
 		refs_json=excluded.refs_json,updated_at=excluded.updated_at`,
-		batch.TargetActorID, batch.TargetHandle, batch.WorkspaceID, batch.BatchID, batch.FirstAnsweredAt, batch.LastAnsweredAt,
+		batch.TargetActorID, batch.TargetHandle, batch.WorkspaceID, batch.BatchID, batch.FirstAnsweredAt, batch.LastAnsweredAt, batch.DebounceDeadline,
 		batch.ThreadID, batch.TriggerEventID, batch.TriggerCreatedAt, batch.AnswerCount, string(askIDsJSON), string(answerIDsJSON), string(refsJSON), time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return fmt.Errorf("queue answer wake batch: %w", err)
@@ -127,7 +152,7 @@ func (s *Store) ListHumanAttentionAnswerWakeBatches(ctx context.Context) ([]Huma
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT target_actor_id,target_handle,workspace_id,batch_id,
-		first_answered_at,last_answered_at,thread_id,trigger_event_id,trigger_created_at,answer_count,
+		first_answered_at,last_answered_at,debounce_deadline,thread_id,trigger_event_id,trigger_created_at,answer_count,
 		ask_event_ids_json,answer_event_ids_json,refs_json FROM human_attention_answer_wake_batches
 		ORDER BY last_answered_at,target_actor_id`)
 	if err != nil {
@@ -157,10 +182,8 @@ func (s *Store) CountOpenHumanAttentionAsks(ctx context.Context, requesterActorI
 		WHERE ask.type='human_attention_requested'
 		  AND trim(COALESCE(json_extract(ask.payload_json,'$.payload.requester_actor_id'),''))=?
 		  AND NOT EXISTS (
-			SELECT 1 FROM events AS answer
-			WHERE answer.type='human_attention_responded'
-			  AND (json_extract(answer.payload_json,'$.payload.request_event_ref')='event:' || ask.id
-			       OR json_extract(answer.payload_json,'$.payload.request_event_id')=ask.id)
+			SELECT 1 FROM human_attention_request_resolutions AS resolution
+			WHERE resolution.request_event_id=ask.id
 		  )`, strings.TrimSpace(requesterActorID)).Scan(&count)
 	return count, err
 }
@@ -186,7 +209,7 @@ func scanHumanAttentionAnswerWakeBatch(row answerWakeBatchScanner) (HumanAttenti
 	var batch HumanAttentionAnswerWakeBatch
 	var askJSON, answerJSON, refsJSON string
 	err := row.Scan(&batch.TargetActorID, &batch.TargetHandle, &batch.WorkspaceID, &batch.BatchID,
-		&batch.FirstAnsweredAt, &batch.LastAnsweredAt, &batch.ThreadID, &batch.TriggerEventID, &batch.TriggerCreatedAt, &batch.AnswerCount,
+		&batch.FirstAnsweredAt, &batch.LastAnsweredAt, &batch.DebounceDeadline, &batch.ThreadID, &batch.TriggerEventID, &batch.TriggerCreatedAt, &batch.AnswerCount,
 		&askJSON, &answerJSON, &refsJSON)
 	if err == sql.ErrNoRows {
 		return HumanAttentionAnswerWakeBatch{}, ErrNotFound

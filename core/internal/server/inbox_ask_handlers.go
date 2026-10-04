@@ -281,6 +281,7 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 		"thread_id":       threadID,
 		"subject_ref":     subjectRef,
 		"mode":            target.Mode,
+		"quiet_window_ns": int64(opts.answerWakeQuietWindow),
 	}
 	storedResponse, replayed, err := responseStore.AppendHumanAttentionResponse(r.Context(), actorID, sourceEventID, inboxItemID, req.IdempotencyKey, requestHash, responseEvent, initialNotify)
 	if err != nil {
@@ -312,7 +313,9 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 				maintainer := NewAnswerWakeMaintainer(AnswerWakeMaintainerConfig{
 					PrimitiveStore:      opts.primitiveStore,
 					WorkspaceID:         opts.workspaceID,
+					QuietWindow:         opts.answerWakeQuietWindow,
 					FlushWhenNoOpenAsks: true,
+					RecipientIsActive:   answerWakeRecipientIsActive(opts.authStore),
 				})
 				if flushErr := maintainer.FlushTarget(r.Context(), target.ActorID); flushErr == nil {
 					notifyMessage = "All of your open asks are answered; the answer batch is queued now."

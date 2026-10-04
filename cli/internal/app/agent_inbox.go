@@ -105,6 +105,21 @@ func (a *App) loadOwnInboxAsks(ctx context.Context, cfg config.Resolved) ([]map[
 	if err != nil {
 		return nil, err
 	}
+	withdrawals, err := a.invokeRawJSON(ctx, cfg, "inbox withdrawn asks", "GET", "/events?type=human_attention_withdrawn&limit=100", nil)
+	if err != nil {
+		return nil, err
+	}
+	withdrawnByAsk := map[string]bool{}
+	for _, raw := range asSlice(commandResultBody(withdrawals)["events"]) {
+		payload := asMap(asMap(raw)["payload"])
+		askID := strings.TrimSpace(anyString(payload["request_event_id"]))
+		if askID == "" {
+			askID = strings.TrimPrefix(strings.TrimSpace(anyString(payload["request_event_ref"])), "event:")
+		}
+		if askID != "" {
+			withdrawnByAsk["event:"+askID] = true
+		}
+	}
 	answerByAsk := map[string]map[string]any{}
 	for _, raw := range asSlice(commandResultBody(answers)["events"]) {
 		event := asMap(raw)
@@ -144,6 +159,9 @@ func (a *App) loadOwnInboxAsks(ctx context.Context, cfg config.Resolved) ([]map[
 			continue
 		}
 		askID := "event:" + anyString(event["id"])
+		if withdrawnByAsk[askID] {
+			continue
+		}
 		answer := answerByAsk[askID]
 		answerUnread := false
 		if answer != nil {

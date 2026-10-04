@@ -910,6 +910,41 @@ var migrations = []migration{
 			`CREATE INDEX idx_human_attention_answer_wake_batches_updated ON human_attention_answer_wake_batches(last_answered_at,target_actor_id);`,
 		},
 	},
+	{
+		Version: 47,
+		Statements: []string{
+			`ALTER TABLE human_attention_answer_wake_batches ADD COLUMN debounce_deadline TEXT NOT NULL DEFAULT '';`,
+			`CREATE TABLE human_attention_request_resolutions (
+				request_event_id TEXT PRIMARY KEY,
+				resolution_event_id TEXT NOT NULL UNIQUE,
+				resolution_type TEXT NOT NULL CHECK(resolution_type IN ('answered','withdrawn')),
+				actor_id TEXT NOT NULL,
+				created_at TEXT NOT NULL
+			);`,
+			`CREATE INDEX idx_human_attention_request_resolutions_type ON human_attention_request_resolutions(resolution_type,request_event_id);`,
+		},
+		AfterApply: applyMigration47HumanAttentionResolutions,
+	},
+}
+
+func applyMigration47HumanAttentionResolutions(ctx context.Context, tx *sql.Tx) error {
+	var exists int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='events'`).Scan(&exists); err != nil {
+		return err
+	}
+	if exists == 0 {
+		return nil
+	}
+	_, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO human_attention_request_resolutions(request_event_id,resolution_event_id,resolution_type,actor_id,created_at)
+		SELECT ask.id, answer.id, 'answered', answer.actor_id, answer.ts
+		FROM events AS answer
+		JOIN events AS ask ON ask.type='human_attention_requested' AND (
+			json_extract(answer.payload_json,'$.payload.request_event_id')=ask.id
+			OR json_extract(answer.payload_json,'$.payload.request_event_ref')='event:' || ask.id
+			OR json_extract(answer.payload_json,'$.payload.request_event_ref')='event:' || ask.handle
+		)
+		WHERE answer.type='human_attention_responded';`)
+	return err
 }
 
 func applyMigration44CardPlans(ctx context.Context, tx *sql.Tx) error {

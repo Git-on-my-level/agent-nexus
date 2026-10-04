@@ -130,6 +130,7 @@ var HomeFeedEventTypes = []string{
 	"topic_trashed",
 	"human_attention_requested",
 	"human_attention_responded",
+	"human_attention_withdrawn",
 	"document_created",
 	"document_revision_created",
 	"document_revised",

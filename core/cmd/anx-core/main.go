@@ -416,6 +416,18 @@ func main() {
 		WorkspaceName:       workspaceName,
 		QuietWindow:         answerWakeQuietWindow,
 		FlushWhenNoOpenAsks: flushAnswerWakeWhenEmpty,
+		RecipientIsActive: func(ctx context.Context, actorID string) (bool, error) {
+			principals, _, err := authStore.ListPrincipals(ctx, auth.AuthPrincipalListFilter{})
+			if err != nil {
+				return false, err
+			}
+			for _, principal := range principals {
+				if principal.ActorID == actorID && !principal.Revoked && principal.PrincipalKind == string(auth.PrincipalKindAgent) {
+					return true, nil
+				}
+			}
+			return false, nil
+		},
 	})
 	sidecarHost := sidecar.NewHost()
 	if sidecarRouterEnabled {
@@ -546,6 +558,7 @@ func main() {
 		}),
 		server.WithWorkspaceID(workspaceID),
 		server.WithAnswerWakeFlushWhenNoOpenAsks(flushAnswerWakeWhenEmpty),
+		server.WithAnswerWakeQuietWindow(answerWakeQuietWindow),
 		server.WithWorkspaceAccessMode(workspaceAccessMode),
 		server.WithSecretsStore(secretsStore),
 		server.WithEnableDevActorMode(enableDevActorMode),

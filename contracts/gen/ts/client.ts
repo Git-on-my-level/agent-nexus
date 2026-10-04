@@ -5038,6 +5038,7 @@ export const commandRegistry: CommandSpec[] = [
             "exception_raised",
             "human_attention_requested",
             "human_attention_responded",
+            "human_attention_withdrawn",
             "message_posted",
             "receipt_added",
             "review_completed",

@@ -73,6 +73,28 @@ func TestWorkHelpOffline(t *testing.T) {
 	}
 }
 
+func TestWorkListBoardFlagShowsRepairCommandBeforeProfileResolution(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	a := New()
+	a.Stdout = &stdout
+	a.Stderr = &stderr
+	a.Stdin = strings.NewReader("")
+	a.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	a.ReadFile = os.ReadFile
+	a.Getenv = func(string) string { return "" }
+	if got := a.Run([]string{"--json", "work", "list", "--board", "board:launch"}); got != 2 {
+		t.Fatalf("exit=%d want 2: %s", got, stdout.String())
+	}
+	payload := assertEnvelopeError(t, stdout.String())
+	err := asMap(payload["error"])
+	if got := anyStringValue(err["code"]); got != "invalid_flags" {
+		t.Fatalf("code=%q want invalid_flags: %s", got, stdout.String())
+	}
+	if got := anyStringValue(err["message"]); !strings.Contains(got, "anx boards cards list --board <board-ref>") {
+		t.Fatalf("repair hint missing from error: %s", stdout.String())
+	}
+}
+
 func TestWorkRequestsUseCentralAPI(t *testing.T) {
 	for _, tc := range []struct {
 		args                                []string

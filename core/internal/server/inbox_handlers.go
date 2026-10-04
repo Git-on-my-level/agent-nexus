@@ -22,6 +22,7 @@ var subjectRefPrefixesPreferred = []string{
 const (
 	humanAttentionRequestedEventType = "human_attention_requested"
 	humanAttentionRespondedEventType = "human_attention_responded"
+	humanAttentionWithdrawnEventType = "human_attention_withdrawn"
 )
 
 func pickSubjectRefFromEventRefs(refs []string, threadID string) string {
@@ -477,6 +478,21 @@ func decidedInboxItemIDs(events []map[string]any) map[string]struct{} {
 	out := make(map[string]struct{})
 	for _, event := range events {
 		eventType, _ := event["type"].(string)
+		if eventType == humanAttentionWithdrawnEventType {
+			payload, _ := event["payload"].(map[string]any)
+			requestID := strings.TrimSpace(anyString(payload["request_event_id"]))
+			if requestID == "" {
+				requestRef := strings.TrimSpace(anyString(payload["request_event_ref"]))
+				prefix, value, err := schema.SplitTypedRef(requestRef)
+				if err == nil && prefix == "event" {
+					requestID = value
+				}
+			}
+			if requestID != "" {
+				out["event:"+requestID] = struct{}{}
+			}
+			continue
+		}
 		if eventType != humanAttentionRespondedEventType {
 			continue
 		}

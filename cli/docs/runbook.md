@@ -180,7 +180,7 @@ assigns and moves native work; it is not a registration shortcut. Project
 association should use clear configured evidence and ask when ambiguous. A
 successful run/session does not satisfy the task's acceptance criteria.
 
-The bundled participant skill advertises `anx.participant.v5`; explicitly
+The bundled participant skill advertises `anx.participant.v6`; explicitly
 designated PMs can load the additional `anx.pm.v3` skill. Use `anx skills
 configure|status|verify --path <skill-directory> --role participant|pm` for
 versioned local ownership, clean refresh and read-only verification. Existing

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/actors"
+	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/router"
 )
@@ -31,6 +32,7 @@ type AnswerWakeMaintainerConfig struct {
 	QuietWindow         time.Duration
 	PollInterval        time.Duration
 	FlushWhenNoOpenAsks bool
+	RecipientIsActive   func(context.Context, string) (bool, error)
 }
 
 type AnswerWakeMaintainer struct {
@@ -40,6 +42,7 @@ type AnswerWakeMaintainer struct {
 	quietWindow         time.Duration
 	pollInterval        time.Duration
 	flushWhenNoOpenAsks bool
+	recipientIsActive   func(context.Context, string) (bool, error)
 }
 
 func NewAnswerWakeMaintainer(config AnswerWakeMaintainerConfig) *AnswerWakeMaintainer {
@@ -63,6 +66,7 @@ func NewAnswerWakeMaintainer(config AnswerWakeMaintainerConfig) *AnswerWakeMaint
 		quietWindow:         config.QuietWindow,
 		pollInterval:        config.PollInterval,
 		flushWhenNoOpenAsks: config.FlushWhenNoOpenAsks,
+		recipientIsActive:   config.RecipientIsActive,
 	}
 }
 
@@ -96,15 +100,35 @@ func (m *AnswerWakeMaintainer) Step(ctx context.Context, now time.Time) error {
 		return err
 	}
 	for _, batch := range batches {
+		if m.recipientIsActive != nil {
+			active, activeErr := m.recipientIsActive(ctx, batch.TargetActorID)
+			if activeErr != nil {
+				return activeErr
+			}
+			if !active {
+				if _, err := m.store.DeleteHumanAttentionAnswerWakeBatch(ctx, batch.TargetActorID, batch.BatchID, batch.TriggerEventID); err != nil {
+					return err
+				}
+				continue
+			}
+		}
 		openAsks, err := m.store.CountOpenHumanAttentionAsks(ctx, batch.TargetActorID)
 		if err != nil {
 			return err
 		}
-		lastAnswered, err := time.Parse(time.RFC3339Nano, batch.LastAnsweredAt)
-		if err != nil {
-			return fmt.Errorf("parse answer wake batch timestamp: %w", err)
+		deadline := strings.TrimSpace(batch.DebounceDeadline)
+		if deadline == "" {
+			lastAnswered, err := time.Parse(time.RFC3339Nano, batch.LastAnsweredAt)
+			if err != nil {
+				return fmt.Errorf("parse answer wake batch timestamp: %w", err)
+			}
+			deadline = lastAnswered.Add(m.quietWindow).UTC().Format(time.RFC3339Nano)
 		}
-		if !(m.flushWhenNoOpenAsks && openAsks == 0) && now.Sub(lastAnswered) < m.quietWindow {
+		debounceDeadline, err := time.Parse(time.RFC3339Nano, deadline)
+		if err != nil {
+			return fmt.Errorf("parse answer wake debounce deadline: %w", err)
+		}
+		if !(m.flushWhenNoOpenAsks && openAsks == 0) && now.Before(debounceDeadline) {
 			continue
 		}
 		if err := m.dispatch(ctx, batch); err != nil {
@@ -112,6 +136,16 @@ func (m *AnswerWakeMaintainer) Step(ctx context.Context, now time.Time) error {
 		}
 	}
 	return nil
+}
+
+func answerWakeRecipientIsActive(authStore *auth.Store) func(context.Context, string) (bool, error) {
+	if authStore == nil {
+		return nil
+	}
+	return func(ctx context.Context, actorID string) (bool, error) {
+		_, found, err := findAgentPrincipalByActorID(ctx, authStore, actorID)
+		return found, err
+	}
 }
 
 func (m *AnswerWakeMaintainer) FlushTarget(ctx context.Context, targetActorID string) error {

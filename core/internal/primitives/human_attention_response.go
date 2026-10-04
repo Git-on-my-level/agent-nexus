@@ -69,7 +69,7 @@ func (s *Store) AppendHumanAttentionResponse(ctx context.Context, actorID, sourc
 		return nil, false, err
 	}
 	var existingResponses int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE type='human_attention_responded' AND id<>? AND (json_extract(payload_json,'$.payload.request_event_ref')=? OR json_extract(payload_json,'$.payload.request_event_id')=?)`, prepared.Body["id"], "event:"+sourceEventID, sourceEventID).Scan(&existingResponses); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE type='human_attention_responded' AND id<>? AND (json_extract(payload_json,'$.payload.request_event_ref')=? OR json_extract(payload_json,'$.payload.request_event_ref')='event:' || (SELECT handle FROM events WHERE id=?) OR json_extract(payload_json,'$.payload.request_event_id')=?)`, prepared.Body["id"], "event:"+sourceEventID, sourceEventID, sourceEventID).Scan(&existingResponses); err != nil {
 		return nil, false, err
 	}
 	if existingResponses > 0 {
@@ -87,7 +87,32 @@ func (s *Store) AppendHumanAttentionResponse(ctx context.Context, actorID, sourc
 		}
 		return nil, false, ErrHumanAttentionAlreadyResponded
 	}
-	response := map[string]any{"event": prepared.Body, "notify": initialNotify}
+	resolution, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO human_attention_request_resolutions(request_event_id,resolution_event_id,resolution_type,actor_id,created_at) VALUES(?,?,'answered',?,?)`, sourceEventID, prepared.Body["id"], actorID, prepared.Body["ts"])
+	if err != nil {
+		return nil, false, err
+	}
+	resolutionInserted, err := resolution.RowsAffected()
+	if err != nil {
+		return nil, false, err
+	}
+	if resolutionInserted == 0 {
+		if err := tx.Rollback(); err != nil {
+			return nil, false, err
+		}
+		if key != "" {
+			replay, replayErr := s.HumanAttentionResponseReplay(ctx, actorID, key, hash)
+			if replayErr == nil {
+				return replay, true, nil
+			}
+			if !errors.Is(replayErr, ErrNotFound) {
+				return nil, false, replayErr
+			}
+		}
+		return nil, false, ErrHumanAttentionAlreadyResponded
+	}
+	publicNotify := cloneMap(initialNotify)
+	delete(publicNotify, "quiet_window_ns")
+	response := map[string]any{"event": prepared.Body, "notify": publicNotify}
 	raw, err := json.Marshal(response)
 	if err != nil {
 		return nil, false, err

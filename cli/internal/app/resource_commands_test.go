@@ -566,6 +566,52 @@ func TestHumanAskCommandCreatesHumanAttentionRequestedEvent(t *testing.T) {
 	}
 }
 
+func TestAskWithdrawCommandRecordsDistinctWithdrawalEvent(t *testing.T) {
+	t.Parallel()
+
+	var captured map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/events" {
+			http.NotFound(w, r)
+			return
+		}
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Fatalf("decode withdrawal body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"event":{"id":"withdrawal-1","type":"human_attention_withdrawn"}}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	payload := assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json", "--base-url", server.URL, "--as", "agent-a",
+		"ask", "withdraw", "event:ask-123", "--reason", "the decision is no longer needed",
+	}))
+	if got := anyStringValue(payload["command"]); got != "ask withdraw" {
+		t.Fatalf("command=%q want ask withdraw: %#v", got, payload)
+	}
+	if got := anyStringValue(machineEnvelopeCommandID(payload)); got != "ask.withdraw" {
+		t.Fatalf("command id=%q want ask.withdraw", got)
+	}
+	requestKey := anyStringValue(captured["request_key"])
+	if requestKey != "ask-withdraw:ask-123" {
+		t.Fatalf("request key=%q: %#v", requestKey, captured)
+	}
+	event := asMap(captured["event"])
+	if got := anyStringValue(event["type"]); got != humanAttentionWithdrawnEventType {
+		t.Fatalf("event type=%q: %#v", got, event)
+	}
+	withdrawal := asMap(event["payload"])
+	if got := anyStringValue(withdrawal["request_event_ref"]); got != "event:ask-123" {
+		t.Fatalf("request ref=%q: %#v", got, withdrawal)
+	}
+	if got := anyStringValue(withdrawal["reason"]); got != "the decision is no longer needed" {
+		t.Fatalf("reason=%q: %#v", got, withdrawal)
+	}
+}
+
 func TestHumanAskCommandResolvesThreadIDFromTopicSubjectRef(t *testing.T) {
 	t.Parallel()
 

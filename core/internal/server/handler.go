@@ -185,6 +185,7 @@ type handlerOptions struct {
 	allowLoopbackVerificationReads bool
 	inboxRiskHorizon               time.Duration
 	answerWakeFlushWhenNoOpenAsks  bool
+	answerWakeQuietWindow          time.Duration
 	coreVersion                    string
 	apiVersion                     string
 	minCLIVersion                  string
@@ -267,6 +268,10 @@ func WithWorkspaceManagedAgentGrantVerifier(verifier auth.WorkspaceManagedAgentG
 
 func WithAnswerWakeFlushWhenNoOpenAsks(enabled bool) HandlerOption {
 	return func(opts *handlerOptions) { opts.answerWakeFlushWhenNoOpenAsks = enabled }
+}
+
+func WithAnswerWakeQuietWindow(window time.Duration) HandlerOption {
+	return func(opts *handlerOptions) { opts.answerWakeQuietWindow = window }
 }
 
 func WithPasskeySessionStore(store *auth.PasskeySessionStore) HandlerOption {
@@ -619,6 +624,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		coreInstanceID:                "core-local",
 		streamPollInterval:            time.Second,
 		answerWakeFlushWhenNoOpenAsks: true,
+		answerWakeQuietWindow:         DefaultAnswerWakeQuietWindow,
 		allowUnauthenticatedWrites:    false,
 	}
 	for _, option := range options {
