@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Groups: `28`
+- Groups: `30`
 
 ## `topics`
 
@@ -37,6 +37,16 @@ Generated from `contracts/anx-openapi.yaml`.
 - Command IDs:
   - `actors.create` (`actors create`)
   - `actors.list` (`actors list`)
+
+## `adapters`
+
+- Commands: `5`
+- Command IDs:
+  - `adapters.declare` (`adapters declare`)
+  - `adapters.delete` (`adapters delete`)
+  - `adapters.list` (`adapters list`)
+  - `adapters.revoke` (`adapters revoke`)
+  - `adapters.token` (`adapters token`)
 
 ## `agent`
 
@@ -302,6 +312,15 @@ Generated from `contracts/anx-openapi.yaml`.
   - `secrets.reveal` (`secret get --reveal`)
   - `secrets.reveal-batch` (`secret exec`)
   - `secrets.update` (`secret update`)
+
+## `series`
+
+- Commands: `4`
+- Command IDs:
+  - `series.list` (`series list`)
+  - `series.push` (`series push`)
+  - `series.query` (`series query`)
+  - `series.show` (`series show`)
 
 ## `sessions`
 

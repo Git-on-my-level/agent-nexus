@@ -270,3 +270,7 @@ The Overview resolves a `?dashboard=<id-or-handle>` bookmark on load, without
 requiring focus on the report selector.
 Initiatives expose `needs[]` and use the live report summary parser, ignoring
 fenced examples and counting empty Markdown checkbox lines.
+
+## Declared live series
+
+See `../../docs/live-series.md` for adapter declaration, scoped token exchange, bounded queries, caps, retention, panel sources and fallback semantics. The canonical paths and JSON schemas are in `contracts/anx-openapi.yaml`.

@@ -26,7 +26,7 @@ const (
 var panelTypes = []string{
 	"explanation", "evidence-table", "milestone-timeline", "dependency-diagram",
 	"metric-chart", "artifact-preview", "chart", "metric-strip", "callout", "comparison",
-	"live-initiatives", "live-asks", "live-work-mix", "live-activity",
+	"live-initiatives", "live-asks", "live-work-mix", "live-activity", "metric", "table",
 }
 
 // PanelTypes returns the panel types accepted by the shared visual-report contract.
@@ -405,7 +405,7 @@ func (v *validator) report(r map[string]any) {
 	}
 	for i, raw := range panels {
 		p := fmt.Sprintf("panels[%d]", i)
-		item, ok := object(raw, p, []string{"id", "project_id", "type", "title", "author", "provenance", "observed_at", "freshness", "source_ids", "data"}, []string{"appearance", "density"}, v.add)
+		item, ok := object(raw, p, []string{"id", "project_id", "type", "title", "author", "provenance", "observed_at", "freshness", "source_ids", "data"}, []string{"appearance", "density", "source", "fallback"}, v.add)
 		if !ok {
 			continue
 		}
@@ -441,7 +441,14 @@ func (v *validator) report(r map[string]any) {
 				v.add(p+".source_ids", "verified panels require evidence sources")
 			}
 		}
-		v.panelData(item, p, panelSources, reference)
+		if _, bound := item["source"]; bound {
+			v.seriesBinding(item, p, panelSources, reference)
+		} else {
+			if _, exists := item["fallback"]; exists {
+				v.add(p+".fallback", "requires a series source")
+			}
+			v.panelData(item, p, panelSources, reference)
+		}
 	}
 }
 
@@ -453,6 +460,8 @@ func (v *validator) panelData(panel map[string]any, path string, panelSources ma
 		if _, err := ParseQuery(panel["type"].(string), raw); err != nil {
 			v.add(dp, err.Error())
 		}
+	case "metric":
+		v.metric(data, dp)
 	case "chart":
 		v.chart(data, dp)
 	case "callout":
@@ -526,7 +535,7 @@ func (v *validator) panelData(panel map[string]any, path string, panelSources ma
 		if ok {
 			v.text(m["text"], dp+".text", 12000, false)
 		}
-	case "evidence-table":
+	case "evidence-table", "table":
 		m, ok := object(data, dp, []string{"columns", "rows"}, nil, v.add)
 		if !ok {
 			return

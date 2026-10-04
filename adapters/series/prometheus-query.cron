@@ -1,0 +1,3 @@
+# Declare prometheus, owner collector.<host>, expected_interval 5m, gauge request-rate.
+# /etc/anx/prometheus.env is mode 600 and supplies PROMETHEUS_URL and optional PROMETHEUS_TOKEN.
+*/5 * * * * set -a; . /etc/anx/prometheus.env; set +a; ANX_AS=collector ANX_ADAPTER=prometheus /usr/bin/python3 /opt/anx-adapters/prometheus-query.py request-rate 'sum(rate(http_requests_total[5m]))' >> /var/log/anx-prometheus.log 2>&1

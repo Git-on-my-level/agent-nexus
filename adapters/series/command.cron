@@ -1,0 +1,2 @@
+# Declare command, owner collector.<host>, expected_interval 1m, gauge pending-jobs.
+* * * * * ANX_AS=collector ANX_ADAPTER=command /usr/bin/python3 /opt/anx-adapters/command.py pending-jobs -- /opt/jobs/count >> /var/log/anx-command.log 2>&1

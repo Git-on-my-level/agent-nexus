@@ -1,3 +1,4 @@
+import { validateSeriesBinding } from "./seriesReports.js";
 import { validateReportLayout } from "./visualReportLayout.js";
 import { validateReportChart } from "./visualReportCharts.js";
 import {
@@ -19,6 +20,8 @@ export const VISUAL_REPORT_TYPES = Object.freeze([
   "artifact-preview",
   "chart",
   "metric-strip",
+  "metric",
+  "table",
   "callout",
   "comparison",
   ...LIVE_REPORT_TYPES,
@@ -125,6 +128,16 @@ export function safeReportUrl(value) {
 /** Freshness describes observation age, never completion, availability, or health. */
 export function getPanelFreshness(panel, now = Date.now()) {
   if (!isRecord(panel)) return "unknown";
+  if (panel.source) {
+    if (panel.seriesFallback) return "stale";
+    if (panel.freshness !== "current") return panel.freshness ?? "unavailable";
+    const interval =
+      panel.seriesObservation?.provenance?.expected_interval_seconds;
+    const deadline = panel.seriesObservation?.fresh_until
+      ? Date.parse(panel.seriesObservation.fresh_until)
+      : Date.parse(panel.observed_at) + interval * 2000;
+    return interval && now > deadline ? "stale" : "current";
+  }
   if (isLivePanel(panel) && !panel.live) return "unavailable";
   if (panel.freshness === "unavailable") return "unavailable";
   if (!FRESHNESS.includes(panel.freshness) || panel.freshness === "unknown")
@@ -337,7 +350,7 @@ function validateReport(report) {
           "source_ids",
           "data",
         ],
-        ["appearance", "density"],
+        ["appearance", "density", "source", "fallback"],
       )
     )
       return;
@@ -371,14 +384,34 @@ function validateReport(report) {
     const panelSources = new Set(
       Array.isArray(panel.source_ids) ? panel.source_ids : [],
     );
-    const data = panel.data;
+    let data = panel.data;
+    if (panel.source !== undefined) {
+      for (const error of validateSeriesBinding(panel))
+        add(`${path}.source`, error);
+      if (panel.fallback === undefined) return;
+      if (!record(panel.fallback, `${path}.fallback`, ["as_of", "data"]))
+        return;
+      timestamp(panel.fallback.as_of, `${path}.fallback.as_of`);
+      data = panel.fallback.data;
+    } else if (panel.fallback !== undefined)
+      add(`${path}.fallback`, "requires a series source");
     const dataPath = `${path}.data`;
-    if (isLivePanel(panel)) {
+    if (LIVE_REPORT_TYPES.includes(panel.type)) {
       for (const error of validateLiveQuery(panel.type, data))
         add(dataPath, error);
       return;
     }
     switch (panel.type) {
+      case "metric":
+        if (record(data, dataPath, ["value"], ["unit"])) {
+          if (typeof data.value === "number") {
+            if (!Number.isFinite(data.value) || Math.abs(data.value) > 1e12)
+              add(dataPath, "exceeds numeric bounds");
+          } else string(data.value, `${dataPath}.value`, 128);
+          if (data.unit !== undefined)
+            string(data.unit, `${dataPath}.unit`, 80, true);
+        }
+        break;
       case "chart":
         for (const error of validateReportChart(data)) add(dataPath, error);
         break;
@@ -491,6 +524,7 @@ function validateReport(report) {
         if (record(data, dataPath, ["text"]))
           string(data.text, `${dataPath}.text`, VISUAL_REPORT_LIMITS.text);
         break;
+      case "table":
       case "evidence-table": {
         if (!record(data, dataPath, ["columns", "rows"])) break;
         const columns = array(

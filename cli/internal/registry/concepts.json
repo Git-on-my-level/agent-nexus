@@ -7357,7 +7357,7 @@
           ],
           "stability": "beta",
           "surface": "projection",
-          "agent_notes": "Read-only. Both text and structured version 1 visual reports are supported. Each live panel is independently materialized with status ok or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows. Archived boards and their work are excluded. Private PM events remain private.",
+          "agent_notes": "Read-only. Both text and structured version 1 visual reports are supported. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows. Archived boards and their work are excluded. Private PM events remain private.",
           "path_params": [
             "document_id"
           ],
@@ -10629,7 +10629,7 @@
           ],
           "stability": "beta",
           "surface": "projection",
-          "agent_notes": "Read-only. Both text and structured version 1 visual reports are supported. Each live panel is independently materialized with status ok or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows. Archived boards and their work are excluded. Private PM events remain private.",
+          "agent_notes": "Read-only. Both text and structured version 1 visual reports are supported. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows. Archived boards and their work are excluded. Private PM events remain private.",
           "path_params": [
             "document_id"
           ],
@@ -10640,13 +10640,262 @@
     },
     {
       "name": "documents",
-      "command_count": 3,
+      "command_count": 12,
       "command_ids": [
+        "adapters.declare",
+        "adapters.delete",
+        "adapters.list",
+        "adapters.revoke",
+        "adapters.token",
         "overview.get",
+        "series.list",
+        "series.push",
+        "series.query",
+        "series.show",
         "workspace.dashboard.list",
         "workspace.dashboard.set"
       ],
       "commands": [
+        {
+          "command_id": "adapters.declare",
+          "cli_path": "adapters declare",
+          "group": "adapters",
+          "method": "POST",
+          "path": "/adapters",
+          "operation_id": "adapters_declare",
+          "summary": "Declare an adapter and its series",
+          "why": "Declare an adapter and its series.",
+          "input_mode": "file-and-body",
+          "http_input_mode": "json-body",
+          "cli_input": {
+            "mode": "file-and-body",
+            "flags": [
+              {
+                "name": "body-file",
+                "required": true,
+                "description": "UTF-8 adapter declaration JSON file or stdin (-)."
+              }
+            ]
+          },
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns JSON with provenance and explicit freshness.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "forbidden",
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "series_capacity"
+          ],
+          "concepts": [
+            "documents"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Explicit declared push source; core never fetches external data.",
+          "examples": [
+            {
+              "title": "Declare before pushing",
+              "command": "anx adapters declare --body-file adapter.json"
+            }
+          ],
+          "body_schema": {
+            "required": [
+              {
+                "name": "agent_id",
+                "type": "string"
+              },
+              {
+                "name": "description",
+                "type": "string"
+              },
+              {
+                "name": "expected_interval",
+                "type": "string"
+              },
+              {
+                "name": "name",
+                "type": "string"
+              },
+              {
+                "name": "series",
+                "type": "list\u003cany\u003e"
+              }
+            ]
+          },
+          "adjacent_commands": [
+            "adapters.delete",
+            "adapters.list",
+            "adapters.revoke",
+            "adapters.token"
+          ],
+          "go_method": "AdaptersDeclare",
+          "ts_method": "adaptersDeclare"
+        },
+        {
+          "command_id": "adapters.delete",
+          "cli_path": "adapters delete",
+          "group": "adapters",
+          "method": "DELETE",
+          "path": "/adapters/{name}",
+          "operation_id": "adapters_delete",
+          "summary": "Delete an adapter and its series",
+          "why": "Delete an adapter and its series.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns JSON with provenance and explicit freshness.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "forbidden",
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "series_capacity"
+          ],
+          "concepts": [
+            "documents"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Explicit declared push source; core never fetches external data.",
+          "path_params": [
+            "name"
+          ],
+          "adjacent_commands": [
+            "adapters.declare",
+            "adapters.list",
+            "adapters.revoke",
+            "adapters.token"
+          ],
+          "go_method": "AdaptersDelete",
+          "ts_method": "adaptersDelete"
+        },
+        {
+          "command_id": "adapters.list",
+          "cli_path": "adapters list",
+          "group": "adapters",
+          "method": "GET",
+          "path": "/adapters",
+          "operation_id": "adapters_list",
+          "summary": "List declared adapters",
+          "why": "List declared adapters.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns JSON with provenance and explicit freshness.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "forbidden",
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "series_capacity"
+          ],
+          "concepts": [
+            "documents"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Explicit declared push source; core never fetches external data.",
+          "adjacent_commands": [
+            "adapters.declare",
+            "adapters.delete",
+            "adapters.revoke",
+            "adapters.token"
+          ],
+          "go_method": "AdaptersList",
+          "ts_method": "adaptersList"
+        },
+        {
+          "command_id": "adapters.revoke",
+          "cli_path": "adapters revoke",
+          "group": "adapters",
+          "method": "POST",
+          "path": "/adapters/{name}/revoke",
+          "operation_id": "adapters_revoke",
+          "summary": "Revoke an adapter grant",
+          "why": "Revoke an adapter grant.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns JSON with provenance and explicit freshness.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "forbidden",
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "series_capacity"
+          ],
+          "concepts": [
+            "documents"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Explicit declared push source; core never fetches external data.",
+          "path_params": [
+            "name"
+          ],
+          "adjacent_commands": [
+            "adapters.declare",
+            "adapters.delete",
+            "adapters.list",
+            "adapters.token"
+          ],
+          "go_method": "AdaptersRevoke",
+          "ts_method": "adaptersRevoke"
+        },
+        {
+          "command_id": "adapters.token",
+          "cli_path": "adapters token",
+          "group": "adapters",
+          "method": "POST",
+          "path": "/adapters/{name}/token",
+          "operation_id": "adapters_token",
+          "summary": "Exchange owner identity for a scoped series-write token",
+          "why": "Exchange owner identity for a scoped series-write token.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns JSON with provenance and explicit freshness.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "forbidden",
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "series_capacity"
+          ],
+          "concepts": [
+            "documents"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Explicit declared push source; core never fetches external data.",
+          "path_params": [
+            "name"
+          ],
+          "adjacent_commands": [
+            "adapters.declare",
+            "adapters.delete",
+            "adapters.list",
+            "adapters.revoke"
+          ],
+          "go_method": "AdaptersToken",
+          "ts_method": "adaptersToken"
+        },
         {
           "command_id": "overview.get",
           "cli_path": "overview",
@@ -10677,6 +10926,220 @@
           "agent_notes": "Use anx overview --json to inspect the same executive projection as the web UI.",
           "go_method": "OverviewGet",
           "ts_method": "overviewGet"
+        },
+        {
+          "command_id": "series.list",
+          "cli_path": "series list",
+          "group": "series",
+          "method": "GET",
+          "path": "/series",
+          "operation_id": "series_list",
+          "summary": "List pushed series",
+          "why": "List pushed series.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns JSON with provenance and explicit freshness.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "forbidden",
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "series_capacity"
+          ],
+          "concepts": [
+            "documents"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Explicit declared push source; core never fetches external data.",
+          "adjacent_commands": [
+            "series.push",
+            "series.query",
+            "series.show"
+          ],
+          "go_method": "SeriesList",
+          "ts_method": "seriesList"
+        },
+        {
+          "command_id": "series.push",
+          "cli_path": "series push",
+          "group": "series",
+          "method": "POST",
+          "path": "/series/{name}/points",
+          "operation_id": "series_push",
+          "summary": "Push one declared series point",
+          "description": "Exact same-timestamp retries are idempotent. A changed raw observation at the same timestamp replaces its value and consumes daily ingestion budget; rolled-up observations cannot be corrected through push.",
+          "why": "Push one declared series point.",
+          "input_mode": "flags",
+          "http_input_mode": "json-body",
+          "cli_input": {
+            "mode": "flags",
+            "flags": [
+              {
+                "name": "adapter",
+                "description": "Declared adapter; omitted means resolve from series inventory."
+              },
+              {
+                "name": "label",
+                "description": "Repeated exact k=v labels."
+              },
+              {
+                "name": "ts",
+                "description": "RFC3339 observation timestamp."
+              },
+              {
+                "name": "from-command",
+                "description": "Read a number or JSON point from the argv after --."
+              },
+              {
+                "name": "series",
+                "description": "Series name when from-command stdout is a number."
+              }
+            ]
+          },
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns JSON with provenance and explicit freshness.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "forbidden",
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "series_capacity"
+          ],
+          "concepts": [
+            "documents"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Explicit declared push source; core never fetches external data.",
+          "examples": [
+            {
+              "title": "Push a number",
+              "command": "anx series push builds 12 --label initiative=launch"
+            },
+            {
+              "title": "Push command output",
+              "command": "anx series push builds --from-command -- ./count-builds"
+            }
+          ],
+          "body_schema": {
+            "optional": [
+              {
+                "name": "labels",
+                "type": "object"
+              },
+              {
+                "name": "state",
+                "type": "string"
+              },
+              {
+                "name": "ts",
+                "type": "datetime"
+              },
+              {
+                "name": "value",
+                "type": "number"
+              }
+            ]
+          },
+          "path_params": [
+            "name"
+          ],
+          "adjacent_commands": [
+            "series.list",
+            "series.query",
+            "series.show"
+          ],
+          "go_method": "SeriesPush",
+          "ts_method": "seriesPush"
+        },
+        {
+          "command_id": "series.query",
+          "cli_path": "series query",
+          "group": "series",
+          "method": "GET",
+          "path": "/series/{name}/query",
+          "operation_id": "series_query",
+          "summary": "Query a bounded series range",
+          "why": "Query a bounded series range.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns JSON with provenance and explicit freshness.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "forbidden",
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "series_capacity"
+          ],
+          "concepts": [
+            "documents"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Explicit declared push source; core never fetches external data.",
+          "path_params": [
+            "name"
+          ],
+          "adjacent_commands": [
+            "series.list",
+            "series.push",
+            "series.show"
+          ],
+          "go_method": "SeriesQuery",
+          "ts_method": "seriesQuery"
+        },
+        {
+          "command_id": "series.show",
+          "cli_path": "series show",
+          "group": "series",
+          "method": "GET",
+          "path": "/series/{name}",
+          "operation_id": "series_show",
+          "summary": "Show a series and its provenance",
+          "why": "Show a series and its provenance.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns JSON with provenance and explicit freshness.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "forbidden",
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "series_capacity"
+          ],
+          "concepts": [
+            "documents"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Explicit declared push source; core never fetches external data.",
+          "path_params": [
+            "name"
+          ],
+          "adjacent_commands": [
+            "series.list",
+            "series.push",
+            "series.query"
+          ],
+          "go_method": "SeriesShow",
+          "ts_method": "seriesShow"
         },
         {
           "command_id": "workspace.dashboard.list",
@@ -13152,7 +13615,7 @@
           ],
           "stability": "beta",
           "surface": "projection",
-          "agent_notes": "Read-only. Both text and structured version 1 visual reports are supported. Each live panel is independently materialized with status ok or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows. Archived boards and their work are excluded. Private PM events remain private.",
+          "agent_notes": "Read-only. Both text and structured version 1 visual reports are supported. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows. Archived boards and their work are excluded. Private PM events remain private.",
           "path_params": [
             "document_id"
           ],
