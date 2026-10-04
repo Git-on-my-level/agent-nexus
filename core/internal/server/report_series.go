@@ -22,13 +22,7 @@ func (reader *reportReader) materializeSeries(panel reports.Panel) map[string]an
 			return out
 		}
 	}
-	step := window / series.MaxBuckets
-	if step < time.Second {
-		step = time.Second
-	}
-	if window > series.Retention {
-		step = 24 * time.Hour * ((window/24/time.Hour + series.MaxBuckets - 1) / series.MaxBuckets)
-	}
+	step := series.DefaultStep(window)
 	// Metrics aggregate the complete requested window; charts/tables use bins.
 	if panel.Type == "metric" || panel.Type == "metric-strip" {
 		step = window

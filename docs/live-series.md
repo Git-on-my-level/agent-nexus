@@ -42,7 +42,9 @@ with `Retry-After` seconds. Normal human operations do not share these limits.
 Recognized retry storms are rejected before body reads or database access.
 
 Raw observations older than 90 days compact into daily count/sum/min/max/last
-rollups on maintenance and series reads/writes. Daily rollups are retained forever
+rollups in the daily maintenance job. Queries use read-only snapshots and never
+compact data or acquire the workspace write lock. Uncompacted raw data remains
+queryable alongside daily rollups. Daily rollups are retained forever
 with no expiry, per David's 2026-10-05 decision. Rollup updates and raw deletion
 commit as one atomic checkpoint; interrupted or replayed compaction cannot count
 a sample twice. Historical queries use whole UTC
@@ -52,8 +54,25 @@ retain the last state. `avg` is weighted by the underlying sample count, and
 expected interval; provenance includes the last received push as a separate fact.
 Queries cover at most 3,650 days, with steps from one second to 3,650 days and
 at most 200 buckets per label set. Retaining rollups forever does not permit an
-unbounded query response. Raw corrections and out-of-order samples must stay
-within the 90-day backfill window; rolled-up observations cannot be rewritten.
+unbounded query response. Default steps round up to fit that bucket limit;
+historical ranges first round up to whole days, then choose a whole-day step.
+Raw corrections and out-of-order samples must stay within the 90-day backfill
+window; rolled-up observations cannot be rewritten.
+
+The reproducible capacity benchmark seeds 1,000 declared series and measures
+queries over 100,000 and 9,100,000 raw points, with either one or 100 label sets.
+The larger case covers 91 UTC ingestion-day budgets in a rolling 90-day window.
+Fixture setup is excluded from the query timing:
+
+```sh
+cd core
+GOMAXPROCS=2 go test ./internal/series -run '^$' -bench '^BenchmarkQueryCapacity$' -benchtime=1x
+```
+
+`TestQueryReadSnapshotDoesNotTakeWriteLock` pauses an actual query while an
+immediate human mutation commits, then checks the reader's snapshot. Separate
+tests verify indexed range scans and matching aggregates before and after
+maintenance, including a UTC day split between raw points and a daily rollup.
 
 ## Panel binding
 
