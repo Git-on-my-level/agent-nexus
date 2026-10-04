@@ -93,8 +93,19 @@ func TestMoveTopicRealCoresPreservesSharedBoardAndRewritesPlanRefs(t *testing.T)
 	destinationPlan := pair.destination.runCLIExpectOK(t, "move-agent", nil, "plan", "show", wantCardARef)
 	stepsRaw, _ := getPathValue(destinationPlan.Payload, "result.plan.steps")
 	steps, _ := stepsRaw.([]any)
-	if len(steps) != 2 || moveIntegrationString(integrationMap(steps[0])["ref"]) != wantCardBRef || moveIntegrationString(integrationMap(steps[1])["ref"]) != wantCardBRef {
-		t.Fatalf("plan link was not rewritten across the moved set: %s", destinationPlan.Stdout)
+	wantDocumentRef := "document:" + moveIntegrationDeterministicUUID(moveID, "document", fixture.document)
+	if len(steps) != 4 || moveIntegrationString(integrationMap(steps[0])["ref"]) != wantCardBRef || moveIntegrationString(integrationMap(steps[1])["ref"]) != wantCardBRef || moveIntegrationString(integrationMap(steps[2])["ref"]) != wantDocumentRef || moveIntegrationString(integrationMap(steps[3])["ref"]) != wantDocumentRef {
+		t.Fatalf("plan links or doc alias were not rewritten across the moved set: %s", destinationPlan.Stdout)
+	}
+	stateRaw, _ := getPathValue(destinationPlan.Payload, "result.plan_state.steps")
+	stateSteps := integrationSlice(stateRaw)
+	if len(stateSteps) != 4 {
+		t.Fatalf("destination plan state omitted its linked resources: %s", destinationPlan.Stdout)
+	}
+	for index := range steps {
+		if resolvable, ok := integrationMap(stateSteps[index])["resolvable"].(bool); !ok || !resolvable {
+			t.Fatalf("destination plan ref %q is not resolvable: %s", moveIntegrationString(integrationMap(steps[index])["ref"]), destinationPlan.Stdout)
+		}
 	}
 	destinationCardA := integrationMap(pair.destination.getCore(t, "/work/"+url.PathEscape(wantCardARef))["work"])
 	destinationCardB := integrationMap(pair.destination.getCore(t, "/work/"+url.PathEscape(wantCardBRef))["work"])
@@ -232,12 +243,25 @@ func TestMoveTopicRealCoreDryRunListsInaccessibleLinkedDocument(t *testing.T) {
 
 func TestMoveSourceBackedCardRealCoreBindsDestinationConnection(t *testing.T) {
 	pair := newMoveCorePair(t)
+	sourceURL := "https://github.com/example/repo/issues/604"
 	card := pair.createCard(t, "source-backed-mapped", map[string]any{
-		"authority": "github", "connection_id": "source-connection", "native_id": "issue-604",
+		"authority": "github", "connection_id": "source-connection", "native_id": "issue-604", "url": sourceURL,
 	}, "")
+	plan := map[string]any{"steps": []any{
+		map[string]any{"id": "url-self-review", "title": "Review this card by source URL", "ref": sourceURL},
+		map[string]any{"id": "typed-url-self-review", "title": "Review this card by typed source URL", "ref": "card:" + sourceURL},
+	}}
+	pair.source.runCLIExpectOK(t, "move-agent", plan, "plan", "set", card, "--from-file", "-")
 	result := pair.source.runCLIExpectOK(t, "move-agent", nil, "move", "card", card, "--to", "destination", "--connection-map", "source-connection=destination-connection")
 	destinationRef := mustStringPath(t, result.Payload, "result.destination_ref")
 	workResponse := pair.destination.getCore(t, "/work/"+url.PathEscape(destinationRef))
+	wantCanonicalDestinationRef := "card:" + moveIntegrationDeterministicUUID(mustStringPath(t, result.Payload, "result.move_id"), "card", card)
+	destinationPlan := pair.destination.runCLIExpectOK(t, "move-agent", nil, "plan", "show", destinationRef)
+	planStepsRaw, _ := getPathValue(destinationPlan.Payload, "result.plan.steps")
+	planSteps, _ := planStepsRaw.([]any)
+	if len(planSteps) != 2 || moveIntegrationString(integrationMap(planSteps[0])["ref"]) != wantCanonicalDestinationRef || moveIntegrationString(integrationMap(planSteps[1])["ref"]) != wantCanonicalDestinationRef {
+		t.Fatalf("source URL aliases did not resolve to the moved card identity: %s", destinationPlan.Stdout)
+	}
 	source := integrationMap(integrationMap(workResponse["work"])["source"])
 	if moveIntegrationString(source["authority"]) != "github" || moveIntegrationString(source["connection_id"]) != "destination-connection" || moveIntegrationString(source["native_id"]) != "issue-604" {
 		t.Fatalf("destination card did not bind the destination-local connection mapping: %#v", source)
@@ -401,9 +425,13 @@ func (p *moveCorePair) createTopicFixture(t *testing.T, suffix string) moveTopic
 		"document_refs": []string{document}, "board_refs": []string{board}, "related_refs": []string{cardA, cardB},
 	}}
 	p.source.runCLIExpectOK(t, "move-agent", patch, "topics", "patch", "--topic-id", topic)
+	documentIdentity := integrationMap(p.source.getCore(t, "/docs/"+url.PathEscape(document))["document"])
+	documentUUIDRef := "doc:" + moveIntegrationString(documentIdentity["id"])
 	plan := map[string]any{"steps": []any{
 		map[string]any{"id": "verify-b", "title": "Verify linked card", "ref": cardB},
 		map[string]any{"id": "verify-b-uuid", "title": "Verify linked card by UUID", "ref": cardBUUIDRef},
+		map[string]any{"id": "verify-doc-uuid-alias", "title": "Verify linked document by doc UUID alias", "ref": documentUUIDRef},
+		map[string]any{"id": "verify-doc-handle", "title": "Verify linked document by canonical handle", "ref": document},
 	}}
 	p.source.runCLIExpectOK(t, "move-agent", plan, "plan", "set", cardA, "--from-file", "-")
 	return moveTopicFixture{topic: topic, board: board, document: document, pinnedDocument: pinnedDocument, aliasDocument: aliasDocument, cardA: cardA, cardB: cardB, cardBID: moveIntegrationString(cardBIdentity["id"]), unrelatedCard: unrelated}

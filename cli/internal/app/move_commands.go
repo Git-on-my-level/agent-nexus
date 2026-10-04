@@ -497,16 +497,32 @@ func moveUnique(values []string) []string {
 
 func moveRewriteRef(ref string, mapping map[string]string) string {
 	ref = strings.TrimSpace(ref)
-	if mapped := mapping[ref]; mapped != "" {
+	normalized := moveNormalizeRefAlias(ref)
+	if mapped := mapping[normalized]; mapped != "" {
 		return mapped
 	}
-	kind, suffix, ok := strings.Cut(ref, ":")
-	if ok {
-		if mapped := mapping[kind+":"+suffix]; mapped != "" {
+	if normalized != ref {
+		if mapped := mapping[ref]; mapped != "" {
 			return mapped
 		}
 	}
 	return ref
+}
+
+// Keep plan-ref aliases aligned with core's readRefFacts resolver. Plans accept
+// doc: as an alias for document:, and bare source URLs as card refs.
+func moveNormalizeRefAlias(ref string) string {
+	if strings.HasPrefix(ref, "https://") || strings.HasPrefix(ref, "http://") {
+		return "card:" + ref
+	}
+	kind, suffix, ok := strings.Cut(ref, ":")
+	if !ok {
+		return ref
+	}
+	if kind == "doc" {
+		kind = "document"
+	}
+	return kind + ":" + suffix
 }
 
 func moveRewriteRefs(refs any, mapping map[string]string) []string {
@@ -540,11 +556,20 @@ func moveAddIdentity(mapping map[string]string, object map[string]any, kind, des
 	if destinationRef == "" {
 		return
 	}
-	for _, candidate := range []string{moveFieldString(object, "ref"), moveFieldString(object, "id"), moveFieldString(object, "handle")} {
+	candidates := []string{moveFieldString(object, "ref"), moveFieldString(object, "id"), moveFieldString(object, "handle")}
+	if kind == "card" {
+		if sourceURL := moveFieldString(asMap(object["source"]), "url"); sourceURL != "" {
+			candidates = append(candidates, sourceURL)
+		}
+	}
+	for _, candidate := range candidates {
 		if candidate == "" {
 			continue
 		}
 		mapping[candidate] = destinationRef
+		if strings.HasPrefix(candidate, "https://") || strings.HasPrefix(candidate, "http://") {
+			mapping["card:"+candidate] = destinationRef
+		}
 		if !strings.Contains(candidate, ":") {
 			mapping[kind+":"+candidate] = destinationRef
 		}
