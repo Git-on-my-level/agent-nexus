@@ -33,9 +33,9 @@ Options:
   --help                 Show this help
 
 Examples:
-  node scripts/capture-screenshot.mjs --capture signin=/hosted/signin
+  node scripts/capture-screenshot.mjs --capture login=/o/local/w/local/login
   node scripts/capture-screenshot.mjs --fixture topic-messages \\
-    --capture signin=/hosted/signin \\
+    --capture login=/o/local/w/local/login \\
     --capture messages='/o/local/w/local/threads/0ae18e22-f?qa=1'
 `.trim(),
   );

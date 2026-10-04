@@ -21,14 +21,10 @@ import {
   QA_DOCUMENTS,
   QA_EVENTS,
   QA_FIXED_NOW_ISO,
-  QA_HOSTED_ACCOUNT,
-  QA_HOSTED_BILLING_SUMMARY,
   QA_INVITES,
   QA_AGENTS,
   QA_HOSTS,
   QA_HOST_ENROLLMENTS,
-  QA_HOSTED_ORGS,
-  QA_HOSTED_WORKSPACES,
   QA_INBOX_POPULATED,
   QA_PRINCIPALS,
   QA_SECRETS,
@@ -39,6 +35,11 @@ import {
 import { auditLayout, formatViolations } from "../tests/helpers/layoutAudit.js";
 import { getExpectedCommandRegistryDigest } from "../src/lib/commandRegistryDigest.js";
 import { EXPECTED_SCHEMA_VERSION } from "../src/lib/config.js";
+
+import {
+  extensionScenes,
+  routeExtensionRequest,
+} from "../tests/helpers/uiExtensionQa.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
@@ -81,108 +82,7 @@ const QA_HOME_FEED_TYPES = new Set([
 ]);
 
 export const QA_SCENES = [
-  {
-    name: "hosted-signin",
-    path: "/hosted/signin",
-    hostedMode: "public",
-    waitFor: async (page) => {
-      await page.waitForSelector("text=Welcome back");
-    },
-  },
-  {
-    name: "hosted-signup",
-    path: "/hosted/signup",
-    hostedMode: "public",
-    waitFor: async (page) => {
-      await page.waitForSelector("text=Create your account");
-    },
-  },
-  {
-    name: "hosted-dashboard",
-    path: "/hosted/dashboard",
-    hostedMode: "authed-dashboard",
-    waitFor: async (page) => {
-      await page.waitForSelector('h1:has-text("Northwind Autonomy")');
-      await page.waitForSelector('h2:has-text("Workspaces")');
-      await page.waitForSelector("text=Orbit Release");
-    },
-  },
-  {
-    name: "hosted-organizations",
-    path: "/hosted/organizations",
-    hostedMode: "authed-dashboard",
-    waitFor: async (page) => {
-      await page.waitForSelector('h1:has-text("Organizations")');
-      /** List rows render after CP fetch; title alone matches SSR skeleton state. */
-      await page.waitForSelector("text=Northwind Autonomy");
-    },
-  },
-  {
-    name: "hosted-organizations-billing",
-    path: "/hosted/organizations/org_qa_primary/billing",
-    hostedMode: "authed-dashboard",
-    waitFor: async (page) => {
-      await page.waitForSelector("text=Manage in Stripe");
-    },
-  },
-  {
-    name: "hosted-organization-detail",
-    path: "/hosted/organizations/org_qa_primary",
-    hostedMode: "authed-dashboard",
-    waitFor: async (page) => {
-      /** Buttons are static; wait for usage/workspace panels after CP loads. */
-      await page.waitForSelector('h2:has-text("Workspaces")');
-      await page.waitForSelector("text=Orbit Release");
-    },
-  },
-  {
-    name: "hosted-organization-usage",
-    path: "/hosted/organizations/org_qa_primary/usage",
-    hostedMode: "authed-dashboard",
-    waitFor: async (page) => {
-      /** Legacy usage URL redirects to the billing page that now owns usage details. */
-      await page.waitForURL(
-        /\/hosted\/organizations\/org_qa_primary\/billing$/,
-      );
-      await page.waitForSelector('h1:has-text("Billing & Usage")');
-      await page.waitForSelector('h2:has-text("Workspace usage")');
-    },
-  },
-  {
-    name: "hosted-billing-return",
-    path: "/hosted/billing/return?session_id=cs_mock_qa_1",
-    hostedMode: "authed-dashboard",
-    waitFor: async (page) => {
-      await page.waitForURL(
-        /\/hosted\/organizations\/org_qa_primary\/billing\?activating=1$/,
-      );
-      await page.waitForSelector("text=Manage in Stripe");
-    },
-  },
-  {
-    name: "hosted-workspaces-new",
-    path: "/hosted/workspaces/new",
-    hostedMode: "authed-dashboard",
-    waitFor: async (page) => {
-      await page.waitForSelector("text=Create a workspace");
-    },
-  },
-  {
-    name: "hosted-onboarding-organization",
-    path: "/hosted/onboarding/organization",
-    hostedMode: "onboarding-organization",
-    waitFor: async (page) => {
-      await page.waitForSelector("text=Name your organization");
-    },
-  },
-  {
-    name: "hosted-onboarding-workspace",
-    path: "/hosted/onboarding/workspace",
-    hostedMode: "onboarding-workspace",
-    waitFor: async (page) => {
-      await page.waitForSelector("text=Name your first workspace");
-    },
-  },
+  ...extensionScenes,
   {
     name: "workspace-home-handoff-first-run",
     path: "/o/local/w/local",
@@ -1007,28 +907,6 @@ function qaHomeUnreadResponse(homeState) {
   };
 }
 
-function createHostedScenario(mode) {
-  switch (mode) {
-    case "public":
-      return { accountState: "unauthed", organizations: [], workspaces: [] };
-    case "onboarding-organization":
-      return { accountState: "authed", organizations: [], workspaces: [] };
-    case "onboarding-workspace":
-      return {
-        accountState: "authed",
-        organizations: [QA_HOSTED_ORGS[0]],
-        workspaces: [],
-      };
-    case "authed-dashboard":
-    default:
-      return {
-        accountState: "authed",
-        organizations: QA_HOSTED_ORGS,
-        workspaces: QA_HOSTED_WORKSPACES,
-      };
-  }
-}
-
 function jsonResponse(status, body) {
   return {
     status,
@@ -1217,8 +1095,6 @@ export async function installQaEnvironment(page, scene) {
         return seed / 0x7fffffff;
       };
 
-      localStorage.setItem("anx_hosted_active_org_id", "org_qa_primary");
-
       for (const [key, value] of Object.entries(sceneLocalStorage ?? {})) {
         if (value == null) {
           localStorage.removeItem(key);
@@ -1239,7 +1115,6 @@ export async function installQaEnvironment(page, scene) {
 }
 
 export async function installQaRoutes(page, scene) {
-  const hostedScenario = createHostedScenario(scene.hostedMode);
   const workspaceScenario = createWorkspaceScenario(scene.workspaceMode);
 
   await page.route("**/*", async (route) => {
@@ -1261,11 +1136,7 @@ export async function installQaRoutes(page, scene) {
       return;
     }
 
-    if (pathname.startsWith("/hosted/api/")) {
-      const apiPath = normalizePathname(pathname.replace(/^\/hosted\/api/, ""));
-      await handleHostedApiRoute(route, request, url, apiPath, hostedScenario);
-      return;
-    }
+    if (await routeExtensionRequest({ route, request, url, scene })) return;
 
     await handleWorkspaceApiRoute(
       route,
@@ -1275,136 +1146,6 @@ export async function installQaRoutes(page, scene) {
       workspaceScenario,
     );
   });
-}
-
-async function handleHostedApiRoute(route, request, url, pathname, scenario) {
-  if (pathname === "/account/me" && request.method() === "GET") {
-    if (scenario.accountState !== "authed") {
-      await route.fulfill(
-        jsonResponse(401, { error: { message: "unauthorized" } }),
-      );
-      return;
-    }
-    await route.fulfill(jsonResponse(200, { account: QA_HOSTED_ACCOUNT }));
-    return;
-  }
-
-  if (pathname === "/organizations" && request.method() === "GET") {
-    await route.fulfill(
-      jsonResponse(200, {
-        organizations: sliceByLimit(scenario.organizations, url.searchParams),
-        next_cursor: "",
-      }),
-    );
-    return;
-  }
-
-  if (pathname === "/workspaces" && request.method() === "GET") {
-    const orgId = String(url.searchParams.get("organization_id") ?? "").trim();
-    const items = scenario.workspaces.filter((workspace) => {
-      if (!orgId) {
-        return true;
-      }
-      return String(workspace.organization_id) === orgId;
-    });
-    await route.fulfill(
-      jsonResponse(200, {
-        workspaces: sliceByLimit(items, url.searchParams),
-        next_cursor: "",
-      }),
-    );
-    return;
-  }
-
-  const billingMatch = pathname.match(/^\/organizations\/([^/]+)\/billing$/);
-  if (billingMatch && request.method() === "GET") {
-    const organizationId = billingMatch[1];
-    if (organizationId !== QA_HOSTED_BILLING_SUMMARY.organization_id) {
-      await route.fulfill(
-        jsonResponse(404, { error: { message: "not found" } }),
-      );
-      return;
-    }
-    await route.fulfill(
-      jsonResponse(200, { summary: QA_HOSTED_BILLING_SUMMARY }),
-    );
-    return;
-  }
-
-  const usageMatch = pathname.match(
-    /^\/organizations\/([^/]+)\/usage-summary$/,
-  );
-  if (usageMatch && request.method() === "GET") {
-    const organizationId = usageMatch[1];
-    if (organizationId !== QA_HOSTED_BILLING_SUMMARY.organization_id) {
-      await route.fulfill(
-        jsonResponse(404, { error: { message: "not found" } }),
-      );
-      return;
-    }
-    await route.fulfill(
-      jsonResponse(200, { summary: QA_HOSTED_BILLING_SUMMARY.usage_summary }),
-    );
-    return;
-  }
-
-  const membershipsMatch = pathname.match(
-    /^\/organizations\/([^/]+)\/memberships$/,
-  );
-  if (membershipsMatch && request.method() === "GET") {
-    await route.fulfill(
-      jsonResponse(200, {
-        memberships: [
-          {
-            id: "membership_owner_jordan",
-            organization_id: membershipsMatch[1],
-            role: "owner",
-            status: "active",
-            account_display_name: QA_HOSTED_ACCOUNT.display_name,
-            account_email: QA_HOSTED_ACCOUNT.email,
-          },
-        ],
-      }),
-    );
-    return;
-  }
-
-  const organizationMatch = pathname.match(/^\/organizations\/([^/]+)$/);
-  if (organizationMatch && request.method() === "GET") {
-    const organization = scenario.organizations.find(
-      (item) => String(item.id) === organizationMatch[1],
-    );
-    if (!organization) {
-      await route.fulfill(
-        jsonResponse(404, { error: { message: "not found" } }),
-      );
-      return;
-    }
-    await route.fulfill(jsonResponse(200, { organization }));
-    return;
-  }
-
-  const checkoutSessionMatch = pathname.match(
-    /^\/billing\/checkout-session\/([^/]+)$/,
-  );
-  if (checkoutSessionMatch && request.method() === "GET") {
-    await route.fulfill(
-      jsonResponse(200, {
-        organization_id: QA_HOSTED_BILLING_SUMMARY.organization_id,
-      }),
-    );
-    return;
-  }
-
-  const mockCheckoutMatch = pathname.match(
-    /^\/organizations\/([^/]+)\/billing\/mock-checkout-complete$/,
-  );
-  if (mockCheckoutMatch && request.method() === "POST") {
-    await route.fulfill(jsonResponse(200, { ok: true }));
-    return;
-  }
-
-  await route.fulfill(jsonResponse(404, { error: { message: "not found" } }));
 }
 
 async function handleWorkspaceApiRoute(

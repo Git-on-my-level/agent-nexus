@@ -17,199 +17,6 @@ function daysAgo(days) {
   return atOffsetMs(-days * 24 * 60 * 60 * 1000);
 }
 
-export const QA_HOSTED_ACCOUNT = {
-  id: "acct_qa_jordan",
-  email: "jordan@agentnexus.dev",
-  display_name: "Jordan Kim",
-};
-
-export const QA_HOSTED_ORGS = [
-  {
-    id: "org_qa_primary",
-    slug: "northwind-labs",
-    display_name: "Northwind Autonomy",
-    plan_tier: "team",
-    status: "active",
-    created_at: daysAgo(60),
-    updated_at: hoursAgo(5),
-  },
-  {
-    id: "org_qa_sidecar",
-    slug: "solstice-ops",
-    display_name: "Solstice Ops",
-    plan_tier: "starter",
-    status: "active",
-    created_at: daysAgo(14),
-    updated_at: hoursAgo(12),
-  },
-];
-
-export const QA_HOSTED_WORKSPACES = [
-  {
-    id: "ws_qa_orbit",
-    organization_id: "org_qa_primary",
-    slug: "orbit",
-    display_name: "Orbit Release",
-    status: "ready",
-    created_at: daysAgo(30),
-    updated_at: hoursAgo(2),
-  },
-  {
-    id: "ws_qa_docs",
-    organization_id: "org_qa_primary",
-    slug: "docs",
-    display_name: "Docs Studio",
-    status: "ready",
-    created_at: daysAgo(18),
-    updated_at: hoursAgo(8),
-  },
-  {
-    id: "ws_qa_staging",
-    organization_id: "org_qa_primary",
-    slug: "staging",
-    display_name: "Staging Fleet",
-    status: "provisioning",
-    created_at: hoursAgo(10),
-    updated_at: hoursAgo(1),
-  },
-];
-
-/** Full UsagePlan-shaped rows matching control-plane JSON (billing.plan_usage_envelopes). */
-function qaHostedUsagePlanEnvelope({
-  id,
-  displayName,
-  wl,
-  artifactCap,
-  storageGb,
-  storageBytes,
-}) {
-  const gb = Number(storageGb);
-  return {
-    id,
-    display_name: displayName,
-    workspace_limit: wl,
-    max_artifacts_per_workspace: artifactCap,
-    artifact_capacity: artifactCap,
-    included_storage_gb: gb,
-    included_storage_bytes:
-      typeof storageBytes === "number" ? storageBytes : gb * 1024 * 1024 * 1024,
-  };
-}
-
-export const QA_HOSTED_BILLING_SUMMARY = {
-  organization_id: "org_qa_primary",
-  plan_tier: "team",
-  billing_account: {
-    organization_id: "org_qa_primary",
-    provider: "stripe",
-    billing_status: "active",
-    stripe_customer_id: "cus_qa_team",
-    stripe_subscription_id: "sub_qa_team",
-    stripe_price_id: "price_qa_team",
-    stripe_subscription_status: "active",
-    current_period_end: atOffsetMs(18 * 24 * 60 * 60 * 1000),
-    cancel_at_period_end: false,
-    last_webhook_event_id: "evt_qa_billing_sync",
-    last_webhook_event_type: "customer.subscription.updated",
-    last_webhook_received_at: hoursAgo(2),
-    created_at: daysAgo(30),
-    updated_at: hoursAgo(2),
-  },
-  usage_summary: {
-    organization_id: "org_qa_primary",
-    plan: {
-      id: "team",
-      display_name: "Pro",
-      workspace_limit: 5,
-      max_artifacts_per_workspace: 125000,
-      artifact_capacity: 125000,
-      included_storage_gb: 25,
-      included_storage_bytes: 25 * 1024 * 1024 * 1024,
-    },
-    usage: {
-      workspace_count: 3,
-      artifact_count: 384,
-      storage_bytes: Math.floor(7.4 * 1024 * 1024 * 1024),
-      storage_gb: 8,
-      monthly_launch_count: 118,
-    },
-    quota: {
-      workspaces_remaining: 2,
-      artifacts_remaining: 124616,
-      storage_bytes_remaining: Math.max(
-        0,
-        Math.floor(25 * 1024 ** 3 - 7.4 * 1024 ** 3),
-      ),
-      storage_gb_remaining: 17,
-    },
-    workspaces: QA_HOSTED_WORKSPACES.map((workspace, index) => {
-      const artifactCounts = [164, 102, 118];
-      const storageGbs = [4, 2, 3];
-      const monthlyLaunches = [42, 38, 38];
-      const gb = storageGbs[index] ?? 0;
-      return {
-        id: workspace.id,
-        slug: workspace.slug,
-        display_name: workspace.display_name,
-        artifact_count: artifactCounts[index] ?? 0,
-        storage_gb: gb,
-        storage_bytes: gb * 1024 ** 3,
-        monthly_launch_count: monthlyLaunches[index] ?? 0,
-        last_active_at:
-          [hoursAgo(2), hoursAgo(8), hoursAgo(1)][index] ?? hoursAgo(1),
-        summary_stale: false,
-        summary_generated_at: hoursAgo(1),
-      };
-    }),
-  },
-  configuration: {
-    provider: "stripe",
-    configured: true,
-    publishable_key_configured: true,
-    secret_key_configured: true,
-    webhook_secret_configured: true,
-    checkout_configured: true,
-    customer_portal_configured: true,
-    plan_price_ids: {
-      starter: "price_qa_starter",
-      team: "price_qa_team",
-      scale: "price_qa_scale",
-    },
-    missing_configuration: [],
-  },
-  plan_usage_envelopes: {
-    starter: qaHostedUsagePlanEnvelope({
-      id: "starter",
-      displayName: "Free",
-      wl: 1,
-      artifactCap: 1000,
-      storageGb: 1,
-      storageBytes: 256 * 1024 * 1024,
-    }),
-    team: qaHostedUsagePlanEnvelope({
-      id: "team",
-      displayName: "Pro",
-      wl: 5,
-      artifactCap: 125_000,
-      storageGb: 25,
-    }),
-    scale: qaHostedUsagePlanEnvelope({
-      id: "scale",
-      displayName: "Scale",
-      wl: 25,
-      artifactCap: 2_500_000,
-      storageGb: 250,
-    }),
-    enterprise: qaHostedUsagePlanEnvelope({
-      id: "enterprise",
-      displayName: "Enterprise",
-      wl: 100,
-      artifactCap: 100_000_000,
-      storageGb: 1000,
-    }),
-  },
-};
-
 export const QA_ACTORS = [
   {
     id: "actor-jordan-human",
@@ -389,7 +196,7 @@ export const QA_AUTH_AUDIT = [
     event_id: "audit_invite_created_qa",
     event_type: "invite_created",
     ts: hoursAgo(2),
-    actor_username: QA_HOSTED_ACCOUNT.email,
+    actor_username: "jordan@agentnexus.dev",
     actor_agent_id: QA_AUTH_AGENT.agent_id,
     actor_actor_id: QA_AUTH_AGENT.actor_id,
     invite_id: "oinv_qa_human_onboarding",
@@ -398,7 +205,7 @@ export const QA_AUTH_AUDIT = [
     event_id: "audit_invite_consumed_qa",
     event_type: "invite_consumed",
     ts: hoursAgo(20),
-    actor_username: QA_HOSTED_ACCOUNT.email,
+    actor_username: "jordan@agentnexus.dev",
     actor_agent_id: QA_AUTH_AGENT.agent_id,
     actor_actor_id: QA_AUTH_AGENT.actor_id,
     subject_username: "iris.docs@agentnexus.dev",

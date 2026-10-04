@@ -33,8 +33,7 @@ function parseLastWorkspaceCookie(raw) {
 
 /**
  * Root `/` and similar: send the user to their last-used workspace if it still
- * resolves; otherwise the default self-host workspace (local provider) or the
- * hosted chooser when using the control plane.
+ * resolves; otherwise the default self-host workspace or the provider chooser.
  */
 export async function redirectToRecentWorkspaceOrChooser(event, pathname = "") {
   const catalog = await resolveWorkspaceCatalog(event);
@@ -75,7 +74,12 @@ export async function redirectToRecentWorkspaceOrChooser(event, pathname = "") {
     );
   }
 
-  throw redirect(307, "/hosted/start");
+  const chooserPath = provider.describeShellCapabilities?.().chooserPath;
+  if (!chooserPath) {
+    const { error } = await import("@sveltejs/kit");
+    throw error(503, "No workspace is configured.");
+  }
+  throw redirect(307, chooserPath);
 }
 
 export function lastWorkspaceCookieValue(organizationSlug, workspaceSlug) {

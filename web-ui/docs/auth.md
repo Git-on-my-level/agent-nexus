@@ -6,14 +6,14 @@ This document complements [AGENTS.md](../AGENTS.md) with one map of auth/session
 
 `OutOfWorkspaceProvider` is the server-side seam for everything that depends on a control plane.
 
-Signal:
-- `ANX_CONTROL_BASE_URL` unset -> `mode: "local"`
-- `ANX_CONTROL_BASE_URL` set -> `mode: "hosted"`
+The standalone OSS build always selects the inert `local` provider. A composed
+application supplies its provider through `src/lib/server/extensions/provider.js`.
+Environment variables alone do not add account routes or commercial UI to OSS.
+See [UI extensions](ui-extensions.md) for composition and ownership.
 
 Implementation:
 - `src/lib/server/outOfWorkspace/index.js`
 - `src/lib/server/outOfWorkspace/local.js`
-- `src/lib/server/outOfWorkspace/hosted.js`
 
 ## Cookies (workspace vs control plane)
 
@@ -27,7 +27,7 @@ Workspace callback routes only write `anx_ui_*`; they never clear the CP cookie.
 
 ## Callback/error taxonomy
 
-Canonical callback error codes are surfaced through `src/lib/hosted/callbackErrorCopy.js`.
+Canonical callback error codes are surfaced through `src/lib/workspaceCallbackErrorCopy.js`.
 
 Notable route behavior:
 - Nested callback (`/o/{org}/w/{workspace}/auth/callback`) always resolves by URL params.

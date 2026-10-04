@@ -1,5 +1,5 @@
 import { isSyntheticAnxHandle } from "$lib/actorSession";
-import { initialsFor } from "$lib/hosted/session.js";
+import { initialsFor } from "$lib/extensions/accountSession.js";
 
 /** Machine-minted handles (`external.<hash>`, `passkey.<slug>.<hex>`) are not names. */
 function isMachineHandle(username) {

@@ -74,22 +74,25 @@ describe("redirectToRecentWorkspaceOrChooser", () => {
     });
   });
 
-  it("redirects to /hosted/start when the provider is hosted", async () => {
+  it("redirects to the provider chooser", async () => {
     const event = { cookies: { get: () => null } };
     workspaceResolverMocks.resolveWorkspaceCatalog.mockResolvedValue({
       defaultWorkspace: { organizationSlug: "local", slug: "local" },
     });
-    oowMocks.getOutOfWorkspaceProvider.mockReturnValue({ mode: "hosted" });
+    oowMocks.getOutOfWorkspaceProvider.mockReturnValue({
+      mode: "hosted",
+      describeShellCapabilities: () => ({ chooserPath: "/choose" }),
+    });
 
     await expect(
       redirectToRecentWorkspaceOrChooser(event, ""),
     ).rejects.toMatchObject({
       status: 307,
-      location: "/hosted/start",
+      location: "/choose",
     });
   });
 
-  it("redirects to /hosted/start when local but no default workspace is configured", async () => {
+  it("returns an unavailable state when no workspace or chooser is configured", async () => {
     const event = { cookies: { get: () => null } };
     workspaceResolverMocks.resolveWorkspaceCatalog.mockResolvedValue({
       defaultWorkspace: null,
@@ -99,8 +102,7 @@ describe("redirectToRecentWorkspaceOrChooser", () => {
     await expect(
       redirectToRecentWorkspaceOrChooser(event, ""),
     ).rejects.toMatchObject({
-      status: 307,
-      location: "/hosted/start",
+      status: 503,
     });
   });
 });

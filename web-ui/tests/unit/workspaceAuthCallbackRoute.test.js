@@ -347,7 +347,7 @@ describe("workspace auth callback route", () => {
     });
   });
 
-  it("redirects browser callback replay failures to stable hosted recovery", async () => {
+  it("redirects browser callback replay failures to provider recovery", async () => {
     globalThis.fetch = vi.fn();
     const event = createEvent(
       {
@@ -358,6 +358,9 @@ describe("workspace auth callback route", () => {
       {
         headers: { accept: "text/html" },
         outOfWorkspace: mockHostedProvider({
+          describeShellCapabilities: () => ({
+            recoveryPath: "/account/recovery",
+          }),
           exchangeLaunchSession: vi.fn(async () => ({
             ok: false,
             status: 409,
@@ -371,7 +374,7 @@ describe("workspace auth callback route", () => {
     await expect(POST(event)).rejects.toMatchObject({
       status: 303,
       location:
-        "/hosted/dashboard?launch_error=exchange_invalid&workspace_id=ws_123",
+        "/account/recovery?launch_error=exchange_invalid&workspace_id=ws_123",
     });
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });

@@ -1,7 +1,7 @@
 import { env as privateEnv } from "$env/dynamic/private";
 import { redirect } from "@sveltejs/kit";
 
-import { sanitizeHostedReturnPath } from "$lib/hosted/launchFlow.js";
+import { sanitizeReturnPath } from "$lib/workspaceLaunchFlow.js";
 import { loadWorkspaceAuthenticatedAgent } from "$lib/server/authSession";
 import {
   hostedWorkspaceCoreBaseUrl,
@@ -52,7 +52,7 @@ export async function load(event) {
   }
 
   if (agent?.agent_id) {
-    const returnTo = sanitizeHostedReturnPath(
+    const returnTo = sanitizeReturnPath(
       event.url.searchParams.get("return_to") ??
         event.url.searchParams.get("return_path") ??
         "/",
@@ -74,7 +74,7 @@ export async function load(event) {
   const workspaceID = String(
     workspace.workspaceId ?? workspace.id ?? "",
   ).trim();
-  const returnPath = sanitizeHostedReturnPath(
+  const returnPath = sanitizeReturnPath(
     event.url.searchParams.get("return_path") ??
       event.url.searchParams.get("return_to") ??
       "/",

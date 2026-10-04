@@ -121,7 +121,7 @@ func main() {
 		sidecarRouterPollInterval   = envDuration("ANX_SIDECAR_ROUTER_POLL_INTERVAL", time.Second)
 		sidecarRouterCacheTTL       = envDuration("ANX_SIDECAR_ROUTER_PRINCIPAL_CACHE_TTL", time.Minute)
 		shutdownTimeout             = envDuration("ANX_SHUTDOWN_TIMEOUT", 15*time.Second)
-		enforceLocalQuotas          = envBool("ANX_ENFORCE_LOCAL_QUOTAS", true)
+		enforceLocalQuotas          = localQuotaEnforcementEnabled()
 		workspaceAccessMode         = envString("ANX_WORKSPACE_ACCESS_MODE", "")
 		workspaceQuota              = primitives.WorkspaceQuota{
 			MaxBlobBytes:   envInt64("ANX_WORKSPACE_MAX_BLOB_BYTES", defaultWorkspaceMaxBlobBytes),
@@ -163,13 +163,11 @@ func main() {
 	flag.StringVar(&projectionMode, "projection-mode", projectionMode, "projection maintenance mode (background|manual)")
 	flag.DurationVar(&projectionPollInterval, "projection-maintenance-interval", projectionPollInterval, "poll interval used by background projection maintenance")
 	flag.IntVar(&projectionBatchSize, "projection-maintenance-batch-size", projectionBatchSize, "max dirty thread projections refreshed per maintenance pass")
-	flag.BoolVar(&enforceLocalQuotas, "enforce-local-quotas", enforceLocalQuotas, "enforce workspace-local write quotas")
+	flag.BoolVar(&enforceLocalQuotas, "enforce-local-quotas", enforceLocalQuotas, "opt in to workspace capacity quotas (technical safety limits remain enabled)")
 	flag.StringVar(&workspaceAccessMode, "workspace-access-mode", workspaceAccessMode, "workspace HTTP API mode: read_write or read_only (hosted quota enforcement)")
 	flag.Parse()
 
-	if !enforceLocalQuotas {
-		workspaceQuota = primitives.WorkspaceQuota{}
-	}
+	workspaceQuota = effectiveWorkspaceQuota(enforceLocalQuotas, workspaceQuota)
 
 	parsedProjectionMode, err := server.ParseProjectionMode(projectionMode)
 	if err != nil {

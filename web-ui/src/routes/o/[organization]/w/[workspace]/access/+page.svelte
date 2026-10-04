@@ -711,7 +711,8 @@
           To invite a person, go to
           <a
             class="font-medium text-accent-text hover:text-accent-text"
-            href="/hosted/organizations">your Organizations</a
+            href={$page.data?.shellCapabilities?.peoplePath || "/"}
+            >{$page.data?.shellCapabilities?.peopleLabel || "your account"}</a
           >.
         </p>
       {/if}

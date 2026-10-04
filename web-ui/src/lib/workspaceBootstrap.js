@@ -1,3 +1,4 @@
+import { buildSignInPath } from "$lib/extensions/launchFlow.js";
 import { requestWorkspaceActivation } from "./workspaceActivation.js";
 import { get } from "svelte/store";
 
@@ -37,10 +38,7 @@ import {
   setDevActorMode,
   setDevActorModeReady,
 } from "$lib/workspaceContext";
-import {
-  buildHostedSignInPath,
-  sanitizeHostedReturnPath,
-} from "$lib/hosted/launchFlow.js";
+import { sanitizeReturnPath } from "$lib/workspaceLaunchFlow.js";
 import { installFetchLoopGuard } from "$lib/dev/fetchLoopGuard.js";
 import { createRedirectLoopGuard } from "$lib/dev/redirectLoopGuard.js";
 
@@ -145,11 +143,11 @@ export function buildLoginRedirectDestination({
   search = "",
   workspacePath,
 }) {
-  const returnPath = sanitizeHostedReturnPath(
+  const returnPath = sanitizeReturnPath(
     `${currentAppPath || "/"}${search || ""}`,
   );
   if (hostedMode) {
-    return buildHostedSignInPath({
+    return buildSignInPath({
       organizationSlug,
       workspaceSlug,
       workspaceId,

@@ -5,7 +5,7 @@
   import {
     resolveHostedSupportUrl,
     supportLinkOpensInNewTab,
-  } from "$lib/hosted/supportLink.js";
+  } from "$lib/extensions/supportLink.js";
 
   let {
     title = "",
@@ -34,13 +34,13 @@
   >
     {message}
   </p>
-  {#if supportHint}
+  {#if supportHint && supportHref}
     <p class="mt-2 text-meta text-danger-text">
       Need help? <a
         class="font-medium underline-offset-2 hover:underline"
         href={supportHref}
         {...supportExternal ? { target: "_blank", rel: "noreferrer" } : {}}
-        >Contact Agent Nexus support</a
+        >Contact support</a
       >.
     </p>
   {/if}

@@ -58,7 +58,7 @@ variables.
 | WebAuthn allowed origins | n/a | `ANX_WEBAUTHN_ALLOWED_ORIGINS` | unset |
 | WebAuthn RP display name | n/a | `ANX_WEBAUTHN_RP_DISPLAY_NAME` | `Agent Nexus` |
 | CORS allowed origins | n/a | `ANX_CORS_ALLOWED_ORIGINS` | unset (CORS disabled) |
-| Enforce local workspace quotas on writes | `--enforce-local-quotas` | `ANX_ENFORCE_LOCAL_QUOTAS` | `true` |
+| Enforce local workspace quotas on writes | `--enforce-local-quotas` | `ANX_ENFORCE_LOCAL_QUOTAS` | `false` |
 | Workspace storage quota (blob bytes plus SQLite bytes when measurable) | n/a | `ANX_WORKSPACE_MAX_BLOB_BYTES` | `1073741824` |
 | Workspace artifact quota | n/a | `ANX_WORKSPACE_MAX_ARTIFACTS` | `100000` |
 | Workspace document quota | n/a | `ANX_WORKSPACE_MAX_DOCUMENTS` | `50000` |
@@ -322,3 +322,16 @@ are separate one-time grants; revoke outstanding tokens separately if necessary.
 
 Use the stdin-over-SSH flow in [the CLI runbook](../../cli/docs/runbook.md#fleet-enrollment-by-an-auth-admin-agent)
 for fleet enrollment. Logs and token lists never contain enrollment secrets.
+
+### Capacity policy and technical safety
+
+Self-hosted workspaces have no capacity quotas by default. Usage counters and
+`GET /v1/usage/summary` remain available. `ANX_WORKSPACE_MAX_*` capacity settings
+apply only when explicitly opting in with `ANX_ENFORCE_LOCAL_QUOTAS=true` (or
+`--enforce-local-quotas`). External deployment policy may instead set the generic
+`ANX_WORKSPACE_ACCESS_MODE`; this is independent of local quotas.
+
+Technical limits stay active in both modes: `ANX_REQUEST_BODY_LIMIT_BYTES`,
+`ANX_AUTH_REQUEST_BODY_LIMIT_BYTES`, `ANX_CONTENT_REQUEST_BODY_LIMIT_BYTES`,
+`ANX_ATTACHMENT_MAX_UPLOAD_BYTES`, auth/write rate limits, and blob integrity
+and reference checks. Disabling capacity quotas does not disable these limits.

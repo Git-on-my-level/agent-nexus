@@ -32,7 +32,10 @@
   import CommandPalette from "$lib/components/CommandPalette.svelte";
   import { navIconPath } from "$lib/icons.js";
   import { commandPaletteRequests } from "$lib/stores/commandPalette.js";
-  import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
+  import {
+    hostedSession,
+    loadHostedSession,
+  } from "$lib/extensions/accountSession.js";
   import { coreClient } from "$lib/coreClient";
   import { computeWorkspaceShellIdentity } from "$lib/workspaceShellIdentity.js";
   import {
@@ -106,7 +109,7 @@
   );
   let hostedMode = $derived(shellCapabilities.mode === "hosted");
   let hostedAccountPath = $derived(
-    String(shellCapabilities.accountPath ?? "").trim() || "/hosted/onboarding",
+    String(shellCapabilities.accountPath ?? "").trim() || "/",
   );
   let activeWorkspaceSlug = $derived(activeWorkspace?.slug ?? "");
   let activeOrganizationSlug = $derived(
