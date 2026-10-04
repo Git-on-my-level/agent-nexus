@@ -8,18 +8,34 @@ import (
 )
 
 func main() {
-	var inputs []string
+	var inputs struct {
+		Reports   []string `json:"reports"`
+		Summaries []string `json:"summaries"`
+	}
 	if err := json.NewDecoder(os.Stdin).Decode(&inputs); err != nil {
 		panic(err)
 	}
-	results := make([]struct {
-		Recognized bool `json:"recognized"`
-		Valid      bool `json:"valid"`
-	}, len(inputs))
-	for i, content := range inputs {
+	results := struct {
+		Reports []struct {
+			Recognized bool `json:"recognized"`
+			Valid      bool `json:"valid"`
+		} `json:"reports"`
+		Summaries []visualreport.Progress `json:"summaries"`
+	}{
+		Reports: make([]struct {
+			Recognized bool `json:"recognized"`
+			Valid      bool `json:"valid"`
+		}, len(inputs.Reports)),
+		Summaries: make([]visualreport.Progress, len(inputs.Summaries)),
+	}
+	for i, content := range inputs.Reports {
 		result := visualreport.Validate([]byte(content))
-		results[i].Recognized = result.Recognized
-		results[i].Valid = result.Valid
+		results.Reports[i].Recognized = result.Recognized
+		results.Reports[i].Valid = result.Valid
+	}
+	for i, markdown := range inputs.Summaries {
+		_, progress, _ := visualreport.Summary(markdown)
+		results.Summaries[i] = progress
 	}
 	if err := json.NewEncoder(os.Stdout).Encode(results); err != nil {
 		panic(err)

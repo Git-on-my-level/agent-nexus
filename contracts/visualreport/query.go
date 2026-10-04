@@ -8,7 +8,14 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"sort"
 	"strings"
+
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
+	extensionast "github.com/yuin/goldmark/extension/ast"
+	"github.com/yuin/goldmark/text"
 )
 
 const MaxRows = 2000
@@ -156,104 +163,104 @@ type Progress struct {
 	Total int `json:"total"`
 }
 
-var checkbox = regexp.MustCompile(`^\s*-\s+\[([ xX])\](?:\s|$)`)
 var needsLine = regexp.MustCompile(`(?i)^Needs\s+[^:]+:`)
-var listItemMarker = regexp.MustCompile(`^(?:[*+-]|[0-9]{1,9}[.)])[ \t]+`)
 
-type listContainer struct {
-	contentIndent int
-}
+var summaryMarkdown = goldmark.New(goldmark.WithExtensions(extension.GFM))
 
-// listItemIndent returns the absolute column where a list item's content
-// begins. CommonMark permits up to three spaces before a marker and uses one
-// to four columns of padding after it.
-func listItemIndent(raw string, parentIndent int) (int, bool) {
-	indent := len(raw) - len(strings.TrimLeft(raw, " "))
-	if indent < parentIndent || indent-parentIndent > 3 {
-		return 0, false
-	}
-	match := listItemMarker.FindStringIndex(raw[indent:])
-	if match == nil {
-		return 0, false
-	}
-	markerEnd := indent + match[1]
-	markerStart := indent
-	for markerStart < len(raw) && raw[markerStart] == ' ' {
-		markerStart++
-	}
-	markerWidth := 1
-	if raw[markerStart] >= '0' && raw[markerStart] <= '9' {
-		markerWidth = 0
-		for i := markerStart; i < markerEnd && raw[i] >= '0' && raw[i] <= '9'; i++ {
-			markerWidth++
+func lineStarts(source []byte) []int {
+	starts := []int{0}
+	for offset, b := range source {
+		if b == '\n' {
+			starts = append(starts, offset+1)
 		}
-		markerWidth++ // ordered-list delimiter
 	}
-	padding := markerEnd - indent - markerWidth
-	if padding > 4 {
-		padding = 1
-	}
-	return indent + markerWidth + padding, true
+	return starts
 }
 
-// Ignore fenced examples; they are not commitments. Preserve plain text for the UI.
+func sourceLine(starts []int, offset int) int {
+	line := sort.Search(len(starts), func(i int) bool { return starts[i] > offset }) - 1
+	if line < 0 {
+		return 0
+	}
+	return line
+}
+
+func markVisibleBlockLines(node ast.Node, starts []int, visible []bool) {
+	if node.Type() != ast.TypeBlock || node.Lines() == nil {
+		return
+	}
+	if _, fenced := node.(*ast.FencedCodeBlock); fenced {
+		return
+	}
+	if _, indented := node.(*ast.CodeBlock); indented {
+		return
+	}
+	// Containers span their descendants, including code. Only mark leaf block
+	// text so a list or quote cannot make a nested code block visible again.
+	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+		if child.Type() == ast.TypeBlock {
+			return
+		}
+	}
+	for i := 0; i < node.Lines().Len(); i++ {
+		segment := node.Lines().At(i)
+		first := sourceLine(starts, segment.Start)
+		lastOffset := segment.Stop - 1
+		if lastOffset < segment.Start {
+			lastOffset = segment.Start
+		}
+		last := sourceLine(starts, lastOffset)
+		for line := first; line <= last && line < len(visible); line++ {
+			visible[line] = true
+		}
+	}
+}
+
+func markTaskLine(node ast.Node, starts []int, taskLines []bool) {
+	for parent := node.Parent(); parent != nil; parent = parent.Parent() {
+		if parent.Type() != ast.TypeBlock || parent.Lines() == nil || parent.Lines().Len() == 0 {
+			continue
+		}
+		line := sourceLine(starts, parent.Lines().At(0).Start)
+		if line < len(taskLines) {
+			taskLines[line] = true
+		}
+		return
+	}
+}
+
+// Ignore code examples; they are not commitments. Goldmark's GFM AST defines
+// task items and code boundaries so counting follows CommonMark containers.
 func Summary(markdown string) (string, Progress, []string) {
+	source := []byte(markdown)
+	doc := summaryMarkdown.Parser().Parse(text.NewReader(source))
+	starts := lineStarts(source)
+	visible := make([]bool, len(starts))
+	taskLines := make([]bool, len(starts))
 	first := ""
 	progress := Progress{}
 	needs := []string{}
-	var fence byte
-	fenceLength := 0
-	containers := []listContainer{}
-	for _, raw := range strings.Split(markdown, "\n") {
-		line := strings.TrimSpace(raw)
-		indent := len(raw) - len(strings.TrimLeft(raw, " "))
-		if fence == 0 {
-			for len(containers) > 0 && indent < containers[len(containers)-1].contentIndent {
-				containers = containers[:len(containers)-1]
-			}
-			parentIndent := 0
-			if len(containers) > 0 {
-				parentIndent = containers[len(containers)-1].contentIndent
-			}
-			if contentIndent, ok := listItemIndent(raw, parentIndent); ok {
-				containers = append(containers, listContainer{contentIndent: contentIndent})
-			}
+	_ = ast.Walk(doc, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
 		}
-		// CommonMark fence indentation is measured after removing list item
-		// container indentation; a four-space raw indent may therefore be zero.
-		effectiveIndent := indent
-		markerLine := strings.TrimLeft(raw, " ")
-		if len(containers) > 0 && indent >= containers[len(containers)-1].contentIndent {
-			effectiveIndent -= containers[len(containers)-1].contentIndent
-			markerLine = strings.TrimLeft(raw[containers[len(containers)-1].contentIndent:], " ")
-		}
-		// CommonMark permits at most three spaces of indentation; closers use
-		// the opening character and length and cannot have an info string.
-		if effectiveIndent <= 3 && len(markerLine) >= 3 && (markerLine[0] == '`' || markerLine[0] == '~') {
-			marker := markerLine[0]
-			length := 0
-			for length < len(markerLine) && markerLine[length] == marker {
-				length++
-			}
-			tail := markerLine[length:]
-			if fence == 0 && length >= 3 && (marker != '`' || !strings.Contains(tail, "`")) {
-				fence = marker
-				fenceLength = length
-				continue
-			}
-			if fence == marker && length >= fenceLength && strings.Trim(tail, " \t\r") == "" {
-				fence = 0
-				continue
-			}
-		}
-		if fence != 0 || line == "" {
-			continue
-		}
-		if match := checkbox.FindStringSubmatch(raw); match != nil {
+		if checkbox, ok := node.(*extensionast.TaskCheckBox); ok {
 			progress.Total++
-			if strings.EqualFold(match[1], "x") {
+			if checkbox.IsChecked {
 				progress.Done++
 			}
+			markTaskLine(node, starts, taskLines)
+		}
+		markVisibleBlockLines(node, starts, visible)
+		return ast.WalkContinue, nil
+	})
+
+	for i, raw := range strings.Split(markdown, "\n") {
+		if i >= len(visible) || !visible[i] || taskLines[i] {
+			continue
+		}
+		line := strings.TrimSpace(raw)
+		if line == "" {
 			continue
 		}
 		if needsLine.MatchString(line) {

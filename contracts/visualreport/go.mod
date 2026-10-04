@@ -2,6 +2,9 @@ module agent-nexus-visualreport
 
 go 1.23.0
 
-require golang.org/x/net v0.41.0
+require (
+	github.com/yuin/goldmark v1.7.8
+	golang.org/x/net v0.41.0
+)
 
 require golang.org/x/text v0.26.0 // indirect

@@ -16,14 +16,19 @@ func TestSharedReportCorpus(t *testing.T) {
 	var cases []struct {
 		Name, Content     string
 		Recognized, Valid bool
+		GoValid           *bool `json:"go_valid"`
 	}
 	if err := json.Unmarshal(raw, &cases); err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range cases {
 		result := Validate([]byte(tc.Content))
-		if result.Recognized != tc.Recognized || result.Valid != tc.Valid {
-			t.Fatalf("%s: %v", tc.Name, result.Errors)
+		expectedValid := tc.Valid
+		if tc.GoValid != nil {
+			expectedValid = *tc.GoValid
+		}
+		if result.Recognized != tc.Recognized || result.Valid != expectedValid {
+			t.Fatalf("%s: got recognized=%v valid=%v, want %v/%v: %v", tc.Name, result.Recognized, result.Valid, tc.Recognized, expectedValid, result.Errors)
 		}
 	}
 }

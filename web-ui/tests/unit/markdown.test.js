@@ -1,11 +1,31 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 
 import {
+  countMarkdownTaskProgress,
   extractDocumentOutline,
   renderMarkdown,
 } from "../../src/lib/markdown.js";
 
+const summaryFixtures = JSON.parse(
+  readFileSync(
+    new URL(
+      "../../../contracts/fixtures/visual-reports/summaries.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+);
+
 describe("markdown", () => {
+  for (const fixture of summaryFixtures) {
+    it(`counts GFM tasks for ${fixture.name}`, () => {
+      expect(countMarkdownTaskProgress(fixture.markdown)).toEqual(
+        fixture.progress,
+      );
+    });
+  }
+
   it("returns an empty string for empty or non-string input", () => {
     expect(renderMarkdown("")).toBe("");
     expect(renderMarkdown(null)).toBe("");

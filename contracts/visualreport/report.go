@@ -32,7 +32,6 @@ var (
 	timestampPattern  = regexp.MustCompile(`^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$`)
 	reportKindPattern = regexp.MustCompile(`"kind"` + jsSpacePattern + `*:` + jsSpacePattern + `*"anx\.visual-report[^"\r\n]*"`)
 	ipv4NumberPattern = regexp.MustCompile(`(?i)^(?:[0-9]+|0x[0-9a-f]*)$`)
-	whatwgIDNA        = idna.New(idna.MapForLookup(), idna.Transitional(false), idna.StrictDomainName(false), idna.CheckHyphens(false), idna.BidiRule())
 )
 
 type Result struct {
@@ -223,7 +222,7 @@ func jsWhitespace(r rune) bool {
 }
 func safeURL(value any) bool {
 	s, ok := value.(string)
-	if !ok || strLen(s) > 2048 || (!strings.HasPrefix(strings.ToLower(s), "http://") && !strings.HasPrefix(strings.ToLower(s), "https://")) {
+	if !ok || strLen(s) > 2048 {
 		return false
 	}
 	for _, r := range s {
@@ -244,7 +243,7 @@ func safeURL(value any) bool {
 		}
 	}
 	u, err := url.Parse(s)
-	if err != nil || u.Hostname() == "" || u.User != nil {
+	if err != nil || u.Opaque != "" || u.User != nil || (!strings.EqualFold(u.Scheme, "http") && !strings.EqualFold(u.Scheme, "https")) || u.Hostname() == "" {
 		return false
 	}
 	if port := u.Port(); port != "" {
@@ -254,14 +253,11 @@ func safeURL(value any) bool {
 		}
 	}
 	host := u.Hostname()
-	if strings.ContainsAny(host, "%<>^|{}\"`") {
-		return false
-	}
 	// net/url before Go 1.27 accepts bracketed non-IP hosts. Validate the
 	// brackets ourselves so all supported toolchains follow the same contract.
 	if strings.HasPrefix(u.Host, "[") {
 		addr, err := netip.ParseAddr(host)
-		if err != nil || !addr.Is6() {
+		if err != nil || !addr.Is6() || addr.Zone() != "" {
 			return false
 		}
 		return true
@@ -269,28 +265,67 @@ func safeURL(value any) bool {
 		return false
 	}
 
-	// Browsers run DNS hosts through UTS #46 before accepting them. Go's
-	// net/url parser does not, and otherwise accepts disallowed IDNA code
-	// points such as joiners without valid context.
-	asciiHost, err := whatwgIDNA.ToASCII(host)
-	if err != nil {
-		return false
-	}
+	return safeDNSHost(host)
+}
 
-	// Numeric host suffixes are IPv4 in WHATWG URL. Require canonical dotted
-	// decimal so Go and the browser cannot interpret the same hostname differently.
-	tail := asciiHost[strings.LastIndex(asciiHost, ".")+1:]
-	if ipv4NumberPattern.MatchString(tail) {
-		addr, err := netip.ParseAddr(host)
-		if err != nil || !addr.Is4() {
+// safeDNSHost deliberately accepts a small ASCII hostname language. WHATWG
+// URL parsing applies IDNA and legacy IPv4-number rules that Go's URL parser
+// does not; rejecting outside this allowlist keeps Go from storing URLs the UI
+// will reject or interpret differently.
+func safeDNSHost(host string) bool {
+	for i := 0; i < len(host); i++ {
+		if host[i] >= 0x80 {
 			return false
 		}
 	}
+	host = strings.ToLower(host)
+	if addr, err := netip.ParseAddr(host); err == nil && addr.Is4() {
+		return addr.String() == host
+	}
+	if strings.HasSuffix(host, ".") {
+		host = strings.TrimSuffix(host, ".")
+		if strings.HasSuffix(host, ".") {
+			return false
+		}
+	}
+	if len(host) == 0 || len(host) > 253 {
+		return false
+	}
+	labels := strings.Split(host, ".")
+	for _, label := range labels {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for i := 0; i < len(label); i++ {
+			c := label[i]
+			if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') {
+				return false
+			}
+		}
+		if strings.HasPrefix(label, "xn--") && !roundTripsPunycode(label) {
+			return false
+		}
+	}
+	// WHATWG treats a numeric final label as an IPv4 address (including hex
+	// spellings), not as a DNS label. Only canonical dotted-decimal IPv4 above
+	// is allowed to pass that interpretation.
+	if ipv4NumberPattern.MatchString(labels[len(labels)-1]) {
+		return false
+	}
 	return true
+}
+
+func roundTripsPunycode(label string) bool {
+	decoded, err := idna.Punycode.ToUnicode(label)
+	if err != nil || decoded == label {
+		return false
+	}
+	encoded, err := idna.Punycode.ToASCII(decoded)
+	return err == nil && strings.EqualFold(encoded, label)
 }
 func (v *validator) url(value any, path string) {
 	if !safeURL(value) {
-		v.add(path, "must be an absolute HTTP(S) URL without credentials")
+		v.add(path, "must be an absolute HTTP(S) URL without credentials and use an ASCII hostname (punycode internationalized domains)")
 	}
 }
 func numeric(value any) (float64, bool) {
