@@ -18830,7 +18830,7 @@
     },
     {
       "name": "write",
-      "command_count": 55,
+      "command_count": 56,
       "command_ids": [
         "agent.inbox.answers.read",
         "agent.notifications.dismiss",

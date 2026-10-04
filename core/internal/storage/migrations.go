@@ -997,6 +997,8 @@ func applyMigration43ReportIndexes(ctx context.Context, tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
 func applyMigration48HumanAttentionAnswerReads(ctx context.Context, tx *sql.Tx) error {
 	var exists int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='events'`).Scan(&exists); err != nil {

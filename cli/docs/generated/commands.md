@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `195`
+- Commands: `197`
 
 ## `actors.create`
 
@@ -29,6 +29,32 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `actors`, `auth`
 - Error codes: `auth_required`, `invalid_token`
 - Output: Returns `{ actors, next_cursor? }`.
+
+## `agent.inbox.answers.read`
+
+- CLI path: `agent inbox answers read`
+- HTTP: `POST /agent-inbox/answers/read`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `json-body`
+- Why: Persist answer-level read state independently from a wake notification batch.
+- Concepts: `agents`, `inbox`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Output: Returns `{ answer }` with the per-answer read state.
+- Agent notes: Only the requesting agent can mark one of its own response events read. This state is independent from wake notification read state.
+
+## `agent.inbox.asks.list`
+
+- CLI path: `agent inbox asks list`
+- HTTP: `GET /agent-inbox/asks`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Requester-scoped projection of open and answered asks, including per-answer read state.
+- Concepts: `agents`, `inbox`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Output: Returns `{ items, page_info }` with keyset pagination.
+- Agent notes: Results are scoped to the authenticated requester and keyset-paginated; do not infer open state from a partial event timeline.
 
 ## `agent.notification-receipts.stream`
 

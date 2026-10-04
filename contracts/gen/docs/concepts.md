@@ -495,7 +495,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `write`
 
-- Commands: `55`
+- Commands: `56`
 - Command IDs:
   - `agent.inbox.answers.read`
   - `agent.notifications.dismiss`
