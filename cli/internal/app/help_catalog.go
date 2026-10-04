@@ -51,6 +51,7 @@ var runtimeHelpManualDocTopics = []runtimeHelpDocTopic{
 	{Path: "config map", Kind: "manual", Summary: "Map a directory glob to a workspace."},
 	{Path: "config unmap", Kind: "manual", Summary: "Remove a directory rule."},
 	{Path: "config show", Kind: "manual", Summary: "Print effective CLI settings, per-field sources, precedence, and env var hints (tokens redacted)."},
+	{Path: "doctor", Kind: "manual", Summary: "Report workspace resolution and local/network preconditions."},
 }
 
 func runtimeHelpCatalogSnapshot() runtimeHelpCatalog {

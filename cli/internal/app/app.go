@@ -121,6 +121,17 @@ func (a *App) Run(args []string) int {
 		return 0
 	}
 
+	// Parsed help is dispatched to a local renderer immediately. No command
+	// exempted as help can later enter a network-capable command handler.
+	if topic, help := commandHelpTopic(remaining); help {
+		text, ok := helpTopicText(topic)
+		if !ok {
+			return a.renderError(resolveMachineCommandIdentity("help"), jsonMode, errnorm.Usage("unknown_command", "unknown help topic "+topic))
+		}
+		a.renderEnvelope(a.Stdout, jsonMode, output.Envelope{OK: true, Command: "help", Result: map[string]any{"help_text": text}})
+		return 0
+	}
+
 	cmdPeek := remaining[0]
 	subPeek := ""
 	if len(remaining) > 1 {
@@ -209,7 +220,7 @@ func needsAgentIdentity(args []string) bool {
 	if len(args) == 0 {
 		return false
 	}
-	if hasHelpToken(args) {
+	if _, help := commandHelpTopic(args); help {
 		return false
 	}
 	if args[0] == "debug" && len(args) > 1 && args[1] == "meta" {
@@ -536,31 +547,9 @@ func isConfigLenientImportCommand(args []string) bool {
 	if len(args) == 0 {
 		return true
 	}
-	for _, arg := range args {
-		if isHelpToken(arg) {
-			return true
-		}
-	}
 	if importSubcommandSpec.normalize(args[0]) != "apply" {
 		return true
 	}
-	return !hasTrueBoolFlag(args[1:], "execute")
-}
-
-func hasTrueBoolFlag(args []string, flagName string) bool {
-	for _, arg := range args {
-		name, value, hasValue, isFlag := parseLongOptionToken(arg)
-		if !isFlag || name != flagName {
-			continue
-		}
-		if !hasValue {
-			return true
-		}
-		parsed, err := strconvParseBool(value)
-		if err != nil {
-			return true
-		}
-		return parsed
-	}
-	return false
+	flags, err := parseImportApplyFlags(args[1:])
+	return err == nil && !flags.execute.value
 }

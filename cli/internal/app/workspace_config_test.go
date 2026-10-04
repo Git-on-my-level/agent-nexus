@@ -3,6 +3,8 @@ package app
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -220,5 +222,102 @@ func TestExplicitURLBypassesCorruptPreferences(t *testing.T) {
 	stdout.Reset()
 	if exit := a.Run([]string{"--json", "doctor"}); exit == 0 || !strings.Contains(stdout.String(), "workspace_config_invalid") {
 		t.Fatalf("corrupt file ignored: %s", stdout)
+	}
+}
+
+// Intercept the default transport so this test cannot leak its fixture bearer
+// to localhost, an enrolled endpoint, or any other network destination.
+type workspaceRecordingTransport struct{ requests []*http.Request }
+
+func (r *workspaceRecordingTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	r.requests = append(r.requests, request)
+	return nil, fmt.Errorf("request intercepted by workspace regression test")
+}
+
+func TestHelpFlagValuesNeverBypassWorkspaceResolution(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".config", "anx")
+	writeWorkspaceHost(t, dir, "ws_a", "https://a.example")
+	writeWorkspaceHost(t, dir, "ws_b", "https://b.example")
+	transport := &workspaceRecordingTransport{}
+	original := http.DefaultTransport
+	http.DefaultTransport = transport
+	t.Cleanup(func() { http.DefaultTransport = original })
+	for _, commandArgs := range [][]string{
+		{"topics", "message", "topic:test", "--body", "--help"},
+		{"topics", "message", "topic:test", "--body", "-h"},
+		{"topics", "message", "topic:test", "--body", "help"},
+		{"topics", "message", "topic:test", "--body=--help"},
+		{"import", "apply", "--plan", "--help", "--execute"},
+		{"import", "apply", "--plan", "fixture.json", "--execute=false", "--execute=true"},
+	} {
+		t.Run(strings.Join(commandArgs, " "), func(t *testing.T) {
+			a, stdout := workspaceTestApp(t, home, home, map[string]string{"ANX_ACCESS_TOKEN": "fixture"})
+			args := append([]string{"--json"}, commandArgs...)
+			if exit := a.Run(args); exit != 2 {
+				t.Fatalf("exit=%d output=%s", exit, stdout)
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if asMap(payload["error"])["code"] != "workspace_ambiguous" {
+				t.Fatalf("output=%s", stdout)
+			}
+			if len(transport.requests) != 0 {
+				t.Fatalf("ambiguous command sent %d requests", len(transport.requests))
+			}
+		})
+	}
+	// The exact reported argv must honor an explicit alias even with a help-
+	// shaped body value. The transport stops the request before any real I/O.
+	for _, body := range []string{"--help", "-h", "help"} {
+		transport.requests = nil
+		a, stdout := workspaceTestApp(t, home, home, map[string]string{"ANX_ACCESS_TOKEN": "fixture"})
+		if exit := a.Run([]string{"--json", "--workspace", "b", "topics", "message", "topic:test", "--body", body}); exit != 6 {
+			t.Fatalf("alias exit=%d output=%s", exit, stdout)
+		}
+		if len(transport.requests) == 0 {
+			t.Fatalf("body %q was treated as help", body)
+		}
+		for _, request := range transport.requests {
+			if request.URL.Scheme != "https" || request.URL.Host != "b.example" || request.Header.Get("Authorization") != "Bearer fixture" {
+				t.Fatalf("wrong workspace: %s", request.URL)
+			}
+		}
+	}
+}
+
+func TestParsedCommandHelpNeverDispatchesNetworkCommand(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".config", "anx")
+	writeWorkspaceHost(t, dir, "ws_a", "https://a.example")
+	writeWorkspaceHost(t, dir, "ws_b", "https://b.example")
+	transport := &workspaceRecordingTransport{}
+	original := http.DefaultTransport
+	http.DefaultTransport = transport
+	t.Cleanup(func() { http.DefaultTransport = original })
+	for _, args := range [][]string{
+		{"topics", "message", "--help"},
+		{"topics", "message", "topic:test", "--body", "literal", "--help"},
+		{"topics", "message", "topic:test", "--body", "--help", "-h"},
+		{"doctor", "--help"}, {"debug", "meta", "--help"},
+	} {
+		a, stdout := workspaceTestApp(t, home, home, map[string]string{"ANX_ACCESS_TOKEN": "fixture"})
+		if exit := a.Run(append([]string{"--json"}, args...)); exit != 0 {
+			t.Fatalf("%v: exit=%d output=%s", args, exit, stdout)
+		}
+		if !strings.Contains(stdout.String(), "help_text") {
+			t.Fatalf("help=%s", stdout)
+		}
+	}
+	// A command with no published help topic also stays local: it must return
+	// a usage error instead of falling through to its network handler.
+	a, stdout := workspaceTestApp(t, home, home, map[string]string{"ANX_ACCESS_TOKEN": "fixture"})
+	if exit := a.Run([]string{"--json", "debug", "meta", "handshake", "--help"}); exit != 2 || !strings.Contains(stdout.String(), "unknown help topic") {
+		t.Fatalf("unknown help: exit=%d output=%s", exit, stdout)
+	}
+	if len(transport.requests) != 0 {
+		t.Fatalf("help dispatched %d requests", len(transport.requests))
 	}
 }

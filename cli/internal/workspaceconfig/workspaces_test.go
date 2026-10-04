@@ -134,3 +134,52 @@ func TestDirectoryRulesFollowSymlinkedHomeAndDirectory(t *testing.T) {
 		t.Fatalf("future directory: rule=%s err=%v", rule, err)
 	}
 }
+
+func TestDirectoryRulesRespectFilesystemCaseSemantics(t *testing.T) {
+	root := t.TempDir()
+	actual := filepath.Join(root, "CamelCase")
+	if err := os.MkdirAll(filepath.Join(actual, "Child"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	actualInfo, err := os.Stat(actual)
+	if err != nil {
+		t.Fatal(err)
+	}
+	differentCase := filepath.Join(root, "camelcase")
+	differentInfo, differentErr := os.Stat(differentCase)
+	equivalent := differentErr == nil && os.SameFile(actualInfo, differentInfo)
+	// No global lowercasing: a differently cased rule applies only if the volume
+	// actually considers the existing directories the same filesystem object.
+	c := Catalog{File: File{Default: "https://a.example", Rules: map[string]string{filepath.Join(differentCase, "**"): "https://b.example"}}}
+	base, source, err := c.Resolve(filepath.Join(actual, "Child"), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if equivalent {
+		if base != "https://b.example" || source == "config:default" {
+			t.Fatalf("case-insensitive volume lost rule: %s via %s", base, source)
+		}
+		// Cwd spelling is normalized as well, including a mixed-case child path.
+		base, _, err = c.Resolve(filepath.Join(root, "CAMELCASE", "cHILD"), root)
+		if err != nil || base != "https://b.example" {
+			t.Fatalf("cwd case: %s err=%v", base, err)
+		}
+		t.Log("verified case-insensitive filesystem equivalence")
+	} else {
+		if base != "https://a.example" || source != "config:default" {
+			t.Fatalf("case-sensitive volume folded paths: %s via %s", base, source)
+		}
+		if err := os.MkdirAll(filepath.Join(differentCase, "Child"), 0700); err != nil {
+			t.Fatal(err)
+		}
+		base, _, err = c.Resolve(filepath.Join(actual, "Child"), root)
+		if err != nil || base != "https://a.example" {
+			t.Fatalf("distinct dirs collapsed: %s err=%v", base, err)
+		}
+		base, _, err = c.Resolve(filepath.Join(differentCase, "Child"), root)
+		if err != nil || base != "https://b.example" {
+			t.Fatalf("exact rule: %s err=%v", base, err)
+		}
+		t.Log("verified case-sensitive filesystem distinction")
+	}
+}

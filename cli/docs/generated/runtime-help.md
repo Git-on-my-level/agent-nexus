@@ -20,6 +20,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `config map` (manual): Map a directory glob to a workspace.
 - `config unmap` (manual): Remove a directory rule.
 - `config show` (manual): Print effective CLI settings, per-field sources, precedence, and env var hints (tokens redacted).
+- `doctor` (manual): Report workspace resolution and local/network preconditions.
 - `bridge` (manual): One bridge per enrolled host for derived-agent wake routing.
 - `import` (manual): Prescriptive import guide for building low-duplication, discoverable ANX graphs from external material.
 - `work` (group): Query commitments, evidence, freshness and refresh state
@@ -699,6 +700,22 @@ Examples:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx config show ... ; anx --json config show ... ; anx config show ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `doctor`
+
+Report workspace resolution and local/network preconditions.
+
+```text
+Doctor: report the resolved workspace and source, enrollment, host key permissions, identity, agentctl and CLI/core version checks. Ambiguous workspace selection fails before networking.
+
+Usage:
+  anx doctor
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx doctor ... ; anx --json doctor ... ; anx doctor ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 

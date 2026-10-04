@@ -12,9 +12,13 @@ func preflightConfigIndependentUsage(args []string) (string, error) {
 }
 
 func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string, error) {
-	if len(args) == 0 || hasHelpToken(args) {
+	if len(args) == 0 {
 		return "", nil
 	}
+	if _, help := commandHelpTopic(args); help {
+		return "help", nil
+	}
+
 	if args[0] == "debug" {
 		if len(args) < 2 || !isDiagnosticGroup(args[1]) {
 			return "debug", errnorm.Usage("unknown_subcommand", "unknown debug group")
@@ -758,7 +762,7 @@ func preflightMinInt(a, b int) int {
 
 func looksLikeStringFlagValue(raw string) bool {
 	raw = strings.TrimSpace(raw)
-	return raw == "-" || looksLikeNegativeNumericFlagValue(raw)
+	return raw == "-" || raw == "--help" || raw == "-h" || looksLikeNegativeNumericFlagValue(raw)
 }
 
 func looksLikeNegativeNumericFlagValue(raw string) bool {

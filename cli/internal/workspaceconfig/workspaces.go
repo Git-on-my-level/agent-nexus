@@ -237,7 +237,7 @@ func canonicalPath(path string) string {
 	prefix := filepath.Clean(path)
 	for {
 		if real, err := filepath.EvalSymlinks(prefix); err == nil {
-			parts := append([]string{real}, suffix...)
+			parts := append([]string{onDiskPath(real)}, suffix...)
 			return filepath.Join(parts...)
 		}
 		parent := filepath.Dir(prefix)
@@ -247,6 +247,55 @@ func canonicalPath(path string) string {
 		suffix = append([]string{filepath.Base(prefix)}, suffix...)
 		prefix = parent
 	}
+}
+
+// onDiskPath recovers the spelling of an existing path component by component.
+// SameFile, rather than case folding, makes differently spelled names equivalent
+// only when this filesystem resolves them to the same directory. EvalSymlinks
+// alone preserves caller spelling on case-insensitive volumes (including APFS).
+func onDiskPath(path string) string {
+	root := filepath.VolumeName(path) + string(filepath.Separator)
+	relative := strings.TrimPrefix(path, root)
+	parent := root
+	for _, component := range strings.Split(relative, string(filepath.Separator)) {
+		if component == "" {
+			continue
+		}
+		requested := filepath.Join(parent, component)
+		entries, err := os.ReadDir(parent)
+		if err != nil {
+			return path
+		}
+		exact := false
+		for _, entry := range entries {
+			if entry.Name() == component {
+				exact = true
+				break
+			}
+		}
+		if exact {
+			parent = requested
+			continue
+		}
+		info, err := os.Stat(requested)
+		if err != nil {
+			return path
+		}
+		found := false
+		for _, entry := range entries {
+			candidate := filepath.Join(parent, entry.Name())
+			candidateInfo, err := entry.Info()
+			if err == nil && os.SameFile(info, candidateInfo) {
+				parent = candidate
+				found = true
+				break
+			}
+		}
+		if !found {
+			return path
+		}
+	}
+	return parent
 }
 
 func canonicalGlob(pattern string) string {

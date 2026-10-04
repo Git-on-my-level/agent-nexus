@@ -1130,6 +1130,9 @@ func helpTopicTextRaw(topic string) (string, bool) {
 	if topic == "env" {
 		return envDocText() + "\n", true
 	}
+	if topic == "doctor" {
+		return "Doctor: report the resolved workspace and source, enrollment, host key permissions, identity, agentctl and CLI/core version checks. Ambiguous workspace selection fails before networking.\n\nUsage:\n  anx doctor\n\n" + formatGlobalFlagUsage(topic), true
+	}
 	if topic == "config" {
 		return "Config: anx config workspaces lists aliases and the cwd rule; anx config use <alias|url> sets a user-global default. Use anx config map <path-glob> <alias|url> and anx config unmap <path-glob> for directory rules. anx config show prints the resolved workspace and sources (secrets redacted).\n", true
 	}

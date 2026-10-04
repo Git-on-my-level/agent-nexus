@@ -14,7 +14,7 @@ import (
 // Only workspace-independent commands may run while selection is ambiguous.
 // In particular, config show and doctor must expose selection failures.
 func workspaceIndependentCommand(args []string) bool {
-	if len(args) == 0 || hasHelpToken(args) {
+	if len(args) == 0 {
 		return true
 	}
 	switch args[0] {
