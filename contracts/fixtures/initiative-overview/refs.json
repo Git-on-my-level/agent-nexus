@@ -1,0 +1,32 @@
+{
+  "items": [
+    {
+      "ref": "card:initiative",
+      "kind": "card",
+      "title": "Initiative",
+      "status": "backlog",
+      "phase": "backlog",
+      "owner": "actor:actor-1",
+      "owner_display": "Actor 1",
+      "board": {
+        "ref": "board:portfolio",
+        "title": "Portfolio"
+      },
+      "priority": "p1",
+      "last_moved_at": "2026-10-04T12:00:00Z",
+      "next_step": {
+        "title": "Build"
+      },
+      "progress": {
+        "done": 0,
+        "total": 1
+      },
+      "url": "/tasks/initiative",
+      "resolvable": true
+    },
+    {
+      "ref": "card:unknown",
+      "resolvable": false
+    }
+  ]
+}

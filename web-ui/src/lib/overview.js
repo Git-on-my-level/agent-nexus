@@ -455,6 +455,7 @@ export async function loadOverview(client, { now = Date.now() } = {}) {
       rows: snapshot.needs_you.rows.slice(0, PREVIEW_LIMIT),
     },
     initiatives: snapshot.initiatives,
+    sinceYouLastLooked: snapshot.since_you_last_looked,
     reports: {
       ...snapshot.dashboard,
       reports: (snapshot.dashboard.reports || []).flatMap((entry) => {
@@ -480,7 +481,7 @@ export async function loadOverview(client, { now = Date.now() } = {}) {
     work: {
       status: snapshot.work.status,
       total: records.length,
-      truncated: false,
+      truncated: snapshot.work.truncated === true,
       matrix: workMatrix(records),
       blocked: {
         count: blocked.length,

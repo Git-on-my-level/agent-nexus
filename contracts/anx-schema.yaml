@@ -1077,7 +1077,7 @@ batch_ref_resolve:
   max_refs: 200
   input: {refs: 'list<string>'}
   output: {items: 'list<object>'}
-  fields: [ref, kind, title, phase, status, owner, progress, url, resolvable]
+  fields: [ref, kind, title, phase, status, owner, owner_display, board, priority, last_moved_at, next_step, progress, url, resolvable]
   semantics:
     - Preserve input order and duplicates, including unknown or inaccessible refs as resolvable false without metadata.
     - Resolve card, doc/document, topic, and board refs by exact handle or internal id. External URLs resolve only through existing source-backed cards.
@@ -1112,3 +1112,29 @@ live_series:
     - Default query steps round up to fit the bucket limit; historical ranges round up to whole days before choosing a whole-day step.
     - Series are stale when now minus the latest observation exceeds twice the adapter expected_interval.
     - Chart, metric, metric-strip and table panels bind source series and may carry a timestamped static fallback.
+
+initiative_overview:
+  max_initiatives: 2000
+  geometry_max_nodes: 24
+  fields: [plan_state, health, geometry]
+  semantics:
+    - Overview uses the same principal-scoped batch plan computation as card reads and live reports, never one query per initiative.
+    - Planless initiatives return null plan_state and geometry; health uses the native phase with a reason. Summary progress is preserved.
+    - Health contains status (on_track, stalled, blocked) and a reason. Geometry contains shape, nodes (id, status, layer, after), total_nodes and collapsed_nodes.
+    - Geometry uses dependency depth as layer, topological order with lexicographic ties, and at most 24 nodes. Edges only name included nodes; collapsed_nodes counts omitted nodes.
+    - Open initiatives are selected before closed history, newest update first; counts describe the visible bounded candidate set and truncated declares that additional candidates exist.
+    - Ref preview owner_display resolves workspace actor names, falling back to the owner ref. Board metadata requires independent board visibility.
+    - Native preview url is a workspace-relative route. Hosted clients prefix it with /o/<org>/w/<ws>; absolute source URLs are used as-is. Never concatenate a hosted prefix onto an absolute URL.
+overview_changes:
+  route: GET /overview/changes
+  max_items: 100
+  max_event_candidates: 200
+  baseline_scope: Authenticated principal within this workspace database (one workspace per deployment).
+  semantics:
+    - GET /overview includes since_you_last_looked computed against the previous visit, then atomically records the current visit timestamp and bounded state snapshot. The changes endpoint reads without advancing the baseline.
+    - A first visit or unauthenticated dev read has null since and no changes; no anonymous shared baseline is stored.
+    - Steps completed and health transitions are net changes from previously visible plan step statuses and health; newly visible initiatives have no prior state and are not reported as transitions.
+    - Completed steps include now-closed initiatives. Newly blocked or stalled health is reported once relative to the saved baseline, including time-only stalling.
+    - Asks answered use canonical human_attention_responded events in (since, generated_at]; new decisions use permission-filtered PM records created in that interval.
+    - Items expose only current readable refs and generic answer or decision labels, never private conversation text. Ref visibility is rechecked before publication.
+    - Results are capped at 100; truncated covers candidate or output limits and bounded snapshots. Repeated digest reads do not change the baseline.

@@ -115,7 +115,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `62`
+- Commands: `63`
 - Command IDs:
   - `agents.get`
   - `agents.me.presence`
@@ -135,6 +135,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `cards.revisions.list`
   - `cards.timeline`
   - `cards.trash`
+  - `overview.changes`
   - `overview.get`
   - `plan.set`
   - `plan.show`
@@ -311,10 +312,11 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `home`
 
-- Commands: `5`
+- Commands: `6`
 - Command IDs:
   - `home.read`
   - `home.unread`
+  - `overview.changes`
   - `overview.get`
   - `workspace.dashboard.list`
   - `workspace.dashboard.set`

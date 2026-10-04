@@ -13,20 +13,33 @@ import (
 	"agent-nexus-core/internal/plans"
 )
 
+type PreviewBoard struct {
+	Ref   string `json:"ref"`
+	Title string `json:"title"`
+}
+type PreviewStep struct {
+	Title string `json:"title"`
+}
+
 // RefPreview contains only the bounded data needed by chips and plan derivation.
 // Internal fields support principal-scoped reads and never appear on the wire.
 type RefPreview struct {
-	Ref        string          `json:"ref"`
-	Kind       string          `json:"kind,omitempty"`
-	Title      string          `json:"title,omitempty"`
-	Status     string          `json:"status,omitempty"`
-	Phase      string          `json:"phase,omitempty"`
-	Owner      string          `json:"owner,omitempty"`
-	Progress   *plans.Progress `json:"progress,omitempty"`
-	URL        string          `json:"url,omitempty"`
-	Resolvable bool            `json:"resolvable"`
-	ID         string          `json:"-"`
-	MovementAt time.Time       `json:"-"`
+	Ref          string          `json:"ref"`
+	Kind         string          `json:"kind,omitempty"`
+	Title        string          `json:"title,omitempty"`
+	Status       string          `json:"status,omitempty"`
+	Phase        string          `json:"phase,omitempty"`
+	Owner        string          `json:"owner,omitempty"`
+	OwnerDisplay string          `json:"owner_display,omitempty"`
+	Board        *PreviewBoard   `json:"board,omitempty"`
+	Priority     string          `json:"priority,omitempty"`
+	LastMovedAt  string          `json:"last_moved_at,omitempty"`
+	NextStep     *PreviewStep    `json:"next_step,omitempty"`
+	Progress     *plans.Progress `json:"progress,omitempty"`
+	URL          string          `json:"url,omitempty"`
+	Resolvable   bool            `json:"resolvable"`
+	ID           string          `json:"-"`
+	MovementAt   time.Time       `json:"-"`
 }
 
 // readRefFacts uses at most four SQL queries, independent of ref count. It never
@@ -71,25 +84,30 @@ func (s *Store) readRefFacts(ctx context.Context, refs []string, visible func(st
 			 CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN c.column_key ELSE COALESCE(json_extract(o.body_json,'$.facts.phase'),json_extract(m.metadata_json,'$.phase'),'unknown') END,
 			 CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN CASE WHEN COALESCE(c.assignee,'')='' THEN '' WHEN c.assignee LIKE '%:%' THEN c.assignee ELSE 'actor:'||c.assignee END ELSE COALESCE(json_extract(o.body_json,'$.facts.owner'),json_extract(m.metadata_json,'$.owner'),'') END,
 			 COALESCE(json_extract(m.metadata_json,'$.source.url'),''),COALESCE(NULLIF(trim(c.thread_id),''),trim(c.parent_thread_id),''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=COALESCE(NULLIF(trim(c.thread_id),''),trim(c.parent_thread_id))),''),
-			 CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN c.updated_at ELSE COALESCE(CASE WHEN julianday(json_extract(o.body_json,'$.source_activity_at')) > julianday(json_extract(o.body_json,'$.meaningful_progress_at')) THEN json_extract(o.body_json,'$.source_activity_at') END,json_extract(o.body_json,'$.meaningful_progress_at'),json_extract(o.body_json,'$.source_activity_at'),c.created_at) END
+			 CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN c.updated_at ELSE COALESCE(CASE WHEN julianday(json_extract(o.body_json,'$.source_activity_at')) > julianday(json_extract(o.body_json,'$.meaningful_progress_at')) THEN json_extract(o.body_json,'$.source_activity_at') END,json_extract(o.body_json,'$.meaningful_progress_at'),json_extract(o.body_json,'$.source_activity_at'),c.created_at) END,
+ COALESCE(json_extract(m.metadata_json,'$.priority'),'none'),
+ COALESCE(NULLIF(b.handle,''),b.id,''),COALESCE(b.title,''),COALESCE(b.thread_id,''),COALESCE(json_extract(bt.body_json,'$.pm_actor_id'),''),
+ COALESCE((SELECT display_name FROM actors WHERE id=CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN replace(c.assignee,'actor:','') ELSE replace(COALESCE(json_extract(o.body_json,'$.facts.owner'),json_extract(m.metadata_json,'$.owner'),''),'actor:','') END),'')
 			 FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id
+ LEFT JOIN boards b ON b.id=c.board_id AND b.trashed_at IS NULL
+ LEFT JOIN threads bt ON bt.id=b.thread_id
 			 WHERE c.trashed_at IS NULL AND (c.id IN (` + marks + `) OR c.handle IN (` + marks + `) OR (m.authority!='nexus' AND json_extract(m.metadata_json,'$.source.url') IN (` + marks + `))) ORDER BY c.id`
 		case "document":
-			query = `SELECT id,handle,COALESCE(title,''),CASE WHEN archived_at IS NULL THEN 'active' ELSE 'archived' END,'','',COALESCE(thread_id,''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=documents.thread_id),''),updated_at FROM documents WHERE trashed_at IS NULL AND (id IN (` + marks + `) OR handle IN (` + marks + `))`
+			query = `SELECT id,handle,COALESCE(title,''),CASE WHEN archived_at IS NULL THEN 'active' ELSE 'archived' END,'','',COALESCE(thread_id,''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=documents.thread_id),''),updated_at,'','','','','','' FROM documents WHERE trashed_at IS NULL AND (id IN (` + marks + `) OR handle IN (` + marks + `))`
 		case "topic":
-			query = `SELECT id,handle,title,CASE WHEN archived_at IS NULL THEN 'active' ELSE 'archived' END,COALESCE(json_extract(extensions_json,'$.owner_refs[0]'),''),'',thread_id,COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=topics.thread_id),''),updated_at FROM topics WHERE trashed_at IS NULL AND (id IN (` + marks + `) OR handle IN (` + marks + `))`
+			query = `SELECT id,handle,title,CASE WHEN archived_at IS NULL THEN 'active' ELSE 'archived' END,COALESCE(json_extract(extensions_json,'$.owner_refs[0]'),''),'',thread_id,COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=topics.thread_id),''),updated_at,'','','','','',COALESCE((SELECT display_name FROM actors WHERE id=replace(json_extract(topics.extensions_json,'$.owner_refs[0]'),'actor:','')),'') FROM topics WHERE trashed_at IS NULL AND (id IN (` + marks + `) OR handle IN (` + marks + `))`
 		case "board":
-			query = `SELECT id,handle,title,CASE WHEN archived_at IS NULL THEN 'active' ELSE 'archived' END,COALESCE(json_extract(owners_json,'$[0]'),''),'',thread_id,COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=boards.thread_id),''),updated_at FROM boards WHERE trashed_at IS NULL AND (id IN (` + marks + `) OR handle IN (` + marks + `))`
+			query = `SELECT id,handle,title,CASE WHEN archived_at IS NULL THEN 'active' ELSE 'archived' END,COALESCE(json_extract(owners_json,'$[0]'),''),'',thread_id,COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=boards.thread_id),''),updated_at,'','','','','',COALESCE((SELECT display_name FROM actors WHERE id=replace(json_extract(boards.owners_json,'$[0]'),'actor:','')),'') FROM boards WHERE trashed_at IS NULL AND (id IN (` + marks + `) OR handle IN (` + marks + `))`
 		}
 		rows, err := s.db.QueryContext(ctx, query, args...)
 		if err != nil {
 			return nil, err
 		}
-		type row struct{ id, handle, title, phase, owner, external, thread, privateOwner, at string }
+		type row struct{ id, handle, title, phase, owner, external, thread, privateOwner, at, priority, boardHandle, boardTitle, boardThread, boardOwner, ownerDisplay string }
 		items := []row{}
 		for rows.Next() {
 			var item row
-			if err = rows.Scan(&item.id, &item.handle, &item.title, &item.phase, &item.owner, &item.external, &item.thread, &item.privateOwner, &item.at); err != nil {
+			if err = rows.Scan(&item.id, &item.handle, &item.title, &item.phase, &item.owner, &item.external, &item.thread, &item.privateOwner, &item.at, &item.priority, &item.boardHandle, &item.boardTitle, &item.boardThread, &item.boardOwner, &item.ownerDisplay); err != nil {
 				rows.Close()
 				return nil, err
 			}
@@ -103,7 +121,7 @@ func (s *Store) readRefFacts(ctx context.Context, refs []string, visible func(st
 		// Access checks run after closing rows, including on one-connection SQLite.
 		candidates := map[string][]RefPreview{}
 		for _, item := range items {
-			if visible != nil && !visible(item.thread, item.privateOwner) {
+			if visible != nil && (!visible(item.thread, item.privateOwner) || (kind == "card" && !visible(item.boardThread, item.boardOwner))) {
 				continue
 			}
 			preview := RefPreview{ID: item.id, Kind: kind, Title: item.title, Status: item.phase, Owner: item.owner, Resolvable: true}
@@ -115,6 +133,14 @@ func (s *Store) readRefFacts(ctx context.Context, refs []string, visible func(st
 			if kind == "card" {
 				preview.Phase = item.phase
 			}
+			preview.OwnerDisplay = firstNonEmptyString(item.ownerDisplay, item.owner)
+			if kind == "card" {
+				preview.Priority = item.priority
+				if item.boardHandle != "" {
+					preview.Board = &PreviewBoard{Ref: "board:" + item.boardHandle, Title: item.boardTitle}
+				}
+			}
+			preview.LastMovedAt = item.at
 			preview.MovementAt, _ = time.Parse(time.RFC3339Nano, item.at)
 			keys := uniqueSortedStrings([]string{item.id, item.handle, item.external})
 			for _, key := range keys {
@@ -221,6 +247,20 @@ func (s *Store) ResolveRefs(ctx context.Context, refs []string, visible func(str
 		if p, ok := ps[row.ID]; ok {
 			state := plans.Compute(p, facts, movement[row.ID], now, threshold)
 			out[i].Progress = &state.Progress
+			if len(state.NextSteps) > 0 {
+				steps := make(map[string]plans.Step, len(p.Steps))
+				for _, step := range p.Steps {
+					steps[step.ID] = step
+				}
+				for _, id := range state.NextSteps {
+					step := steps[id]
+					// Skip unreadable linked resources, including their authored titles.
+					if step.Ref == "" || facts[step.Ref].Known {
+						out[i].NextStep = &PreviewStep{Title: step.Title}
+						break
+					}
+				}
+			}
 		}
 	}
 	return out, nil

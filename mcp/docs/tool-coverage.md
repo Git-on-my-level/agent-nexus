@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 206
+- Command count: 207
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -26,7 +26,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | inbox | 4 |
 | meta | 9 |
 | ops | 3 |
-| overview | 1 |
+| overview | 2 |
 | plan | 2 |
 | pm | 24 |
 | ref-edges | 1 |
@@ -46,7 +46,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 77 |
+| exposed_read | 78 |
 | exposed_write | 66 |
 | gated_admin | 28 |
 | gated_sensitive | 13 |
@@ -60,8 +60,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 143 | exposed_read + exposed_write + adapted |
-| hosted default | 63 | explicit read-only private-app allowlist |
+| standalone default | 144 | exposed_read + exposed_write + adapted |
+| hosted default | 64 | explicit read-only private-app allowlist |
 | gated | 41 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
 | unsupported | 22 | not represented as direct MCP tools in v1 |
@@ -202,6 +202,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | ops.blob.usage.rebuild | ops | POST | /ops/blob-usage/rebuild | gated_admin | blob usage rebuild is maintenance/ops |
 | ops.health | ops | GET | /ops/health | gated_admin | ops health can expose operational diagnostics |
 | ops.usage.summary | ops | GET | /ops/usage-summary | gated_admin | unversioned usage summary is ops/quota telemetry |
+| overview.changes | overview | GET | /overview/changes | exposed_read | Principal-scoped bounded visit digest; reads without advancing the baseline. |
 | overview.get | overview | GET | /overview | exposed_read | Executive Overview projection shared with the web UI and CLI. |
 | plan.set | plan | PUT | /cards/{card_id}/plan | exposed_write | Replace a local initiative plan with a card concurrency token; no upstream source writes. |
 | plan.show | plan | GET | /cards/{card_id}/plan | exposed_read | Read a principal-scoped initiative plan and computed state. |

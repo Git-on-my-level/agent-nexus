@@ -1,0 +1,29 @@
+{
+  "since": "2026-10-04T12:00:00Z",
+  "generated_at": "2026-10-04T14:00:00Z",
+  "items": [
+    {
+      "kind": "step_completed",
+      "ref": "card:complete",
+      "title": "Step",
+      "step_id": "step"
+    },
+    {
+      "kind": "initiative_stalled",
+      "ref": "card:stall",
+      "title": "stall"
+    },
+    {
+      "kind": "initiative_blocked",
+      "ref": "card:block",
+      "title": "block"
+    },
+    {
+      "kind": "ask_answered",
+      "ref": "event:public",
+      "title": "Ask answered",
+      "ts": "2026-10-04T12:01:00Z"
+    }
+  ],
+  "truncated": false
+}

@@ -134,6 +134,43 @@ func TestBatchRefsSharedCorpus(t *testing.T) {
 	}
 }
 
+func TestRefPreviewSelectsFirstReadableReadyStep(t *testing.T) {
+	ctx := context.Background()
+	store, board := newWorkTestStore(t)
+	initiative, err := store.CreateWork(ctx, "actor-1", board, map[string]any{"title": "Initiative"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hidden, err := store.CreateWork(ctx, "actor-1", board, map[string]any{"title": "Hidden work"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	readable, err := store.CreateWork(ctx, "actor-1", board, map[string]any{"title": "Readable work"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.PatchThread(ctx, "actor-1", hidden["thread_id"].(string), map[string]any{"pm_actor_id": "private-owner"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Authored order differs from computed ready order: choose b before c,
+	// while never exposing the authored title for unreadable a.
+	p := plans.Plan{Steps: []plans.Step{
+		{ID: "c-readable", Title: "Later readable", After: []string{}},
+		{ID: "b-readable", Title: "First readable", Ref: readable["ref"].(string), After: []string{}},
+		{ID: "a-hidden", Title: "Secret step title", Ref: hidden["ref"].(string), After: []string{}},
+	}}
+	if err = store.SetCardPlan(ctx, "actor-1", initiative["id"].(string), initiative["updated_at"].(string), p); err != nil {
+		t.Fatal(err)
+	}
+	items, err := store.ResolveRefs(ctx, []string{initiative["ref"].(string)}, func(_ string, owner string) bool { return owner != "private-owner" }, time.Now(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if items[0].NextStep == nil || items[0].NextStep.Title != "First readable" {
+		t.Fatalf("next step=%+v; want first readable ready step", items[0].NextStep)
+	}
+}
+
 func TestExternalPlanRefAndPollFreshness(t *testing.T) {
 	ctx := context.Background()
 	store, board := newWorkTestStore(t)

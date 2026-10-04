@@ -960,6 +960,16 @@ var migrations = []migration{
 		// Cover edge aggregates without a table lookup for every raw value.
 		`CREATE INDEX series_points_query ON series_points(series,labels,ts,value);`,
 	}},
+	{Version: 53, Statements: []string{
+		`CREATE TABLE overview_visits (principal_id TEXT PRIMARY KEY, visited_at TEXT NOT NULL, snapshot_json TEXT NOT NULL);`,
+	}, AfterApply: func(ctx context.Context, tx *sql.Tx) error {
+		exists, err := sqliteTableExists(ctx, tx, "events")
+		if err != nil || !exists {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `CREATE INDEX idx_events_overview_answers ON events(type,ts,id)`)
+		return err
+	}},
 }
 
 func applyMigration49SeriesTokenScope(ctx context.Context, tx *sql.Tx) error {

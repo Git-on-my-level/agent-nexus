@@ -7272,6 +7272,37 @@ export const commandRegistry = [
         "ts_method": "opsUsageSummary"
     },
     {
+        "command_id": "overview.changes",
+        "cli_path": "overview changes",
+        "group": "overview",
+        "method": "GET",
+        "path": "/overview/changes",
+        "operation_id": "getOverviewChanges",
+        "summary": "Read bounded changes since this principal last viewed Overview",
+        "why": "Read a compact digest of completed steps, health transitions, answered asks and new decisions.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns the principal-scoped bounded change digest.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token"
+        ],
+        "concepts": [
+            "home",
+            "cards"
+        ],
+        "stability": "beta",
+        "surface": "projection",
+        "agent_notes": "Read-only; never advances the baseline. First visit returns null since and empty items.",
+        "adjacent_commands": [
+            "overview.get"
+        ],
+        "go_method": "OverviewChanges",
+        "ts_method": "overviewChanges"
+    },
+    {
         "command_id": "overview.get",
         "cli_path": "overview",
         "group": "overview",
@@ -7298,7 +7329,10 @@ export const commandRegistry = [
         ],
         "stability": "beta",
         "surface": "projection",
-        "agent_notes": "Use anx overview --json to inspect the same executive projection as the web UI.",
+        "agent_notes": "Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it.",
+        "adjacent_commands": [
+            "overview.changes"
+        ],
         "go_method": "OverviewGet",
         "ts_method": "overviewGet"
     },
@@ -12289,6 +12323,9 @@ export class AnxClient {
     }
     opsUsageSummary(options = {}) {
         return this.invoke("ops.usage.summary", {}, options);
+    }
+    overviewChanges(options = {}) {
+        return this.invoke("overview.changes", {}, options);
     }
     overviewGet(options = {}) {
         return this.invoke("overview.get", {}, options);

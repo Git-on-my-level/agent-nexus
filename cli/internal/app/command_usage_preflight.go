@@ -70,6 +70,10 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 		name := "work " + args[1]
 		return name, preflightFlagUsage(args[2:], preflightFlagSpecs()[name])
 	}
+	if args[0] == "overview" {
+		name, _, err := parseOverviewCommand(args)
+		return name, err
+	}
 	if args[0] == "plan" {
 		if len(args) == 1 || len(args) == 2 && args[1] == "step" {
 			return "plan", errnorm.Usage("subcommand_required", "run anx help plan")

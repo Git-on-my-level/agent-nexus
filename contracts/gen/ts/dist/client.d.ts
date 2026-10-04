@@ -187,6 +187,7 @@ export declare class AnxClient {
     opsBlobUsageRebuild(options?: RequestOptions): Promise<InvokeResult>;
     opsHealth(options?: RequestOptions): Promise<InvokeResult>;
     opsUsageSummary(options?: RequestOptions): Promise<InvokeResult>;
+    overviewChanges(options?: RequestOptions): Promise<InvokeResult>;
     overviewGet(options?: RequestOptions): Promise<InvokeResult>;
     planSet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     planShow(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

@@ -237,7 +237,8 @@ The existing live-initiatives report projection retains `progress` and `needs[]`
 
 Report hydration joins cards, metadata, latest good/attempt observations, board labels and thread privacy in one query for the bounded candidate set (up to 2,000 rows). Plan enrichment uses one plan query plus at most one fact query per referenced resource kind, independent of card/step count. Batch ref resolution uses at most four initial kind queries, one plan query and four linked-fact queries. These paths never call `GetWork` per row or ref. The general `ListWork` read path is unchanged.
 
-`POST /refs/resolve` accepts `{refs:[...]}` (max 200). Results are `{items:[{ref,resolvable,kind?,title?,status?,phase?,owner?,progress?,url?}]}` in input order, retaining duplicates. Native card/document URLs are workspace-relative UI paths; topics and boards omit url because they have no current UI detail surface. Unknown, trashed or inaccessible refs return only `{ref,resolvable:false}`. Native handles and internal ids resolve for cards, docs/documents, topics and boards. Plan-derived progress and status honor the requesting principal's access to every referenced resource. Responses are read-only and uncached.
+`POST /refs/resolve` accepts `{refs:[...]}` (max 200). Results are `{items:[{ref,resolvable,kind?,title?,status?,phase?,owner?,owner_display?,board?,priority?,last_moved_at?,next_step?,progress?,url?}]}` in input order, retaining duplicates. Native card/document URLs are workspace-relative UI paths; topics and boards omit url because they have no current UI detail surface. Unknown, trashed or inaccessible refs return only `{ref,resolvable:false}`. Native handles and internal ids resolve for cards, docs/documents, topics and boards. Plan-derived progress and status honor the requesting principal's access to every referenced resource. Responses are read-only and uncached. `board` contains `{ref,title}` and is independently visibility checked. `owner_display` is the workspace actor display name, falling back to the owner ref. `next_step` contains the first readable ready step's title when a plan exists. `last_moved_at` uses the same native update/source meaningful movement timestamp as plan facts, never a polling observation timestamp. Hosted clients prepend `/o/<org>/w/<ws>` to native relative URLs; absolute source URLs are used unchanged.
+
 ## Executive Overview and workspace dashboard
 
 `GET /overview` is the shared projection behind the web UI and `anx overview
@@ -246,7 +247,37 @@ and human next actors), the selected dashboard, open initiatives with Markdown
 checklist progress, active work records/counts, and agent presence. Archived
 cards, boards and topics do not contribute. Initiatives share the live report
 projection: `progress.done/total`, `needs[]`, phase, board and update time.
-The browser opens each card using its typed ref.
+The browser opens each card using its typed ref. Each initiative also contains
+`plan_state` (the same effective computation as card plans), `health` with
+`{status,reason}`, and `geometry`. A plan overrides summary checklist progress.
+Planless initiatives have null plan_state/geometry and phase-based health.
+Geometry supplies shape, effective node status, dependency layer and included
+`after` edges, capped at 24 nodes; `total_nodes` and `collapsed_nodes` describe
+the remainder. Clients render geometry without re-deriving workflow semantics.
+The projection reads at most 2,000 active-lifecycle candidate cards (including
+closed cards for completion digests), reuses the report batch privacy context,
+and declares `truncated` on work and initiatives when more candidates exist.
+Counts refer to the visible bounded set.
+
+`GET /overview/changes` returns `{since,generated_at,items,truncated}` for the
+last authenticated principal visit to Overview in this workspace database.
+`GET /overview` includes that digest as `since_you_last_looked`, then records
+the new visit and a bounded status snapshot atomically. It remains a business
+read: its only write is private viewer presentation state. All responses use
+`Cache-Control: no-store`. Reading changes or pinning a dashboard does not
+advance the baseline. A first visit (or unauthenticated dev read) has null since
+and empty items; anonymous reads never share stored visit state.
+
+Digest items have kind, ref, title, optional step_id and optional ts. Kinds are
+`step_completed`, `initiative_stalled`, `initiative_blocked`, `ask_answered`,
+and `decision_created`. Steps and health are net changes against previously
+visible statuses, including time-only stalling and steps of now-closed cards.
+Newly visible cards do not invent transitions. Answers are canonical events
+and new decisions are ordinary permission-filtered PM records in
+`(since,generated_at]`; private answer/decision text is never copied. Reads
+recheck current resource visibility. The digest caps output at 100 and each
+answer/decision candidate read at 200, with `truncated` for any reached limit.
+The shared wire fixtures live in `contracts/fixtures/initiative-overview/`.
 
 `PUT /workspace/dashboard` accepts `{ "document_ref": "document:<handle>" }`
 and pins an active visual-report document accepted by the full shared validator. `{ "document_ref": null }` clears the

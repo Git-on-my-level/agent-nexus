@@ -304,6 +304,16 @@ func loadOpenInbox(r *http.Request, opts handlerOptions, now time.Time) (map[str
 	if err != nil {
 		return nil, err
 	}
+	items, err := loadOpenInboxItems(r, opts)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"status": "open", "items": items, "generated_at": now.Format(time.RFC3339Nano), "projection_freshness": aggregateTopicProjectionFreshness(states, threadIDs)}, nil
+}
+
+// Overview needs the same permission-filtered asks, but not the inbox's
+// workspace-wide thread freshness scan and public-ref hydration.
+func loadOpenInboxItems(r *http.Request, opts handlerOptions) ([]map[string]any, error) {
 	projected, err := opts.primitiveStore.ListDerivedInboxItems(r.Context(), primitives.DerivedInboxListFilter{})
 	if err != nil {
 		return nil, err
@@ -338,7 +348,7 @@ func loadOpenInbox(r *http.Request, opts handlerOptions, now time.Time) (map[str
 		}
 		payloadItems = visible
 	}
-	return map[string]any{"status": "open", "items": payloadItems, "generated_at": now.Format(time.RFC3339Nano), "projection_freshness": aggregateTopicProjectionFreshness(states, threadIDs)}, nil
+	return payloadItems, nil
 }
 
 func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOptions, inboxItemID string) {

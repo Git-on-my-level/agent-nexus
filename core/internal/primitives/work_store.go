@@ -569,9 +569,10 @@ func (s *Store) ListAllWork(ctx context.Context) ([]map[string]any, error) {
 // ReportWorkFilter selects a bounded candidate set before projection. BoardIDs
 // are resolved IDs, not authored SQL or handles. Each scope needs only one read.
 type ReportWorkFilter struct {
-	BoardIDs   []string
-	ProjectRef string
-	Limit      int
+	BoardIDs      []string
+	ProjectRef    string
+	Limit         int
+	IncludeClosed bool
 }
 type ReportWorkBoard struct {
 	Title, ThreadID, PrivateOwner string
@@ -612,9 +613,18 @@ func reportWorkQuery(filter ReportWorkFilter) (string, []any) {
 	 LEFT JOIN threads ct ON ct.id=COALESCE(NULLIF(trim(c.thread_id),''),trim(c.parent_thread_id))
 	 LEFT JOIN threads bt ON bt.id=trim(b.thread_id)
 	 LEFT JOIN ref_edges placement ON placement.source_type='board' AND placement.target_type='card' AND placement.edge_type='board_card' AND placement.source_id=b.id AND placement.target_id=c.id`
-	where += ` AND (CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN c.column_key ELSE COALESCE(json_extract(o.body_json,'$.facts.phase'),json_extract(m.metadata_json,'$.phase'),c.column_key) END) NOT IN ('done','cancelled')`
+	if !filter.IncludeClosed {
+		where += ` AND (CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN c.column_key ELSE COALESCE(json_extract(o.body_json,'$.facts.phase'),json_extract(m.metadata_json,'$.phase'),c.column_key) END) NOT IN ('done','cancelled')`
+	}
 	args = append(args, limit+1)
-	// No global sort: only the bounded candidates are materialized and sorted.
+	ordering := ""
+	if filter.IncludeClosed {
+		// Overview prioritizes open candidates. Historical closed work must not
+		// crowd all active initiatives out of a bounded visit snapshot.
+		ordering = ` ORDER BY (CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN c.column_key ELSE COALESCE(json_extract(o.body_json,'$.facts.phase'),json_extract(m.metadata_json,'$.phase'),c.column_key) END IN ('done','cancelled')),c.updated_at DESC,c.id DESC`
+	}
+	// Reports sort only bounded candidates; Overview also orders candidate
+	// selection so its snapshots remain stable as closed history grows.
 	return `SELECT b.id,b.handle,c.id,c.handle,
 	 COALESCE(json_extract(placement.metadata_json,'$.column_key'),c.column_key),COALESCE(json_extract(placement.metadata_json,'$.rank'),c.rank),
 	 c.title,c.summary,c.version,c.head_revision_id,c.head_revision_number,c.thread_id,c.parent_thread_id,c.due_at,c.definition_of_done_json,
@@ -622,7 +632,7 @@ func reportWorkQuery(filter ReportWorkFilter) (string, []any) {
 	 c.archived_at,c.archived_by,c.trashed_at,c.trashed_by,c.trash_reason,
 	 COALESCE(m.metadata_json,'{"source":{"authority":"nexus"}}'),COALESCE(m.version,0),COALESCE(m.refresh_json,'{"state":"idle"}'),o.body_json,a.body_json,
 	 b.title,COALESCE(b.thread_id,''),COALESCE(json_extract(bt.body_json,'$.pm_actor_id'),''),COALESCE(json_extract(ct.body_json,'$.pm_actor_id'),'')
-	 FROM ` + from + ` WHERE ` + where + ` LIMIT ?`, args
+	 FROM ` + from + ` WHERE ` + where + ordering + ` LIMIT ?`, args
 }
 
 func (s *Store) ListReportWork(ctx context.Context, filter ReportWorkFilter) (ReportWorkPage, error) {

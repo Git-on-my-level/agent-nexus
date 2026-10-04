@@ -1033,6 +1033,9 @@ Read the executive Overview projection shown in the web UI
 Executive Overview
 
 Usage: anx overview [--json]
+       anx overview changes [--json]
+
+Changes reads the digest without advancing the viewer visit baseline.
 
 Reads Needs you, the selected dashboard, active initiatives and work details from the same core projection as the web UI.
 ```
