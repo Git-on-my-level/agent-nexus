@@ -194,7 +194,7 @@ func preflightKnownCommandShape(args []string) error {
 	case "import":
 		return preflightSubcommand(args[1:], importSubcommandSpec)
 	case "skills":
-		return preflightSubcommand(args[1:], skillsSubcommandSpec)
+		return preflightSkillsArgs(args[1:])
 	case "install":
 		return preflightSubcommand(args[1:], installSubcommandSpec)
 	case "draft":
@@ -259,6 +259,17 @@ func preflightKnownCommandShape(args []string) error {
 		return preflightSubcommand(args[1:], derivedSubcommandSpec)
 	}
 	return nil
+}
+
+func preflightSkillsArgs(args []string) error {
+	if err := preflightSubcommand(args, skillsSubcommandSpec); err != nil {
+		return err
+	}
+	if len(args) == 0 {
+		return nil
+	}
+	command := skillsSubcommandSpec.normalize(args[0])
+	return preflightFlagUsage(args[1:], skillsPreflightFlagSpecs()["skills "+command])
 }
 
 func preflightSubcommand(args []string, spec subcommandSpec) error {
@@ -497,6 +508,9 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 	addLayer(derivedLifecyclePreflightSpecs())
 	addLayer(resourceRuntimePreflightSpecs())
 	for _, topic := range localHelperTopics {
+		if strings.HasPrefix(topic.Path, "skills ") {
+			continue
+		}
 		flags := map[string]preflightFlagSpec{}
 		for _, flag := range topic.Flags {
 			name, kind, ok := parseLocalHelperFlagSpec(flag.Name)
@@ -509,6 +523,7 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		}
 	}
 	addLayer(manualPreflightFlagSpecs())
+	addLayer(skillsPreflightFlagSpecs())
 	return specs
 }
 

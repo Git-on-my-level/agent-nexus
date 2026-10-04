@@ -532,6 +532,29 @@ func (a *App) runHostDoctor(ctx context.Context, cfg config.Resolved) (*commandR
 		}
 		return "agentctl on PATH"
 	}())
+	if home, homeErr := a.skillHome(""); homeErr == nil {
+		if skillsConfigDir, dirErr := resolveSkillsConfigDir(home, cfg.ConfigDir); dirErr == nil {
+			preferences, _, prefErr := readSkillsSyncConfig(skillsConfigDir)
+			if prefErr == nil {
+				roles := []string{"participant"}
+				if preferences.PMEnabled {
+					roles = append(roles, "pm")
+				}
+				targets := detectSkillHarnesses(home, a.Getenv, a.skillsLookPath())
+				states, stateErr := inspectDetectedSkillStates(targets, roles)
+				if stateErr == nil {
+					for _, state := range states {
+						ok := state.State == "current" || state.State == "missing" || state.State == "deferred"
+						checks = append(checks, doctorCheck{Name: "skill_" + state.Harness + "_" + state.Role, OK: ok, Status: state.State, Message: state.Path})
+					}
+				} else {
+					checks = append(checks, doctorCheck{Name: "skills_status", OK: false, Status: "warn", Message: stateErr.Error()})
+				}
+			} else {
+				checks = append(checks, doctorCheck{Name: "skills_status", OK: false, Status: "warn", Message: "ANX skill preferences could not be read: " + prefErr.Error()})
+			}
+		}
+	}
 	client, clientErr := httpclient.New(cfg)
 	if clientErr == nil {
 		resp, callErr := client.RawCall(ctx, httpclient.RawRequest{Method: "GET", Path: "/readyz"})

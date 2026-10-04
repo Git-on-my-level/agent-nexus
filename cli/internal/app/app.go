@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -16,18 +17,20 @@ import (
 )
 
 type App struct {
-	Stdin           io.Reader
-	Stdout          io.Writer
-	Stderr          io.Writer
-	Getenv          func(string) string
-	UserHomeDir     func() (string, error)
-	Getwd           func() (string, error)
-	ReadFile        func(string) ([]byte, error)
-	StdinIsTTY      func() bool
-	hasOMPAncestor  func() bool
-	now             func() time.Time
-	pmTurns         *pmTurnMemory
-	runtimeIdentity func() (*runtimeIdentityReport, error)
+	Stdin              io.Reader
+	Stdout             io.Writer
+	Stderr             io.Writer
+	Getenv             func(string) string
+	UserHomeDir        func() (string, error)
+	Getwd              func() (string, error)
+	ReadFile           func(string) ([]byte, error)
+	StdinIsTTY         func() bool
+	hasOMPAncestor     func() bool
+	now                func() time.Time
+	pmTurns            *pmTurnMemory
+	runtimeIdentity    func() (*runtimeIdentityReport, error)
+	startSkillsRefresh func(executable, configDir, home string) error
+	skillLookPath      func(string) (string, error)
 }
 
 func (a *App) clockNow() time.Time {
@@ -73,15 +76,17 @@ func isTrailingHelpOnlyInvocation(remaining []string) bool {
 
 func New() *App {
 	app := &App{
-		Stdin:          os.Stdin,
-		Stdout:         os.Stdout,
-		Stderr:         os.Stderr,
-		Getenv:         os.Getenv,
-		UserHomeDir:    os.UserHomeDir,
-		Getwd:          os.Getwd,
-		ReadFile:       os.ReadFile,
-		hasOMPAncestor: ompAncestor,
-		pmTurns:        newPMTurnMemory(),
+		Stdin:              os.Stdin,
+		Stdout:             os.Stdout,
+		Stderr:             os.Stderr,
+		Getenv:             os.Getenv,
+		UserHomeDir:        os.UserHomeDir,
+		Getwd:              os.Getwd,
+		ReadFile:           os.ReadFile,
+		hasOMPAncestor:     ompAncestor,
+		pmTurns:            newPMTurnMemory(),
+		startSkillsRefresh: startDetachedSkillsRefresh,
+		skillLookPath:      exec.LookPath,
 	}
 	app.StdinIsTTY = func() bool {
 		file, ok := app.Stdin.(*os.File)
@@ -191,6 +196,9 @@ func (a *App) Run(args []string) int {
 	identity := resolveMachineCommandIdentity(commandName)
 	if runErr != nil {
 		return a.renderError(identity, resolved.JSON, runErr)
+	}
+	if !isGoTestBinary() {
+		a.maybeScheduleSkillsRefresh(identity.Command, result, resolved.ConfigDir)
 	}
 
 	if result != nil && result.RawWritten {

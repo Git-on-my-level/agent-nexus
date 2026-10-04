@@ -9,8 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"strings"
 
+	"agent-nexus-cli/internal/buildinfo"
+	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/filelock"
 	"agent-nexus-cli/skills"
@@ -22,55 +25,66 @@ const maxManagedSkillBytes = 1 << 20
 var skillDigestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 type managedSkillMarker struct {
-	SchemaVersion int    `json:"schema_version"`
-	ManagedBy     string `json:"managed_by"`
-	Role          string `json:"role"`
-	SkillName     string `json:"skill_name"`
-	SkillVersion  string `json:"skill_version"`
-	ContentSHA256 string `json:"content_sha256"`
+	SchemaVersion  int    `json:"schema_version"`
+	ManagedBy      string `json:"managed_by"`
+	Role           string `json:"role"`
+	SkillName      string `json:"skill_name"`
+	SkillVersion   string `json:"skill_version"`
+	ContentSHA256  string `json:"content_sha256"`
+	CLIVersion     string `json:"cli_version"`
+	SourceRevision string `json:"source_revision"`
 }
 
 type managedSkillState struct {
-	SchemaVersion        int    `json:"schema_version"`
-	Path                 string `json:"path"`
-	Role                 string `json:"role"`
-	SkillName            string `json:"skill_name"`
-	ExpectedVersion      string `json:"expected_version"`
-	InstalledVersion     string `json:"installed_version,omitempty"`
-	ExpectedSHA256       string `json:"expected_sha256"`
-	ObservedSHA256       string `json:"observed_sha256,omitempty"`
-	State                string `json:"state"`
-	Reason               string `json:"reason,omitempty"`
-	Delivery             string `json:"delivery"`
-	HarnessConfiguration string `json:"harness_configuration"`
-	SessionActivation    string `json:"session_activation"`
-	Changed              bool   `json:"changed"`
-	DryRun               bool   `json:"dry_run"`
+	SchemaVersion           int    `json:"schema_version"`
+	Harness                 string `json:"harness,omitempty"`
+	Path                    string `json:"path"`
+	Role                    string `json:"role"`
+	SkillName               string `json:"skill_name"`
+	ExpectedVersion         string `json:"expected_version"`
+	InstalledVersion        string `json:"installed_version,omitempty"`
+	CLIVersion              string `json:"cli_version"`
+	SourceRevision          string `json:"source_revision"`
+	InstalledCLIVersion     string `json:"installed_cli_version,omitempty"`
+	InstalledSourceRevision string `json:"installed_source_revision,omitempty"`
+	ExpectedSHA256          string `json:"expected_sha256"`
+	ObservedSHA256          string `json:"observed_sha256,omitempty"`
+	State                   string `json:"state"`
+	Reason                  string `json:"reason,omitempty"`
+	Delivery                string `json:"delivery"`
+	HarnessConfiguration    string `json:"harness_configuration"`
+	SessionActivation       string `json:"session_activation"`
+	Changed                 bool   `json:"changed"`
+	DryRun                  bool   `json:"dry_run"`
 }
 
-func (a *App) runSkills(args []string) (*commandResult, string, error) {
+func (a *App) runSkills(args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 || isHelpToken(args[0]) {
 		return &commandResult{Text: skillsUsageText()}, "skills", nil
 	}
 	sub := args[0]
 	name := "skills " + sub
-	if sub != "configure" && sub != "status" && sub != "verify" {
+	switch sub {
+	case "sync":
+		return a.runSkillsSync(args[1:], cfg)
+	case "adopt":
+		return a.runSkillsAdopt(args[1:])
+	case "status":
+		return a.runSkillsStatus(args[1:], cfg)
+	}
+	if sub != "configure" && sub != "verify" {
 		return nil, "skills", skillsSubcommandSpec.unknownError(sub)
 	}
-	fs := newSilentFlagSet(name)
-	var path, role trackedString
-	var dryRun trackedBool
-	fs.Var(&path, "path", "Explicit skill directory; no harness discovery")
-	fs.Var(&role, "role", "participant or pm")
-	if sub == "configure" {
-		fs.Var(&dryRun, "dry-run", "Inspect without writing")
-	}
-	if err := fs.Parse(args[1:]); err != nil {
+	parsed, err := parseSkillsFlags(sub, args[1:])
+	if err != nil {
 		return nil, name, errnorm.Usage("invalid_flags", err.Error())
 	}
-	if len(fs.Args()) > 0 {
+	if len(parsed.positionals) > 0 {
 		return nil, name, errnorm.Usage("invalid_args", "unexpected positional arguments")
 	}
+	path := parsed.stringValue("path")
+	role := parsed.stringValue("role")
+	dryRun := parsed.boolValue("dry-run")
 	if strings.TrimSpace(path.value) == "" || strings.TrimSpace(role.value) == "" {
 		return nil, name, errnorm.Usage("invalid_request", "--path <skill-directory> and --role participant|pm are required")
 	}
@@ -117,7 +131,7 @@ func (a *App) runSkills(args []string) (*commandResult, string, error) {
 	var result map[string]any
 	_ = json.Unmarshal(data, &result)
 	result["requested_path"] = requestedPath
-	result["text"] = fmt.Sprintf("skill name=%s role=%s state=%s expected_version=%s installed_version=%s path=%q\nverification scope=local_file harness_configuration=unknown session_activation=unknown\n", state.SkillName, state.Role, state.State, state.ExpectedVersion, state.InstalledVersion, state.Path)
+	result["text"] = fmt.Sprintf("skill name=%s role=%s state=%s expected_version=%s installed_version=%s cli_version=%s source_revision=%s path=%q\nverification scope=local_file harness_configuration=unknown session_activation=unknown\n", state.SkillName, state.Role, state.State, state.ExpectedVersion, state.InstalledVersion, state.CLIVersion, state.SourceRevision, state.Path)
 	if sub == "configure" && dryRun.value {
 		result["would_change"] = state.State == "missing" || state.State == "outdated"
 	}
@@ -135,10 +149,37 @@ func managedSkillError(state managedSkillState) error {
 	return errnorm.WithDetails(errnorm.Local(code, "skill is "+state.State+"; existing content was preserved"), map[string]any{"skill": state})
 }
 
+func currentSkillSourceRevision() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok || info == nil {
+		return "unknown"
+	}
+	revision := ""
+	modified := false
+	for _, setting := range info.Settings {
+		switch setting.Key {
+		case "vcs.revision":
+			revision = strings.TrimSpace(setting.Value)
+		case "vcs.modified":
+			modified = setting.Value == "true"
+		}
+	}
+	if revision == "" {
+		revision = strings.TrimSpace(buildinfo.SourceRevision)
+	}
+	if revision == "" || revision == "unknown" {
+		return "unknown"
+	}
+	if modified {
+		return "tree:" + revision
+	}
+	return revision
+}
+
 // No harness catalog, environment detection, network reads or history access is
 // involved. A local file digest cannot prove configuration or session activation.
 func inspectManagedSkill(target string, skill skills.Skill) (managedSkillState, error) {
-	state := managedSkillState{SchemaVersion: 1, Path: target, Role: skill.Role, SkillName: skill.Name, ExpectedVersion: skill.Version, ExpectedSHA256: skill.SHA256, Delivery: "manual", HarnessConfiguration: "unknown", SessionActivation: "unknown"}
+	state := managedSkillState{SchemaVersion: 1, Path: target, Role: skill.Role, SkillName: skill.Name, ExpectedVersion: skill.Version, ExpectedSHA256: skill.SHA256, CLIVersion: buildinfo.Current, SourceRevision: currentSkillSourceRevision(), Delivery: "manual", HarnessConfiguration: "unknown", SessionActivation: "unknown"}
 	if err := skillPathWithoutSymlinks(target); err != nil {
 		state.State = "conflict"
 		state.Reason = err.Error()
@@ -186,13 +227,15 @@ func inspectManagedSkill(target string, skill skills.Skill) (managedSkillState, 
 		return state, nil
 	}
 	state.InstalledVersion = marker.SkillVersion
+	state.InstalledCLIVersion = marker.CLIVersion
+	state.InstalledSourceRevision = marker.SourceRevision
 	if contentErr != nil || marker.ContentSHA256 != state.ObservedSHA256 {
 		state.State = "drifted"
 		state.Reason = "managed skill was edited or removed; refresh refused"
 		return state, nil
 	}
 	state.State = "current"
-	if marker.SkillVersion != skill.Version || marker.ContentSHA256 != skill.SHA256 {
+	if marker.SkillVersion != skill.Version || marker.ContentSHA256 != skill.SHA256 || marker.CLIVersion != state.CLIVersion || marker.SourceRevision != state.SourceRevision {
 		state.State = "outdated"
 	}
 	return state, nil
@@ -227,7 +270,7 @@ func configureManagedSkill(target string, skill skills.Skill) error {
 	if state.State != "missing" && state.State != "outdated" {
 		return managedSkillError(state)
 	}
-	marker := managedSkillMarker{SchemaVersion: 1, ManagedBy: "anx", Role: skill.Role, SkillName: skill.Name, SkillVersion: skill.Version, ContentSHA256: skill.SHA256}
+	marker := managedSkillMarker{SchemaVersion: 1, ManagedBy: "anx", Role: skill.Role, SkillName: skill.Name, SkillVersion: skill.Version, ContentSHA256: skill.SHA256, CLIVersion: buildinfo.Current, SourceRevision: currentSkillSourceRevision()}
 	markerBytes, err := json.MarshalIndent(marker, "", "  ")
 	if err != nil {
 		return err
@@ -357,39 +400,51 @@ func writeManagedSkillFile(path string, content []byte, exclusive bool) error {
 	return os.Rename(file.Name(), path)
 }
 
-var skillsSubcommandSpec = subcommandSpec{command: "skills", valid: []string{"configure", "status", "verify"}, examples: []string{"anx skills configure --path ./anx-participant --role participant --dry-run", "anx skills verify --path ./anx-participant --role participant"}}
+var skillsSubcommandSpec = subcommandSpec{command: "skills", valid: []string{"configure", "status", "verify", "sync", "adopt"}, examples: []string{"anx skills sync --dry-run", "anx skills configure --path ./anx-participant --role participant --dry-run", "anx skills adopt ~/.codex/skills/anx"}}
 
 func skillsUsageText() string {
-	return strings.TrimSpace(`Managed ANX skill primitives (local files only)
+	return strings.TrimSpace(`Install and maintain ANX skills across detected harnesses, or inspect one explicit copy.
 
 Usage:
+  anx skills sync [--dry-run] [--pm|--no-pm] [--auto-sync|--no-auto-sync] [--home <dir>]
+  anx skills status [--home <dir>]
+  anx skills adopt <path> [--expected-digest sha256:<digest>] [--role participant|pm]
   anx skills configure --path <skill-directory> --role participant|pm [--dry-run]
   anx skills status --path <skill-directory> --role participant|pm
   anx skills verify --path <skill-directory> --role participant|pm
 
-Configure installs or refreshes only clean ANX-owned SKILL.md content. Existing
-unmanaged or edited files are preserved; there is no force or implicit adoption.
-Other files, shared instructions, credentials and harness settings are untouched.
-Dry-run and status perform no writes, network access or harness/history discovery.
-Verify checks the local version and bytes, not whether a harness/session loaded it.
-PM supplements the participant skill; configure both in separate directories.
+Sync detects installed harnesses and installs or refreshes only clean ANX-owned
+copies. It preserves unmanaged or edited files. --pm opts into the additional PM
+skill and remembers that choice. Automatic refresh is enabled by default and can
+be disabled with --no-auto-sync or ANX_SKILLS_AUTO_SYNC=0. --dry-run performs no
+writes. Agentctl-owned copies are reported and left for agentctl to manage.
 
-Status returns missing, unmanaged, current, outdated, drifted or conflict.
-Verify exits 0 for current files, 3 for missing, 7 for outdated, 4 for conflicts,
-and 1 for filesystem failures. Harness configuration and activation stay unknown.
+Legacy skills are reported with their digest. Adoption is read-only until the
+printed digest is passed back with --expected-digest; adoption migrates the
+skill to the canonical harness path and keeps the old SKILL.md as a timestamped
+backup, leaving the legacy directory without a loadable skill. Status reports state per harness. Explicit
+configure/verify remain available for arbitrary providers and paths. Harness
+activation remains unknown even when a managed copy is current.
 
-Supported harness delivery and auto-clean updates belong to agentctl Skill Hub
-packs. Select cli/skills/participant.json or cli/skills/pm.json from a reviewed
-ANX source revision. ANX never edits that selection automatically. Arbitrary
-agents may consume the files manually; no supported-harness registry is required.`)
+Managed copies record CLI version, source revision, skill version and content
+digest. Custom files, unrelated instructions and credentials are preserved.`)
 }
 
 func init() {
-	for _, sub := range []string{"configure", "status", "verify"} {
-		flags := []localHelperFlag{{Name: "--path <skill-directory>", Description: "Explicit destination; no harness discovery."}, {Name: "--role <role>", Description: "participant or pm; PM supplements participant."}}
-		if sub == "configure" {
-			flags = append(flags, localHelperFlag{Name: "--dry-run", Description: "Inspect only; no writes or network."})
+	for _, sub := range []string{"sync", "adopt", "configure", "status", "verify"} {
+		var examples []string
+		switch sub {
+		case "sync":
+			examples = []string{"anx skills sync --dry-run", "anx skills sync --pm"}
+		case "adopt":
+			examples = []string{"anx skills adopt ~/.codex/skills/anx"}
+		case "configure":
+			examples = []string{"anx skills configure --path ./anx-participant --role participant --dry-run"}
+		case "status":
+			examples = []string{"anx skills status", "anx skills status --path ./anx-participant --role participant"}
+		case "verify":
+			examples = []string{"anx skills verify --path ./anx-participant --role participant"}
 		}
-		localHelperTopics = append(localHelperTopics, localHelperTopic{Path: "skills " + sub, Summary: "Inspect or maintain versioned local ANX skill files.", JSONShape: "`schema_version`, `state`, `expected_version`, `installed_version`, `expected_sha256`, `observed_sha256`, `harness_configuration`, `session_activation`", Composition: "Explicit local files only. Harness installation and activation are distinct; session activation remains unknown.", Flags: flags, Examples: []string{"anx skills " + sub + " --path ./anx-participant --role participant"}})
+		localHelperTopics = append(localHelperTopics, localHelperTopic{Path: "skills " + sub, Summary: "Inspect or maintain versioned local ANX skill files.", JSONShape: "`schema_version`, `state`, `cli_version`, `source_revision`, `expected_sha256`, `observed_sha256`, `harness_configuration`, `session_activation`", Composition: "Local managed files preserve edited and agentctl-owned copies; session activation remains unknown.", Flags: skillsLocalHelperFlags(sub), Examples: examples})
 	}
 }

@@ -667,6 +667,7 @@ func (h *liveCoreHarness) runCLI(t *testing.T, agent string, stdin any, args ...
 		"AGENTCTL_EXECUTION_ID=",
 		"AGENTCTL_ADAPTER=",
 		"AGENTCTL_HOST_ID=",
+		"ANX_SKILLS_AUTO_SYNC=0",
 	)
 
 	var stdinReader io.Reader

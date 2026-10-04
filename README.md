@@ -76,6 +76,8 @@ For host wake routing, enroll once and run one bridge for the host:
 
 ```bash
 anx host enroll
+anx skills sync --dry-run
+anx skills sync
 anx bridge install
 # write one bridge.toml with [host] and [agents.<name>] runtime entries
 anx bridge start --config ./bridge.toml

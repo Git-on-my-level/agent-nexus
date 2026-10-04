@@ -103,9 +103,10 @@ cli-check: ## Run CLI checks
 	cd $(CLI_DIR) && go test ./...
 
 CLI_VERSION ?= $(shell ./scripts/read-version.sh)
+CLI_SOURCE_REVISION ?= $(shell git rev-parse --verify HEAD 2>/dev/null || echo unknown)
 
 cli-build: ## Build CLI binary
-	cd $(CLI_DIR) && go build -ldflags='-X agent-nexus-cli/internal/buildinfo.Current=$(CLI_VERSION)' -o anx ./cmd/anx
+	cd $(CLI_DIR) && go build -ldflags='-X agent-nexus-cli/internal/buildinfo.Current=$(CLI_VERSION) -X agent-nexus-cli/internal/buildinfo.SourceRevision=$(CLI_SOURCE_REVISION)' -o anx ./cmd/anx
 
 cli-integration-test: ## Run CLI real-binary integration tests (non-default)
 	cd $(CLI_DIR) && go test -tags=integration ./integration/...

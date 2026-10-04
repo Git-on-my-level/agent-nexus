@@ -93,7 +93,7 @@ func TestHostHeadlessTokenAndRuns(t *testing.T) {
 	h.runCLIExpectOK(t, "codex", nil, "runs", "get", runID)
 	h.runCLIExpectOK(t, "codex", nil, "runs", "list", "--host-id", hostID)
 	cmd := exec.Command(h.cliBin, "--json", "--base-url", h.baseURL, "--as", "codex", "api", "call", "--method", "PATCH", "--path", "/agents/me/presence", "--from-file", "-")
-	cmd.Env = append(os.Environ(), "HOME="+h.homeDir, "ANX_ACCESS_TOKEN=", "AGENTCTL_ADAPTER=codex", "AGENTCTL_EXECUTION_ID=exec-attrib-bravo-charlie-delta-echo-foxtrot", "AGENTCTL_HOST_ID=host-alpha-bravo-charlie-delta-echo-foxtrot")
+	cmd.Env = append(os.Environ(), "HOME="+h.homeDir, "ANX_ACCESS_TOKEN=", "AGENTCTL_ADAPTER=codex", "AGENTCTL_EXECUTION_ID=exec-attrib-bravo-charlie-delta-echo-foxtrot", "AGENTCTL_HOST_ID=host-alpha-bravo-charlie-delta-echo-foxtrot", "ANX_SKILLS_AUTO_SYNC=0")
 	cmd.Stdin = strings.NewReader(`{"note":"attribution test"}`)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -118,7 +118,7 @@ func TestHostInteractiveEnrollment(t *testing.T) {
 	admin := h.postCore(t, "/auth/passkey/dev/register", "", map[string]any{"display_name": "Interactive admin", "bootstrap_token": h.bootstrapToken})
 	bearer := mustStringPath(t, admin, "tokens.access_token")
 	cmd := exec.Command(h.cliBin, "--base-url", h.baseURL, "host", "enroll", "--name", "interactive-host")
-	cmd.Env = append(os.Environ(), "HOME="+h.homeDir, "ANX_AS=codex")
+	cmd.Env = append(os.Environ(), "HOME="+h.homeDir, "ANX_AS=codex", "ANX_SKILLS_AUTO_SYNC=0")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

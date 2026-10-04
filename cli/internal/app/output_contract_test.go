@@ -100,6 +100,14 @@ func TestStateDerivedActionsAndActorReferences(t *testing.T) {
 	}
 }
 
+func TestHostEnrollmentNextActionsKeepConfiguredDirectory(t *testing.T) {
+	t.Parallel()
+	actions := deriveNextActions("host enroll", nil, map[string]any{"config_dir": "/tmp/anx-config"})
+	if len(actions) != 2 || strings.Join(actions[0].Argv, " ") != "anx --config-dir /tmp/anx-config host status" || strings.Join(actions[1].Argv, " ") != "anx --config-dir /tmp/anx-config skills sync" {
+		t.Fatalf("host enrollment lost its configured directory: %#v", actions)
+	}
+}
+
 func TestAwaitActionsFollowStructuredOutcome(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
