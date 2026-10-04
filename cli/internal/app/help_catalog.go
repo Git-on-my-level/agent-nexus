@@ -46,6 +46,10 @@ var runtimeHelpManualDocTopics = []runtimeHelpDocTopic{
 	{Path: "draft", Kind: "manual", Summary: "Local draft staging, listing, commit, and discard workflow."},
 	{Path: "provenance", Kind: "manual", Summary: "Deterministic provenance walk reference and examples."},
 	{Path: "auth whoami", Kind: "manual", Summary: "Show the enrolled host, derived agent and resolution source."},
+	{Path: "config workspaces", Kind: "manual", Summary: "List workspace aliases and the rule applying to cwd."},
+	{Path: "config use", Kind: "manual", Summary: "Set the user-global default workspace."},
+	{Path: "config map", Kind: "manual", Summary: "Map a directory glob to a workspace."},
+	{Path: "config unmap", Kind: "manual", Summary: "Remove a directory rule."},
 	{Path: "config show", Kind: "manual", Summary: "Print effective CLI settings, per-field sources, precedence, and env var hints (tokens redacted)."},
 }
 

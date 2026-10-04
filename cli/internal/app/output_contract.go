@@ -6,6 +6,7 @@ import (
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/output"
+	"agent-nexus-cli/internal/workspaceconfig"
 )
 
 // commandSideEffectClass is the CLI's command policy. New command families must
@@ -25,6 +26,12 @@ func commandSideEffectClass(command string) string {
 			return "local_operational_write"
 		}
 		return "read_only"
+	}
+	if parts[0] == "config" && len(parts) > 1 {
+		if parts[1] == "show" || parts[1] == "workspaces" {
+			return "read_only"
+		}
+		return "local_operational_write"
 	}
 	if parts[0] == "api" {
 		return "external_side_effect"
@@ -97,7 +104,11 @@ func commandSideEffectClass(command string) string {
 }
 
 func action(label string, argv ...string) output.NextAction {
-	class := commandSideEffectClass(strings.Join(argv[1:], " "))
+	_, remaining, _, err := parseGlobalFlags(argv[1:])
+	if err != nil {
+		remaining = argv[1:]
+	}
+	class := commandSideEffectClass(strings.Join(remaining, " "))
 	return output.NextAction{Label: label, Argv: argv, Mutates: class != "read_only", SideEffectClass: class}
 }
 
@@ -118,7 +129,16 @@ func deriveNextActions(command string, argv []string, value any) []output.NextAc
 		}
 	}
 	if command == "host enroll" {
-		actions = append(actions, action("Check host", "anx", "host", "status"))
+		if alias := anyString(root["workspace_alias"]); alias != "" {
+			prefix := []string{"anx"}
+			if dir := anyString(root["config_dir"]); dir != "" {
+				prefix = append(prefix, "--config-dir", dir)
+			}
+			actions = append(actions, action("Make workspace default", append(append([]string{}, prefix...), "config", "use", alias)...))
+			actions = append(actions, action("Check host", append(prefix, "--workspace", alias, "host", "status")...))
+		} else {
+			actions = append(actions, action("Check host", "anx", "host", "status"))
+		}
 	}
 	if command == "host token" {
 		actions = append(actions, action("Check identity", "anx", "auth", "whoami"))
@@ -365,6 +385,26 @@ func deriveErrorActions(command string, err *errnorm.Error) []output.NextAction 
 		}
 	}
 	switch err.Code {
+	case "workspace_ambiguous":
+		prefix := []string{"anx"}
+		if details, ok := err.Details.(map[string]any); ok {
+			if dir := anyString(details["config_dir"]); dir != "" {
+				prefix = append(prefix, "--config-dir", dir)
+			}
+		}
+		actions := []output.NextAction{action("List workspaces", append(append([]string{}, prefix...), "config", "workspaces")...)}
+		if details, ok := err.Details.(map[string]any); ok {
+			if workspaces, ok := details["workspaces"].([]workspaceconfig.Workspace); ok {
+				for _, ws := range workspaces {
+					if ws.Enrolled {
+						actions = append(actions, action("Use workspace "+ws.Alias, append(append([]string{}, prefix...), "config", "use", ws.Alias)...))
+					}
+				}
+			}
+		}
+		return actions
+	case "workspace_unknown":
+		return []output.NextAction{action("List workspaces", "anx", "config", "workspaces")}
 	case "identity_unresolved":
 		return []output.NextAction{action("Select agent", "anx", "--as", "codex", "auth", "whoami")}
 	case "host_not_enrolled":

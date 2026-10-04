@@ -970,7 +970,7 @@ Daily loop:
 
 Setup: anx host discover; anx host enroll; anx doctor; anx install skill --path ./SKILL.md
 Help: anx help onboarding; anx help <command>; anx help --all
-Global flags: --json, --base-url, --as, --timeout`) + "\n"
+Global flags: --json, --base-url, --workspace, --as, --timeout`) + "\n"
 }
 
 func (a *App) rootUsageTextAll() string {
@@ -1044,6 +1044,7 @@ Onboarding:
 Global Flags:
   --json
   --base-url <url>
+  --workspace <alias>
   --as <name>
   --config-dir <absolute-path>
   --no-color
@@ -1130,7 +1131,7 @@ func helpTopicTextRaw(topic string) (string, bool) {
 		return envDocText() + "\n", true
 	}
 	if topic == "config" {
-		return "Config: anx config show prints the workspace URL, selected agent name, and sources (secrets redacted).\n", true
+		return "Config: anx config workspaces lists aliases and the cwd rule; anx config use <alias|url> sets a user-global default. Use anx config map <path-glob> <alias|url> and anx config unmap <path-glob> for directory rules. anx config show prints the resolved workspace and sources (secrets redacted).\n", true
 	}
 	if topic == "auth" {
 		return "Auth: anx auth whoami reports the enrolled host, derived agent and resolution source. Enroll with anx host enroll.\n", true
@@ -1640,7 +1641,7 @@ func formatGlobalFlagUsage(topic string) string {
 	return strings.TrimSpace(fmt.Sprintf(`Global flags:
   Global flags can appear before or after the command path.
   Examples: anx %s ... ; anx --json %s ... ; anx %s ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>`, path, path, path))
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>`, path, path, path))
 }
 
 func formatInputSchemaBlock(cmd registry.Command) string {
@@ -2009,7 +2010,7 @@ func onboardingHelpText() string {
 Every ANX reader is a CEO by default: group execution detail into a small set of outcome cards, with status in a summary, checklist or visual report.
 
 1. Enroll this machine once per workspace with anx host enroll; a human approves it.
-2. Let agentctl supply the adapter context, or select a persona with ANX_AS / --as.
+2. Run anx config workspaces when unsure; set a default with anx config use <alias>. Do not hardcode --base-url in agent prompts. Let agentctl supply adapter context, or select ANX_AS / --as.
 3. Run anx orient. Confirm your handle, host, assigned work and next actions.
 4. Run anx work start card:<slug>, then anx work note "Progress" as you go.
 5. When blocked, use anx ask "Question" --recommend "Answer" and anx await <ask-id>.
@@ -2110,6 +2111,26 @@ func configLocalHelpText(topic string) (string, bool) {
 	}
 	topics := map[string]configTopic{
 
+		"config workspaces": {
+			summary:  "List enrolled workspaces, aliases, the configured default and the rule applying to cwd. Works even when selection is ambiguous.",
+			usage:    "anx config workspaces",
+			examples: []string{"anx config workspaces", "anx config workspaces --json"},
+		},
+		"config use": {
+			summary:  "Set the user-global default workspace by alias or absolute http(s) base URL. Directory rules still take precedence.",
+			usage:    "anx config use <alias|url>",
+			examples: []string{"anx config use personal"},
+		},
+		"config map": {
+			summary:  "Map an absolute or ~/ directory glob to a workspace. Quote globs. ** matches zero or more path components; longest literal prefix wins, then most literal characters, then lexical order.",
+			usage:    "anx config map <path-glob> <alias|url>",
+			examples: []string{`anx config map "~/work/omi/**" omi`},
+		},
+		"config unmap": {
+			summary:  "Remove a directory rule by its path glob (idempotent).",
+			usage:    "anx config unmap <path-glob>",
+			examples: []string{`anx config unmap "~/work/omi/**"`},
+		},
 		"config show": {
 			summary:  "Print effective CLI settings and the source of each field (access tokens are redacted).",
 			usage:    "anx config show",

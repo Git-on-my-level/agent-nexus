@@ -13,7 +13,7 @@ const agentGuideSkillName = "anx-participant"
 
 const agentGuideSkillDescription = "Participate in Agent Nexus work with source authority, scoped session identity, meaningful updates, and evidence-backed completion."
 
-const agentGuideSkillVersion = "anx.participant.v3"
+const agentGuideSkillVersion = "anx.participant.v4"
 
 type guideSection struct {
 	Title string
@@ -28,6 +28,7 @@ func agentGuideSections() []guideSection {
 	return []guideSection{
 		{Title: "Setup and identity", Lines: []string{
 			"- Enroll a host once per workspace and machine with `anx host enroll`. A human approves the enrollment. Other agents on that host use the same host enrollment.",
+			"- Run `anx config workspaces` when unsure which workspace applies. Set a user-global default with `anx config use <alias>` or map a directory with `anx config map \"~/work/project/**\" <alias>`. Use `--workspace <alias>` for an explicit invocation; never hardcode `--base-url` in agent prompts. Preferences live outside git repositories.",
 			"- Set `ANX_AS=<name>` or pass `--as <name>` to select an explicit stable principal. Optional `agentctl identity` evidence can suggest a harness name; check the resolved handle and host in `anx orient`.",
 			"- `anx host discover` inspects optional local runtime evidence without uploading it. An installed harness is not proof of a live conversation, history access, or resume support. Generic registration does not require agentctl.",
 		}},

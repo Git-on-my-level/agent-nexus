@@ -120,7 +120,10 @@ func preflightKnownCommandShape(args []string) error {
 	case "bridge":
 		return preflightSubcommand(args[1:], bridgeSubcommandSpec)
 	case "config":
-		return preflightSubcommand(args[1:], configSubcommandSpec)
+		if err := preflightSubcommand(args[1:], configSubcommandSpec); err != nil {
+			return err
+		}
+		return preflightConfigArgs(args[1:])
 	case "meta":
 		if err := preflightSubcommand(args[1:], metaSubcommandSpec); err != nil {
 			return err
@@ -778,4 +781,20 @@ func hasHelpToken(args []string) bool {
 		}
 	}
 	return false
+}
+
+func preflightConfigArgs(args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+	expected := map[string]int{"show": 0, "workspaces": 0, "use": 1, "map": 2, "unmap": 1}
+	for _, arg := range args[1:] {
+		if strings.HasPrefix(arg, "-") {
+			return errnorm.Usage("invalid_flags", "config commands accept positional arguments only")
+		}
+	}
+	if len(args)-1 != expected[args[0]] {
+		return errnorm.Usage("invalid_args", "use anx help config "+args[0]+" for command arguments")
+	}
+	return nil
 }

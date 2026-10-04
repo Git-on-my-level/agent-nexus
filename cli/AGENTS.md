@@ -45,6 +45,8 @@ Use the smallest domain verb that says what is happening:
 - `assign`, `resolve`, and `reopen` are Card workflow verbs with domain meaning.
 - `workspace` is the composed read for an agent that needs the useful surrounding context.
 
+Run `anx config workspaces` when unsure which workspace applies. Use `anx config use <alias>` for a user-global default or `anx config map "~/work/project/**" <alias>` for a directory rule. For one invocation, use `--workspace <alias>`. Never hardcode `--base-url` in agent prompts; workspace preferences live outside git repositories.
+
 ### Flag conventions
 
 - **Lifecycle verbs:** `archive`, `unarchive`, `trash`, `restore`, and `purge` (where supported) share one parser-driven surface across artifacts, boards, docs, events, cards, and topics: optional `--from-file` JSON, `--reason`, `--actor-id` (except `purge`), and `--dry-run`, plus the resource id as a leading positional or `--<resource>-id`. The canonical verb matrix per resource is `internal/app/lifecycle_spec.go`; `--reason` / `--actor-id` overlay JSON from `--from-file` when both are supplied.

@@ -62,6 +62,9 @@ func TestDoctorCLIVersionAgainstHandshake(t *testing.T) {
 			if tc.wantExit == 0 {
 				result := asMap(payload["result"])
 				checks = asSlice(result["checks"])
+				if result["source"] != "flag:--base-url" || result["base_url"] != server.URL || !doctorStatus(checks, "workspace_resolution", "pass") {
+					t.Fatalf("workspace diagnostics=%#v", result)
+				}
 				actions = asSlice(payload["next_actions"])
 				if tc.wantStatus == "warn" {
 					warnings := asSlice(payload["warnings"])
@@ -167,7 +170,7 @@ func TestBareInvocationUsesSingleEnrolledHostBaseURL(t *testing.T) {
 	}
 }
 
-func TestBareInvocationKeepsDefaultWhenSeveralHostsAreEnrolled(t *testing.T) {
+func TestBareInvocationFailsWhenSeveralHostsAreEnrolled(t *testing.T) {
 	home := t.TempDir()
 	configDir := filepath.Join(home, ".config", "anx")
 	for _, host := range []hostidentity.Host{
@@ -193,15 +196,30 @@ func TestBareInvocationKeepsDefaultWhenSeveralHostsAreEnrolled(t *testing.T) {
 		return ""
 	}
 	cli.UserHomeDir = func() (string, error) { return home, nil }
-	if exitCode := cli.Run([]string{"--json", "config", "show"}); exitCode != 0 {
-		t.Fatalf("exit %d stdout=%s", exitCode, stdout.String())
-	}
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(stdout.String()), &payload); err != nil {
-		t.Fatal(err)
-	}
-	result := asMap(payload["result"])
-	if result["base_url"] != "http://127.0.0.1:8000" || asMap(result["sources"])["base_url"] != "default" {
-		t.Fatalf("multiple hosts should keep the default: %#v", result)
+	for _, args := range [][]string{
+		{"--json", "config", "show"}, {"--json", "doctor"}, {"--json", "topics", "list"},
+		{"--json", "api", "call", "--path", "/readyz"}, {"--json", "host", "status"},
+	} {
+		stdout.Reset()
+		if exitCode := cli.Run(args); exitCode != 2 {
+			t.Fatalf("exit %d stdout=%s", exitCode, stdout.String())
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(stdout.String()), &payload); err != nil {
+			t.Fatal(err)
+		}
+		errorData := asMap(payload["error"])
+		if errorData["code"] != "workspace_ambiguous" {
+			t.Fatalf("error=%#v", errorData)
+		}
+		message := anyString(errorData["message"])
+		for _, repair := range []string{"a (https://a.example)", "b (https://b.example)", "anx config use a", "anx config use b"} {
+			if !strings.Contains(message, repair) {
+				t.Fatalf("message=%s missing %s", message, repair)
+			}
+		}
+		if len(asSlice(errorData["next_actions"])) != 3 {
+			t.Fatalf("repairs=%#v", errorData)
+		}
 	}
 }

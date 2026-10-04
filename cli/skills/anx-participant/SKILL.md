@@ -5,12 +5,13 @@ description: Keep substantive Agent Nexus work visible with explicit task refs, 
 
 # ANX participant
 
-Skill contract: anx.participant.v3. Installation does not prove that a session loaded this version.
+Skill contract: anx.participant.v4. Installation does not prove that a session loaded this version.
 
 Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence.
 
 ## Setup and scope
 
+- Run `anx config workspaces` when unsure which workspace applies. Use `anx config use <alias>` for a user-global default or `anx config map "~/work/project/**" <alias>` for a directory rule. For one invocation, use `--workspace <alias>`. Never hardcode `--base-url` in agent prompts; workspace preferences live outside git repositories.
 - Enroll the host once with `anx host enroll`; a human approves it. Choose your stable principal with `--as <name>` or `ANX_AS`. Check identity with `anx orient`. Registration never grants credentials or additional authority.
 - `anx host discover` reports optional local identity evidence. A detected harness is not a live session, transcript permission, or proof of resume support. Arbitrary providers can register explicitly without agentctl.
 - Match an existing project only from clear configured repository/source/task evidence. Ask about new or ambiguous projects. Skip trivial activity. Reading context alone does not create tasks, register participation, or report progress.

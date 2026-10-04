@@ -320,6 +320,12 @@ func parseHelp(content []byte) (HelpRegistry, error) {
 }
 
 func sideEffectClass(cmd Command) string {
+	if strings.HasPrefix(cmd.CLIPath, "config ") {
+		if cmd.CLIPath == "config show" || cmd.CLIPath == "config workspaces" {
+			return "read_only"
+		}
+		return "local_operational_write"
+	}
 	if strings.HasPrefix(cmd.CLIPath, "skills ") {
 		if cmd.CLIPath == "skills configure" {
 			return "local_operational_write"

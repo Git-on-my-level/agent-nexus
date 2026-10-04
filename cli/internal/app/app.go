@@ -21,6 +21,7 @@ type App struct {
 	Stderr          io.Writer
 	Getenv          func(string) string
 	UserHomeDir     func() (string, error)
+	Getwd           func() (string, error)
 	ReadFile        func(string) ([]byte, error)
 	StdinIsTTY      func() bool
 	hasOMPAncestor  func() bool
@@ -77,6 +78,7 @@ func New() *App {
 		Stderr:         os.Stderr,
 		Getenv:         os.Getenv,
 		UserHomeDir:    os.UserHomeDir,
+		Getwd:          os.Getwd,
 		ReadFile:       os.ReadFile,
 		hasOMPAncestor: ompAncestor,
 		pmTurns:        newPMTurnMemory(),
@@ -152,7 +154,12 @@ func (a *App) Run(args []string) int {
 			return a.renderError(resolveMachineCommandIdentity(configErrorCommand), jsonMode, wrapped)
 		}
 	}
-	resolved = a.applySingleHostBaseURL(resolved)
+	if !workspaceIndependentCommand(remaining) || cmdPeek == "config" && subPeek == "workspaces" && overrides.Workspace != nil {
+		resolved, err = a.resolveWorkspace(resolved, overrides.Workspace)
+		if err != nil {
+			return a.renderError(resolveMachineCommandIdentity(preflightCommandName), resolved.JSON, err)
+		}
+	}
 	if resolved.AccessToken == "" && len(remaining) > 0 && needsAgentIdentity(remaining) {
 		if _, _, nameErr := a.identityName(resolved); nameErr == nil {
 			if _, hostErr := a.resolvedHost(resolved); hostErr == nil {
@@ -272,6 +279,7 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	var (
 		jsonFlag      trackedBool
 		baseURLFlag   trackedString
+		workspaceFlag trackedString
 		asFlag        trackedString
 		configDirFlag trackedString
 		noColorFlag   trackedBool
@@ -282,6 +290,7 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	)
 	fs.Var(&jsonFlag, "json", "Emit JSON envelope output")
 	fs.Var(&baseURLFlag, "base-url", "Core base URL")
+	fs.Var(&workspaceFlag, "workspace", "Workspace alias (see anx config workspaces)")
 	fs.Var(&asFlag, "as", "Derived agent name")
 	fs.Var(&configDirFlag, "config-dir", "Absolute ANX config directory")
 	fs.Var(&noColorFlag, "no-color", "Disable colorized output")
@@ -304,6 +313,9 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	}
 	if baseURLFlag.set {
 		overrides.BaseURL = &baseURLFlag.value
+	}
+	if workspaceFlag.set {
+		overrides.Workspace = &workspaceFlag.value
 	}
 	if asFlag.set {
 		overrides.As = &asFlag.value
@@ -330,6 +342,12 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	}
 	if versionFlag.set && versionFlag.value && len(remaining) == 0 {
 		remaining = []string{"version"}
+	}
+	if overrides.BaseURL != nil && overrides.Workspace != nil {
+		return overrides, nil, false, errnorm.Usage("invalid_flags", "use either --base-url or --workspace")
+	}
+	if overrides.Workspace != nil && *overrides.Workspace == "" {
+		return overrides, nil, false, errnorm.Usage("invalid_flags", "--workspace requires a non-empty alias")
 	}
 	return overrides, remaining, helpRequested, nil
 }
@@ -406,6 +424,13 @@ func normalizeTrailingGlobalFlags(args []string, overrides *config.Overrides) ([
 			}
 			parsed := strings.TrimSpace(rawValue)
 			overrides.BaseURL = &parsed
+		case "workspace":
+			rawValue, err := readValue(name)
+			if err != nil {
+				return nil, err
+			}
+			parsed := strings.TrimSpace(rawValue)
+			overrides.Workspace = &parsed
 		case "as":
 			rawValue, err := readValue(name)
 			if err != nil {

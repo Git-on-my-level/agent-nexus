@@ -12,7 +12,7 @@ anx --as codex auth whoami
 anx --as codex orient
 ```
 
-Enrollment prints a user code and verification URL for human approval. For CI, use a one-time headless token: `anx host enroll --token <token>`. The host key is stored owner-only under `~/.config/anx/hosts/<workspace-key>/`.
+Enrollment prints a user code and verification URL for human approval. For CI, use a one-time headless token: `anx host enroll --token <token>`. Enrollment prints `anx config use <alias>` to select that workspace without changing your default. Run `anx config workspaces` when unsure, and use `anx config map "~/work/project/**" <alias>` for directory rules. Preferences are user-global in `~/.config/anx/workspaces.json`; never hardcode `--base-url` in agent prompts. Multiple enrolled workspaces without a selection fail with repair commands. The host key is stored owner-only under `~/.config/anx/hosts/<workspace-key>/`.
 
 Inside `agentctl run`, the CLI resolves the adapter and run attribution automatically. Use `--as` or `ANX_AS` for a persona or when no harness context is available. See [host and runs runbook](docs/runbook.md) for token scripting and the agentctl subscription recipe.
 

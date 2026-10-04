@@ -18,6 +18,7 @@ const (
 type Overrides struct {
 	JSON      *bool
 	BaseURL   *string
+	Workspace *string
 	As        *string
 	ConfigDir *string
 	NoColor   *bool
