@@ -52,15 +52,29 @@ func (a *App) hostCall(ctx context.Context, cfg config.Resolved, method, path st
 	return parsed, nil
 }
 
-func writeEnrollmentInstructions(progress io.Writer, start map[string]any) {
+func writeEnrollmentInstructions(progress io.Writer, start map[string]any, baseURL string) {
 	code := anyString(start["user_code"])
 	verify := anyString(start["verification_url"])
-	parsed, err := url.Parse(verify)
-	if err == nil && parsed != nil && (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Hostname() != "" {
+	if isAbsoluteHTTPURL(verify) {
+		fmt.Fprintf(progress, "enrollment user_code=%s verification_url=%s\nnext open %s\n", code, verify, verify)
+		return
+	}
+	if isAbsoluteHTTPURL(baseURL) {
+		parsed, _ := url.Parse(strings.TrimSpace(baseURL))
+		parsed.Path = strings.TrimRight(parsed.Path, "/") + "/access/hosts"
+		parsed.RawPath = ""
+		parsed.RawQuery = ""
+		parsed.Fragment = ""
+		verify = parsed.String()
 		fmt.Fprintf(progress, "enrollment user_code=%s verification_url=%s\nnext open %s\n", code, verify, verify)
 		return
 	}
 	fmt.Fprintf(progress, "enrollment user_code=%s\ninstruction open Access → Hosts in the workspace web UI and approve this code\n", code)
+}
+
+func isAbsoluteHTTPURL(value string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	return err == nil && parsed != nil && (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Hostname() != ""
 }
 
 func discoveredAdapters() []string {
@@ -301,7 +315,7 @@ func (a *App) hostEnroll(ctx context.Context, args []string, cfg config.Resolved
 		if cfg.JSON {
 			progress = a.Stderr
 		}
-		writeEnrollmentInstructions(progress, start)
+		writeEnrollmentInstructions(progress, start, cfg.BaseURL)
 		interval := time.Duration(hostInt(start["poll_interval_seconds"])) * time.Second
 		if interval < time.Second {
 			interval = time.Second
