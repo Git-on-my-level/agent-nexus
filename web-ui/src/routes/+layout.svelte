@@ -85,6 +85,9 @@
   let creatingActor = $state(false);
   let newActorName = $state("");
   let hydratedWorkspaceSlug = $state("");
+  let activationError = $state("");
+  let activationPending = $state(false);
+  const hydration = { attemptPath: "", sequence: 0 };
   let workspacePickerOpen = $state(false);
   let commandPaletteOpen = $state(false);
   let accountMenuOpen = $state(false);
@@ -337,13 +340,16 @@
     setCurrentCoreBaseUrl(activeWorkspace?.coreBaseUrl ?? "");
     const workspaceKey = `${activeOrganizationSlug}/${workspaceSlug}`;
     if (hydratedWorkspaceSlug === workspaceKey) {
+      hydration.sequence += 1;
+      activationError = "";
+      activationPending = false;
       return;
     }
 
-    hydratedWorkspaceSlug = workspaceKey;
-    void hydrateWorkspace(workspaceSlug).catch((error) => {
-      actorError = error.message;
-    });
+    const attemptPath = `${workspaceKey}:${$page.url.pathname}`;
+    if (hydration.attemptPath === attemptPath) return;
+    hydration.attemptPath = attemptPath;
+    void activateCurrentWorkspace();
   });
 
   $effect(() => {
@@ -445,8 +451,41 @@
     }
   }
 
-  async function hydrateWorkspace(workspaceSlug) {
-    await hydrateWorkspaceBootstrap({
+  async function activateCurrentWorkspace() {
+    const sequence = ++hydration.sequence;
+    const key = `${activeOrganizationSlug}/${activeWorkspaceSlug}`;
+    activationError = "";
+    activationPending = true;
+    try {
+      const result = await hydrateWorkspace(activeWorkspaceSlug, (message) => {
+        if (
+          sequence === hydration.sequence &&
+          key === `${activeOrganizationSlug}/${activeWorkspaceSlug}`
+        )
+          activationError = message;
+      });
+      if (
+        sequence === hydration.sequence &&
+        key === `${activeOrganizationSlug}/${activeWorkspaceSlug}` &&
+        result !== false
+      ) {
+        hydratedWorkspaceSlug = key;
+        activationError = "";
+      }
+    } catch {
+      if (
+        sequence === hydration.sequence &&
+        key === `${activeOrganizationSlug}/${activeWorkspaceSlug}`
+      )
+        activationError = "Could not open this workspace. Please try again.";
+    } finally {
+      if (sequence === hydration.sequence) activationPending = false;
+    }
+  }
+
+  async function hydrateWorkspace(workspaceSlug, onActivationRetry = () => {}) {
+    return hydrateWorkspaceBootstrap({
+      onActivationRetry,
       workspaceSlug,
       hostedSession: hostedMode ? $page.data.workspaceSession : undefined,
       workspaceHeader: WORKSPACE_HEADER,
@@ -1278,7 +1317,19 @@
             class={`shell-content shell-content--${shellContentConfig.mode}`}
             style={`--shell-content-max: ${shellContentConfig.maxWidth}`}
           >
-            {#if !identityReady || workspaceBootstrapPending || shouldRedirectToLogin || hydratedWorkspaceSlug !== `${activeOrganizationSlug}/${activeWorkspaceSlug}`}
+            {#if activationError}
+              <div class="p-6" role="alert" data-workspace-activation-error>
+                <p>{activationError}</p>
+                <button
+                  class="btn-secondary mt-3"
+                  type="button"
+                  disabled={activationPending}
+                  onclick={() => void activateCurrentWorkspace()}
+                >
+                  {activationPending ? "Retrying…" : "Retry"}
+                </button>
+              </div>
+            {:else if !identityReady || workspaceBootstrapPending || shouldRedirectToLogin || hydratedWorkspaceSlug !== `${activeOrganizationSlug}/${activeWorkspaceSlug}`}
               <div
                 class="p-6"
                 aria-label="Loading workspace content"

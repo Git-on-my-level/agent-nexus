@@ -373,8 +373,18 @@ function buildCSPDirectives(env = privateEnv) {
   };
 }
 
-function buildCSPHeader() {
-  return Object.entries(buildCSPDirectives())
+function buildCSPHeader(generatedPolicy = "") {
+  const directives = buildCSPDirectives();
+  // Keep Kit's per-response nonce/hash that authorizes its inline bootstrap.
+  const generatedScript = generatedPolicy
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith("script-src "));
+  const bootstrapSources = (
+    generatedScript?.split(/\s+/).slice(1) ?? []
+  ).filter((source) => /^'(nonce-|sha(256|384|512)-)/.test(source));
+  directives["script-src"].push(...bootstrapSources);
+  return Object.entries(directives)
     .map(([directive, values]) => `${directive} ${values.join(" ")}`)
     .join("; ");
 }
@@ -555,7 +565,10 @@ export async function handle({ event, resolve }) {
   response.headers.set("X-ANX-UI-Version", CURRENT_VERSION);
 
   if (documentNavigation) {
-    response.headers.set("Content-Security-Policy", buildCSPHeader());
+    response.headers.set(
+      "Content-Security-Policy",
+      buildCSPHeader(response.headers.get("Content-Security-Policy") ?? ""),
+    );
     response.headers.set("X-Frame-Options", "DENY");
     response.headers.set("X-Content-Type-Options", "nosniff");
     response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");

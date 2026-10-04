@@ -200,7 +200,10 @@ export async function load(event) {
           organizationSlug: workOrg,
           workspaceSlug: workSlug,
           coreBaseUrl: schemaCoreBaseUrl,
-          headers: hostedWorkspaceCoreProxyHeaders(event),
+          headers: {
+            ...hostedWorkspaceCoreProxyHeaders(event),
+            purpose: "prefetch",
+          },
         })
       : Promise.resolve(undefined);
   // Attach a rejection handler immediately while the schema check is pending.
@@ -224,7 +227,7 @@ export async function load(event) {
           [WORKSPACE_HEADER]: workSlug,
           [WORKSPACE_HEADER_CONSTANTS.ORGANIZATION_HEADER]: workOrg,
           ...(provider.mode === "hosted"
-            ? hostedWorkspaceCoreProxyHeaders(event)
+            ? { ...hostedWorkspaceCoreProxyHeaders(event), purpose: "prefetch" }
             : {}),
         }),
       });
@@ -232,6 +235,10 @@ export async function load(event) {
         .then(() => "")
         .catch((error) => {
           schemaCheckPromises.delete(cacheKey);
+          // Passive reads cannot wake a sleeping runtime. Activation checks the
+          // schema after establishing the selected workspace's session.
+          if (provider.mode === "hosted" && error?.coreHttpStatus === 503)
+            return "";
           if (shouldDegradeCoreSchemaCheckInDev(error)) {
             logServerEvent("workspace.layout.schema_check_degraded", {
               org: workOrg,

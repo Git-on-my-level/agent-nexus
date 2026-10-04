@@ -808,7 +808,7 @@ export async function loadWorkspaceAuthenticatedAgent({
       });
       return payload.agent ?? null;
     } catch (failure) {
-      if (failure?.status === 401) return null;
+      if (failure?.status === 401 || failure?.status === 503) return null;
       throw failure;
     }
   }

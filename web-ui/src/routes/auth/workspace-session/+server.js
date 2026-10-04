@@ -1,3 +1,7 @@
+import {
+  createAnxCoreClient,
+  verifyCoreSchemaVersion,
+} from "$lib/anxCoreClient.js";
 import { json } from "@sveltejs/kit";
 import { dev } from "$app/environment";
 import {
@@ -80,6 +84,13 @@ export async function POST(event) {
       );
       agent = session.agent;
     }
+    await verifyCoreSchemaVersion(
+      createAnxCoreClient({
+        baseUrl: target.coreBaseUrl,
+        fetchFn: fetch,
+        requestContextHeadersProvider: () => target.headers ?? {},
+      }),
+    );
     event.cookies.set(
       LAST_WORKSPACE_COOKIE,
       lastWorkspaceCookieValue(organizationSlug, workspaceSlug),
@@ -93,9 +104,11 @@ export async function POST(event) {
     );
     return json({ agent }, { headers });
   } catch (failure) {
+    if ([429, 503].includes(failure.status) && failure.retryAfter)
+      headers["retry-after"] = failure.retryAfter;
     return json(
       { error: "session_establishment_failed" },
-      { status: failure.status || 502, headers },
+      { status: failure.status || failure.coreHttpStatus || 502, headers },
     );
   }
 }

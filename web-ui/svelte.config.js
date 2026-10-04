@@ -8,6 +8,7 @@ const { basePath, useNodeAdapter } = resolveUiBuildConfig();
 const config = {
   preprocess: vitePreprocess(),
   kit: {
+    csp: { mode: "auto", directives: { "script-src": ["self"] } },
     adapter: useNodeAdapter ? adapterNode({ out: "build" }) : adapterAuto(),
     paths: {
       base: basePath,

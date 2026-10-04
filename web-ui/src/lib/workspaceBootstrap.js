@@ -1,3 +1,4 @@
+import { requestWorkspaceActivation } from "./workspaceActivation.js";
 import { get } from "svelte/store";
 
 import { goto } from "$app/navigation";
@@ -436,6 +437,7 @@ export async function hydrateWorkspaceBootstrap({
   coreClient,
   storage,
   fetchFn = globalThis.fetch.bind(globalThis),
+  onActivationRetry = () => {},
   onActorError = () => {},
   onLoadingActors = () => {},
   onDevPersonaBusy = () => {},
@@ -446,16 +448,14 @@ export async function hydrateWorkspaceBootstrap({
   if (hostedSession !== undefined) {
     // Actual activation only: cached/preloaded route data is never an auth authority.
     const epoch = getSessionEpoch();
-    const response = await fetchFn(appPath("/auth/workspace-session"), {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ organizationSlug, workspaceSlug }),
+    hostedSession = await requestWorkspaceActivation({
+      url: appPath("/auth/workspace-session"),
+      input: { organizationSlug, workspaceSlug },
+      fetchFn,
+      onRetry: onActivationRetry,
+      isCurrent: () => epoch === getSessionEpoch(),
     });
-    if (!response.ok)
-      throw new Error(`Workspace selection failed (${response.status})`);
-    hostedSession = await response.json();
-    if (epoch !== getSessionEpoch()) return;
+    if (!hostedSession || epoch !== getSessionEpoch()) return false;
     initializeActorSession(storage, workspaceSlug);
     completeAuthSession(hostedSession.agent, workspaceSlug, {
       organizationSlug,

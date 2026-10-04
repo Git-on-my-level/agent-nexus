@@ -641,6 +641,29 @@ describe("hooks proxy retry", () => {
     );
   });
 
+  it("preserves the generated bootstrap nonce in the document CSP", async () => {
+    const response = await handle({
+      event: {
+        url: new URL("https://ui.test/"),
+        request: new Request("https://ui.test/", {
+          headers: { accept: "text/html" },
+        }),
+      },
+      resolve: async () =>
+        new Response("ok", {
+          headers: {
+            "content-security-policy": "script-src 'self' 'nonce-per-response'",
+          },
+        }),
+    });
+    expect(response.headers.get("content-security-policy")).toContain(
+      "'nonce-per-response'",
+    );
+    expect(response.headers.get("content-security-policy")).not.toContain(
+      "script-src 'self' 'unsafe-inline'",
+    );
+  });
+
   it("adds configured CSP sources to document navigation responses", async () => {
     envState.ANX_UI_CSP_SCRIPT_SRC_EXTRA =
       "https://static.cloudflareinsights.com 'sha256-examplehash='";

@@ -250,6 +250,10 @@ describe("workspace +layout.server.js (integration with real resolver)", () => {
 
     vi.unstubAllGlobals();
     expect(result.workspaceSession.agent.agent_id).toBe("human");
+    const config =
+      anxCoreClientIntegrationMocks.createAnxCoreClient.mock.calls.at(-1)[0];
+    expect(config.requestContextHeadersProvider().purpose).toBe("prefetch");
+
     expect(result.workspace).toMatchObject({
       slug: "my-ws",
       organizationSlug: "my-org",

@@ -1,3 +1,7 @@
+vi.mock("$lib/anxCoreClient.js", () => ({
+  createAnxCoreClient: vi.fn(),
+  verifyCoreSchemaVersion: vi.fn().mockResolvedValue({}),
+}));
 import { beforeEach, expect, it, vi } from "vitest";
 const resolve = vi.hoisted(() => vi.fn());
 vi.mock("$lib/server/workspaceResolver.js", () => ({
@@ -74,4 +78,13 @@ it("revoked membership cannot establish, refresh, or set last-workspace", async 
   expect((await POST(e)).status).toBe(403);
   expect(establishSession).not.toHaveBeenCalled();
   expect(jar.size).toBe(0);
+});
+
+it("preserves transient handshake failures for activation backoff", async () => {
+  const { verifyCoreSchemaVersion } = await import("$lib/anxCoreClient.js");
+  verifyCoreSchemaVersion.mockRejectedValueOnce(
+    Object.assign(new Error("asleep"), { coreHttpStatus: 503 }),
+  );
+  const { e } = event();
+  expect((await POST(e)).status).toBe(503);
 });
