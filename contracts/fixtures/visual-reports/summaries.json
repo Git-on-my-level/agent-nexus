@@ -1,0 +1,56 @@
+[
+  {
+    "name": "four backticks ignore shorter nested fence",
+    "markdown": "Ready\n````markdown\n```\n- [x] Example\nNeeds David: example\n````\n- [ ] Ship",
+    "summary": "Ready",
+    "progress": {
+      "done": 0,
+      "total": 1
+    },
+    "needs": []
+  },
+  {
+    "name": "tilde fences require matching marker and length",
+    "markdown": "~~~~\n```\n- [x] Example\n~~~\n- [x] Still example\n~~~~~\n- [ ]",
+    "summary": "",
+    "progress": {
+      "done": 0,
+      "total": 1
+    },
+    "needs": []
+  },
+  {
+    "name": "closing fences cannot have info strings",
+    "markdown": "```\n```text\n- [x] Example\n```\nNeeds David: approve",
+    "summary": "",
+    "progress": {
+      "done": 0,
+      "total": 0
+    },
+    "needs": [
+      "Needs David: approve"
+    ]
+  },
+  {
+    "name": "empty final checkbox and nested task",
+    "markdown": "# Launch\n  - [X] Nested\n- [ ]",
+    "summary": "Launch",
+    "progress": {
+      "done": 1,
+      "total": 2
+    },
+    "needs": []
+  },
+  {
+    "name": "three space indentation and longer closer",
+    "markdown": "   ````md\n- [x] Example\n   `````   \nNeeds operator: approve\n- [ ] Ship",
+    "summary": "",
+    "progress": {
+      "done": 0,
+      "total": 1
+    },
+    "needs": [
+      "Needs operator: approve"
+    ]
+  }
+]

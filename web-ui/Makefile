@@ -16,10 +16,11 @@ install: ## Install dependencies
 serve: ## Run local development server
 	PORT=$(PORT) ./scripts/dev
 
-check: ## Run cheap checks (eslint, prettier --check, unit tests)
+check: ## Run lint, unit tests, and shared Go/browser report conformance
 	$(PNPM) run lint
 	$(PNPM) run test:unit
 	node scripts/audit-core-proxy-paths.mjs
+	node ../scripts/check-visual-report-conformance.mjs
 
 format: ## Apply formatting
 	$(PNPM) run format

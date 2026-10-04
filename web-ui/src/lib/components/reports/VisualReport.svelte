@@ -9,7 +9,7 @@
   import ReportLayout from "./ReportLayout.svelte";
   import { layoutPanelIds } from "./reportLayout.js";
 
-  let { report, documentId = "", revisionRef = "" } = $props();
+  let { report, documentId = "", revisionRef = "", compact = false } = $props();
   let liveObservations = $state(new Map());
   let hasLive = $derived(report.panels.some(isLivePanel));
   let observedPanels = $derived(
@@ -41,8 +41,10 @@
   let panels = $derived(
     observedPanels.filter(
       (panel) =>
-        (project === "all" || panel.project_id === project) &&
-        (freshness === "all" || getPanelFreshness(panel, now) === freshness),
+        (compact || project === "all" || panel.project_id === project) &&
+        (compact ||
+          freshness === "all" ||
+          getPanelFreshness(panel, now) === freshness),
     ),
   );
   let panelsById = $derived(new Map(panels.map((panel) => [panel.id, panel])));
@@ -148,26 +150,26 @@
 <section class="visual-report" aria-label="Visual report">
   <header class="report-heading">
     <div>
-      <p class="report-kicker">
-        Visual report <span>· v{report.schema_version}</span>
-      </p>
+      {#if !compact}<p class="report-kicker">
+          Visual report <span>· v{report.schema_version}</span>
+        </p>{/if}
       <h2>{report.title}</h2>
-      <p class="report-summary">{report.summary}</p>
+      {#if !compact}<p class="report-summary">{report.summary}</p>{/if}
     </div>
-    <div class="report-snapshot">
-      <span class="report-snapshot-dot" aria-hidden="true"></span><span
-        >{hasLive ? "Live workspace + snapshots" : "Snapshot, not live"}<br
-        /><time datetime={report.generated_at}
-          >{new Date(report.generated_at)
-            .toISOString()
-            .slice(0, 16)
-            .replace("T", " ")} UTC</time
-        ></span
-      >
-    </div>
+    {#if !compact}<div class="report-snapshot">
+        <span class="report-snapshot-dot" aria-hidden="true"></span><span
+          >{hasLive ? "Live workspace + snapshots" : "Snapshot, not live"}<br
+          /><time datetime={report.generated_at}
+            >{new Date(report.generated_at)
+              .toISOString()
+              .slice(0, 16)
+              .replace("T", " ")} UTC</time
+          ></span
+        >
+      </div>{/if}
   </header>
 
-  {#if !report.layout || report.projects.length > 1}
+  {#if !compact && (!report.layout || report.projects.length > 1)}
     <div class="report-projects" aria-label="Project overview">
       {#each report.projects as item}
         <button
@@ -188,38 +190,39 @@
     </div>
   {/if}
 
-  <div class="report-toolbar">
-    <div class="flex flex-wrap items-center gap-3">
-      <button
-        type="button"
-        class="report-all"
-        aria-pressed={project === "all"}
-        onclick={() => setFilter("reportProject", "all")}>All projects</button
+  {#if !compact}<div class="report-toolbar">
+      <div class="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          class="report-all"
+          aria-pressed={project === "all"}
+          onclick={() => setFilter("reportProject", "all")}>All projects</button
+        >
+        <p class="text-micro text-fg-muted" aria-live="polite">
+          {panels.length} of {report.panels.length} panels{staleCount
+            ? ` · ${staleCount} stale`
+            : ""}
+        </p>
+      </div>
+      <label class="report-filter-label"
+        >Freshness <select
+          aria-label="Filter by freshness"
+          value={freshness}
+          onchange={(event) =>
+            setFilter("reportFreshness", event.currentTarget.value)}
+          >{#each freshnessOptions as option}<option value={option}
+              >{option === "all"
+                ? "All evidence"
+                : option.charAt(0).toUpperCase() + option.slice(1)}</option
+            >{/each}</select
+        ></label
       >
-      <p class="text-micro text-fg-muted" aria-live="polite">
-        {panels.length} of {report.panels.length} panels{staleCount
-          ? ` · ${staleCount} stale`
-          : ""}
-      </p>
-    </div>
-    <label class="report-filter-label"
-      >Freshness <select
-        aria-label="Filter by freshness"
-        value={freshness}
-        onchange={(event) =>
-          setFilter("reportFreshness", event.currentTarget.value)}
-        >{#each freshnessOptions as option}<option value={option}
-            >{option === "all"
-              ? "All evidence"
-              : option.charAt(0).toUpperCase() + option.slice(1)}</option
-          >{/each}</select
-      ></label
-    >
-  </div>
+    </div>{/if}
 
   {#if panels.length}
     {#if report.layout}
       <ReportLayout
+        {compact}
         node={report.layout}
         {panelsById}
         sources={report.sources}
@@ -234,6 +237,7 @@
       <div class="report-grid" class:report-layout-remainder={report.layout}>
         {#each remainingPanels as panel (panel.id)}
           <VisualReportPanel
+            {compact}
             {panel}
             sources={report.sources}
             freshness={getPanelFreshness(panel, now)}
@@ -252,11 +256,11 @@
       >
     </div>
   {/if}
-  <p class="report-footnote">
-    {hasLive
-      ? "Live panels refresh from workspace data · Authored snapshots retain their observation time"
-      : "Agent-assembled report · Source-linked claims · No automatic source refresh"}
-  </p>
+  {#if !compact}<p class="report-footnote">
+      {hasLive
+        ? "Live panels refresh from workspace data · Authored snapshots retain their observation time"
+        : "Agent-assembled report · Source-linked claims · No automatic source refresh"}
+    </p>{/if}
 </section>
 
 <style>

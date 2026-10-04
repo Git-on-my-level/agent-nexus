@@ -14,7 +14,7 @@ import { visualReportExample } from "../../src/lib/fixtures/visualReportExample.
 const cases = JSON.parse(
   readFileSync(
     new URL(
-      "../../../contracts/fixtures/live-report-queries.json",
+      "../../../contracts/fixtures/visual-reports/queries.json",
       import.meta.url,
     ),
     "utf8",
@@ -45,7 +45,7 @@ it("keeps static snapshots and uses read time for live freshness", () => {
   expect(getPanelFreshness(panel, now)).toBe("unavailable");
   const observed = withLiveObservation(panel, {
     status: "ok",
-    observed_at: "2026-10-04T10:00:00Z",
+    observed_at: "2026-10-04T10:00:00.123456789Z",
     data: { items: [] },
   });
   expect(getPanelFreshness(observed, now)).toBe("current");

@@ -1,6 +1,8 @@
 package server
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,7 +13,7 @@ import (
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/reports"
+	reports "agent-nexus-visualreport"
 )
 
 func handleRenderReport(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {
@@ -67,7 +69,7 @@ type reportReader struct {
 	visibility       map[string]bool
 	work             []map[string]any
 	boards           map[string]map[string]any
-	workRead         bool
+	workScopes       map[string]reportWorkRead
 	workPartial      bool
 	workErr          error
 	events           []map[string]any
@@ -85,39 +87,51 @@ func reportActive(row map[string]any) bool {
 	return row != nil && (state == "" || state == "active") && anyString(row["archived_at"]) == "" && anyString(row["trashed_at"]) == ""
 }
 
-func (reader *reportReader) loadWork() {
-	if reader.workRead {
+type reportWorkStore interface {
+	ListReportWork(context.Context, primitives.ReportWorkFilter) (primitives.ReportWorkPage, error)
+}
+type reportWorkRead struct {
+	work    []map[string]any
+	partial bool
+	err     error
+}
+
+func (reader *reportReader) loadWork(filter primitives.ReportWorkFilter) {
+	keyBytes, _ := json.Marshal(filter)
+	key := string(keyBytes)
+	if cached, ok := reader.workScopes[key]; ok {
+		reader.work, reader.workPartial, reader.workErr = cached.work, cached.partial, cached.err
 		return
 	}
-	reader.workRead = true
-	reader.boards = map[string]map[string]any{}
-	limit := 1000
-	boards, cursor, err := reader.opts.primitiveStore.ListBoards(reader.r.Context(), primitives.BoardListFilter{States: []string{"active"}, Limit: &limit})
-	if err != nil {
-		reader.workErr = err
-		return
+	// Keep all scope reads request-local, so panels with identical scopes share
+	// the bounded query, while different scopes cannot consume each other's cap.
+	reader.work, reader.workPartial, reader.workErr = nil, false, nil
+	if reader.boards == nil {
+		reader.boards = map[string]map[string]any{}
 	}
-	reader.workPartial = cursor != ""
-	for _, b := range boards {
-		if reportActive(b.Board) && threadAccessible(reader.r, reader.opts, anyString(b.Board["thread_id"])) {
-			reader.boards[anyString(b.Board["ref"])] = b.Board
-		}
-	}
-	store, ok := reader.opts.primitiveStore.(WorkStore)
+	store, ok := reader.opts.primitiveStore.(reportWorkStore)
 	if !ok {
 		reader.workErr = fmt.Errorf("work unavailable")
-		return
-	}
-	cursor = ""
-	for count := 0; count < reports.MaxRows; {
-		page, err := store.ListWork(reader.r.Context(), primitives.WorkListFilter{Limit: 200, Cursor: cursor})
-		if err != nil {
-			reader.workErr = err
-			return
-		}
-		count += len(page.Work)
+	} else {
+		page, err := store.ListReportWork(reader.r.Context(), filter)
+		reader.workPartial, reader.workErr = page.Truncated, err
 		for _, work := range page.Work {
-			if reader.boards[anyString(work["board_ref"])] == nil || !reportActive(work) || !threadAccessible(reader.r, reader.opts, anyString(work["thread_id"])) {
+			ref := anyString(work["board_ref"])
+			board := reader.boards[ref]
+			if board == nil {
+				resolved, err := reader.opts.primitiveStore.ResolveResourceRef(reader.r.Context(), primitives.ResourceRefInput{Type: "board", Ref: ref})
+				if err != nil {
+					reader.workErr = err
+					break
+				}
+				board, err = reader.opts.primitiveStore.GetBoard(reader.r.Context(), resolved.ID)
+				if err != nil {
+					reader.workErr = err
+					break
+				}
+				reader.boards[ref] = board
+			}
+			if !reportActive(board) || !reportActive(work) || !threadAccessible(reader.r, reader.opts, anyString(board["thread_id"])) || !threadAccessible(reader.r, reader.opts, anyString(work["thread_id"])) {
 				continue
 			}
 			phase := anyString(work["phase"])
@@ -126,19 +140,15 @@ func (reader *reportReader) loadWork() {
 			}
 			reader.work = append(reader.work, work)
 		}
-		cursor = page.NextCursor
-		if cursor == "" {
-			break
-		}
 	}
-	reader.workPartial = reader.workPartial || cursor != ""
+	if reader.workScopes == nil {
+		reader.workScopes = map[string]reportWorkRead{}
+	}
+	reader.workScopes[key] = reportWorkRead{reader.work, reader.workPartial, reader.workErr}
 }
 
 func (reader *reportReader) scopedWork(q reports.Query) ([]map[string]any, error) {
-	reader.loadWork()
-	if reader.workErr != nil {
-		return nil, reader.workErr
-	}
+	filter := primitives.ReportWorkFilter{Limit: reports.MaxRows}
 	selected := map[string]bool{}
 	for _, ref := range q.BoardRefs {
 		resolved, err := reader.opts.primitiveStore.ResolveResourceRef(reader.r.Context(), primitives.ResourceRefInput{Type: "board", Ref: ref})
@@ -153,6 +163,7 @@ func (reader *reportReader) scopedWork(q reports.Query) ([]map[string]any, error
 			return nil, fmt.Errorf("board unavailable")
 		}
 		selected[anyString(board["ref"])] = true
+		filter.BoardIDs = append(filter.BoardIDs, resolved.ID)
 	}
 	project := q.ProjectRef
 	if project != "" {
@@ -165,6 +176,11 @@ func (reader *reportReader) scopedWork(q reports.Query) ([]map[string]any, error
 			return nil, fmt.Errorf("project unavailable")
 		}
 		project = anyString(topic["ref"])
+	}
+	filter.ProjectRef = project
+	reader.loadWork(filter)
+	if reader.workErr != nil {
+		return nil, reader.workErr
 	}
 	out := []map[string]any{}
 	for _, work := range reader.work {

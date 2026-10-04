@@ -819,7 +819,7 @@ function liveObservation() {
   return {
     document_ref: `document:${DOC_ID}`,
     revision_ref: "document_revision:dashboard-r1",
-    observed_at: OBSERVED_AT,
+    observed_at: OBSERVED_AT.replace(/(?:\.\d+)?Z$/, ".123456789Z"),
     panels: [
       {
         id: "initiatives",
@@ -911,7 +911,7 @@ function liveObservation() {
       ...panel,
       status: "ok",
       truncated: false,
-      observed_at: OBSERVED_AT,
+      observed_at: OBSERVED_AT.replace(/(?:\.\d+)?Z$/, ".123456789Z"),
     })),
   };
 }
@@ -981,6 +981,23 @@ for (const viewport of [
     expectReadOnly(state);
   });
 }
+
+test("Current filter retains RFC3339Nano live panels", async ({ page }) => {
+  await installLiveDashboard(page);
+  await page.goto(DOC_PATH);
+  const report = reportRegion(page);
+  await expect(
+    report.getByRole("link", { name: "Launch readiness" }),
+  ).toBeVisible();
+  await report
+    .getByLabel("Filter by freshness", { exact: true })
+    .selectOption("current");
+  await expect(
+    report.getByRole("link", { name: "Launch readiness" }),
+  ).toBeVisible();
+  await expect(report).toContainText("3/7");
+  await expect(report).toContainText("7 open tasks");
+});
 
 test("live panels refresh without changing the saved report and fail safely", async ({
   page,

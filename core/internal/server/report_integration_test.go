@@ -13,16 +13,16 @@ import (
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/reports"
+	reports "agent-nexus-visualreport"
 )
 
 func createReportFixture(t *testing.T, h primitivesTestHarness, structured bool) string {
 	t.Helper()
 	panels := []map[string]any{}
 	for _, kind := range []string{"live-initiatives", "live-asks", "live-work-mix", "live-activity"} {
-		panels = append(panels, map[string]any{"id": kind, "type": kind, "data": map[string]any{}})
+		panels = append(panels, map[string]any{"id": kind, "type": kind, "data": map[string]any{}, "project_id": "workspace", "title": kind, "author": "ANX", "provenance": "reported", "observed_at": nil, "freshness": "unavailable", "source_ids": []any{}})
 	}
-	report := map[string]any{"kind": "anx.visual-report", "schema_version": 1, "panels": panels}
+	report := map[string]any{"kind": "anx.visual-report", "schema_version": 1, "panels": panels, "title": "Dashboard", "summary": "Workspace report", "generated_at": "2026-10-04T10:00:00Z", "sources": []any{}, "projects": []any{map[string]any{"id": "workspace", "title": "Workspace", "summary": "Current work", "outcome": "Ship"}}}
 	var content any = report
 	contentType := "structured"
 	if !structured {
@@ -95,8 +95,8 @@ func TestReportLiveWorkAndArchiveBoundary(t *testing.T) {
 
 type reportWorkFailure struct{ *primitives.Store }
 
-func (s reportWorkFailure) ListWork(context.Context, primitives.WorkListFilter) (primitives.WorkPage, error) {
-	return primitives.WorkPage{}, fmt.Errorf("secret backend detail")
+func (s reportWorkFailure) ListReportWork(context.Context, primitives.ReportWorkFilter) (primitives.ReportWorkPage, error) {
+	return primitives.ReportWorkPage{}, fmt.Errorf("secret backend detail")
 }
 
 func TestReportPartialAndUnavailablePanels(t *testing.T) {
@@ -115,12 +115,14 @@ func TestReportPartialAndUnavailablePanels(t *testing.T) {
 	if reportPanelByType(t, response, "live-initiatives")["status"] != "unavailable" || reportPanelByType(t, response, "live-activity")["status"] != "ok" {
 		t.Fatalf("%#v", response)
 	}
-	reader := reportReader{r: req, opts: handlerOptions{primitiveStore: h.primitiveStore}, now: time.Now(), workRead: true, work: []map[string]any{{"ref": "card:first", "phase": "ready", "board_ref": "board:b"}, {"ref": "card:second", "phase": "ready", "board_ref": "board:b"}}, boards: map[string]map[string]any{"board:b": {"title": "Work"}}}
+	reader := reportReader{r: req, opts: handlerOptions{primitiveStore: h.primitiveStore}, now: time.Now(), work: []map[string]any{{"ref": "card:first", "phase": "ready", "board_ref": "board:b"}, {"ref": "card:second", "phase": "ready", "board_ref": "board:b"}}, boards: map[string]map[string]any{"board:b": {"title": "Work"}}}
+	cacheKey, _ := json.Marshal(primitives.ReportWorkFilter{Limit: reports.MaxRows})
+	reader.workScopes = map[string]reportWorkRead{string(cacheKey): {work: reader.work}}
 	data, partial, err := reader.materialize(reports.Panel{Type: "live-initiatives", Query: reports.Query{Limit: 1, Sort: "title"}})
 	if err != nil || !partial || len(data["items"].([]map[string]any)) != 1 {
 		t.Fatalf("%#v %v %v", data, partial, err)
 	}
-	reader.workPartial = true
+	reader.workScopes[string(cacheKey)] = reportWorkRead{work: reader.work, partial: true}
 	_, partial, err = reader.materialize(reports.Panel{Type: "live-work-mix", Query: reports.Query{GroupBy: "phase"}})
 	if err != nil || !partial {
 		t.Fatal("lost source truncation")

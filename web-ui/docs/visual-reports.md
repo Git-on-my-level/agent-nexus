@@ -128,7 +128,8 @@ The UI refreshes every 30 seconds while visible and immediately on returning to
 the tab. Every live panel shows **Live as of** with the actual read time. Failed
 refreshes remove previous successful values. Readers without access see an
 unavailable panel; other live panels and authored snapshots remain usable.
-Materialization is bounded to 2,000 rows per source (1,000 boards). A displayed-row
+Work materialization is bounded to 2,000 candidates per board/project scope;
+event and decision reads each have a 2,000-row source cap. A displayed-row
 limit or a source cap sets `truncated: true` and shows **Partial view**. This is
 not a complete workspace count. Open asks outside the bounded event history may
 be omitted; the partial flag preserves that uncertainty. Activity includes new
@@ -194,7 +195,7 @@ anx docs create --topic topic:YOUR-TOPIC --title "Dashboard" --body-file dashboa
 ```
 
 The JS validator and core query parser run the same accepted/rejected fixtures in
-`contracts/fixtures/live-report-queries.json`. The publishing validator in
+`contracts/fixtures/visual-reports/queries.json`. The publishing validator in
 SCA-597 can reuse these fixtures for CLI validation. `LiveInitiatives.svelte` is
 the shared display component for report rows and SCA-595’s Overview initiatives.
 
@@ -566,3 +567,17 @@ with Cartesian composition, without requiring React in the Svelte UI. Its
 [security guidance](https://echarts.apache.org/handbook/en/best-practices/security/)
 inform the application-owned adapter. JSON by itself is not a security boundary;
 the strict whitelist, bounds and option reconstruction are.
+
+The Go validator, live query parser and checklist/Needs summary parser live in
+`contracts/visualreport`; core and CLI consume the same module. Browser and Go
+validation are checked against `contracts/fixtures/visual-reports/` by
+`make visualreport-check` and CI. This includes decimal/exponent integer spellings,
+RFC3339Nano observation times, URL/whitespace boundaries, and longer nested fences.
+Work reads apply board/project scope and a 2,000 candidate cap in SQL before
+materialization; equal scopes share one read per request. A capped read is marked
+truncated, so it does not claim complete coverage.
+
+The Overview uses compact rendering: report title and panels. Project filters,
+counts, freshness controls and provenance details are available through its
+**Open document** link. The reusable `LiveInitiatives.svelte` expects the shared
+`progress.done/total` and `needs[]` projection for the Overview initiatives section.

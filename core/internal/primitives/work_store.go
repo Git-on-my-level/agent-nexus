@@ -445,6 +445,85 @@ func (s *Store) GetWork(ctx context.Context, identifier string) (map[string]any,
 	return out, nil
 }
 
+// ReportWorkFilter selects a bounded candidate set before projection. BoardIDs
+// are resolved IDs, not authored SQL or handles. Each scope needs only one read.
+type ReportWorkFilter struct {
+	BoardIDs   []string
+	ProjectRef string
+	Limit      int
+}
+type ReportWorkPage struct {
+	Work      []map[string]any
+	Truncated bool
+}
+
+func reportWorkQuery(filter ReportWorkFilter) (string, []any) {
+	limit := filter.Limit
+	if limit < 1 || limit > 2000 {
+		limit = 2000
+	}
+	from := `cards c JOIN boards b ON b.id=c.board_id LEFT JOIN work_metadata m ON m.card_id=c.id`
+	where := `c.archived_at IS NULL AND c.trashed_at IS NULL AND b.archived_at IS NULL AND b.trashed_at IS NULL`
+	args := []any{}
+	if filter.ProjectRef != "" {
+		// Lead with the expression index, avoiding a workspace-wide card read for
+		// project-scoped panels. CROSS JOIN preserves this indexed join order.
+		from = `work_metadata m INDEXED BY idx_work_metadata_project CROSS JOIN cards c ON c.id=m.card_id JOIN boards b ON b.id=c.board_id`
+		where += ` AND json_extract(m.metadata_json,'$.project_ref')=?`
+		args = append(args, filter.ProjectRef)
+	}
+	if len(filter.BoardIDs) > 0 {
+		where += ` AND c.board_id IN (` + strings.TrimSuffix(strings.Repeat("?,", len(filter.BoardIDs)), ",") + `)`
+		for _, id := range filter.BoardIDs {
+			args = append(args, id)
+		}
+	}
+	// Match GetWork's source-authority rule, including the latest observation.
+	from += ` LEFT JOIN work_observations o ON o.id=m.latest_observation_id`
+	where += ` AND (CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN c.column_key ELSE COALESCE(json_extract(o.body_json,'$.facts.phase'),json_extract(m.metadata_json,'$.phase'),c.column_key) END) NOT IN ('done','cancelled')`
+	args = append(args, limit+1)
+	// No global sort: only the bounded candidates are materialized and sorted.
+	return `SELECT c.id FROM ` + from + ` WHERE ` + where + ` LIMIT ?`, args
+}
+
+func (s *Store) ListReportWork(ctx context.Context, filter ReportWorkFilter) (ReportWorkPage, error) {
+	query, args := reportWorkQuery(filter)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return ReportWorkPage{}, err
+	}
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return ReportWorkPage{}, err
+		}
+		ids = append(ids, id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return ReportWorkPage{}, err
+	}
+	limit := filter.Limit
+	if limit < 1 || limit > 2000 {
+		limit = 2000
+	}
+	page := ReportWorkPage{Work: []map[string]any{}, Truncated: len(ids) > limit}
+	if len(ids) > limit {
+		ids = ids[:limit]
+	}
+	for _, id := range ids {
+		work, err := s.GetWork(ctx, id)
+		if err != nil {
+			return ReportWorkPage{}, err
+		}
+		page.Work = append(page.Work, work)
+	}
+	return page, nil
+}
+
 func (s *Store) ListWork(ctx context.Context, f WorkListFilter) (WorkPage, error) {
 	page := WorkPage{Work: []map[string]any{}}
 	if f.Limit == 0 {

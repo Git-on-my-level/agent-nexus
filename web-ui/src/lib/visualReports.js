@@ -48,7 +48,7 @@ const PROVENANCE = ["reported", "verified", "illustrative"];
 const STATUS = ["complete", "pending", "unknown"];
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
 const TIMESTAMP =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
 
 function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -95,6 +95,16 @@ export function safeReportUrl(value) {
   try {
     const url = new URL(value);
     if (!url.hostname || url.username || url.password) return "";
+    if (/%(?![0-9a-f]{2})/i.test(value)) return "";
+    const authority = value.slice(value.indexOf("://") + 3).split(/[/?#]/)[0];
+    if (authority.includes("%")) return "";
+    const host = authority.replace(/:\d*$/, "");
+    if (
+      !host.startsWith("[") &&
+      /(?:^|\.)(?:[0-9]+|0x[0-9a-f]+)$/i.test(host) &&
+      host !== url.hostname
+    )
+      return "";
     return url.href;
   } catch {
     return "";

@@ -885,6 +885,27 @@ var migrations = []migration{
 			`CREATE INDEX idx_work_participants_card_id ON work_participants(card_id,id);`,
 		},
 	},
+	{Version: 43, AfterApply: applyMigration43ReportIndexes},
+}
+
+func applyMigration43ReportIndexes(ctx context.Context, tx *sql.Tx) error {
+	// Some legacy partial workspaces omit primitive tables. Follow the existing
+	// conditional backfill convention rather than failing their migration.
+	for _, item := range []struct{ table, statement string }{
+		{"cards", `CREATE INDEX idx_report_cards_board_active ON cards(board_id,id) WHERE archived_at IS NULL AND trashed_at IS NULL`},
+		{"work_metadata", `CREATE INDEX idx_work_metadata_project ON work_metadata(json_extract(metadata_json,'$.project_ref'),card_id)`},
+	} {
+		var exists int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, item.table).Scan(&exists); err != nil {
+			return err
+		}
+		if exists > 0 {
+			if _, err := tx.ExecContext(ctx, item.statement); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func applyMigration40HostIdentity(ctx context.Context, tx *sql.Tx) error {

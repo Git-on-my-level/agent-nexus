@@ -55,3 +55,7 @@ fi
 )
 
 pnpm exec tsc --project contracts/gen/ts/tsconfig.json --pretty false
+
+# Existing contracts CI supplies Go and Node; keep the shared report contract
+# under the same mandatory gate as generated API contracts.
+make visualreport-check

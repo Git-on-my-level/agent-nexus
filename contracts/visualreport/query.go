@@ -1,11 +1,12 @@
-// Package reports defines bounded, read-only live report queries. Report strings
+// Queries define bounded, read-only live report queries. Report strings
 // are data, never code, fetch URLs, or SQL.
-package reports
+package visualreport
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 )
@@ -51,16 +52,15 @@ func Parse(content any) ([]Panel, error) {
 			return nil, err
 		}
 	}
-	if len(raw) > 128*1024 {
-		return nil, fmt.Errorf("report exceeds 128 KiB")
+	result := Validate(raw)
+	if !result.Valid {
+		return nil, fmt.Errorf("invalid visual report: %s", strings.Join(result.Errors, "; "))
 	}
 	var report struct {
-		Kind    string            `json:"kind"`
-		Version int               `json:"schema_version"`
-		Panels  []json.RawMessage `json:"panels"`
+		Panels []json.RawMessage `json:"panels"`
 	}
-	if json.Unmarshal(raw, &report) != nil || report.Kind != "anx.visual-report" || report.Version != 1 || len(report.Panels) < 1 || len(report.Panels) > 32 {
-		return nil, fmt.Errorf("expected a version 1 visual report with 1..32 panels")
+	if err := json.Unmarshal(raw, &report); err != nil {
+		return nil, err
 	}
 	out := []Panel{}
 	seen := map[string]bool{}
@@ -110,9 +110,23 @@ func ParseQuery(kind string, raw []byte) (Query, error) {
 			return q, fmt.Errorf("unsupported or null query field")
 		}
 	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&q); err != nil {
+	// JSON numbers use the browser's IEEE-754 semantics. Integral decimal and
+	// exponent spellings are accepted; fractions and out-of-range values are not.
+	for _, key := range []string{"limit", "answered_within_hours"} {
+		if value, present := fields[key]; present {
+			var number float64
+			max := float64(100)
+			if key == "answered_within_hours" {
+				max = 720
+			}
+			if json.Unmarshal(value, &number) != nil || number < 1 || number > max || number != math.Trunc(number) {
+				return q, fmt.Errorf("invalid integer query field")
+			}
+			fields[key], _ = json.Marshal(int(number))
+		}
+	}
+	normalized, _ := json.Marshal(fields)
+	if err := json.Unmarshal(normalized, &q); err != nil {
 		return q, fmt.Errorf("invalid query field type")
 	}
 	if q.Limit < 1 || q.Limit > 100 || len(q.BoardRefs) > 16 || q.AnsweredWithinHours < 1 || q.AnsweredWithinHours > 720 {
@@ -150,19 +164,32 @@ func Summary(markdown string) (string, Progress, []string) {
 	first := ""
 	progress := Progress{}
 	needs := []string{}
-	fence := ""
+	var fence byte
+	fenceLength := 0
 	for _, raw := range strings.Split(markdown, "\n") {
 		line := strings.TrimSpace(raw)
-		if strings.HasPrefix(line, "```") || strings.HasPrefix(line, "~~~") {
-			marker := line[:3]
-			if fence == "" {
-				fence = marker
-			} else if fence == marker {
-				fence = ""
+		// CommonMark: at most three spaces of indentation; closing fences use
+		// the same character, at least the opening length, and no info string.
+		indent := len(raw) - len(strings.TrimLeft(raw, " "))
+		markerLine := strings.TrimLeft(raw, " ")
+		if indent <= 3 && len(markerLine) >= 3 && (markerLine[0] == '`' || markerLine[0] == '~') {
+			marker := markerLine[0]
+			length := 0
+			for length < len(markerLine) && markerLine[length] == marker {
+				length++
 			}
-			continue
+			tail := markerLine[length:]
+			if fence == 0 && length >= 3 && (marker != '`' || !strings.Contains(tail, "`")) {
+				fence = marker
+				fenceLength = length
+				continue
+			}
+			if fence == marker && length >= fenceLength && strings.Trim(tail, " \t\r") == "" {
+				fence = 0
+				continue
+			}
 		}
-		if fence != "" || line == "" {
+		if fence != 0 || line == "" {
 			continue
 		}
 		if match := checkbox.FindStringSubmatch(raw); match != nil {

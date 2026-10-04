@@ -7,6 +7,7 @@
   import { safeReportUrl } from "$lib/visualReports.js";
 
   let {
+    compact = false,
     panel,
     sources = [],
     freshness,
@@ -245,7 +246,7 @@
     {/if}
   </div>
 
-  {#if !isLivePanel(panel)}
+  {#if !compact && !isLivePanel(panel)}
     <footer class="report-panel-footer">
       <div class="report-provenance">
         <ActorLabel
@@ -276,7 +277,7 @@
       >
     </footer>
   {/if}
-  {#if evidenceOpen}
+  {#if !compact && evidenceOpen}
     <div id={`report-evidence-${panel.id}`} class="report-evidence-detail">
       <h4 class="text-meta font-medium text-fg">Source evidence</h4>
       <p class="mt-1 text-micro text-fg-muted">

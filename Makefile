@@ -195,3 +195,9 @@ bridge-%: ## Pass-through target to adapter bridge Makefile
 
 web-ui-%: ## Pass-through target to web-ui Makefile
 	$(MAKE) -C $(WEB_UI_DIR) $*
+
+.PHONY: visualreport-check
+visualreport-check: ## Verify the shared Go report contract and browser conformance
+	@test -z "$$(gofmt -l contracts/visualreport)"
+	cd contracts/visualreport && go vet ./... && go test ./...
+	node scripts/check-visual-report-conformance.mjs
