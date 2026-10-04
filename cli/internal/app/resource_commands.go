@@ -425,6 +425,17 @@ func (a *App) runWorkspaceCommand(ctx context.Context, args []string, cfg config
 	}
 	boardBody := commandResultBody(boardResult)
 	boards := asSlice(boardBody["boards"])
+	activeBoardIDs := make(map[string]struct{}, len(boards))
+	for _, row := range boards {
+		entry := asMap(row)
+		board := asMap(entry["board"])
+		if board == nil {
+			board = entry
+		}
+		if id := strings.TrimSpace(anyString(board["id"])); id != "" {
+			activeBoardIDs[id] = struct{}{}
+		}
+	}
 	counts := map[string]any{
 		"boards":      len(boards),
 		"cards":       nil,
@@ -434,7 +445,17 @@ func (a *App) runWorkspaceCommand(ctx context.Context, args []string, cfg config
 	warnings := make([]any, 0, 3)
 
 	if cardsResult, cardsErr := a.invokeTypedJSON(ctx, cfg, "cards list", "cards.list", nil, nil, nil); cardsErr == nil {
-		counts["cards"] = len(asSlice(commandResultBody(cardsResult)["cards"]))
+		activeCardCount := 0
+		for _, row := range asSlice(commandResultBody(cardsResult)["cards"]) {
+			card := asMap(row)
+			if nested := asMap(card["card"]); nested != nil {
+				card = nested
+			}
+			if _, activeBoard := activeBoardIDs[strings.TrimSpace(anyString(card["board_id"]))]; activeBoard {
+				activeCardCount++
+			}
+		}
+		counts["cards"] = activeCardCount
 	} else {
 		warnings = append(warnings, workspaceSummaryWarning("cards", cardsErr))
 	}

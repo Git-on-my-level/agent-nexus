@@ -4088,7 +4088,7 @@ func TestBoardCommands(t *testing.T) {
 	}
 }
 
-func TestWorkspaceSummaryTextAndJSON(t *testing.T) {
+func TestWorkspaceSummaryTextAndJSONExcludesArchivedBoardCards(t *testing.T) {
 	t.Parallel()
 
 	const boardID = "board_1234567890abcdef"
@@ -4100,7 +4100,7 @@ func TestWorkspaceSummaryTextAndJSON(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/boards":
 			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + boardID + `","title":"Launch","state":"active"},"summary":{"card_count":2,"unresolved_card_count":1,"document_count":1,"latest_activity_at":"` + updatedAt + `"}}]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/cards":
-			_, _ = w.Write([]byte(`{"cards":[{"id":"card_1"},{"id":"card_2"}]}`))
+			_, _ = w.Write([]byte(`{"cards":[{"id":"card_1","board_id":"` + boardID + `"},{"id":"card_2","board_id":"` + boardID + `"},{"id":"card_archived","board_id":"board_archived"}]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/docs":
 			_, _ = w.Write([]byte(`{"documents":[{"id":"doc_1"}]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
