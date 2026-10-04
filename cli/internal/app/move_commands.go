@@ -303,31 +303,30 @@ func moveValidateSnapshot(marker map[string]any, sourceWorkspace, kind, sourceRe
 	return nil
 }
 
-func moveRewriteValue(value any, mapping map[string]string) any {
-	switch typed := value.(type) {
-	case string:
-		return moveRewriteRef(typed, mapping)
-	case []any:
-		out := make([]any, len(typed))
-		for index, item := range typed {
-			out[index] = moveRewriteValue(item, mapping)
-		}
-		return out
-	case []string:
-		out := make([]string, len(typed))
-		for index, item := range typed {
-			out[index] = moveRewriteRef(item, mapping)
-		}
-		return out
-	case map[string]any:
-		out := make(map[string]any, len(typed))
-		for key, item := range typed {
-			out[key] = moveRewriteValue(item, mapping)
-		}
-		return out
-	default:
+func moveRewritePlan(value any, mapping map[string]string) any {
+	// Plan's schema defines only steps[*].ref as a resource reference. Keep
+	// titles and any other plan content byte-for-byte as provided.
+	plan := asMap(value)
+	steps, ok := plan["steps"].([]any)
+	if plan == nil || !ok {
 		return value
 	}
+	out := cloneMoveMap(plan)
+	rewrittenSteps := make([]any, len(steps))
+	for index, rawStep := range steps {
+		step := asMap(rawStep)
+		if step == nil {
+			rewrittenSteps[index] = rawStep
+			continue
+		}
+		rewrittenStep := cloneMoveMap(step)
+		if ref, ok := step["ref"].(string); ok {
+			rewrittenStep["ref"] = moveRewriteRef(ref, mapping)
+		}
+		rewrittenSteps[index] = rewrittenStep
+	}
+	out["steps"] = rewrittenSteps
+	return out
 }
 
 func markCuratedTombstone(marker map[string]any, destinationRef, destinationURL string) {
@@ -496,17 +495,16 @@ func moveUnique(values []string) []string {
 }
 
 func moveRewriteRef(ref string, mapping map[string]string) string {
-	ref = strings.TrimSpace(ref)
+	// Normalize aliases only for identity lookup; an unmapped reference remains
+	// exactly as the caller supplied it.
 	normalized := moveNormalizeRef(ref)
 	if mapped := mapping[normalized]; mapped != "" {
 		return moveNormalizeRef(mapped)
 	}
-	if normalized != ref {
-		if mapped := mapping[ref]; mapped != "" {
-			return moveNormalizeRef(mapped)
-		}
+	if mapped := mapping[ref]; mapped != "" {
+		return moveNormalizeRef(mapped)
 	}
-	return normalized
+	return ref
 }
 
 // Normalize aliases once before they enter the move plan. Core accepts doc:
@@ -543,23 +541,12 @@ func moveRewriteRefs(refs any, mapping map[string]string) []string {
 	return moveUnique(values)
 }
 
-func moveRewriteProvenance(raw any, mapping map[string]string) any {
+func moveCopyProvenance(raw any) any {
 	provenance := asMap(raw)
 	if provenance == nil {
 		return raw
 	}
-	copy := make(map[string]any, len(provenance))
-	for key, value := range provenance {
-		copy[key] = value
-	}
-	if sources, ok := provenance["sources"]; ok {
-		rewritten := moveStringList(sources)
-		for index := range rewritten {
-			rewritten[index] = moveRewriteRef(rewritten[index], mapping)
-		}
-		copy["sources"] = rewritten
-	}
-	return copy
+	return cloneMoveMap(provenance)
 }
 
 func moveAddIdentity(mapping map[string]string, object map[string]any, kind, destinationRef string) {
@@ -850,7 +837,7 @@ func (a *App) moveCard(ctx context.Context, sourceCfg, destCfg config.Resolved, 
 	if err := moveValidateSnapshot(destMarker, sourceCfg.BaseURL, "card", sourceRef, source, moveHasMarker(sourceMarker, moveID)); err != nil {
 		return nil, err
 	}
-	if err := moveWriteCardPlan(ctx, a, destCfg, destinationRef, moveRewriteValue(source["plan"], refMapping)); err != nil {
+	if err := moveWriteCardPlan(ctx, a, destCfg, destinationRef, moveRewritePlan(source["plan"], refMapping)); err != nil {
 		return nil, err
 	}
 	verifyResource := &topicMoveResource{
@@ -1356,7 +1343,7 @@ func (a *App) verifyMovedResource(ctx context.Context, sourceCfg, destCfg config
 		if err != nil {
 			return err
 		}
-		if want := moveRewriteValue(resource.work["plan"], mapping); !moveJSONEqual(want, plan["plan"]) {
+		if want := moveRewritePlan(resource.work["plan"], mapping); !moveJSONEqual(want, plan["plan"]) {
 			return errnorm.New(errnorm.KindRemote, "destination_verification_failed", fmt.Sprintf("destination card %s failed canonical plan verification", resource.destinationRef))
 		}
 	case "board":
@@ -1365,7 +1352,7 @@ func (a *App) verifyMovedResource(ctx context.Context, sourceCfg, destCfg config
 			expectedBoardRefs = moveUnique(append(expectedBoardRefs, topicRef))
 		}
 		expected := map[string]any{
-			"title": moveRewriteValue(resource.object["title"], mapping), "summary": resource.object["summary"],
+			"title": resource.object["title"], "summary": resource.object["summary"],
 			"primary_topic_ref": moveRewriteRef(moveFieldString(resource.object, "primary_topic_ref"), mapping),
 			"refs":              expectedBoardRefs,
 			"document_refs":     moveRewriteRefs(resource.object["document_refs"], mapping), "pinned_refs": moveRewriteRefs(resource.object["pinned_refs"], mapping),
@@ -1759,7 +1746,7 @@ func (a *App) moveTopic(ctx context.Context, sourceCfg, destCfg config.Resolved,
 		"title": sourceTopic["title"], "summary": sourceTopic["summary"],
 		"owner_refs":    []string{},
 		"document_refs": []string{}, "board_refs": []string{}, "related_refs": []string{},
-		"provenance": moveRewriteProvenance(sourceTopic["provenance"], mapping), "workspace_move": topicCreateMarker,
+		"provenance": moveCopyProvenance(sourceTopic["provenance"]), "workspace_move": topicCreateMarker,
 	}
 	var destTopic map[string]any
 	if rootAction == "reuse" {
@@ -1827,7 +1814,7 @@ func (a *App) moveTopic(ctx context.Context, sourceCfg, destCfg config.Resolved,
 				}
 				destWork = asMap(body["work"])
 			}
-			if err := moveWriteCardPlan(ctx, a, destCfg, resource.destinationRef, moveRewriteValue(resource.work["plan"], mapping)); err != nil {
+			if err := moveWriteCardPlan(ctx, a, destCfg, resource.destinationRef, moveRewritePlan(resource.work["plan"], mapping)); err != nil {
 				return nil, err
 			}
 		}
@@ -2163,7 +2150,7 @@ func (a *App) createMovedDocument(ctx context.Context, sourceCfg, destCfg config
 		"thread_id":   resource.destinationThreadID,
 		"title":       doc["title"], "summary": doc["summary"], "source": doc["source"],
 		"tags": doc["tags"], "hosts": doc["hosts"], "verified_at": doc["verified_at"],
-		"provenance": moveRewriteProvenance(doc["provenance"], mapping), "workspace_move": marker,
+		"provenance": moveCopyProvenance(doc["provenance"]), "workspace_move": marker,
 		"refs": moveRewriteRefs(doc["refs"], mapping),
 	}
 	if subject := moveFieldString(doc, "subject_ref"); subject != "" {
@@ -2209,7 +2196,7 @@ func (a *App) createMovedBoard(ctx context.Context, cfg config.Resolved, resourc
 		"document_refs": moveRewriteRefs(board["document_refs"], mapping),
 		"pinned_refs":   moveRewriteRefs(board["pinned_refs"], mapping),
 		"column_schema": board["column_schema"],
-		"provenance":    moveRewriteProvenance(board["provenance"], mapping), "workspace_move": marker,
+		"provenance":    moveCopyProvenance(board["provenance"]), "workspace_move": marker,
 	}
 	body, err := moveCall(ctx, a, cfg, http.MethodPost, "/boards", map[string]any{"request_key": moveID + ":board:" + resource.sourceRef, "board": boardInput})
 	if err != nil {

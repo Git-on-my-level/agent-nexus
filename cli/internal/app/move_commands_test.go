@@ -135,7 +135,7 @@ func TestMoveTopicDryRunAndResumesPartialCopy(t *testing.T) {
 		t.Fatalf("moved card refs were not rewritten: %#v", curated)
 	}
 	steps := asSlice(asMap(destination.plans[moveFieldString(curated, "ref")])["steps"])
-	if len(steps) < 3 || moveFieldString(asMap(steps[2]), "target_ref") != moveResourceRef("card", moveDeterministicUUID(anyString(topicMove["move_id"]), "card", "card:linked")) {
+	if len(steps) != 1 || moveFieldString(asMap(steps[0]), "ref") != moveResourceRef("card", moveDeterministicUUID(anyString(topicMove["move_id"]), "card", "card:linked")) {
 		t.Fatalf("plan link to a moved card was not rewritten: %#v", curated["plan"])
 	}
 	linkedSource := asMap(linked["source"])
@@ -423,7 +423,7 @@ func newMoveTestWorkspace(t *testing.T, source bool) *moveFakeWorkspace {
 		"board_ref":  "board:launch-board", "title": "Prepare announcement", "summary": "Draft launch note",
 		"definition_of_done": []any{"Review copy"}, "phase": "in_progress", "priority": "p1", "risk": "medium",
 		"source": map[string]any{"authority": "nexus"}, "topic_ref": "topic:launch", "document_ref": "document:spec",
-		"related_refs": []any{"board:launch-board"}, "plan": map[string]any{"steps": []any{"draft", "review", map[string]any{"target_ref": "card:linked"}}},
+		"related_refs": []any{"board:launch-board"}, "plan": map[string]any{"steps": []any{map[string]any{"id": "draft", "title": "Draft", "ref": "card:linked"}}},
 	}
 	linked := map[string]any{
 		"id": "card-linked-source", "ref": "card:linked", "handle": "linked", "state": "active", "version": 1,

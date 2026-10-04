@@ -58,6 +58,49 @@ func TestMoveCardRealCoresUsesCanonicalPlanAndRewritesSelfRefs(t *testing.T) {
 	}
 }
 
+func TestMoveCardRealCorePreservesRefLikeTextAndUnmappedPlanRefs(t *testing.T) {
+	pair := newMoveCorePair(t)
+	freeTextRef, freeTextURL := "doc: draft", "https://example.com/instructions"
+	card := pair.createCardWithFields(t, "ref-like-text", map[string]any{"authority": "nexus"}, "", map[string]any{
+		"title":              freeTextRef,
+		"summary":            freeTextURL,
+		"definition_of_done": []string{freeTextRef, freeTextURL},
+	})
+	sourceIdentity := integrationMap(pair.source.getCore(t, "/cards/"+url.PathEscape(card))["card"])
+	sourceUUIDRef := "card:" + moveIntegrationString(sourceIdentity["id"])
+	plan := map[string]any{"steps": []any{
+		map[string]any{"id": "self-doc-text", "title": freeTextRef, "ref": card},
+		map[string]any{"id": "self-url-text", "title": freeTextURL, "ref": sourceUUIDRef},
+		map[string]any{"id": "unmapped-doc-ref", "title": "Keep an unmapped doc alias", "ref": "doc:unmapped-document"},
+		map[string]any{"id": "unmapped-url-ref", "title": "Keep an external ref", "ref": freeTextURL},
+	}}
+	pair.source.runCLIExpectOK(t, "move-agent", plan, "plan", "set", card, "--from-file", "-")
+
+	result := pair.source.runCLIExpectOK(t, "move-agent", nil, "move", "card", card, "--to", "destination")
+	moveID := mustStringPath(t, result.Payload, "result.move_id")
+	destinationRef := mustStringPath(t, result.Payload, "result.destination_ref")
+	wantDestinationRef := "card:" + moveIntegrationDeterministicUUID(moveID, "card", card)
+	destinationWork := integrationMap(pair.destination.getCore(t, "/work/"+url.PathEscape(destinationRef))["work"])
+	definitionOfDone := integrationStrings(destinationWork["definition_of_done"])
+	if destinationWork["title"] != freeTextRef || destinationWork["summary"] != freeTextURL || len(definitionOfDone) != 2 || definitionOfDone[0] != freeTextRef || definitionOfDone[1] != freeTextURL {
+		t.Fatalf("move changed ref-like card text: %#v", destinationWork)
+	}
+	destinationPlan := pair.destination.runCLIExpectOK(t, "move-agent", nil, "plan", "show", destinationRef)
+	stepsRaw, _ := getPathValue(destinationPlan.Payload, "result.plan.steps")
+	steps := integrationSlice(stepsRaw)
+	wantTitles := []string{freeTextRef, freeTextURL, "Keep an unmapped doc alias", "Keep an external ref"}
+	wantRefs := []string{wantDestinationRef, wantDestinationRef, "doc:unmapped-document", freeTextURL}
+	if len(steps) != len(wantTitles) {
+		t.Fatalf("destination plan lost steps: %s", destinationPlan.Stdout)
+	}
+	for index, raw := range steps {
+		step := integrationMap(raw)
+		if step["title"] != wantTitles[index] || step["ref"] != wantRefs[index] {
+			t.Fatalf("move changed plan step %d free text or an unmapped ref: got %#v want title=%q ref=%q", index, step, wantTitles[index], wantRefs[index])
+		}
+	}
+}
+
 func TestMoveTopicRealCoresPreservesSharedBoardAndRewritesPlanRefs(t *testing.T) {
 	pair := newMoveCorePair(t)
 	fixture := pair.createTopicFixture(t, "shared-board")
@@ -151,7 +194,12 @@ func TestMoveTopicRealCoresPreservesSharedBoardAndRewritesPlanRefs(t *testing.T)
 		t.Fatalf("pinned document was not copied to destination: status=%d", status)
 	}
 	aliasDocument := pair.destination.getCore(t, "/docs/"+url.PathEscape(wantAliasDocumentRef))
-	aliasMetadataRefs := integrationStrings(integrationMap(aliasDocument["document"])["refs"])
+	aliasDocumentMetadata := integrationMap(aliasDocument["document"])
+	aliasMetadataRefs := integrationStrings(aliasDocumentMetadata["refs"])
+	aliasProvenanceSources := integrationStrings(integrationMap(aliasDocumentMetadata["provenance"])["sources"])
+	if len(aliasProvenanceSources) != 2 || aliasProvenanceSources[0] != "doc:draft" || aliasProvenanceSources[1] != "https://example.com/instructions" {
+		t.Fatalf("document provenance labels changed during ref rewriting: %#v", aliasProvenanceSources)
+	}
 	aliasRevision := integrationMap(aliasDocument["revision"])
 	aliasRefs := integrationStrings(aliasRevision["refs"])
 	destinationCardBIdentity := integrationMap(pair.destination.getCore(t, "/cards/"+url.PathEscape(wantCardBRef))["card"])
@@ -448,10 +496,12 @@ func (p *moveCorePair) createTopicFixture(t *testing.T, suffix string) moveTopic
 	cardBIdentity := integrationMap(p.source.getCore(t, "/cards/"+url.PathEscape(cardB))["card"])
 	cardBUUIDRef := "card:" + moveIntegrationString(cardBIdentity["id"])
 	aliasResult := p.source.runCLIExpectOK(t, "move-agent", map[string]any{
-		"document": map[string]any{"id": "move-card-link-doc-" + suffix, "title": "Card link doc " + suffix},
-		"refs":     []string{cardB, cardBUUIDRef, documentUUIDCanonical, document},
-		"content":  "Synthetic card-linked document.", "content_type": "text",
-		"provenance": map[string]any{"sources": []string{"inferred"}},
+		"document": map[string]any{
+			"id": "move-card-link-doc-" + suffix, "title": "Card link doc " + suffix,
+			"provenance": map[string]any{"sources": []string{"doc:draft", "https://example.com/instructions"}},
+		},
+		"refs":    []string{cardB, cardBUUIDRef, documentUUIDCanonical, document},
+		"content": "Synthetic card-linked document.", "content_type": "text",
 	}, "docs", "create")
 	aliasDocument := mustStringPath(t, aliasResult.Payload, "result.document.ref")
 	aliasDocumentResponse := p.source.getCore(t, "/docs/"+url.PathEscape(aliasDocument))
