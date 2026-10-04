@@ -199,6 +199,9 @@ func TestBareInvocationFailsWhenSeveralHostsAreEnrolled(t *testing.T) {
 	for _, args := range [][]string{
 		{"--json", "config", "show"}, {"--json", "doctor"}, {"--json", "topics", "list"},
 		{"--json", "api", "call", "--path", "/readyz"}, {"--json", "host", "status"},
+		{"--json", "debug", "meta", "handshake"}, {"--json", "debug", "meta", "health"},
+		{"--json", "debug", "meta", "readyz"}, {"--json", "debug", "meta", "livez"},
+		{"--json", "debug", "meta", "version"}, {"--json", "debug", "meta", "ops", "health"},
 	} {
 		stdout.Reset()
 		if exitCode := cli.Run(args); exitCode != 2 {
@@ -222,4 +225,16 @@ func TestBareInvocationFailsWhenSeveralHostsAreEnrolled(t *testing.T) {
 			t.Fatalf("repairs=%#v", errorData)
 		}
 	}
+	for _, args := range [][]string{
+		{"--json", "config", "workspaces"},
+		{"--json", "debug", "meta", "doc", "env"},
+		{"--json", "debug", "meta", "commands"},
+		{"--json", "doctor", "--help"},
+	} {
+		stdout.Reset()
+		if exitCode := cli.Run(args); exitCode != 0 {
+			t.Fatalf("offline command %v: exit=%d stdout=%s", args, exitCode, stdout.String())
+		}
+	}
+
 }

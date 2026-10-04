@@ -126,7 +126,7 @@ func (a *App) Run(args []string) int {
 	if len(remaining) > 1 {
 		subPeek = remaining[1]
 	}
-	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "debug" && subPeek == "meta" || cmdPeek == "host" && subPeek == "discover" || cmdPeek == "update" || cmdPeek == "bridge" || cmdPeek == "install" || cmdPeek == "skills" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
+	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "debug" && subPeek == "meta" && workspaceIndependentCommand(remaining) || cmdPeek == "host" && subPeek == "discover" || cmdPeek == "update" || cmdPeek == "bridge" && workspaceIndependentCommand(remaining) || cmdPeek == "install" || cmdPeek == "skills" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
 		(cmdPeek == "import" && isConfigLenientImportCommand(remaining[1:])) ||
 		isAPICallHelpOnly(remaining) ||
 		isTrailingHelpOnlyInvocation(remaining) ||

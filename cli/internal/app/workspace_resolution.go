@@ -25,7 +25,17 @@ func workspaceIndependentCommand(args []string) bool {
 	case "host":
 		return len(args) > 1 && args[1] == "discover"
 	case "debug":
-		return len(args) > 1 && args[1] == "meta"
+		if len(args) < 2 || args[1] != "meta" {
+			return false
+		}
+		if len(args) == 2 {
+			return true
+		} // Metadata group help.
+		switch metaSubcommandSpec.normalize(args[2]) {
+		case "commands", "command", "concepts", "concept", "docs", "doc", "skill":
+			return true
+		}
+		return false
 	case "import":
 		return isConfigLenientImportCommand(args[1:])
 	case "bridge":
