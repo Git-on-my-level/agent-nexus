@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -43,7 +44,14 @@ func TestSeriesTokenOnlyPushesDeclaredPointsAndReportMaterialization(t *testing.
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	seedSeriesIdentities(t, env)
 	token := declareSeriesHTTP(t, env)
-	for _, item := range []struct{ method, path string }{{"GET", "/series"}, {"GET", "/cards"}, {"POST", "/topics"}, {"POST", "/auth/token"}, {"POST", "/adapters/github/token"}, {"POST", "/sessions"}, {"GET", "/events/stream"}, {"POST", "/series/not-declared/points"}} {
+	if _, err := env.workspace.DB().Exec(`UPDATE agents SET metadata_json=json_set(metadata_json,'$.auth_admin',1) WHERE id='series-owner'`); err != nil {
+		t.Fatal(err)
+	}
+	principal, err := env.authStore.AuthenticateAccessToken(context.Background(), token)
+	if err != nil || principal.AuthAdmin {
+		t.Fatalf("scoped credential inherited administrator powers: %#v %v", principal, err)
+	}
+	for _, item := range []struct{ method, path string }{{"GET", "/series"}, {"GET", "/cards"}, {"POST", "/topics"}, {"GET", "/adapters"}, {"POST", "/adapters/github/revoke"}, {"POST", "/auth/token"}, {"POST", "/adapters/github/token"}, {"POST", "/sessions"}, {"GET", "/events/stream"}, {"GET", "/health"}, {"POST", "/series/not-declared/points"}} {
 		status, out := hostHTTP(t, item.method, env.server.URL+item.path, token, map[string]any{"value": 1})
 		hostStatus(t, status, 403, out)
 	}
@@ -92,40 +100,167 @@ func (b *blockedPointBody) Read(p []byte) (int, error) {
 }
 func (b *blockedPointBody) Close() error { return nil }
 func TestSeriesRevocationWhileAdmittedPushReadsBody(t *testing.T) {
+	for _, target := range []string{"adapter", "host", "agent"} {
+		t.Run(target, func(t *testing.T) {
+			env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+			seedSeriesIdentities(t, env)
+			token := declareSeriesHTTP(t, env)
+			body := &blockedPointBody{reader: strings.NewReader(`{"value":7}`), admitted: make(chan struct{}), release: make(chan struct{})}
+			req := httptest.NewRequest("POST", "/series/prs/points", nil)
+			req.Body = body
+			req.Header.Set("Authorization", "Bearer "+token)
+			rec := httptest.NewRecorder()
+			done := make(chan struct{})
+			handler := NewHandler("test", WithAuthStore(env.authStore), WithSeriesStore(&series.Store{DB: env.workspace.DB(), Auth: env.authStore}))
+			go func() { handler.ServeHTTP(rec, req); close(done) }()
+			select {
+			case <-body.admitted:
+			case <-time.After(5 * time.Second):
+				close(body.release)
+				t.Fatal("push was not admitted")
+			}
+			if target == "adapter" {
+				status, out := hostHTTP(t, "POST", env.server.URL+"/adapters/github/revoke", "admin-token", nil)
+				hostStatus(t, status, 200, out)
+			} else {
+				statement := `UPDATE hosts SET revoked_at=? WHERE id='series-host'`
+				if target == "agent" {
+					statement = `UPDATE agents SET revoked_at=? WHERE id='series-owner'`
+				}
+				if _, err := env.workspace.DB().Exec(statement, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			close(body.release)
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("push did not finish")
+			}
+			if rec.Code != 403 {
+				t.Fatalf("admitted push survived revoke: %d %s", rec.Code, rec.Body.String())
+			}
+			var n int
+			if err := env.workspace.DB().QueryRow(`SELECT COUNT(*) FROM series_points`).Scan(&n); err != nil || n != 0 {
+				t.Fatalf("push committed: %d %v", n, err)
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+type unreadableSeriesBody struct{}
+
+func (unreadableSeriesBody) Read([]byte) (int, error) { panic("denied request body was read") }
+func (unreadableSeriesBody) Close() error             { return nil }
+
+func TestSeriesCapabilityDeniesUndeclaredResourceBeforeBodyRead(t *testing.T) {
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	seedSeriesIdentities(t, env)
 	token := declareSeriesHTTP(t, env)
-	body := &blockedPointBody{reader: strings.NewReader(`{"value":7}`), admitted: make(chan struct{}), release: make(chan struct{})}
-	req := httptest.NewRequest("POST", "/series/prs/points", nil)
-	req.Body = body
-	req.Header.Set("Authorization", "Bearer "+token)
-	rec := httptest.NewRecorder()
-	done := make(chan struct{})
 	handler := NewHandler("test", WithAuthStore(env.authStore), WithSeriesStore(&series.Store{DB: env.workspace.DB(), Auth: env.authStore}))
-	go func() { handler.ServeHTTP(rec, req); close(done) }()
-	select {
-	case <-body.admitted:
-	case <-time.After(5 * time.Second):
-		close(body.release)
-		t.Fatal("push was not admitted")
+	r := httptest.NewRequest("POST", "/series/undeclared/points", nil)
+	r.Header.Set("Authorization", "Bearer "+token)
+	r.Body = unreadableSeriesBody{}
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+	if w.Code != 403 {
+		t.Fatalf("undeclared resource capability admitted: %d %s", w.Code, w.Body.String())
 	}
-	status, out := hostHTTP(t, "POST", env.server.URL+"/adapters/github/revoke", "admin-token", nil)
-	hostStatus(t, status, 200, out)
-	close(body.release)
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("push did not finish")
+}
+
+func TestSeriesConcurrentPushAdmissionLeavesHumanReadsAvailable(t *testing.T) {
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	seedSeriesIdentities(t, env)
+	token := declareSeriesHTTP(t, env)
+	handler := NewHandler("test", WithAuthStore(env.authStore), WithSeriesStore(&series.Store{DB: env.workspace.DB(), Auth: env.authStore}))
+	release := make(chan struct{})
+	defer func() {
+		if release != nil {
+			close(release)
+		}
+	}()
+	bodyJSON := `{"value":7,"ts":"` + time.Now().UTC().Format(time.RFC3339Nano) + `"}`
+	done := make(chan *httptest.ResponseRecorder, 2)
+	for i := 0; i < 2; i++ {
+		body := &blockedPointBody{reader: strings.NewReader(bodyJSON), admitted: make(chan struct{}), release: release}
+		r := httptest.NewRequest("POST", "/series/prs/points", nil)
+		r.Header.Set("Authorization", "Bearer "+token)
+		r.Body = body
+		go func() {
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, r)
+			done <- w
+		}()
+		select {
+		case <-body.admitted:
+		case <-time.After(5 * time.Second):
+			t.Fatal("push was not admitted")
+		}
 	}
-	if rec.Code != 403 {
-		t.Fatalf("admitted push survived revoke: %d %s", rec.Code, rec.Body.String())
+	r := httptest.NewRequest("POST", "/series/prs/points", nil)
+	r.Header.Set("Authorization", "Bearer "+token)
+	r.Body = unreadableSeriesBody{}
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+	if w.Code != 429 || w.Header().Get("Retry-After") == "" {
+		t.Fatalf("concurrent adapter bound: %d %s", w.Code, w.Body.String())
 	}
-	var n int
-	if err := env.workspace.DB().QueryRow(`SELECT COUNT(*) FROM series_points`).Scan(&n); err != nil || n != 0 {
-		t.Fatalf("push committed: %d %v", n, err)
+	human := httptest.NewRequest("GET", "/series", nil)
+	human.Header.Set("Authorization", "Bearer admin-token")
+	humanResult := httptest.NewRecorder()
+	handler.ServeHTTP(humanResult, human)
+	if humanResult.Code != http.StatusOK {
+		t.Fatalf("human read crowded out: %d %s", humanResult.Code, humanResult.Body.String())
 	}
-	var payload map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+	close(release)
+	release = nil
+	for i := 0; i < 2; i++ {
+		select {
+		case result := <-done:
+			if result.Code != 200 {
+				t.Fatalf("concurrent push failed: %d %s", result.Code, result.Body.String())
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("concurrent push did not finish")
+		}
+	}
+	var count int
+	if err := env.workspace.DB().QueryRow(`SELECT COUNT(*) FROM series_points`).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("concurrent HTTP retry dedupe: %d %v", count, err)
+	}
+}
+
+func TestSeriesRetryStormRejectedWithoutDatabaseOrBodyRead(t *testing.T) {
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	seedSeriesIdentities(t, env)
+	token := declareSeriesHTTP(t, env)
+	gate := newSeriesIngress()
+	now := time.Now().UTC()
+	gate.clock = func() time.Time { return now }
+	gate.remember(token, "github", now)
+	gate.adapters["github"] = &seriesAdmissionState{minute: now.Unix() / 60, requests: series.MaxAdapterRequestsPerMinute}
+	if err := env.workspace.DB().Close(); err != nil {
 		t.Fatal(err)
+	}
+	r := httptest.NewRequest("POST", "/series/prs/points", nil)
+	r.Header.Set("Authorization", "Bearer "+token)
+	r.Body = unreadableSeriesBody{}
+	w := httptest.NewRecorder()
+	release, allowed := beginScopedSeriesRequest(w, r, handlerOptions{authStore: env.authStore}, gate)
+	if allowed || release != nil || w.Code != 429 {
+		t.Fatalf("retry storm reached database: allowed=%v code=%d body=%s", allowed, w.Code, w.Body.String())
+	}
+	// Token churn cannot bypass the bounded pre-authentication lane either.
+	fresh := newSeriesIngress()
+	fresh.clock = func() time.Time { return now }
+	fresh.fresh = seriesAdmissionState{minute: now.Unix() / 60, requests: series.MaxRequestsPerMinute}
+	w = httptest.NewRecorder()
+	release, allowed = beginScopedSeriesRequest(w, r, handlerOptions{authStore: env.authStore}, fresh)
+	if allowed || release != nil || w.Code != 429 {
+		t.Fatalf("fresh-token storm reached database: allowed=%v code=%d body=%s", allowed, w.Code, w.Body.String())
 	}
 }

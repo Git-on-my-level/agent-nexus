@@ -41,6 +41,10 @@ ANX_ADAPTER=prometheus PROMETHEUS_URL=https://prometheus.internal \
 
 Only explicit `--labels job,instance` keys are forwarded. Narrow/aggregate the
 PromQL query to fit ANX's caps. See the [Prometheus API](https://prometheus.io/docs/prometheus/latest/querying/api/).
+The shared push helper waits 60 seconds on `series_rate_limited` and retries the
+same timestamped observation at most three times. Other caps and authentication
+errors stop the run. Large backfills may span several minutes under the adapter's
+1,200 requests/minute budget; avoid overlapping scheduled runs.
 
 For a generic command, declare its series and run:
 

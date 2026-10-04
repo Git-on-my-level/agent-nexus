@@ -5,14 +5,20 @@ import (
 	"agent-nexus-core/internal/storage"
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 )
 
 func fixture(t *testing.T) (Store, auth.Principal, auth.Principal, auth.Principal) {
+	return fixtureAt(t, t.TempDir())
+}
+
+func fixtureAt(t *testing.T, root string) (Store, auth.Principal, auth.Principal, auth.Principal) {
 	t.Helper()
 	ctx := context.Background()
-	w, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	w, err := storage.InitializeWorkspace(ctx, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,11 +56,200 @@ func fixture(t *testing.T) (Store, auth.Principal, auth.Principal, auth.Principa
 	}
 	return s, human, owner, writer
 }
+
+func reopenStore(t *testing.T, s Store, root string) Store {
+	t.Helper()
+	if err := s.DB.Close(); err != nil {
+		t.Fatal(err)
+	}
+	w, err := storage.InitializeWorkspace(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { w.Close() })
+	return Store{DB: w.DB(), Auth: auth.NewStore(w.DB())}
+}
+
+func TestRestartPreservesDedupeBudgetsAndLabelCardinality(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	s, _, _, writer := fixtureAt(t, root)
+	now := time.Now().UTC().Truncate(time.Second)
+	p := Point{Value: number(7), TS: now.Format(time.RFC3339Nano), Labels: map[string]string{"initiative": "launch", "status": "open"}}
+	if err := s.Push(ctx, "builds", p, writer, now); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i < MaxLabelSets; i++ {
+		if _, err := s.DB.Exec(`INSERT INTO series_labels(series,labels) VALUES('builds',json_object('slot',CAST(? AS TEXT)))`, i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s = reopenStore(t, s, root)
+	// Reversed map insertion order and an equivalent timezone dedupe identically.
+	p.Labels = map[string]string{"status": "open", "initiative": "launch"}
+	p.TS = now.In(time.FixedZone("offset", 3600)).Format(time.RFC3339Nano)
+	if err := s.Push(ctx, "builds", p, writer, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Push(ctx, "builds", Point{Value: number(1), Labels: map[string]string{"slot": "new"}}, writer, now); !errors.Is(err, ErrCapacity) {
+		t.Fatalf("restart reset label cardinality: %v", err)
+	}
+	for table, want := range map[string]int{"series_points": 1, "series_labels": MaxLabelSets} {
+		var n int
+		if err := s.DB.QueryRow(`SELECT COUNT(*) FROM ` + table + ` WHERE series='builds'`).Scan(&n); err != nil || n != want {
+			t.Fatalf("%s count=%d want=%d error=%v", table, n, want, err)
+		}
+	}
+	var ingested int
+	if err := s.DB.QueryRow(`SELECT n FROM series_ingestion_days WHERE day=?`, now.UnixNano()/Day).Scan(&ingested); err != nil || ingested != 1 {
+		t.Fatalf("restart lost dedupe: %d %v", ingested, err)
+	}
+	if _, err := s.DB.Exec(`UPDATE series_request_budgets SET n=? WHERE scope='adapter:collector'`, MaxAdapterRequestsPerMinute); err != nil {
+		t.Fatal(err)
+	}
+	s = reopenStore(t, s, root)
+	if err := s.Push(ctx, "builds", p, writer, now); !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("restart or exact retry bypassed adapter rate budget: %v", err)
+	}
+	var workspaceRequests int
+	if err := s.DB.QueryRow(`SELECT n FROM series_request_budgets WHERE scope='workspace' AND minute=?`, now.Unix()/60).Scan(&workspaceRequests); err != nil || workspaceRequests != 2 {
+		t.Fatalf("denied attempt partially changed budget: %d %v", workspaceRequests, err)
+	}
+	if err := s.Push(ctx, "builds", p, writer, now.Add(time.Minute)); err != nil {
+		t.Fatalf("budget did not reopen at next minute: %v", err)
+	}
+	if _, err := s.DB.Exec(`UPDATE series_request_budgets SET n=? WHERE scope='workspace'`, MaxRequestsPerMinute); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Push(ctx, "builds", p, writer, now.Add(time.Minute)); !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("workspace rate budget: %v", err)
+	}
+}
+
+func TestRestartRollupCheckpointIsAtomicIdempotentAndHasNoExpiry(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	s, _, _, writer := fixtureAt(t, root)
+	now := time.Now().UTC()
+	p := Point{Value: number(9), TS: now.Add(-89 * 24 * time.Hour).Format(time.RFC3339Nano)}
+	if err := s.Push(ctx, "builds", p, writer, now); err != nil {
+		t.Fatal(err)
+	}
+	future := now.Add(3 * 24 * time.Hour)
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if err := compact(ctx, tx, future); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	s = reopenStore(t, s, root)
+	var raw, daily int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM series_points`).Scan(&raw); err != nil || raw != 1 {
+		t.Fatalf("interrupted checkpoint lost raw data: %d %v", raw, err)
+	}
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM series_daily`).Scan(&daily); err != nil || daily != 0 {
+		t.Fatalf("interrupted checkpoint left partial rollup: %d %v", daily, err)
+	}
+	if err := s.Compact(ctx, future); err != nil {
+		t.Fatal(err)
+	}
+	s = reopenStore(t, s, root)
+	for _, at := range []time.Time{future, future.Add(20 * 365 * 24 * time.Hour)} {
+		if err := s.Compact(ctx, at); err != nil {
+			t.Fatal(err)
+		}
+		var n int
+		var total float64
+		if err := s.DB.QueryRow(`SELECT n,total FROM series_daily WHERE series='builds'`).Scan(&n, &total); err != nil || n != 1 || total != 9 {
+			t.Fatalf("replayed/expired daily checkpoint: n=%d total=%v err=%v", n, total, err)
+		}
+	}
+}
+
+func TestConcurrentPushesDedupeAndEnforceDailyBudgetAtomically(t *testing.T) {
+	ctx := context.Background()
+	s, _, _, writer := fixture(t)
+	now := time.Now().UTC()
+	p := Point{Value: number(3), TS: now.Format(time.RFC3339Nano)}
+	push := func(same bool) map[string]int {
+		var wg sync.WaitGroup
+		results := make(chan error, 12)
+		for i := 0; i < cap(results); i++ {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				point := p
+				if !same {
+					point.TS = now.Add(time.Duration(i+1) * time.Millisecond).Format(time.RFC3339Nano)
+				}
+				results <- s.Push(ctx, "builds", point, writer, now)
+			}(i)
+		}
+		wg.Wait()
+		close(results)
+		counts := map[string]int{}
+		for err := range results {
+			switch {
+			case err == nil:
+				counts["accepted"]++
+			case errors.Is(err, ErrCapacity):
+				counts["capacity"]++
+			default:
+				t.Fatal(err)
+			}
+		}
+		return counts
+	}
+	if got := push(true); got["accepted"] != 12 {
+		t.Fatal(got)
+	}
+	var raw int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM series_points`).Scan(&raw); err != nil || raw != 1 {
+		t.Fatalf("concurrent dedupe: %d %v", raw, err)
+	}
+	if _, err := s.DB.Exec(`UPDATE series_ingestion_days SET n=?`, MaxPointsPerDay-1); err != nil {
+		t.Fatal(err)
+	}
+	if got := push(false); got["accepted"] != 1 || got["capacity"] != 11 {
+		t.Fatal(got)
+	}
+	var n int
+	if err := s.DB.QueryRow(`SELECT n FROM series_ingestion_days`).Scan(&n); err != nil || n != MaxPointsPerDay {
+		t.Fatalf("concurrent daily budget: %d %v", n, err)
+	}
+}
+
+func TestTimestampAndLabelSafetyBounds(t *testing.T) {
+	s, _, _, writer := fixture(t)
+	now := time.Now().UTC()
+	for _, ts := range []time.Time{now.Add(-Retention - time.Nanosecond), now.Add(5*time.Minute + time.Nanosecond)} {
+		if err := s.Push(context.Background(), "builds", Point{Value: number(1), TS: ts.Format(time.RFC3339Nano)}, writer, now); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("timestamp outside bound: %v", err)
+		}
+	}
+	labels := map[string]string{}
+	for i := 0; i < 9; i++ {
+		labels[fmt.Sprintf("k%d", i)] = "v"
+	}
+	if err := s.Push(context.Background(), "builds", Point{Value: number(1), Labels: labels}, writer, now); !errors.Is(err, ErrCapacity) {
+		t.Fatalf("label key cap: %v", err)
+	}
+}
 func number(v float64) *float64 { return &v }
 func TestGrantScopeRevocationAndAudit(t *testing.T) {
 	ctx := context.Background()
 	s, human, owner, writer := fixture(t)
 	now := time.Now().UTC()
+	for _, capability := range []auth.SeriesCapability{{Operation: "cards.create", Resource: "builds"}, {Operation: auth.SeriesPointsPushOperation, Resource: "undeclared"}} {
+		if err := s.Auth.RequireSeriesCapability(ctx, writer, capability); !errors.Is(err, auth.ErrSeriesForbidden) {
+			t.Fatalf("unexpected operation/resource capability: %#v %v", capability, err)
+		}
+	}
 	if err := s.Push(ctx, "builds", Point{Value: number(2)}, owner, now); !errors.Is(err, auth.ErrSeriesForbidden) {
 		t.Fatalf("ordinary identity can push: %v", err)
 	}

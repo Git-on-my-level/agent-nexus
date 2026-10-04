@@ -41,6 +41,9 @@ func seriesRouteAccess(r *http.Request) routeAccessRequirement {
 
 func seriesError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, series.ErrRateLimited):
+		w.Header().Set("Retry-After", "60")
+		writeError(w, 429, "series_rate_limited", "series request safety budget exceeded; retry after the indicated delay")
 	case errors.Is(err, auth.ErrSeriesForbidden):
 		writeError(w, 403, "forbidden", "an active, explicitly granted series permission is required")
 	case errors.Is(err, series.ErrInvalid):

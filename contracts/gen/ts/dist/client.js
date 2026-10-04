@@ -9713,7 +9713,7 @@ export const commandRegistry = [
         "path": "/series/{name}/points",
         "operation_id": "series_push",
         "summary": "Push one declared series point",
-        "description": "Exact same-timestamp retries are idempotent. A changed raw observation at the same timestamp replaces its value and consumes daily ingestion budget; rolled-up observations cannot be corrected through push.",
+        "description": "Scoped credentials have a default-deny series.points.push capability for declared resources only. Exact same-timestamp retries are idempotent. A changed raw observation at the same timestamp replaces its value and consumes daily ingestion budget; rolled-up observations cannot be corrected through push. Safety bounds are independent of commercial quotas. Fixed UTC-minute request budgets are 1200 per adapter and 2400 per workspace, counting retries; accepted points are capped at 100000 per UTC day. In-flight scoped requests are limited to two per adapter and four per workspace. Timestamps may be at most 90 days old or five minutes ahead. Raw retention is 90 days; daily rollups never expire.",
         "why": "Push one declared series point.",
         "input_mode": "flags",
         "http_input_mode": "json-body",
@@ -9753,7 +9753,8 @@ export const commandRegistry = [
             "invalid_request",
             "not_found",
             "conflict",
-            "series_capacity"
+            "series_capacity",
+            "series_rate_limited"
         ],
         "concepts": [
             "documents"

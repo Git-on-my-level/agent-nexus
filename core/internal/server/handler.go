@@ -2668,20 +2668,14 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		corsOriginSet[o] = true
 	}
 
+	seriesAdmission := newSeriesIngress()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// A scoped token cannot reach any other surface, including auth ceremonies
-		// or streams. All grant checks are repeated inside the point transaction.
-		if opts.authStore != nil {
-			if token, err := parseBearerToken(strings.TrimSpace(r.Header.Get("Authorization"))); err == nil {
-				if principal, err := opts.authStore.AuthenticateAccessToken(r.Context(), token); err == nil && principal.SeriesAdapter != "" {
-					parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-					if r.Method != http.MethodPost || len(parts) != 3 || parts[0] != "series" || parts[1] == "" || parts[2] != "points" {
-						writeError(w, 403, "forbidden", "series-write tokens can only push declared series points")
-						return
-					}
-					cacheAuthenticatedPrincipal(r, &principal)
-				}
-			}
+		release, allowed := beginScopedSeriesRequest(w, r, opts, seriesAdmission)
+		if !allowed {
+			return
+		}
+		if release != nil {
+			defer release()
 		}
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")

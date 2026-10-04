@@ -228,7 +228,7 @@ paths:
     post:
       operationId: series_push
       summary: Push one declared series point
-      description: Exact same-timestamp retries are idempotent. A changed raw observation at the same timestamp replaces its value and consumes daily ingestion budget; rolled-up observations cannot be corrected through push.
+      description: Scoped credentials have a default-deny series.points.push capability for declared resources only. Exact same-timestamp retries are idempotent. A changed raw observation at the same timestamp replaces its value and consumes daily ingestion budget; rolled-up observations cannot be corrected through push. Safety bounds are independent of commercial quotas. Fixed UTC-minute request budgets are 1200 per adapter and 2400 per workspace, counting retries; accepted points are capped at 100000 per UTC day. In-flight scoped requests are limited to two per adapter and four per workspace. Timestamps may be at most 90 days old or five minutes ahead. Raw retention is 90 days; daily rollups never expire.
       tags: [series]
       x-anx-command-id: series.push
       x-anx-cli-input:
@@ -247,7 +247,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: {mode: none}
       x-anx-output-envelope: Returns JSON with provenance and explicit freshness.
-      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, not_found, conflict, series_capacity]
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, not_found, conflict, series_capacity, series_rate_limited]
       x-anx-concepts: [documents]
       x-anx-surface: canonical
       x-anx-agent-notes: Explicit declared push source; core never fetches external data.
@@ -268,6 +268,11 @@ paths:
           content:
             application/json:
               schema: {type: object, additionalProperties: true}
+        "429":
+          description: Safety request budget or ingestion/cardinality cap exceeded; retry storms are rejected before body reads. series_rate_limited responses carry Retry-After seconds.
+          headers:
+            Retry-After:
+              schema: {type: integer, minimum: 1, maximum: 60}
   /series/{name}/query:
     get:
       operationId: series_query

@@ -2187,7 +2187,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `flags`
 - Why: Push one declared series point.
 - Concepts: `documents`
-- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`, `series_rate_limited`
 - Output: Returns JSON with provenance and explicit freshness.
 - Agent notes: Explicit declared push source; core never fetches external data.
 - Examples:

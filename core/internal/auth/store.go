@@ -556,7 +556,7 @@ func (s *Store) AuthenticateAccessToken(ctx context.Context, accessToken string)
 		Username:      username,
 		PrincipalKind: strings.TrimSpace(principalKind),
 		AuthMethod:    strings.TrimSpace(authMethod),
-		AuthAdmin:     authAdmin,
+		AuthAdmin:     authAdmin && seriesAdapter == "",
 	}, nil
 }
 

@@ -29,12 +29,31 @@ at most five minutes ahead. Counters are nonnegative; state points contain a
 nonempty string instead of a number (`anx series push health healthy`). Numeric values are finite within ±1e12.
 Counters store samples (including resets), rather than computing a rate.
 
+These are technical safety bounds on every deployment, including self-hosted
+workspaces, independently of commercial quotas. Push requests have fixed UTC-minute
+budgets: 1,200 per adapter and 2,400 across the workspace. Retries count against
+the request budget, even when deduplication avoids consuming daily ingestion
+budget. Durable counters preserve successful request budgets across restarts;
+ingress also counts rejected and malformed attempts in memory. All credentials
+for an adapter share its budget. At most two scoped requests per adapter and
+four across the workspace can run at once, including a bounded authentication
+lane for fresh credentials. Excess traffic receives `429 series_rate_limited`
+with `Retry-After` seconds. Normal human operations do not share these limits.
+Recognized retry storms are rejected before body reads or database access.
+
 Raw observations older than 90 days compact into daily count/sum/min/max/last
-rollups on maintenance and series reads/writes. Historical queries use whole UTC
+rollups on maintenance and series reads/writes. Daily rollups are retained forever
+with no expiry, per David's 2026-10-05 decision. Rollup updates and raw deletion
+commit as one atomic checkpoint; interrupted or replayed compaction cannot count
+a sample twice. Historical queries use whole UTC
 days and a whole-day step, reporting their reduced resolution. State rollups
 retain the last state. `avg` is weighted by the underlying sample count, and
 `count` counts samples. A series label set is stale after twice its adapter's
 expected interval; provenance includes the last received push as a separate fact.
+Queries cover at most 3,650 days, with steps from one second to 3,650 days and
+at most 200 buckets per label set. Retaining rollups forever does not permit an
+unbounded query response. Raw corrections and out-of-order samples must stay
+within the 90-day backfill window; rolled-up observations cannot be rewritten.
 
 ## Panel binding
 
