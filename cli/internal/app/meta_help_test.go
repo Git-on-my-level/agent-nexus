@@ -292,6 +292,9 @@ func TestConceptsCommandAndHelpTopic(t *testing.T) {
 	if !strings.Contains(commandOutput, "ANX concepts guide") {
 		t.Fatalf("expected concepts guide heading output=%s", commandOutput)
 	}
+	if !strings.Contains(commandOutput, "CEO by default") || !strings.Contains(commandOutput, "small set of outcome cards") {
+		t.Fatalf("expected executive-readable guidance output=%s", commandOutput)
+	}
 	if !strings.Contains(commandOutput, "threads") || !strings.Contains(commandOutput, "docs") || !strings.Contains(commandOutput, "boards") || !strings.Contains(commandOutput, "work") {
 		t.Fatalf("expected core primitives including work in concepts guide output=%s", commandOutput)
 	}
@@ -827,6 +830,9 @@ func TestRunOnboardingHelpTopic(t *testing.T) {
 	}
 	if !strings.Contains(output, "anx host enroll") || !strings.Contains(output, "anx work done") {
 		t.Fatalf("expected host enrollment and daily loop output=%s", output)
+	}
+	if !strings.Contains(output, "CEO by default") || !strings.Contains(output, "small set of outcome cards") {
+		t.Fatalf("expected executive-readable onboarding principle output=%s", output)
 	}
 }
 

@@ -5,7 +5,7 @@ description: Help an explicitly designated existing agent discover permitted con
 
 # ANX project coordination
 
-Skill contract: anx.pm.v1. Load anx-participant alongside this skill. Installing this file neither designates a PM nor proves that a session loaded it.
+Skill contract: anx.pm.v2. Load anx-participant alongside this skill. Installing this file neither designates a PM nor proves that a session loaded it.
 
 ## Designation and boundaries
 
@@ -22,6 +22,8 @@ Designation grants no new permissions. Keep source writes, consequential decisio
 
 ## Synthesize useful overviews
 
+Treat every ANX reader as a CEO by default. Lead with the outcome and what needs the human, then give concise evidence and detail. Group related executor issues, PRs and runs under an existing human-level initiative/outcome card; run `anx work list --project-ref <ref>` before creating, keep source details linked as evidence, and never mirror a tracker 1:1. Keep the workspace near 15 or fewer open cards and very few open asks; use a checklist or `anx.visual-report` dashboard/chart for dense status.
+
 Summarize the accepted objective, decisions, meaningful progress, blockers, uncertainty, next actors/actions and evidence links. Attribute claims to the reporting agent or source and distinguish reported, inferred and verified facts. State coverage and freshness; do not fill missing context with certainty or reproduce raw chats.
 
 Reconcile native Nexus commitments and externally authoritative tasks without replacing source IDs, assignees, workflow fields or completion criteria. A project need not have one owner. Participation is not ownership, and a completed run is not an accepted task outcome.
@@ -30,5 +32,6 @@ Reconcile native Nexus commitments and externally authoritative tasks without re
 
 - Inspect explicit task context and recent evidence before proposing the next step. Surface conflicts and consequential unresolved ambiguity to the user with a concise recommendation.
 - Use ordinary task messages, asks and authorized source tools. Keep requester-scoped context and human decision gates. Never resolve an approval request on the user's behalf merely because you are PM.
+- Ask only for decisions genuinely owned by the human (direction, money, risk or irreversible choices), recommend one answer, offer at most 2–3 alternatives and batch related decisions. Do not also block a card with the human as `next_actor` for the same question; that duplicates the Inbox item. Keep `next_actor` on the agent and use the response event as evidence when advancing or resolving the card.
 - Keep updates tied to explicit task/project refs with evidence and next steps. Avoid repeated unchanged notices, hidden claiming or task-state writes from reads.
 - Prefer fresh-context handoffs with objective, decisions, evidence, remaining work, authority boundaries and uncertainty. Cite prior sessions only as supported recovery clues. Do not promise universal resume/history access.
