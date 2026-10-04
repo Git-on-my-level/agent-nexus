@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import runpy
 import sys
+import subprocess
 import unittest
 from unittest.mock import patch
 
@@ -14,6 +15,22 @@ import common
 ROOT = Path(__file__).parent
 
 class AdaptersTest(unittest.TestCase):
+    def test_rate_backoff_retries_the_same_observation_only(self):
+        limited = subprocess.CompletedProcess([], 1, json.dumps({"error": {"code": "series_rate_limited"}}), "")
+        accepted = subprocess.CompletedProcess([], 0, "{}", "")
+        with patch.dict("os.environ", {"ANX_ADAPTER": "collector"}), patch("subprocess.run", side_effect=[limited, accepted]) as run, patch.object(common.time, "sleep") as sleep:
+            common.push("builds", 2, {"initiative": "launch"}, "2026-10-05T00:00:00Z")
+        self.assertEqual(run.call_args_list[0], run.call_args_list[1])
+        sleep.assert_called_once_with(60)
+
+    def test_non_rate_caps_are_not_retried(self):
+        capped = subprocess.CompletedProcess([], 1, json.dumps({"error": {"code": "series_capacity"}}), "")
+        with patch.dict("os.environ", {"ANX_ADAPTER": "collector"}), patch("subprocess.run", return_value=capped) as run, patch.object(common.time, "sleep") as sleep:
+            with self.assertRaisesRegex(RuntimeError, "series_capacity"):
+                common.push("builds", 2)
+        self.assertEqual(run.call_count, 1)
+        sleep.assert_not_called()
+
     def test_github_groups_labels_and_keeps_open_and_merged_distinct(self):
         now = dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
         rows = [

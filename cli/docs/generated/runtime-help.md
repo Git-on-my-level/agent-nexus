@@ -5487,7 +5487,7 @@ Generated Help: series push
 - Input mode: `flags`
 - Why: Push one declared series point.
 - Output: Returns JSON with provenance and explicit freshness.
-- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`, `series_rate_limited`
 - Concepts: `documents`
 - Agent notes: Explicit declared push source; core never fetches external data.
 - Adjacent commands: `series list`, `series query`, `series show`

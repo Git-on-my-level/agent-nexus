@@ -17,6 +17,7 @@ import (
 
 var ErrInvalid = errors.New("invalid_request")
 var ErrCapacity = errors.New("series_capacity")
+var ErrRateLimited = errors.New("series_rate_limited")
 var ErrNotFound = errors.New("not_found")
 var ErrConflict = errors.New("conflict")
 var Name = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,79}$`)
@@ -27,6 +28,10 @@ const MaxSeries = 1000
 const MaxLabelSets = 100
 const MaxPointsPerDay = 100000
 const MaxBuckets = 200
+const MaxRequestsPerMinute = 2400
+const MaxAdapterRequestsPerMinute = 1200
+const MaxConcurrentRequests = 4
+const MaxAdapterConcurrentRequests = 2
 
 type Definition struct {
 	Name string `json:"name"`
@@ -298,6 +303,11 @@ func (s Store) Push(ctx context.Context, name string, p Point, actor auth.Princi
 	} else if p.State != nil || p.Value == nil || math.IsNaN(*p.Value) || math.IsInf(*p.Value, 0) || math.Abs(*p.Value) > 1e12 || (kind == "counter" && *p.Value < 0) {
 		return ErrInvalid
 	}
+	// Count exact retries as requests even when they do not create a new point.
+	// Both scopes commit with the point (or dedupe checkpoint), surviving restart.
+	if err = requestBudget(ctx, tx, actor.SeriesAdapter, now); err != nil {
+		return err
+	}
 	if err = compact(ctx, tx, now); err != nil {
 		return err
 	}
@@ -350,6 +360,26 @@ func (s Store) Push(ctx context.Context, name string, p Point, actor auth.Princi
 		return err
 	}
 	return tx.Commit()
+}
+
+func requestBudget(ctx context.Context, tx *sql.Tx, adapter string, now time.Time) error {
+	minute := now.Unix() / 60
+	for _, scope := range []struct {
+		name string
+		max  int
+	}{{"workspace", MaxRequestsPerMinute}, {"adapter:" + adapter, MaxAdapterRequestsPerMinute}} {
+		result, err := tx.ExecContext(ctx, `INSERT INTO series_request_budgets(scope,minute,n) VALUES(?,?,1) ON CONFLICT(scope,minute) DO UPDATE SET n=n+1 WHERE n<?`, scope.name, minute, scope.max)
+		if err != nil {
+			return err
+		}
+		if n, err := result.RowsAffected(); err != nil {
+			return err
+		} else if n == 0 {
+			return fmt.Errorf("%w: %s request budget exceeded", ErrRateLimited, scope.name)
+		}
+	}
+	_, err := tx.ExecContext(ctx, `DELETE FROM series_request_budgets WHERE minute<?`, minute-1)
+	return err
 }
 
 // Compact applies retention without needing an active collector or reader.

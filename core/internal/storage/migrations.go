@@ -895,6 +895,9 @@ var migrations = []migration{
 		`CREATE TABLE series_daily (series TEXT NOT NULL, labels TEXT NOT NULL, day INTEGER NOT NULL, n INTEGER NOT NULL, total REAL, low REAL, high REAL, last_ts INTEGER NOT NULL, last_value REAL, last_state TEXT, PRIMARY KEY(series,labels,day), FOREIGN KEY(series,labels) REFERENCES series_labels(series,labels) ON DELETE CASCADE);`,
 		`CREATE TABLE series_ingestion_days (day INTEGER PRIMARY KEY, n INTEGER NOT NULL);`,
 	}},
+	{Version: 45, Statements: []string{
+		`CREATE TABLE series_request_budgets (scope TEXT NOT NULL, minute INTEGER NOT NULL, n INTEGER NOT NULL, PRIMARY KEY(scope,minute));`,
+	}},
 }
 
 func applyMigration44SeriesTokenScope(ctx context.Context, tx *sql.Tx) error {
