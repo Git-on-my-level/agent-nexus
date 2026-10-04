@@ -191,3 +191,5 @@ embedded sidecar and starts by default with the workspace core.
 - Repo-local contributor workflow: `make bridge-setup`, `make bridge-doctor`, `make bridge-test`
 - Workspace-router runtime notes: `core/README.md`
 - Package-specific bridge runtime notes: `adapters/agent-bridge/README.md`
+
+Live dashboard data and declared push adapters: [guide](docs/live-series.md).

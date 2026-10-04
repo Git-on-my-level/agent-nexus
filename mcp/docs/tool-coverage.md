@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 197
+- Command count: 206
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -11,6 +11,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | Group | Commands |
 | --- | --- |
 | actors | 2 |
+| adapters | 5 |
 | agent | 6 |
 | agents | 4 |
 | artifacts | 10 |
@@ -33,6 +34,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | report | 1 |
 | runs | 3 |
 | secret | 6 |
+| series | 4 |
 | sessions | 2 |
 | threads | 5 |
 | topics | 10 |
@@ -44,25 +46,25 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 74 |
+| exposed_read | 77 |
 | exposed_write | 66 |
-| gated_admin | 24 |
-| gated_sensitive | 12 |
+| gated_admin | 28 |
+| gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 9 |
 | unsupported_interactive | 5 |
 | unsupported_other | 2 |
-| unsupported_shell_shaped | 1 |
+| unsupported_shell_shaped | 2 |
 | unsupported_streaming | 4 |
 
 ## Counts by Surface
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 140 | exposed_read + exposed_write + adapted |
+| standalone default | 143 | exposed_read + exposed_write + adapted |
 | hosted default | 63 | explicit read-only private-app allowlist |
-| gated | 36 | requires explicit admin/sensitive policy scope |
+| gated | 41 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
-| unsupported | 21 | not represented as direct MCP tools in v1 |
+| unsupported | 22 | not represented as direct MCP tools in v1 |
 
 ## Command Inventory
 
@@ -70,6 +72,11 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | --- | --- | --- | --- | --- | --- |
 | actors.create | actors | POST | /actors | unsupported_bootstrap_auth | dev-only actor registration is not an MCP auth path |
 | actors.list | actors | GET | /actors | gated_admin | actor inventory is auth-administrative |
+| adapters.declare | adapters | POST | /adapters | gated_admin | Explicitly grant a host agent permission to write named series; core rechecks administration transactionally. |
+| adapters.delete | adapters | DELETE | /adapters/{name} | gated_admin | Delete declared series history; requires current workspace administration. |
+| adapters.list | adapters | GET | /adapters | gated_admin | Inspect explicitly declared series grants; administration is required by core. |
+| adapters.revoke | adapters | POST | /adapters/{name}/revoke | gated_admin | Withdraw a series grant; requires current workspace administration. |
+| adapters.token | adapters | POST | /adapters/{name}/token | gated_sensitive | Return a short-lived credential for the owning enrolled agent; never expose by default. |
 | agent.inbox.answers.read | agent | POST | /agent-inbox/answers/read | exposed_write | ordinary authenticated agent per-answer read state write |
 | agent.inbox.asks.list | agent | GET | /agent-inbox/asks | exposed_read | requester-scoped, keyset-paginated human attention inbox projection |
 | agent.notification-receipts.stream | agent | GET | /stream/agent-notification-receipts | unsupported_streaming | SSE stream needs a bounded read adapter before MCP exposure |
@@ -234,6 +241,10 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | secrets.reveal | secret | POST | /secrets/{secret_id}/reveal | gated_sensitive | secret value reveal is sensitive |
 | secrets.reveal-batch | secret | POST | /secrets/reveal-batch | gated_sensitive | secret value reveal is sensitive |
 | secrets.update | secret | PUT | /secrets/{secret_id} | gated_sensitive | secret payload write is sensitive |
+| series.list | series | GET | /series | exposed_read | Read declared numeric/state series metadata and source provenance. |
+| series.push | series | POST | /series/{name}/points | unsupported_shell_shaped | Use the enrolled host CLI for scoped token exchange and optional source command execution. |
+| series.query | series | GET | /series/{name}/query | exposed_read | Read range/step-bounded series observations with explicit label filters and aggregation. |
+| series.show | series | GET | /series/{name} | exposed_read | Read bounded series observations and freshness. |
 | sessions.get | sessions | GET | /sessions/{session_id} | exposed_read | Read only the authenticated agent's private session metadata; no transcript access or other task links. |
 | sessions.register | sessions | POST | /sessions | exposed_write | Register sequence-fenced metadata under an existing agent principal; never creates credentials or controls execution. |
 | threads.context | threads | GET | /threads/{thread_id}/context | exposed_read | bounded thread context projection |

@@ -4,9 +4,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `197`
+- Command operations: `206`
 - Baseline-allowed required-field gaps: `120`
-- Missing recommended examples: `179`
+- Missing recommended examples: `186`
 
 ## Baseline gap counts
 
@@ -143,6 +143,10 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - `actors.create` `POST /actors`
 - `actors.list` `GET /actors`
+- `adapters.delete` `DELETE /adapters/{name}`
+- `adapters.list` `GET /adapters`
+- `adapters.revoke` `POST /adapters/{name}/revoke`
+- `adapters.token` `POST /adapters/{name}/token`
 - `agent.inbox.answers.read` `POST /agent-inbox/answers/read`
 - `agent.inbox.asks.list` `GET /agent-inbox/asks`
 - `agent.notification-receipts.stream` `GET /stream/agent-notification-receipts`
@@ -289,6 +293,9 @@ Generated from `contracts/anx-openapi.yaml`.
 - `secrets.reveal` `POST /secrets/{secret_id}/reveal`
 - `secrets.reveal-batch` `POST /secrets/reveal-batch`
 - `secrets.update` `PUT /secrets/{secret_id}`
+- `series.list` `GET /series`
+- `series.query` `GET /series/{name}/query`
+- `series.show` `GET /series/{name}`
 - `sessions.get` `GET /sessions/{session_id}`
 - `sessions.register` `POST /sessions`
 - `threads.context` `GET /threads/{thread_id}/context`

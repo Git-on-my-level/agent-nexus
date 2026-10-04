@@ -31,9 +31,11 @@ type Query struct {
 }
 
 type Panel struct {
-	ID    string `json:"id"`
-	Type  string `json:"type"`
-	Query Query  `json:"data"`
+	ID       string          `json:"id"`
+	Type     string          `json:"type"`
+	Query    Query           `json:"data"`
+	Source   *SeriesSource   `json:"source,omitempty"`
+	Fallback *SeriesFallback `json:"fallback,omitempty"`
 }
 
 var identifier = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$`)
@@ -73,14 +75,20 @@ func Parse(content any) ([]Panel, error) {
 	seen := map[string]bool{}
 	for _, rawPanel := range report.Panels {
 		var p struct {
-			ID   string          `json:"id"`
-			Type string          `json:"type"`
-			Data json.RawMessage `json:"data"`
+			ID       string          `json:"id"`
+			Type     string          `json:"type"`
+			Data     json.RawMessage `json:"data"`
+			Source   *SeriesSource   `json:"source"`
+			Fallback *SeriesFallback `json:"fallback"`
 		}
 		if json.Unmarshal(rawPanel, &p) != nil || !identifier.MatchString(p.ID) || seen[p.ID] {
 			return nil, fmt.Errorf("panel ids must be valid and unique")
 		}
 		seen[p.ID] = true
+		if p.Source != nil {
+			out = append(out, Panel{ID: p.ID, Type: p.Type, Source: p.Source, Fallback: p.Fallback})
+			continue
+		}
 		if !IsLive(p.Type) {
 			continue
 		}

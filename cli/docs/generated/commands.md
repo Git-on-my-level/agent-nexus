@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `197`
+- Commands: `206`
 
 ## `actors.create`
 
@@ -29,6 +29,73 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `actors`, `auth`
 - Error codes: `auth_required`, `invalid_token`
 - Output: Returns `{ actors, next_cursor? }`.
+
+## `adapters.declare`
+
+- CLI path: `adapters declare`
+- HTTP: `POST /adapters`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `file-and-body`
+- Why: Declare an adapter and its series.
+- Concepts: `documents`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`
+- Output: Returns JSON with provenance and explicit freshness.
+- Agent notes: Explicit declared push source; core never fetches external data.
+- Examples:
+  - Declare before pushing: `anx adapters declare --body-file adapter.json`
+
+## `adapters.delete`
+
+- CLI path: `adapters delete`
+- HTTP: `DELETE /adapters/{name}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Delete an adapter and its series.
+- Concepts: `documents`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`
+- Output: Returns JSON with provenance and explicit freshness.
+- Agent notes: Explicit declared push source; core never fetches external data.
+
+## `adapters.list`
+
+- CLI path: `adapters list`
+- HTTP: `GET /adapters`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: List declared adapters.
+- Concepts: `documents`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`
+- Output: Returns JSON with provenance and explicit freshness.
+- Agent notes: Explicit declared push source; core never fetches external data.
+
+## `adapters.revoke`
+
+- CLI path: `adapters revoke`
+- HTTP: `POST /adapters/{name}/revoke`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Revoke an adapter grant.
+- Concepts: `documents`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`
+- Output: Returns JSON with provenance and explicit freshness.
+- Agent notes: Explicit declared push source; core never fetches external data.
+
+## `adapters.token`
+
+- CLI path: `adapters token`
+- HTTP: `POST /adapters/{name}/token`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Exchange owner identity for a scoped series-write token.
+- Concepts: `documents`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`
+- Output: Returns JSON with provenance and explicit freshness.
+- Agent notes: Explicit declared push source; core never fetches external data.
 
 ## `agent.inbox.answers.read`
 
@@ -1980,7 +2047,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `cards`, `evidence`
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `not_found`, `invalid_request`, `unavailable`
 - Output: Returns `{ document_ref, revision_ref, observed_at, panels }`; static panels are omitted.
-- Agent notes: Read-only. Both text and structured version 1 visual reports are supported. Each live panel is independently materialized with status ok or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows. Archived boards and their work are excluded. Private PM events remain private.
+- Agent notes: Read-only. Both text and structured version 1 visual reports are supported. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows. Archived boards and their work are excluded. Private PM events remain private.
 
 ## `runs.get`
 
@@ -2097,6 +2164,61 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`, `human_only`, `not_found`, `invalid_request`, `secrets_not_configured`
 - Output: Returns `{ secret }` (metadata only).
 - Agent notes: Only human principals may update secrets.
+
+## `series.list`
+
+- CLI path: `series list`
+- HTTP: `GET /series`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: List pushed series.
+- Concepts: `documents`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`
+- Output: Returns JSON with provenance and explicit freshness.
+- Agent notes: Explicit declared push source; core never fetches external data.
+
+## `series.push`
+
+- CLI path: `series push`
+- HTTP: `POST /series/{name}/points`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `flags`
+- Why: Push one declared series point.
+- Concepts: `documents`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`, `series_rate_limited`
+- Output: Returns JSON with provenance and explicit freshness.
+- Agent notes: Explicit declared push source; core never fetches external data.
+- Examples:
+  - Push a number: `anx series push builds 12 --label initiative=launch`
+  - Push command output: `anx series push builds --from-command -- ./count-builds`
+
+## `series.query`
+
+- CLI path: `series query`
+- HTTP: `GET /series/{name}/query`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Query a bounded series range.
+- Concepts: `documents`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`
+- Output: Returns JSON with provenance and explicit freshness.
+- Agent notes: Explicit declared push source; core never fetches external data.
+
+## `series.show`
+
+- CLI path: `series show`
+- HTTP: `GET /series/{name}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Show a series and its provenance.
+- Concepts: `documents`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`
+- Output: Returns JSON with provenance and explicit freshness.
+- Agent notes: Explicit declared push source; core never fetches external data.
 
 ## `sessions.get`
 

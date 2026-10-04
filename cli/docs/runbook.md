@@ -826,3 +826,7 @@ anx refs resolve card:launch doc:launch-guide topic:release board:initiatives ca
 ```
 
 Use `step rm <card> <step-id>` after updating any dependent `--after` lists. Empty `--ref`, `--due`, or `--status` clears the optional field; `--after ""` clears dependencies. Known ref state overrides fallback status. Unknown URLs remain unresolved until an existing source-backed card supplies state; plan reads never fetch URLs.
+
+## Live dashboard series
+
+Prefer native live queries. Declare external-data adapters before pushing, and keep third-party credentials on the enrolled owner host. See `../../docs/live-series.md` and `../../adapters/series/README.md` for commands, scripts, grants and schedules.

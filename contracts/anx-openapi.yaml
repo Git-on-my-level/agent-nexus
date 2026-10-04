@@ -40,6 +40,282 @@ x-anx-extension-vocabulary:
   x-anx-surface: canonical | projection | diagnostic | utility
   x-anx-agent-notes: Idempotency, retries, and protocol caveats.
 paths:
+  /adapters:
+    get:
+      operationId: adapters_list
+      summary: List declared adapters
+      tags: [series]
+      x-anx-command-id: adapters.list
+      x-anx-cli-path: adapters list
+      x-anx-why: List declared adapters.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns JSON with provenance and explicit freshness.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, not_found, conflict, series_capacity]
+      x-anx-concepts: [documents]
+      x-anx-surface: canonical
+      x-anx-agent-notes: Explicit declared push source; core never fetches external data.
+      x-anx-stability: beta
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+    post:
+      operationId: adapters_declare
+      summary: Declare an adapter and its series
+      tags: [series]
+      x-anx-command-id: adapters.declare
+      x-anx-cli-input:
+        mode: file-and-body
+        flags:
+        - {name: body-file, required: true, description: UTF-8 adapter declaration JSON file or stdin (-).}
+      x-anx-examples:
+      - {title: Declare before pushing, command: "anx adapters declare --body-file adapter.json"}
+      x-anx-cli-path: adapters declare
+      x-anx-why: Declare an adapter and its series.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns JSON with provenance and explicit freshness.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, not_found, conflict, series_capacity]
+      x-anx-concepts: [documents]
+      x-anx-surface: canonical
+      x-anx-agent-notes: Explicit declared push source; core never fetches external data.
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AdapterDeclaration"}
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+  /adapters/{name}/revoke:
+    post:
+      operationId: adapters_revoke
+      summary: Revoke an adapter grant
+      tags: [series]
+      x-anx-command-id: adapters.revoke
+      x-anx-cli-path: adapters revoke
+      x-anx-why: Revoke an adapter grant.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns JSON with provenance and explicit freshness.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, not_found, conflict, series_capacity]
+      x-anx-concepts: [documents]
+      x-anx-surface: canonical
+      x-anx-agent-notes: Explicit declared push source; core never fetches external data.
+      x-anx-stability: beta
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema: {type: string, pattern: "^[a-z][a-z0-9_.-]{0,79}$"}
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+  /adapters/{name}:
+    delete:
+      operationId: adapters_delete
+      summary: Delete an adapter and its series
+      tags: [series]
+      x-anx-command-id: adapters.delete
+      x-anx-cli-path: adapters delete
+      x-anx-why: Delete an adapter and its series.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns JSON with provenance and explicit freshness.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, not_found, conflict, series_capacity]
+      x-anx-concepts: [documents]
+      x-anx-surface: canonical
+      x-anx-agent-notes: Explicit declared push source; core never fetches external data.
+      x-anx-stability: beta
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema: {type: string, pattern: "^[a-z][a-z0-9_.-]{0,79}$"}
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+  /adapters/{name}/token:
+    post:
+      operationId: adapters_token
+      summary: Exchange owner identity for a scoped series-write token
+      tags: [series]
+      x-anx-command-id: adapters.token
+      x-anx-cli-path: adapters token
+      x-anx-why: Exchange owner identity for a scoped series-write token.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns JSON with provenance and explicit freshness.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, not_found, conflict, series_capacity]
+      x-anx-concepts: [documents]
+      x-anx-surface: canonical
+      x-anx-agent-notes: Explicit declared push source; core never fetches external data.
+      x-anx-stability: beta
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema: {type: string, pattern: "^[a-z][a-z0-9_.-]{0,79}$"}
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+  /series:
+    get:
+      operationId: series_list
+      summary: List pushed series
+      tags: [series]
+      x-anx-command-id: series.list
+      x-anx-cli-path: series list
+      x-anx-why: List pushed series.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns JSON with provenance and explicit freshness.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, not_found, conflict, series_capacity]
+      x-anx-concepts: [documents]
+      x-anx-surface: canonical
+      x-anx-agent-notes: Explicit declared push source; core never fetches external data.
+      x-anx-stability: beta
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+  /series/{name}:
+    get:
+      operationId: series_show
+      summary: Show a series and its provenance
+      tags: [series]
+      x-anx-command-id: series.show
+      x-anx-cli-path: series show
+      x-anx-why: Show a series and its provenance.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns JSON with provenance and explicit freshness.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, not_found, conflict, series_capacity]
+      x-anx-concepts: [documents]
+      x-anx-surface: canonical
+      x-anx-agent-notes: Explicit declared push source; core never fetches external data.
+      x-anx-stability: beta
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema: {type: string, pattern: "^[a-z][a-z0-9_.-]{0,79}$"}
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+  /series/{name}/points:
+    post:
+      operationId: series_push
+      summary: Push one declared series point
+      description: Scoped credentials have a default-deny series.points.push capability for declared resources only. Exact same-timestamp retries are idempotent. A changed raw observation at the same timestamp replaces its value and consumes daily ingestion budget; rolled-up observations cannot be corrected through push. Safety bounds are independent of commercial quotas. Fixed UTC-minute request budgets are 1200 per adapter and 2400 per workspace, counting retries; accepted points are capped at 100000 per UTC day. In-flight scoped requests are limited to two per adapter and four per workspace. Timestamps may be at most 90 days old or five minutes ahead. Raw retention is 90 days; daily rollups never expire.
+      tags: [series]
+      x-anx-command-id: series.push
+      x-anx-cli-input:
+        mode: flags
+        flags:
+        - {name: adapter, description: Declared adapter; omitted means resolve from series inventory.}
+        - {name: label, description: Repeated exact k=v labels.}
+        - {name: ts, description: RFC3339 observation timestamp.}
+        - {name: from-command, description: Read a number or JSON point from the argv after --.}
+        - {name: series, description: Series name when from-command stdout is a number.}
+      x-anx-examples:
+      - {title: Push a number, command: "anx series push builds 12 --label initiative=launch"}
+      - {title: Push command output, command: "anx series push builds --from-command -- ./count-builds"}
+      x-anx-cli-path: series push
+      x-anx-why: Push one declared series point.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns JSON with provenance and explicit freshness.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, not_found, conflict, series_capacity, series_rate_limited]
+      x-anx-concepts: [documents]
+      x-anx-surface: canonical
+      x-anx-agent-notes: Explicit declared push source; core never fetches external data.
+      x-anx-stability: beta
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema: {type: string, pattern: "^[a-z][a-z0-9_.-]{0,79}$"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SeriesPointInput"}
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        "429":
+          description: Safety request budget or ingestion/cardinality cap exceeded; retry storms are rejected before body reads. series_rate_limited responses carry Retry-After seconds.
+          headers:
+            Retry-After:
+              schema: {type: integer, minimum: 1, maximum: 60}
+  /series/{name}/query:
+    get:
+      operationId: series_query
+      summary: Query a bounded series range
+      tags: [series]
+      x-anx-command-id: series.query
+      x-anx-cli-path: series query
+      x-anx-why: Query a bounded series range.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns JSON with provenance and explicit freshness.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, not_found, conflict, series_capacity]
+      x-anx-concepts: [documents]
+      x-anx-surface: canonical
+      x-anx-agent-notes: Explicit declared push source; core never fetches external data.
+      x-anx-stability: beta
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema: {type: string, pattern: "^[a-z][a-z0-9_.-]{0,79}$"}
+      - name: range
+        in: query
+        description: Duration up to 3650d; default 24h.
+        schema: {type: string}
+      - name: step
+        in: query
+        description: Duration; at most 200 buckets. Steps of at least 1d use summaries for complete interior UTC days and exact retained raw points for partial edges, without extending the requested rolling window or including future points. Raw queries are limited to 4096 observations; dense ranges of at least 1d downsample to a UTC daily bucket grid. Daily queries are limited to 20000 summary rows and 200000 partial-edge raw points. Narrower ranges or label filters are required beyond those bounds. Historical rollups require whole-day steps and contribute only fully covered days when raw edges have expired.
+        schema: {type: string}
+      - name: agg
+        in: query
+        description: last, avg, sum, min, max or count; default last.
+        schema: {type: string}
+      - name: label
+        in: query
+        description: Repeated exact k=v label filter.
+        schema: {type: string}
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
   /pm/conversations:
     get:
       operationId: pmConversationsList
@@ -2690,7 +2966,7 @@ paths:
       x-anx-stability: beta
       x-anx-agent-notes: >
         Read-only. Both text and structured version 1 visual reports are supported.
-        Each live panel is independently materialized with status ok or unavailable,
+        Each live or series-bound panel is independently materialized with status ok, stale or unavailable,
         observation time, data and an explicit truncated flag. Never infer zero work
         from an unavailable or truncated panel. Queries are bounded to 2000 source
         rows. Archived boards and their work are excluded. Private PM events remain private.
@@ -7517,11 +7793,25 @@ components:
       required: [id, type, status, observed_at, truncated, data]
       properties:
         id: {type: string}
-        type: {type: string, enum: [live-initiatives, live-asks, live-work-mix, live-activity]}
-        status: {type: string, enum: [ok, unavailable]}
-        observed_at: {type: string, format: date-time}
+        type: {type: string, enum: [live-initiatives, live-asks, live-work-mix, live-activity, chart, metric, metric-strip, table, metric-chart, evidence-table]}
+        status: {type: string, enum: [ok, stale, unavailable]}
+        observed_at: {type: string, format: date-time, nullable: true}
         truncated: {type: boolean}
         message: {type: string}
+        stale_since: {type: string, description: When the selected series became stale; empty when never observed.}
+        fresh_until: {type: string, format: date-time, description: Earliest freshness deadline of the selected label sets.}
+        provenance:
+          type: object
+          properties:
+            series: {type: string}
+            adapter: {type: string}
+            host: {type: string}
+            host_id: {type: string}
+            agent_id: {type: string}
+            last_push: {type: string, format: date-time, nullable: true}
+            expected_interval_seconds: {type: integer}
+            labels: {$ref: '#/components/schemas/SeriesLabels'}
+            resolution: {type: string, enum: [raw, daily, daily+raw]}
         data:
           type: object
           additionalProperties: true
@@ -7530,7 +7820,7 @@ components:
             priority, phase, board_ref, updated_at). Asks return items (id, title,
             status, created_at, age_seconds, request_event_ref, response_text, responded_at).
             Work mix returns group_by, total and buckets (key,label,count).
-            Activity returns items (ref,type,summary,actor_id,ts,count).
+            Activity returns items (ref,type,summary,actor_id,ts,count). Series bindings return the panel type's static data shape, live provenance and freshness deadlines.
     LiveReportQuery:
       type: object
       additionalProperties: false
@@ -11418,3 +11708,56 @@ components:
               value: { type: string }
             required: [name, value]
       required: [secrets]
+
+    SeriesLabels:
+      type: object
+      description: At most eight label keys; each label value is limited to 128 UTF-8 bytes.
+      maxProperties: 8
+      propertyNames: {pattern: "^[a-z][a-z0-9_.-]{0,79}$"}
+      additionalProperties: {type: string, maxLength: 128}
+    SeriesDefinition:
+      type: object
+      additionalProperties: false
+      required: [name, kind, unit]
+      properties:
+        name: {type: string, pattern: "^[a-z][a-z0-9_.-]{0,79}$"}
+        kind: {type: string, enum: [gauge, counter, state]}
+        unit: {type: string, maxLength: 80}
+    AdapterDeclaration:
+      type: object
+      additionalProperties: false
+      required: [name, description, agent_id, expected_interval, series]
+      properties:
+        name: {type: string, pattern: "^[a-z][a-z0-9_.-]{0,79}$"}
+        description: {type: string, minLength: 1, maxLength: 2000}
+        agent_id: {type: string, description: Exact active enrolled agent ID or username; host resolved by core.}
+        expected_interval: {type: string, description: Duration from 1s to 30d.}
+        series:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: {$ref: '#/components/schemas/SeriesDefinition'}
+    SeriesPointInput:
+      type: object
+      additionalProperties: false
+      properties:
+        ts: {type: string, format: date-time, description: Defaults to now; no older than 90 days or more than 5 minutes ahead.}
+        value: {type: number, minimum: -1000000000000, maximum: 1000000000000}
+        state: {type: string, minLength: 1, maxLength: 128}
+        labels: {$ref: '#/components/schemas/SeriesLabels'}
+    SeriesPanelSource:
+      type: object
+      additionalProperties: false
+      required: [series]
+      properties:
+        series: {type: string, pattern: "^[a-z][a-z0-9_.-]{0,79}$"}
+        labels: {$ref: '#/components/schemas/SeriesLabels'}
+        range: {type: string, description: Duration up to 3650d; default 24h.}
+        agg: {type: string, enum: [last, avg, sum, min, max, count]}
+    SeriesPanelFallback:
+      type: object
+      additionalProperties: false
+      required: [as_of, data]
+      properties:
+        as_of: {type: string, format: date-time}
+        data: {type: object, description: Static data matching the panel type.}

@@ -1083,3 +1083,32 @@ batch_ref_resolve:
     - Resolve card, doc/document, topic, and board refs by exact handle or internal id. External URLs resolve only through existing source-backed cards.
     - URLs for native card/document entities are workspace-relative paths; topics and boards have no current UI detail surface and omit url. No caller-supplied origin is trusted.
     - Read access is checked for every resource and referenced plan step; unavailable refs never expose hidden state.
+
+# Push-only data, declared before use; no external URL or credential lives in core.
+live_series:
+  kinds: [gauge, counter, state]
+  aggregations: [last, avg, sum, min, max, count]
+  raw_retention_days: 90
+  daily_rollup_lifetime: forever
+  caps: {series: 1000, label_keys: 8, label_value_utf8_bytes: 128, label_sets_per_series: 100, points_per_day: 100000, push_requests_per_minute: 2400, adapter_push_requests_per_minute: 1200, concurrent_pushes: 4, adapter_concurrent_pushes: 2, query_buckets: 200, query_range_days: 3650, query_step_min_seconds: 1, query_step_max_days: 3650, raw_query_points: 4096, daily_query_rows: 20000, daily_query_edge_points: 200000, out_of_order_days: 90, future_skew_seconds: 300}
+  rules:
+    - Safety bounds apply to self-hosted and all other deployments independently of commercial quotas.
+    - Humans and explicitly granted auth-admins declare, list, revoke and delete workspace-local adapters.
+    - Adapters belong to an active enrolled host agent and declare all writable series.
+    - Series-write tokens use the existing access-token store, are scoped to one adapter, have no refresh token and allow only point pushes.
+    - Default-deny operation/resource capabilities are checked at the request boundary and inside the write transaction; scoped credentials inherit no auth-admin powers.
+    - Fixed UTC-minute push request budgets count exact retries, persist across restart, and are shared by all tokens for the same adapter; accepted new or corrected points also consume the daily ingestion budget.
+    - Admission bounds reject excess adapter traffic before body reads or database access for recognized scoped credentials; normal human operations do not share these limits.
+    - Grant, owner, host, token expiry and revocation are rechecked inside each write transaction.
+    - Exact point retries are idempotent; same-timestamp raw corrections are permitted and count toward the daily ingestion cap.
+    - An adapter's owning agent can exchange its ordinary authenticated token for a short-lived series-write token.
+    - Revoked adapters cannot be reactivated; deletion retains the grant tombstone and invalidates outstanding tokens.
+    - Raw points older than 90 days are compacted into daily count, sum, min, max and last rollups; state rollups preserve last state.
+    - Rollup update and raw deletion form one atomic idempotent checkpoint; daily rollups have no expiry.
+    - Query range and step are bounded, labels are exact-match filters, and query results expose provenance and per-label freshness.
+    - Queries use read-only snapshots; steps of at least one day use daily summaries for fully covered interior UTC days and exact retained raw observations for partial edge days. Neither observations nor freshness timestamps include future points. Retention compaction runs separately in maintenance.
+    - Raw aggregation examines at most 4096 observations per query. Dense ranges of at least one day downsample to a UTC daily bucket grid without widening the requested interval; shorter dense ranges require a narrower range or label filter.
+    - Daily aggregation examines at most 20000 summary rows and 200000 partial-edge raw observations per query; larger requests require a narrower range or label filter. Expired raw edges cannot be reconstructed from daily rollups, so archived summaries contribute only fully covered UTC days. These safety bounds are independent of commercial quotas.
+    - Default query steps round up to fit the bucket limit; historical ranges round up to whole days before choosing a whole-day step.
+    - Series are stale when now minus the latest observation exceeds twice the adapter expected_interval.
+    - Chart, metric, metric-strip and table panels bind source series and may carry a timestamped static fallback.

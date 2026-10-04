@@ -20,6 +20,7 @@ import (
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
 	"agent-nexus-core/internal/secrets"
+	"agent-nexus-core/internal/series"
 	"agent-nexus-core/internal/server/stream"
 )
 
@@ -170,6 +171,7 @@ type handlerOptions struct {
 	pmHandler                      http.Handler
 	healthCheck                    HealthCheckFunc
 	actorRegistry                  ActorRegistry
+	seriesStore                    *series.Store
 	authStore                      *auth.Store
 	runStore                       *commandcenter.Store
 	agentChanges                   *agentChangeHub
@@ -685,7 +687,11 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			}
 			// Unsupported routes are rejected by their handlers. Do not create a
 			// provisional run before that rejection (or bypass read-only policy).
-			if requirement.supported && !attachRunAttribution(w, r, opts) {
+			attributed := requirement.supported
+			if p, ok := cachedAuthenticatedPrincipal(r); ok && p.SeriesAdapter != "" {
+				attributed = false
+			}
+			if attributed && !attachRunAttribution(w, r, opts) {
 				return
 			}
 			handler(w, r)
@@ -1018,6 +1024,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleRevokeInvite(w, r, opts, inviteID)
 	})
 
+	for _, path := range []string{"/adapters", "/adapters/", "/series", "/series/"} {
+		registerRoute(path, seriesRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleSeriesRoutes(w, r, opts) })
+	}
 	registerRoute("/auth/token", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationAuthAccessCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
@@ -2659,7 +2668,15 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		corsOriginSet[o] = true
 	}
 
+	seriesAdmission := newSeriesIngress()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		release, allowed := beginScopedSeriesRequest(w, r, opts, seriesAdmission)
+		if !allowed {
+			return
+		}
+		if release != nil {
+			defer release()
+		}
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")

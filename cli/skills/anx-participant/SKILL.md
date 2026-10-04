@@ -5,7 +5,7 @@ description: Keep substantive Agent Nexus work visible with explicit task refs, 
 
 # ANX participant
 
-Skill contract: anx.participant.v8. Installation does not prove that a session loaded this version.
+Skill contract: anx.participant.v9. Installation does not prove that a session loaded this version.
 
 Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence.
 
@@ -48,3 +48,18 @@ Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence
 Read `anx plan show card:<slug>` before editing. Use `anx plan set card:<slug> --from-file plan.json` with `{ "steps": [] }` to replace the plan, or add a step with `anx plan step add card:<slug> --step-id build --title "Build" --ref <ref-or-url>`. Stable step ids are agent-chosen slugs; omitting `--step-id` derives one from the title. Branch with `anx plan step add card:<slug> --title "QA" --after build`. Use `step update <card> <step-id>` for fields and `step rm <card> <step-id>` to remove an unreferenced step. Update dependent `--after` lists before removal.
 
 Use `--status` for unlinked steps or as a fallback for a ref ANX cannot yet resolve. Known card/source workflow state takes precedence. Context refs (docs/topics) have lifecycle state only, so use fallback status for those steps. Unknown external URLs are not fetched. Due dates accept YYYY-MM-DD or RFC3339. The server validates cycles, ids and caps; writes use a concurrency token and preserve event history. A conflict means read again and reconcile the plan. Read `progress`, `health`, `critical_path` and `next_steps` from computed state; never overwrite them with a prose claim. Resolve up to 200 chips in one read using `anx refs resolve <ref>...`.
+
+## Live dashboard data
+
+Prefer ANX live queries for workspace facts. For external data, use a declared
+host-local adapter and pushed series; core must never fetch external URLs or
+hold source credentials. Ask a human or explicitly granted auth-admin to declare
+name, description, owning enrolled agent, expected interval and allowed series
+with `anx adapters declare --body-file adapter.json` before any push. As the owner,
+use `anx series push <name> <value> [--label k=v]` or
+`anx series push <name> --from-command -- <cmd>`. The CLI exchanges your host-agent
+token for a short-lived series-write token, restricted to the declared series.
+Bind panels through `source: {series, labels?, range?, agg?}` and put any static
+fallback in `{as_of, data}`. Expose adapter, host, last push, stale state and the
+fallback's original as-of time. Source scripts and schedules live in
+`adapters/series/`; the full guide is `docs/live-series.md`.

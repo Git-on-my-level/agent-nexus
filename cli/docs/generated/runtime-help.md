@@ -23,6 +23,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `doctor` (manual): Report workspace resolution and local/network preconditions.
 - `bridge` (manual): One bridge per enrolled host for derived-agent wake routing.
 - `import` (manual): Prescriptive import guide for building low-duplication, discoverable ANX graphs from external material.
+- `series` (group): Push and query declared live series with source provenance
+- `adapters` (group): Declare and administer scoped host-local live data sources
 - `work` (group): Query commitments, evidence, freshness and refresh state
 - `pm` (group): Read and operate durable PM conversations, decisions and action receipts
 - `auth` (group): Inspect the enrolled host and derived-agent identity
@@ -161,6 +163,15 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `secret get --reveal` (command): Reveal secret value
 - `secret exec` (command): Reveal multiple secrets by name
 - `secret update` (command): Update secret value
+- `series list` (local-helper): List workspace series definitions and owning adapters.
+- `series show` (local-helper): Show bounded observations, freshness, and provenance.
+- `series query` (local-helper): Query at most 200 buckets per label set.
+- `series push` (local-helper): Push one point through an explicit adapter grant.
+- `adapters declare` (local-helper): Declare a host-local adapter and its allowed series.
+- `adapters list` (local-helper): List declared sources and grant state.
+- `adapters revoke` (local-helper): Revoke a source grant immediately; keep observations.
+- `adapters delete` (local-helper): Delete a source and its series history; invalidate its tokens.
+- `adapters token` (local-helper): Exchange owner identity for a short-lived, push-only token.
 - `inbox list` (local-helper): List asks addressed to the active agent, including answer and per-answer read state.
 - `inbox read` (local-helper): Mark one answer to your ask as read, including before its wake is delivered.
 - `lifecycle verbs` (local-helper): Uniform lifecycle surface for archive, unarchive, trash, restore, and purge across artifacts, boards, docs, events, cards, and topics.
@@ -420,6 +431,7 @@ Runs and output
 
 - Label agentctl work `anx.card.<card-slug>` so the run links to the card. A completed run does not complete the card.
 - Prefer fresh context from durable task evidence. Use previous sessions only as supported provenance/recovery clues for unfinished or unreflected work; do not assume a session can be resumed.
+- Prefer native live dashboard queries, then declared host-local pushed series; pasted numbers need an as-of timestamp. Declare an adapter before pushing (`anx adapters declare --body-file adapter.json`).
 - If designated as PM, remain an ordinary agent: summarize and propose with provenance, ask the user about consequential unresolved ambiguity, and preserve human approval gates. Designation grants no source-write or private-history authority.
 - Text output is compact. Use `--json` for scripts; follow `next_actions` rather than guessing refs.
 - Use `anx help <command>` for flags and `anx debug meta doc agent-guide` for this guide.
@@ -827,6 +839,49 @@ Output conventions
 - `dedupe` writes `dedupe.json`.
 - `plan` writes `plan.json` and `plan-preview.md`.
 - `apply` writes payload previews plus `apply-results.json` and `apply-commands.sh`.
+```
+
+## `series`
+
+Push and query declared live series with source provenance
+
+```text
+Generated Help: series
+
+Commands:
+  series list              List pushed series
+  series push              Push one declared series point
+  series query             Query a bounded series range
+  series show              Show a series and its provenance
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx series ... ; anx --json series ... ; anx series ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Tip: `anx help <command path>` for full command-level generated details.
+```
+
+## `adapters`
+
+Declare and administer scoped host-local live data sources
+
+```text
+Generated Help: adapters
+
+Commands:
+  adapters declare         Declare an adapter and its series
+  adapters delete          Delete an adapter and its series
+  adapters list            List declared adapters
+  adapters revoke          Revoke an adapter grant
+  adapters token           Exchange owner identity for a scoped series-write token
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx adapters ... ; anx --json adapters ... ; anx adapters ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Tip: `anx help <command path>` for full command-level generated details.
 ```
 
 ## `work`
@@ -4502,7 +4557,7 @@ Generated Help: report render
 - Output: Returns `{ document_ref, revision_ref, observed_at, panels }`; static panels are omitted.
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `not_found`, `invalid_request`, `unavailable`
 - Concepts: `docs`, `cards`, `evidence`
-- Agent notes: Read-only. Both text and structured version 1 visual reports are supported. Each live panel is independently materialized with status ok or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows. Archived boards and their work are excluded. Private PM events remain private.
+- Agent notes: Read-only. Both text and structured version 1 visual reports are supported. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows. Archived boards and their work are excluded. Private PM events remain private.
 
 Inputs:
   Required:
@@ -5283,6 +5338,411 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx secret update ... ; anx --json secret update ... ; anx secret update ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `series list`
+
+List workspace series definitions and owning adapters.
+
+```text
+Generated Help: series list
+
+- Command ID: `series.list`
+- CLI path: `series list`
+- HTTP: `GET /series`
+- Side effect class: `read_only`
+- Stability: `beta`
+- Input mode: `none`
+- Why: List pushed series.
+- Output: Returns JSON with provenance and explicit freshness.
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`
+- Concepts: `documents`
+- Agent notes: Explicit declared push source; core never fetches external data.
+- Adjacent commands: `series push`, `series query`, `series show`
+
+Local Help: series list
+
+- Kind: `local helper`
+- Side effect class: `read_only`
+- Summary: List workspace series definitions and owning adapters.
+- Quick start: anx series list
+- Examples:
+  - `anx series list`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx series list ... ; anx --json series list ... ; anx series list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `series show`
+
+Show bounded observations, freshness, and provenance.
+
+```text
+Generated Help: series show
+
+- Command ID: `series.show`
+- CLI path: `series show`
+- HTTP: `GET /series/{name}`
+- Side effect class: `read_only`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Show a series and its provenance.
+- Output: Returns JSON with provenance and explicit freshness.
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`
+- Concepts: `documents`
+- Agent notes: Explicit declared push source; core never fetches external data.
+- Adjacent commands: `series list`, `series push`, `series query`
+
+Inputs:
+  Required:
+  - path `name`
+
+Local Help: series show
+
+- Kind: `local helper`
+- Side effect class: `read_only`
+- Summary: Show bounded observations, freshness, and provenance.
+- Quick start: anx series show <name> [--range 24h] [--step 1h] [--agg last] [--label k=v]
+- Examples:
+  - `anx series show builds`
+
+Flags:
+  <name>                       Accepted by series show.
+  --range <duration>           Accepted by series show.
+  --step <duration>            Accepted by series show.
+  --agg <aggregation>          Accepted by series show.
+  --label k=v                  Accepted by series show.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx series show ... ; anx --json series show ... ; anx series show ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `series query`
+
+Query at most 200 buckets per label set.
+
+```text
+Generated Help: series query
+
+- Command ID: `series.query`
+- CLI path: `series query`
+- HTTP: `GET /series/{name}/query`
+- Side effect class: `read_only`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Query a bounded series range.
+- Output: Returns JSON with provenance and explicit freshness.
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`
+- Concepts: `documents`
+- Agent notes: Explicit declared push source; core never fetches external data.
+- Adjacent commands: `series list`, `series push`, `series show`
+
+Inputs:
+  Required:
+  - path `name`
+
+Local Help: series query
+
+- Kind: `local helper`
+- Side effect class: `read_only`
+- Summary: Query at most 200 buckets per label set.
+- Quick start: anx series query <name> --range <duration> --step <duration> [--agg last|avg|sum|min|max|count] [--label k=v]
+- Examples:
+  - `anx series query builds --range 7d --step 1h --agg sum`
+
+Flags:
+  <name>                       Accepted by series query.
+  --range <duration>           Accepted by series query.
+  --step <duration>            Accepted by series query.
+  --agg <aggregation>          Accepted by series query.
+  --label k=v                  Accepted by series query.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx series query ... ; anx --json series query ... ; anx series query ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `series push`
+
+Push one point through an explicit adapter grant.
+
+```text
+Generated Help: series push
+
+- Command ID: `series.push`
+- CLI path: `series push`
+- HTTP: `POST /series/{name}/points`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `flags`
+- Why: Push one declared series point.
+- Output: Returns JSON with provenance and explicit freshness.
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`, `series_rate_limited`
+- Concepts: `documents`
+- Agent notes: Explicit declared push source; core never fetches external data.
+- Adjacent commands: `series list`, `series query`, `series show`
+- Examples:
+  - Push a number: `anx series push builds 12 --label initiative=launch`
+  - Push command output: `anx series push builds --from-command -- ./count-builds`
+
+Inputs:
+  Required:
+  - path `name`
+  Optional:
+  - body `labels` (object)
+  - body `state` (string)
+  - body `ts` (datetime)
+  - body `value` (number)
+
+CLI input:
+  Flags:
+  - `--adapter`: Declared adapter; omitted means resolve from series inventory.
+  - `--label`: Repeated exact k=v labels.
+  - `--ts`: RFC3339 observation timestamp.
+  - `--from-command`: Read a number or JSON point from the argv after --.
+  - `--series`: Series name when from-command stdout is a number.
+
+Local Help: series push
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Push one point through an explicit adapter grant.
+- Quick start: anx series push <name> <value-or-state> [--adapter <name>] [--label k=v] [--ts RFC3339]; or anx series push [<name>] --from-command -- <cmd> [args...]
+- Examples:
+  - `anx series push builds 12 --label initiative=launch`
+  - `anx series push --series builds --from-command -- ./count-builds`
+
+Flags:
+  <name>                       Accepted by series push.
+  <value-or-state>             Accepted by series push.
+  --adapter <name>             Accepted by series push.
+  --label k=v                  Accepted by series push.
+  --ts RFC3339                 Accepted by series push.
+  --from-command               Accepted by series push.
+  --series <name>              Accepted by series push.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx series push ... ; anx --json series push ... ; anx series push ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `adapters declare`
+
+Declare a host-local adapter and its allowed series.
+
+```text
+Generated Help: adapters declare
+
+- Command ID: `adapters.declare`
+- CLI path: `adapters declare`
+- HTTP: `POST /adapters`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `file-and-body`
+- Why: Declare an adapter and its series.
+- Output: Returns JSON with provenance and explicit freshness.
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`
+- Concepts: `documents`
+- Agent notes: Explicit declared push source; core never fetches external data.
+- Adjacent commands: `adapters delete`, `adapters list`, `adapters revoke`, `adapters token`
+- Examples:
+  - Declare before pushing: `anx adapters declare --body-file adapter.json`
+
+Inputs:
+  Required:
+  - body `agent_id` (string)
+  - body `description` (string)
+  - body `expected_interval` (string)
+  - body `name` (string)
+  - body `series` (list<any>)
+
+CLI input:
+  Flags:
+  - `--body-file` required: UTF-8 adapter declaration JSON file or stdin (-).
+
+Local Help: adapters declare
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Declare a host-local adapter and its allowed series.
+- Quick start: anx adapters declare --body-file <path|->
+- Examples:
+  - `anx adapters declare --body-file adapter.json`
+
+Flags:
+  --body-file <path|->         Accepted by adapters declare.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx adapters declare ... ; anx --json adapters declare ... ; anx adapters declare ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `adapters list`
+
+List declared sources and grant state.
+
+```text
+Generated Help: adapters list
+
+- Command ID: `adapters.list`
+- CLI path: `adapters list`
+- HTTP: `GET /adapters`
+- Side effect class: `read_only`
+- Stability: `beta`
+- Input mode: `none`
+- Why: List declared adapters.
+- Output: Returns JSON with provenance and explicit freshness.
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`
+- Concepts: `documents`
+- Agent notes: Explicit declared push source; core never fetches external data.
+- Adjacent commands: `adapters declare`, `adapters delete`, `adapters revoke`, `adapters token`
+
+Local Help: adapters list
+
+- Kind: `local helper`
+- Side effect class: `read_only`
+- Summary: List declared sources and grant state.
+- Quick start: anx adapters list
+- Examples:
+  - `anx adapters list`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx adapters list ... ; anx --json adapters list ... ; anx adapters list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `adapters revoke`
+
+Revoke a source grant immediately; keep observations.
+
+```text
+Generated Help: adapters revoke
+
+- Command ID: `adapters.revoke`
+- CLI path: `adapters revoke`
+- HTTP: `POST /adapters/{name}/revoke`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Revoke an adapter grant.
+- Output: Returns JSON with provenance and explicit freshness.
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`
+- Concepts: `documents`
+- Agent notes: Explicit declared push source; core never fetches external data.
+- Adjacent commands: `adapters declare`, `adapters delete`, `adapters list`, `adapters token`
+
+Inputs:
+  Required:
+  - path `name`
+
+Local Help: adapters revoke
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Revoke a source grant immediately; keep observations.
+- Quick start: anx adapters revoke <name>
+- Examples:
+  - `anx adapters revoke github`
+
+Flags:
+  <name>                       Accepted by adapters revoke.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx adapters revoke ... ; anx --json adapters revoke ... ; anx adapters revoke ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `adapters delete`
+
+Delete a source and its series history; invalidate its tokens.
+
+```text
+Generated Help: adapters delete
+
+- Command ID: `adapters.delete`
+- CLI path: `adapters delete`
+- HTTP: `DELETE /adapters/{name}`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Delete an adapter and its series.
+- Output: Returns JSON with provenance and explicit freshness.
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`
+- Concepts: `documents`
+- Agent notes: Explicit declared push source; core never fetches external data.
+- Adjacent commands: `adapters declare`, `adapters list`, `adapters revoke`, `adapters token`
+
+Inputs:
+  Required:
+  - path `name`
+
+Local Help: adapters delete
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Delete a source and its series history; invalidate its tokens.
+- Quick start: anx adapters delete <name>
+- Examples:
+  - `anx adapters delete github`
+
+Flags:
+  <name>                       Accepted by adapters delete.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx adapters delete ... ; anx --json adapters delete ... ; anx adapters delete ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `adapters token`
+
+Exchange owner identity for a short-lived, push-only token.
+
+```text
+Generated Help: adapters token
+
+- Command ID: `adapters.token`
+- CLI path: `adapters token`
+- HTTP: `POST /adapters/{name}/token`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Exchange owner identity for a scoped series-write token.
+- Output: Returns JSON with provenance and explicit freshness.
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`
+- Concepts: `documents`
+- Agent notes: Explicit declared push source; core never fetches external data.
+- Adjacent commands: `adapters declare`, `adapters delete`, `adapters list`, `adapters revoke`
+
+Inputs:
+  Required:
+  - path `name`
+
+Local Help: adapters token
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Exchange owner identity for a short-lived, push-only token.
+- Quick start: anx adapters token <name>
+- Examples:
+  - `anx --json adapters token github`
+
+Flags:
+  <name>                       Accepted by adapters token.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx adapters token ... ; anx --json adapters token ... ; anx adapters token ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 

@@ -55,6 +55,9 @@ type TokenBundle struct {
 }
 
 type Principal struct {
+	// Scoped tokens are existing access tokens, never a separate bearer scheme.
+	SeriesAdapter string
+	AccessTokenID string
 	AgentID       string
 	ActorID       string
 	Username      string
@@ -509,17 +512,19 @@ func (s *Store) AuthenticateAccessToken(ctx context.Context, accessToken string)
 		agentRevoked  sql.NullString
 		expiresAtRaw  string
 		tokenRevoked  sql.NullString
+		seriesAdapter string
+		accessTokenID string
 	)
 	err := s.db.QueryRowContext(
 		ctx,
 		fmt.Sprintf(`SELECT a.id, a.username, a.actor_id, %s, %s,
 		        COALESCE(json_extract(a.metadata_json, '$.auth_admin'), 0),
-		        a.revoked_at, t.expires_at, t.revoked_at
+		        a.revoked_at, t.expires_at, t.revoked_at, COALESCE(t.series_adapter,''), t.id
 		 FROM auth_access_tokens t
 		 JOIN agents a ON a.id = t.agent_id
 		 WHERE t.token_hash = ?`, principalKindExpr("a"), authMethodExpr("a")),
 		hashToken(accessToken),
-	).Scan(&agentID, &username, &actorID, &principalKind, &authMethod, &authAdmin, &agentRevoked, &expiresAtRaw, &tokenRevoked)
+	).Scan(&agentID, &username, &actorID, &principalKind, &authMethod, &authAdmin, &agentRevoked, &expiresAtRaw, &tokenRevoked, &seriesAdapter, &accessTokenID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Principal{}, ErrInvalidToken
@@ -544,12 +549,14 @@ func (s *Store) AuthenticateAccessToken(ctx context.Context, accessToken string)
 	}
 
 	return Principal{
+		SeriesAdapter: seriesAdapter,
+		AccessTokenID: accessTokenID,
 		AgentID:       agentID,
 		ActorID:       actorID,
 		Username:      username,
 		PrincipalKind: strings.TrimSpace(principalKind),
 		AuthMethod:    strings.TrimSpace(authMethod),
-		AuthAdmin:     authAdmin,
+		AuthAdmin:     authAdmin && seriesAdapter == "",
 	}, nil
 }
 

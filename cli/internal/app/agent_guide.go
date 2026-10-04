@@ -13,7 +13,7 @@ const agentGuideSkillName = "anx-participant"
 
 const agentGuideSkillDescription = "Participate in Agent Nexus work with source authority, scoped session identity, meaningful updates, and evidence-backed completion."
 
-const agentGuideSkillVersion = "anx.participant.v8"
+const agentGuideSkillVersion = "anx.participant.v9"
 
 type guideSection struct {
 	Title string
@@ -64,6 +64,7 @@ func agentGuideSections() []guideSection {
 		{Title: "Runs and output", Lines: []string{
 			"- Label agentctl work `anx.card.<card-slug>` so the run links to the card. A completed run does not complete the card.",
 			"- Prefer fresh context from durable task evidence. Use previous sessions only as supported provenance/recovery clues for unfinished or unreflected work; do not assume a session can be resumed.",
+			"- Prefer native live dashboard queries, then declared host-local pushed series; pasted numbers need an as-of timestamp. Declare an adapter before pushing (`anx adapters declare --body-file adapter.json`).",
 			"- If designated as PM, remain an ordinary agent: summarize and propose with provenance, ask the user about consequential unresolved ambiguity, and preserve human approval gates. Designation grants no source-write or private-history authority.",
 			"- Text output is compact. Use `--json` for scripts; follow `next_actions` rather than guessing refs.",
 			"- Use `anx help <command>` for flags and `anx debug meta doc agent-guide` for this guide.",

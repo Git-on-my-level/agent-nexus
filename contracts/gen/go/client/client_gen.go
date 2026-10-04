@@ -56,6 +56,70 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:  []string{"actors.create"},
 	},
 	{
+		CommandID: "adapters.declare",
+		CLIPath:   "adapters declare",
+		Group:     "adapters",
+		Method:    "POST",
+		Path:      "/adapters",
+		InputMode: "file-and-body",
+		Stability: "beta",
+		Concepts:  []string{"documents"},
+		Adjacent:  []string{"adapters.delete", "adapters.list", "adapters.revoke", "adapters.token"},
+		Examples: []Example{
+			{
+				Title:   "Declare before pushing",
+				Command: "anx adapters declare --body-file adapter.json",
+			},
+		},
+	},
+	{
+		CommandID:  "adapters.delete",
+		CLIPath:    "adapters delete",
+		Group:      "adapters",
+		Method:     "DELETE",
+		Path:       "/adapters/{name}",
+		PathParams: []string{"name"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"documents"},
+		Adjacent:   []string{"adapters.declare", "adapters.list", "adapters.revoke", "adapters.token"},
+	},
+	{
+		CommandID: "adapters.list",
+		CLIPath:   "adapters list",
+		Group:     "adapters",
+		Method:    "GET",
+		Path:      "/adapters",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"documents"},
+		Adjacent:  []string{"adapters.declare", "adapters.delete", "adapters.revoke", "adapters.token"},
+	},
+	{
+		CommandID:  "adapters.revoke",
+		CLIPath:    "adapters revoke",
+		Group:      "adapters",
+		Method:     "POST",
+		Path:       "/adapters/{name}/revoke",
+		PathParams: []string{"name"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"documents"},
+		Adjacent:   []string{"adapters.declare", "adapters.delete", "adapters.list", "adapters.token"},
+	},
+	{
+		CommandID:  "adapters.token",
+		CLIPath:    "adapters token",
+		Group:      "adapters",
+		Method:     "POST",
+		Path:       "/adapters/{name}/token",
+		PathParams: []string{"name"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"documents"},
+		Adjacent:   []string{"adapters.declare", "adapters.delete", "adapters.list", "adapters.revoke"},
+	},
+	{
 		CommandID: "agent.inbox.answers.read",
 		CLIPath:   "agent inbox answers read",
 		Group:     "agent",
@@ -2045,6 +2109,63 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:   []string{"secrets.create", "secrets.delete", "secrets.reveal-batch", "secrets.reveal", "secrets.list"},
 	},
 	{
+		CommandID: "series.list",
+		CLIPath:   "series list",
+		Group:     "series",
+		Method:    "GET",
+		Path:      "/series",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"documents"},
+		Adjacent:  []string{"series.push", "series.query", "series.show"},
+	},
+	{
+		CommandID:  "series.push",
+		CLIPath:    "series push",
+		Group:      "series",
+		Method:     "POST",
+		Path:       "/series/{name}/points",
+		PathParams: []string{"name"},
+		InputMode:  "flags",
+		Stability:  "beta",
+		Concepts:   []string{"documents"},
+		Adjacent:   []string{"series.list", "series.query", "series.show"},
+		Examples: []Example{
+			{
+				Title:   "Push a number",
+				Command: "anx series push builds 12 --label initiative=launch",
+			},
+			{
+				Title:   "Push command output",
+				Command: "anx series push builds --from-command -- ./count-builds",
+			},
+		},
+	},
+	{
+		CommandID:  "series.query",
+		CLIPath:    "series query",
+		Group:      "series",
+		Method:     "GET",
+		Path:       "/series/{name}/query",
+		PathParams: []string{"name"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"documents"},
+		Adjacent:   []string{"series.list", "series.push", "series.show"},
+	},
+	{
+		CommandID:  "series.show",
+		CLIPath:    "series show",
+		Group:      "series",
+		Method:     "GET",
+		Path:       "/series/{name}",
+		PathParams: []string{"name"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"documents"},
+		Adjacent:   []string{"series.list", "series.push", "series.query"},
+	},
+	{
 		CommandID:  "sessions.get",
 		CLIPath:    "sessions get",
 		Group:      "sessions",
@@ -2539,6 +2660,26 @@ func (c *Client) ActorsCreate(ctx context.Context, opts RequestOptions) (*http.R
 
 func (c *Client) ActorsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "actors.list", nil, opts)
+}
+
+func (c *Client) AdaptersDeclare(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "adapters.declare", nil, opts)
+}
+
+func (c *Client) AdaptersDelete(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "adapters.delete", pathParams, opts)
+}
+
+func (c *Client) AdaptersList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "adapters.list", nil, opts)
+}
+
+func (c *Client) AdaptersRevoke(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "adapters.revoke", pathParams, opts)
+}
+
+func (c *Client) AdaptersToken(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "adapters.token", pathParams, opts)
 }
 
 func (c *Client) AgentInboxAnswersRead(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
@@ -3195,6 +3336,22 @@ func (c *Client) SecretsRevealBatch(ctx context.Context, opts RequestOptions) (*
 
 func (c *Client) SecretsUpdate(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "secrets.update", pathParams, opts)
+}
+
+func (c *Client) SeriesList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "series.list", nil, opts)
+}
+
+func (c *Client) SeriesPush(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "series.push", pathParams, opts)
+}
+
+func (c *Client) SeriesQuery(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "series.query", pathParams, opts)
+}
+
+func (c *Client) SeriesShow(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "series.show", pathParams, opts)
 }
 
 func (c *Client) SessionsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

@@ -1,0 +1,293 @@
+package server
+
+import (
+	"agent-nexus-core/internal/series"
+	reports "agent-nexus-visualreport"
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+)
+
+func TestSeriesHistoricalDefaultStepForHTTPAndReportPanels(t *testing.T) {
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	seedSeriesIdentities(t, env)
+	token := declareSeriesHTTP(t, env)
+	status, out := hostHTTP(t, "POST", env.server.URL+"/series/prs/points", token, map[string]any{"value": 42})
+	hostStatus(t, status, 200, out)
+	reader := reportReader{r: httptest.NewRequest("GET", "/report", nil), opts: handlerOptions{seriesStore: &series.Store{DB: env.workspace.DB(), Auth: env.authStore}}, now: time.Now().UTC()}
+	for _, window := range []string{"2161h", "4800h", "4801h", "9600h", "9601h", "3650d"} {
+		t.Run(window, func(t *testing.T) {
+			status, out := hostHTTP(t, "GET", env.server.URL+"/series/prs/query?range="+window, "owner-token", nil)
+			hostStatus(t, status, 200, out)
+			for _, kind := range []string{"chart", "table", "metric-strip", "metric"} {
+				panel := reports.Panel{ID: "historical", Type: kind, Source: &reports.SeriesSource{Series: "prs", Range: window}}
+				got := reader.materializeSeries(panel)
+				if got["status"] != "ok" {
+					t.Fatalf("%s range=%s default step failed: %#v", kind, window, got)
+				}
+			}
+		})
+	}
+	status, out = hostHTTP(t, "GET", env.server.URL+"/series/prs/query?range=4801h&step=1d", "owner-token", nil)
+	hostStatus(t, status, 400, out) // Explicit steps still obey the 200-bucket cap.
+	status, out = hostHTTP(t, "GET", env.server.URL+"/series/prs/query?range=200s1ns", "owner-token", nil)
+	hostStatus(t, status, 200, out) // Fractional raw bucket defaults round up too.
+}
+
+func seedSeriesIdentities(t *testing.T, env authIntegrationEnv) {
+	t.Helper()
+	ctx := context.Background()
+	db := env.workspace.DB()
+	seedHumanPrincipalForLockoutTest(t, ctx, db, "series-admin", "series-human", "series-admin", "admin-token")
+	seedHumanPrincipalForLockoutTest(t, ctx, db, "series-owner", "series-owner-actor", "series-owner", "owner-token")
+	if _, err := db.Exec(`UPDATE agents SET metadata_json=json_set(metadata_json,'$.principal_kind','agent','$.auth_admin',0) WHERE id='series-owner'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO hosts(id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at) VALUES('series-host','series-host','Collector','test','test','[]',?)`, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO host_agents(host_id,name,agent_id,identity_kind) VALUES('series-host','collector','series-owner','derived')`); err != nil {
+		t.Fatal(err)
+	}
+}
+func declareSeriesHTTP(t *testing.T, env authIntegrationEnv) string {
+	t.Helper()
+	body := map[string]any{"name": "github", "description": "PR counts", "agent_id": "series-owner", "expected_interval": "1m", "series": []map[string]string{{"name": "prs", "kind": "gauge", "unit": "PRs"}}}
+	status, out := hostHTTP(t, "POST", env.server.URL+"/adapters", "owner-token", body)
+	hostStatus(t, status, 403, out)
+	status, out = hostHTTP(t, "POST", env.server.URL+"/adapters", "admin-token", body)
+	hostStatus(t, status, 200, out)
+	status, out = hostHTTP(t, "POST", env.server.URL+"/adapters/github/token", "owner-token", nil)
+	hostStatus(t, status, 200, out)
+	return out["tokens"].(map[string]any)["access_token"].(string)
+}
+func TestSeriesTokenOnlyPushesDeclaredPointsAndReportMaterialization(t *testing.T) {
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	seedSeriesIdentities(t, env)
+	token := declareSeriesHTTP(t, env)
+	if _, err := env.workspace.DB().Exec(`UPDATE agents SET metadata_json=json_set(metadata_json,'$.auth_admin',1) WHERE id='series-owner'`); err != nil {
+		t.Fatal(err)
+	}
+	principal, err := env.authStore.AuthenticateAccessToken(context.Background(), token)
+	if err != nil || principal.AuthAdmin {
+		t.Fatalf("scoped credential inherited administrator powers: %#v %v", principal, err)
+	}
+	for _, item := range []struct{ method, path string }{{"GET", "/series"}, {"GET", "/cards"}, {"POST", "/topics"}, {"GET", "/adapters"}, {"POST", "/adapters/github/revoke"}, {"GET", "/auth/admins"}, {"POST", "/auth/admins/series-owner/grant"}, {"POST", "/auth/token"}, {"POST", "/adapters/github/token"}, {"POST", "/sessions"}, {"GET", "/events/stream"}, {"GET", "/health"}, {"GET", "/agent-inbox/asks"}, {"POST", "/agent-inbox/answers/read"}, {"POST", "/series/not-declared/points"}} {
+		status, out := hostHTTP(t, item.method, env.server.URL+item.path, token, map[string]any{"value": 1})
+		hostStatus(t, status, 403, out)
+	}
+	now := time.Now().UTC()
+	status, out := hostHTTP(t, "POST", env.server.URL+"/series/prs/points", token, map[string]any{"value": 42, "labels": map[string]string{"initiative": "launch"}, "ts": now.Format(time.RFC3339Nano)})
+	hostStatus(t, status, 200, out)
+	status, out = hostHTTP(t, "GET", env.server.URL+"/series/prs/query?range=1h&step=1m&agg=sum&label=initiative=launch", "owner-token", nil)
+	hostStatus(t, status, 200, out)
+	result := out["series"].(map[string]any)
+	if result["adapter"] != "github" || result["host"] != "series-host" || result["last_push"] == nil {
+		t.Fatalf("missing provenance: %#v", out)
+	}
+	status, out = hostHTTP(t, "POST", env.server.URL+"/series/prs/points", token, map[string]any{"value": 5, "labels": map[string]string{"initiative": "launch"}, "ts": now.Add(-10 * time.Minute).Format(time.RFC3339Nano)})
+	hostStatus(t, status, 200, out)
+	panel := map[string]any{"id": "prs", "project_id": "launch", "type": "metric", "title": "PRs", "author": "collector", "provenance": "reported", "observed_at": nil, "freshness": "unavailable", "source_ids": []string{}, "data": map[string]any{}, "source": map[string]any{"series": "prs", "agg": "sum", "range": "1h", "labels": map[string]string{"initiative": "launch"}}, "fallback": map[string]any{"as_of": "2026-10-01T00:00:00Z", "data": map[string]any{"value": 12}}}
+	report := map[string]any{"kind": "anx.visual-report", "schema_version": 1, "title": "Dashboard", "summary": "Live counts", "generated_at": now.Format(time.RFC3339Nano), "projects": []map[string]any{{"id": "launch", "title": "Launch", "summary": "Ship", "outcome": "Launch"}}, "sources": []string{}, "panels": []map[string]any{panel}}
+	status, out = hostHTTP(t, "POST", env.server.URL+"/docs", "owner-token", map[string]any{"document": map[string]any{"title": "Dashboard"}, "content": report, "content_type": "structured"})
+	hostStatus(t, status, 201, out)
+	ref := out["document"].(map[string]any)["ref"].(string)
+	status, out = hostHTTP(t, "GET", env.server.URL+"/docs/"+ref+"/report", "owner-token", nil)
+	hostStatus(t, status, 200, out)
+	observation := out["panels"].([]any)[0].(map[string]any)
+	if observation["status"] != "ok" || observation["data"].(map[string]any)["value"] != float64(47) {
+		t.Fatalf("live metric: %#v", out)
+	}
+	status, out = hostHTTP(t, "POST", env.server.URL+"/adapters/github/revoke", "admin-token", nil)
+	hostStatus(t, status, 200, out)
+	status, out = hostHTTP(t, "GET", env.server.URL+"/docs/"+ref+"/report", "owner-token", nil)
+	hostStatus(t, status, 200, out)
+	observation = out["panels"].([]any)[0].(map[string]any)
+	if observation["status"] != "stale" {
+		t.Fatalf("revoked source still live: %#v", out)
+	}
+}
+
+type blockedPointBody struct {
+	reader   io.Reader
+	once     sync.Once
+	admitted chan struct{}
+	release  chan struct{}
+}
+
+func (b *blockedPointBody) Read(p []byte) (int, error) {
+	b.once.Do(func() { close(b.admitted); <-b.release })
+	return b.reader.Read(p)
+}
+func (b *blockedPointBody) Close() error { return nil }
+func TestSeriesRevocationWhileAdmittedPushReadsBody(t *testing.T) {
+	for _, target := range []string{"adapter", "host", "agent"} {
+		t.Run(target, func(t *testing.T) {
+			env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+			seedSeriesIdentities(t, env)
+			token := declareSeriesHTTP(t, env)
+			body := &blockedPointBody{reader: strings.NewReader(`{"value":7}`), admitted: make(chan struct{}), release: make(chan struct{})}
+			req := httptest.NewRequest("POST", "/series/prs/points", nil)
+			req.Body = body
+			req.Header.Set("Authorization", "Bearer "+token)
+			rec := httptest.NewRecorder()
+			done := make(chan struct{})
+			handler := NewHandler("test", WithAuthStore(env.authStore), WithSeriesStore(&series.Store{DB: env.workspace.DB(), Auth: env.authStore}))
+			go func() { handler.ServeHTTP(rec, req); close(done) }()
+			select {
+			case <-body.admitted:
+			case <-time.After(5 * time.Second):
+				close(body.release)
+				t.Fatal("push was not admitted")
+			}
+			if target == "adapter" {
+				status, out := hostHTTP(t, "POST", env.server.URL+"/adapters/github/revoke", "admin-token", nil)
+				hostStatus(t, status, 200, out)
+			} else {
+				statement := `UPDATE hosts SET revoked_at=? WHERE id='series-host'`
+				if target == "agent" {
+					statement = `UPDATE agents SET revoked_at=? WHERE id='series-owner'`
+				}
+				if _, err := env.workspace.DB().Exec(statement, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			close(body.release)
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("push did not finish")
+			}
+			if rec.Code != 403 {
+				t.Fatalf("admitted push survived revoke: %d %s", rec.Code, rec.Body.String())
+			}
+			var n int
+			if err := env.workspace.DB().QueryRow(`SELECT COUNT(*) FROM series_points`).Scan(&n); err != nil || n != 0 {
+				t.Fatalf("push committed: %d %v", n, err)
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+type unreadableSeriesBody struct{}
+
+func (unreadableSeriesBody) Read([]byte) (int, error) { panic("denied request body was read") }
+func (unreadableSeriesBody) Close() error             { return nil }
+
+func TestSeriesCapabilityDeniesUndeclaredResourceBeforeBodyRead(t *testing.T) {
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	seedSeriesIdentities(t, env)
+	token := declareSeriesHTTP(t, env)
+	handler := NewHandler("test", WithAuthStore(env.authStore), WithSeriesStore(&series.Store{DB: env.workspace.DB(), Auth: env.authStore}))
+	r := httptest.NewRequest("POST", "/series/undeclared/points", nil)
+	r.Header.Set("Authorization", "Bearer "+token)
+	r.Body = unreadableSeriesBody{}
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+	if w.Code != 403 {
+		t.Fatalf("undeclared resource capability admitted: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestSeriesConcurrentPushAdmissionLeavesHumanReadsAvailable(t *testing.T) {
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	seedSeriesIdentities(t, env)
+	token := declareSeriesHTTP(t, env)
+	handler := NewHandler("test", WithAuthStore(env.authStore), WithSeriesStore(&series.Store{DB: env.workspace.DB(), Auth: env.authStore}))
+	release := make(chan struct{})
+	defer func() {
+		if release != nil {
+			close(release)
+		}
+	}()
+	bodyJSON := `{"value":7,"ts":"` + time.Now().UTC().Format(time.RFC3339Nano) + `"}`
+	done := make(chan *httptest.ResponseRecorder, 2)
+	for i := 0; i < 2; i++ {
+		body := &blockedPointBody{reader: strings.NewReader(bodyJSON), admitted: make(chan struct{}), release: release}
+		r := httptest.NewRequest("POST", "/series/prs/points", nil)
+		r.Header.Set("Authorization", "Bearer "+token)
+		r.Body = body
+		go func() {
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, r)
+			done <- w
+		}()
+		select {
+		case <-body.admitted:
+		case <-time.After(5 * time.Second):
+			t.Fatal("push was not admitted")
+		}
+	}
+	r := httptest.NewRequest("POST", "/series/prs/points", nil)
+	r.Header.Set("Authorization", "Bearer "+token)
+	r.Body = unreadableSeriesBody{}
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+	if w.Code != 429 || w.Header().Get("Retry-After") == "" {
+		t.Fatalf("concurrent adapter bound: %d %s", w.Code, w.Body.String())
+	}
+	human := httptest.NewRequest("GET", "/series", nil)
+	human.Header.Set("Authorization", "Bearer admin-token")
+	humanResult := httptest.NewRecorder()
+	handler.ServeHTTP(humanResult, human)
+	if humanResult.Code != http.StatusOK {
+		t.Fatalf("human read crowded out: %d %s", humanResult.Code, humanResult.Body.String())
+	}
+	close(release)
+	release = nil
+	for i := 0; i < 2; i++ {
+		select {
+		case result := <-done:
+			if result.Code != 200 {
+				t.Fatalf("concurrent push failed: %d %s", result.Code, result.Body.String())
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("concurrent push did not finish")
+		}
+	}
+	var count int
+	if err := env.workspace.DB().QueryRow(`SELECT COUNT(*) FROM series_points`).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("concurrent HTTP retry dedupe: %d %v", count, err)
+	}
+}
+
+func TestSeriesRetryStormRejectedWithoutDatabaseOrBodyRead(t *testing.T) {
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	seedSeriesIdentities(t, env)
+	token := declareSeriesHTTP(t, env)
+	gate := newSeriesIngress()
+	now := time.Now().UTC()
+	gate.clock = func() time.Time { return now }
+	gate.remember(token, "github", now)
+	gate.adapters["github"] = &seriesAdmissionState{minute: now.Unix() / 60, requests: series.MaxAdapterRequestsPerMinute}
+	if err := env.workspace.DB().Close(); err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest("POST", "/series/prs/points", nil)
+	r.Header.Set("Authorization", "Bearer "+token)
+	r.Body = unreadableSeriesBody{}
+	w := httptest.NewRecorder()
+	release, allowed := beginScopedSeriesRequest(w, r, handlerOptions{authStore: env.authStore}, gate)
+	if allowed || release != nil || w.Code != 429 {
+		t.Fatalf("retry storm reached database: allowed=%v code=%d body=%s", allowed, w.Code, w.Body.String())
+	}
+	// Token churn cannot bypass the bounded pre-authentication lane either.
+	fresh := newSeriesIngress()
+	fresh.clock = func() time.Time { return now }
+	fresh.fresh = seriesAdmissionState{minute: now.Unix() / 60, requests: series.MaxRequestsPerMinute}
+	w = httptest.NewRecorder()
+	release, allowed = beginScopedSeriesRequest(w, r, handlerOptions{authStore: env.authStore}, fresh)
+	if allowed || release != nil || w.Code != 429 {
+		t.Fatalf("fresh-token storm reached database: allowed=%v code=%d body=%s", allowed, w.Code, w.Body.String())
+	}
+}

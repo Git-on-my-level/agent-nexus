@@ -47,6 +47,11 @@ func handleRenderReport(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	reader := reportReader{r: r, opts: opts, now: now, visibility: map[string]bool{}}
 	results := []map[string]any{}
 	for _, panel := range panels {
+		if panel.Source != nil {
+			result := reader.materializeSeries(panel)
+			results = append(results, result)
+			continue
+		}
 		data, truncated, err := reader.materialize(panel)
 		result := map[string]any{"id": panel.ID, "type": panel.Type, "status": "ok", "observed_at": now.Format(time.RFC3339Nano), "truncated": truncated, "data": data}
 		if err != nil {

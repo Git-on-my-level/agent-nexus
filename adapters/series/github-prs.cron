@@ -1,0 +1,3 @@
+# Declare github, owner collector.<host>, expected_interval 24h, gauge github-prs (PRs).
+# Replace owner/repo and paths. gh authentication stays in this OS user's keychain.
+0 8 * * * ANX_AS=collector ANX_ADAPTER=github /usr/bin/python3 /opt/anx-adapters/github-prs.py owner/repo >> /var/log/anx-github.log 2>&1

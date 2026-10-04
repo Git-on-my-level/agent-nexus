@@ -1,10 +1,13 @@
+import { withSeriesObservation } from "./seriesReports.js";
+
 export const LIVE_REPORT_TYPES = Object.freeze([
   "live-initiatives",
   "live-asks",
   "live-work-mix",
   "live-activity",
 ]);
-export const isLivePanel = (panel) => LIVE_REPORT_TYPES.includes(panel?.type);
+export const isLivePanel = (panel) =>
+  !!panel?.source || LIVE_REPORT_TYPES.includes(panel?.type);
 
 /** Query validation mirrors the canonical LiveReportQuery contract. */
 export function validateLiveQuery(type, data) {
@@ -69,6 +72,7 @@ export function validateLiveQuery(type, data) {
 
 /** Presentation freshness must reflect the actual live read, never authored fields. */
 export function withLiveObservation(panel, observation) {
+  if (panel.source) return withSeriesObservation(panel, observation);
   if (!isLivePanel(panel)) return panel;
   return {
     ...panel,

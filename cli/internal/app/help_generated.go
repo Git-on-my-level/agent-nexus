@@ -29,6 +29,8 @@ type localHelperTopic struct {
 }
 
 var runtimeGeneratedTopics = []runtimeHelpTopic{
+	{Path: "series", Description: "Push and query declared live series with source provenance"},
+	{Path: "adapters", Description: "Declare and administer scoped host-local live data sources"},
 	{Path: "work", Description: "Query commitments, evidence, freshness and refresh state"},
 	{Path: "pm", Description: "Read and operate durable PM conversations, decisions and action receipts"},
 	{Path: "auth", Description: "Inspect the enrolled host and derived-agent identity"},
@@ -52,6 +54,16 @@ var runtimeGeneratedTopics = []runtimeHelpTopic{
 var runtimeGeneratedPacketResources = []string{}
 
 var localHelperTopics = []localHelperTopic{
+	{Path: "series list", Summary: "List workspace series definitions and owning adapters.", QuickStart: "anx series list", Examples: []string{"anx series list"}, Flags: []localHelperFlag{}},
+	{Path: "series show", Summary: "Show bounded observations, freshness, and provenance.", QuickStart: "anx series show <name> [--range 24h] [--step 1h] [--agg last] [--label k=v]", Examples: []string{"anx series show builds"}, Flags: []localHelperFlag{{Name: "<name>", Description: "Accepted by series show."}, {Name: "--range <duration>", Description: "Accepted by series show."}, {Name: "--step <duration>", Description: "Accepted by series show."}, {Name: "--agg <aggregation>", Description: "Accepted by series show."}, {Name: "--label k=v", Description: "Accepted by series show."}}},
+	{Path: "series query", Summary: "Query at most 200 buckets per label set.", QuickStart: "anx series query <name> --range <duration> --step <duration> [--agg last|avg|sum|min|max|count] [--label k=v]", Examples: []string{"anx series query builds --range 7d --step 1h --agg sum"}, Flags: []localHelperFlag{{Name: "<name>", Description: "Accepted by series query."}, {Name: "--range <duration>", Description: "Accepted by series query."}, {Name: "--step <duration>", Description: "Accepted by series query."}, {Name: "--agg <aggregation>", Description: "Accepted by series query."}, {Name: "--label k=v", Description: "Accepted by series query."}}},
+	{Path: "series push", Summary: "Push one point through an explicit adapter grant.", QuickStart: "anx series push <name> <value-or-state> [--adapter <name>] [--label k=v] [--ts RFC3339]; or anx series push [<name>] --from-command -- <cmd> [args...]", Examples: []string{"anx series push builds 12 --label initiative=launch", "anx series push --series builds --from-command -- ./count-builds"}, Flags: []localHelperFlag{{Name: "<name>", Description: "Accepted by series push."}, {Name: "<value-or-state>", Description: "Accepted by series push."}, {Name: "--adapter <name>", Description: "Accepted by series push."}, {Name: "--label k=v", Description: "Accepted by series push."}, {Name: "--ts RFC3339", Description: "Accepted by series push."}, {Name: "--from-command", Description: "Accepted by series push."}, {Name: "--series <name>", Description: "Accepted by series push."}}},
+	{Path: "adapters declare", Summary: "Declare a host-local adapter and its allowed series.", QuickStart: "anx adapters declare --body-file <path|->", Examples: []string{"anx adapters declare --body-file adapter.json"}, Flags: []localHelperFlag{{Name: "--body-file <path|->", Description: "Accepted by adapters declare."}}},
+	{Path: "adapters list", Summary: "List declared sources and grant state.", QuickStart: "anx adapters list", Examples: []string{"anx adapters list"}, Flags: []localHelperFlag{}},
+	{Path: "adapters revoke", Summary: "Revoke a source grant immediately; keep observations.", QuickStart: "anx adapters revoke <name>", Examples: []string{"anx adapters revoke github"}, Flags: []localHelperFlag{{Name: "<name>", Description: "Accepted by adapters revoke."}}},
+	{Path: "adapters delete", Summary: "Delete a source and its series history; invalidate its tokens.", QuickStart: "anx adapters delete <name>", Examples: []string{"anx adapters delete github"}, Flags: []localHelperFlag{{Name: "<name>", Description: "Accepted by adapters delete."}}},
+	{Path: "adapters token", Summary: "Exchange owner identity for a short-lived, push-only token.", QuickStart: "anx adapters token <name>", Examples: []string{"anx --json adapters token github"}, Flags: []localHelperFlag{{Name: "<name>", Description: "Accepted by adapters token."}}},
+
 	{
 		Path:        "inbox list",
 		Summary:     "List asks addressed to the active agent, including answer and per-answer read state.",
@@ -1962,6 +1974,8 @@ func runtimeSupportedCommandIDs() map[string]struct{} {
 
 func runtimeGeneratedHelpSpecs() []subcommandSpec {
 	specs := []subcommandSpec{
+		{command: "series", valid: []string{"list", "show", "query", "push"}},
+		{command: "adapters", valid: []string{"declare", "list", "revoke", "delete", "token"}},
 		{command: "runs", valid: []string{"list", "get", "ingest"}},
 		{command: "host", valid: []string{"list", "revoke"}},
 		authAdminsSubcommandSpec, hostEnrollmentsSubcommandSpec, hostTokensSubcommandSpec,

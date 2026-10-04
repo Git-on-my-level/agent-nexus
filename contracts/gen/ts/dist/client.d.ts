@@ -57,6 +57,11 @@ export declare class AnxClient {
     invoke(commandId: string, pathParams?: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     actorsCreate(options?: RequestOptions): Promise<InvokeResult>;
     actorsList(options?: RequestOptions): Promise<InvokeResult>;
+    adaptersDeclare(options?: RequestOptions): Promise<InvokeResult>;
+    adaptersDelete(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    adaptersList(options?: RequestOptions): Promise<InvokeResult>;
+    adaptersRevoke(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    adaptersToken(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     agentInboxAnswersRead(options?: RequestOptions): Promise<InvokeResult>;
     agentInboxAsksList(options?: RequestOptions): Promise<InvokeResult>;
     agentNotificationReceiptsStream(options?: RequestOptions): Promise<InvokeResult>;
@@ -221,6 +226,10 @@ export declare class AnxClient {
     secretsReveal(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     secretsRevealBatch(options?: RequestOptions): Promise<InvokeResult>;
     secretsUpdate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    seriesList(options?: RequestOptions): Promise<InvokeResult>;
+    seriesPush(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    seriesQuery(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    seriesShow(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     sessionsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     sessionsRegister(options?: RequestOptions): Promise<InvokeResult>;
     threadsContext(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

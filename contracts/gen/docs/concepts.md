@@ -227,9 +227,18 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `documents`
 
-- Commands: `3`
+- Commands: `12`
 - Command IDs:
+  - `adapters.declare`
+  - `adapters.delete`
+  - `adapters.list`
+  - `adapters.revoke`
+  - `adapters.token`
   - `overview.get`
+  - `series.list`
+  - `series.push`
+  - `series.query`
+  - `series.show`
   - `workspace.dashboard.list`
   - `workspace.dashboard.set`
 

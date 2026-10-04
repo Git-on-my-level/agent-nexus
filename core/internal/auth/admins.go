@@ -30,6 +30,9 @@ func requireAdministrationTx(ctx context.Context, tx *sql.Tx, actor Principal, h
 	if humanOnly {
 		denied = ErrHumanRequired
 	}
+	if actor.SeriesAdapter != "" {
+		return denied
+	}
 	var kind string
 	var granted bool
 	err := tx.QueryRowContext(ctx, `SELECT `+principalKindExpr("a")+`,COALESCE(json_extract(metadata_json,'$.auth_admin'),0) FROM agents a WHERE id=? AND actor_id=? AND revoked_at IS NULL`, actor.AgentID, actor.ActorID).Scan(&kind, &granted)
