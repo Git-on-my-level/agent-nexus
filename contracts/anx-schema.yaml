@@ -85,6 +85,7 @@ enums:
       - exception_raised
       - human_attention_requested
       - human_attention_responded
+      - human_attention_withdrawn
       - agent_notification_read
       - agent_notification_dismissed
     groups:
@@ -93,7 +94,7 @@ enums:
       documents: [document_created, document_revised, document_trashed, document_restored]
       boards: [board_created, board_updated]
       cards: [card_created, card_updated, card_moved, card_archived, card_trashed, card_resolved]
-      attention: [human_attention_requested, human_attention_responded]
+      attention: [human_attention_requested, human_attention_responded, human_attention_withdrawn]
       notifications: [agent_notification_read, agent_notification_dismissed]
       reviews: [receipt_added, review_completed]
       exceptions: [exception_raised]
@@ -334,6 +335,9 @@ primitives:
         human_attention_responded:
           family: ask_resolved
           required_payload_fields: [title]
+        human_attention_withdrawn:
+          family: ask_resolved
+          required_payload_fields: [reason]
         document_created:
           family: doc
           required_payload_fields: [document_id, title]
@@ -670,7 +674,8 @@ reference_conventions:
     Required refs per event kind.
     Thread-scoped events are durably anchored by `event.thread_id` and a matching
     `thread:<thread_id>` ref when they belong to a backing timeline. Human
-    coordination uses `human_attention_requested` and `human_attention_responded`;
+    coordination uses `human_attention_requested`, `human_attention_responded`,
+    and `human_attention_withdrawn`;
     legacy decision/intervention event types are not part of the current product
     vocabulary.
 
@@ -744,6 +749,10 @@ reference_conventions:
       refs_must_include: ["inbox:<inbox_item_id>"]
       payload_must_include: ["inbox_item_id", "kind", "response_text", "outcome", "responding_actor_id"]
 
+    human_attention_withdrawn:
+      refs_must_include: ["event:<request_event_id>"]
+      payload_must_include: ["request_event_id", "request_event_ref", "withdrawn_by_actor_id", "reason"]
+
     agent_notification_read:
       refs_must_include: ["artifact:<wakeup_id>"]
 
@@ -778,7 +787,7 @@ derived:
   inbox_item:
     description: >
       Human attention queue item derived from explicit human_attention_requested
-      events and closed by human_attention_responded events.
+      events, closed by human_attention_responded events, or withdrawn by its requester.
     fields:
       id: { type: string, required: true }
       kind: { type: string, required: true, description: "Open classifier; v1 known values are ask, review, and escalate." }
@@ -810,6 +819,7 @@ derived:
       target_actor_id: { type: string, required: true }
       thread_ref: { type: typed_ref, required: false }
       trigger_event_ref: { type: typed_ref, required: true }
+      related_refs: { type: "list<typed_ref>", required: false, description: "All ask and answer events included in one debounced answer wake." }
       created_at: { type: datetime, required: true }
       read_at: { type: datetime, required: false }
       dismissed_at: { type: datetime, required: false }

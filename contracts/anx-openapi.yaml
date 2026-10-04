@@ -5285,7 +5285,7 @@ paths:
       x-anx-surface: projection
       x-anx-command-id: inbox.list
       x-anx-cli-path: inbox list
-      x-anx-why: Load the operator-only human attention queue derived from explicit human_attention_requested events.
+      x-anx-why: Project human_attention_requested events into a queryable inbox view.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }`."
@@ -7040,6 +7040,87 @@ paths:
               schema:
                 $ref: '#/components/schemas/JsonValue'
         '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /agent-inbox/asks:
+    get:
+      operationId: listAgentInboxAsks
+      summary: List authenticated agent's human attention asks
+      tags: [agents, inbox]
+      x-anx-surface: projection
+      x-anx-command-id: agent.inbox.asks.list
+      x-anx-cli-path: agent inbox asks list
+      x-anx-why: Requester-scoped projection of open and answered asks, including per-answer read state.
+      x-anx-agent-notes: Results are scoped to the authenticated requester and keyset-paginated; do not infer open state from a partial event timeline.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ items, page_info }` with keyset pagination."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-concepts: [agents, inbox]
+      x-anx-stability: beta
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200 }
+        - in: query
+          name: cursor
+          schema: { type: string }
+      responses:
+        '200':
+          description: Requester's asks and answers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /agent-inbox/answers/read:
+    post:
+      operationId: markAgentInboxAnswerRead
+      summary: Mark one of the authenticated agent's answers read
+      tags: [agents, inbox]
+      x-anx-surface: projection
+      x-anx-command-id: agent.inbox.answers.read
+      x-anx-cli-path: agent inbox answers read
+      x-anx-why: Persist answer-level read state independently from a wake notification batch.
+      x-anx-agent-notes: Only the requesting agent can mark one of its own response events read. This state is independent from wake notification read state.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ answer }` with the per-answer read state."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-anx-concepts: [agents, inbox, write]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answer_event_id]
+              properties:
+                answer_event_id: { type: string, minLength: 1 }
+              additionalProperties: false
+      responses:
+        '200':
+          description: Already marked read
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '201':
+          description: Marked read
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
           $ref: '#/components/responses/ErrorResponse'
 
   /agent-notifications/read:
@@ -9279,7 +9360,7 @@ components:
         payload:
           type: object
           additionalProperties: true
-          description: For human_attention_responded, see HumanAttentionRespondedPayload; outcome is required on new responses.
+          description: For human_attention_responded, see HumanAttentionRespondedPayload; for human_attention_withdrawn, see HumanAttentionWithdrawnPayload.
         provenance: { $ref: '#/components/schemas/Provenance' }
       required: [ref, handle, ts, type, actor_id, refs, summary, provenance]
 
@@ -10013,7 +10094,7 @@ components:
         payload:
           type: object
           additionalProperties: true
-          description: For human_attention_responded, see HumanAttentionRespondedPayload; outcome is required on write.
+          description: For human_attention_responded, see HumanAttentionRespondedPayload; for human_attention_withdrawn, see HumanAttentionWithdrawnPayload.
         provenance: { $ref: '#/components/schemas/Provenance' }
       required: [type, actor_id, refs, summary, provenance]
 
@@ -10357,6 +10438,16 @@ components:
         responding_actor_id: { type: string }
       required: [inbox_item_id, kind, response_text, outcome, responding_actor_id]
 
+    HumanAttentionWithdrawnPayload:
+      type: object
+      description: Payload of a requester-authored human_attention_withdrawn event.
+      properties:
+        request_event_id: { type: string }
+        request_event_ref: { $ref: '#/components/schemas/TypedRef' }
+        withdrawn_by_actor_id: { type: string }
+        reason: { type: string, minLength: 1 }
+      required: [request_event_id, request_event_ref, withdrawn_by_actor_id, reason]
+
     TopicLifecycleMutationRequest:
       type: object
       properties:
@@ -10638,6 +10729,10 @@ components:
         target_actor_id: { type: string }
         thread_id: { type: string }
         trigger_event_id: { type: string }
+        related_refs:
+          type: array
+          description: Ask and answer event refs included in a debounced answer wake batch.
+          items: { $ref: '#/components/schemas/TypedRef' }
         created_at: { type: string, format: date-time }
         claimed_at: { type: string, format: date-time }
         completed_at: { type: string, format: date-time }

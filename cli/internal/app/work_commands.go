@@ -134,6 +134,13 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 		}
 	}
 	tail := args[width:]
+	if out.name == "work list" {
+		for _, arg := range tail {
+			if arg == "--board" || strings.HasPrefix(arg, "--board=") {
+				return out, errnorm.Usage("invalid_flags", "`anx work list` does not accept --board; use `anx boards cards list --board <board-ref>`")
+			}
+		}
+	}
 	var leading []string
 	// Resource ids lead the command in the public convention. Go flag stops at
 	// positionals, so lift only leading positionals before parsing the flag tail.

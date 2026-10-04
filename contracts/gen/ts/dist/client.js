@@ -61,6 +61,86 @@ export const commandRegistry = [
         "ts_method": "actorsList"
     },
     {
+        "command_id": "agent.inbox.answers.read",
+        "cli_path": "agent inbox answers read",
+        "group": "agent",
+        "method": "POST",
+        "path": "/agent-inbox/answers/read",
+        "operation_id": "markAgentInboxAnswerRead",
+        "summary": "Mark one of the authenticated agent's answers read",
+        "why": "Persist answer-level read state independently from a wake notification batch.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ answer }` with the per-answer read state.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found"
+        ],
+        "concepts": [
+            "agents",
+            "inbox",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "projection",
+        "agent_notes": "Only the requesting agent can mark one of its own response events read. This state is independent from wake notification read state.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "answer_event_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "adjacent_commands": [
+            "agent.inbox.asks.list",
+            "agent.notifications.dismiss",
+            "agent.notifications.list",
+            "agent.notifications.read"
+        ],
+        "go_method": "AgentInboxAnswersRead",
+        "ts_method": "agentInboxAnswersRead"
+    },
+    {
+        "command_id": "agent.inbox.asks.list",
+        "cli_path": "agent inbox asks list",
+        "group": "agent",
+        "method": "GET",
+        "path": "/agent-inbox/asks",
+        "operation_id": "listAgentInboxAsks",
+        "summary": "List authenticated agent's human attention asks",
+        "why": "Requester-scoped projection of open and answered asks, including per-answer read state.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ items, page_info }` with keyset pagination.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token"
+        ],
+        "concepts": [
+            "agents",
+            "inbox"
+        ],
+        "stability": "beta",
+        "surface": "projection",
+        "agent_notes": "Results are scoped to the authenticated requester and keyset-paginated; do not infer open state from a partial event timeline.",
+        "adjacent_commands": [
+            "agent.inbox.answers.read",
+            "agent.notifications.dismiss",
+            "agent.notifications.list",
+            "agent.notifications.read"
+        ],
+        "go_method": "AgentInboxAsksList",
+        "ts_method": "agentInboxAsksList"
+    },
+    {
         "command_id": "agent.notification-receipts.stream",
         "cli_path": "",
         "method": "GET",
@@ -115,6 +195,8 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "projection",
         "adjacent_commands": [
+            "agent.inbox.answers.read",
+            "agent.inbox.asks.list",
             "agent.notifications.list",
             "agent.notifications.read"
         ],
@@ -146,6 +228,8 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "projection",
         "adjacent_commands": [
+            "agent.inbox.answers.read",
+            "agent.inbox.asks.list",
             "agent.notifications.dismiss",
             "agent.notifications.read"
         ],
@@ -180,6 +264,8 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "projection",
         "adjacent_commands": [
+            "agent.inbox.answers.read",
+            "agent.inbox.asks.list",
             "agent.notifications.dismiss",
             "agent.notifications.list"
         ],
@@ -4987,6 +5073,7 @@ export const commandRegistry = [
                         "exception_raised",
                         "human_attention_requested",
                         "human_attention_responded",
+                        "human_attention_withdrawn",
                         "message_posted",
                         "receipt_added",
                         "review_completed",
@@ -6309,7 +6396,7 @@ export const commandRegistry = [
         "path": "/inbox",
         "operation_id": "listInboxItems",
         "summary": "List inbox items",
-        "why": "Load the operator-only human attention queue derived from explicit human_attention_requested events.",
+        "why": "Project human_attention_requested events into a queryable inbox view.",
         "input_mode": "none",
         "streaming": {
             "mode": "none"
@@ -11203,6 +11290,12 @@ export class AnxClient {
     }
     actorsList(options = {}) {
         return this.invoke("actors.list", {}, options);
+    }
+    agentInboxAnswersRead(options = {}) {
+        return this.invoke("agent.inbox.answers.read", {}, options);
+    }
+    agentInboxAsksList(options = {}) {
+        return this.invoke("agent.inbox.asks.list", {}, options);
     }
     agentNotificationReceiptsStream(options = {}) {
         return this.invoke("agent.notification-receipts.stream", {}, options);

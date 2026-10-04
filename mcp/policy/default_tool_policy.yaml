@@ -13,6 +13,7 @@ valid_classifications:
   - unsupported_shell_shaped
   - unsupported_other
 hosted_default_commands:
+  - "agent.inbox.asks.list"
   - "agent.notifications.list"
   - "agents.me.get"
   - "artifacts.get"
@@ -85,6 +86,12 @@ commands:
   "agent.notification-receipts.stream":
     classification: unsupported_streaming
     reason: "SSE stream needs a bounded read adapter before MCP exposure"
+  "agent.inbox.asks.list":
+    classification: exposed_read
+    reason: "requester-scoped, keyset-paginated human attention inbox projection"
+  "agent.inbox.answers.read":
+    classification: exposed_write
+    reason: "ordinary authenticated agent per-answer read state write"
   "agent.notifications.dismiss":
     classification: exposed_write
     reason: "ordinary authenticated agent notification state write"
@@ -333,7 +340,7 @@ commands:
     reason: "ordinary reversible event lifecycle write"
   "events.create":
     classification: exposed_write
-    reason: "ordinary event creation"
+    reason: "ask withdrawal is an agent write restricted by the server to the requester's own open asks"
   "events.get":
     classification: exposed_read
     reason: "event read"
@@ -411,7 +418,7 @@ commands:
     reason: "bounded inbox inventory read"
   "inbox.respond":
     classification: unsupported_interactive
-    reason: "human response submission requires human judgment"
+    reason: "human-only response submission requires human judgment"
   "inbox.stream":
     classification: unsupported_streaming
     reason: "SSE stream needs a bounded read adapter before MCP exposure"

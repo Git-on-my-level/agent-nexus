@@ -273,12 +273,12 @@ func TestMetaCommandShowsRequiredInputsAndConcurrencyGuidance(t *testing.T) {
 	}
 }
 
-func TestInboxListHelpMentionsViewingAsAndCategories(t *testing.T) {
+func TestInboxListHelpMentionsAnswerBatchesAndCategories(t *testing.T) {
 	t.Parallel()
 
 	output := runHelpCommand(t, "help", "debug", "inbox", "list")
-	if !strings.Contains(output, "viewing_as") {
-		t.Fatalf("expected viewing_as scoping guidance output=%s", output)
+	if !strings.Contains(output, "anx inbox list --status answered") || !strings.Contains(output, "anx debug inbox list") {
+		t.Fatalf("expected answer-batch and operator-debug guidance output=%s", output)
 	}
 	if !strings.Contains(output, "`ask`") || !strings.Contains(output, "`escalate`") {
 		t.Fatalf("expected inbox kind reference output=%s", output)
@@ -1020,6 +1020,9 @@ func TestGeneratedCommandHelpIncludesBodySchemaAndEnums(t *testing.T) {
 	}
 	if !strings.Contains(output, "- `human_attention_responded`") {
 		t.Fatalf("expected human_attention_responded listing output=%s", output)
+	}
+	if !strings.Contains(output, "- `human_attention_withdrawn`") {
+		t.Fatalf("expected human_attention_withdrawn listing output=%s", output)
 	}
 	if !strings.Contains(output, "`message_posted`") {
 		t.Fatalf("expected message_posted discoverability note output=%s", output)

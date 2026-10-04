@@ -888,6 +888,75 @@ var migrations = []migration{
 	{Version: 43, AfterApply: applyMigration43ReportIndexes},
 	{Version: 44, AfterApply: applyMigration44CardPlans},
 	{Version: 45, Statements: []string{`CREATE TABLE workspace_dashboard (singleton INTEGER PRIMARY KEY CHECK(singleton=1), document_id TEXT, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL);`}},
+	{
+		Version: 46,
+		Statements: []string{
+			`CREATE TABLE human_attention_answer_wake_batches (
+				target_actor_id TEXT PRIMARY KEY,
+				target_handle TEXT NOT NULL,
+				workspace_id TEXT NOT NULL,
+				batch_id TEXT NOT NULL,
+				first_answered_at TEXT NOT NULL,
+				last_answered_at TEXT NOT NULL,
+				thread_id TEXT NOT NULL DEFAULT '',
+				trigger_event_id TEXT NOT NULL,
+				trigger_created_at TEXT NOT NULL,
+				answer_count INTEGER NOT NULL,
+				ask_event_ids_json TEXT NOT NULL DEFAULT '[]',
+				answer_event_ids_json TEXT NOT NULL DEFAULT '[]',
+				refs_json TEXT NOT NULL DEFAULT '[]',
+				updated_at TEXT NOT NULL
+			);`,
+			`CREATE INDEX idx_human_attention_answer_wake_batches_updated ON human_attention_answer_wake_batches(last_answered_at,target_actor_id);`,
+		},
+	},
+	{
+		Version: 47,
+		Statements: []string{
+			`ALTER TABLE human_attention_answer_wake_batches ADD COLUMN debounce_deadline TEXT NOT NULL DEFAULT '';`,
+			`CREATE TABLE human_attention_request_resolutions (
+				request_event_id TEXT PRIMARY KEY,
+				resolution_event_id TEXT NOT NULL UNIQUE,
+				resolution_type TEXT NOT NULL CHECK(resolution_type IN ('answered','withdrawn')),
+				actor_id TEXT NOT NULL,
+				created_at TEXT NOT NULL
+			);`,
+			`CREATE INDEX idx_human_attention_request_resolutions_type ON human_attention_request_resolutions(resolution_type,request_event_id);`,
+		},
+		AfterApply: applyMigration47HumanAttentionResolutions,
+	},
+	{
+		Version: 48,
+		Statements: []string{
+			`CREATE TABLE human_attention_answer_reads (
+				answer_event_id TEXT PRIMARY KEY,
+				requester_actor_id TEXT NOT NULL,
+				read_at TEXT NOT NULL
+			);`,
+			`CREATE INDEX idx_human_attention_answer_reads_requester ON human_attention_answer_reads(requester_actor_id,read_at,answer_event_id);`,
+		},
+		AfterApply: applyMigration48HumanAttentionAnswerReads,
+	},
+}
+
+func applyMigration47HumanAttentionResolutions(ctx context.Context, tx *sql.Tx) error {
+	var exists int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='events'`).Scan(&exists); err != nil {
+		return err
+	}
+	if exists == 0 {
+		return nil
+	}
+	_, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO human_attention_request_resolutions(request_event_id,resolution_event_id,resolution_type,actor_id,created_at)
+		SELECT ask.id, answer.id, 'answered', answer.actor_id, answer.ts
+		FROM events AS answer
+		JOIN events AS ask ON ask.type='human_attention_requested' AND (
+			json_extract(answer.payload_json,'$.payload.request_event_id')=ask.id
+			OR json_extract(answer.payload_json,'$.payload.request_event_ref')='event:' || ask.id
+			OR json_extract(answer.payload_json,'$.payload.request_event_ref')='event:' || ask.handle
+		)
+		WHERE answer.type='human_attention_responded';`)
+	return err
 }
 
 func applyMigration44CardPlans(ctx context.Context, tx *sql.Tx) error {
@@ -928,6 +997,31 @@ func applyMigration43ReportIndexes(ctx context.Context, tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+func applyMigration48HumanAttentionAnswerReads(ctx context.Context, tx *sql.Tx) error {
+	var exists int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='events'`).Scan(&exists); err != nil {
+		return err
+	}
+	if exists == 0 {
+		return nil
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='agent_wakeups'`).Scan(&exists); err != nil {
+		return err
+	}
+	if exists == 0 {
+		return nil
+	}
+	_, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO human_attention_answer_reads(answer_event_id,requester_actor_id,read_at)
+		SELECT response.id, wake.target_actor_id, COALESCE(wake.read_at,wake.updated_at)
+		FROM agent_wakeups AS wake
+		JOIN events AS response ON response.type='human_attention_responded'
+			AND trim(COALESCE(json_extract(response.payload_json,'$.payload.requester_actor_id'),''))=wake.target_actor_id
+		WHERE wake.notification_status='read'
+		  AND EXISTS (SELECT 1 FROM json_each(wake.refs_json) AS ref WHERE ref.value='event:' || response.id);`)
+	return err
+
 }
 
 func applyMigration40HostIdentity(ctx context.Context, tx *sql.Tx) error {

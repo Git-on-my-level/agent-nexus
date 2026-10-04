@@ -20,7 +20,7 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 	}
 
 	if args[0] == "debug" {
-		if len(args) < 2 || !isDiagnosticGroup(args[1]) {
+		if len(args) < 2 || !isDebugGroup(args[1]) {
 			return "debug", errnorm.Usage("unknown_subcommand", "unknown debug group")
 		}
 		name, err := preflightConfigIndependentUsageWithDebug(args[1:], true)
@@ -28,6 +28,39 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 	}
 	if isDiagnosticGroup(args[0]) && !debug {
 		return args[0], errnorm.Usage("unknown_command", "unknown command "+args[0]+"; use anx debug "+args[0])
+	}
+	if args[0] == "ask" && len(args) >= 2 && args[1] == "withdraw" {
+		commandName := "ask withdraw"
+		if err := preflightFlagUsage(args[2:], map[string]preflightFlagSpec{
+			"reason": {kind: preflightFlagString}, "dry-run": {kind: preflightFlagBool},
+		}); err != nil {
+			return commandName, err
+		}
+		hasReason := false
+		positionals := 0
+		for i := 0; i < len(args[2:]); i++ {
+			arg := strings.TrimSpace(args[i+2])
+			if strings.HasPrefix(arg, "-") {
+				name, _, inline := strings.Cut(strings.TrimLeft(arg, "-"), "=")
+				if name == "reason" {
+					if inline {
+						hasReason = strings.TrimSpace(strings.TrimPrefix(arg, "--reason=")) != ""
+					} else if i+3 < len(args) {
+						hasReason = strings.TrimSpace(args[i+3]) != ""
+						i++
+					}
+				}
+				continue
+			}
+			positionals++
+		}
+		if positionals != 1 {
+			return commandName, errnorm.Usage("invalid_args", "usage: anx ask withdraw <event:ask-id> --reason <text>")
+		}
+		if !hasReason {
+			return commandName, errnorm.Usage("invalid_request", "--reason is required")
+		}
+		return commandName, nil
 	}
 	if args[0] == "work" && len(args) >= 2 && isDailyWorkVerb(args[1]) {
 		name := "work " + args[1]
@@ -416,7 +449,7 @@ func preflightRootCommands() map[string]struct{} {
 		"version": {}, "doctor": {}, "update": {}, "bridge": {}, "auth": {}, "host": {}, "runs": {}, "config": {}, "debug": {}, "notifications": {},
 		"import": {}, "install": {}, "skills": {}, "draft": {}, "provenance": {}, "orient": {}, "ask": {}, "review": {}, "escalate": {}, "await": {}, "secret": {}, "workspace": {}, "overview": {}, "read": {}, "url": {}, "concepts": {}, "primitives": {},
 		"topics": {}, "cards": {}, "artifacts": {}, "boards": {}, "docs": {},
-		"api": {}, "report": {}, "help": {}, "--help": {}, "-h": {},
+		"api": {}, "report": {}, "inbox": {}, "help": {}, "--help": {}, "-h": {},
 	}
 }
 
@@ -440,7 +473,7 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 	}
 	addLayer(map[string]map[string]preflightFlagSpec{
 		"orient":     {"stale-hours": {kind: preflightFlagString}},
-		"await":      {"until": {kind: preflightFlagString}, "timeout": {kind: preflightFlagString}},
+		"await":      {"until": {kind: preflightFlagString}, "timeout": {kind: preflightFlagString}, "answers": {kind: preflightFlagBool}},
 		"work start": {},
 		"work note":  {},
 		"work block": {"ask": {kind: preflightFlagBool}, "recommend": {kind: preflightFlagString}, "alt": {kind: preflightFlagString}},
@@ -654,6 +687,8 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"thread-id": valueFlag,
 			"type":      valueFlag,
 			"full-id":   boolFlag,
+			"status":    valueFlag,
+			"unread":    boolFlag,
 		},
 		"inbox respond": {
 			"from-file":     valueFlag,

@@ -13,7 +13,7 @@ const agentGuideSkillName = "anx-participant"
 
 const agentGuideSkillDescription = "Participate in Agent Nexus work with source authority, scoped session identity, meaningful updates, and evidence-backed completion."
 
-const agentGuideSkillVersion = "anx.participant.v5"
+const agentGuideSkillVersion = "anx.participant.v7"
 
 type guideSection struct {
 	Title string
@@ -56,9 +56,10 @@ func agentGuideSections() []guideSection {
 			"1. Run `anx orient` to see your identity, assigned work, asks and answers, notifications, stale work, and next commands.",
 			"2. Read `anx work context card:<slug>` and register participation when doing substantive work. Use `anx work start card:<slug>` only when explicitly taking ownership of a Nexus-native task: it adds an assignee and marks in progress.",
 			"3. Post `anx cards message card:<slug> --body \"What changed and why\"` after meaningful progress. Include evidence, decisions, blockers, uncertainty and next steps; avoid raw chat copies and repeated unchanged updates. Always name the task explicitly: participation does not change legacy current-card selection.",
-			"4. Report execution blockers on the card. For a consequential human decision, create one recommended ask with `anx ask \"Question\" --subject-ref card:<slug> --recommend \"Preferred answer\"`; keep `next_actor` on the agent and do not also block the card for that question. Use `anx work block` only for an authorized Nexus-native task blocked by an execution issue, not as a duplicate of a human ask.",
-			"5. Run `anx await <ask-id>` when an answer gates the next step. It prints one terminal result with outcome. Exit 8 means timeout; exit 9 means rejected.",
-			"6. Verify acceptance criteria before changing task completion. For an authorized Nexus-native task, `anx work done card:<slug> --evidence <url|event:ref|artifact:ref>` resolves that explicit task and clears legacy presence. Report source-owned completion as attributed evidence for its authorized source workflow. Closing a session or finishing a run never completes a task.",
+			"4. Report execution blockers on the card. For a consequential human decision, create one recommended ask with `anx ask \"Question\" --subject-ref card:<slug> --recommend \"Preferred answer\"`; keep `next_actor` on the agent and do not also block the card for that question. Withdraw an ask that is no longer needed with `anx ask withdraw <event:ask-id> --reason \"<short reason>\"`. Use `anx work block` only for an authorized Nexus-native task blocked by an execution issue, not as a duplicate of a human ask.",
+			"5. Run `anx await <ask-id>` when one answer gates the next step. For a batch, use `anx await --answers`; `anx orient` and `anx inbox list --status answered` also show replies. Exit 8 means timeout; exit 9 means an individual answer was rejected.",
+			"6. Hermes, Claude Code, and Codex harnesses consume the same workspace-local agent notification: on wake, read `anx inbox list --unread` or `anx orient`, then mark each processed answer with `anx inbox read event:<ask-id>`. `inbox read` marks that answer only, including before wake delivery; `anx notifications read --wakeup-id <id>` separately marks the wake notification read.",
+			"7. Verify acceptance criteria before changing task completion. For an authorized Nexus-native task, `anx work done card:<slug> --evidence <url|event:ref|artifact:ref>` resolves that explicit task and clears legacy presence. Report source-owned completion as attributed evidence for its authorized source workflow. Closing a session or finishing a run never completes a task.",
 		}},
 		{Title: "Runs and output", Lines: []string{
 			"- Label agentctl work `anx.card.<card-slug>` so the run links to the card. A completed run does not complete the card.",

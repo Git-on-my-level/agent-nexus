@@ -184,6 +184,8 @@ type handlerOptions struct {
 	allowUnauthenticatedWrites     bool
 	allowLoopbackVerificationReads bool
 	inboxRiskHorizon               time.Duration
+	answerWakeFlushWhenNoOpenAsks  bool
+	answerWakeQuietWindow          time.Duration
 	coreVersion                    string
 	apiVersion                     string
 	minCLIVersion                  string
@@ -262,6 +264,14 @@ func WithWorkspaceManagedAgentGrantVerifier(verifier auth.WorkspaceManagedAgentG
 	return func(opts *handlerOptions) {
 		opts.workspaceManagedGrantVerifier = verifier
 	}
+}
+
+func WithAnswerWakeFlushWhenNoOpenAsks(enabled bool) HandlerOption {
+	return func(opts *handlerOptions) { opts.answerWakeFlushWhenNoOpenAsks = enabled }
+}
+
+func WithAnswerWakeQuietWindow(window time.Duration) HandlerOption {
+	return func(opts *handlerOptions) { opts.answerWakeQuietWindow = window }
 }
 
 func WithPasskeySessionStore(store *auth.PasskeySessionStore) HandlerOption {
@@ -607,13 +617,15 @@ func enforceRouteAccess(w http.ResponseWriter, r *http.Request, opts handlerOpti
 
 func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	opts := handlerOptions{
-		coreVersion:                strings.TrimSpace(schemaVersion),
-		apiVersion:                 "v0",
-		minCLIVersion:              "0.1.0",
-		recommendedCLIVersion:      "0.1.0",
-		coreInstanceID:             "core-local",
-		streamPollInterval:         time.Second,
-		allowUnauthenticatedWrites: false,
+		coreVersion:                   strings.TrimSpace(schemaVersion),
+		apiVersion:                    "v0",
+		minCLIVersion:                 "0.1.0",
+		recommendedCLIVersion:         "0.1.0",
+		coreInstanceID:                "core-local",
+		streamPollInterval:            time.Second,
+		answerWakeFlushWhenNoOpenAsks: true,
+		answerWakeQuietWindow:         DefaultAnswerWakeQuietWindow,
+		allowUnauthenticatedWrites:    false,
 	}
 	for _, option := range options {
 		option(&opts)
@@ -2572,6 +2584,22 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 		handleListAgentNotifications(w, r, opts)
+	})
+
+	registerRoute("/agent-inbox/asks", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+		handleListAgentInboxAsks(w, r, opts)
+	})
+
+	registerRoute("/agent-inbox/answers/read", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleReadAgentInboxAnswer(w, r, opts)
 	})
 
 	registerRoute("/agent-notifications/read", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {

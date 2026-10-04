@@ -54,7 +54,7 @@ func commandSideEffectClass(command string) string {
 	if parts[0] == "orient" || parts[0] == "await" {
 		return "read_only"
 	}
-	if command == "host revoke" || command == "host enrollments approve" || command == "host enrollments deny" || command == "host tokens create" || command == "host tokens revoke" || command == "auth admins grant" || command == "auth admins revoke" {
+	if command == "host revoke" || command == "host enrollments approve" || command == "host enrollments deny" || command == "host tokens create" || command == "host tokens revoke" || command == "auth admins grant" || command == "auth admins revoke" || parts[0] == "inbox" && len(parts) > 1 && parts[1] == "read" {
 		return "remote_coordination_write"
 	}
 	if command == "host token" {
@@ -536,6 +536,8 @@ func validSubcommands(group string) []string {
 		return boardsSubcommandSpec.valid
 	case "notifications":
 		return notificationsSubcommandSpec.valid
+	case "inbox":
+		return inboxSubcommandSpec.valid
 	case "auth":
 		return authSubcommandSpec.valid
 	case "config":

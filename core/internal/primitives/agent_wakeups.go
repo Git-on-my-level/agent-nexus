@@ -59,14 +59,30 @@ func (s *Store) UpsertAgentWakeup(ctx context.Context, wakeup AgentWakeup) (Agen
 		return AgentWakeup{}, fmt.Errorf("primitives store database is not initialized")
 	}
 	wakeup = normalizeAgentWakeup(wakeup)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return AgentWakeup{}, fmt.Errorf("begin agent wakeup transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := upsertAgentWakeupTx(ctx, tx, wakeup); err != nil {
+		return AgentWakeup{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return AgentWakeup{}, fmt.Errorf("commit agent wakeup transaction: %w", err)
+	}
+	return s.GetAgentWakeup(ctx, wakeup.WakeupID)
+}
+
+func upsertAgentWakeupTx(ctx context.Context, tx *sql.Tx, wakeup AgentWakeup) error {
+	wakeup = normalizeAgentWakeup(wakeup)
 	if wakeup.WakeupID == "" || wakeup.TargetActorID == "" {
-		return AgentWakeup{}, fmt.Errorf("invalid agent wakeup")
+		return fmt.Errorf("invalid agent wakeup")
 	}
 	refsJSON, err := json.Marshal(wakeup.Refs)
 	if err != nil {
-		return AgentWakeup{}, fmt.Errorf("encode wake refs: %w", err)
+		return fmt.Errorf("encode wake refs: %w", err)
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO agent_wakeups (
+	_, err = tx.ExecContext(ctx, `INSERT INTO agent_wakeups (
 			wakeup_id, status, notification_status, target_handle, target_actor_id,
 			workspace_id, workspace_name, thread_id, thread_title, trigger_event_id,
 			trigger_created_at, trigger_text, refs_json,
@@ -81,9 +97,9 @@ func (s *Store) UpsertAgentWakeup(ctx context.Context, wakeup AgentWakeup) (Agen
 		nullEmpty(wakeup.FailedAt), nullEmpty(wakeup.ReadAt), nullEmpty(wakeup.DismissedAt), wakeup.UpdatedAt,
 	)
 	if err != nil {
-		return AgentWakeup{}, fmt.Errorf("insert agent wakeup: %w", err)
+		return fmt.Errorf("insert agent wakeup: %w", err)
 	}
-	return s.GetAgentWakeup(ctx, wakeup.WakeupID)
+	return nil
 }
 
 func (s *Store) GetAgentWakeup(ctx context.Context, wakeupID string) (AgentWakeup, error) {

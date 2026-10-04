@@ -85,7 +85,7 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		writeError(w, http.StatusBadRequest, "invalid_request", "event.type is required")
 		return
 	}
-	if isGenericAppendProtectedEventType(typeValue) {
+	if isGenericAppendProtectedEventType(typeValue) && typeValue != humanAttentionWithdrawnEventType {
 		writeError(w, http.StatusForbidden, "protected_event_type", typeValue+" must be created through its dedicated handler")
 		return
 	}
@@ -128,8 +128,58 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 
-	stored, err := opts.primitiveStore.AppendEvent(r.Context(), actorID, req.Event)
+	var stored map[string]any
+	if typeValue == humanAttentionWithdrawnEventType {
+		principal, ok := requireAuthenticatedPrincipal(w, r, opts)
+		if !ok {
+			return
+		}
+		if !isAgentPrincipal(principal) {
+			writeError(w, http.StatusForbidden, "agent_required", "only the requesting agent may withdraw an ask")
+			return
+		}
+		payload, _ := req.Event["payload"].(map[string]any)
+		reason := strings.TrimSpace(anyString(payload["reason"]))
+		if reason == "" || len(reason) > 500 {
+			writeError(w, http.StatusBadRequest, "invalid_request", "event.payload.reason must contain 1 to 500 characters")
+			return
+		}
+		requestEventID := strings.TrimSpace(anyString(payload["request_event_id"]))
+		if requestEventID == "" {
+			requestEventRef := strings.TrimSpace(anyString(payload["request_event_ref"]))
+			if strings.HasPrefix(requestEventRef, "event:") {
+				requestEventID = strings.TrimPrefix(requestEventRef, "event:")
+			}
+		}
+		requestEventRef := strings.TrimSpace(anyString(payload["request_event_ref"]))
+		if requestEventID == "" || requestEventRef != "event:"+requestEventID {
+			writeError(w, http.StatusBadRequest, "invalid_request", "request_event_id and request_event_ref must identify the same ask event")
+			return
+		}
+		withdrawalStore, ok := opts.primitiveStore.(interface {
+			AppendHumanAttentionWithdrawal(context.Context, string, string, map[string]any) (map[string]any, error)
+		})
+		if !ok {
+			writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "human attention withdrawal store is not configured")
+			return
+		}
+		stored, err = withdrawalStore.AppendHumanAttentionWithdrawal(r.Context(), actorID, requestEventID, req.Event)
+	} else {
+		stored, err = opts.primitiveStore.AppendEvent(r.Context(), actorID, req.Event)
+	}
 	if err != nil {
+		if errors.Is(err, primitives.ErrHumanAttentionAlreadyResponded) {
+			writeError(w, http.StatusConflict, "conflict", "human attention request is already resolved")
+			return
+		}
+		if errors.Is(err, primitives.ErrForbidden) {
+			writeError(w, http.StatusForbidden, "forbidden", "only the requesting agent may withdraw this ask")
+			return
+		}
+		if errors.Is(err, primitives.ErrNotFound) && typeValue == humanAttentionWithdrawnEventType {
+			writeError(w, http.StatusNotFound, "not_found", "human attention request not found")
+			return
+		}
 		if errors.Is(err, primitives.ErrConflict) && strings.TrimSpace(req.RequestKey) != "" {
 			eventID := firstNonEmptyString(req.Event["id"])
 			existing, loadErr := opts.primitiveStore.GetEvent(r.Context(), eventID)
@@ -163,7 +213,7 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			}
 		}
 	}
-	if strings.TrimSpace(anyString(stored["type"])) == "human_attention_requested" && opts.projectionMaintainer != nil {
+	if (strings.TrimSpace(anyString(stored["type"])) == humanAttentionRequestedEventType || strings.TrimSpace(anyString(stored["type"])) == humanAttentionWithdrawnEventType) && opts.projectionMaintainer != nil {
 		if err := opts.projectionMaintainer.RefreshThread(r.Context(), threadID, time.Now().UTC()); err != nil {
 			log.Printf("best-effort human inbox projection refresh failed (thread=%s): %v", threadID, err)
 		}
@@ -182,7 +232,7 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 
 func isGenericAppendProtectedEventType(eventType string) bool {
 	switch strings.TrimSpace(eventType) {
-	case humanAttentionRespondedEventType:
+	case humanAttentionRespondedEventType, humanAttentionWithdrawnEventType:
 		return true
 	default:
 		return false

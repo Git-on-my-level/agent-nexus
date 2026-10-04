@@ -259,8 +259,11 @@ var eventsSubcommandSpec = subcommandSpec{
 
 var inboxSubcommandSpec = subcommandSpec{
 	command: "inbox",
-	valid:   []string{"list", "get", "respond", "stream", "tail"},
+	valid:   []string{"list", "get", "respond", "read", "stream", "tail"},
 	examples: []string{
+		"anx inbox list --status answered",
+		"anx inbox list --unread",
+		"anx inbox read event:<ask-id>",
 		"anx inbox get --id <id-or-alias>",
 		"anx inbox respond --inbox-item-id <id-or-alias> --response-text <text>",
 	},

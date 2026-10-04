@@ -5,7 +5,7 @@ description: Keep substantive Agent Nexus work visible with explicit task refs, 
 
 # ANX participant
 
-Skill contract: anx.participant.v5. Installation does not prove that a session loaded this version.
+Skill contract: anx.participant.v7. Installation does not prove that a session loaded this version.
 
 Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence.
 
@@ -24,8 +24,9 @@ Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence
 1. Run `anx orient`, then `anx work context card:<slug>` for the explicit task. Keep stable principal, provider/host-scoped conversation, and run attempt separate. Use `anx sessions register --from-file session.json` and `anx work participants register card:<slug> --from-file participation.json` when doing substantive work; inspect exact fields with `anx help`.
 2. Preserve sequence and identical payload on retries. Increment only for a new observation. Sessions can participate in several tasks. Always report against the explicit task ref; participation does not update legacy current-card selection.
 3. Post meaningful progress with `anx cards message card:<slug> --body "What changed, evidence, uncertainty, and next step"`. Report facts with provenance, distinguish claims from verification, and avoid unchanged updates or raw chat copies.
-4. Report blockers on that same task. If an answer gates work, use `anx ask "Question" --subject-ref card:<slug> --recommend "Preferred answer"`, then `anx await <ask-id>`. Exit 8 is timeout; 9 is rejected. Preserve human approval gates.
-5. Verify acceptance criteria before reporting completion. Only for an authorized Nexus-native task, `anx work start card:<slug>` assigns and moves work, and `anx work done card:<slug> --evidence <url|event:ref|artifact:ref>` completes it. Source-owned completion needs its authorized source workflow. A finished run or closed session never completes a task.
+4. Report blockers on that same task. If one answer gates work, use `anx ask "Question" --subject-ref card:<slug> --recommend "Preferred answer"`, then `anx await <ask-id>`. To wait for a debounced answer batch, use `anx await --answers`; inspect replies with `anx inbox list --status answered` or `anx orient`. Withdraw a superseded open ask with `anx ask withdraw <event:ask-id> --reason "<short reason>"`.
+5. Hermes, Claude Code, and Codex harnesses consume the same durable workspace-local agent notification. On wake, read `anx inbox list --unread` or `anx orient`, then mark each processed answer with `anx inbox read event:<ask-id>`. Answer read state is per response and works before wake delivery; use `anx notifications read --wakeup-id <id>` to mark the wake notification separately. Exit 8 is timeout; exit 9 is rejected. Preserve human approval gates.
+6. Verify acceptance criteria before reporting completion. Only for an authorized Nexus-native task, `anx work start card:<slug>` assigns and moves work, and `anx work done card:<slug> --evidence <url|event:ref|artifact:ref>` completes it. Source-owned completion needs its authorized source workflow. A finished run or closed session never completes a task.
 
 ## Keep the workspace executive-readable
 

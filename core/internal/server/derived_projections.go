@@ -146,7 +146,9 @@ func deriveThreadInboxItems(opts handlerOptions, events []map[string]any, workIt
 			if !ok {
 				continue
 			}
-			if _, decided := decidedIDs[item.ID]; decided {
+			_, decidedByID := decidedIDs[item.ID]
+			_, withdrawn := decidedIDs["event:"+strings.TrimSpace(anyString(event["id"]))]
+			if decidedByID || withdrawn {
 				continue
 			}
 			items = append(items, item)

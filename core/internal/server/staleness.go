@@ -69,7 +69,7 @@ func isMeaningfulThreadActivityEvent(event map[string]any) bool {
 		"document_trashed",
 		"document_restored":
 		return true
-	case "human_attention_requested", "human_attention_responded", "exception_raised":
+	case "human_attention_requested", "human_attention_responded", "human_attention_withdrawn", "exception_raised":
 		return false
 	default:
 		return false

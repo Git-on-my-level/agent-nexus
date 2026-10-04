@@ -74,6 +74,31 @@ func TestDeriveHumanAttentionInboxItemContractFields(t *testing.T) {
 	}
 }
 
+func TestWithdrawnAskDisappearsFromOpenInboxWithoutBecomingCompleted(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC).Format(time.RFC3339Nano)
+	ask := map[string]any{
+		"id": "ask-1", "type": humanAttentionRequestedEventType, "thread_id": "thread-1", "ts": at,
+		"refs": []any{"thread:thread-1"},
+		"payload": map[string]any{
+			"kind": "ask", "title": "Should I continue?", "subject_ref": "thread:thread-1",
+			"requester_actor_id": "agent-one", "response_proposals": []any{"Continue"},
+		},
+	}
+	withdrawal := map[string]any{
+		"id": "withdrawal-1", "type": humanAttentionWithdrawnEventType, "thread_id": "thread-1", "ts": at,
+		"payload": map[string]any{"request_event_id": "ask-1", "request_event_ref": "event:ask-1", "reason": "superseded"},
+	}
+	items, err := deriveThreadInboxItems(handlerOptions{}, []map[string]any{ask, withdrawal}, nil, time.Time{}, time.Now())
+	if err != nil || len(items) != 0 {
+		t.Fatalf("withdrawn ask remained in the open inbox: %#v err=%v", items, err)
+	}
+	if withdrawal["type"] == humanAttentionRespondedEventType {
+		t.Fatal("withdrawal must remain a distinct event from a human answer")
+	}
+}
+
 func TestPayloadFromDerivedInboxItemUsesColumnKind(t *testing.T) {
 	t.Parallel()
 

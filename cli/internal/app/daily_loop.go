@@ -130,40 +130,14 @@ func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved)
 			}
 		}
 	}
-	requests, err := a.invokeRawJSON(ctx, cfg, "orient asks", "GET", "/events?type=human_attention_requested&limit=100", nil)
+	allOwnAsks, err := a.loadOwnInboxAsksForActor(ctx, cfg, anyString(agent["actor_id"]))
 	if err != nil {
 		return nil, err
 	}
-	responses, err := a.invokeRawJSON(ctx, cfg, "orient answers", "GET", "/events?type=human_attention_responded&limit=100", nil)
-	if err != nil {
-		return nil, err
-	}
-	ownRequests := []any{}
-	answerByRequest := map[string]any{}
-	for _, raw := range asSlice(commandResultBody(responses)["events"]) {
-		event := asMap(raw)
-		payload := asMap(event["payload"])
-		if anyString(payload["requester_actor_id"]) != anyString(agent["actor_id"]) {
-			continue
-		}
-		ref := responseAskID(payload)
-		if ref != "" {
-			answerByRequest[ref] = map[string]any{"text": payload["response_text"], "outcome": payload["outcome"], "responder": payload["responding_actor_id"], "at": event["ts"], "response_event_id": event["id"]}
-		}
-	}
-	askMatched := 0
-	for _, raw := range asSlice(commandResultBody(requests)["events"]) {
-		event := asMap(raw)
-		payload := asMap(event["payload"])
-		if anyString(payload["requester_actor_id"]) != anyString(agent["actor_id"]) {
-			continue
-		}
-		askMatched++
-		if len(ownRequests) >= orientReturnLimit {
-			continue
-		}
-		ref := "event:" + anyString(event["id"])
-		ownRequests = append(ownRequests, map[string]any{"ask_id": ref, "title": payload["title"], "subject_ref": payload["subject_ref"], "answer": answerByRequest[ref]})
+	askMatched := len(allOwnAsks)
+	ownRequests := make([]any, 0, min(askMatched, orientReturnLimit))
+	for i := 0; i < len(allOwnAsks) && i < orientReturnLimit; i++ {
+		ownRequests = append(ownRequests, allOwnAsks[i])
 	}
 	notifications, err := a.invokeRawJSON(ctx, cfg, "orient notifications", "GET", "/agent-notifications?status=unread", nil)
 	if err != nil {
@@ -174,17 +148,6 @@ func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved)
 	returnedNotifications := allNotifications
 	if len(returnedNotifications) > orientReturnLimit {
 		returnedNotifications = returnedNotifications[:orientReturnLimit]
-	}
-	unreadEvents := map[string]bool{}
-	for _, raw := range allNotifications {
-		item := asMap(raw)
-		unreadEvents[anyString(item["trigger_event_id"])] = true
-	}
-	for _, raw := range ownRequests {
-		ask := asMap(raw)
-		answer := asMap(ask["answer"])
-		id := anyString(answer["response_event_id"])
-		ask["answer_unread"] = id != "" && unreadEvents[id]
 	}
 	sort.SliceStable(ownRequests, func(i, j int) bool {
 		return asMap(ownRequests[i])["answer_unread"] == true && asMap(ownRequests[j])["answer_unread"] != true
@@ -229,7 +192,7 @@ func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved)
 		"me":               map[string]any{"agent": agent["id"], "handle": agent["handle"], "host": agent["host_slug"], "current_card_ref": agent["current_card_ref"], "identity_resolved_by": resolution},
 		"my_work_by_phase": workByPhase, "my_work_matched": matched, "my_work_returned": min(matched, orientReturnLimit),
 		"work_page_limit": orientPageLimit, "work_has_more": anyString(workBody["next_cursor"]) != "", "work_next_cursor": workBody["next_cursor"],
-		"my_asks_and_answers": ownRequests, "my_asks_matched": askMatched, "my_asks_returned": len(ownRequests), "ask_page_limit": 100,
+		"my_asks_and_answers": ownRequests, "my_asks_matched": askMatched, "my_asks_returned": len(ownRequests), "ask_page_limit": 200,
 		"open_asks": returnedOpenAsks, "open_asks_matched": len(allOpenAsks), "open_asks_returned": len(returnedOpenAsks),
 		"mentions_notifications": map[string]any{"items": returnedNotifications, "matched": len(allNotifications), "returned": len(returnedNotifications)},
 		"stale_items":            stale, "stale_hours": hours, "next": next,
@@ -407,12 +370,28 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 	leading, rest := splitLeadingPositionals(args)
 	fs := newSilentFlagSet("await")
 	var until, timeout trackedString
+	var answers trackedBool
 	fs.Var(&until, "until", "answered or state=<phase>")
 	fs.Var(&timeout, "timeout", "Maximum wait duration, default 30m")
+	fs.Var(&answers, "answers", "Wait for a debounced batch of answers to my asks")
 	if err := fs.Parse(rest); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	refs := append(leading, fs.Args()...)
+	if answers.value {
+		if len(refs) != 0 || until.set {
+			return nil, errnorm.Usage("invalid_args", "usage: anx await --answers [--timeout <dur>]")
+		}
+		wait := 30 * time.Minute
+		if timeout.set {
+			var err error
+			wait, err = time.ParseDuration(timeout.value)
+			if err != nil || wait <= 0 {
+				return nil, errnorm.Usage("invalid_request", "--timeout must be a positive duration")
+			}
+		}
+		return a.runAwaitAnswers(ctx, cfg, wait)
+	}
 	if len(refs) != 1 {
 		return nil, errnorm.Usage("invalid_args", "usage: anx await <ask-id|card-ref> [--until answered|state=<phase>] [--timeout <dur>]")
 	}
@@ -569,6 +548,71 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 		}
 	}
 	return nil, errnorm.WithDetails(errnorm.New(errnorm.KindNetwork, "timeout", "await timed out"), map[string]any{"target": target, "timeout": wait.String()})
+}
+
+func (a *App) runAwaitAnswers(ctx context.Context, cfg config.Resolved, timeout time.Duration) (*commandResult, error) {
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	readBatch := func() (*commandResult, bool, error) {
+		notifications, err := a.invokeRawJSON(waitCtx, cfg, "await answer notifications", "GET", "/agent-notifications?status=unread", nil)
+		if err != nil {
+			return nil, false, err
+		}
+		responseIDs := map[string]bool{}
+		for _, raw := range asSlice(commandResultBody(notifications)["items"]) {
+			item := asMap(raw)
+			triggerID := strings.TrimSpace(anyString(item["trigger_event_id"]))
+			if triggerID != "" {
+				responseIDs[triggerID] = true
+			}
+			for _, ref := range stringList(item["related_refs"]) {
+				if strings.HasPrefix(ref, "event:") {
+					responseIDs[strings.TrimPrefix(ref, "event:")] = true
+				}
+			}
+		}
+		if len(responseIDs) == 0 {
+			return nil, false, nil
+		}
+		result, err := a.runAgentInboxList(waitCtx, []string{"--status", "answered", "--unread"}, cfg)
+		if err != nil {
+			return nil, false, err
+		}
+		data := asMap(result.Data)
+		items := asSlice(data["items"])
+		batch := make([]any, 0, len(items))
+		for _, raw := range items {
+			item := asMap(raw)
+			answer := asMap(item["answer"])
+			answerID := strings.TrimSpace(anyString(answer["response_event_id"]))
+			if answerID != "" && responseIDs[answerID] {
+				batch = append(batch, item)
+			}
+		}
+		if len(batch) == 0 {
+			return nil, false, nil
+		}
+		return &commandResult{Data: map[string]any{"answers": batch, "count": len(batch)}}, true, nil
+	}
+	if result, ready, err := readBatch(); err != nil || ready {
+		return result, err
+	}
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-waitCtx.Done():
+			return nil, errnorm.WithDetails(errnorm.New(errnorm.KindNetwork, "timeout", "await timed out waiting for answer batch"), map[string]any{"target": "answers", "timeout": timeout.String()})
+		case <-ticker.C:
+			result, ready, err := readBatch()
+			if err != nil {
+				return nil, err
+			}
+			if ready {
+				return result, nil
+			}
+		}
+	}
 }
 
 func awaitResponseResult(target string, event map[string]any) (map[string]any, error) {

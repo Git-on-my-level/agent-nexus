@@ -46,6 +46,7 @@ type agentNotificationItem struct {
 	BridgeInstanceID string
 	DeliveryStatus   string
 	FailureReason    string
+	RelatedRefs      []string
 }
 
 func handleListAgentNotifications(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
@@ -469,6 +470,7 @@ func agentNotificationFromWakeup(wakeup primitives.AgentWakeup) *agentNotificati
 		BridgeInstanceID: wakeup.BridgeInstanceID,
 		DeliveryStatus:   wakeup.Status,
 		FailureReason:    wakeup.FailureReason,
+		RelatedRefs:      append([]string(nil), wakeup.Refs...),
 	}
 }
 
@@ -484,6 +486,7 @@ func (n *agentNotificationItem) toMap() map[string]any {
 		"thread_id":          n.ThreadID,
 		"thread_title":       n.ThreadTitle,
 		"trigger_event_id":   n.TriggerEventID,
+		"related_refs":       n.RelatedRefs,
 		"trigger_created_at": n.TriggerCreatedAt,
 		"trigger_text":       n.TriggerText,
 		"created_at":         n.CreatedAt,

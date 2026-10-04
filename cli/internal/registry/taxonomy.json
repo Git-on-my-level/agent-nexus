@@ -88,6 +88,7 @@
         "exception_raised",
         "human_attention_requested",
         "human_attention_responded",
+        "human_attention_withdrawn",
         "message_posted",
         "receipt_added",
         "review_completed",
@@ -160,7 +161,8 @@
   "event_groups": {
     "attention": [
       "human_attention_requested",
-      "human_attention_responded"
+      "human_attention_responded",
+      "human_attention_withdrawn"
     ],
     "boards": [
       "board_created",
@@ -252,6 +254,9 @@
       "attention"
     ],
     "human_attention_responded": [
+      "attention"
+    ],
+    "human_attention_withdrawn": [
       "attention"
     ],
     "message_posted": [

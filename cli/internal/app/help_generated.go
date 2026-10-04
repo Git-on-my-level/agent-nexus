@@ -41,7 +41,7 @@ var runtimeGeneratedTopics = []runtimeHelpTopic{
 	{Path: "notifications", Description: "Inspect and clear durable wake notifications for the active agent"},
 	{Path: "threads", Description: "Read-only backing-thread inspection (tooling and diagnostics)"},
 	{Path: "events", Description: "Manage events and event streams"},
-	{Path: "inbox", Description: "Operator diagnostics for human attention inbox items"},
+	{Path: "inbox", Description: "Read your asks and process human attention inbox items"},
 	{Path: "artifacts", Description: "Manage artifact resources and content"},
 	{Path: "actors", Description: "Diagnostic actor inventory and fixture helpers"},
 	{Path: "ref-edges", Description: "Diagnostic typed-ref edge inspection"},
@@ -52,6 +52,29 @@ var runtimeGeneratedTopics = []runtimeHelpTopic{
 var runtimeGeneratedPacketResources = []string{}
 
 var localHelperTopics = []localHelperTopic{
+	{
+		Path:        "inbox list",
+		Summary:     "List asks addressed to the active agent, including answer and per-answer read state.",
+		QuickStart:  "Use `--unread` to focus on unprocessed answers; it implies `--status answered` unless status is explicit.",
+		Composition: "Reads the authenticated agent's requester-scoped, paginated ask projection. Answer read state is per response and independent of wake notifications. Use `anx debug inbox list` for operator inbox diagnostics.",
+		Examples: []string{
+			"anx inbox list",
+			"anx inbox list --status answered",
+			"anx inbox list --unread",
+		},
+		Flags: []localHelperFlag{
+			{Name: "--status <open|answered|all>", Description: "Filter your asks; default is open."},
+			{Name: "--unread", Description: "Show answers not individually marked read; implies answered unless --status is explicit."},
+		},
+	},
+	{
+		Path:        "inbox read",
+		Summary:     "Mark one answer to your ask as read, including before its wake is delivered.",
+		QuickStart:  "Pass the `event:<ask-id>` returned by `anx ask`.",
+		Composition: "Persists read state for that answer only. Wake notification read state remains separate and is managed with `anx notifications read`.",
+		Examples:    []string{"anx inbox read event:<ask-id>"},
+		Flags:       []localHelperFlag{},
+	},
 	{
 		Path:        "lifecycle verbs",
 		Summary:     "Uniform lifecycle surface for archive, unarchive, trash, restore, and purge across artifacts, boards, docs, events, cards, and topics.",
@@ -968,6 +991,7 @@ Daily loop:
   work done [card] --evidence <url|ref>  Resolve with evidence (remote_coordination_write)
   ask|review|escalate <title> --recommend <text>  Request operator attention (remote_coordination_write)
   await <ask-id|card-ref>   Wait on event stream for answer or state (read_only)
+  inbox list                List my open asks; add --status answered for replies (read_only)
 
 Setup: anx host discover; anx host enroll; anx doctor; anx install skill --path ./SKILL.md
 Help: anx help onboarding; anx help <command>; anx help --all
@@ -1001,7 +1025,8 @@ Core Commands:
   draft         Stage write requests locally and commit them later
   ask|review|escalate  Request operator attention
   orient        Read the personal daily snapshot
-  await         Wait for an answer or card state
+  await         Wait for an answer, answer batch, or card state
+  inbox         Read my asks and mark answer batches read
   provenance    Walk refs/provenance links as a deterministic graph
   secret        Manage workspace secrets for agent credential injection
   work          Query commitments, context, freshness, refresh and capabilities
@@ -1068,7 +1093,7 @@ func helpTopicText(topic string) (string, bool) {
 }
 
 func qualifyDiagnosticExamples(text string) string {
-	for _, group := range []string{"threads", "events", "ref-edges", "derived", "actors", "inbox", "meta"} {
+	for _, group := range []string{"threads", "events", "ref-edges", "derived", "actors", "meta"} {
 		text = strings.ReplaceAll(text, "anx "+group+" ", "anx debug "+group+" ")
 		text = strings.ReplaceAll(text, "anx "+group+"`", "anx debug "+group+"`")
 		text = strings.ReplaceAll(text, "anx --json "+group+" ", "anx --json debug "+group+" ")
@@ -1108,7 +1133,7 @@ func helpTopicTextRaw(topic string) (string, bool) {
 		return "anx orient [--stale-hours N]: bounded personal snapshot (read_only)\n", true
 	}
 	if topic == "await" {
-		return "anx await <ask-id|card-ref> [--until answered|state=<phase>] [--timeout <dur>]: wait on events (read_only)\n", true
+		return "anx await <ask-id|card-ref> [--until answered|state=<phase>] [--timeout <dur>]: wait on events (read_only)\n  anx await --answers [--timeout <dur>]: wait for a debounced batch of answers to your asks (read_only)\n", true
 	}
 	if topic == "ask" || topic == "review" || topic == "escalate" {
 		return humanUsageText() + "\n", true
@@ -1775,7 +1800,7 @@ func fieldHelpText(commandID string, name string) string {
 	case strings.HasPrefix(name, "if_"):
 		return "Optimistic concurrency token. Read the latest value from the corresponding read command before mutating."
 	case commandID == "inbox.get" && name == "inbox_item_id":
-		return "Canonical inbox id or alias from `anx inbox list`."
+		return "Canonical inbox item id/alias from `anx debug inbox list`, or an ask event ref returned by `anx ask`."
 	default:
 		return ""
 	}
@@ -1838,9 +1863,10 @@ func formatCommandSpecificHelpBlock(cmd registry.Command) string {
 		return strings.TrimSpace(`Common authoring types:
   Communication: direct communication or important non-structured information
   - ` + "`message_posted`" + `
-  Human attention: request and close operator attention
+  Human attention: request, answer, or withdraw operator attention
   - ` + "`human_attention_requested`" + `
   - ` + "`human_attention_responded`" + `
+  - ` + "`human_attention_withdrawn`" + `
   Topics and documents: durable subject and document lifecycle signals
   - ` + "`topic_created`" + `, ` + "`topic_updated`" + `, ` + "`topic_archived`" + `, ` + "`topic_trashed`" + `
   - ` + "`document_created`" + `, ` + "`document_revised`" + `, ` + "`document_trashed`" + `
@@ -1852,6 +1878,7 @@ func formatCommandSpecificHelpBlock(cmd registry.Command) string {
 
 Usually emitted by higher-level commands:
   - ` + "`human_attention_requested`" + `: prefer ` + "`anx ask|review|escalate`" + `
+  - ` + "`human_attention_withdrawn`" + `: prefer ` + "`anx ask withdraw`" + `
 
 Local CLI notes:
   - Prefer higher-level commands for topic, board, card, doc, and human-attention lifecycle writes.
@@ -1866,9 +1893,12 @@ Local CLI notes:
 Note: by default, archived and trashed events are excluded from the timeline output.`)
 	case "inbox.list":
 		return strings.TrimSpace(`View scoping:
-  - ` + "`inbox list`" + ` is read from the active CLI identity's perspective.
-  - The response includes ` + "`viewing_as`" + ` so you can confirm the resolved agent, username, and actor_id.
-  - Switch perspective with ` + "`--as <name>`" + ` or ` + "`ANX_AS`" + ` before reading or acting.
+  - ` + "`anx inbox list`" + ` lists your own open asks. Use ` + "`--status answered`" + ` to read replies, or ` + "`--status all`" + ` for both.
+  - Add ` + "`--unread`" + ` to show answers not yet individually marked read; it implies answered unless ` + "`--status`" + ` is explicit.
+  - ` + "`anx inbox read event:<ask-id>`" + ` marks only that answer read, even during the quiet window.
+  - ` + "`anx notifications read --wakeup-id <id>`" + ` marks a wake notification read separately.
+  - Human attention triage remains available as ` + "`anx debug inbox list`" + `; use ` + "`anx inbox respond`" + ` to answer an inbox item.
+  - Select an agent with ` + "`--as <name>`" + ` or ` + "`ANX_AS`" + `.
 
 Inbox kinds:
   - ` + "`ask`" + `: A requesting agent needs an answer, judgment, or missing context.
@@ -1876,7 +1906,7 @@ Inbox kinds:
   - ` + "`escalate`" + `: A requesting agent surfaced a risk or abnormal condition.`)
 	case "inbox.respond":
 		return strings.TrimSpace(`CLI flags (` + "`inbox respond`" + `):
-  --inbox-item-id <id>    Inbox item id or list alias (see ` + "`inbox list`" + `).
+  --inbox-item-id <id>    Inbox item id or list alias (see ` + "`debug inbox list`" + `).
   --response-text <text>  Freeform response text.
   --outcome <value>       answered, approved, rejected, or acknowledged (required).
   --notify-mode <mode>    original, target, or none.
@@ -2044,7 +2074,7 @@ func mapRuntimePathToRegistryPath(path string) string {
 	if len(parts) == 0 {
 		return ""
 	}
-	if len(parts) > 1 && parts[0] == "debug" && isDiagnosticGroup(parts[1]) {
+	if len(parts) > 1 && parts[0] == "debug" && isDebugGroup(parts[1]) {
 		parts = parts[1:]
 	}
 	path = strings.Join(parts, " ")

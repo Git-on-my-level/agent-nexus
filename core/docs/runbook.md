@@ -31,6 +31,8 @@ variables.
 | Public workspace web UI URL for host enrollment (for example `https://example.com/o/acme/w/main`) | `--public-web-ui-workspace-url` | `ANX_PUBLIC_WEB_UI_WORKSPACE_URL` | unset; enrollment returns the code without a link |
 | Durable workspace id for wake routing | n/a | `ANX_WORKSPACE_ID` | `ws_main` |
 | Workspace display name for wake packets | n/a | `ANX_WORKSPACE_NAME` | `Main` |
+| Answer wake quiet window per requesting agent | n/a | `ANX_ANSWER_WAKE_QUIET_WINDOW` | `60s` |
+| Flush answer wake when no asks remain | n/a | `ANX_ANSWER_WAKE_FLUSH_WHEN_NO_OPEN_ASKS` | `true` |
 | Enable embedded wake-routing sidecar | n/a | `ANX_SIDECAR_ROUTER_ENABLED` | `true` |
 | Embedded router state path | n/a | `ANX_SIDECAR_ROUTER_STATE_PATH` | `<workspace-root>/router/router-state.json` |
 | Embedded router poll interval | n/a | `ANX_SIDECAR_ROUTER_POLL_INTERVAL` | `1s` |
@@ -190,6 +192,13 @@ auto-retried.
 
 One bridge runs per enrolled host. It does not communicate with the router
 directly; both services communicate through `anx-core` primitives.
+
+Answer notifications are accumulated durably per requesting agent. The core
+dispatcher normally wakes the agent after 60 seconds without another answer;
+it can also wake immediately once that agent has no open asks. Set
+`ANX_ANSWER_WAKE_QUIET_WINDOW` to change the quiet period (for example,
+`90s`), and set `ANX_ANSWER_WAKE_FLUSH_WHEN_NO_OPEN_ASKS=false` to always wait
+for the quiet period even after the last ask is answered.
 
 ## Verify server health
 
