@@ -14,6 +14,61 @@ import (
 	"agent-nexus-visualreport"
 )
 
+func TestDashboardEndpointsPreserveHeadRevisionIdentity(t *testing.T) {
+	h := newPrimitivesTestServer(t)
+	store := h.primitiveStore.(*primitives.Store)
+	ctx := context.Background()
+	report := `{"kind":"anx.visual-report","schema_version":1,"title":"Launch","summary":"Progress","generated_at":"2026-10-04T12:00:00Z","projects":[{"id":"launch","title":"Launch","summary":"Ship","outcome":"Delivery"}],"sources":[],"panels":[{"id":"progress","project_id":"launch","type":"live-initiatives","title":"Original labels","author":"Test","provenance":"reported","observed_at":null,"freshness":"unknown","source_ids":[],"data":{}}]}`
+	doc, _, err := store.CreateDocument(ctx, "executive", map[string]any{"title": "Launch", "handle": "launch-dashboard"}, report, "text", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, revision, err := store.GetDocument(ctx, anyString(doc["id"]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := func(title string) {
+		t.Helper()
+		for _, path := range []string{"/overview", "/workspace/dashboard/reports"} {
+			resp, err := http.Get(h.baseURL + path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var body map[string]any
+			err = json.NewDecoder(resp.Body).Decode(&body)
+			resp.Body.Close()
+			if err != nil || resp.StatusCode != 200 {
+				t.Fatalf("%s: status=%d body=%v error=%v", path, resp.StatusCode, body, err)
+			}
+			if path == "/overview" {
+				body = body["dashboard"].(map[string]any)
+			}
+			entry := body["reports"].([]any)[0].(map[string]any)
+			if entry["revision_ref"] != revision["ref"] || entry["revision_ref"] == "" {
+				t.Fatalf("%s lost selected head identity: %v; want %v", path, entry, revision["ref"])
+			}
+			panel := entry["report"].(map[string]any)["panels"].([]any)[0].(map[string]any)
+			if panel["title"] != title {
+				t.Fatalf("%s definition disagrees with selected revision: %v", path, panel)
+			}
+		}
+	}
+	check("Original labels")
+	previous := revision["ref"]
+	_, _, err = store.UpdateDocument(ctx, "executive", anyString(doc["id"]), nil, anyString(previous), strings.Replace(report, "Original labels", "Revised labels", 1), "text", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, revision, err = store.GetDocument(ctx, anyString(doc["id"]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if revision["ref"] == previous {
+		t.Fatal("fixture did not advance the revision")
+	}
+	check("Revised labels")
+}
+
 func TestOverviewArchivePinAndInitiativeProjection(t *testing.T) {
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"executive","display_name":"David","created_at":"2026-10-04T12:00:00Z","tags":["human"]}}`, 201).Body.Close()

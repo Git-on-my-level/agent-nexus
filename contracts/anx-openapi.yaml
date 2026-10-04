@@ -11034,13 +11034,14 @@ components:
         href: { type: string }
     OverviewReport:
       type: object
-      required: [id, ref, segment, title, updated_at, report]
+      required: [id, ref, segment, title, updated_at, revision_ref, report]
       properties:
         id: { type: string }
         ref: { type: string }
         segment: { type: string }
         title: { type: string }
         updated_at: { type: string, format: date-time }
+        revision_ref: { type: string, description: Selected head revision identity used to reject live data from a different report definition. }
         report: { type: object, additionalProperties: true, description: anx.visual-report v1 body; validated by the shared Go validator with renderer conformance tests. }
 
     HomeUnreadResponse:

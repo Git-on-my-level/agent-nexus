@@ -73,6 +73,25 @@
   });
 
   let request = 0;
+  let requestedReportLoad = $state("");
+  $effect(() => {
+    const wanted = $page.url.searchParams.get("dashboard") || "";
+    const key = `${request}:${wanted}`;
+    if (
+      wanted &&
+      model?.reports?.status === "ok" &&
+      model.reports.has_more &&
+      !reports.some(
+        (entry) => entry.id === wanted || entry.segment === wanted,
+      ) &&
+      requestedReportLoad !== key &&
+      !loadingMoreReports
+    ) {
+      requestedReportLoad = key;
+      void loadMoreReports();
+    }
+  });
+
   async function refresh() {
     const id = ++request;
     refreshing = true;

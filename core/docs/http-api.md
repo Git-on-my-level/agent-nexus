@@ -264,5 +264,9 @@ contains only the selected validated report and `has_more` when unread candidate
 remain. `GET /workspace/dashboard/reports` (`anx workspace dashboard list`) loads
 selector candidates on demand. Pin acceptance, selection and CLI publishing share
 `contracts/visualreport`; renderer conformance covers static and live panels.
+Both dashboard responses include each report's selected head `revision_ref`, so
+live data from a later revision cannot render under an earlier definition.
+The Overview resolves a `?dashboard=<id-or-handle>` bookmark on load, without
+requiring focus on the report selector.
 Initiatives expose `needs[]` and use the live report summary parser, ignoring
 fenced examples and counting empty Markdown checkbox lines.

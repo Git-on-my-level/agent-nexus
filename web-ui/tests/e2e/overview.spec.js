@@ -186,6 +186,7 @@ async function installOverview(page, { gate = null, failure = false } = {}) {
               ref: "document:older-dashboard",
               segment: "older-dashboard",
               title: "Earlier dashboard",
+              report: { ...report, title: "Earlier dashboard" },
             },
           ],
         },
@@ -306,6 +307,42 @@ test("dashboard choices load only when the selector opens", async ({
       .getByRole("combobox", { name: "Report", exact: true })
       .locator("option"),
   ).toHaveCount(2);
+  expect(state.selectorReads).toBe(1);
+});
+
+test("bookmarked dashboard loads without focusing the selector", async ({
+  page,
+}) => {
+  const state = await installOverview(page);
+  await page.goto(`${OVERVIEW}?dashboard=older-dashboard`);
+  await expect(
+    page.getByRole("heading", { name: "Earlier dashboard", exact: true }),
+  ).toBeVisible();
+  const selector = page.getByRole("combobox", { name: "Report", exact: true });
+  await expect(selector).toHaveValue("older-dashboard");
+  await expect(selector).not.toBeFocused();
+  await expect(
+    page.getByRole("link", { name: "Open document", exact: true }),
+  ).toHaveAttribute(
+    "href",
+    `${OVERVIEW.replace(/overview$/, "docs")}/older-dashboard`,
+  );
+  expect(state.selectorReads).toBe(1);
+});
+
+test("unknown bookmarked dashboard falls back without repeated selector reads", async ({
+  page,
+}) => {
+  const state = await installOverview(page);
+  await page.goto(`${OVERVIEW}?dashboard=missing-dashboard`);
+  await expect(
+    page
+      .getByRole("combobox", { name: "Report", exact: true })
+      .locator("option"),
+  ).toHaveCount(2);
+  await expect(
+    page.getByRole("heading", { name: "Omi dashboard", exact: true }),
+  ).toBeVisible();
   expect(state.selectorReads).toBe(1);
 });
 

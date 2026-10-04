@@ -115,7 +115,7 @@ func (s *Store) dashboard(ctx context.Context, all bool) (map[string]any, error)
 	// One metadata read, with the pin first; only read candidate blobs until the
 	// selected valid report is found. No per-document GetDocument queries.
 	rows, err := s.db.QueryContext(ctx, `SELECT d.id, COALESCE(NULLIF(d.handle,''),d.id), d.title, d.updated_at,
-        COALESCE(a.content_hash,''), COALESCE(d.archived_at,''), COALESCE(d.trashed_at,'')
+        COALESCE(a.content_hash,''), COALESCE(d.archived_at,''), COALESCE(d.trashed_at,''), d.head_revision_number
         FROM documents d LEFT JOIN document_revisions dr ON dr.revision_id=d.head_revision_id
         LEFT JOIN artifacts a ON a.id=dr.artifact_id
         WHERE (COALESCE(d.archived_at,'')='' AND COALESCE(d.trashed_at,'')='') OR d.id=?
@@ -123,11 +123,14 @@ func (s *Store) dashboard(ctx context.Context, all bool) (map[string]any, error)
 	if err != nil {
 		return nil, err
 	}
-	type head struct{ id, handle, title, updated, hash, archived, trashed string }
+	type head struct {
+		id, handle, title, updated, hash, archived, trashed string
+		revisionNumber                                      int
+	}
 	heads := []head{}
 	for rows.Next() {
 		var h head
-		if err = rows.Scan(&h.id, &h.handle, &h.title, &h.updated, &h.hash, &h.archived, &h.trashed); err != nil {
+		if err = rows.Scan(&h.id, &h.handle, &h.title, &h.updated, &h.hash, &h.archived, &h.trashed, &h.revisionNumber); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -160,7 +163,7 @@ func (s *Store) dashboard(ctx context.Context, all bool) (map[string]any, error)
 		if !validation.Valid {
 			continue
 		}
-		reports = append(reports, map[string]any{"id": h.id, "segment": h.handle, "title": h.title, "updated_at": h.updated, "report": validation.Report, "ref": "document:" + h.handle})
+		reports = append(reports, map[string]any{"id": h.id, "segment": h.handle, "title": h.title, "updated_at": h.updated, "revision_ref": "document_revision:" + revisionHandle(h.handle, h.revisionNumber), "report": validation.Report, "ref": "document:" + h.handle})
 		if !all {
 			result["has_more"] = i+1 < len(heads)
 			break
