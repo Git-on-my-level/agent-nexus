@@ -546,7 +546,9 @@ func (h *liveCoreHarness) enrollHost(t *testing.T, agent string) {
 	admin := h.postCore(t, "/auth/passkey/dev/register", "", map[string]any{"display_name": "CLI integration admin", "bootstrap_token": h.bootstrapToken})
 	h.adminToken = mustStringPath(t, admin, "tokens.access_token")
 	grant := h.postCore(t, "/auth/hosts/enrollment-tokens", h.adminToken, map[string]any{"label": "CLI integration host", "expires_at": time.Now().Add(20 * time.Minute).UTC().Format(time.RFC3339)})
-	h.runCLIExpectOK(t, agent, nil, "host", "enroll", "--name", "integration-host", "--token", mustStringPath(t, grant, "token"))
+	// URL-safe random tokens can start with "-"; bind the value so the usage
+	// preflight cannot mistake it for another flag.
+	h.runCLIExpectOK(t, agent, nil, "host", "enroll", "--name", "integration-host", "--token="+mustStringPath(t, grant, "token"))
 }
 
 func (h *liveCoreHarness) createHumanInviteToken(t *testing.T) string {
