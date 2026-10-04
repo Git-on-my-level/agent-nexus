@@ -405,6 +405,12 @@ func deriveErrorActions(command string, err *errnorm.Error) []output.NextAction 
 		return actions
 	case "workspace_unknown":
 		return []output.NextAction{action("List workspaces", "anx", "config", "workspaces")}
+	case "archived_report_document":
+		if details, ok := err.Details.(map[string]any); ok {
+			if ref := strings.TrimSpace(anyString(details["document_ref"])); ref != "" {
+				return []output.NextAction{action("Unarchive document", "anx", "docs", "unarchive", ref)}
+			}
+		}
 	case "identity_unresolved":
 		return []output.NextAction{action("Select agent", "anx", "--as", "codex", "auth", "whoami")}
 	case "host_not_enrolled":

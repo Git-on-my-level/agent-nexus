@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 
 	"agent-nexus-cli/internal/config"
@@ -300,6 +301,9 @@ func (a *App) runReportPublish(ctx context.Context, args []string, cfg config.Re
 		if len(matches) > 1 {
 			return nil, errnorm.WithDetails(errnorm.Usage("ambiguous_document", "the requested document ref matches more than one document in the selected topic"), map[string]any{"document": input.document})
 		}
+		if reportDocumentState(matches[0]) == "archived" {
+			return nil, archivedReportDocumentError(matches[0])
+		}
 		target, targetRead, err = a.readReportTarget(ctx, cfg, matches[0])
 		if err != nil {
 			return nil, err
@@ -339,7 +343,7 @@ func (a *App) runReportPublish(ctx context.Context, args []string, cfg config.Re
 		body := docsCreateBodyFromFlags(docTitle, "", input.topic, "", nil)
 		body["content_type"] = "text"
 		body["content"] = contentText
-		body["request_key"] = reportCreateRequestKey(topicID, docTitle)
+		body["request_key"] = reportCreateRequestKeyForPublish(topicID, docTitle, docs)
 		if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
 			return nil, err
 		}
@@ -488,6 +492,9 @@ func findAutomaticReportDocuments(docs []any, title string) []map[string]any {
 		if !ok {
 			continue
 		}
+		if reportDocumentState(doc) != "active" {
+			continue
+		}
 		if (strings.TrimSpace(anyString(doc["title"])) != "" && reportMatchKey(anyString(doc["title"])) == wanted) ||
 			(strings.TrimSpace(anyString(doc["slug"])) != "" && reportMatchKey(anyString(doc["slug"])) == wanted) {
 			matches = append(matches, doc)
@@ -504,12 +511,60 @@ func reportMatchKey(value string) string {
 }
 
 func reportCreateRequestKey(topicID, title string) string {
-	keyTitle := reportSlug(title)
-	if keyTitle == "" {
-		keyTitle = strings.ToLower(strings.TrimSpace(title))
+	return reportCreateRequestKeyForMaterial(strings.TrimSpace(topicID) + "\x00" + reportMatchKey(title))
+}
+
+func reportCreateRequestKeyForPublish(topicID, title string, docs []any) string {
+	archivedRefs := make([]string, 0)
+	wanted := reportMatchKey(title)
+	for _, raw := range docs {
+		doc, ok := raw.(map[string]any)
+		if !ok || reportDocumentState(doc) != "archived" {
+			continue
+		}
+		if !((strings.TrimSpace(anyString(doc["title"])) != "" && reportMatchKey(anyString(doc["title"])) == wanted) ||
+			(strings.TrimSpace(anyString(doc["slug"])) != "" && reportMatchKey(anyString(doc["slug"])) == wanted)) {
+			continue
+		}
+		if ref := reportDocumentRef(doc); ref != "" {
+			archivedRefs = append(archivedRefs, ref)
+		}
 	}
-	digest := sha256.Sum256([]byte(strings.TrimSpace(topicID) + "\x00" + keyTitle))
+	if len(archivedRefs) == 0 {
+		return reportCreateRequestKey(topicID, title)
+	}
+	sort.Strings(archivedRefs)
+	uniqueRefs := archivedRefs[:0]
+	for _, ref := range archivedRefs {
+		if len(uniqueRefs) == 0 || uniqueRefs[len(uniqueRefs)-1] != ref {
+			uniqueRefs = append(uniqueRefs, ref)
+		}
+	}
+	return reportCreateRequestKeyForMaterial(strings.TrimSpace(topicID) + "\x00" + reportMatchKey(title) + "\x00archived\x00" + strings.Join(uniqueRefs, "\x00"))
+}
+
+func reportCreateRequestKeyForMaterial(material string) string {
+	digest := sha256.Sum256([]byte(material))
 	return "visual-report-" + hex.EncodeToString(digest[:])
+}
+
+func reportDocumentState(doc map[string]any) string {
+	return strings.ToLower(strings.TrimSpace(anyString(doc["state"])))
+}
+
+func reportDocumentRef(doc map[string]any) string {
+	return firstNonEmpty(anyString(doc["ref"]), anyString(doc["handle"]), anyString(doc["id"]))
+}
+
+func archivedReportDocumentError(doc map[string]any) *errnorm.Error {
+	ref := reportDocumentRef(doc)
+	command := "anx docs unarchive " + ref
+	err := errnorm.WithDetails(errnorm.Usage(
+		"archived_report_document",
+		fmt.Sprintf("the selected document %s is archived; unarchive it explicitly first with `%s`, then rerun report publish", ref, command),
+	), map[string]any{"document_ref": ref})
+	err.Hint = fmt.Sprintf("Unarchive the document explicitly with `%s`, then rerun report publish.", command)
+	return err
 }
 
 func reportResponseRevisionID(body map[string]any) string {
