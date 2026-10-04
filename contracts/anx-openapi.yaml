@@ -9005,7 +9005,6 @@ components:
           type: object
           additionalProperties: true
           description: Stable client-side move marker used to resume cross-workspace copies.
-        plan: {}
         ref:
           type: string
         handle:

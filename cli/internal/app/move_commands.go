@@ -361,6 +361,53 @@ func moveRead(ctx context.Context, a *App, cfg config.Resolved, path, key string
 	return value, nil
 }
 
+func moveReadCardPlan(ctx context.Context, a *App, cfg config.Resolved, ref string) (map[string]any, error) {
+	return moveCall(ctx, a, cfg, http.MethodGet, "/cards/"+url.PathEscape(ref)+"/plan", nil)
+}
+
+// Cards expose a plan in several read projections, but only /cards/{ref}/plan
+// reads the canonical plan store. Hydrate the snapshot from that API and fence
+// it against the card read so a concurrent plan edit cannot be lost.
+func moveHydrateCardPlan(ctx context.Context, a *App, cfg config.Resolved, work map[string]any) error {
+	ref := moveFieldString(work, "ref")
+	if ref == "" {
+		return errnorm.Internal("move_response_invalid", "card read omitted its ref")
+	}
+	plan, err := moveReadCardPlan(ctx, a, cfg, ref)
+	if err != nil {
+		return err
+	}
+	cardUpdatedAt := moveFieldString(work, "updated_at")
+	planUpdatedAt := moveFieldString(plan, "if_updated_at")
+	if cardUpdatedAt != "" && planUpdatedAt != cardUpdatedAt {
+		return errnorm.New(errnorm.KindRemote, "source_changed", "source card or plan changed while the move snapshot was being read; retry the move")
+	}
+	work["plan"] = plan["plan"]
+	return nil
+}
+
+func moveWriteCardPlan(ctx context.Context, a *App, cfg config.Resolved, ref string, expected any) error {
+	if expected == nil {
+		return nil
+	}
+	path := "/cards/" + url.PathEscape(ref) + "/plan"
+	current, err := moveCall(ctx, a, cfg, http.MethodGet, path, nil)
+	if err != nil {
+		return err
+	}
+	if moveJSONEqual(expected, current["plan"]) {
+		return nil
+	}
+	updatedAt := moveFieldString(current, "if_updated_at")
+	if updatedAt == "" {
+		return errnorm.Internal("move_response_invalid", "canonical plan read omitted its concurrency token")
+	}
+	_, err = moveCall(ctx, a, cfg, http.MethodPut, path, map[string]any{
+		"plan": expected, "if_updated_at": updatedAt,
+	})
+	return err
+}
+
 func moveHasMarker(marker map[string]any, moveID string) bool {
 	return strings.TrimSpace(anyString(marker["move_id"])) == moveID
 }
@@ -584,6 +631,9 @@ func (a *App) moveCard(ctx context.Context, sourceCfg, destCfg config.Resolved, 
 	if err != nil {
 		return nil, err
 	}
+	if err := moveHydrateCardPlan(ctx, a, sourceCfg, source); err != nil {
+		return nil, err
+	}
 	sourceRef := firstNonEmpty(moveFieldString(source, "ref"), requestedRef)
 	boardRef := moveFieldString(source, "board_ref")
 	sourceURL := moveURL(sourceCfg, "card", sourceRef, boardRef)
@@ -662,7 +712,9 @@ func (a *App) moveCard(ctx context.Context, sourceCfg, destCfg config.Resolved, 
 		}
 	}
 
-	workInput, err := moveCardCreateInput(source, moveID, sourceRef, sourceURL, destCfg.BaseURL, targetRef, nil, destinationConnection)
+	refMapping := map[string]string{}
+	moveAddIdentity(refMapping, source, "card", targetRef)
+	workInput, err := moveCardCreateInput(source, moveID, sourceRef, sourceURL, destCfg.BaseURL, targetRef, refMapping, destinationConnection)
 	if err != nil {
 		return nil, err
 	}
@@ -730,11 +782,14 @@ func (a *App) moveCard(ctx context.Context, sourceCfg, destCfg config.Resolved, 
 	if err := moveValidateSnapshot(destMarker, sourceCfg.BaseURL, "card", sourceRef, source, moveHasMarker(sourceMarker, moveID)); err != nil {
 		return nil, err
 	}
+	if err := moveWriteCardPlan(ctx, a, destCfg, destinationRef, moveRewriteValue(source["plan"], refMapping)); err != nil {
+		return nil, err
+	}
 	verifyResource := &topicMoveResource{
 		kind: "card", sourceRef: sourceRef, sourceURL: sourceURL, destinationRef: destinationRef,
 		object: source, work: source, marker: journalMarker, destinationConnection: destinationConnection,
 	}
-	if err := a.verifyMovedResource(ctx, sourceCfg, destCfg, verifyResource, moveID, nil, "", ""); err != nil {
+	if err := a.verifyMovedResource(ctx, sourceCfg, destCfg, verifyResource, moveID, refMapping, "", ""); err != nil {
 		return nil, err
 	}
 	destMarker["destination_ref"] = destinationRef
@@ -745,6 +800,9 @@ func (a *App) moveCard(ctx context.Context, sourceCfg, destCfg config.Resolved, 
 	}
 	currentSource, err := moveRead(ctx, a, sourceCfg, "/work/"+url.PathEscape(sourceRef), "work")
 	if err != nil {
+		return nil, err
+	}
+	if err := moveHydrateCardPlan(ctx, a, sourceCfg, currentSource); err != nil {
 		return nil, err
 	}
 	if !moveHasMarker(asMap(currentSource["workspace_move"]), moveID) {
@@ -861,7 +919,6 @@ func moveCardCreateInput(source map[string]any, moveID, sourceRef, sourceURL, de
 		"due_at":             source["due_at"],
 		"risk":               source["risk"],
 		"source":             source["source"],
-		"plan":               moveRewriteValue(source["plan"], mapping),
 		"workspace_move":     marker,
 	}
 	phase := moveFieldString(source, "phase")
@@ -907,9 +964,7 @@ func moveCardCreateInput(source map[string]any, moveID, sourceRef, sourceURL, de
 			}
 		}
 	}
-	if len(related) > 0 {
-		input["related_refs"] = moveUnique(related)
-	}
+	input["related_refs"] = moveUnique(related)
 	if raw := asMap(source["source"]); len(raw) == 0 {
 		input["source"] = map[string]any{"authority": "nexus"}
 	} else if authority := moveFieldString(raw, "authority"); authority != "" && authority != "nexus" {
@@ -948,6 +1003,38 @@ func moveListRefs(workspace map[string]any, key, kind string) []string {
 		}
 	}
 	return refs
+}
+
+func moveResourceIdentitySet(object map[string]any, kind string) map[string]struct{} {
+	values := map[string]struct{}{}
+	for _, candidate := range []string{moveFieldString(object, "ref"), moveFieldString(object, "id"), moveFieldString(object, "handle")} {
+		if candidate == "" {
+			continue
+		}
+		values[candidate] = struct{}{}
+		if !strings.Contains(candidate, ":") {
+			values[kind+":"+candidate] = struct{}{}
+		}
+	}
+	return values
+}
+
+func moveRefInIdentitySet(ref string, values map[string]struct{}) bool {
+	ref = strings.TrimSpace(ref)
+	if _, ok := values[ref]; ok {
+		return true
+	}
+	_, suffix, ok := strings.Cut(ref, ":")
+	if !ok {
+		return false
+	}
+	for candidate := range values {
+		_, existingSuffix, existing := strings.Cut(candidate, ":")
+		if existing && existingSuffix == suffix {
+			return true
+		}
+	}
+	return false
 }
 
 func cloneMoveMap(source map[string]any) map[string]any {
@@ -989,12 +1076,108 @@ func moveVerifyFields(kind, ref string, expected, actual map[string]any, keys []
 		if !ok || want == nil {
 			continue
 		}
-		if !moveJSONEqual(want, actual[key]) {
+		got := actual[key]
+		if moveIsCollectionField(key) {
+			want = moveCanonicalCollection(want)
+			got = moveCanonicalCollection(got)
+		}
+		if !moveJSONEqual(want, got) {
 			return errnorm.New(errnorm.KindRemote, "destination_verification_failed", fmt.Sprintf("destination %s %s failed verification for %s", kind, ref, key))
 		}
 	}
 	return nil
 }
+
+func moveCanonicalDestinationRef(ctx context.Context, a *App, cfg config.Resolved, ref string) (string, error) {
+	kind, value, ok := strings.Cut(strings.TrimSpace(ref), ":")
+	if !ok || value == "" {
+		return strings.TrimSpace(ref), nil
+	}
+	path, key := "", ""
+	switch kind {
+	case "card":
+		path, key = "/work/"+url.PathEscape(value), "work"
+	case "document", "doc":
+		path, key, kind = "/docs/"+url.PathEscape(value), "document", "document"
+	case "topic":
+		path, key = "/topics/"+url.PathEscape(value), "topic"
+	case "board":
+		path, key = "/boards/"+url.PathEscape(value), "board"
+	case "thread":
+		path, key = "/threads/"+url.PathEscape(value), "thread"
+	default:
+		return strings.TrimSpace(ref), nil
+	}
+	object, err := moveRead(ctx, a, cfg, path, key)
+	if err != nil {
+		if errnorm.Normalize(err).Code == "not_found" {
+			return strings.TrimSpace(ref), nil
+		}
+		return "", err
+	}
+	id := moveFieldString(object, "id")
+	if id == "" {
+		return strings.TrimSpace(ref), nil
+	}
+	return kind + ":" + id, nil
+}
+
+func moveVerifyRef(ctx context.Context, a *App, cfg config.Resolved, kind, ref string, expected, actual map[string]any) error {
+	want, wantOK := expected[ref]
+	if !wantOK || want == nil {
+		return nil
+	}
+	wantRef, gotRef := strings.TrimSpace(anyString(want)), strings.TrimSpace(anyString(actual[ref]))
+	canonicalWant, err := moveCanonicalDestinationRef(ctx, a, cfg, wantRef)
+	if err != nil {
+		return err
+	}
+	canonicalGot, err := moveCanonicalDestinationRef(ctx, a, cfg, gotRef)
+	if err != nil {
+		return err
+	}
+	if canonicalWant != canonicalGot {
+		return errnorm.New(errnorm.KindRemote, "destination_verification_failed", fmt.Sprintf("destination %s failed verification for %s: expected %s, got %s", kind, ref, canonicalWant, canonicalGot))
+	}
+	return nil
+}
+
+func moveVerifyRefList(ctx context.Context, a *App, cfg config.Resolved, kind, field string, expected, actual map[string]any) error {
+	want := moveStringList(expected[field])
+	got := moveStringList(actual[field])
+	canonicalWant := make([]string, 0, len(want))
+	canonicalGot := make([]string, 0, len(got))
+	for _, ref := range want {
+		canonical, err := moveCanonicalDestinationRef(ctx, a, cfg, ref)
+		if err != nil {
+			return err
+		}
+		canonicalWant = append(canonicalWant, canonical)
+	}
+	for _, ref := range got {
+		canonical, err := moveCanonicalDestinationRef(ctx, a, cfg, ref)
+		if err != nil {
+			return err
+		}
+		canonicalGot = append(canonicalGot, canonical)
+	}
+	canonicalWant, canonicalGot = moveUnique(canonicalWant), moveUnique(canonicalGot)
+	if !moveJSONEqual(canonicalWant, canonicalGot) {
+		return errnorm.New(errnorm.KindRemote, "destination_verification_failed", fmt.Sprintf("destination %s failed verification for %s: expected %v, got %v", kind, field, canonicalWant, canonicalGot))
+	}
+	return nil
+}
+
+func moveIsCollectionField(key string) bool {
+	switch key {
+	case "owner_refs", "document_refs", "board_refs", "related_refs", "refs", "pinned_refs":
+		return true
+	default:
+		return false
+	}
+}
+
+func moveCanonicalCollection(value any) []string { return moveUnique(moveStringList(value)) }
 
 func (a *App) readMoveSourceResource(ctx context.Context, cfg config.Resolved, resource *topicMoveResource) (map[string]any, error) {
 	path, key := "", ""
@@ -1009,7 +1192,16 @@ func (a *App) readMoveSourceResource(ctx context.Context, cfg config.Resolved, r
 		return nil, errnorm.Internal("move_resource_kind_invalid", "unsupported move resource kind "+resource.kind)
 	}
 	if resource.kind != "document" {
-		return moveRead(ctx, a, cfg, path, key)
+		object, err := moveRead(ctx, a, cfg, path, key)
+		if err != nil {
+			return nil, err
+		}
+		if resource.kind == "card" {
+			if err := moveHydrateCardPlan(ctx, a, cfg, object); err != nil {
+				return nil, err
+			}
+		}
+		return object, nil
 	}
 	body, err := moveCall(ctx, a, cfg, http.MethodGet, path, nil)
 	if err != nil {
@@ -1070,26 +1262,59 @@ func (a *App) verifyMovedResource(ctx context.Context, sourceCfg, destCfg config
 				expected["board_ref"] = mapped
 			}
 		}
-		if err := moveVerifyFields("card", resource.destinationRef, expected, actual, []string{"title", "summary", "definition_of_done", "priority", "due_at", "risk", "source", "plan", "phase", "board_ref", "topic_ref", "document_ref", "related_refs"}); err != nil {
+		if err := moveVerifyFields("card", resource.destinationRef, expected, actual, []string{"title", "summary", "definition_of_done", "priority", "due_at", "risk", "source", "phase"}); err != nil {
 			return err
 		}
+		for _, field := range []string{"board_ref", "topic_ref", "document_ref"} {
+			if err := moveVerifyRef(ctx, a, destCfg, "card", field, expected, actual); err != nil {
+				return err
+			}
+		}
+		if err := moveVerifyRefList(ctx, a, destCfg, "card", "related_refs", expected, actual); err != nil {
+			return err
+		}
+		plan, err := moveReadCardPlan(ctx, a, destCfg, resource.destinationRef)
+		if err != nil {
+			return err
+		}
+		if want := moveRewriteValue(resource.work["plan"], mapping); !moveJSONEqual(want, plan["plan"]) {
+			return errnorm.New(errnorm.KindRemote, "destination_verification_failed", fmt.Sprintf("destination card %s failed canonical plan verification", resource.destinationRef))
+		}
 	case "board":
+		expectedBoardRefs := moveRewriteRefs(resource.object["refs"], mapping)
+		if topicRef != "" {
+			expectedBoardRefs = moveUnique(append(expectedBoardRefs, topicRef))
+		}
 		expected := map[string]any{
 			"title": moveRewriteValue(resource.object["title"], mapping), "summary": resource.object["summary"],
 			"primary_topic_ref": moveRewriteRef(moveFieldString(resource.object, "primary_topic_ref"), mapping),
+			"refs":              expectedBoardRefs,
 			"document_refs":     moveRewriteRefs(resource.object["document_refs"], mapping), "pinned_refs": moveRewriteRefs(resource.object["pinned_refs"], mapping),
 			"column_schema": resource.object["column_schema"],
 		}
 		if moveFieldString(expected, "primary_topic_ref") == "" {
 			expected["primary_topic_ref"] = topicRef
 		}
-		if err := moveVerifyFields("board", resource.destinationRef, expected, actual, []string{"title", "summary", "primary_topic_ref", "document_refs", "pinned_refs", "column_schema"}); err != nil {
+		if err := moveVerifyFields("board", resource.destinationRef, expected, actual, []string{"title", "summary", "column_schema"}); err != nil {
 			return err
+		}
+		for _, field := range []string{"primary_topic_ref"} {
+			if err := moveVerifyRef(ctx, a, destCfg, "board", field, expected, actual); err != nil {
+				return err
+			}
+		}
+		for _, field := range []string{"refs", "document_refs", "pinned_refs"} {
+			if err := moveVerifyRefList(ctx, a, destCfg, "board", field, expected, actual); err != nil {
+				return err
+			}
 		}
 	case "document":
 		expectedRefs := moveRewriteRefs(resource.object["refs"], mapping)
 		expected := map[string]any{"title": resource.object["title"], "summary": resource.object["summary"], "refs": expectedRefs, "source": resource.object["source"]}
-		if err := moveVerifyFields("document", resource.destinationRef, expected, actual, []string{"title", "summary", "refs", "source"}); err != nil {
+		if err := moveVerifyFields("document", resource.destinationRef, expected, actual, []string{"title", "summary", "source"}); err != nil {
+			return err
+		}
+		if err := moveVerifyRefList(ctx, a, destCfg, "document", "refs", expected, actual); err != nil {
 			return err
 		}
 		wantRevision, gotRevision := asMap(resource.object["revision"]), asMap(actual["revision"])
@@ -1105,8 +1330,8 @@ func (a *App) verifyMovedResource(ctx context.Context, sourceCfg, destCfg config
 		} else if !moveJSONEqual(wantRevision["content"], gotRevision["content"]) {
 			return errnorm.New(errnorm.KindRemote, "destination_verification_failed", "destination document content differs from the source snapshot")
 		}
-		if !moveJSONEqual(moveRewriteRefs(wantRevision["refs"], mapping), gotRevision["refs"]) {
-			return errnorm.New(errnorm.KindRemote, "destination_verification_failed", "destination document refs differ from the rewritten source snapshot")
+		if err := moveVerifyRefList(ctx, a, destCfg, "document revision", "refs", map[string]any{"refs": moveRewriteRefs(wantRevision["refs"], mapping)}, gotRevision); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -1128,11 +1353,18 @@ func (a *App) verifyMovedTopic(ctx context.Context, cfg config.Resolved, destina
 	expected := map[string]any{
 		"title": source["title"], "summary": source["summary"],
 		"document_refs": moveRewriteRefs(source["document_refs"], mapping),
-		"board_refs":    moveRewriteRefs(source["board_refs"], mapping),
-		"related_refs":  moveRewriteRefs(source["related_refs"], mapping),
+		// Topic moves leave source boards in place. Workspace projections expose
+		// associated boards as shared context, not as owned move resources.
+		"board_refs":   []string{},
+		"related_refs": moveRewriteRefs(source["related_refs"], mapping),
 	}
-	if err := moveVerifyFields("topic", destinationRef, expected, destination, []string{"title", "summary", "document_refs", "board_refs", "related_refs"}); err != nil {
+	if err := moveVerifyFields("topic", destinationRef, expected, destination, []string{"title", "summary"}); err != nil {
 		return err
+	}
+	for _, field := range []string{"document_refs", "board_refs", "related_refs"} {
+		if err := moveVerifyRefList(ctx, a, cfg, "topic", field, expected, destination); err != nil {
+			return err
+		}
 	}
 	_ = sourceRef
 	_ = sourceURL
@@ -1142,6 +1374,9 @@ func (a *App) verifyMovedTopic(ctx context.Context, cfg config.Resolved, destina
 func (a *App) archiveMovedSourceCard(ctx context.Context, sourceCfg, destCfg config.Resolved, resource *topicMoveResource, moveID string, mapping map[string]string) error {
 	current, err := moveRead(ctx, a, sourceCfg, "/work/"+url.PathEscape(resource.sourceRef), "work")
 	if err != nil {
+		return err
+	}
+	if err := moveHydrateCardPlan(ctx, a, sourceCfg, current); err != nil {
 		return err
 	}
 	marker := asMap(current["workspace_move"])
@@ -1377,6 +1612,9 @@ func (a *App) moveTopic(ctx context.Context, sourceCfg, destCfg config.Resolved,
 	if dryRun {
 		actions := make([]map[string]any, 0, len(resources)*2+3)
 		actions = append(actions, map[string]any{"action": rootAction, "kind": "topic", "source_ref": sourceRef, "destination_ref": destinationTopicRef})
+		for _, boardRef := range moveStringList(sourceTopic["board_refs"]) {
+			actions = append(actions, map[string]any{"action": "preserve", "kind": "board", "ref": boardRef, "reason": "shared topic context is not part of the transfer set"})
+		}
 		for _, resource := range resources {
 			if resource.problem != "" {
 				actions = append(actions, map[string]any{"action": "fail", "kind": resource.kind, "source_ref": resource.sourceRef, "reason": resource.problem})
@@ -1444,16 +1682,24 @@ func (a *App) moveTopic(ctx context.Context, sourceCfg, destCfg config.Resolved,
 		"document_refs": []string{}, "board_refs": []string{}, "related_refs": []string{},
 		"provenance": moveRewriteProvenance(sourceTopic["provenance"], mapping), "workspace_move": topicCreateMarker,
 	}
-	topicBody, err := moveCall(ctx, a, destCfg, http.MethodPost, "/topics", map[string]any{"request_key": moveID + ":topic", "topic": topicInput})
+	var destTopic map[string]any
+	if rootAction == "reuse" {
+		// The request key is bound to the exact body on first use. Once a
+		// journal advances, its marker changes, so a resume reuses the object
+		// already written instead of replaying a changed body under that key.
+		destTopic, err = moveRead(ctx, a, destCfg, "/topics/"+url.PathEscape(destinationTopicRef), "topic")
+	} else {
+		var topicBody map[string]any
+		topicBody, err = moveCall(ctx, a, destCfg, http.MethodPost, "/topics", map[string]any{"request_key": moveID + ":topic", "topic": topicInput})
+		if err == nil {
+			destTopic = asMap(topicBody["topic"])
+			if destTopic == nil {
+				destTopic, err = moveRead(ctx, a, destCfg, "/topics/"+url.PathEscape(destinationTopicRef), "topic")
+			}
+		}
+	}
 	if err != nil {
 		return nil, err
-	}
-	destTopic := asMap(topicBody["topic"])
-	if destTopic == nil {
-		destTopic, err = moveRead(ctx, a, destCfg, "/topics/"+url.PathEscape(destinationTopicRef), "topic")
-		if err != nil {
-			return nil, err
-		}
 	}
 	if !moveHasMarker(asMap(destTopic["workspace_move"]), moveID) {
 		return nil, errnorm.New(errnorm.KindRemote, "destination_id_conflict", "destination topic id is used by a topic without the expected move journal")
@@ -1464,13 +1710,6 @@ func (a *App) moveTopic(ctx context.Context, sourceCfg, destCfg config.Resolved,
 	for _, resource := range resources {
 		if resource.problem == "" && resource.kind == "document" {
 			if _, err := a.createMovedDocument(ctx, sourceCfg, destCfg, resource, moveID, mapping); err != nil {
-				return nil, err
-			}
-		}
-	}
-	for _, resource := range resources {
-		if resource.problem == "" && resource.kind == "board" {
-			if _, err := a.createMovedBoard(ctx, destCfg, resource, moveID, sourceRef, sourceURL, mapping); err != nil {
 				return nil, err
 			}
 		}
@@ -1509,11 +1748,14 @@ func (a *App) moveTopic(ctx context.Context, sourceCfg, destCfg config.Resolved,
 				}
 				destWork = asMap(body["work"])
 			}
+			if err := moveWriteCardPlan(ctx, a, destCfg, resource.destinationRef, moveRewriteValue(resource.work["plan"], mapping)); err != nil {
+				return nil, err
+			}
 		}
 	}
 
 	documentRefs := moveRewriteRefs(sourceTopic["document_refs"], mapping)
-	boardRefs := moveRewriteRefs(sourceTopic["board_refs"], mapping)
+	boardRefs := []string{}
 	relatedRefs := moveRewriteRefs(sourceTopic["related_refs"], mapping)
 	moveSetPhase(topicMarker, "refs_rewritten")
 	if _, err := a.updateMoveTopicMarker(ctx, destCfg, destinationTopicRef, topicMarker, map[string]any{
@@ -1632,6 +1874,9 @@ func (a *App) moveTopic(ctx context.Context, sourceCfg, destCfg config.Resolved,
 	}
 	actions := make([]map[string]any, 0, len(resources)*2+2)
 	actions = append(actions, map[string]any{"action": "create_or_resume", "kind": "topic", "source_ref": sourceRef, "destination_ref": destinationTopicRef})
+	for _, boardRef := range moveStringList(sourceTopic["board_refs"]) {
+		actions = append(actions, map[string]any{"action": "preserve", "kind": "board", "ref": boardRef, "reason": "shared topic context is not part of the transfer set"})
+	}
 	for _, resource := range resources {
 		if resource.problem != "" {
 			continue
@@ -1701,38 +1946,43 @@ func moveBoardExistingMarker(ctx context.Context, a *App, cfg config.Resolved, b
 
 func (a *App) readTopicMoveResources(ctx context.Context, sourceCfg, destCfg config.Resolved, topic, workspace map[string]any, moveID string) ([]*topicMoveResource, error) {
 	_ = destCfg
-	refs := map[string]map[string]struct{}{"document": {}, "board": {}, "card": {}}
-	for _, spec := range []struct{ key, kind string }{{"documents", "document"}, {"boards", "board"}, {"cards", "card"}} {
-		for _, ref := range moveListRefs(workspace, spec.key, spec.kind) {
-			if refs[spec.kind] == nil {
-				refs[spec.kind] = map[string]struct{}{}
-			}
-			refs[spec.kind][ref] = struct{}{}
-		}
-	}
+	refs := map[string]map[string]struct{}{"document": {}, "card": {}}
+	// Only direct topic links establish ownership. /workspace includes
+	// contextual resources from associated boards, which can be shared with
+	// unrelated active cards and must not enter the transfer set.
 	for _, ref := range moveStringList(topic["document_refs"]) {
 		refs["document"][ref] = struct{}{}
 	}
-	for _, ref := range moveStringList(topic["board_refs"]) {
-		refs["board"][ref] = struct{}{}
-	}
 	for _, ref := range moveStringList(topic["related_refs"]) {
 		kind, _, ok := strings.Cut(ref, ":")
-		if ok && refs[kind] != nil {
+		if ok && (kind == "document" || kind == "card") {
 			refs[kind][ref] = struct{}{}
+		}
+	}
+	topicIdentities := moveResourceIdentitySet(topic, "topic")
+	for _, raw := range asSlice(workspace["cards"]) {
+		card := moveExtractObject(raw, "card")
+		if work := asMap(card["work"]); work != nil {
+			card = work
+		}
+		if moveRefInIdentitySet(moveFieldString(card, "topic_ref"), topicIdentities) {
+			if ref := moveFieldString(card, "ref"); ref != "" {
+				refs["card"][ref] = struct{}{}
+			}
 		}
 	}
 	if previous := asMap(topic["workspace_move"]); moveHasMarker(previous, moveID) {
 		for _, raw := range asSlice(previous["resources"]) {
 			item := asMap(raw)
 			kind, ref := moveFieldString(item, "kind"), moveFieldString(item, "source_ref")
-			if refs[kind] != nil && ref != "" {
+			if (kind == "document" || kind == "card") && ref != "" {
 				refs[kind][ref] = struct{}{}
 			}
 		}
 	}
 	items := make([]*topicMoveResource, 0)
-	for _, kind := range []string{"document", "board", "card"} {
+	canonicalSeen := map[string]struct{}{}
+	for _, kind := range []string{"document", "card"} {
 		keys := make([]string, 0, len(refs[kind]))
 		for ref := range refs[kind] {
 			keys = append(keys, ref)
@@ -1770,6 +2020,16 @@ func (a *App) readTopicMoveResources(ctx context.Context, sourceCfg, destCfg con
 				}
 			}
 			resourceRef := firstNonEmpty(moveFieldString(object, "ref"), ref)
+			if kind == "card" {
+				if err := moveHydrateCardPlan(ctx, a, sourceCfg, object); err != nil {
+					return nil, err
+				}
+			}
+			canonicalKey := kind + ":" + moveSourceObjectID(kind, resourceRef, object)
+			if _, duplicate := canonicalSeen[canonicalKey]; duplicate {
+				continue
+			}
+			canonicalSeen[canonicalKey] = struct{}{}
 			boardRef := ""
 			if kind == "card" {
 				boardRef = moveFieldString(object, "board_ref")
@@ -1830,16 +2090,17 @@ func (a *App) createMovedBoard(ctx context.Context, cfg config.Resolved, resourc
 	if marker == nil {
 		marker = moveMarker(moveID, "board", resource.sourceRef, resource.sourceURL, cfg.BaseURL, resource.destinationRef, "pending")
 	}
+	refs := moveRewriteRefs(board["refs"], mapping)
+	refs = moveUnique(append(refs, topicRef))
 	boardInput := map[string]any{
 		"id": resource.destinationID, "thread_id": resource.destinationThreadID, "title": board["title"], "summary": board["summary"],
-		"primary_topic_ref": moveRewriteRef(moveFieldString(board, "primary_topic_ref"), mapping),
-		"document_refs":     moveRewriteRefs(board["document_refs"], mapping),
-		"pinned_refs":       moveRewriteRefs(board["pinned_refs"], mapping),
-		"column_schema":     board["column_schema"],
-		"provenance":        moveRewriteProvenance(board["provenance"], mapping), "workspace_move": marker,
-	}
-	if moveFieldString(boardInput, "primary_topic_ref") == "" {
-		boardInput["primary_topic_ref"] = topicRef
+		// Core derives primary_topic_ref from canonical typed refs. Sending the
+		// projection field alone does not establish a board-topic relationship.
+		"refs":          refs,
+		"document_refs": moveRewriteRefs(board["document_refs"], mapping),
+		"pinned_refs":   moveRewriteRefs(board["pinned_refs"], mapping),
+		"column_schema": board["column_schema"],
+		"provenance":    moveRewriteProvenance(board["provenance"], mapping), "workspace_move": marker,
 	}
 	body, err := moveCall(ctx, a, cfg, http.MethodPost, "/boards", map[string]any{"request_key": moveID + ":board:" + resource.sourceRef, "board": boardInput})
 	if err != nil {

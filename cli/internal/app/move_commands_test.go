@@ -68,7 +68,7 @@ func TestMoveTopicDryRunAndResumesPartialCopy(t *testing.T) {
 	if _, err := app.moveTopic(ctx, sourceCfg, destCfg, "topic:launch", false, connectionMaps); err == nil {
 		t.Fatal("simulated destination failure was not returned")
 	}
-	if moveState(source.topic) == "archived" || destination.createCount["topic"] != 1 || destination.createCount["document"] != 1 || destination.createCount["board"] != 1 || destination.createCount["card"] != 0 {
+	if moveState(source.topic) == "archived" || destination.createCount["topic"] != 1 || destination.createCount["document"] != 1 || destination.createCount["board"] != 0 || destination.createCount["card"] != 0 {
 		t.Fatalf("partial failure advanced source lifecycle or lost resumable writes: topic=%#v target_counts=%#v", source.topic, destination.createCount)
 	}
 	topicJournal := asMap(source.topic["workspace_move"])
@@ -80,16 +80,8 @@ func TestMoveTopicDryRunAndResumesPartialCopy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dry run after partial copy: %v", err)
 	}
-	boardReused := false
-	if actions, ok := asMap(resumePreview.Data)["actions"].([]map[string]any); ok {
-		for _, action := range actions {
-			if action["kind"] == "board" && action["action"] == "reuse" {
-				boardReused = true
-			}
-		}
-	}
-	if destination.mutationCount() != writesBeforePreview || !boardReused {
-		t.Fatalf("resumed dry run failed to reuse the cited board or performed writes: result=%#v writes=%d/%d", resumePreview.Data, writesBeforePreview, destination.mutationCount())
+	if destination.mutationCount() != writesBeforePreview {
+		t.Fatalf("resumed dry run performed writes: result=%#v writes=%d/%d", resumePreview.Data, writesBeforePreview, destination.mutationCount())
 	}
 
 	result, err := app.moveTopic(ctx, sourceCfg, destCfg, "topic:launch", false, connectionMaps)
@@ -99,14 +91,17 @@ func TestMoveTopicDryRunAndResumesPartialCopy(t *testing.T) {
 	if asMap(result.Data)["status"] != "moved" {
 		t.Fatalf("unexpected result: %#v", result.Data)
 	}
-	if destination.createCount["topic"] != 1 || destination.createCount["document"] != 1 || destination.createCount["board"] != 1 || destination.createCount["card"] != 2 {
+	if destination.createCount["topic"] != 1 || destination.createCount["document"] != 1 || destination.createCount["board"] != 0 || destination.createCount["card"] != 2 {
 		t.Fatalf("resume duplicated or dropped destination resources: %#v", destination.createCount)
 	}
 	if moveState(source.topic) != "archived" || moveState(asMap(source.documents["document:spec"]["document"])) != "archived" || moveState(source.works["card:curated"]) != "archived" || moveState(source.works["card:linked"]) != "archived" {
 		t.Fatalf("source topic, docs and cards were not archived: topic=%#v docs=%#v work=%#v", source.topic, source.documents, source.works)
 	}
-	if moveState(source.boards["board:launch-board"]) != "archived" {
-		t.Fatalf("source board was not archived: %#v", source.boards)
+	if moveState(source.boards["board:launch-board"]) != "active" {
+		t.Fatalf("shared source board was not preserved: %#v", source.boards)
+	}
+	if moveState(source.works["card:unrelated"]) != "active" || destination.createCount["card"] != 2 {
+		t.Fatalf("unrelated shared-board card entered the topic transfer: source=%#v destination=%#v", source.works["card:unrelated"], destination.works)
 	}
 
 	topicMove := asMap(destination.topic["workspace_move"])
@@ -114,17 +109,15 @@ func TestMoveTopicDryRunAndResumesPartialCopy(t *testing.T) {
 		t.Fatalf("destination topic marker omitted source citation: %#v", topicMove)
 	}
 	documentRef := moveResourceRef("document", moveDeterministicUUID(anyString(topicMove["move_id"]), "document", "document:spec"))
-	boardRef := moveResourceRef("board", moveDeterministicUUID(anyString(topicMove["move_id"]), "board", "board:launch-board"))
-	if !containsString(moveStringList(destination.topic["document_refs"]), documentRef) || !containsString(moveStringList(destination.topic["board_refs"]), boardRef) {
+	if destination.createCount["document"] != 1 {
+		t.Fatalf("document UUID and handle aliases created duplicate resources: %#v", destination.documents)
+	}
+	if !containsString(moveStringList(destination.topic["document_refs"]), documentRef) || len(moveStringList(destination.topic["board_refs"])) != 0 {
 		t.Fatalf("topic refs were not rewritten: topic=%#v", destination.topic)
 	}
 	movedDocument := asMap(destination.documents[documentRef]["document"])
 	if movedDocument["thread_id"] != moveDeterministicUUID(anyString(topicMove["move_id"]), "document_thread", "document:spec") || !containsString(moveStringList(movedDocument["refs"]), moveResourceRef("topic", moveDeterministicUUID(anyString(topicMove["move_id"]), "topic", "topic:launch"))) {
 		t.Fatalf("document thread/ref identities were not rewritten: %#v", movedDocument)
-	}
-	movedBoard := destination.boards[boardRef]
-	if movedBoard["thread_id"] != moveDeterministicUUID(anyString(topicMove["move_id"]), "board_thread", "board:launch-board") {
-		t.Fatalf("board thread identity was not rewritten: %#v", movedBoard)
 	}
 	curated := destination.works[moveResourceRef("card", moveDeterministicUUID(anyString(topicMove["move_id"]), "card", "card:curated"))]
 	linked := findFakeWorkByExternalIdentity(destination, "github", "gh-dest", "issue-42")
@@ -138,10 +131,10 @@ func TestMoveTopicDryRunAndResumesPartialCopy(t *testing.T) {
 	if asMap(source.works["card:linked"]["workspace_move"])["source_action"] != "archive" {
 		t.Fatalf("source-backed card did not record archive lifecycle: %#v", source.works["card:linked"]["workspace_move"])
 	}
-	if moveFieldString(curated, "topic_ref") != moveResourceRef("topic", moveDeterministicUUID(anyString(topicMove["move_id"]), "topic", "topic:launch")) || moveFieldString(curated, "document_ref") != documentRef || !containsString(moveStringList(curated["related_refs"]), boardRef) {
+	if moveFieldString(curated, "topic_ref") != moveResourceRef("topic", moveDeterministicUUID(anyString(topicMove["move_id"]), "topic", "topic:launch")) || moveFieldString(curated, "document_ref") != documentRef || !containsString(moveStringList(curated["related_refs"]), "board:launch-board") {
 		t.Fatalf("moved card refs were not rewritten: %#v", curated)
 	}
-	steps := asSlice(asMap(curated["plan"])["steps"])
+	steps := asSlice(asMap(destination.plans[moveFieldString(curated, "ref")])["steps"])
 	if len(steps) < 3 || moveFieldString(asMap(steps[2]), "target_ref") != moveResourceRef("card", moveDeterministicUUID(anyString(topicMove["move_id"]), "card", "card:linked")) {
 		t.Fatalf("plan link to a moved card was not rewritten: %#v", curated["plan"])
 	}
@@ -221,6 +214,33 @@ func TestMoveCardResumesAfterDestinationCommitWithoutReply(t *testing.T) {
 	}
 	if destination.createCount["card"] != 1 || moveState(source.works["card:source-card"]) != "archived" {
 		t.Fatalf("resume duplicated the destination or failed to finish the source transition: creates=%d source=%#v", destination.createCount["card"], source.works["card:source-card"])
+	}
+}
+
+func TestMoveCardCopiesCanonicalPlanAndRewritesSelfReference(t *testing.T) {
+	source := newMoveTestWorkspace(t, false)
+	destination := newMoveTestWorkspace(t, false)
+	source.workspacesSetupSingleCard("card:source-card", map[string]any{"authority": "nexus"})
+	canonicalPlan := map[string]any{"steps": []any{map[string]any{"id": "self", "title": "Review this card", "ref": "card:source-card"}}}
+	source.plans["card:source-card"] = canonicalPlan
+	// The work projection is deliberately stale: only the canonical plan API
+	// may define what the move transfers and verifies.
+	source.works["card:source-card"]["plan"] = map[string]any{"steps": []any{map[string]any{"id": "stale"}}}
+	sourceServer := httptest.NewServer(source)
+	t.Cleanup(sourceServer.Close)
+	destinationServer := httptest.NewServer(destination)
+	t.Cleanup(destinationServer.Close)
+
+	if _, err := New().moveCard(context.Background(), moveTestConfig(sourceServer.URL, "source-token"), moveTestConfig(destinationServer.URL, "destination-token"), "card:source-card", false, nil); err != nil {
+		t.Fatalf("move card with canonical plan: %v", err)
+	}
+	destinationRef := moveFieldString(asMap(source.works["card:source-card"]["workspace_move"]), "destination_ref")
+	want := map[string]any{"steps": []any{map[string]any{"id": "self", "title": "Review this card", "ref": destinationRef}}}
+	if !moveJSONEqual(destination.plans[destinationRef], want) {
+		t.Fatalf("destination canonical plan was not copied with self refs rewritten: got=%#v want=%#v", destination.plans[destinationRef], want)
+	}
+	if _, echoed := destination.works[destinationRef]["plan"]; echoed {
+		t.Fatal("move copied plan through work metadata instead of the canonical plan API")
 	}
 }
 
@@ -347,6 +367,7 @@ type moveFakeWorkspace struct {
 	documents                map[string]map[string]any
 	boards                   map[string]map[string]any
 	works                    map[string]map[string]any
+	plans                    map[string]any
 	writes                   []map[string]any
 	createCount              map[string]int
 	failNextBoardCreate      bool
@@ -363,7 +384,7 @@ func newMoveTestWorkspace(t *testing.T, source bool) *moveFakeWorkspace {
 	fake := &moveFakeWorkspace{
 		isSource:  source,
 		documents: map[string]map[string]any{}, boards: map[string]map[string]any{}, works: map[string]map[string]any{},
-		createCount: map[string]int{}, inaccessibleDocs: map[string]int{},
+		plans: map[string]any{}, createCount: map[string]int{}, inaccessibleDocs: map[string]int{},
 	}
 	if !source {
 		return fake
@@ -372,7 +393,7 @@ func newMoveTestWorkspace(t *testing.T, source bool) *moveFakeWorkspace {
 	fake.topic = map[string]any{
 		"id": "topic-source", "ref": "topic:launch", "handle": "launch", "thread_id": "thread-source",
 		"state": "active", "title": "Launch", "summary": "Coordinate launch", "updated_at": updatedAt,
-		"owner_refs": []any{"actor:source-owner"}, "document_refs": []any{"document:spec"},
+		"owner_refs": []any{"actor:source-owner"}, "document_refs": []any{"document:spec", "document:doc-source"},
 		"board_refs": []any{"board:launch-board"}, "related_refs": []any{"card:curated", "card:linked"},
 		"provenance": map[string]any{"sources": []any{"https://source.example/launch"}},
 	}
@@ -398,21 +419,32 @@ func newMoveTestWorkspace(t *testing.T, source bool) *moveFakeWorkspace {
 	fake.boards["board:launch-board"] = board
 	curated := map[string]any{
 		"id": "card-curated-source", "ref": "card:curated", "handle": "curated", "state": "active", "version": 1,
-		"board_ref": "board:launch-board", "title": "Prepare announcement", "summary": "Draft launch note",
+		"updated_at": updatedAt,
+		"board_ref":  "board:launch-board", "title": "Prepare announcement", "summary": "Draft launch note",
 		"definition_of_done": []any{"Review copy"}, "phase": "in_progress", "priority": "p1", "risk": "medium",
 		"source": map[string]any{"authority": "nexus"}, "topic_ref": "topic:launch", "document_ref": "document:spec",
 		"related_refs": []any{"board:launch-board"}, "plan": map[string]any{"steps": []any{"draft", "review", map[string]any{"target_ref": "card:linked"}}},
 	}
 	linked := map[string]any{
 		"id": "card-linked-source", "ref": "card:linked", "handle": "linked", "state": "active", "version": 1,
-		"board_ref": "board:launch-board", "title": "Fix release blocker", "summary": "A linked issue",
+		"updated_at": updatedAt,
+		"board_ref":  "board:launch-board", "title": "Fix release blocker", "summary": "A linked issue",
 		"definition_of_done": []any{}, "phase": "ready", "priority": "p2",
 		"source":    map[string]any{"authority": "github", "connection_id": "gh-main", "native_id": "issue-42", "url": "https://github.example/issues/42"},
 		"topic_ref": "topic:launch", "document_ref": "document:spec", "related_refs": []any{"board:launch-board"},
 	}
 	fake.works["card:curated"] = curated
 	fake.works["card:linked"] = linked
-	fake.workspace = map[string]any{"documents": []any{doc}, "boards": []any{board}, "cards": []any{curated, linked}}
+	fake.plans["card:curated"] = curated["plan"]
+	fake.plans["card:linked"] = nil
+	unrelated := map[string]any{
+		"id": "card-unrelated", "ref": "card:unrelated", "handle": "unrelated", "state": "active", "version": 1,
+		"updated_at": updatedAt, "board_ref": "board:launch-board", "title": "Unrelated shared board card",
+		"source": map[string]any{"authority": "nexus"}, "related_refs": []any{},
+	}
+	fake.works["card:unrelated"] = unrelated
+	fake.plans["card:unrelated"] = nil
+	fake.workspace = map[string]any{"documents": []any{doc}, "boards": []any{board}, "cards": []any{curated, linked, unrelated}}
 	return fake
 }
 
@@ -421,11 +453,13 @@ func (f *moveFakeWorkspace) workspacesSetupSingleCard(ref string, source map[str
 	defer f.mu.Unlock()
 	work := map[string]any{
 		"id": "source-card", "ref": ref, "handle": strings.TrimPrefix(ref, "card:"), "state": "active", "version": 1,
-		"board_ref": "board:tasks", "title": "Move me", "summary": "Card summary", "phase": "ready",
+		"updated_at": "2026-10-01T00:00:00Z",
+		"board_ref":  "board:tasks", "title": "Move me", "summary": "Card summary", "phase": "ready",
 		"definition_of_done": []any{"Verify"}, "priority": "p1", "source": source,
 		"related_refs": []any{}, "plan": map[string]any{"note": "Keep this"},
 	}
 	f.works[ref] = work
+	f.plans[ref] = work["plan"]
 }
 
 func (f *moveFakeWorkspace) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -444,15 +478,38 @@ func (f *moveFakeWorkspace) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(value)
 	}
-	if f.denyWrites && r.Method != http.MethodGet {
-		respond(http.StatusForbidden, map[string]any{"error": map[string]any{"code": "forbidden", "message": "destination write grant missing"}})
-		return
-	}
 	notFound := func() {
 		respond(http.StatusNotFound, map[string]any{"error": map[string]any{"code": "not_found", "message": "not found"}})
 	}
 	conflict := func() {
 		respond(http.StatusConflict, map[string]any{"error": map[string]any{"code": "conflict", "message": "conflict"}})
+	}
+	if f.denyWrites && r.Method != http.MethodGet {
+		respond(http.StatusForbidden, map[string]any{"error": map[string]any{"code": "forbidden", "message": "destination write grant missing"}})
+		return
+	}
+	if len(segments) == 3 && segments[0] == "cards" && segments[2] == "plan" {
+		work := fakeFindResource(f.works, segments[1])
+		if work == nil {
+			notFound()
+			return
+		}
+		ref := moveFieldString(work, "ref")
+		if r.Method == http.MethodGet {
+			respond(http.StatusOK, map[string]any{"card_ref": ref, "plan": f.plans[ref], "if_updated_at": moveFieldString(work, "updated_at")})
+			return
+		}
+		if r.Method == http.MethodPut {
+			if moveFieldString(body, "if_updated_at") != moveFieldString(work, "updated_at") {
+				conflict()
+				return
+			}
+			f.plans[ref] = body["plan"]
+			work["version"] = moveTestInt(work["version"]) + 1
+			work["updated_at"] = fmt.Sprintf("2026-10-01T00:00:%02dZ", moveTestInt(work["version"]))
+			respond(http.StatusOK, map[string]any{"card_ref": ref, "plan": f.plans[ref], "if_updated_at": moveFieldString(work, "updated_at")})
+			return
+		}
 	}
 	if len(segments) == 1 && segments[0] == "work" {
 		if r.Method == http.MethodGet {
@@ -496,7 +553,7 @@ func (f *moveFakeWorkspace) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			for key, value := range input {
 				work[key] = value
 			}
-			work["id"], work["ref"], work["handle"], work["state"], work["version"] = id, ref, id, "active", 1
+			work["id"], work["ref"], work["handle"], work["state"], work["version"], work["updated_at"] = id, ref, id, "active", 1, "2026-10-01T00:00:00Z"
 			f.works[ref] = work
 			f.createCount["card"]++
 			if f.afterCardCreate != nil {
@@ -795,7 +852,7 @@ func assertMoveCitationInWrites(t *testing.T, writes []map[string]any) {
 			found[path] = true
 		}
 	}
-	for _, path := range []string{"/topics", "/docs", "/boards", "/work"} {
+	for _, path := range []string{"/topics", "/docs", "/work"} {
 		if !found[path] {
 			t.Errorf("first destination event payload for %s omitted the source citation", path)
 		}
