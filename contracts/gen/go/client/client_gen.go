@@ -56,6 +56,28 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:  []string{"actors.create"},
 	},
 	{
+		CommandID: "agent.inbox.answers.read",
+		CLIPath:   "agent inbox answers read",
+		Group:     "agent",
+		Method:    "POST",
+		Path:      "/agent-inbox/answers/read",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"agents", "inbox", "write"},
+		Adjacent:  []string{"agent.inbox.asks.list", "agent.notifications.dismiss", "agent.notifications.list", "agent.notifications.read"},
+	},
+	{
+		CommandID: "agent.inbox.asks.list",
+		CLIPath:   "agent inbox asks list",
+		Group:     "agent",
+		Method:    "GET",
+		Path:      "/agent-inbox/asks",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"agents", "inbox"},
+		Adjacent:  []string{"agent.inbox.answers.read", "agent.notifications.dismiss", "agent.notifications.list", "agent.notifications.read"},
+	},
+	{
 		CommandID: "agent.notification-receipts.stream",
 		CLIPath:   "",
 		Method:    "GET",
@@ -73,7 +95,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"agents", "notifications", "write"},
-		Adjacent:  []string{"agent.notifications.list", "agent.notifications.read"},
+		Adjacent:  []string{"agent.inbox.answers.read", "agent.inbox.asks.list", "agent.notifications.list", "agent.notifications.read"},
 	},
 	{
 		CommandID: "agent.notifications.list",
@@ -84,7 +106,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"agents", "notifications"},
-		Adjacent:  []string{"agent.notifications.dismiss", "agent.notifications.read"},
+		Adjacent:  []string{"agent.inbox.answers.read", "agent.inbox.asks.list", "agent.notifications.dismiss", "agent.notifications.read"},
 	},
 	{
 		CommandID: "agent.notifications.read",
@@ -95,7 +117,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"agents", "notifications", "write"},
-		Adjacent:  []string{"agent.notifications.dismiss", "agent.notifications.list"},
+		Adjacent:  []string{"agent.inbox.answers.read", "agent.inbox.asks.list", "agent.notifications.dismiss", "agent.notifications.list"},
 	},
 	{
 		CommandID:  "agents.get",
@@ -2517,6 +2539,14 @@ func (c *Client) ActorsCreate(ctx context.Context, opts RequestOptions) (*http.R
 
 func (c *Client) ActorsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "actors.list", nil, opts)
+}
+
+func (c *Client) AgentInboxAnswersRead(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "agent.inbox.answers.read", nil, opts)
+}
+
+func (c *Client) AgentInboxAsksList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "agent.inbox.asks.list", nil, opts)
 }
 
 func (c *Client) AgentNotificationReceiptsStream(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

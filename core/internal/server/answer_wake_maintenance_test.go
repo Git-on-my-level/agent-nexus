@@ -131,6 +131,42 @@ func TestAnswerWakeMaintainerFlushesWhenNoAsksRemain(t *testing.T) {
 	}
 }
 
+func TestAnswerWakeMaintainerRejectsStaleSnapshotWhenAnswerArrivesBeforeAtomicClaim(t *testing.T) {
+	ctx := context.Background()
+	workspace, store := newAnswerWakeTestStore(t, ctx)
+	defer workspace.Close()
+	maintainer := NewAnswerWakeMaintainer(AnswerWakeMaintainerConfig{
+		PrimitiveStore: store, WorkspaceID: "ws_test", QuietWindow: time.Minute,
+		FlushWhenNoOpenAsks: false,
+	})
+	firstAsk := appendAnswerWakeTestAsk(t, ctx, store, "actor-one", "interleave-first")
+	firstAnswer := appendAnswerWakeTestResponse(t, ctx, store, "actor-one", "worker.one", firstAsk)
+	batches, err := store.ListHumanAttentionAnswerWakeBatches(ctx)
+	if err != nil || len(batches) != 1 {
+		t.Fatalf("load first generation snapshot: batches=%#v err=%v", batches, err)
+	}
+	secondAsk := appendAnswerWakeTestAsk(t, ctx, store, "actor-one", "interleave-second")
+	secondAnswer := appendAnswerWakeTestResponse(t, ctx, store, "actor-one", "worker.one", secondAsk)
+	if err := maintainer.dispatch(ctx, batches[0]); err != nil {
+		t.Fatalf("attempt stale snapshot delivery: %v", err)
+	}
+	if wakeups, err := store.ListAgentWakeups(ctx, primitives.AgentWakeupListFilter{TargetActorID: "actor-one"}); err != nil || len(wakeups) != 0 {
+		t.Fatalf("stale generation was delivered after a newer answer joined: wakeups=%#v err=%v", wakeups, err)
+	}
+	if err := maintainer.Step(ctx, answerWakeTestTimestamp(t, secondAnswer).Add(time.Minute)); err != nil {
+		t.Fatalf("deliver the updated generation: %v", err)
+	}
+	wakeups, err := store.ListAgentWakeups(ctx, primitives.AgentWakeupListFilter{TargetActorID: "actor-one"})
+	if err != nil || len(wakeups) != 1 {
+		t.Fatalf("expected one wake for updated generation: wakeups=%#v err=%v", wakeups, err)
+	}
+	for _, answer := range []map[string]any{firstAnswer, secondAnswer} {
+		if !containsAnswerWakeRef(wakeups[0].Refs, "event:"+fmt.Sprint(answer["id"])) {
+			t.Fatalf("updated wake omitted response %v: %#v", answer["id"], wakeups[0].Refs)
+		}
+	}
+}
+
 func TestAnswerWakeDeadlineSurvivesRestartAndDuplicateDeliveryKeepsReadState(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
@@ -184,8 +220,8 @@ func TestAnswerWakeDeadlineSurvivesRestartAndDuplicateDeliveryKeepsReadState(t *
 	if _, err := store.MarkAgentWakeupNotification(ctx, wakeups[0].WakeupID, "actor-one", primitives.AgentWakeupNotificationRead); err != nil {
 		t.Fatal(err)
 	}
-	// Simulate recovery after the wake row committed but before its pending batch
-	// deletion committed. The deterministic wakeup id makes the retry a no-op.
+	// A stale retry after the atomic delivery transaction sees no generation to
+	// claim and cannot create another wake or reset notification read state.
 	if err := maintainer.dispatch(ctx, batches[0]); err != nil {
 		t.Fatal(err)
 	}

@@ -15,8 +15,10 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `agents`
 
-- Commands: `16`
+- Commands: `18`
 - Command IDs:
+  - `agent.inbox.answers.read`
+  - `agent.inbox.asks.list`
   - `agent.notification-receipts.stream`
   - `agent.notifications.dismiss`
   - `agent.notifications.list`
@@ -330,8 +332,10 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `inbox`
 
-- Commands: `5`
+- Commands: `7`
 - Command IDs:
+  - `agent.inbox.answers.read`
+  - `agent.inbox.asks.list`
   - `agents.get`
   - `agents.list`
   - `inbox.get`
@@ -493,6 +497,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - Commands: `55`
 - Command IDs:
+  - `agent.inbox.answers.read`
   - `agent.notifications.dismiss`
   - `agent.notifications.read`
   - `artifacts.archive`

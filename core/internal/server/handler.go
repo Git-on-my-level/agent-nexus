@@ -2586,6 +2586,22 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleListAgentNotifications(w, r, opts)
 	})
 
+	registerRoute("/agent-inbox/asks", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+		handleListAgentInboxAsks(w, r, opts)
+	})
+
+	registerRoute("/agent-inbox/answers/read", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleReadAgentInboxAnswer(w, r, opts)
+	})
+
 	registerRoute("/agent-notifications/read", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"agent-nexus-cli/internal/config"
@@ -51,7 +52,9 @@ func (a *App) runAgentInboxList(ctx context.Context, args []string, cfg config.R
 		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx inbox list`")
 	}
 	statusValue := strings.ToLower(strings.TrimSpace(status.value))
-	if statusValue == "" {
+	if !status.set && unread.value {
+		statusValue = "answered"
+	} else if statusValue == "" {
 		statusValue = "open"
 	}
 	if statusValue != "open" && statusValue != "answered" && statusValue != "all" {
@@ -97,89 +100,42 @@ func (a *App) loadOwnInboxAsks(ctx context.Context, cfg config.Resolved) ([]map[
 	if actorID == "" {
 		return nil, errnorm.Usage("identity_unresolved", "active agent has no actor id")
 	}
-	requests, err := a.invokeRawJSON(ctx, cfg, "inbox asks", "GET", "/events?type=human_attention_requested&limit=100", nil)
-	if err != nil {
-		return nil, err
-	}
-	answers, err := a.invokeRawJSON(ctx, cfg, "inbox answers", "GET", "/events?type=human_attention_responded&limit=100", nil)
-	if err != nil {
-		return nil, err
-	}
-	withdrawals, err := a.invokeRawJSON(ctx, cfg, "inbox withdrawn asks", "GET", "/events?type=human_attention_withdrawn&limit=100", nil)
-	if err != nil {
-		return nil, err
-	}
-	withdrawnByAsk := map[string]bool{}
-	for _, raw := range asSlice(commandResultBody(withdrawals)["events"]) {
-		payload := asMap(asMap(raw)["payload"])
-		askID := strings.TrimSpace(anyString(payload["request_event_id"]))
-		if askID == "" {
-			askID = strings.TrimPrefix(strings.TrimSpace(anyString(payload["request_event_ref"])), "event:")
-		}
-		if askID != "" {
-			withdrawnByAsk["event:"+askID] = true
-		}
-	}
-	answerByAsk := map[string]map[string]any{}
-	for _, raw := range asSlice(commandResultBody(answers)["events"]) {
-		event := asMap(raw)
-		payload := asMap(event["payload"])
-		if anyString(payload["requester_actor_id"]) != actorID {
-			continue
-		}
-		askID := responseAskID(payload)
-		if askID == "" {
-			continue
-		}
-		answerByAsk[askID] = map[string]any{
-			"text": payload["response_text"], "outcome": payload["outcome"],
-			"responder": payload["responding_actor_id"], "at": event["ts"],
-			"response_event_ref": "event:" + anyString(event["id"]),
-		}
-	}
-	notifications, err := a.invokeRawJSON(ctx, cfg, "inbox answer notifications", "GET", "/agent-notifications?status=unread", nil)
-	if err != nil {
-		return nil, err
-	}
-	unreadAnswers := map[string]bool{}
-	for _, raw := range asSlice(commandResultBody(notifications)["items"]) {
-		item := asMap(raw)
-		unreadAnswers[anyString(item["trigger_event_id"])] = true
-		for _, ref := range stringList(item["related_refs"]) {
-			if strings.HasPrefix(ref, "event:") {
-				unreadAnswers[strings.TrimPrefix(ref, "event:")] = true
-			}
-		}
+	return a.loadOwnInboxAsksForActor(ctx, cfg, actorID)
+}
+
+func (a *App) loadOwnInboxAsksForActor(ctx context.Context, cfg config.Resolved, actorID string) ([]map[string]any, error) {
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		return nil, errnorm.Usage("identity_unresolved", "active agent has no actor id")
 	}
 	items := make([]map[string]any, 0)
-	for _, raw := range asSlice(commandResultBody(requests)["events"]) {
-		event := asMap(raw)
-		payload := asMap(event["payload"])
-		if anyString(payload["requester_actor_id"]) != actorID {
-			continue
+	cursor := ""
+	seenCursors := map[string]bool{}
+	for {
+		query := url.Values{"limit": []string{"200"}}
+		if cursor != "" {
+			query.Set("cursor", cursor)
 		}
-		askID := "event:" + anyString(event["id"])
-		if withdrawnByAsk[askID] {
-			continue
+		result, err := a.invokeRawJSON(ctx, cfg, "inbox asks", "GET", "/agent-inbox/asks?"+query.Encode(), nil)
+		if err != nil {
+			return nil, err
 		}
-		answer := answerByAsk[askID]
-		answerUnread := false
-		if answer != nil {
-			answerUnread = unreadAnswers[strings.TrimPrefix(anyString(answer["response_event_ref"]), "event:")]
+		body := commandResultBody(result)
+		for _, raw := range asSlice(body["items"]) {
+			if item := asMap(raw); item != nil {
+				items = append(items, item)
+			}
 		}
-		status := "open"
-		if answer != nil {
-			status = "answered"
+		pageInfo := asMap(body["page_info"])
+		next := strings.TrimSpace(anyString(pageInfo["next_cursor"]))
+		if next == "" {
+			break
 		}
-		items = append(items, map[string]any{
-			"ask_id":        askID,
-			"title":         payload["title"],
-			"subject_ref":   payload["subject_ref"],
-			"requested_at":  event["ts"],
-			"status":        status,
-			"answer":        answer,
-			"answer_unread": answerUnread,
-		})
+		if seenCursors[next] || next == cursor {
+			return nil, errnorm.New(errnorm.KindInternal, "invalid_pagination", "agent inbox pagination returned a repeated cursor")
+		}
+		seenCursors[next] = true
+		cursor = next
 	}
 	return items, nil
 }
@@ -202,42 +158,23 @@ func (a *App) runAgentInboxRead(ctx context.Context, args []string, cfg config.R
 	if err != nil {
 		return nil, err
 	}
-	var answerEventRef string
+	var answerEventID string
 	for _, ask := range asks {
 		if anyString(ask["ask_id"]) == wanted {
-			answerEventRef = anyString(asMap(ask["answer"])["response_event_ref"])
+			answerEventID = anyString(asMap(ask["answer"])["response_event_id"])
 			break
 		}
 	}
-	if answerEventRef == "" {
+	if answerEventID == "" {
 		return nil, errnorm.Usage("not_found", fmt.Sprintf("answered ask %q was not found", wanted))
 	}
-	notifications, err := a.invokeRawJSON(ctx, cfg, "inbox answer notifications", "GET", "/agent-notifications", nil)
+	marked, err := a.invokeRawJSON(ctx, cfg, "inbox answer read", "POST", "/agent-inbox/answers/read", map[string]any{"answer_event_id": answerEventID})
 	if err != nil {
 		return nil, err
 	}
-	for _, raw := range asSlice(commandResultBody(notifications)["items"]) {
-		item := asMap(raw)
-		if anyString(item["trigger_event_id"]) != strings.TrimPrefix(answerEventRef, "event:") && !inboxHasString(stringList(item["related_refs"]), answerEventRef) {
-			continue
-		}
-		if anyString(item["status"]) == "read" || anyString(item["status"]) == "dismissed" {
-			return &commandResult{Data: map[string]any{"ask_id": wanted, "answer_event_ref": answerEventRef, "notification_id": item["wakeup_id"], "status": anyString(item["status"]), "already_read": true}}, nil
-		}
-		result, _, err := a.runNotificationsCommand(ctx, []string{"read", "--wakeup-id", anyString(item["wakeup_id"])}, cfg)
-		if err != nil {
-			return nil, err
-		}
-		return &commandResult{Data: map[string]any{"ask_id": wanted, "answer_event_ref": answerEventRef, "notification_id": item["wakeup_id"], "status": "read", "notification": commandResultBody(result)}}, nil
-	}
-	return nil, errnorm.Usage("not_found", fmt.Sprintf("answer notification for %q was not found", wanted))
-}
-
-func inboxHasString(values []string, want string) bool {
-	for _, value := range values {
-		if strings.TrimSpace(value) == strings.TrimSpace(want) {
-			return true
-		}
-	}
-	return false
+	answer := asMap(commandResultBody(marked)["answer"])
+	return &commandResult{Data: map[string]any{
+		"ask_id": wanted, "answer_event_ref": "event:" + answerEventID,
+		"status": "read", "already_read": answer["already_read"], "answer": answer,
+	}}, nil
 }

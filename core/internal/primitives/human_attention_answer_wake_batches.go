@@ -201,6 +201,49 @@ func (s *Store) DeleteHumanAttentionAnswerWakeBatch(ctx context.Context, targetA
 	return count > 0, err
 }
 
+// DeliverHumanAttentionAnswerWakeBatch atomically claims one persisted batch
+// generation, queues its durable wakeup, and removes the claimed batch. A
+// response queued before the claim changes TriggerEventID and makes the claim
+// fail; one queued after the claim creates a fresh generation after commit.
+func (s *Store) DeliverHumanAttentionAnswerWakeBatch(ctx context.Context, batch HumanAttentionAnswerWakeBatch, wakeup AgentWakeup) (bool, error) {
+	if s == nil || s.db == nil {
+		return false, fmt.Errorf("primitives store database is not initialized")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("begin answer wake delivery transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	claimed, err := claimHumanAttentionAnswerWakeBatchTx(ctx, tx, batch, wakeup)
+	if err != nil || !claimed {
+		return claimed, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("commit answer wake delivery transaction: %w", err)
+	}
+	return true, nil
+}
+
+func claimHumanAttentionAnswerWakeBatchTx(ctx context.Context, tx *sql.Tx, batch HumanAttentionAnswerWakeBatch, wakeup AgentWakeup) (bool, error) {
+	result, err := tx.ExecContext(ctx, `DELETE FROM human_attention_answer_wake_batches
+		WHERE target_actor_id=? AND batch_id=? AND trigger_event_id=?`, batch.TargetActorID, batch.BatchID, batch.TriggerEventID)
+	if err != nil {
+		return false, fmt.Errorf("claim answer wake batch generation: %w", err)
+	}
+	deleted, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("read answer wake claim result: %w", err)
+	}
+	if deleted == 0 {
+		return false, nil
+	}
+	if err := upsertAgentWakeupTx(ctx, tx, wakeup); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 type answerWakeBatchScanner interface {
 	Scan(dest ...any) error
 }

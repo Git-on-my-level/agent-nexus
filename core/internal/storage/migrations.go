@@ -925,6 +925,18 @@ var migrations = []migration{
 		},
 		AfterApply: applyMigration47HumanAttentionResolutions,
 	},
+	{
+		Version: 48,
+		Statements: []string{
+			`CREATE TABLE human_attention_answer_reads (
+				answer_event_id TEXT PRIMARY KEY,
+				requester_actor_id TEXT NOT NULL,
+				read_at TEXT NOT NULL
+			);`,
+			`CREATE INDEX idx_human_attention_answer_reads_requester ON human_attention_answer_reads(requester_actor_id,read_at,answer_event_id);`,
+		},
+		AfterApply: applyMigration48HumanAttentionAnswerReads,
+	},
 }
 
 func applyMigration47HumanAttentionResolutions(ctx context.Context, tx *sql.Tx) error {
@@ -985,6 +997,29 @@ func applyMigration43ReportIndexes(ctx context.Context, tx *sql.Tx) error {
 		}
 	}
 	return nil
+func applyMigration48HumanAttentionAnswerReads(ctx context.Context, tx *sql.Tx) error {
+	var exists int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='events'`).Scan(&exists); err != nil {
+		return err
+	}
+	if exists == 0 {
+		return nil
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='agent_wakeups'`).Scan(&exists); err != nil {
+		return err
+	}
+	if exists == 0 {
+		return nil
+	}
+	_, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO human_attention_answer_reads(answer_event_id,requester_actor_id,read_at)
+		SELECT response.id, wake.target_actor_id, COALESCE(wake.read_at,wake.updated_at)
+		FROM agent_wakeups AS wake
+		JOIN events AS response ON response.type='human_attention_responded'
+			AND trim(COALESCE(json_extract(response.payload_json,'$.payload.requester_actor_id'),''))=wake.target_actor_id
+		WHERE wake.notification_status='read'
+		  AND EXISTS (SELECT 1 FROM json_each(wake.refs_json) AS ref WHERE ref.value='event:' || response.id);`)
+	return err
+
 }
 
 func applyMigration40HostIdentity(ctx context.Context, tx *sql.Tx) error {

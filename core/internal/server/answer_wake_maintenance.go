@@ -21,6 +21,7 @@ type answerWakeBatchStore interface {
 	ListHumanAttentionAnswerWakeBatches(context.Context) ([]primitives.HumanAttentionAnswerWakeBatch, error)
 	CountOpenHumanAttentionAsks(context.Context, string) (int, error)
 	DeleteHumanAttentionAnswerWakeBatch(context.Context, string, string, string) (bool, error)
+	DeliverHumanAttentionAnswerWakeBatch(context.Context, primitives.HumanAttentionAnswerWakeBatch, primitives.AgentWakeup) (bool, error)
 	CreateArtifact(context.Context, string, map[string]any, any, string) (map[string]any, error)
 	UpsertAgentWakeup(context.Context, primitives.AgentWakeup) (primitives.AgentWakeup, error)
 }
@@ -165,19 +166,9 @@ func (m *AnswerWakeMaintainer) FlushTarget(ctx context.Context, targetActorID st
 }
 
 func (m *AnswerWakeMaintainer) dispatch(ctx context.Context, batch primitives.HumanAttentionAnswerWakeBatch) error {
-	// A new answer may have arrived after Step took its snapshot. In that case
-	// keep the newer window intact and let its quiet timer run again.
-	current, err := m.store.ListHumanAttentionAnswerWakeBatches(ctx)
-	if err != nil {
-		return err
-	}
-	for _, candidate := range current {
-		if candidate.TargetActorID == batch.TargetActorID && candidate.TriggerEventID != batch.TriggerEventID {
-			return nil
-		}
-	}
-
-	wakeupID := router.WakeupArtifactID(m.workspaceID, batch.ThreadID, batch.TriggerEventID, batch.TargetActorID)
+	// BatchID is the persisted generation token. The store claims that exact
+	// generation, inserts its wakeup, and removes it in one transaction.
+	wakeupID := router.WakeupArtifactID(m.workspaceID, batch.ThreadID, batch.BatchID, batch.TargetActorID)
 	refs := append([]string(nil), batch.Refs...)
 	refs = append(refs, "artifact:"+wakeupID)
 	triggerText := fmt.Sprintf("%d answers to your asks are ready. Run `anx await --answers`.", batch.AnswerCount)
@@ -204,11 +195,7 @@ func (m *AnswerWakeMaintainer) dispatch(ctx context.Context, batch primitives.Hu
 		"answer_event_refs":  eventRefs(batch.AnswerEventIDs),
 		"ask_event_refs":     eventRefs(batch.AskEventIDs),
 	}
-	if _, artifactErr := m.store.CreateArtifact(ctx, actors.SystemActorID, artifact, content, "structured"); artifactErr != nil && !strings.Contains(strings.ToLower(artifactErr.Error()), "conflict") {
-		// The wakeup row is the durable signal; its refs and trigger text are
-		// enough for clients when artifact storage is unavailable.
-	}
-	_, err = m.store.UpsertAgentWakeup(ctx, primitives.AgentWakeup{
+	wakeup := primitives.AgentWakeup{
 		WakeupID:         wakeupID,
 		Status:           primitives.AgentWakeupStatusRequested,
 		TargetHandle:     batch.TargetHandle,
@@ -220,13 +207,17 @@ func (m *AnswerWakeMaintainer) dispatch(ctx context.Context, batch primitives.Hu
 		TriggerCreatedAt: batch.TriggerCreatedAt,
 		TriggerText:      triggerText,
 		Refs:             refs,
-	})
-	if err != nil {
-		return fmt.Errorf("queue answer batch wake: %w", err)
 	}
-	_, err = m.store.DeleteHumanAttentionAnswerWakeBatch(ctx, batch.TargetActorID, batch.BatchID, batch.TriggerEventID)
+	delivered, err := m.store.DeliverHumanAttentionAnswerWakeBatch(ctx, batch, wakeup)
 	if err != nil {
-		return err
+		return fmt.Errorf("atomically deliver answer batch wake: %w", err)
+	}
+	if !delivered {
+		return nil
+	}
+	if _, artifactErr := m.store.CreateArtifact(ctx, actors.SystemActorID, artifact, content, "structured"); artifactErr != nil && !strings.Contains(strings.ToLower(artifactErr.Error()), "conflict") {
+		// The wakeup row is the durable signal; its refs and trigger text are
+		// enough for clients when artifact storage is unavailable.
 	}
 	return nil
 }

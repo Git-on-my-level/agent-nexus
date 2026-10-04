@@ -161,8 +161,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `secret get --reveal` (command): Reveal secret value
 - `secret exec` (command): Reveal multiple secrets by name
 - `secret update` (command): Update secret value
-- `inbox list` (local-helper): List asks addressed to the active agent, including answer and unread state.
-- `inbox read` (local-helper): Mark the durable answer notification batch for one of your asks as read.
+- `inbox list` (local-helper): List asks addressed to the active agent, including answer and per-answer read state.
+- `inbox read` (local-helper): Mark one answer to your ask as read, including before its wake is delivered.
 - `lifecycle verbs` (local-helper): Uniform lifecycle surface for archive, unarchive, trash, restore, and purge across artifacts, boards, docs, events, cards, and topics.
 - `topics create` (local-helper): Create a topic from plain flags, or from advanced JSON.
 - `topics patch` (local-helper): Patch a topic from scalar flags, or from advanced JSON.
@@ -410,7 +410,7 @@ Daily loop
 3. Post `anx cards message card:<slug> --body "What changed and why"` after meaningful progress. Include evidence, decisions, blockers, uncertainty and next steps; avoid raw chat copies and repeated unchanged updates. Always name the task explicitly: participation does not change legacy current-card selection.
 4. Report execution blockers on the card. For a consequential human decision, create one recommended ask with `anx ask "Question" --subject-ref card:<slug> --recommend "Preferred answer"`; keep `next_actor` on the agent and do not also block the card for that question. Withdraw an ask that is no longer needed with `anx ask withdraw <event:ask-id> --reason "<short reason>"`. Use `anx work block` only for an authorized Nexus-native task blocked by an execution issue, not as a duplicate of a human ask.
 5. Run `anx await <ask-id>` when one answer gates the next step. For a batch, use `anx await --answers`; `anx orient` and `anx inbox list --status answered` also show replies. Exit 8 means timeout; exit 9 means an individual answer was rejected.
-6. Hermes, Claude Code, and Codex harnesses consume the same workspace-local agent notification: on wake, read `anx inbox list --unread` or `anx orient`, then mark the processed batch with `anx inbox read event:<ask-id>`. One read marks every answer in that batch read.
+6. Hermes, Claude Code, and Codex harnesses consume the same workspace-local agent notification: on wake, read `anx inbox list --unread` or `anx orient`, then mark each processed answer with `anx inbox read event:<ask-id>`. `inbox read` marks that answer only, including before wake delivery; `anx notifications read --wakeup-id <id>` separately marks the wake notification read.
 7. Verify acceptance criteria before changing task completion. For an authorized Nexus-native task, `anx work done card:<slug> --evidence <url|event:ref|artifact:ref>` resolves that explicit task and clears legacy presence. Report source-owned completion as attributed evidence for its authorized source workflow. Closing a session or finishing a run never completes a task.
 
 
@@ -5286,7 +5286,7 @@ Global flags:
 
 ## `inbox list`
 
-List asks addressed to the active agent, including answer and unread state.
+List asks addressed to the active agent, including answer and per-answer read state.
 
 ```text
 Generated Help: inbox list
@@ -5304,8 +5304,9 @@ Generated Help: inbox list
 
 View scoping:
   - `anx inbox list` lists your own open asks. Use `--status answered` to read replies, or `--status all` for both.
-  - Add `--unread` to show answers whose wake notification is unread.
-  - `anx inbox read event:<ask-id>` marks the whole answer batch read.
+  - Add `--unread` to show answers not yet individually marked read; it implies answered unless `--status` is explicit.
+  - `anx inbox read event:<ask-id>` marks only that answer read, even during the quiet window.
+  - `anx notifications read --wakeup-id <id>` marks a wake notification read separately.
   - Human attention triage remains available as `anx debug inbox list`; use `anx inbox respond` to answer an inbox item.
   - Select an agent with `--as <name>` or `ANX_AS`.
 
@@ -5318,9 +5319,9 @@ Local Help: inbox list
 
 - Kind: `local helper`
 - Side effect class: `read_only`
-- Summary: List asks addressed to the active agent, including answer and unread state.
-- Quick start: Use `--status answered` to read replies and `--unread` to focus on new answer batches.
-- Composition: Composes the active agent's request and response events with its durable wake notifications. Use `anx debug inbox list` for operator inbox diagnostics.
+- Summary: List asks addressed to the active agent, including answer and per-answer read state.
+- Quick start: Use `--unread` to focus on unprocessed answers; it implies `--status answered` unless status is explicit.
+- Composition: Reads the authenticated agent's requester-scoped, paginated ask projection. Answer read state is per response and independent of wake notifications. Use `anx debug inbox list` for operator inbox diagnostics.
 - Examples:
   - `anx inbox list`
   - `anx inbox list --status answered`
@@ -5328,7 +5329,7 @@ Local Help: inbox list
 
 Flags:
   --status <open|answered|all> Filter your asks; default is open.
-  --unread                     Show only answered asks with unread wake notifications.
+  --unread                     Show answers not individually marked read; implies answered unless --status is explicit.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -5338,16 +5339,16 @@ Global flags:
 
 ## `inbox read`
 
-Mark the durable answer notification batch for one of your asks as read.
+Mark one answer to your ask as read, including before its wake is delivered.
 
 ```text
 Local Help: inbox read
 
 - Kind: `local helper`
 - Side effect class: `remote_coordination_write`
-- Summary: Mark the durable answer notification batch for one of your asks as read.
+- Summary: Mark one answer to your ask as read, including before its wake is delivered.
 - Quick start: Pass the `event:<ask-id>` returned by `anx ask`.
-- Composition: Marks the matching workspace-local agent notification read; all answers in that batch transition together.
+- Composition: Persists read state for that answer only. Wake notification read state remains separate and is managed with `anx notifications read`.
 - Examples:
   - `anx inbox read event:<ask-id>`
 

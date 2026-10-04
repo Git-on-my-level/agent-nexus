@@ -57,6 +57,8 @@ export declare class AnxClient {
     invoke(commandId: string, pathParams?: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     actorsCreate(options?: RequestOptions): Promise<InvokeResult>;
     actorsList(options?: RequestOptions): Promise<InvokeResult>;
+    agentInboxAnswersRead(options?: RequestOptions): Promise<InvokeResult>;
+    agentInboxAsksList(options?: RequestOptions): Promise<InvokeResult>;
     agentNotificationReceiptsStream(options?: RequestOptions): Promise<InvokeResult>;
     agentNotificationsDismiss(options?: RequestOptions): Promise<InvokeResult>;
     agentNotificationsList(options?: RequestOptions): Promise<InvokeResult>;

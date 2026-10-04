@@ -40,8 +40,10 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `agent`
 
-- Commands: `3`
+- Commands: `5`
 - Command IDs:
+  - `agent.inbox.answers.read` (`agent inbox answers read`)
+  - `agent.inbox.asks.list` (`agent inbox asks list`)
   - `agent.notifications.dismiss` (`agent notifications dismiss`)
   - `agent.notifications.list` (`agent notifications list`)
   - `agent.notifications.read` (`agent notifications read`)

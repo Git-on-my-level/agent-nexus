@@ -54,9 +54,9 @@ var runtimeGeneratedPacketResources = []string{}
 var localHelperTopics = []localHelperTopic{
 	{
 		Path:        "inbox list",
-		Summary:     "List asks addressed to the active agent, including answer and unread state.",
-		QuickStart:  "Use `--status answered` to read replies and `--unread` to focus on new answer batches.",
-		Composition: "Composes the active agent's request and response events with its durable wake notifications. Use `anx debug inbox list` for operator inbox diagnostics.",
+		Summary:     "List asks addressed to the active agent, including answer and per-answer read state.",
+		QuickStart:  "Use `--unread` to focus on unprocessed answers; it implies `--status answered` unless status is explicit.",
+		Composition: "Reads the authenticated agent's requester-scoped, paginated ask projection. Answer read state is per response and independent of wake notifications. Use `anx debug inbox list` for operator inbox diagnostics.",
 		Examples: []string{
 			"anx inbox list",
 			"anx inbox list --status answered",
@@ -64,14 +64,14 @@ var localHelperTopics = []localHelperTopic{
 		},
 		Flags: []localHelperFlag{
 			{Name: "--status <open|answered|all>", Description: "Filter your asks; default is open."},
-			{Name: "--unread", Description: "Show only answered asks with unread wake notifications."},
+			{Name: "--unread", Description: "Show answers not individually marked read; implies answered unless --status is explicit."},
 		},
 	},
 	{
 		Path:        "inbox read",
-		Summary:     "Mark the durable answer notification batch for one of your asks as read.",
+		Summary:     "Mark one answer to your ask as read, including before its wake is delivered.",
 		QuickStart:  "Pass the `event:<ask-id>` returned by `anx ask`.",
-		Composition: "Marks the matching workspace-local agent notification read; all answers in that batch transition together.",
+		Composition: "Persists read state for that answer only. Wake notification read state remains separate and is managed with `anx notifications read`.",
 		Examples:    []string{"anx inbox read event:<ask-id>"},
 		Flags:       []localHelperFlag{},
 	},
@@ -1894,8 +1894,9 @@ Note: by default, archived and trashed events are excluded from the timeline out
 	case "inbox.list":
 		return strings.TrimSpace(`View scoping:
   - ` + "`anx inbox list`" + ` lists your own open asks. Use ` + "`--status answered`" + ` to read replies, or ` + "`--status all`" + ` for both.
-  - Add ` + "`--unread`" + ` to show answers whose wake notification is unread.
-  - ` + "`anx inbox read event:<ask-id>`" + ` marks the whole answer batch read.
+  - Add ` + "`--unread`" + ` to show answers not yet individually marked read; it implies answered unless ` + "`--status`" + ` is explicit.
+  - ` + "`anx inbox read event:<ask-id>`" + ` marks only that answer read, even during the quiet window.
+  - ` + "`anx notifications read --wakeup-id <id>`" + ` marks a wake notification read separately.
   - Human attention triage remains available as ` + "`anx debug inbox list`" + `; use ` + "`anx inbox respond`" + ` to answer an inbox item.
   - Select an agent with ` + "`--as <name>`" + ` or ` + "`ANX_AS`" + `.
 

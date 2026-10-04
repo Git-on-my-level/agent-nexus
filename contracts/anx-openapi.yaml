@@ -7042,6 +7042,87 @@ paths:
         '401':
           $ref: '#/components/responses/ErrorResponse'
 
+  /agent-inbox/asks:
+    get:
+      operationId: listAgentInboxAsks
+      summary: List authenticated agent's human attention asks
+      tags: [agents, inbox]
+      x-anx-surface: projection
+      x-anx-command-id: agent.inbox.asks.list
+      x-anx-cli-path: agent inbox asks list
+      x-anx-why: Requester-scoped projection of open and answered asks, including per-answer read state.
+      x-anx-agent-notes: Results are scoped to the authenticated requester and keyset-paginated; do not infer open state from a partial event timeline.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ items, page_info }` with keyset pagination."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-concepts: [agents, inbox]
+      x-anx-stability: beta
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200 }
+        - in: query
+          name: cursor
+          schema: { type: string }
+      responses:
+        '200':
+          description: Requester's asks and answers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /agent-inbox/answers/read:
+    post:
+      operationId: markAgentInboxAnswerRead
+      summary: Mark one of the authenticated agent's answers read
+      tags: [agents, inbox]
+      x-anx-surface: projection
+      x-anx-command-id: agent.inbox.answers.read
+      x-anx-cli-path: agent inbox answers read
+      x-anx-why: Persist answer-level read state independently from a wake notification batch.
+      x-anx-agent-notes: Only the requesting agent can mark one of its own response events read. This state is independent from wake notification read state.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ answer }` with the per-answer read state."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-anx-concepts: [agents, inbox, write]
+      x-anx-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answer_event_id]
+              properties:
+                answer_event_id: { type: string, minLength: 1 }
+              additionalProperties: false
+      responses:
+        '200':
+          description: Already marked read
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '201':
+          description: Marked read
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
   /agent-notifications/read:
     post:
       operationId: markAgentNotificationRead
