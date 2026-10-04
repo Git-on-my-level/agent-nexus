@@ -156,6 +156,49 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(client.writes, [])
         self.assertEqual(plan_ingestion([item(i) for i in range(4)], mapping(rules=[]), client)['proposals'], [])
 
+    def test_shared_label_is_found_with_distinct_earlier_labels(self):
+        for with_project_repo in (False, True):
+            with self.subTest(with_project_repo=with_project_repo):
+                items = [item(i, project=f'p-{i}' if with_project_repo else None,
+                              repo=f'org/repo-{i}' if with_project_repo else None,
+                              labels=[f'a-{i}', 'shared-initiative']) for i in range(5)]
+                plan = plan_ingestion(items, mapping(rules=[]), Client())
+                self.assertEqual(len(plan['proposals']), 1)
+                self.assertEqual(plan['proposals'][0]['cluster'][2], 'label:shared-initiative')
+                self.assertEqual(plan['proposals'][0]['count'], 5)
+
+    def test_all_dimensions_and_overlaps_form_one_stable_suggestion(self):
+        items = [item(i, repo='org/repo', labels=['release', 'shared', 'shared']) for i in range(5)]
+        proposals = plan_ingestion(items, mapping(rules=[]), Client())['proposals']
+        self.assertEqual(len(proposals), 1)
+        self.assertEqual(proposals[0]['count'], 5)
+        self.assertEqual({c[2] for c in proposals[0]['clusters']},
+                         {'project:p', 'repo:org/repo', 'label:release', 'label:shared'})
+        for row in items:
+            row['labels'].reverse()
+        self.assertEqual(plan_ingestion(items[::-1], mapping(rules=[]), Client())['proposals'], proposals)
+
+    def test_partial_and_transitive_overlap_deduplicates_members(self):
+        items = [item(i, project=None, labels=[label for label, members in
+                 [('a', range(5)), ('b', range(4, 9)), ('c', range(8, 13))] if i in members])
+                 for i in range(13)]
+        proposals = plan_ingestion(items, mapping(rules=[]), Client())['proposals']
+        self.assertEqual(len(proposals), 1)
+        self.assertEqual(proposals[0]['count'], 13)
+        self.assertEqual(len(proposals[0]['clusters']), 3)
+
+    def test_disjoint_scopes_stay_separate_and_threshold_precedes_union(self):
+        items = [item(i, connection_id=connection, labels=['shared'])
+                 for connection in ('local', 'other') for i in range(5)]
+        proposals = plan_ingestion(items, mapping(rules=[]), Client())['proposals']
+        self.assertEqual([p['count'] for p in proposals], [5, 5])
+        items = [item(i, project=None, labels=['a'] if i < 5 else ['b']) for i in range(10)]
+        proposals = plan_ingestion(items, mapping(rules=[]), Client())['proposals']
+        self.assertEqual([p['count'] for p in proposals], [5, 5])
+        items = [item(i, project=None, labels=['a'] if i < 3 else ['b']) for i in range(6)]
+        self.assertEqual(plan_ingestion(items, mapping(rules=[]), Client())['proposals'], [])
+
+
     def test_source_reader_metadata_reaches_routing(self):
         reads = [{'name': 'multica', 'ok': True, 'complete': True, 'items': [
             {'native_id': 'source-1', 'identifier': 'SCA-1', 'title': 'A milestone',

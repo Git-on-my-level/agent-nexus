@@ -76,27 +76,54 @@ def main():
                 topic = client._call(['topics','create','--title','Fleet test','--summary','Smoke context'], timeout=30)['topic']['ref']
                 board = client._call(['boards','create','--topic',topic,'--title','Initiatives','--summary','Smoke outcomes'], timeout=30)['board']['ref']
                 initiative = client._call(['cards','create','--board',board,'--title','Ship outcome','--body','Human context'], timeout=30)['card']['ref']
-                mapping = {'version':1,'workspace':base,'rules':[{'id':'test','initiative':initiative,'match':{'authority':'multica'}}],'pins':[]}
-                items = [{'authority':'multica','connection_id':'test','native_id':str(i),'title':f'Issue {i}','status':'in_progress','url':f'https://example.test/{i}'} for i in range(340)]
-                first = apply_ingestion(client, plan_ingestion(items, mapping, client))
-                assert first['revised'] == 1 and not first['errors'], first
-                assert len(evidence_entries(client.card_get(initiative)['summary'])) == 340
-                second = apply_ingestion(client, plan_ingestion(items, mapping, client))
-                assert second['skipped'] == 1 and not second['errors'], second
-                legacy = client._call_body(['work','create'], {'board_ref':board,'title':'Legacy issue','summary':'Original source content','phase':'ready','source':{'authority':'multica','connection_id':'test','native_id':'old'}}, timeout=30)['work']['ref']
+                legacy = client._call_body(['work','create'], {'board_ref':board,'title':'Legacy issue','summary':'Original source content','phase':'ready','source':{'authority':'multica','connection_id':'test','native_id':'old','url':'https://example.test/old'}}, timeout=30)['work']['ref']
                 client._call_body(['work','observations','submit',legacy], {'observation':{
                     'idempotency_key':'fixture','reader_id':'fleet-sync/multica','reader_revision':'0.1.0',
                     'observed_at':datetime.now(timezone.utc).isoformat(),'status':'reported',
                     'facts':{'title':'Legacy issue','phase':'ready'},'evidence':[]}}, timeout=30)
+                graph = {'steps': [
+                    {'id': 'design', 'title': 'Approved design', 'status': 'done', 'after': []},
+                    {'id': 'build', 'title': 'Build milestone', 'ref': 'https://example.test/1',
+                     'status': 'active', 'after': ['design'], 'due': '2099-01-01'},
+                    {'id': 'legacy', 'title': 'Existing source card', 'ref': legacy, 'after': ['design']},
+                    {'id': 'source-url', 'title': 'Source URL', 'ref': 'https://example.test/old', 'after': ['legacy']},
+                    {'id': 'accept', 'title': 'Acceptance', 'status': 'blocked', 'after': ['build', 'source-url']},
+                ]}
+                client._call_body(['plan', 'set', initiative], graph, timeout=30)
+                baseline = client._call(['plan', 'show', initiative], timeout=30)
+                assert baseline['plan_state']['progress'] == {'done': 1, 'total': 5}, baseline
+                assert baseline['plan_state']['health'] == 'blocked', baseline
+
+                def assert_plan_preserved():
+                    for current in (client.card_get(initiative), client._call(['plan', 'show', initiative], timeout=30)):
+                        assert current['plan'] == baseline['plan'], current
+                        assert current['plan_state'] == baseline['plan_state'], current
+
+                mapping = {'version':1,'workspace':base,'rules':[{'id':'test','initiative':initiative,'match':{'authority':'multica'}}],'pins':[]}
+                items = [{'authority':'multica','connection_id':'test','native_id':str(i),'title':f'Issue {i}','status':'in_progress','url':f'https://example.test/{i}'} for i in range(340)]
+                preview = plan_ingestion(items, mapping, client)
+                # A separately edited plan between preview and body revision must survive.
+                graph['steps'][1]['title'] = 'Refined build milestone'
+                client._call_body(['plan', 'set', initiative], graph, timeout=30)
+                baseline = client._call(['plan', 'show', initiative], timeout=30)
+                first = apply_ingestion(client, preview)
+                assert first['revised'] == 1 and not first['errors'], first
+                assert len(evidence_entries(client.card_get(initiative)['summary'])) == 340
+                assert_plan_preserved()
+                second = apply_ingestion(client, plan_ingestion(items, mapping, client))
+                assert second['skipped'] == 1 and not second['errors'], second
+                assert_plan_preserved()
                 manifest = inventory(client, mapping, base)
                 assert manifest['counts']['archive_after_fold'] == 1, manifest['counts']
                 result = apply_migration(client, manifest, base, manifest['digest'])
                 assert result['archived'] == [legacy], result
+                assert_plan_preserved()
                 card = client.card_get(legacy)
                 assert card['summary'] == 'Original source content' and card.get('archived_at'), card
                 replay = apply_migration(client, manifest, base, manifest['digest'])
                 assert replay['already_archived'] == [legacy], replay
-                print('PASS: real CLI/core; 340-item zero-create ingestion, cache-free rerun, source-backed tombstone/archive, replay; isolated workspace removed')
+                assert_plan_preserved()
+                print('PASS: real CLI/core; 340-item zero-create ingestion, cache-free rerun, source-backed tombstone/archive, replay; existing plan and full computed state preserved, including concurrent plan edit; isolated workspace removed')
             finally:
                 core.terminate()
                 core.wait(timeout=10)

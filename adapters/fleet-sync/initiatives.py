@@ -208,18 +208,50 @@ def plan_ingestion(items, mapping, client):
         summary = merge_evidence(card, entries)
         changes.append({'initiative': target, 'action': 'revise' if summary != card.get('summary', '') else 'skip',
                         'items': entries, 'body': revision_body(card, summary)})
-    clusters = defaultdict(list)
-    for item in unsorted:
-        # Source/host alone is not a coherent project cluster.
-        key = ('project:' + item['project']) if item.get('project') else ('repo:' + item['repo']) if item.get('repo') else ('label:' + sorted(item['labels'])[0]) if item.get('labels') else None
-        if key:
-            clusters[(item['authority'], item['connection_id'], key)].append(identity(item))
-    proposals = [{'cluster': list(key), 'count': len(set(members)), 'items': sorted(set(members)),
-                  'action': 'suggest initiative; requires deliberate promotion'}
-                 for key, members in sorted(clusters.items()) if len(set(members)) >= mapping.get('proposal_threshold', 5)]
+    proposals = cluster_proposals(unsorted, mapping.get('proposal_threshold', 5))
     return {'initiatives': changes, 'unsorted': unsorted, 'proposals': proposals,
             'counts': {'items': len(items), 'mapped': sum(len(v) for v in groups.values()),
                        'unsorted': len(unsorted), 'new_cards': 0}}
+
+
+def cluster_proposals(items, threshold):
+    clusters = defaultdict(set)
+    for item in items:
+        # Evaluate each dimension independently; a project/repo does not mask
+        # labels. Source/host alone is not a coherent initiative cluster.
+        dimensions = {f'label:{label}' for label in item.get('labels', []) if label}
+        dimensions.update(f'{field}:{item[field]}' for field in ('project', 'repo') if item.get(field))
+        for dimension in dimensions:
+            clusters[(item['authority'], item['connection_id'], dimension)].add(identity(item))
+    candidates = [(key, members) for key, members in sorted(clusters.items()) if len(members) >= threshold]
+    parents = list(range(len(candidates)))
+
+    def root(index):
+        while parents[index] != index:
+            parents[index] = parents[parents[index]]
+            index = parents[index]
+        return index
+
+    # Connected components of overlapping qualifying clusters. Do not promote
+    # sub-threshold labels simply because their union would pass the threshold.
+    owner = {}
+    for index, (_, members) in enumerate(candidates):
+        for member in members:
+            if member in owner:
+                parents[root(index)] = root(owner[member])
+            else:
+                owner[member] = index
+    groups = {}
+    for index, (key, members) in enumerate(candidates):
+        dimensions, combined = groups.setdefault(root(index), ([], set()))
+        dimensions.append(list(key))
+        combined.update(members)
+    return sorted([
+        {'cluster': dimensions[0], 'clusters': dimensions,
+         'count': len(members), 'items': sorted(members),
+         'action': 'suggest initiative; requires deliberate promotion'}
+        for dimensions, members in groups.values()
+    ], key=lambda proposal: proposal['cluster'])
 
 
 def apply_ingestion(client, plan):
@@ -241,7 +273,7 @@ def add_unsorted_panel(report, plan, reads):
     items = plan['unsorted']
     rows = [{'cells': [i['title'], i['authority'], i['status'], i.get('url') or i['native_id']], 'source_ids': []} for i in items]
     proposals = plan['proposals']
-    rows = [{'cells': ['Suggestion: ' + p['cluster'][2], str(p['count']) + ' items', 'review mapping', 'Create or select an initiative deliberately'], 'source_ids': []} for p in proposals] + rows
+    rows = [{'cells': ['Suggestion: ' + p['cluster'][2] + (f" (+{len(p['clusters']) - 1} overlapping groups)" if len(p['clusters']) > 1 else ''), str(p['count']) + ' items', 'review mapping', 'Create or select an initiative deliberately'], 'source_ids': []} for p in proposals] + rows
     incomplete = any(not r.get('ok') or not r.get('complete') for r in reads)
     if len(rows) > 200:
         omitted = len(rows) - 199

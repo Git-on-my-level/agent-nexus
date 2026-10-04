@@ -68,13 +68,17 @@ facts produce no revision even after local cache loss. Partial reads and items
 missing from a later source window never delete historical evidence or mark an
 initiative done. Migration links survive future updates. Rerouting adds evidence
 to the new initiative; the former initiative retains its historical evidence.
-Do not hand-edit the marked block. A malformed block stops the run.
+The existing initiative plan and core-derived state are preserved. An exact
+source URL/step-ref match already links the source; ingestion adds no separate
+step association and never edits steps or their statuses. Do not hand-edit the marked block. A malformed block stops the run.
 
 Unmatched items stay in **one** Unsorted panel, with a full count, at most 199
 listed rows plus an explicit overflow row (the report contract caps tables at
-200). `--plan` always includes the complete list. A shared project, repository,
-or label cluster with at least five members produces one persistent suggestion
-in that panel; the threshold is configurable. No card or inbox ask is created.
+200). `--plan` always includes the complete list. Projects, repositories and every label are evaluated independently. Clusters
+with at least five members qualify (configurable); overlapping qualifying
+clusters, including transitive overlaps, share one suggestion with deduplicated
+items and all dimensions recorded in the preview. Disjoint groups and source
+connections remain separate. Sub-threshold clusters never combine to qualify. No card or inbox ask is created.
 Humans/agents deliberately choose an existing initiative or create a justified
 new one, then add a rule. Source/host alone is not enough to propose a cluster.
 
