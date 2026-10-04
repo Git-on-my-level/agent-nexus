@@ -488,6 +488,15 @@ func (f *moveFakeWorkspace) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		respond(http.StatusForbidden, map[string]any{"error": map[string]any{"code": "forbidden", "message": "destination write grant missing"}})
 		return
 	}
+	if len(segments) == 2 && segments[0] == "cards" && r.Method == http.MethodGet {
+		work := fakeFindResource(f.works, segments[1])
+		if work == nil {
+			notFound()
+			return
+		}
+		respond(http.StatusOK, map[string]any{"card": work})
+		return
+	}
 	if len(segments) == 3 && segments[0] == "cards" && segments[2] == "plan" {
 		work := fakeFindResource(f.works, segments[1])
 		if work == nil {

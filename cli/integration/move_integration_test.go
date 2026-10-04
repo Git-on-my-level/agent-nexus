@@ -27,8 +27,11 @@ import (
 func TestMoveCardRealCoresUsesCanonicalPlanAndRewritesSelfRefs(t *testing.T) {
 	pair := newMoveCorePair(t)
 	card := pair.createCard(t, "source-card", map[string]any{"authority": "nexus"}, "")
+	sourceCard := pair.source.getCore(t, "/cards/"+url.PathEscape(card))["card"]
+	sourceUUIDRef := "card:" + moveIntegrationString(integrationMap(sourceCard)["id"])
 	plan := map[string]any{"steps": []any{
 		map[string]any{"id": "self-review", "title": "Review this card", "ref": card},
+		map[string]any{"id": "uuid-self-review", "title": "Review this card by UUID", "ref": sourceUUIDRef},
 	}}
 	pair.source.runCLIExpectOK(t, "move-agent", plan, "plan", "set", card, "--from-file", "-")
 
@@ -42,11 +45,11 @@ func TestMoveCardRealCoresUsesCanonicalPlanAndRewritesSelfRefs(t *testing.T) {
 	steps, ok := refs.([]any)
 	wantSelfRef := "card:" + moveIntegrationDeterministicUUID(mustStringPath(t, result.Payload, "result.move_id"), "card", card)
 	stepRef := ""
-	if ok && len(steps) == 1 {
+	if ok && len(steps) > 0 {
 		stepRef = moveIntegrationString(integrationMap(steps[0])["ref"])
 	}
-	if !ok || len(steps) != 1 || stepRef != wantSelfRef {
-		t.Fatalf("destination plan did not rewrite the self-reference: destination_ref=%q expected_step=%q actual_step=%q response=%s", destinationRef, wantSelfRef, stepRef, destinationPlan.Stdout)
+	if !ok || len(steps) != 2 || stepRef != wantSelfRef || moveIntegrationString(integrationMap(steps[1])["ref"]) != wantSelfRef {
+		t.Fatalf("destination plan did not rewrite handle and UUID self-references: destination_ref=%q expected_step=%q steps=%#v response=%s", destinationRef, wantSelfRef, steps, destinationPlan.Stdout)
 	}
 	sourceWork := pair.source.getCore(t, "/work/"+url.PathEscape(card))
 	if moveIntegrationState(sourceWork, "work") != "archived" {
@@ -85,11 +88,34 @@ func TestMoveTopicRealCoresPreservesSharedBoardAndRewritesPlanRefs(t *testing.T)
 	if len(cardRefs) != 2 || integrationContains(cardRefs, fixture.cardA) || integrationContains(cardRefs, fixture.cardB) {
 		t.Fatalf("topic card refs were not rewritten: %#v", topic["related_refs"])
 	}
+	wantPinnedDocumentRef := "document:" + moveIntegrationDeterministicUUID(moveID, "document", fixture.pinnedDocument)
+	wantPinnedDocumentCardRef := "card:" + moveIntegrationDeterministicUUID(moveID, "card", fixture.cardB)
 	destinationPlan := pair.destination.runCLIExpectOK(t, "move-agent", nil, "plan", "show", wantCardARef)
 	stepsRaw, _ := getPathValue(destinationPlan.Payload, "result.plan.steps")
 	steps, _ := stepsRaw.([]any)
-	if len(steps) != 1 || moveIntegrationString(integrationMap(steps[0])["ref"]) != wantCardBRef {
+	if len(steps) != 2 || moveIntegrationString(integrationMap(steps[0])["ref"]) != wantCardBRef || moveIntegrationString(integrationMap(steps[1])["ref"]) != wantCardBRef {
 		t.Fatalf("plan link was not rewritten across the moved set: %s", destinationPlan.Stdout)
+	}
+	destinationCardA := integrationMap(pair.destination.getCore(t, "/work/"+url.PathEscape(wantCardARef))["work"])
+	destinationCardB := integrationMap(pair.destination.getCore(t, "/work/"+url.PathEscape(wantCardBRef))["work"])
+	destinationPinnedByID := pair.destination.getCore(t, "/docs/"+url.PathEscape(wantPinnedDocumentRef))
+	destinationPinnedRef := moveIntegrationString(destinationCardB["document_ref"])
+	if destinationPinnedRef == "" {
+		t.Fatalf("destination card lost its pinned document ref: %#v", destinationCardB)
+	}
+	destinationPinnedByCardRef := pair.destination.getCore(t, "/docs/"+url.PathEscape(destinationPinnedRef))
+	destinationPinnedID := moveIntegrationString(integrationMap(destinationPinnedByID["document"])["id"])
+	sourcePinnedID := moveIntegrationString(integrationMap(pair.source.getCore(t, "/docs/"+url.PathEscape(fixture.pinnedDocument))["document"])["id"])
+	if destinationPinnedID != moveIntegrationString(integrationMap(destinationPinnedByCardRef["document"])["id"]) || destinationPinnedID != strings.TrimPrefix(wantPinnedDocumentRef, "document:") || destinationPinnedID == sourcePinnedID {
+		t.Fatalf("card-attached document was not included and linked in destination: %#v", destinationCardB)
+	}
+	sourceCardBUUIDRef := "card:" + fixture.cardBID
+	if refs := integrationStrings(destinationCardA["related_refs"]); countIntegrationRef(refs, wantCardBRef) != 1 || integrationContains(refs, fixture.cardB) || integrationContains(refs, sourceCardBUUIDRef) {
+		t.Fatalf("card-related handle and UUID aliases were not rewritten and deduplicated: %#v", destinationCardA["related_refs"])
+	}
+	wantAliasDocumentRef := "document:" + moveIntegrationDeterministicUUID(moveID, "document", fixture.aliasDocument)
+	if !integrationContains(integrationStrings(destinationCardA["related_refs"]), wantAliasDocumentRef) || integrationContains(integrationStrings(destinationCardA["related_refs"]), fixture.aliasDocument) {
+		t.Fatalf("card-related document ref was not rewritten: %#v", destinationCardA["related_refs"])
 	}
 	destinationDocRefs := integrationStrings(topic["document_refs"])
 	if len(destinationDocRefs) != 1 || destinationDocRefs[0] == fixture.document {
@@ -101,6 +127,43 @@ func TestMoveTopicRealCoresPreservesSharedBoardAndRewritesPlanRefs(t *testing.T)
 	revision, _ := destinationDoc["revision"].(map[string]any)
 	if moveIntegrationString(document["title"]) == "" || revision["content"] != "Synthetic topic move document." {
 		t.Fatalf("destination document content or metadata was not preserved: %#v", destinationDoc)
+	}
+	if _, status := pair.destination.getCoreStatus(t, "/docs/"+url.PathEscape(wantPinnedDocumentRef)); status != http.StatusOK {
+		t.Fatalf("pinned document was not copied to destination: status=%d", status)
+	}
+	aliasDocument := pair.destination.getCore(t, "/docs/"+url.PathEscape(wantAliasDocumentRef))
+	aliasRevision := integrationMap(aliasDocument["revision"])
+	aliasRefs := integrationStrings(aliasRevision["refs"])
+	destinationCardBIdentity := integrationMap(pair.destination.getCore(t, "/cards/"+url.PathEscape(wantCardBRef))["card"])
+	resolvedAliasCardIdentity := map[string]any{}
+	aliasCardRefs := []string{}
+	for _, ref := range aliasRefs {
+		if strings.HasPrefix(ref, "card:") {
+			aliasCardRefs = append(aliasCardRefs, ref)
+		}
+	}
+	if len(aliasCardRefs) == 1 {
+		resolvedAliasCardIdentity = integrationMap(pair.destination.getCore(t, "/cards/"+url.PathEscape(aliasCardRefs[0]))["card"])
+	}
+	if len(aliasCardRefs) != 1 || moveIntegrationString(resolvedAliasCardIdentity["id"]) != moveIntegrationString(destinationCardBIdentity["id"]) || moveIntegrationString(destinationCardBIdentity["id"]) != strings.TrimPrefix(wantPinnedDocumentCardRef, "card:") || moveIntegrationString(destinationCardBIdentity["id"]) == fixture.cardBID {
+		t.Fatalf("document refs did not rewrite handle and UUID aliases: %#v", aliasRevision["refs"])
+	}
+	pinnedListed := false
+	aliasListed := false
+	for _, raw := range rows {
+		row := integrationMap(raw)
+		if row["kind"] == "document" && row["source_ref"] == fixture.pinnedDocument {
+			pinnedListed = true
+		}
+		if row["kind"] == "document" && row["source_ref"] == fixture.aliasDocument {
+			aliasListed = true
+		}
+	}
+	if !pinnedListed {
+		t.Fatalf("dry run omitted the document pinned to a selected card: %s", preview.Stdout)
+	}
+	if !aliasListed {
+		t.Fatalf("dry run omitted the document linked from a selected card: %s", preview.Stdout)
 	}
 	if got := moveIntegrationState(pair.source.getCore(t, "/boards/"+url.PathEscape(fixture.board)), "board"); got != "active" {
 		t.Fatalf("shared source board was changed: state=%q", got)
@@ -246,7 +309,7 @@ type moveCorePair struct {
 }
 
 type moveTopicFixture struct {
-	topic, board, document, cardA, cardB, unrelatedCard string
+	topic, board, document, pinnedDocument, aliasDocument, cardA, cardB, cardBID, unrelatedCard string
 }
 
 func newMoveCorePair(t *testing.T) *moveCorePair {
@@ -282,8 +345,15 @@ func (p *moveCorePair) createTopic(t *testing.T, name string) string {
 }
 
 func (p *moveCorePair) createCard(t *testing.T, title string, source map[string]any, board string) string {
+	return p.createCardWithFields(t, title, source, board, nil)
+}
+
+func (p *moveCorePair) createCardWithFields(t *testing.T, title string, source map[string]any, board string, fields map[string]any) string {
 	t.Helper()
 	input := map[string]any{"title": "Move " + title, "summary": "Synthetic move card", "source": source, "related_refs": []string{}}
+	for key, value := range fields {
+		input[key] = value
+	}
 	if board != "" {
 		input["board_ref"] = board
 	}
@@ -306,16 +376,37 @@ func (p *moveCorePair) createTopicFixture(t *testing.T, suffix string) moveTopic
 		"provenance": map[string]any{"sources": []string{"inferred"}},
 	}, "docs", "create")
 	document := mustStringPath(t, docResult.Payload, "result.document.ref")
-	cardA := p.createCard(t, "owned-a-"+suffix, map[string]any{"authority": "nexus"}, board)
-	cardB := p.createCard(t, "owned-b-"+suffix, map[string]any{"authority": "nexus"}, board)
+	pinnedResult := p.source.runCLIExpectOK(t, "move-agent", map[string]any{
+		"document": map[string]any{"id": "move-pinned-doc-" + suffix, "title": "Pinned move doc " + suffix},
+		"refs":     []string{},
+		"content":  "Synthetic card-pinned document.", "content_type": "text",
+		"provenance": map[string]any{"sources": []string{"inferred"}},
+	}, "docs", "create")
+	pinnedDocument := mustStringPath(t, pinnedResult.Payload, "result.document.ref")
+	cardB := p.createCardWithFields(t, "owned-b-"+suffix, map[string]any{"authority": "nexus"}, board, map[string]any{"document_ref": pinnedDocument})
+	cardBIdentity := integrationMap(p.source.getCore(t, "/cards/"+url.PathEscape(cardB))["card"])
+	cardBUUIDRef := "card:" + moveIntegrationString(cardBIdentity["id"])
+	aliasResult := p.source.runCLIExpectOK(t, "move-agent", map[string]any{
+		"document": map[string]any{"id": "move-card-link-doc-" + suffix, "title": "Card link doc " + suffix},
+		"refs":     []string{cardB, cardBUUIDRef},
+		"content":  "Synthetic card-linked document.", "content_type": "text",
+		"provenance": map[string]any{"sources": []string{"inferred"}},
+	}, "docs", "create")
+	aliasDocument := mustStringPath(t, aliasResult.Payload, "result.document.ref")
+	cardA := p.createCardWithFields(t, "owned-a-"+suffix, map[string]any{"authority": "nexus"}, board, map[string]any{
+		"related_refs": []string{cardB, cardBUUIDRef, aliasDocument},
+	})
 	unrelated := p.createCard(t, "unrelated-"+suffix, map[string]any{"authority": "nexus"}, board)
 	patch := map[string]any{"patch": map[string]any{
 		"document_refs": []string{document}, "board_refs": []string{board}, "related_refs": []string{cardA, cardB},
 	}}
 	p.source.runCLIExpectOK(t, "move-agent", patch, "topics", "patch", "--topic-id", topic)
-	plan := map[string]any{"steps": []any{map[string]any{"id": "verify-b", "title": "Verify linked card", "ref": cardB}}}
+	plan := map[string]any{"steps": []any{
+		map[string]any{"id": "verify-b", "title": "Verify linked card", "ref": cardB},
+		map[string]any{"id": "verify-b-uuid", "title": "Verify linked card by UUID", "ref": cardBUUIDRef},
+	}}
 	p.source.runCLIExpectOK(t, "move-agent", plan, "plan", "set", cardA, "--from-file", "-")
-	return moveTopicFixture{topic: topic, board: board, document: document, cardA: cardA, cardB: cardB, unrelatedCard: unrelated}
+	return moveTopicFixture{topic: topic, board: board, document: document, pinnedDocument: pinnedDocument, aliasDocument: aliasDocument, cardA: cardA, cardB: cardB, cardBID: moveIntegrationString(cardBIdentity["id"]), unrelatedCard: unrelated}
 }
 
 func newMoveIntegrationFaultProxy(t *testing.T, target string) (*moveIntegrationFaultProxy, string) {
@@ -556,6 +647,16 @@ func integrationContains(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func countIntegrationRef(values []string, want string) int {
+	count := 0
+	for _, value := range values {
+		if value == want {
+			count++
+		}
+	}
+	return count
 }
 
 func moveIntegrationDeterministicUUID(moveID, kind, sourceRef string) string {

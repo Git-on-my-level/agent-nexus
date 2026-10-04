@@ -365,6 +365,34 @@ func moveReadCardPlan(ctx context.Context, a *App, cfg config.Resolved, ref stri
 	return moveCall(ctx, a, cfg, http.MethodGet, "/cards/"+url.PathEscape(ref)+"/plan", nil)
 }
 
+func moveHydrateCardIdentity(ctx context.Context, a *App, cfg config.Resolved, work map[string]any) error {
+	ref := moveFieldString(work, "ref")
+	if ref == "" {
+		return errnorm.Internal("move_response_invalid", "card read omitted its ref")
+	}
+	card, err := moveRead(ctx, a, cfg, "/cards/"+url.PathEscape(ref), "card")
+	if err != nil {
+		return err
+	}
+	cardID := moveFieldString(card, "id")
+	cardRef := moveFieldString(card, "ref")
+	if cardID == "" || cardRef == "" {
+		return errnorm.Internal("move_response_invalid", "canonical card read omitted its id or ref")
+	}
+	if workID := moveFieldString(work, "id"); workID != "" && workID != cardID {
+		return errnorm.New(errnorm.KindRemote, "source_changed", "source card identity changed while the move snapshot was being read; retry the move")
+	}
+	if workUpdatedAt, cardUpdatedAt := moveFieldString(work, "updated_at"), moveFieldString(card, "updated_at"); workUpdatedAt != "" && cardUpdatedAt != "" && workUpdatedAt != cardUpdatedAt {
+		return errnorm.New(errnorm.KindRemote, "source_changed", "source card changed while its canonical identity was being read; retry the move")
+	}
+	work["id"] = cardID
+	work["ref"] = cardRef
+	if handle := moveFieldString(card, "handle"); handle != "" {
+		work["handle"] = handle
+	}
+	return nil
+}
+
 // Cards expose a plan in several read projections, but only /cards/{ref}/plan
 // reads the canonical plan store. Hydrate the snapshot from that API and fence
 // it against the card read so a concurrent plan edit cannot be lost.
@@ -373,6 +401,10 @@ func moveHydrateCardPlan(ctx context.Context, a *App, cfg config.Resolved, work 
 	if ref == "" {
 		return errnorm.Internal("move_response_invalid", "card read omitted its ref")
 	}
+	if err := moveHydrateCardIdentity(ctx, a, cfg, work); err != nil {
+		return err
+	}
+	ref = moveFieldString(work, "ref")
 	plan, err := moveReadCardPlan(ctx, a, cfg, ref)
 	if err != nil {
 		return err
@@ -1096,7 +1128,10 @@ func moveCanonicalDestinationRef(ctx context.Context, a *App, cfg config.Resolve
 	path, key := "", ""
 	switch kind {
 	case "card":
-		path, key = "/work/"+url.PathEscape(value), "work"
+		// The work projection intentionally omits the card's internal UUID.
+		// Canonical card reads carry it and let verification treat public handles
+		// and UUID refs as aliases of the same destination object.
+		path, key = "/cards/"+url.PathEscape(value), "card"
 	case "document", "doc":
 		path, key, kind = "/docs/"+url.PathEscape(value), "document", "document"
 	case "topic":
@@ -1980,6 +2015,35 @@ func (a *App) readTopicMoveResources(ctx context.Context, sourceCfg, destCfg con
 			}
 		}
 	}
+	// Read the selected cards before planning the doc set. A card's pinned
+	// document is owned by that card's transfer even when the topic does not
+	// link the document directly. Reuse these exact card snapshots below so the
+	// membership decision and the eventual copy are fenced to the same read.
+	cardSnapshots := make(map[string]map[string]any, len(refs["card"]))
+	cardRefs := make([]string, 0, len(refs["card"]))
+	for ref := range refs["card"] {
+		cardRefs = append(cardRefs, ref)
+	}
+	sort.Strings(cardRefs)
+	for _, ref := range cardRefs {
+		card, err := moveRead(ctx, a, sourceCfg, "/work/"+url.PathEscape(ref), "work")
+		if err != nil {
+			return nil, fmt.Errorf("read source card %s: %w", ref, err)
+		}
+		if err := moveHydrateCardPlan(ctx, a, sourceCfg, card); err != nil {
+			return nil, err
+		}
+		cardSnapshots[ref] = card
+		if documentRef := moveFieldString(card, "document_ref"); documentRef != "" {
+			refs["document"][documentRef] = struct{}{}
+		}
+		for _, relatedRef := range moveStringList(card["related_refs"]) {
+			kind, _, ok := strings.Cut(relatedRef, ":")
+			if ok && (kind == "document" || kind == "doc") {
+				refs["document"][relatedRef] = struct{}{}
+			}
+		}
+	}
 	items := make([]*topicMoveResource, 0)
 	canonicalSeen := map[string]struct{}{}
 	for _, kind := range []string{"document", "card"} {
@@ -2012,6 +2076,11 @@ func (a *App) readTopicMoveResources(ctx context.Context, sourceCfg, destCfg con
 				}
 				object = cloneMoveMap(doc)
 				object["revision"] = full["revision"]
+			} else if kind == "card" {
+				object = cardSnapshots[ref]
+				if object == nil {
+					return nil, errnorm.Internal("move_response_invalid", "selected card snapshot was not loaded")
+				}
 			} else {
 				var err error
 				object, err = moveRead(ctx, a, sourceCfg, path, responseKey)
@@ -2020,11 +2089,6 @@ func (a *App) readTopicMoveResources(ctx context.Context, sourceCfg, destCfg con
 				}
 			}
 			resourceRef := firstNonEmpty(moveFieldString(object, "ref"), ref)
-			if kind == "card" {
-				if err := moveHydrateCardPlan(ctx, a, sourceCfg, object); err != nil {
-					return nil, err
-				}
-			}
 			canonicalKey := kind + ":" + moveSourceObjectID(kind, resourceRef, object)
 			if _, duplicate := canonicalSeen[canonicalKey]; duplicate {
 				continue
