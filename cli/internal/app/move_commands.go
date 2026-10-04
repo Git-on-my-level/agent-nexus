@@ -162,7 +162,7 @@ func moveResourceRef(kind, id string) string {
 }
 
 func moveRefID(ref string) string {
-	_, suffix, ok := strings.Cut(strings.TrimSpace(ref), ":")
+	_, suffix, ok := strings.Cut(moveNormalizeRef(ref), ":")
 	if ok {
 		return suffix
 	}
@@ -497,21 +497,22 @@ func moveUnique(values []string) []string {
 
 func moveRewriteRef(ref string, mapping map[string]string) string {
 	ref = strings.TrimSpace(ref)
-	normalized := moveNormalizeRefAlias(ref)
+	normalized := moveNormalizeRef(ref)
 	if mapped := mapping[normalized]; mapped != "" {
-		return mapped
+		return moveNormalizeRef(mapped)
 	}
 	if normalized != ref {
 		if mapped := mapping[ref]; mapped != "" {
-			return mapped
+			return moveNormalizeRef(mapped)
 		}
 	}
-	return ref
+	return normalized
 }
 
-// Keep plan-ref aliases aligned with core's readRefFacts resolver. Plans accept
-// doc: as an alias for document:, and bare source URLs as card refs.
-func moveNormalizeRefAlias(ref string) string {
+// Normalize aliases once before they enter the move plan. Core accepts doc:
+// for documents and bare source URLs for cards; every move phase uses this form.
+func moveNormalizeRef(ref string) string {
+	ref = strings.TrimSpace(ref)
 	if strings.HasPrefix(ref, "https://") || strings.HasPrefix(ref, "http://") {
 		return "card:" + ref
 	}
@@ -519,10 +520,19 @@ func moveNormalizeRefAlias(ref string) string {
 	if !ok {
 		return ref
 	}
+	kind, suffix = strings.TrimSpace(kind), strings.TrimSpace(suffix)
 	if kind == "doc" {
 		kind = "document"
 	}
 	return kind + ":" + suffix
+}
+
+func moveRefKind(ref string) string {
+	kind, _, ok := strings.Cut(moveNormalizeRef(ref), ":")
+	if !ok {
+		return ""
+	}
+	return kind
 }
 
 func moveRewriteRefs(refs any, mapping map[string]string) []string {
@@ -556,22 +566,23 @@ func moveAddIdentity(mapping map[string]string, object map[string]any, kind, des
 	if destinationRef == "" {
 		return
 	}
+	destinationRef = moveNormalizeRef(destinationRef)
 	candidates := []string{moveFieldString(object, "ref"), moveFieldString(object, "id"), moveFieldString(object, "handle")}
 	if kind == "card" {
 		if sourceURL := moveFieldString(asMap(object["source"]), "url"); sourceURL != "" {
 			candidates = append(candidates, sourceURL)
 		}
 	}
-	for _, candidate := range candidates {
+	for _, rawCandidate := range candidates {
+		candidate := strings.TrimSpace(rawCandidate)
 		if candidate == "" {
 			continue
 		}
 		mapping[candidate] = destinationRef
-		if strings.HasPrefix(candidate, "https://") || strings.HasPrefix(candidate, "http://") {
-			mapping["card:"+candidate] = destinationRef
-		}
+		normalized := moveNormalizeRef(candidate)
+		mapping[normalized] = destinationRef
 		if !strings.Contains(candidate, ":") {
-			mapping[kind+":"+candidate] = destinationRef
+			mapping[moveNormalizeRef(moveResourceRef(kind, candidate))] = destinationRef
 		}
 	}
 }
@@ -1068,16 +1079,16 @@ func moveResourceIdentitySet(object map[string]any, kind string) map[string]stru
 		if candidate == "" {
 			continue
 		}
-		values[candidate] = struct{}{}
+		values[moveNormalizeRef(candidate)] = struct{}{}
 		if !strings.Contains(candidate, ":") {
-			values[kind+":"+candidate] = struct{}{}
+			values[moveNormalizeRef(moveResourceRef(kind, candidate))] = struct{}{}
 		}
 	}
 	return values
 }
 
 func moveRefInIdentitySet(ref string, values map[string]struct{}) bool {
-	ref = strings.TrimSpace(ref)
+	ref = moveNormalizeRef(ref)
 	if _, ok := values[ref]; ok {
 		return true
 	}
@@ -1086,7 +1097,7 @@ func moveRefInIdentitySet(ref string, values map[string]struct{}) bool {
 		return false
 	}
 	for candidate := range values {
-		_, existingSuffix, existing := strings.Cut(candidate, ":")
+		_, existingSuffix, existing := strings.Cut(moveNormalizeRef(candidate), ":")
 		if existing && existingSuffix == suffix {
 			return true
 		}
@@ -1112,9 +1123,10 @@ func resourceMarker(moveID string, resource *topicMoveResource, sourceCfg, destC
 }
 
 func moveManifestResource(resources any, kind, sourceRef string) map[string]any {
+	sourceRef = moveNormalizeRef(sourceRef)
 	for _, raw := range asSlice(resources) {
 		item := asMap(raw)
-		if moveFieldString(item, "kind") == kind && moveFieldString(item, "source_ref") == sourceRef {
+		if moveFieldString(item, "kind") == kind && moveNormalizeRef(moveFieldString(item, "source_ref")) == sourceRef {
 			return item
 		}
 	}
@@ -1146,9 +1158,10 @@ func moveVerifyFields(kind, ref string, expected, actual map[string]any, keys []
 }
 
 func moveCanonicalDestinationRef(ctx context.Context, a *App, cfg config.Resolved, ref string) (string, error) {
-	kind, value, ok := strings.Cut(strings.TrimSpace(ref), ":")
+	ref = moveNormalizeRef(ref)
+	kind, value, ok := strings.Cut(ref, ":")
 	if !ok || value == "" {
-		return strings.TrimSpace(ref), nil
+		return ref, nil
 	}
 	path, key := "", ""
 	switch kind {
@@ -1157,8 +1170,8 @@ func moveCanonicalDestinationRef(ctx context.Context, a *App, cfg config.Resolve
 		// Canonical card reads carry it and let verification treat public handles
 		// and UUID refs as aliases of the same destination object.
 		path, key = "/cards/"+url.PathEscape(value), "card"
-	case "document", "doc":
-		path, key, kind = "/docs/"+url.PathEscape(value), "document", "document"
+	case "document":
+		path, key = "/docs/"+url.PathEscape(value), "document"
 	case "topic":
 		path, key = "/topics/"+url.PathEscape(value), "topic"
 	case "board":
@@ -1166,20 +1179,20 @@ func moveCanonicalDestinationRef(ctx context.Context, a *App, cfg config.Resolve
 	case "thread":
 		path, key = "/threads/"+url.PathEscape(value), "thread"
 	default:
-		return strings.TrimSpace(ref), nil
+		return ref, nil
 	}
 	object, err := moveRead(ctx, a, cfg, path, key)
 	if err != nil {
 		if errnorm.Normalize(err).Code == "not_found" {
-			return strings.TrimSpace(ref), nil
+			return ref, nil
 		}
 		return "", err
 	}
 	id := moveFieldString(object, "id")
 	if id == "" {
-		return strings.TrimSpace(ref), nil
+		return ref, nil
 	}
-	return kind + ":" + id, nil
+	return moveNormalizeRef(kind + ":" + id), nil
 }
 
 func moveVerifyRef(ctx context.Context, a *App, cfg config.Resolved, kind, ref string, expected, actual map[string]any) error {
@@ -1237,7 +1250,13 @@ func moveIsCollectionField(key string) bool {
 	}
 }
 
-func moveCanonicalCollection(value any) []string { return moveUnique(moveStringList(value)) }
+func moveCanonicalCollection(value any) []string {
+	refs := moveStringList(value)
+	for index := range refs {
+		refs[index] = moveNormalizeRef(refs[index])
+	}
+	return moveUnique(refs)
+}
 
 func (a *App) readMoveSourceResource(ctx context.Context, cfg config.Resolved, resource *topicMoveResource) (map[string]any, error) {
 	path, key := "", ""
@@ -2011,12 +2030,13 @@ func (a *App) readTopicMoveResources(ctx context.Context, sourceCfg, destCfg con
 	// contextual resources from associated boards, which can be shared with
 	// unrelated active cards and must not enter the transfer set.
 	for _, ref := range moveStringList(topic["document_refs"]) {
-		refs["document"][ref] = struct{}{}
+		refs["document"][moveNormalizeRef(ref)] = struct{}{}
 	}
 	for _, ref := range moveStringList(topic["related_refs"]) {
-		kind, _, ok := strings.Cut(ref, ":")
-		if ok && (kind == "document" || kind == "card") {
-			refs[kind][ref] = struct{}{}
+		normalized := moveNormalizeRef(ref)
+		kind := moveRefKind(normalized)
+		if kind == "document" || kind == "card" {
+			refs[kind][normalized] = struct{}{}
 		}
 	}
 	topicIdentities := moveResourceIdentitySet(topic, "topic")
@@ -2034,7 +2054,7 @@ func (a *App) readTopicMoveResources(ctx context.Context, sourceCfg, destCfg con
 	if previous := asMap(topic["workspace_move"]); moveHasMarker(previous, moveID) {
 		for _, raw := range asSlice(previous["resources"]) {
 			item := asMap(raw)
-			kind, ref := moveFieldString(item, "kind"), moveFieldString(item, "source_ref")
+			kind, ref := moveFieldString(item, "kind"), moveNormalizeRef(moveFieldString(item, "source_ref"))
 			if (kind == "document" || kind == "card") && ref != "" {
 				refs[kind][ref] = struct{}{}
 			}
@@ -2060,12 +2080,12 @@ func (a *App) readTopicMoveResources(ctx context.Context, sourceCfg, destCfg con
 		}
 		cardSnapshots[ref] = card
 		if documentRef := moveFieldString(card, "document_ref"); documentRef != "" {
-			refs["document"][documentRef] = struct{}{}
+			refs["document"][moveNormalizeRef(documentRef)] = struct{}{}
 		}
 		for _, relatedRef := range moveStringList(card["related_refs"]) {
-			kind, _, ok := strings.Cut(relatedRef, ":")
-			if ok && (kind == "document" || kind == "doc") {
-				refs["document"][relatedRef] = struct{}{}
+			normalized := moveNormalizeRef(relatedRef)
+			if moveRefKind(normalized) == "document" {
+				refs["document"][normalized] = struct{}{}
 			}
 		}
 	}

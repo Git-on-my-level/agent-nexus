@@ -15,6 +15,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -81,7 +82,12 @@ func TestMoveTopicRealCoresPreservesSharedBoardAndRewritesPlanRefs(t *testing.T)
 	if len(integrationStrings(topic["board_refs"])) != 0 {
 		t.Fatalf("destination topic retained a source-workspace board ref: %#v", topic["board_refs"])
 	}
-	cardRefs := integrationStrings(topic["related_refs"])
+	cardRefs := []string{}
+	for _, ref := range integrationStrings(topic["related_refs"]) {
+		if strings.HasPrefix(ref, "card:") {
+			cardRefs = append(cardRefs, ref)
+		}
+	}
 	moveID := mustStringPath(t, result.Payload, "result.move_id")
 	wantCardARef := "card:" + moveIntegrationDeterministicUUID(moveID, "card", fixture.cardA)
 	wantCardBRef := "card:" + moveIntegrationDeterministicUUID(moveID, "card", fixture.cardB)
@@ -128,12 +134,14 @@ func TestMoveTopicRealCoresPreservesSharedBoardAndRewritesPlanRefs(t *testing.T)
 	if !integrationContains(integrationStrings(destinationCardA["related_refs"]), wantAliasDocumentRef) || integrationContains(integrationStrings(destinationCardA["related_refs"]), fixture.aliasDocument) {
 		t.Fatalf("card-related document ref was not rewritten: %#v", destinationCardA["related_refs"])
 	}
+	if countIntegrationRef(integrationStrings(destinationCardA["related_refs"]), wantAliasDocumentRef) != 1 {
+		t.Fatalf("card-related doc UUID and handle aliases were not normalized and deduplicated: %#v", destinationCardA["related_refs"])
+	}
 	destinationDocRefs := integrationStrings(topic["document_refs"])
-	if len(destinationDocRefs) != 1 || destinationDocRefs[0] == fixture.document {
+	if len(destinationDocRefs) != 2 || countIntegrationRef(destinationDocRefs, wantDocumentRef) != 1 || countIntegrationRef(destinationDocRefs, wantAliasDocumentRef) != 1 {
 		t.Fatalf("document link was not rewritten: %#v", topic["document_refs"])
 	}
-	destinationDocRef := destinationDocRefs[0]
-	destinationDoc := pair.destination.getCore(t, "/docs/"+url.PathEscape(destinationDocRef))
+	destinationDoc := pair.destination.getCore(t, "/docs/"+url.PathEscape(wantDocumentRef))
 	document, _ := destinationDoc["document"].(map[string]any)
 	revision, _ := destinationDoc["revision"].(map[string]any)
 	if moveIntegrationString(document["title"]) == "" || revision["content"] != "Synthetic topic move document." {
@@ -143,6 +151,7 @@ func TestMoveTopicRealCoresPreservesSharedBoardAndRewritesPlanRefs(t *testing.T)
 		t.Fatalf("pinned document was not copied to destination: status=%d", status)
 	}
 	aliasDocument := pair.destination.getCore(t, "/docs/"+url.PathEscape(wantAliasDocumentRef))
+	aliasMetadataRefs := integrationStrings(integrationMap(aliasDocument["document"])["refs"])
 	aliasRevision := integrationMap(aliasDocument["revision"])
 	aliasRefs := integrationStrings(aliasRevision["refs"])
 	destinationCardBIdentity := integrationMap(pair.destination.getCore(t, "/cards/"+url.PathEscape(wantCardBRef))["card"])
@@ -159,6 +168,8 @@ func TestMoveTopicRealCoresPreservesSharedBoardAndRewritesPlanRefs(t *testing.T)
 	if len(aliasCardRefs) != 1 || moveIntegrationString(resolvedAliasCardIdentity["id"]) != moveIntegrationString(destinationCardBIdentity["id"]) || moveIntegrationString(destinationCardBIdentity["id"]) != strings.TrimPrefix(wantPinnedDocumentCardRef, "card:") || moveIntegrationString(destinationCardBIdentity["id"]) == fixture.cardBID {
 		t.Fatalf("document refs did not rewrite handle and UUID aliases: %#v", aliasRevision["refs"])
 	}
+	assertMovedDocumentRefAlias(t, pair.destination, aliasMetadataRefs, strings.TrimPrefix(wantDocumentRef, "document:"), "document metadata")
+	assertMovedDocumentRefAlias(t, pair.destination, aliasRefs, strings.TrimPrefix(wantDocumentRef, "document:"), "document revision")
 	pinnedListed := false
 	aliasListed := false
 	for _, raw := range rows {
@@ -184,6 +195,28 @@ func TestMoveTopicRealCoresPreservesSharedBoardAndRewritesPlanRefs(t *testing.T)
 	}
 	if _, status := pair.destination.getCoreStatus(t, "/work/"+url.PathEscape(fixture.unrelatedCard)); status != http.StatusNotFound {
 		t.Fatalf("unrelated shared-board card was copied: status=%d", status)
+	}
+}
+
+func assertMovedDocumentRefAlias(t *testing.T, core *liveCoreHarness, refs []string, expectedID, surface string) {
+	t.Helper()
+	documentRefCount := 0
+	for _, ref := range refs {
+		if strings.HasPrefix(ref, "doc:") {
+			t.Fatalf("%s retained non-canonical doc alias %q in %#v", surface, ref, refs)
+		}
+		if !strings.HasPrefix(ref, "document:") {
+			continue
+		}
+		documentRefCount++
+		resolved := core.getCore(t, "/docs/"+url.PathEscape(ref))
+		resolvedID := moveIntegrationString(integrationMap(resolved["document"])["id"])
+		if resolvedID != expectedID {
+			t.Fatalf("%s alias did not resolve to moved document %q: ref=%q resolved=%q refs=%#v", surface, expectedID, ref, resolvedID, refs)
+		}
+	}
+	if documentRefCount != 1 {
+		t.Fatalf("%s doc UUID and handle aliases did not deduplicate to one destination document: %#v", surface, refs)
 	}
 }
 
@@ -400,6 +433,10 @@ func (p *moveCorePair) createTopicFixture(t *testing.T, suffix string) moveTopic
 		"provenance": map[string]any{"sources": []string{"inferred"}},
 	}, "docs", "create")
 	document := mustStringPath(t, docResult.Payload, "result.document.ref")
+	documentIdentity := integrationMap(p.source.getCore(t, "/docs/"+url.PathEscape(document))["document"])
+	documentUUIDAlias := "doc:" + moveIntegrationString(documentIdentity["id"])
+	documentHandleAlias := "doc:" + moveIntegrationString(documentIdentity["handle"])
+	documentUUIDCanonical := "document:" + moveIntegrationString(documentIdentity["id"])
 	pinnedResult := p.source.runCLIExpectOK(t, "move-agent", map[string]any{
 		"document": map[string]any{"id": "move-pinned-doc-" + suffix, "title": "Pinned move doc " + suffix},
 		"refs":     []string{},
@@ -412,29 +449,92 @@ func (p *moveCorePair) createTopicFixture(t *testing.T, suffix string) moveTopic
 	cardBUUIDRef := "card:" + moveIntegrationString(cardBIdentity["id"])
 	aliasResult := p.source.runCLIExpectOK(t, "move-agent", map[string]any{
 		"document": map[string]any{"id": "move-card-link-doc-" + suffix, "title": "Card link doc " + suffix},
-		"refs":     []string{cardB, cardBUUIDRef},
+		"refs":     []string{cardB, cardBUUIDRef, documentUUIDCanonical, document},
 		"content":  "Synthetic card-linked document.", "content_type": "text",
 		"provenance": map[string]any{"sources": []string{"inferred"}},
 	}, "docs", "create")
 	aliasDocument := mustStringPath(t, aliasResult.Payload, "result.document.ref")
+	aliasDocumentResponse := p.source.getCore(t, "/docs/"+url.PathEscape(aliasDocument))
+	aliasDocumentIdentity := integrationMap(aliasDocumentResponse["document"])
+	cardRelatedDocumentUUIDAlias := "doc:" + moveIntegrationString(aliasDocumentIdentity["id"])
+	cardRelatedDocumentHandleAlias := "doc:" + moveIntegrationString(aliasDocumentIdentity["handle"])
+	legacyDocumentRefs := append(integrationStrings(aliasDocumentIdentity["refs"]), documentUUIDAlias, documentHandleAlias)
+	legacyRevisionRefs := append(integrationStrings(integrationMap(aliasDocumentResponse["revision"])["refs"]), documentUUIDAlias, documentHandleAlias)
+	seedMoveDocumentRefAliases(t, p.source, moveIntegrationString(aliasDocumentIdentity["id"]), legacyDocumentRefs, legacyRevisionRefs)
 	cardA := p.createCardWithFields(t, "owned-a-"+suffix, map[string]any{"authority": "nexus"}, board, map[string]any{
-		"related_refs": []string{cardB, cardBUUIDRef, aliasDocument},
+		"related_refs": []string{cardB, cardBUUIDRef, cardRelatedDocumentUUIDAlias, cardRelatedDocumentHandleAlias},
 	})
 	unrelated := p.createCard(t, "unrelated-"+suffix, map[string]any{"authority": "nexus"}, board)
 	patch := map[string]any{"patch": map[string]any{
-		"document_refs": []string{document}, "board_refs": []string{board}, "related_refs": []string{cardA, cardB},
+		"document_refs": []string{document}, "board_refs": []string{board},
+		"related_refs": []string{cardA, cardB},
 	}}
 	p.source.runCLIExpectOK(t, "move-agent", patch, "topics", "patch", "--topic-id", topic)
-	documentIdentity := integrationMap(p.source.getCore(t, "/docs/"+url.PathEscape(document))["document"])
-	documentUUIDRef := "doc:" + moveIntegrationString(documentIdentity["id"])
+	topicIdentity := integrationMap(p.source.getCore(t, "/topics/"+url.PathEscape(topic))["topic"])
+	seedMoveTopicDocumentAliases(t, p.source, moveIntegrationString(topicIdentity["id"]), moveIntegrationString(aliasDocumentIdentity["id"]), moveIntegrationString(aliasDocumentIdentity["handle"]), suffix)
+	seededTopic := integrationMap(p.source.getCore(t, "/topics/"+url.PathEscape(topic))["topic"])
+	if !integrationContains(integrationStrings(seededTopic["document_refs"]), "doc:"+moveIntegrationString(aliasDocumentIdentity["id"])) || !integrationContains(integrationStrings(seededTopic["document_refs"]), "doc:"+moveIntegrationString(aliasDocumentIdentity["handle"])) {
+		t.Fatalf("real core fixture did not expose seeded legacy topic aliases: %#v", seededTopic)
+	}
 	plan := map[string]any{"steps": []any{
 		map[string]any{"id": "verify-b", "title": "Verify linked card", "ref": cardB},
 		map[string]any{"id": "verify-b-uuid", "title": "Verify linked card by UUID", "ref": cardBUUIDRef},
-		map[string]any{"id": "verify-doc-uuid-alias", "title": "Verify linked document by doc UUID alias", "ref": documentUUIDRef},
-		map[string]any{"id": "verify-doc-handle", "title": "Verify linked document by canonical handle", "ref": document},
+		map[string]any{"id": "verify-doc-uuid-alias", "title": "Verify linked document by doc UUID alias", "ref": documentUUIDAlias},
+		map[string]any{"id": "verify-doc-handle-alias", "title": "Verify linked document by doc handle alias", "ref": documentHandleAlias},
 	}}
 	p.source.runCLIExpectOK(t, "move-agent", plan, "plan", "set", cardA, "--from-file", "-")
 	return moveTopicFixture{topic: topic, board: board, document: document, pinnedDocument: pinnedDocument, aliasDocument: aliasDocument, cardA: cardA, cardB: cardB, cardBID: moveIntegrationString(cardBIdentity["id"]), unrelatedCard: unrelated}
+}
+
+// Current writes reject doc: outside plans. Seed the legacy persisted forms
+// directly so two live cores exercise how moves read and normalize old data.
+func seedMoveDocumentRefAliases(t *testing.T, h *liveCoreHarness, documentID string, documentRefs, revisionRefs []string) {
+	t.Helper()
+	sqlite, err := exec.LookPath("sqlite3")
+	if err != nil {
+		t.Fatalf("sqlite3 is required to seed legacy move refs: %v", err)
+	}
+	documentRefsJSON, err := json.Marshal(documentRefs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revisionRefsJSON, err := json.Marshal(revisionRefs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	quotedDocumentRefs, quotedRevisionRefs, quotedID := moveIntegrationSQLQuote(string(documentRefsJSON)), moveIntegrationSQLQuote(string(revisionRefsJSON)), moveIntegrationSQLQuote(documentID)
+	statement := fmt.Sprintf(`UPDATE documents SET refs_json=%s WHERE id=%s;
+UPDATE document_revisions SET refs_json=%s WHERE document_id=%s AND revision_id=(SELECT head_revision_id FROM documents WHERE id=%s);`, quotedDocumentRefs, quotedID, quotedRevisionRefs, quotedID, quotedID)
+	if output, err := exec.Command(sqlite, filepath.Join(h.workspace, "state.sqlite"), statement).CombinedOutput(); err != nil {
+		t.Fatalf("seed legacy document refs: %v: %s", err, output)
+	}
+}
+
+func seedMoveTopicDocumentAliases(t *testing.T, h *liveCoreHarness, topicID, documentID, documentHandle, suffix string) {
+	t.Helper()
+	sqlite, err := exec.LookPath("sqlite3")
+	if err != nil {
+		t.Fatalf("sqlite3 is required to seed legacy move refs: %v", err)
+	}
+	createdAt := moveIntegrationSQLQuote("2026-10-05T00:00:00Z")
+	var statements []string
+	for _, item := range []struct {
+		name, targetID string
+	}{{"uuid", documentID}, {"handle", documentHandle}} {
+		statements = append(statements, fmt.Sprintf(
+			`INSERT OR REPLACE INTO ref_edges(id,source_type,source_id,target_type,target_id,edge_type,created_at,metadata_json) VALUES(%s,'topic',%s,'doc',%s,'ref',%s,%s);`,
+			moveIntegrationSQLQuote("legacy-move-doc-alias-"+suffix+"-"+item.name), moveIntegrationSQLQuote(topicID), moveIntegrationSQLQuote(item.targetID), createdAt,
+			moveIntegrationSQLQuote(`{"topic_ref_field":"document_refs"}`),
+		))
+	}
+	statement := strings.Join(statements, "\n")
+	if output, err := exec.Command(sqlite, filepath.Join(h.workspace, "state.sqlite"), statement).CombinedOutput(); err != nil {
+		t.Fatalf("seed legacy topic doc aliases: %v: %s", err, output)
+	}
+}
+
+func moveIntegrationSQLQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
 }
 
 func newMoveIntegrationFaultProxy(t *testing.T, target string) (*moveIntegrationFaultProxy, string) {
