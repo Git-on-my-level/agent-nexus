@@ -180,7 +180,7 @@ assigns and moves native work; it is not a registration shortcut. Project
 association should use clear configured evidence and ask when ambiguous. A
 successful run/session does not satisfy the task's acceptance criteria.
 
-The bundled participant skill advertises `anx.participant.v7`; explicitly
+The bundled participant skill advertises `anx.participant.v8`; explicitly
 designated PMs can load the additional `anx.pm.v3` skill. After host enrollment,
 the CLI offers `anx skills sync`. Preview with `anx skills sync --dry-run`, then
 run `anx skills sync` to install or refresh clean managed copies for detected
