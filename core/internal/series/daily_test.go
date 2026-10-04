@@ -16,6 +16,7 @@ import (
 func removeRecentRollupMigration(t testing.TB, s Store) {
 	t.Helper()
 	for _, stmt := range []string{
+		`DROP INDEX series_points_query`, `DELETE FROM schema_migrations WHERE version=52`,
 		`DROP TRIGGER series_points_daily_insert`, `DROP TRIGGER series_points_daily_update`,
 		`DROP INDEX series_points_daily_value`, `DROP TABLE series_live_daily`,
 		`DELETE FROM schema_migrations WHERE version=51`,
@@ -30,7 +31,7 @@ func TestDailyMultiDayBucketsPreserveWeightedAggregatesAndLabels(t *testing.T) {
 	s, _, _, writer := fixture(t)
 	ctx := context.Background()
 	day := time.Now().UTC().Truncate(24 * time.Hour)
-	now := day.Add(12 * time.Hour)
+	now := day
 	for _, label := range []string{`{"cohort":"a"}`, `{"cohort":"b"}`} {
 		if _, err := s.DB.Exec(`INSERT INTO series_labels VALUES('builds',?)`, label); err != nil {
 			t.Fatal(err)
@@ -79,7 +80,7 @@ func TestDailyMultiDayBucketsPreserveWeightedAggregatesAndLabels(t *testing.T) {
 func BenchmarkDailyQuerySafetyCapacity(b *testing.B) {
 	s, _, _, _ := fixtureAt(b, b.TempDir())
 	ctx := context.Background()
-	now := time.Now().UTC().Truncate(24 * time.Hour).Add(12 * time.Hour)
+	now := time.Now().UTC().Truncate(24 * time.Hour)
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		b.Fatal(err)
@@ -226,10 +227,12 @@ func TestDailySummaryMigrationAndRestartPreserveArchivedData(t *testing.T) {
 }
 
 func TestDailyAndAdaptiveQueriesAvoidRawAggregation(t *testing.T) {
-	var reads atomic.Int64
+	var interiorReads atomic.Int64
+	now := time.Now().UTC().Truncate(24 * time.Hour).Add(12 * time.Hour)
+	interiorEnd := now.Add(-24 * time.Hour).UnixNano()
 	fn := fmt.Sprintf("series_read_budget_%d", pauseFunctionID.Add(1))
-	if err := sqlite.RegisterScalarFunction(fn, 1, func(_ *sqlite.FunctionContext, _ []driver.Value) (driver.Value, error) {
-		if reads.Add(1) > MaxRawQueryPoints+1 {
+	if err := sqlite.RegisterScalarFunction(fn, 1, func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
+		if args[0].(int64) < interiorEnd && interiorReads.Add(1) > MaxRawQueryPoints+1 {
 			return nil, errors.New("unbounded raw aggregation")
 		}
 		return int64(1), nil
@@ -237,11 +240,13 @@ func TestDailyAndAdaptiveQueriesAvoidRawAggregation(t *testing.T) {
 		t.Fatal(err)
 	}
 	s, _, _, _ := fixture(t)
-	now := time.Now().UTC()
 	if _, err := s.DB.Exec(`INSERT INTO series_labels(series,labels) VALUES('builds','{}')`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.DB.Exec(`WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<4999) INSERT INTO series_points(series,labels,ts,value,received_day) SELECT 'builds','{}',?-i*1000000,1,0 FROM n`, now.UnixNano()); err != nil {
+	if _, err := s.DB.Exec(`WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<4999) INSERT INTO series_points(series,labels,ts,value,received_day) SELECT 'builds','{}',?-i*1000000,1,0 FROM n`, now.Add(-48*time.Hour).UnixNano()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.Exec(`WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<9) INSERT INTO series_points(series,labels,ts,value,received_day) SELECT 'builds','{}',?-i*1000000,1,0 FROM n`, now.UnixNano()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.DB.Exec(`ALTER TABLE series_points RENAME TO budget_test_points`); err != nil {
@@ -251,17 +256,17 @@ func TestDailyAndAdaptiveQueriesAvoidRawAggregation(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, step := range []time.Duration{24 * time.Hour, DefaultStep(Retention)} {
-		reads.Store(0)
+		interiorReads.Store(0)
 		r, err := s.Query(context.Background(), "builds", nil, Retention, step, "sum", now)
-		if err != nil || r.Resolution != "daily" || *r.Streams[0].Points[0].Value != 5000 {
+		if err != nil || r.Resolution != "daily" || *r.Streams[0].Points[0].Value != 5000 || *r.Streams[0].Points[1].Value != 10 {
 			t.Fatalf("rollup path failed: %#v %v", r, err)
 		}
-		if step >= 24*time.Hour && reads.Load() != 0 {
-			t.Fatalf("daily query touched raw points: %d", reads.Load())
+		if step >= 24*time.Hour && interiorReads.Load() != 0 {
+			t.Fatalf("daily query touched interior raw points: %d", interiorReads.Load())
 		}
 	}
-	reads.Store(0)
-	if _, err := s.Query(context.Background(), "builds", nil, time.Hour, time.Minute, "sum", now); !errors.Is(err, ErrCapacity) {
+	interiorReads.Store(0)
+	if _, err := s.Query(context.Background(), "builds", nil, time.Hour, time.Minute, "sum", now.Add(-48*time.Hour)); !errors.Is(err, ErrCapacity) {
 		t.Fatalf("dense short query must be capped: %v", err)
 	}
 }

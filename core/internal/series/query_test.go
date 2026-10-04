@@ -61,11 +61,20 @@ func TestQueryDoesNotCompactAndAgreesAcrossMaintenance(t *testing.T) {
 			}
 		}
 	}
-	type query struct{ series, agg string }
-	queries := []query{{"builds", "sum"}, {"builds", "avg"}, {"builds", "min"}, {"builds", "max"}, {"builds", "last"}, {"builds", "count"}, {"health", "last"}, {"health", "count"}}
+	type query struct {
+		series, agg string
+		window      time.Duration
+	}
+	queries := []query{}
+	for _, window := range []time.Duration{100 * 24 * time.Hour, Retention} {
+		for _, agg := range []string{"sum", "avg", "min", "max", "last", "count"} {
+			queries = append(queries, query{"builds", agg, window})
+		}
+		queries = append(queries, query{"health", "last", window}, query{"health", "count", window})
+	}
 	before := make([]Result, len(queries))
 	for i, q := range queries {
-		r, err := s.Query(ctx, q.series, nil, 100*24*time.Hour, 2*24*time.Hour, q.agg, now)
+		r, err := s.Query(ctx, q.series, nil, q.window, 2*24*time.Hour, q.agg, now)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -82,7 +91,7 @@ func TestQueryDoesNotCompactAndAgreesAcrossMaintenance(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i, q := range queries {
-		after, err := s.Query(ctx, q.series, nil, 100*24*time.Hour, 2*24*time.Hour, q.agg, now)
+		after, err := s.Query(ctx, q.series, nil, q.window, 2*24*time.Hour, q.agg, now)
 		if err != nil || !reflect.DeepEqual(before[i], after) {
 			t.Fatalf("maintenance changed %s/%s result: before=%#v after=%#v err=%v", q.series, q.agg, before[i], after, err)
 		}
@@ -203,7 +212,9 @@ func BenchmarkQueryCapacity(b *testing.B) {
 			root := b.TempDir()
 			s, human, _, _ := fixtureAt(b, root)
 			ctx := context.Background()
-			now := time.Now().UTC().Truncate(time.Second)
+			// Midday forces both partial edges to use raw observations, while the
+			// fully covered interior stays on the rollup path.
+			now := time.Now().UTC().Truncate(24 * time.Hour).Add(12 * time.Hour)
 			for first := 2; first < MaxSeries; first += 100 {
 				defs := []Definition{}
 				for i := first; i < first+100 && i < MaxSeries; i++ {

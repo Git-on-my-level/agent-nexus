@@ -46,7 +46,10 @@ rollups in the daily maintenance job. Queries use read-only snapshots and never
 compact data or acquire the workspace write lock. Recent-day summaries are
 updated in the point transaction, including exact retries, corrections and
 out-of-order points. Day-sized steps scan matching summaries and archived rollups
-once, aggregating weighted buckets without raw scans or per-bucket payload joins.
+once for fully covered interior UTC days. Indexed raw scans handle partial edge
+days within the exact requested rolling interval; future observations are excluded
+from both aggregates and freshness timestamps. Interior days require no raw scans
+or per-bucket payload joins.
 Admission and indexed freshness reads are batched across labels. Daily rollups are retained forever
 with no expiry, per David's 2026-10-05 decision. Rollup updates and raw deletion
 commit as one atomic checkpoint; interrupted or replayed compaction cannot count
@@ -64,11 +67,15 @@ window; rolled-up observations cannot be rewritten.
 
 Raw aggregation is limited to 4,096 observations across all matching label sets.
 Dense ranges of at least one day automatically use a whole-day step and report
-`resolution: daily`. Daily queries cover complete UTC days, including partial
-current-day data. Shorter dense ranges return `series_capacity`; select fewer
+`resolution: daily`. Daily buckets keep their UTC grid without widening the
+requested window. Partial edge days use exact raw observations while retained;
+archived summaries contribute only fully covered days because expired raw edges
+cannot be reconstructed. Shorter dense ranges return `series_capacity`; select fewer
 labels, shorten the range or request a daily step. Daily aggregation is capped at
-20,000 summary rows across both recent and archived summaries; narrower ranges
-or label filters are required beyond that bound. These are query safety limits,
+20,000 summary rows across both recent and archived summaries, plus 200,000 raw
+observations across partial edges. The separate edge cap prevents concentrated
+backfill from turning a partial-day scan into an unbounded query. Narrower ranges
+or label filters are required beyond these bounds. These are query safety limits,
 independent of commercial quotas.
 
 The reproducible capacity benchmark seeds 1,000 declared series and measures
@@ -82,12 +89,16 @@ cd core
 GOMAXPROCS=2 go test ./internal/series -run '^$' -bench '^BenchmarkQueryCapacity$' -benchtime=1x
 ```
 
+The benchmark runs at UTC noon, so it includes both exact partial-day edges.
+Migration 52 adds a covering `(series, labels, ts, value)` index for those edge
+aggregates; existing rollup workspaces install it without rebuilding summaries.
+
 Fast benchmarks also cover the full query safety limits: 20,000 daily summary
 rows across recent and archived history (both sum and last), and 4,096 raw points
 across 100 label sets. These use the production workspace and driver:
 
 ```sh
-GOMAXPROCS=2 go test ./internal/series -run '^$' -bench 'Benchmark(Daily|Raw)QuerySafetyCapacity' -benchtime=5x
+GOMAXPROCS=2 go test ./internal/series -run '^$' -bench 'Benchmark(DailyQuery|DailyEdge|RawQuery)SafetyCapacity' -benchtime=5x
 ```
 
 `TestQueryReadSnapshotDoesNotTakeWriteLock` pauses an actual query while an
@@ -95,8 +106,11 @@ immediate human mutation commits, then checks the reader's snapshot. Separate
 tests verify indexed range scans and matching aggregates before and after
 maintenance, including a UTC day split between raw points and a daily rollup.
 `TestDailyAndAdaptiveQueriesAvoidRawAggregation` guards the daily path in CI:
-day-sized queries touch no raw rows, and automatic downsampling reads at most
-the bounded preflight before switching to summaries.
+day-sized queries never aggregate interior raw rows, and automatic downsampling
+reads at most the bounded preflight before switching to summaries and exact edges.
+`TestDailyQueriesEqualRawForRandomRollingWindows` compares every aggregation and
+state payload with raw-only results, including timezone offsets and future points.
+The combined edge benchmark covers both 20,000 summaries and 200,000 edge points.
 
 ## Panel binding
 

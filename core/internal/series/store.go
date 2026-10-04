@@ -36,6 +36,10 @@ const MaxAdapterConcurrentRequests = 2
 const MaxRawQueryPoints = 4096
 const MaxDailyQueryRows = 20000
 
+// Two partial UTC days may accompany a daily query. Backfill can concentrate
+// many ingestion days into one observation day, so this needs an explicit cap.
+const MaxDailyEdgePoints = 2 * MaxPointsPerDay
+
 type Definition struct {
 	Name string `json:"name"`
 	Kind string `json:"kind"`

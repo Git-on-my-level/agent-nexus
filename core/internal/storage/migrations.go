@@ -956,6 +956,10 @@ var migrations = []migration{
 		seriesLiveDailyInsertSQL,
 		seriesLiveDailyUpdateSQL,
 	}},
+	{Version: 52, Statements: []string{
+		// Cover edge aggregates without a table lookup for every raw value.
+		`CREATE INDEX series_points_query ON series_points(series,labels,ts,value);`,
+	}},
 }
 
 func applyMigration49SeriesTokenScope(ctx context.Context, tx *sql.Tx) error {

@@ -195,9 +195,8 @@ func (s Store) Query(ctx context.Context, name string, labels map[string]string,
 	}
 	if daily {
 		out.Resolution = "daily"
-		since = since / Day * Day
-		end = (end/Day+1)*Day - 1
-		over, err := overQueryBudget(ctx, tx, name, labelSets, since, end, true)
+		first, until := completeDays(since, end)
+		over, err := overQueryBudget(ctx, tx, name, labelSets, first, until-1, true)
 		if err != nil {
 			return out, err
 		}
@@ -213,7 +212,7 @@ func (s Store) Query(ctx context.Context, name string, labels map[string]string,
 			return out, err
 		}
 	}
-	latest, err := lastPoints(ctx, tx, name, labelSets)
+	latest, err := lastPoints(ctx, tx, name, labelSets, end)
 	if err != nil {
 		return out, err
 	}
@@ -245,8 +244,8 @@ func (s Store) Query(ctx context.Context, name string, labels map[string]string,
 				stream.StaleSince = staleAt.UTC().Format(time.RFC3339Nano)
 			}
 		}
-		// A daily rollup is an explicit one-day observation. Historical query edges
-		// cover complete UTC days and expose resolution so clients do not imply raw precision.
+		// Daily buckets retain their UTC grid, but partial edges contain only raw
+		// observations in the requested window. Never widen the window to that grid.
 		if daily {
 			if points := summaries[l]; points != nil {
 				stream.Points = points

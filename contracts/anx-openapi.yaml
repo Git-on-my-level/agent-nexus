@@ -300,7 +300,7 @@ paths:
         schema: {type: string}
       - name: step
         in: query
-        description: Duration; at most 200 buckets. Steps of at least 1d use daily summaries. Raw queries are limited to 4096 observations; dense ranges of at least 1d downsample to whole UTC days. Daily queries are limited to 20000 summary rows. Narrower ranges or label filters are required beyond those bounds. Historical rollups require whole-day steps.
+        description: Duration; at most 200 buckets. Steps of at least 1d use summaries for complete interior UTC days and exact retained raw points for partial edges, without extending the requested rolling window or including future points. Raw queries are limited to 4096 observations; dense ranges of at least 1d downsample to a UTC daily bucket grid. Daily queries are limited to 20000 summary rows and 200000 partial-edge raw points. Narrower ranges or label filters are required beyond those bounds. Historical rollups require whole-day steps and contribute only fully covered days when raw edges have expired.
         schema: {type: string}
       - name: agg
         in: query
