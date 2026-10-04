@@ -129,6 +129,40 @@ func TestSkillsAppRunAcceptsEverySyncFlagForm(t *testing.T) {
 	}
 }
 
+func TestSkillsSyncHonorsExplicitFalseBooleanValues(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name         string
+		flag         string
+		wantPM       bool
+		wantAutoSync bool
+	}{
+		{name: "pm false", flag: "--pm=false", wantPM: false, wantAutoSync: true},
+		{name: "no pm false", flag: "--no-pm=false", wantPM: true, wantAutoSync: true},
+		{name: "auto sync false", flag: "--auto-sync=false", wantPM: false, wantAutoSync: false},
+		{name: "no auto sync false", flag: "--no-auto-sync=false", wantPM: false, wantAutoSync: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			if err := os.Mkdir(filepath.Join(home, ".claude"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			var stdout, stderr bytes.Buffer
+			a := isolatedSkillsApp(home)
+			a.Stdout = &stdout
+			a.Stderr = &stderr
+			if code := a.Run([]string{"skills", "sync", "--home", home, tc.flag}); code != 0 {
+				t.Fatalf("App.Run rejected %s: exit=%d stdout=%s stderr=%s", tc.flag, code, stdout.String(), stderr.String())
+			}
+			preferences, exists, err := readSkillsSyncConfig(filepath.Join(home, ".config", "anx"))
+			if err != nil || !exists || preferences.PMEnabled != tc.wantPM || preferences.AutoSync != tc.wantAutoSync {
+				t.Fatalf("%s saved PM=%t auto_sync=%t, want PM=%t auto_sync=%t (exists=%t err=%v)", tc.flag, preferences.PMEnabled, preferences.AutoSync, tc.wantPM, tc.wantAutoSync, exists, err)
+			}
+		})
+	}
+}
+
 func TestSkillsSyncReportsSharedLegacyRootOnce(t *testing.T) {
 	t.Parallel()
 	home := t.TempDir()
@@ -477,6 +511,59 @@ func TestFailedScheduledSkillsRefreshDoesNotRecordCompletion(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(configDir, skillsSyncConfigName))
 	if err != nil || string(content) != "{invalid\n" {
 		t.Fatalf("failed refresh changed preferences or recorded completion: %q err=%v", content, err)
+	}
+}
+
+func TestFailedScheduledSkillsInstallDoesNotRecordCompletion(t *testing.T) {
+	t.Parallel()
+	home := skillTestDir(t)
+	if err := os.Mkdir(filepath.Join(home, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	skill := participantFixture(t)
+	target := filepath.Join(home, ".claude", "skills", skill.Name)
+	if err := configureManagedSkill(target, skill); err != nil {
+		t.Fatal(err)
+	}
+	markerPath := filepath.Join(target, managedSkillMarkerName)
+	markerBytes, err := os.ReadFile(markerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var marker managedSkillMarker
+	if err := json.Unmarshal(markerBytes, &marker); err != nil {
+		t.Fatal(err)
+	}
+	marker.CLIVersion = "older-cli"
+	markerBytes, err = json.Marshal(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(markerPath, markerBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(target, ".anx-skill.lock"), []byte("locked"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	a := isolatedSkillsApp(home)
+	var stdout, stderr bytes.Buffer
+	a.Stdout = &stdout
+	a.Stderr = &stderr
+	if code := a.Run([]string{"skills", "sync", "--scheduled", "--home", home}); code == 0 {
+		t.Fatalf("locked outdated skill refresh unexpectedly succeeded: stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+	preferences, _, err := readSkillsSyncConfig(filepath.Join(home, ".config", "anx"))
+	if err != nil || preferences.LastAutoSyncAt != "" {
+		t.Fatalf("failed scheduled refresh recorded completion: %+v err=%v", preferences, err)
+	}
+	status, _, err := a.runSkillsStatus(nil, config.Resolved{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	states := asMap(status.Data)["skills"].([]managedSkillState)
+	if len(states) != 1 || states[0].State != "outdated" {
+		t.Fatalf("status did not continue to report the failed copy as outdated: %#v", states)
 	}
 }
 

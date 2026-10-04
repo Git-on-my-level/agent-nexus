@@ -83,16 +83,16 @@ func (a *App) runSkillsSync(args []string, cfg config.Resolved) (*commandResult,
 		return nil, "skills sync", errnorm.Wrap(errnorm.KindLocal, "skill_config_read_failed", "read ANX skills preferences", err)
 	}
 	if pm.set {
-		preferences.PMEnabled = true
+		preferences.PMEnabled = pm.value
 	}
 	if noPM.set {
-		preferences.PMEnabled = false
+		preferences.PMEnabled = !noPM.value
 	}
 	if autoSync.set {
-		preferences.AutoSync = true
+		preferences.AutoSync = autoSync.value
 	}
 	if noAutoSync.set {
-		preferences.AutoSync = false
+		preferences.AutoSync = !noAutoSync.value
 	}
 	roles := []string{"participant"}
 	if preferences.PMEnabled {
@@ -101,6 +101,7 @@ func (a *App) runSkillsSync(args []string, cfg config.Resolved) (*commandResult,
 	lookPath := a.skillsLookPath()
 	targets := detectSkillHarnesses(home, a.Getenv, lookPath)
 	states := make([]managedSkillState, 0, len(targets)*len(roles))
+	refreshFailures := []managedSkillState{}
 	for _, target := range targets {
 		for _, role := range roles {
 			skill, skillErr := skills.Get(role)
@@ -131,6 +132,7 @@ func (a *App) runSkillsSync(args []string, cfg config.Resolved) (*commandResult,
 				if err := configureManagedSkill(path, skill); err != nil {
 					state.State = "conflict"
 					state.Reason = err.Error()
+					refreshFailures = appendHarnessSkillStates(refreshFailures, state, target.Harnesses)
 					states = appendHarnessSkillStates(states, state, target.Harnesses)
 					continue
 				}
@@ -152,6 +154,12 @@ func (a *App) runSkillsSync(args []string, cfg config.Resolved) (*commandResult,
 	legacy, legacyErr := scanKnownLegacySkills(home, targets)
 	if legacyErr != nil {
 		return nil, "skills sync", errnorm.Wrap(errnorm.KindLocal, "skill_read_failed", "scan known legacy ANX skills", legacyErr)
+	}
+	if scheduled.value && len(refreshFailures) > 0 {
+		return nil, "skills sync", errnorm.WithDetails(
+			errnorm.Local("conflict", "automatic skills refresh could not update one or more managed copies; run anx skills status for details"),
+			map[string]any{"failed_skills": refreshFailures},
+		)
 	}
 	if !dryRun.value && scheduled.value {
 		preferences.LastAutoSyncAt = a.clockNow().UTC().Format(time.RFC3339Nano)
