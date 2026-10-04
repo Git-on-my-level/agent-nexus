@@ -24,11 +24,14 @@ import { workspacePath } from "./workspacePaths.js";
 /**
  * Ref prefixes that render as a chip.
  *
- * Both `doc:` and `document:` are accepted: the plan contract writes `doc:`
- * while `KNOWN_REF_PREFIXES` in `typedRefs.js` carries `document`. Accepting
- * both means a chip renders whichever one core emits; the canonical spelling
- * is still worth settling.
+ * Both `doc:` and `document:` are accepted, and that is now the contract
+ * rather than a hedge: the plan schema names "card:, doc:, document: or topic:"
+ * for a step ref, and batch resolve resolves "card, doc/document, topic, and
+ * board refs". `board:` has no step-ref use but does resolve, so it chips too.
  */
+/** The batch resolve contract takes at most this many refs per request. */
+export const MAX_BATCH_REFS = 200;
+
 export const CHIP_REF_PREFIXES = Object.freeze([
   "card",
   "doc",
@@ -232,14 +235,18 @@ export function collectPageRefs(texts = [], { extraRefs = [] } = {}) {
  * absent from the response entirely is also recorded as unresolvable, so a
  * partial response cannot silently drop a chip.
  *
- * @param {{ refs?: object[] }|object[]} response
+ * The wire shape is `{items: [...]}` — the batch resolve response — and the
+ * contract preserves input order and duplicates, so this indexes rather than
+ * assuming uniqueness.
+ *
+ * @param {{ items?: object[] }|object[]} response
  * @param {string[]} [requested]
  */
 export function indexResolvedRefs(response, requested = []) {
   const rows = Array.isArray(response)
     ? response
-    : Array.isArray(response?.refs)
-      ? response.refs
+    : Array.isArray(response?.items)
+      ? response.items
       : [];
   const byRef = new Map();
   for (const row of rows) {
@@ -249,11 +256,16 @@ export function indexResolvedRefs(response, requested = []) {
       ref,
       kind: asText(row?.kind),
       title: asText(row?.title),
-      status: asText(row?.status ?? row?.phase),
+      // `status` carries the workflow phase for a chip to show; `phase` is the
+      // same value on the derivation path. Either may be absent for a context
+      // ref such as a doc or a topic, which has lifecycle state only.
+      status: asText(row?.status || row?.phase),
       owner: asText(row?.owner),
       url: asText(row?.url),
       progress: normalizeProgress(row?.progress),
       resolvable: row?.resolvable !== false,
+      // Not in the batch resolve contract today. Read defensively so a preview
+      // fills in if a later revision adds them, and renders without otherwise.
       board: asText(row?.board ?? row?.board_ref),
       priority: asText(row?.priority),
       lastMovedAt: asText(row?.last_moved_at ?? row?.updated_at),

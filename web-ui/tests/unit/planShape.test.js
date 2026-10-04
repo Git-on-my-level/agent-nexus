@@ -89,10 +89,16 @@ describe("classifyPlanShape", () => {
     expect(classifyPlanShape(steps)).toBe("chain");
   });
 
-  it("classifies a flat list with no dependencies as a chain, not lanes", () => {
+  it("classifies a flat list with no dependencies as lanes", () => {
+    // Every step is its own root, and core calls more than one root `lanes`.
     const { steps } = normalizePlanSteps(
       plan([step("a"), step("b"), step("c")]),
     );
+    expect(classifyPlanShape(steps)).toBe("lanes");
+  });
+
+  it("classifies a single step as a chain", () => {
+    const { steps } = normalizePlanSteps(plan([step("only")]));
     expect(classifyPlanShape(steps)).toBe("chain");
   });
 
@@ -199,16 +205,36 @@ describe("effectiveStepStatus", () => {
     expect(effectiveStepStatus({ ref: "card:ship" }, resolved)).toBe("active");
   });
 
-  it("maps review to active and cancelled to done", () => {
-    expect(
-      effectiveStepStatus({ ref: "card:a" }, { "card:a": { phase: "review" } }),
-    ).toBe("active");
+  it("maps the workflow states core calls finished", () => {
+    for (const phase of ["done", "published", "closed", "resolved", "merged"]) {
+      expect(
+        effectiveStepStatus({ ref: "card:a" }, { "card:a": { phase } }),
+      ).toBe("done");
+    }
+  });
+
+  it("maps review and in_progress to active", () => {
+    for (const phase of ["review", "in_progress", "active"]) {
+      expect(
+        effectiveStepStatus({ ref: "card:a" }, { "card:a": { phase } }),
+      ).toBe("active");
+    }
+  });
+
+  it("treats a cancelled card as not started, as core does", () => {
+    // Core's mapping names the states that count as finished work, and a
+    // cancelled card is not finished work; everything unlisted falls through.
     expect(
       effectiveStepStatus(
         { ref: "card:a" },
         { "card:a": { phase: "cancelled" } },
       ),
-    ).toBe("done");
+    ).toBe("not_started");
+  });
+
+  it("reads a Map as well as a plain lookup", () => {
+    const asMap = new Map([["card:a", { phase: "done" }]]);
+    expect(effectiveStepStatus({ ref: "card:a" }, asMap)).toBe("done");
   });
 
   it("lets a resolved ref override an authored status", () => {
@@ -339,12 +365,17 @@ describe("nextActionableSteps", () => {
 describe("planHealth", () => {
   const now = Date.parse("2026-10-04T12:00:00Z");
   const daysAgo = (days) => new Date(now - days * 86_400_000).toISOString();
+  /** Health reads the whole graph, so cases state their steps, not a path. */
+  const chain = normalizePlanSteps(plan([step("a"), step("b", ["a"])])).steps;
+  const lanes = normalizePlanSteps(
+    plan([step("a"), step("b", ["a"]), step("c"), step("d", ["c"])]),
+  ).steps;
 
-  it("is blocked when a blocked step sits on the critical path", () => {
+  it("is blocked when a blocked step sits on a longest remaining path", () => {
     expect(
       planHealth({
-        statusById: { a: "blocked" },
-        path: ["a"],
+        steps: chain,
+        statusById: { a: "blocked", b: "not_started" },
         lastMovedAt: daysAgo(0),
         now,
       }),
@@ -354,39 +385,65 @@ describe("planHealth", () => {
   it("outranks stalled with blocked", () => {
     expect(
       planHealth({
-        statusById: { a: "blocked" },
-        path: ["a"],
+        steps: chain,
+        statusById: { a: "blocked", b: "not_started" },
         lastMovedAt: daysAgo(30),
         now,
       }),
     ).toBe("blocked");
   });
 
-  it("ignores a blocked step that is off the critical path", () => {
+  it("is blocked from a lane that is not the highlighted path", () => {
+    // Both lanes are two steps long, so only one wins the tie-break; a blocked
+    // step on the other still blocks the plan.
     expect(
       planHealth({
-        statusById: { a: "active", side: "blocked" },
-        path: ["a"],
+        steps: lanes,
+        statusById: {
+          a: "not_started",
+          b: "not_started",
+          c: "blocked",
+          d: "not_started",
+        },
+        lastMovedAt: daysAgo(0),
+        now,
+      }),
+    ).toBe("blocked");
+  });
+
+  it("ignores a blocked step on a shorter path", () => {
+    const steps = normalizePlanSteps(
+      plan([step("a"), step("b", ["a"]), step("c", ["b"]), step("side")]),
+    ).steps;
+    expect(
+      planHealth({
+        steps,
+        statusById: {
+          a: "not_started",
+          b: "not_started",
+          c: "not_started",
+          side: "blocked",
+        },
         lastMovedAt: daysAgo(0),
         now,
       }),
     ).toBe("on_track");
   });
 
-  it("is stalled past the threshold and on track just inside it", () => {
-    const statusById = { a: "active" };
+  it("is stalled at the threshold and on track just inside it", () => {
+    const statusById = { a: "active", b: "not_started" };
     expect(
       planHealth({
+        steps: chain,
         statusById,
-        path: ["a"],
-        lastMovedAt: daysAgo(DEFAULT_STALLED_DAYS + 1),
+        lastMovedAt: daysAgo(DEFAULT_STALLED_DAYS),
         now,
       }),
     ).toBe("stalled");
     expect(
       planHealth({
+        steps: chain,
         statusById,
-        path: ["a"],
         lastMovedAt: daysAgo(DEFAULT_STALLED_DAYS - 1),
         now,
       }),
@@ -396,8 +453,8 @@ describe("planHealth", () => {
   it("honours a configured threshold", () => {
     expect(
       planHealth({
-        statusById: { a: "active" },
-        path: ["a"],
+        steps: chain,
+        statusById: { a: "active", b: "not_started" },
         lastMovedAt: daysAgo(2),
         now,
         stalledDays: 1,
@@ -405,12 +462,31 @@ describe("planHealth", () => {
     ).toBe("stalled");
   });
 
-  it("does not call a plan stalled when movement is unknown", () => {
+  it("calls a finished plan on track however long ago it moved", () => {
+    // Nothing is waiting, so nothing is stale.
     expect(
-      planHealth({ statusById: {}, path: [], lastMovedAt: null, now }),
+      planHealth({
+        steps: chain,
+        statusById: { a: "done", b: "done" },
+        lastMovedAt: daysAgo(90),
+        now,
+      }),
+    ).toBe("on_track");
+  });
+
+  it("calls an empty plan on track", () => {
+    expect(
+      planHealth({ steps: [], statusById: {}, lastMovedAt: daysAgo(90), now }),
+    ).toBe("on_track");
+  });
+
+  it("does not call a plan stalled when movement is unknown", () => {
+    const statusById = { a: "active", b: "not_started" };
+    expect(
+      planHealth({ steps: chain, statusById, lastMovedAt: null, now }),
     ).toBe("on_track");
     expect(
-      planHealth({ statusById: {}, path: [], lastMovedAt: "not a date", now }),
+      planHealth({ steps: chain, statusById, lastMovedAt: "not a date", now }),
     ).toBe("on_track");
   });
 });
@@ -478,21 +554,21 @@ describe("planLayout", () => {
     );
   });
 
-  it("prefers a server-sent shape and health over the derived ones", () => {
-    const layout = planLayout({
-      steps: [step("a"), step("b", ["a"])],
-      shape: "lanes",
-      health: "stalled",
-    });
+  it("prefers core's plan_state over the derived values", () => {
+    // Fuller coverage of this lives in planContractConformance.test.js.
+    const layout = planLayout(
+      { steps: [step("a"), step("b", ["a"])] },
+      { planState: { shape: "lanes", health: "stalled" } },
+    );
     expect(layout.shape).toBe("lanes");
     expect(layout.health).toBe("stalled");
   });
 
-  it("ignores a server-sent shape that is not a known shape", () => {
-    const layout = planLayout({
-      steps: [step("a"), step("b", ["a"])],
-      shape: "spiral",
-    });
+  it("ignores a plan_state shape that is not a known shape", () => {
+    const layout = planLayout(
+      { steps: [step("a"), step("b", ["a"])] },
+      { planState: { shape: "spiral" } },
+    );
     expect(layout.shape).toBe("chain");
   });
 

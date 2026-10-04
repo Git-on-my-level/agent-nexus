@@ -20,8 +20,14 @@
   } from "$lib/planShape.js";
 
   let {
-    /** `{ steps: [...] }`, optionally with a server-computed shape/health. */
+    /** The authored plan from the card: `{ steps: [...] }`. */
     plan = null,
+    /**
+     * Core's computed `plan_state`. Authoritative when present — it sees source
+     * activity and access scoping the browser cannot — and the renderer falls
+     * back to deriving the same values when it is absent.
+     */
+    planState = null,
     /** Page-level batch resolve result, from `indexResolvedRefs`. */
     resolved = new Map(),
     organizationSlug = "",
@@ -32,7 +38,7 @@
     onpreviewclose = null,
   } = $props();
 
-  let layout = $derived(planLayout(plan, { resolved, now }));
+  let layout = $derived(planLayout(plan, { planState, resolved, now }));
   let nodeById = $derived(new Map(layout.nodes.map((node) => [node.id, node])));
   let geometry = $derived(planTreeGeometry(layout));
   let geometryById = $derived(

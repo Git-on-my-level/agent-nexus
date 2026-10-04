@@ -29,26 +29,30 @@ export const PLAN_HEALTH = Object.freeze(["on_track", "stalled", "blocked"]);
 export const DEFAULT_STALLED_DAYS = 5;
 
 /**
- * Caps that keep a hand-written plan from rendering into something unusable.
- * The server validates its own limits; these stop a pathological payload from
- * freezing the browser before that validation exists.
+ * The caps the plan contract states (`initiative_plan.max_steps`,
+ * `max_dependencies_per_step`). Matching them matters in both directions: a
+ * lower cap here would silently drop dependencies the server accepted.
  */
-export const PLAN_LIMITS = Object.freeze({ steps: 200, afterPerStep: 16 });
+export const PLAN_LIMITS = Object.freeze({ steps: 200, afterPerStep: 50 });
 
 /**
- * Card phase to step status. `cancelled` is closed, not outstanding, so it
- * lands on `done` exactly as `CLOSED_PHASES` in `pm/presentation.js` treats it;
- * progress counts it as resolved rather than leaving it to block a path.
+ * Workflow state to step status, mirroring `plans.Status` in core.
+ *
+ * Anything unlisted is `not_started`, which is why `cancelled` lands there:
+ * core's mapping names the states that count as finished work, and a cancelled
+ * card is not finished work. (An earlier version of this file mapped it to
+ * `done` by analogy with `CLOSED_PHASES`; core is the authority.)
  */
 const PHASE_TO_STEP_STATUS = Object.freeze({
-  backlog: "not_started",
-  ready: "not_started",
-  unknown: "not_started",
+  done: "done",
+  published: "done",
+  closed: "done",
+  resolved: "done",
+  merged: "done",
+  blocked: "blocked",
+  active: "active",
   in_progress: "active",
   review: "active",
-  blocked: "blocked",
-  done: "done",
-  cancelled: "done",
 });
 
 const asText = (value) => String(value ?? "").trim();
@@ -122,12 +126,17 @@ export function normalizePlanSteps(plan) {
  * writing progress prose. The authored `status` is the fallback for steps with
  * no ref, or whose ref we could not resolve.
  *
+ * `resolved` is whatever batch ref resolve produced. `indexResolvedRefs`
+ * returns a Map, while fixtures and tests find a plain object easier to write,
+ * so both are read here — property access alone silently found nothing in a
+ * Map, which meant a linked step kept its authored status instead of its ref's.
+ *
  * @param {{ ref?: string, status?: string }} step
- * @param {Record<string, {status?: string, phase?: string}>} [resolved]
+ * @param {Map<string, object>|Record<string, {status?: string, phase?: string}>} [resolved]
  */
 export function effectiveStepStatus(step, resolved = {}) {
   const ref = asText(step?.ref);
-  const hit = ref ? resolved?.[ref] : null;
+  const hit = ref ? lookupResolved(resolved, ref) : null;
   if (hit) {
     const direct = asText(hit.status);
     if (isStepStatus(direct)) return direct;
@@ -137,6 +146,13 @@ export function effectiveStepStatus(step, resolved = {}) {
   }
   const authored = asText(step?.status);
   return isStepStatus(authored) ? authored : "not_started";
+}
+
+/** Read a ref out of either a Map or a plain lookup object. */
+function lookupResolved(resolved, ref) {
+  if (!resolved) return null;
+  if (typeof resolved.get === "function") return resolved.get(ref) ?? null;
+  return resolved[ref] ?? null;
 }
 
 /**
@@ -216,22 +232,25 @@ export function planComponents(steps) {
 }
 
 /**
- * Which view the plan's shape asks for.
+ * Which view the plan's shape asks for, mirroring `plans.Compute` in core:
+ * anything that branches or merges is a `dag`, otherwise more than one root
+ * makes `lanes`, otherwise `chain`.
+ *
+ * Note what that means for a flat list of steps with no `after` at all: every
+ * step is a root, so it is `lanes`, not `chain`. An earlier version of this
+ * file deliberately called that a chain on the grounds that a timeline reads
+ * more cheaply. Core now computes and sends `shape`, so a client rule that
+ * disagreed would render one way with `plan_state` and another without it;
+ * matching core matters more than the preference did.
  *
  * - `chain`: one path, start to finish. Renders as a timeline.
  * - `dag`: something branches or merges. Renders as a tech tree.
- * - `lanes`: separate chains running in parallel. Renders as lanes.
+ * - `lanes`: separate runs in parallel. Renders as lanes.
  *
- * A plan with no dependencies at all is a `chain`, not N one-step lanes: a
- * flat list of steps is the commonest plan there is, and a timeline reads it
- * far more cheaply than a lane per step. `lanes` therefore needs at least one
- * component that actually links two steps together.
- *
- * A plan containing a dependency loop is a `dag`. Every step in a loop has a
- * single dependency, so the degree test alone would read a two-step loop as a
- * chain beside the rest of the plan — and the tree is the only view that knows
- * how to park steps it cannot order, so sending a loop anywhere else loses
- * them.
+ * A plan containing a dependency loop is also a `dag`. Core rejects cycles
+ * before they reach here, but `dependency-diagram` panels are not validated
+ * for them and render through the same code, and the tree is the only view
+ * that parks steps it cannot order.
  *
  * @param {Array<{id: string, after: string[]}>} steps
  * @returns {"chain"|"dag"|"lanes"}
@@ -239,144 +258,232 @@ export function planComponents(steps) {
 export function classifyPlanShape(steps) {
   if (!steps.length) return "chain";
 
-  const outDegree = new Map(steps.map((step) => [step.id, 0]));
-  let edges = 0;
+  const children = new Map(steps.map((step) => [step.id, 0]));
+  let roots = 0;
+  let branching = false;
   for (const step of steps) {
-    if (step.after.length > 1) return "dag";
+    if (step.after.length === 0) roots += 1;
+    if (step.after.length > 1) branching = true;
     for (const dependency of step.after) {
-      edges += 1;
-      const next = (outDegree.get(dependency) ?? 0) + 1;
-      if (next > 1) return "dag";
-      outDegree.set(dependency, next);
+      const count = (children.get(dependency) ?? 0) + 1;
+      if (count > 1) branching = true;
+      children.set(dependency, count);
     }
   }
 
-  if (edges === 0) return "chain";
+  if (branching) return "dag";
   if (layerSteps(steps).cyclic.length) return "dag";
-  const components = planComponents(steps);
-  return components.length > 1 ? "lanes" : "chain";
+  return roots > 1 ? "lanes" : "chain";
 }
 
 /**
- * The longest remaining chain of work: the path through steps that are not
- * done which reaches furthest before it runs out of successors. This is what
- * decides the finish date, so it is what gets highlighted.
+ * The longest remaining path through the plan, and everything derived from the
+ * same walk. This is a port of `plans.Compute`; the web UI uses core's
+ * `plan_state` when it has one, and this when it does not — a fixture, an
+ * unsaved edit, or a `dependency-diagram` panel — so the two have to agree.
  *
- * Ties break on declaration order, so the same plan always highlights the same
- * path.
+ * Every unfinished step weighs 1 and finished steps weigh 0, so the path that
+ * wins is the one with the most work left on it. Ties compare the step ids
+ * along the path, which is what makes the answer stable rather than dependent
+ * on declaration order.
  *
  * @param {Array<{id: string, after: string[]}>} steps
  * @param {Record<string, string>} statusById
- * @returns {string[]}
  */
-export function criticalPath(steps, statusById = {}) {
-  const open = steps.filter((step) => statusById[step.id] !== "done");
-  if (!open.length) return [];
-
-  const openIds = new Set(open.map((step) => step.id));
-  const position = new Map(open.map((step, index) => [step.id, index]));
-  const dependenciesOf = new Map(
-    open.map((step) => [
-      step.id,
-      step.after.filter((dependency) => openIds.has(dependency)),
-    ]),
-  );
-
-  // Longest path ending at each step, walked in layer order so every
-  // dependency is already solved. Cyclic steps never become ready and stay out
-  // of the result rather than looping forever.
-  const { layers } = layerSteps(
-    open.map((step) => ({ id: step.id, after: dependenciesOf.get(step.id) })),
-  );
-  const best = new Map();
-  for (const layer of layers) {
-    for (const id of layer) {
-      let winner = null;
-      for (const dependency of dependenciesOf.get(id)) {
-        const candidate = best.get(dependency);
-        if (!candidate) continue;
-        if (
-          !winner ||
-          candidate.length > winner.length ||
-          (candidate.length === winner.length &&
-            position.get(candidate.at(-1)) < position.get(winner.at(-1)))
-        ) {
-          winner = candidate;
-        }
-      }
-      best.set(id, winner ? [...winner, id] : [id]);
+function walkPlan(steps, statusById = {}) {
+  const byId = new Map(steps.map((step) => [step.id, step]));
+  const children = new Map(steps.map((step) => [step.id, []]));
+  for (const step of steps) {
+    for (const dependency of step.after) {
+      children.get(dependency)?.push(step.id);
     }
   }
 
-  let longest = [];
-  for (const id of open.map((step) => step.id)) {
-    const path = best.get(id);
-    if (!path) continue;
-    if (path.length > longest.length) longest = path;
+  // Dependency order; steps in a cycle can never be ordered and are appended so
+  // they still carry a status rather than disappearing from the walk.
+  const { layers, cyclic } = layerSteps(steps);
+  const ids = layers.flat().concat(cyclic);
+
+  const weight = (id) => (statusById[id] === "done" ? 0 : 1);
+  const compare = (a, b) => a.join("\u0000") < b.join("\u0000");
+
+  const prefix = new Map(ids.map((id) => [id, 0]));
+  const paths = new Map();
+  const nextSteps = [];
+  let longest = 0;
+  let best = [];
+
+  for (const id of ids) {
+    let prior = [];
+    for (const dependency of byId.get(id).after) {
+      if (!prefix.has(dependency)) continue;
+      const candidate = prefix.get(dependency);
+      if (
+        candidate > prefix.get(id) ||
+        (candidate === prefix.get(id) &&
+          compare(paths.get(dependency) ?? [], prior))
+      ) {
+        prefix.set(id, candidate);
+        prior = paths.get(dependency) ?? [];
+      }
+    }
+    prefix.set(id, prefix.get(id) + weight(id));
+    paths.set(id, [...prior, id]);
+
+    if (children.get(id).length === 0) {
+      const path = paths.get(id);
+      if (
+        prefix.get(id) > longest ||
+        (prefix.get(id) === longest && compare(path, best))
+      ) {
+        longest = prefix.get(id);
+        best = path;
+      }
+    }
+
+    // Actionable: not finished, not blocked, and nothing it waits on is open.
+    if (statusById[id] !== "done" && statusById[id] !== "blocked") {
+      if (byId.get(id).after.every((dep) => statusById[dep] === "done")) {
+        nextSteps.push(id);
+      }
+    }
   }
-  return longest;
+
+  // Longest path *through* each step, to find every blocked step that sits on
+  // a longest remaining path — not only the one path that won the tie-break.
+  const suffix = new Map(ids.map((id) => [id, 0]));
+  let blockedOnLongest = false;
+  for (let index = ids.length - 1; index >= 0; index -= 1) {
+    const id = ids[index];
+    for (const child of children.get(id)) {
+      if ((suffix.get(child) ?? 0) > suffix.get(id)) {
+        suffix.set(id, suffix.get(child));
+      }
+    }
+    suffix.set(id, suffix.get(id) + weight(id));
+    if (
+      longest > 0 &&
+      statusById[id] === "blocked" &&
+      prefix.get(id) + suffix.get(id) - weight(id) === longest
+    ) {
+      blockedOnLongest = true;
+    }
+  }
+
+  return {
+    // Finished steps are on the path but are not work remaining, so they are
+    // not what the reader is being pointed at.
+    criticalPath: best.filter((id) => statusById[id] !== "done"),
+    nextSteps,
+    longest,
+    blockedOnLongest,
+  };
 }
 
-/**
- * Steps that could be picked up right now: not finished, and nothing they wait
- * on is still outstanding.
- *
- * @param {Array<{id: string, after: string[]}>} steps
- * @param {Record<string, string>} statusById
- */
+/** The longest remaining chain of work. See `walkPlan`. */
+export function criticalPath(steps, statusById = {}) {
+  return walkPlan(steps, statusById).criticalPath;
+}
+
+/** Steps that could be picked up right now. See `walkPlan`. */
 export function nextActionableSteps(steps, statusById = {}) {
-  return steps
-    .filter((step) => {
-      const status = statusById[step.id];
-      if (status === "done") return false;
-      return step.after.every(
-        (dependency) => statusById[dependency] === "done",
-      );
-    })
-    .map((step) => step.id);
+  return walkPlan(steps, statusById).nextSteps;
 }
 
 /**
- * Plan health. `blocked` outranks `stalled`: a blocked step on the critical
- * path is a thing someone has to act on, where staleness is only a signal.
+ * Plan health, mirroring core: `blocked` when a blocked step sits on any
+ * longest remaining path, else `stalled` once nothing has moved for the
+ * threshold, else `on_track`.
  *
- * @param {{ statusById: Record<string, string>, path: string[], lastMovedAt?: string|number|Date|null, now?: number, stalledDays?: number }} input
+ * A plan with no work left — finished or empty — is `on_track` however long
+ * ago it last moved. Nothing is waiting, so nothing is stale.
+ *
+ * @param {{ steps?: Array<object>, statusById?: Record<string, string>, lastMovedAt?: string|number|Date|null, now?: number, stalledDays?: number }} input
  * @returns {"on_track"|"stalled"|"blocked"}
  */
 export function planHealth({
+  steps = [],
   statusById = {},
-  path = [],
   lastMovedAt = null,
   now = Date.now(),
   stalledDays = DEFAULT_STALLED_DAYS,
 }) {
-  if (path.some((id) => statusById[id] === "blocked")) return "blocked";
+  const { longest, blockedOnLongest } = walkPlan(steps, statusById);
+  if (blockedOnLongest) return "blocked";
+  if (longest === 0) return "on_track";
 
   const movedAt = lastMovedAt ? new Date(lastMovedAt).getTime() : NaN;
   if (Number.isFinite(movedAt)) {
-    const idleDays = (Number(now) - movedAt) / 86_400_000;
-    if (idleDays > stalledDays) return "stalled";
+    const idleMs = Number(now) - movedAt;
+    if (idleMs >= stalledDays * 86_400_000) return "stalled";
   }
   return "on_track";
 }
 
 /**
+ * Core's computed plan state, as the renderer wants it.
+ *
+ * `plan_state` is authoritative: core sees source activity, access scoping and
+ * movement history this module cannot, so when a card carries one it is used
+ * whole rather than recomputed. The local walk is the fallback for a fixture,
+ * an unsaved edit, or a `dependency-diagram` panel — which is why it is a port
+ * of core's algorithm rather than an approximation of it.
+ *
+ * @param {{steps?: object[], progress?: object, critical_path?: string[], next_steps?: string[], shape?: string, health?: string, last_movement_at?: string}|null} planState
+ */
+function readPlanState(planState) {
+  if (!planState || typeof planState !== "object") return null;
+  const shape = asText(planState.shape);
+  const health = asText(planState.health);
+  const statusById = {};
+  for (const step of Array.isArray(planState.steps) ? planState.steps : []) {
+    const id = asText(step?.id);
+    if (id && isStepStatus(asText(step?.status))) {
+      statusById[id] = asText(step.status);
+    }
+  }
+  return {
+    shape: PLAN_SHAPES.includes(shape) ? shape : "",
+    health: PLAN_HEALTH.includes(health) ? health : "",
+    statusById,
+    criticalPath: Array.isArray(planState.critical_path)
+      ? planState.critical_path.map(asText)
+      : null,
+    nextSteps: Array.isArray(planState.next_steps)
+      ? planState.next_steps.map(asText)
+      : null,
+    progress:
+      Number.isFinite(Number(planState.progress?.total)) &&
+      Number.isFinite(Number(planState.progress?.done))
+        ? {
+            done: Number(planState.progress.done),
+            total: Number(planState.progress.total),
+          }
+        : null,
+    lastMovementAt: asText(planState.last_movement_at),
+  };
+}
+
+/**
  * Everything a plan view needs, in one pass: the shape that picks the view,
  * the layered geometry, the edges, the highlighted path and the summary a tile
- * shows. A server-sent `shape` or `health` wins, since the server can see
- * activity this module cannot; both are derived here when absent, so fixtures
- * and unsaved edits still render.
+ * shows.
  *
- * @param {{ steps?: unknown[], shape?: string, health?: string }|null|undefined} plan
- * @param {{ resolved?: Record<string, object>, lastMovedAt?: string|number|Date|null, now?: number, stalledDays?: number }} [options]
+ * Pass core's `plan_state` as `options.planState` and it is used as-is; without
+ * one everything is derived locally by the same rules.
+ *
+ * @param {{ steps?: unknown[] }|null|undefined} plan the authored plan
+ * @param {{ planState?: object|null, resolved?: Record<string, object>, lastMovedAt?: string|number|Date|null, now?: number, stalledDays?: number }} [options]
  */
 export function planLayout(plan, options = {}) {
   const { steps, issues } = normalizePlanSteps(plan);
   const { resolved = {}, lastMovedAt = null, now, stalledDays } = options;
+  const server = readPlanState(options.planState);
 
   const statusById = {};
   for (const step of steps) {
-    statusById[step.id] = effectiveStepStatus(step, resolved);
+    statusById[step.id] =
+      server?.statusById[step.id] ?? effectiveStepStatus(step, resolved);
   }
 
   const { layers, cyclic } = layerSteps(steps);
@@ -386,12 +493,15 @@ export function planLayout(plan, options = {}) {
     );
   }
 
-  const authoredShape = asText(plan?.shape);
-  const shape = PLAN_SHAPES.includes(authoredShape)
-    ? authoredShape
-    : classifyPlanShape(steps);
-  const path = criticalPath(steps, statusById);
-  const done = steps.filter((step) => statusById[step.id] === "done").length;
+  const known = new Set(steps.map((step) => step.id));
+  const shape = server?.shape || classifyPlanShape(steps);
+  const path = (server?.criticalPath ?? criticalPath(steps, statusById)).filter(
+    (id) => known.has(id),
+  );
+  const done =
+    server?.progress?.done ??
+    steps.filter((step) => statusById[step.id] === "done").length;
+  const total = server?.progress?.total ?? steps.length;
 
   const stepById = new Map(steps.map((step) => [step.id, step]));
   const onPath = new Set(path);
@@ -424,14 +534,19 @@ export function planLayout(plan, options = {}) {
     }
   }
 
-  const authoredHealth = asText(plan?.health);
-  const health = PLAN_HEALTH.includes(authoredHealth)
-    ? authoredHealth
-    : planHealth({ statusById, path, lastMovedAt, now, stalledDays });
+  const health =
+    server?.health ||
+    planHealth({
+      steps,
+      statusById,
+      lastMovedAt: server?.lastMovementAt || lastMovedAt,
+      now,
+      stalledDays,
+    });
 
-  const next = nextActionableSteps(steps, statusById).map(
-    (id) => stepById.get(id).title,
-  );
+  const next = (server?.nextSteps ?? nextActionableSteps(steps, statusById))
+    .filter((id) => known.has(id))
+    .map((id) => stepById.get(id).title);
 
   return {
     shape,
@@ -442,7 +557,7 @@ export function planLayout(plan, options = {}) {
     cyclic,
     lanes: planComponents(steps),
     criticalPath: path,
-    progress: { done, total: steps.length },
+    progress: { done, total },
     next,
     issues,
   };

@@ -1,29 +1,28 @@
 /**
- * Batch ref resolve, shaped like the contract the plan work defines:
- * `{ref, kind, title, status, owner, progress, url, resolvable}`.
+ * A batch ref resolve response, in the wire shape core returns:
+ * `{items: [{ref, kind, title, phase, status, owner, progress, url, resolvable}]}`.
  *
- * The chips and the preview card are built and tested against this so they are
- * ready to swap to the real endpoint. Keep the shape honest — if the server
- * ends up spelling a field differently, change it here and the components
- * follow.
+ * Only contract fields appear here. In particular there is no board, priority,
+ * next step or last-moved on a resolved ref — the preview card renders those
+ * when present and omits them otherwise, which today means it omits them.
  *
- * The rows deliberately cover each case a chip has to render: work in flight,
- * finished work, blocked work, a doc, a project, a board with no page to open,
- * an external pull request, and a ref that resolves to nothing.
+ * `url` is workspace-relative for native entities and absent for topics and
+ * boards, which have no detail surface; the components derive their own link
+ * for those rather than inventing a server URL.
+ *
+ * The rows cover each case a chip has to render: work in flight, finished
+ * work, blocked work, a doc, a project, a board, an external pull request, and
+ * a ref that resolves to nothing.
  */
 export const refResolveExample = {
-  refs: [
+  items: [
     {
       ref: "card:initiative-plans",
       kind: "card",
       title: "Initiative plans on cards",
       status: "in_progress",
       owner: "Codex Sol",
-      board: "Release B",
-      priority: "high",
       progress: { done: 3, total: 7 },
-      next_step: "Computed progress and health",
-      last_moved_at: "2026-10-04T09:12:00Z",
       url: "",
       resolvable: true,
     },
@@ -33,9 +32,7 @@ export const refResolveExample = {
       title: "Shared report contracts",
       status: "done",
       owner: "Codex Luna",
-      board: "Release B",
       progress: { done: 5, total: 5 },
-      last_moved_at: "2026-10-03T17:40:00Z",
       resolvable: true,
     },
     {
@@ -44,10 +41,7 @@ export const refResolveExample = {
       title: "Pushed series and declared adapters",
       status: "blocked",
       owner: "Codex Sol",
-      board: "Release B",
       progress: { done: 1, total: 6 },
-      next_step: "Waiting on the panel binding decision",
-      last_moved_at: "2026-09-27T11:02:00Z",
       resolvable: true,
     },
     {
@@ -56,7 +50,6 @@ export const refResolveExample = {
       title: "Release B plan",
       status: "",
       owner: "David Zhang",
-      last_moved_at: "2026-10-04T08:00:00Z",
       resolvable: true,
     },
     {
@@ -90,6 +83,6 @@ export const refResolveExample = {
 };
 
 /** The refs a page would have asked for, including the one that resolves to nothing. */
-export const refResolveExampleRequest = refResolveExample.refs.map(
+export const refResolveExampleRequest = refResolveExample.items.map(
   (row) => row.ref,
 );

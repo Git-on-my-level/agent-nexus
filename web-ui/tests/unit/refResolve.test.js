@@ -184,41 +184,51 @@ describe("indexResolvedRefs", () => {
   });
 
   it("records a requested ref the response left out", () => {
-    const index = indexResolvedRefs({ refs: [] }, ["card:never-came-back"]);
+    const index = indexResolvedRefs({ items: [] }, ["card:never-came-back"]);
     expect(index.get("card:never-came-back")).toEqual({
       ref: "card:never-came-back",
       resolvable: false,
     });
   });
 
-  it("accepts a bare array as well as a wrapped response", () => {
-    const index = indexResolvedRefs([{ ref: "card:a", title: "A" }]);
-    expect(index.get("card:a").title).toBe("A");
+  it("reads the contract envelope and a bare array alike", () => {
+    expect(
+      indexResolvedRefs({ items: [{ ref: "card:a", title: "A" }] }).get(
+        "card:a",
+      ).title,
+    ).toBe("A");
+    expect(
+      indexResolvedRefs([{ ref: "card:a", title: "A" }]).get("card:a").title,
+    ).toBe("A");
   });
 
   it("reads phase when the row spells status that way", () => {
-    const index = indexResolvedRefs([{ ref: "card:a", phase: "review" }]);
+    const index = indexResolvedRefs({
+      items: [{ ref: "card:a", phase: "review" }],
+    });
     expect(index.get("card:a").status).toBe("review");
   });
 
   it("drops a progress object that cannot be a ratio", () => {
-    const index = indexResolvedRefs([
-      { ref: "card:a", progress: { done: 1, total: 0 } },
-      { ref: "card:b", progress: { done: "x", total: 4 } },
-    ]);
+    const index = indexResolvedRefs({
+      items: [
+        { ref: "card:a", progress: { done: 1, total: 0 } },
+        { ref: "card:b", progress: { done: "x", total: 4 } },
+      ],
+    });
     expect(index.get("card:a").progress).toBeNull();
     expect(index.get("card:b").progress).toBeNull();
   });
 
   it("clamps progress that overshoots its total", () => {
-    const index = indexResolvedRefs([
-      { ref: "card:a", progress: { done: 9, total: 4 } },
-    ]);
+    const index = indexResolvedRefs({
+      items: [{ ref: "card:a", progress: { done: 9, total: 4 } }],
+    });
     expect(index.get("card:a").progress).toEqual({ done: 4, total: 4 });
   });
 
   it("ignores a row with no ref", () => {
-    expect(indexResolvedRefs([{ title: "orphan" }]).size).toBe(0);
+    expect(indexResolvedRefs({ items: [{ title: "orphan" }] }).size).toBe(0);
   });
 });
 
@@ -297,9 +307,9 @@ describe("refChipModel", () => {
   });
 
   it("prefers a url the server supplied over a derived path", () => {
-    const index = indexResolvedRefs([
-      { ref: "card:a", title: "A", url: "https://elsewhere.test/a" },
-    ]);
+    const index = indexResolvedRefs({
+      items: [{ ref: "card:a", title: "A", url: "https://elsewhere.test/a" }],
+    });
     expect(refChipModel("card:a", index, context).href).toBe(
       "https://elsewhere.test/a",
     );
@@ -309,13 +319,45 @@ describe("refChipModel", () => {
     expect(refChipModel("card:initiative-plans", resolved, {}).href).toBe("");
   });
 
-  it("carries the preview fields through", () => {
+  it("carries the preview fields the contract returns", () => {
     const model = refChipModel("card:pushed-series", resolved, context);
     expect(model).toMatchObject({
       owner: "Codex Sol",
-      board: "Release B",
-      nextStep: "Waiting on the panel binding decision",
       progress: { done: 1, total: 6 },
+      statusLabel: "blocked",
+    });
+  });
+
+  it("leaves out the preview fields batch resolve does not return", () => {
+    // board, priority, next step and last-moved are not in the contract today.
+    // The preview renders them if a later revision adds them; until then the
+    // model must report them absent rather than inventing anything.
+    const model = refChipModel("card:pushed-series", resolved, context);
+    expect(model.board).toBe("");
+    expect(model.priority).toBe("");
+    expect(model.nextStep).toBe("");
+    expect(model.lastMovedAt).toBe("");
+  });
+
+  it("still reads those fields when a response does carry them", () => {
+    const index = indexResolvedRefs({
+      items: [
+        {
+          ref: "card:a",
+          title: "A",
+          board: "Release B",
+          priority: "high",
+          next_step: "Ship it",
+          last_moved_at: "2026-10-04T09:12:00Z",
+          resolvable: true,
+        },
+      ],
+    });
+    expect(refChipModel("card:a", index, context)).toMatchObject({
+      board: "Release B",
+      priority: "high",
+      nextStep: "Ship it",
+      lastMovedAt: "2026-10-04T09:12:00Z",
     });
   });
 });

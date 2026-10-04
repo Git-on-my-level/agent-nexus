@@ -44,7 +44,7 @@ describe("AnxRefPreview", () => {
     expect(container.querySelector(".anx-ref-preview")).toBeNull();
   });
 
-  it("shows kind, board, priority, status, progress, next step, owner and moved", async () => {
+  it("shows what batch ref resolve returns: kind, status, progress and owner", async () => {
     const { container, component } = render(AnxRefPreview);
     component.open(model("card:initiative-plans"), anchor());
 
@@ -54,17 +54,25 @@ describe("AnxRefPreview", () => {
     const text = container.querySelector(".anx-ref-preview").textContent;
     expect(text).toContain("Initiative plans on cards");
     expect(text).toContain("Task");
-    expect(text).toContain("Release B");
-    expect(text).toContain("high");
     expect(text).toContain("in progress");
     expect(text).toContain("3/7");
-    expect(text).toContain("Next: Computed progress and health");
     expect(text).toContain("Codex Sol");
-    expect(text).toContain("moved");
 
     const progress = container.querySelector("progress");
     expect(progress.getAttribute("value")).toBe("3");
     expect(progress.getAttribute("max")).toBe("7");
+  });
+
+  it("omits the rows the contract does not supply", async () => {
+    // board, priority, next step and last-moved are not batch resolve fields.
+    const { container, component } = render(AnxRefPreview);
+    component.open(model("card:initiative-plans"), anchor());
+    await waitFor(() =>
+      expect(container.querySelector(".anx-ref-preview")).not.toBeNull(),
+    );
+    const text = container.querySelector(".anx-ref-preview").textContent;
+    expect(text).not.toContain("Next:");
+    expect(text).not.toContain("moved");
   });
 
   it("offers Open and Copy ref for a resolvable ref", async () => {
