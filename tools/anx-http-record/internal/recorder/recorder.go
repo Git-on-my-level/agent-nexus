@@ -212,6 +212,8 @@ func MaterializeBody(headers http.Header, data []byte, truncated bool) BodyValue
 }
 
 var sensitiveJSONFragmentPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)("enrollment_token"\s*:\s*")([^"]*)("?)`),
+	regexp.MustCompile(`(?i)("poll_token"\s*:\s*")([^"]*)("?)`),
 	regexp.MustCompile(`(?i)("token"\s*:\s*")([^"]*)("?)`),
 	regexp.MustCompile(`(?i)("access_token"\s*:\s*")([^"]*)("?)`),
 	regexp.MustCompile(`(?i)("refresh_token"\s*:\s*")([^"]*)("?)`),
@@ -254,7 +256,7 @@ func RedactHeaders(header http.Header) map[string][]string {
 
 func isSensitiveHeader(key string) bool {
 	switch strings.ToLower(strings.TrimSpace(key)) {
-	case "authorization", "cookie", "set-cookie", "proxy-authorization", "x-api-key", "x-anx-bootstrap-token":
+	case "authorization", "cookie", "set-cookie", "proxy-authorization", "x-api-key", "x-anx-bootstrap-token", "x-anx-enrollment-token":
 		return true
 	default:
 		return false
@@ -332,7 +334,7 @@ func redactJSON(value any) any {
 
 func isSensitiveJSONKey(key string) bool {
 	switch strings.ToLower(strings.TrimSpace(key)) {
-	case "token", "access_token", "refresh_token", "bootstrap_token", "invite_token", "password":
+	case "token", "access_token", "refresh_token", "bootstrap_token", "invite_token", "enrollment_token", "poll_token", "password":
 		return true
 	default:
 		return false

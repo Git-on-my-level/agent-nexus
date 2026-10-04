@@ -80,6 +80,20 @@ export function describeAuthAuditEvent(event, options = {}) {
         ? `${host} now excludes ${names.join(", ")}`
         : `${host} excludes no names`;
     }
+    case "auth_admin_granted":
+      return `${actor} granted administration to ${subject}`;
+    case "auth_admin_revoked":
+      return `${actor} revoked administration from ${subject}`;
+    case "host_enrollment_token_created":
+      return `${actor} created an enrollment token${meta.label ? ` for ${meta.label}` : ""}`;
+    case "host_enrollment_token_revoked":
+      return `${actor} revoked an enrollment token`;
+    case "host_enrollment_token_consumed": {
+      const issuer = who("", meta.issuer_actor_id, meta.issuer_principal_id);
+      return issuer
+        ? `${host} enrolled using a token issued by ${issuer}`
+        : `${host} enrolled using an enrollment token`;
+    }
     case "host_revoked":
       return `${actor} revoked ${host} and its agents`;
     case "secret.created":

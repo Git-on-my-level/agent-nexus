@@ -24,6 +24,7 @@
     if (!Number.isFinite(at)) return "";
     return at <= now ? "expired" : formatWait(at - now);
   });
+  let approved = $derived(enrollment?.status === "approved");
   let expired = $derived(expiresIn === "expired");
   let requestedAgo = $derived.by(() => {
     const at = Date.parse(enrollment?.created_at ?? "");
@@ -99,7 +100,7 @@
     <p class="mt-2 text-micro text-danger-text" role="alert">{error}</p>
   {/if}
 
-  {#if confirming}
+  {#if confirming && !approved}
     <div
       class="mt-3 flex flex-wrap items-center gap-3 rounded-md border border-line bg-bg px-3 py-2"
       data-enrollment-confirm
@@ -116,7 +117,7 @@
           variant="primary"
           size="compact"
           busy={busy === "approve"}
-          disabled={expired || Boolean(busy)}
+          disabled={approved || expired || Boolean(busy)}
           onclick={() => onapprove(enrollment)}
           >{busy === "approve" ? "Approving…" : "Codes match, approve"}</Button
         >
@@ -133,8 +134,9 @@
       <Button
         variant="secondary"
         size="compact"
-        disabled={expired || Boolean(busy)}
-        onclick={() => (confirming = true)}>Approve…</Button
+        disabled={approved || expired || Boolean(busy)}
+        onclick={() => (confirming = true)}
+        >{approved ? "Approved, awaiting completion" : "Approve…"}</Button
       >
       <Button
         variant="ghost"
@@ -142,7 +144,11 @@
         busy={busy === "deny"}
         disabled={Boolean(busy)}
         onclick={() => ondeny(enrollment)}
-        >{busy === "deny" ? "Denying…" : "Deny"}</Button
+        >{busy === "deny"
+          ? "Denying…"
+          : approved
+            ? "Cancel approval"
+            : "Deny"}</Button
       >
     </div>
   {/if}

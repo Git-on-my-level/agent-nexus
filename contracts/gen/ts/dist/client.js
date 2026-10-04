@@ -876,6 +876,157 @@ export const commandRegistry = [
         "ts_method": "artifactsUnarchive"
     },
     {
+        "command_id": "auth.admins.grant",
+        "cli_path": "auth admins grant",
+        "group": "auth",
+        "method": "POST",
+        "path": "/auth/admins/{principal_id}/grant",
+        "operation_id": "grantAuthAdmin",
+        "summary": "Grant agent auth-admin grants",
+        "description": "Human only. Grant or revoke fleet administration on an active agent principal. Agents may decide enrollments, manage enrollment tokens, revoke other hosts, and read inventory/audit; principal and human invite revocation remain human-only. Idempotent, audited when changed, and effective on its next request even with an existing access token.",
+        "why": "Manage explicit workspace administration authority for agents.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `AuthAdminResponse`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "human_required",
+            "invalid_request",
+            "not_found"
+        ],
+        "concepts": [
+            "auth"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Only a human can change a grant. No default grant is assigned to agents or hosts.",
+        "path_params": [
+            "principal_id"
+        ],
+        "adjacent_commands": [
+            "auth.admins.list",
+            "auth.admins.revoke",
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.dev.login",
+            "auth.passkey.dev.register",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+        ],
+        "go_method": "AuthAdminsGrant",
+        "ts_method": "authAdminsGrant"
+    },
+    {
+        "command_id": "auth.admins.list",
+        "cli_path": "auth admins list",
+        "group": "auth",
+        "method": "GET",
+        "path": "/auth/admins",
+        "operation_id": "listAuthAdmins",
+        "summary": "List agent auth-admin grants",
+        "description": "Human or auth-admin principal. Lists active explicitly granted agents only; humans retain their existing administration rights.",
+        "why": "Manage explicit workspace administration authority for agents.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `AuthAdminsResponse`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "auth_admin_required"
+        ],
+        "concepts": [
+            "auth"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Only a human can change a grant. No default grant is assigned to agents or hosts.",
+        "adjacent_commands": [
+            "auth.admins.grant",
+            "auth.admins.revoke",
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.dev.login",
+            "auth.passkey.dev.register",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+        ],
+        "go_method": "AuthAdminsList",
+        "ts_method": "authAdminsList"
+    },
+    {
+        "command_id": "auth.admins.revoke",
+        "cli_path": "auth admins revoke",
+        "group": "auth",
+        "method": "POST",
+        "path": "/auth/admins/{principal_id}/revoke",
+        "operation_id": "revokeAuthAdmin",
+        "summary": "Revoke agent auth-admin grants",
+        "description": "Human only. Grant or revoke fleet administration on an active agent principal. Agents may decide enrollments, manage enrollment tokens, revoke other hosts, and read inventory/audit; principal and human invite revocation remain human-only. Idempotent, audited when changed, and effective on its next request even with an existing access token.",
+        "why": "Manage explicit workspace administration authority for agents.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `AuthAdminResponse`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "human_required",
+            "invalid_request",
+            "not_found"
+        ],
+        "concepts": [
+            "auth"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Only a human can change a grant. No default grant is assigned to agents or hosts.",
+        "path_params": [
+            "principal_id"
+        ],
+        "adjacent_commands": [
+            "auth.admins.grant",
+            "auth.admins.list",
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.dev.login",
+            "auth.passkey.dev.register",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+        ],
+        "go_method": "AuthAdminsRevoke",
+        "ts_method": "authAdminsRevoke"
+    },
+    {
         "command_id": "auth.audit.list",
         "cli_path": "auth audit list",
         "group": "auth",
@@ -900,6 +1051,9 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
+            "auth.admins.grant",
+            "auth.admins.list",
+            "auth.admins.revoke",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.list",
@@ -937,6 +1091,9 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
+            "auth.admins.grant",
+            "auth.admins.list",
+            "auth.admins.revoke",
             "auth.audit.list",
             "auth.invites.create",
             "auth.invites.list",
@@ -962,6 +1119,7 @@ export const commandRegistry = [
         "path": "/auth/invites",
         "operation_id": "createAuthInvite",
         "summary": "Create invite token",
+        "description": "Human only. Auth-admin agents cannot issue human identity or credential invitations.",
         "why": "Issue a one-time invite for a human principal; kind must be human.",
         "input_mode": "json-body",
         "streaming": {
@@ -972,7 +1130,7 @@ export const commandRegistry = [
             "auth_required",
             "invalid_request",
             "invalid_token",
-            "forbidden"
+            "human_required"
         ],
         "concepts": [
             "auth"
@@ -997,6 +1155,9 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
+            "auth.admins.grant",
+            "auth.admins.list",
+            "auth.admins.revoke",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.list",
@@ -1038,6 +1199,9 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
+            "auth.admins.grant",
+            "auth.admins.list",
+            "auth.admins.revoke",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.create",
@@ -1063,6 +1227,7 @@ export const commandRegistry = [
         "path": "/auth/invites/{invite_id}/revoke",
         "operation_id": "revokeAuthInvite",
         "summary": "Revoke invite",
+        "description": "Human only, revalidated in the mutation transaction. Agents cannot revoke human recovery invitations.",
         "why": "Invalidate an outstanding invite by id.",
         "input_mode": "json-body",
         "streaming": {
@@ -1070,6 +1235,7 @@ export const commandRegistry = [
         },
         "output_envelope": "Returns `{ invite }`.",
         "error_codes": [
+            "human_required",
             "auth_required",
             "invalid_request",
             "not_found",
@@ -1084,6 +1250,9 @@ export const commandRegistry = [
             "invite_id"
         ],
         "adjacent_commands": [
+            "auth.admins.grant",
+            "auth.admins.list",
+            "auth.admins.revoke",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.create",
@@ -1127,6 +1296,9 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
+            "auth.admins.grant",
+            "auth.admins.list",
+            "auth.admins.revoke",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.create",
@@ -1170,6 +1342,9 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
+            "auth.admins.grant",
+            "auth.admins.list",
+            "auth.admins.revoke",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.create",
@@ -1202,7 +1377,8 @@ export const commandRegistry = [
         },
         "output_envelope": "Returns `{ session_id, options }`.",
         "error_codes": [
-            "invalid_request"
+            "invalid_request",
+            "human_required"
         ],
         "concepts": [
             "auth",
@@ -1211,6 +1387,9 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
+            "auth.admins.grant",
+            "auth.admins.list",
+            "auth.admins.revoke",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.create",
@@ -1244,7 +1423,8 @@ export const commandRegistry = [
         "output_envelope": "Returns `{ agent, tokens }`.",
         "error_codes": [
             "invalid_request",
-            "invalid_token"
+            "invalid_token",
+            "human_required"
         ],
         "concepts": [
             "auth",
@@ -1253,6 +1433,9 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
+            "auth.admins.grant",
+            "auth.admins.list",
+            "auth.admins.revoke",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.create",
@@ -1285,7 +1468,8 @@ export const commandRegistry = [
         },
         "output_envelope": "Returns `{ session_id, options }`.",
         "error_codes": [
-            "invalid_request"
+            "invalid_request",
+            "human_required"
         ],
         "concepts": [
             "auth",
@@ -1294,6 +1478,9 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
+            "auth.admins.grant",
+            "auth.admins.list",
+            "auth.admins.revoke",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.create",
@@ -1327,7 +1514,8 @@ export const commandRegistry = [
         "output_envelope": "Returns `{ agent, tokens }` for a human passkey principal.",
         "error_codes": [
             "invalid_request",
-            "invalid_token"
+            "invalid_token",
+            "human_required"
         ],
         "concepts": [
             "auth",
@@ -1336,6 +1524,9 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
+            "auth.admins.grant",
+            "auth.admins.list",
+            "auth.admins.revoke",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.create",
@@ -1361,6 +1552,7 @@ export const commandRegistry = [
         "path": "/auth/principals",
         "operation_id": "listAuthPrincipals",
         "summary": "List principals",
+        "description": "Auth-admin principal inventory. Each summary includes auth_admin, the explicit metadata grant; human administration remains implicit in the human principal kind.",
         "why": "Operator visibility into registered principals for the workspace.",
         "input_mode": "none",
         "streaming": {
@@ -1377,6 +1569,9 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
+            "auth.admins.grant",
+            "auth.admins.list",
+            "auth.admins.revoke",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.create",
@@ -1402,6 +1597,7 @@ export const commandRegistry = [
         "path": "/auth/principals/{principal_id}/revoke",
         "operation_id": "revokeAuthPrincipal",
         "summary": "Revoke principal by agent id",
+        "description": "Human only, revalidated in the mutation transaction. Agents cannot administratively revoke any principal or use the human lockout override.",
         "why": "Administrative revocation of a principal linkage.",
         "input_mode": "json-body",
         "streaming": {
@@ -1409,6 +1605,7 @@ export const commandRegistry = [
         },
         "output_envelope": "Returns result JSON.",
         "error_codes": [
+            "human_required",
             "auth_required",
             "invalid_request",
             "not_found",
@@ -1424,6 +1621,9 @@ export const commandRegistry = [
             "principal_id"
         ],
         "adjacent_commands": [
+            "auth.admins.grant",
+            "auth.admins.list",
+            "auth.admins.revoke",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.create",
@@ -1520,6 +1720,9 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
+            "auth.admins.grant",
+            "auth.admins.list",
+            "auth.admins.revoke",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.create",
@@ -5236,13 +5439,13 @@ export const commandRegistry = [
             "host_id"
         ],
         "adjacent_commands": [
-            "hosts.enroll.approve",
             "hosts.enroll.complete",
-            "hosts.enroll.deny",
             "hosts.enroll.headless",
-            "hosts.enroll.pending",
             "hosts.enroll.poll",
             "hosts.enroll.start",
+            "hosts.enroll.approve",
+            "hosts.enroll.deny",
+            "hosts.enroll.pending",
             "hosts.get",
             "hosts.list",
             "hosts.patch",
@@ -5256,13 +5459,13 @@ export const commandRegistry = [
     },
     {
         "command_id": "hosts.enroll.approve",
-        "cli_path": "host enroll approve",
+        "cli_path": "host enrollments approve",
         "group": "host",
         "method": "POST",
         "path": "/auth/hosts/enrollments/{enrollment_id}/approve",
         "operation_id": "approveHostEnrollment",
         "summary": "Approve host enrollment",
-        "description": "Human auth-admin only. Atomically reserves the host slug for this enrollment; approval does not deliver credentials or perform adoption.",
+        "description": "Human or explicitly granted auth-admin agent. Atomically reserves the host slug for this enrollment; approval does not deliver credentials or perform adoption.",
         "why": "Approve a verified machine.",
         "input_mode": "none",
         "streaming": {
@@ -5272,7 +5475,7 @@ export const commandRegistry = [
         "error_codes": [
             "auth_required",
             "invalid_token",
-            "forbidden",
+            "auth_admin_required",
             "not_found",
             "enrollment_expired",
             "enrollment_consumed",
@@ -5291,11 +5494,11 @@ export const commandRegistry = [
         "adjacent_commands": [
             "hosts.bridge.check_in",
             "hosts.enroll.complete",
-            "hosts.enroll.deny",
             "hosts.enroll.headless",
-            "hosts.enroll.pending",
             "hosts.enroll.poll",
             "hosts.enroll.start",
+            "hosts.enroll.deny",
+            "hosts.enroll.pending",
             "hosts.get",
             "hosts.list",
             "hosts.patch",
@@ -5357,12 +5560,12 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "hosts.bridge.check_in",
-            "hosts.enroll.approve",
-            "hosts.enroll.deny",
             "hosts.enroll.headless",
-            "hosts.enroll.pending",
             "hosts.enroll.poll",
             "hosts.enroll.start",
+            "hosts.enroll.approve",
+            "hosts.enroll.deny",
+            "hosts.enroll.pending",
             "hosts.get",
             "hosts.list",
             "hosts.patch",
@@ -5376,13 +5579,13 @@ export const commandRegistry = [
     },
     {
         "command_id": "hosts.enroll.deny",
-        "cli_path": "host enroll deny",
+        "cli_path": "host enrollments deny",
         "group": "host",
         "method": "POST",
         "path": "/auth/hosts/enrollments/{enrollment_id}/deny",
         "operation_id": "denyHostEnrollment",
         "summary": "Deny host enrollment",
-        "description": "Human auth-admin only; terminal and audited.",
+        "description": "Human or explicitly granted auth-admin agent. Denies a pending request or cancels an approved ceremony before completion; terminal and audited.",
         "why": "Reject an untrusted machine.",
         "input_mode": "none",
         "streaming": {
@@ -5392,7 +5595,7 @@ export const commandRegistry = [
         "error_codes": [
             "auth_required",
             "invalid_token",
-            "forbidden",
+            "auth_admin_required",
             "not_found",
             "enrollment_expired",
             "enrollment_consumed"
@@ -5409,12 +5612,12 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "hosts.bridge.check_in",
-            "hosts.enroll.approve",
             "hosts.enroll.complete",
             "hosts.enroll.headless",
-            "hosts.enroll.pending",
             "hosts.enroll.poll",
             "hosts.enroll.start",
+            "hosts.enroll.approve",
+            "hosts.enroll.pending",
             "hosts.get",
             "hosts.list",
             "hosts.patch",
@@ -5434,7 +5637,7 @@ export const commandRegistry = [
         "path": "/auth/hosts/enrollments/headless",
         "operation_id": "completeHeadlessHostEnrollment",
         "summary": "Enroll host using headless token",
-        "description": "Public single-request ceremony. Atomically verifies and consumes the human-created token, verifies the host key and adoption proofs, and creates the host. A failed request does not consume the token.",
+        "description": "Public single-request ceremony. Atomically verifies and consumes the auth-admin-created token, verifies the host key and adoption proofs, and creates the host. A failed request does not consume the token.",
         "why": "Enroll a CI or cloud host without polling.",
         "input_mode": "json-body",
         "streaming": {
@@ -5497,12 +5700,12 @@ export const commandRegistry = [
         },
         "adjacent_commands": [
             "hosts.bridge.check_in",
-            "hosts.enroll.approve",
             "hosts.enroll.complete",
-            "hosts.enroll.deny",
-            "hosts.enroll.pending",
             "hosts.enroll.poll",
             "hosts.enroll.start",
+            "hosts.enroll.approve",
+            "hosts.enroll.deny",
+            "hosts.enroll.pending",
             "hosts.get",
             "hosts.list",
             "hosts.patch",
@@ -5516,13 +5719,13 @@ export const commandRegistry = [
     },
     {
         "command_id": "hosts.enroll.pending",
-        "cli_path": "host enroll pending",
+        "cli_path": "host enrollments list",
         "group": "host",
         "method": "GET",
         "path": "/auth/hosts/enrollments/pending",
         "operation_id": "listPendingHostEnrollments",
         "summary": "List pending host approvals",
-        "description": "Human auth-admin only. Includes the requested slug, OS user, hostname, discovered adapters, adopted agent names, requesting IP and expiry; never returns poll tokens or proofs.",
+        "description": "Human or explicitly granted auth-admin agent. Lists pending and approved ceremonies awaiting completion, so an approval can be canceled. Includes the requested slug, OS user, hostname, discovered adapters, adopted agent names, requesting IP and expiry; never returns poll tokens or proofs.",
         "why": "Review host enrollment requests.",
         "input_mode": "none",
         "streaming": {
@@ -5532,7 +5735,7 @@ export const commandRegistry = [
         "error_codes": [
             "auth_required",
             "invalid_token",
-            "forbidden"
+            "auth_admin_required"
         ],
         "concepts": [
             "auth",
@@ -5543,12 +5746,12 @@ export const commandRegistry = [
         "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
         "adjacent_commands": [
             "hosts.bridge.check_in",
-            "hosts.enroll.approve",
             "hosts.enroll.complete",
-            "hosts.enroll.deny",
             "hosts.enroll.headless",
             "hosts.enroll.poll",
             "hosts.enroll.start",
+            "hosts.enroll.approve",
+            "hosts.enroll.deny",
             "hosts.get",
             "hosts.list",
             "hosts.patch",
@@ -5593,12 +5796,12 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "hosts.bridge.check_in",
-            "hosts.enroll.approve",
             "hosts.enroll.complete",
-            "hosts.enroll.deny",
             "hosts.enroll.headless",
-            "hosts.enroll.pending",
             "hosts.enroll.start",
+            "hosts.enroll.approve",
+            "hosts.enroll.deny",
+            "hosts.enroll.pending",
             "hosts.get",
             "hosts.list",
             "hosts.patch",
@@ -5674,12 +5877,12 @@ export const commandRegistry = [
         },
         "adjacent_commands": [
             "hosts.bridge.check_in",
-            "hosts.enroll.approve",
             "hosts.enroll.complete",
-            "hosts.enroll.deny",
             "hosts.enroll.headless",
-            "hosts.enroll.pending",
             "hosts.enroll.poll",
+            "hosts.enroll.approve",
+            "hosts.enroll.deny",
+            "hosts.enroll.pending",
             "hosts.get",
             "hosts.list",
             "hosts.patch",
@@ -5723,13 +5926,13 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "hosts.bridge.check_in",
-            "hosts.enroll.approve",
             "hosts.enroll.complete",
-            "hosts.enroll.deny",
             "hosts.enroll.headless",
-            "hosts.enroll.pending",
             "hosts.enroll.poll",
             "hosts.enroll.start",
+            "hosts.enroll.approve",
+            "hosts.enroll.deny",
+            "hosts.enroll.pending",
             "hosts.list",
             "hosts.patch",
             "hosts.revoke",
@@ -5768,13 +5971,13 @@ export const commandRegistry = [
         "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
         "adjacent_commands": [
             "hosts.bridge.check_in",
-            "hosts.enroll.approve",
             "hosts.enroll.complete",
-            "hosts.enroll.deny",
             "hosts.enroll.headless",
-            "hosts.enroll.pending",
             "hosts.enroll.poll",
             "hosts.enroll.start",
+            "hosts.enroll.approve",
+            "hosts.enroll.deny",
+            "hosts.enroll.pending",
             "hosts.get",
             "hosts.patch",
             "hosts.revoke",
@@ -5833,13 +6036,13 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "hosts.bridge.check_in",
-            "hosts.enroll.approve",
             "hosts.enroll.complete",
-            "hosts.enroll.deny",
             "hosts.enroll.headless",
-            "hosts.enroll.pending",
             "hosts.enroll.poll",
             "hosts.enroll.start",
+            "hosts.enroll.approve",
+            "hosts.enroll.deny",
+            "hosts.enroll.pending",
             "hosts.get",
             "hosts.list",
             "hosts.revoke",
@@ -5858,7 +6061,7 @@ export const commandRegistry = [
         "path": "/hosts/{host_id}",
         "operation_id": "revokeHost",
         "summary": "Revoke host and all derived agents",
-        "description": "Human auth-admin only. In one transaction revoke host, every child principal/key/session/token, and record one audit event. Idempotent; retained records remain visible to reads.",
+        "description": "Human or explicitly granted auth-admin agent. Agents cannot revoke their own host (host_self_revoke). In one transaction revoke host, every child principal/key/session/token, and record one audit event. Idempotent; retained records remain visible to reads.",
         "why": "Cut off a compromised machine.",
         "input_mode": "none",
         "streaming": {
@@ -5868,7 +6071,8 @@ export const commandRegistry = [
         "error_codes": [
             "auth_required",
             "invalid_token",
-            "forbidden",
+            "auth_admin_required",
+            "host_self_revoke",
             "not_found"
         ],
         "concepts": [
@@ -5883,13 +6087,13 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "hosts.bridge.check_in",
-            "hosts.enroll.approve",
             "hosts.enroll.complete",
-            "hosts.enroll.deny",
             "hosts.enroll.headless",
-            "hosts.enroll.pending",
             "hosts.enroll.poll",
             "hosts.enroll.start",
+            "hosts.enroll.approve",
+            "hosts.enroll.deny",
+            "hosts.enroll.pending",
             "hosts.get",
             "hosts.list",
             "hosts.patch",
@@ -5908,7 +6112,7 @@ export const commandRegistry = [
         "path": "/auth/hosts/enrollment-tokens",
         "operation_id": "createHostEnrollmentToken",
         "summary": "Create headless enrollment token",
-        "description": "Human auth-admin only. One-time secret shown only in this response; expires within 10 minutes to 24 hours.",
+        "description": "Human or explicitly granted auth-admin agent. One-time secret shown only in this response; expires within 10 minutes to 24 hours.",
         "why": "Authorize one headless host enrollment.",
         "input_mode": "json-body",
         "streaming": {
@@ -5918,7 +6122,7 @@ export const commandRegistry = [
         "error_codes": [
             "auth_required",
             "invalid_token",
-            "forbidden",
+            "auth_admin_required",
             "invalid_request"
         ],
         "concepts": [
@@ -5931,24 +6135,30 @@ export const commandRegistry = [
         "body_schema": {
             "required": [
                 {
+                    "name": "label",
+                    "type": "string"
+                }
+            ],
+            "optional": [
+                {
                     "name": "expires_at",
                     "type": "datetime"
                 },
                 {
-                    "name": "label",
-                    "type": "string"
+                    "name": "expires_in_seconds",
+                    "type": "integer"
                 }
             ]
         },
         "adjacent_commands": [
             "hosts.bridge.check_in",
-            "hosts.enroll.approve",
             "hosts.enroll.complete",
-            "hosts.enroll.deny",
             "hosts.enroll.headless",
-            "hosts.enroll.pending",
             "hosts.enroll.poll",
             "hosts.enroll.start",
+            "hosts.enroll.approve",
+            "hosts.enroll.deny",
+            "hosts.enroll.pending",
             "hosts.get",
             "hosts.list",
             "hosts.patch",
@@ -5967,7 +6177,7 @@ export const commandRegistry = [
         "path": "/auth/hosts/enrollment-tokens",
         "operation_id": "listHostEnrollmentTokens",
         "summary": "List headless enrollment tokens",
-        "description": "Human auth-admin only. Token secrets are never returned by list.",
+        "description": "Human or explicitly granted auth-admin agent. Token secrets are never returned by list.",
         "why": "Inspect headless host enrollment grants.",
         "input_mode": "none",
         "streaming": {
@@ -5977,7 +6187,7 @@ export const commandRegistry = [
         "error_codes": [
             "auth_required",
             "invalid_token",
-            "forbidden"
+            "auth_admin_required"
         ],
         "concepts": [
             "auth",
@@ -5988,13 +6198,13 @@ export const commandRegistry = [
         "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
         "adjacent_commands": [
             "hosts.bridge.check_in",
-            "hosts.enroll.approve",
             "hosts.enroll.complete",
-            "hosts.enroll.deny",
             "hosts.enroll.headless",
-            "hosts.enroll.pending",
             "hosts.enroll.poll",
             "hosts.enroll.start",
+            "hosts.enroll.approve",
+            "hosts.enroll.deny",
+            "hosts.enroll.pending",
             "hosts.get",
             "hosts.list",
             "hosts.patch",
@@ -6013,7 +6223,7 @@ export const commandRegistry = [
         "path": "/auth/hosts/enrollment-tokens/{token_id}/revoke",
         "operation_id": "revokeHostEnrollmentToken",
         "summary": "Revoke headless enrollment token",
-        "description": "Human auth-admin only; consumed tokens remain consumed.",
+        "description": "Human or explicitly granted auth-admin agent; consumed tokens remain consumed.",
         "why": "Invalidate an unused headless grant.",
         "input_mode": "none",
         "streaming": {
@@ -6023,7 +6233,7 @@ export const commandRegistry = [
         "error_codes": [
             "auth_required",
             "invalid_token",
-            "forbidden",
+            "auth_admin_required",
             "not_found"
         ],
         "concepts": [
@@ -6038,13 +6248,13 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "hosts.bridge.check_in",
-            "hosts.enroll.approve",
             "hosts.enroll.complete",
-            "hosts.enroll.deny",
             "hosts.enroll.headless",
-            "hosts.enroll.pending",
             "hosts.enroll.poll",
             "hosts.enroll.start",
+            "hosts.enroll.approve",
+            "hosts.enroll.deny",
+            "hosts.enroll.pending",
             "hosts.get",
             "hosts.list",
             "hosts.patch",
@@ -10810,6 +11020,15 @@ export class AnxClient {
     }
     artifactsUnarchive(pathParams, options = {}) {
         return this.invoke("artifacts.unarchive", pathParams, options);
+    }
+    authAdminsGrant(pathParams, options = {}) {
+        return this.invoke("auth.admins.grant", pathParams, options);
+    }
+    authAdminsList(options = {}) {
+        return this.invoke("auth.admins.list", {}, options);
+    }
+    authAdminsRevoke(pathParams, options = {}) {
+        return this.invoke("auth.admins.revoke", pathParams, options);
     }
     authAuditList(options = {}) {
         return this.invoke("auth.audit.list", {}, options);

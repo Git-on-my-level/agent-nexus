@@ -24,6 +24,7 @@
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import CopyableId from "$lib/components/CopyableId.svelte";
   import CopyButton from "$lib/components/CopyButton.svelte";
+  import AuthAdminGrants from "$lib/components/access/AuthAdminGrants.svelte";
   import HostCard from "$lib/components/access/HostCard.svelte";
   import HostEnrollmentRequest from "$lib/components/access/HostEnrollmentRequest.svelte";
   import HostEnrollmentTokens from "$lib/components/access/HostEnrollmentTokens.svelte";
@@ -58,6 +59,7 @@
     hosts: { status: "idle", error: "" },
     pending: { status: "idle", error: "" },
     tokens: { status: "idle", error: "" },
+    admins: { status: "idle", error: "" },
     principals: { status: "idle", error: "" },
     invites: { status: "idle", error: "" },
     audit: { status: "idle", error: "" },
@@ -66,6 +68,7 @@
   let hosts = $state([]);
   let pending = $state([]);
   let tokens = $state([]);
+  let admins = $state([]);
   let principals = $state([]);
   let activeHumanPrincipalCount = $state(0);
   let invites = $state([]);
@@ -187,12 +190,16 @@
   }
 
   async function loadPeople() {
-    const [principalsResult, invitesResult, auditResult] =
+    const [principalsResult, invitesResult, auditResult, adminsResult] =
       await Promise.allSettled([
         coreClient.listPrincipals({ limit: 200 }),
         coreClient.listInvites(),
         coreClient.listAuthAudit({ limit: 50 }),
+        coreClient.listAuthAdmins(),
       ]);
+    settle("admins", adminsResult, (value) => {
+      admins = value?.admins ?? [];
+    });
     settle("principals", principalsResult, (value) => {
       principals = value?.principals ?? [];
       activeHumanPrincipalCount = value?.active_human_principal_count ?? 0;
@@ -518,7 +525,7 @@
           class="mb-2 flex items-center gap-2 text-meta font-semibold text-fg"
         >
           <span class="h-2 w-2 rounded-full bg-warn" aria-hidden="true"></span>
-          Waiting for approval
+          Awaiting enrollment
           <span class="font-normal text-fg-muted">{pending.length}</span>
         </h2>
         <ul
@@ -658,6 +665,25 @@
             {/each}
           </div>
         {/if}
+      {/if}
+    </section>
+
+    <section class="space-y-3" aria-labelledby="agent-admin-heading">
+      <h2 id="agent-admin-heading" class="text-body font-semibold text-fg">
+        Agent administration
+      </h2>
+      {#if sections.admins.status === "error"}
+        <p class="text-meta text-danger-text" role="alert">
+          {sections.admins.error}
+        </p>
+      {:else if sections.admins.status === "ready"}
+        <AuthAdminGrants
+          {admins}
+          {principals}
+          {hosts}
+          canEdit={$authenticatedAgent?.principal_kind === "human"}
+          onchanged={loadPeople}
+        />
       {/if}
     </section>
 

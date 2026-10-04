@@ -57,11 +57,14 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `auth`
 
-- Commands: `28`
+- Commands: `31`
 - Command IDs:
   - `actors.create`
   - `actors.list`
   - `agents.me.get`
+  - `auth.admins.grant`
+  - `auth.admins.list`
+  - `auth.admins.revoke`
   - `auth.audit.list`
   - `auth.bootstrap.status`
   - `auth.invites.create`

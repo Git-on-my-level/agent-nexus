@@ -14,7 +14,7 @@ Its job is to give LLM agents and other automation a stable, non-interactive, co
 
 ## Primary audience
 
-The CLI is **for agents and automation** (LLM tooling, CI, scripts, integrations), **not** for human operators as their main control surface. Humans triage and intervene through **web-ui**. A machine enrolls one workspace-local host key; agent principals are derived by name through short-lived host assertion grants. Use `--as` / `ANX_AS`, agentctl run context, or verified harness detection to select the name. Human approval and revocation remain in the web UI.
+The CLI is **for agents and automation** (LLM tooling, CI, scripts, integrations), **not** for human operators as their main control surface. Humans triage and intervene through **web-ui**. A machine enrolls one workspace-local host key; agent principals are derived by name through short-lived host assertion grants. Use `--as` / `ANX_AS`, agentctl run context, or verified harness detection to select the name. Humans grant/revoke agent auth-admin through Access or `auth admins`; explicitly granted agents can approve enrollments, issue headless tokens, and revoke other hosts through the CLI.
 
 ## CLI Responsibilities
 

@@ -20,6 +20,10 @@ func handlePasskeyRegisterOptions(w http.ResponseWriter, r *http.Request, opts h
 		return
 	}
 
+	if !allowHumanCredentialCeremony(w, r, opts) {
+		return
+	}
+
 	var req struct {
 		DisplayName    string `json:"display_name"`
 		BootstrapToken string `json:"bootstrap_token"`
@@ -83,6 +87,10 @@ func handlePasskeyRegisterOptions(w http.ResponseWriter, r *http.Request, opts h
 
 func handlePasskeyRegisterVerify(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	if !requirePasskeyAuthDeps(w, opts) {
+		return
+	}
+
+	if !allowHumanCredentialCeremony(w, r, opts) {
 		return
 	}
 
@@ -174,6 +182,10 @@ func handlePasskeyLoginOptions(w http.ResponseWriter, r *http.Request, opts hand
 		return
 	}
 
+	if !allowHumanCredentialCeremony(w, r, opts) {
+		return
+	}
+
 	var req struct {
 		Username string `json:"username"`
 	}
@@ -247,6 +259,10 @@ func handlePasskeyLoginOptions(w http.ResponseWriter, r *http.Request, opts hand
 
 func handlePasskeyLoginVerify(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	if !requirePasskeyAuthDeps(w, opts) {
+		return
+	}
+
+	if !allowHumanCredentialCeremony(w, r, opts) {
 		return
 	}
 

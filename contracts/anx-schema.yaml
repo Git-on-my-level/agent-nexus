@@ -969,6 +969,8 @@ command_center:
     enrollment_expired: { status: 410, meaning: Enrollment expired after ten minutes. }
     enrollment_consumed: { status: 409, meaning: Enrollment was already completed or otherwise finalized. }
     enrollment_capacity: { status: 429, meaning: Too many pending host enrollment requests for this workspace or requester source. }
+    auth_admin_required: { status: 403, meaning: This action requires a human or explicitly granted auth-admin agent. }
+    host_self_revoke: { status: 403, meaning: An agent cannot revoke its own host. }
     human_required: { status: 403, meaning: This action requires a human principal. }
     idempotency_conflict: { status: 409, meaning: An idempotency key was reused with a different response body or target. }
     host_revoked: { status: 403, meaning: Host or its key was revoked. }
@@ -979,11 +981,15 @@ command_center:
     run_state_regression: { status: 409, meaning: An observation would replace a terminal state or regress a known state. }
     run_attribution_invalid: { status: 400, meaning: Run header is malformed or does not resolve to the authenticated host and agent. }
   invariants:
-    - Bootstrap creates only a human passkey principal; host enrollment always requires human approval or a human-created headless token.
+    - Bootstrap creates only a human passkey principal; host enrollment requires human or explicitly granted auth-admin approval, or an auth-admin-created headless token.
     - Host assertion and adoption proofs are single-use, timestamp or nonce bound, Ed25519 verified, and recorded transactionally against replay.
     - Excluding a name blocks new token derivation and revokes outstanding derived-agent sessions without deleting its actor or history.
     - A locally excluded legacy profile is omitted from adoption and remains usable only until revoked; no new standalone agent registration exists.
-    - Host bearer delegation cannot grant auth-admin, issue invites, or act for another host.
+    - Hosts never hold auth-admin. Only a human can grant or revoke auth-admin on an agent; grants are audited and read from durable state on every request.
+    - Auth-admin agents cannot issue human invitations or mint human identities or credentials. Human invite redemption requires a human issuer, including in the credential creation transaction.
+    - Administration writes revalidate the active principal and its current grant in the write transaction. A removed grant cannot authorize a later commit from an earlier request snapshot.
+    - Granting a host-backed agent trusts every process able to read that host's shared key and derive a bearer for that exact agent name; the grant audit includes its host and name.
+    - An auth-admin agent cannot revoke its own host. Host patch and all other human-only gates retain their existing policy.
     - Run state is monotonic. Unknown is provisional; terminal states are absorbing. A late running callback cannot replace completed.
     - Run attribution is resolved from the authenticated agent and its host; an unknown external run creates a provisional unknown-state run before recording the write.
     - Waiting on human takes precedence over working, and bridge online is separate from agent state.

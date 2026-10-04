@@ -49,7 +49,7 @@ var configSubcommandSpec = subcommandSpec{
 
 var authSubcommandSpec = subcommandSpec{
 	command: "auth",
-	valid:   []string{"whoami", "invites", "bootstrap", "principals", "audit"},
+	valid:   []string{"whoami", "invites", "bootstrap", "principals", "audit", "admins"},
 	examples: []string{
 		"anx auth whoami",
 		"anx auth invites list",

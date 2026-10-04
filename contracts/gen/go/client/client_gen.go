@@ -271,6 +271,41 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:   []string{"artifacts.archive", "artifacts.attachments.create", "artifacts.content", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash"},
 	},
 	{
+		CommandID:  "auth.admins.grant",
+		CLIPath:    "auth admins grant",
+		Group:      "auth",
+		Method:     "POST",
+		Path:       "/auth/admins/{principal_id}/grant",
+		PathParams: []string{"principal_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"auth"},
+		Adjacent:   []string{"auth.admins.list", "auth.admins.revoke", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+	},
+	{
+		CommandID: "auth.admins.list",
+		CLIPath:   "auth admins list",
+		Group:     "auth",
+		Method:    "GET",
+		Path:      "/auth/admins",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"auth"},
+		Adjacent:  []string{"auth.admins.grant", "auth.admins.revoke", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+	},
+	{
+		CommandID:  "auth.admins.revoke",
+		CLIPath:    "auth admins revoke",
+		Group:      "auth",
+		Method:     "POST",
+		Path:       "/auth/admins/{principal_id}/revoke",
+		PathParams: []string{"principal_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"auth"},
+		Adjacent:   []string{"auth.admins.grant", "auth.admins.list", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+	},
+	{
 		CommandID: "auth.audit.list",
 		CLIPath:   "auth audit list",
 		Group:     "auth",
@@ -279,7 +314,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"auth", "audit"},
-		Adjacent:  []string{"auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+		Adjacent:  []string{"auth.admins.grant", "auth.admins.list", "auth.admins.revoke", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
 	},
 	{
 		CommandID: "auth.bootstrap.status",
@@ -290,7 +325,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"auth"},
-		Adjacent:  []string{"auth.audit.list", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+		Adjacent:  []string{"auth.admins.grant", "auth.admins.list", "auth.admins.revoke", "auth.audit.list", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
 	},
 	{
 		CommandID: "auth.invites.create",
@@ -301,7 +336,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth"},
-		Adjacent:  []string{"auth.audit.list", "auth.bootstrap.status", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+		Adjacent:  []string{"auth.admins.grant", "auth.admins.list", "auth.admins.revoke", "auth.audit.list", "auth.bootstrap.status", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
 	},
 	{
 		CommandID: "auth.invites.list",
@@ -312,7 +347,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"auth"},
-		Adjacent:  []string{"auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+		Adjacent:  []string{"auth.admins.grant", "auth.admins.list", "auth.admins.revoke", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
 	},
 	{
 		CommandID:  "auth.invites.revoke",
@@ -324,7 +359,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"auth"},
-		Adjacent:   []string{"auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+		Adjacent:   []string{"auth.admins.grant", "auth.admins.list", "auth.admins.revoke", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
 	},
 	{
 		CommandID: "auth.passkey.dev.login",
@@ -335,7 +370,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "passkeys"},
-		Adjacent:  []string{"auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+		Adjacent:  []string{"auth.admins.grant", "auth.admins.list", "auth.admins.revoke", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
 	},
 	{
 		CommandID: "auth.passkey.dev.register",
@@ -346,7 +381,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "passkeys"},
-		Adjacent:  []string{"auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+		Adjacent:  []string{"auth.admins.grant", "auth.admins.list", "auth.admins.revoke", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
 	},
 	{
 		CommandID: "auth.passkey.login.options",
@@ -357,7 +392,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "passkeys"},
-		Adjacent:  []string{"auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+		Adjacent:  []string{"auth.admins.grant", "auth.admins.list", "auth.admins.revoke", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
 	},
 	{
 		CommandID: "auth.passkey.login.verify",
@@ -368,7 +403,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "passkeys"},
-		Adjacent:  []string{"auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+		Adjacent:  []string{"auth.admins.grant", "auth.admins.list", "auth.admins.revoke", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
 	},
 	{
 		CommandID: "auth.passkey.register.options",
@@ -379,7 +414,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "passkeys"},
-		Adjacent:  []string{"auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+		Adjacent:  []string{"auth.admins.grant", "auth.admins.list", "auth.admins.revoke", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
 	},
 	{
 		CommandID: "auth.passkey.register.verify",
@@ -390,7 +425,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "passkeys"},
-		Adjacent:  []string{"auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+		Adjacent:  []string{"auth.admins.grant", "auth.admins.list", "auth.admins.revoke", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.principals.list", "auth.principals.revoke", "auth.token"},
 	},
 	{
 		CommandID: "auth.principals.list",
@@ -401,7 +436,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"auth"},
-		Adjacent:  []string{"auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.revoke", "auth.token"},
+		Adjacent:  []string{"auth.admins.grant", "auth.admins.list", "auth.admins.revoke", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.revoke", "auth.token"},
 	},
 	{
 		CommandID:  "auth.principals.revoke",
@@ -413,7 +448,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"auth"},
-		Adjacent:   []string{"auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.token"},
+		Adjacent:   []string{"auth.admins.grant", "auth.admins.list", "auth.admins.revoke", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.token"},
 	},
 	{
 		CommandID: "auth.token",
@@ -424,7 +459,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth"},
-		Adjacent:  []string{"auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke"},
+		Adjacent:  []string{"auth.admins.grant", "auth.admins.list", "auth.admins.revoke", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke"},
 	},
 	{
 		CommandID:  "boards.archive",
@@ -1198,11 +1233,11 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"hosts", "agents"},
-		Adjacent:   []string{"hosts.enroll.approve", "hosts.enroll.complete", "hosts.enroll.deny", "hosts.enroll.headless", "hosts.enroll.pending", "hosts.enroll.poll", "hosts.enroll.start", "hosts.get", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
+		Adjacent:   []string{"hosts.enroll.complete", "hosts.enroll.headless", "hosts.enroll.poll", "hosts.enroll.start", "hosts.enroll.approve", "hosts.enroll.deny", "hosts.enroll.pending", "hosts.get", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
 	},
 	{
 		CommandID:  "hosts.enroll.approve",
-		CLIPath:    "host enroll approve",
+		CLIPath:    "host enrollments approve",
 		Group:      "host",
 		Method:     "POST",
 		Path:       "/auth/hosts/enrollments/{enrollment_id}/approve",
@@ -1210,7 +1245,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"auth", "hosts"},
-		Adjacent:   []string{"hosts.bridge.check_in", "hosts.enroll.complete", "hosts.enroll.deny", "hosts.enroll.headless", "hosts.enroll.pending", "hosts.enroll.poll", "hosts.enroll.start", "hosts.get", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
+		Adjacent:   []string{"hosts.bridge.check_in", "hosts.enroll.complete", "hosts.enroll.headless", "hosts.enroll.poll", "hosts.enroll.start", "hosts.enroll.deny", "hosts.enroll.pending", "hosts.get", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
 	},
 	{
 		CommandID:  "hosts.enroll.complete",
@@ -1222,11 +1257,11 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"auth", "hosts"},
-		Adjacent:   []string{"hosts.bridge.check_in", "hosts.enroll.approve", "hosts.enroll.deny", "hosts.enroll.headless", "hosts.enroll.pending", "hosts.enroll.poll", "hosts.enroll.start", "hosts.get", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
+		Adjacent:   []string{"hosts.bridge.check_in", "hosts.enroll.headless", "hosts.enroll.poll", "hosts.enroll.start", "hosts.enroll.approve", "hosts.enroll.deny", "hosts.enroll.pending", "hosts.get", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
 	},
 	{
 		CommandID:  "hosts.enroll.deny",
-		CLIPath:    "host enroll deny",
+		CLIPath:    "host enrollments deny",
 		Group:      "host",
 		Method:     "POST",
 		Path:       "/auth/hosts/enrollments/{enrollment_id}/deny",
@@ -1234,7 +1269,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"auth", "hosts"},
-		Adjacent:   []string{"hosts.bridge.check_in", "hosts.enroll.approve", "hosts.enroll.complete", "hosts.enroll.headless", "hosts.enroll.pending", "hosts.enroll.poll", "hosts.enroll.start", "hosts.get", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
+		Adjacent:   []string{"hosts.bridge.check_in", "hosts.enroll.complete", "hosts.enroll.headless", "hosts.enroll.poll", "hosts.enroll.start", "hosts.enroll.approve", "hosts.enroll.pending", "hosts.get", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
 	},
 	{
 		CommandID: "hosts.enroll.headless",
@@ -1245,18 +1280,18 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "hosts"},
-		Adjacent:  []string{"hosts.bridge.check_in", "hosts.enroll.approve", "hosts.enroll.complete", "hosts.enroll.deny", "hosts.enroll.pending", "hosts.enroll.poll", "hosts.enroll.start", "hosts.get", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
+		Adjacent:  []string{"hosts.bridge.check_in", "hosts.enroll.complete", "hosts.enroll.poll", "hosts.enroll.start", "hosts.enroll.approve", "hosts.enroll.deny", "hosts.enroll.pending", "hosts.get", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
 	},
 	{
 		CommandID: "hosts.enroll.pending",
-		CLIPath:   "host enroll pending",
+		CLIPath:   "host enrollments list",
 		Group:     "host",
 		Method:    "GET",
 		Path:      "/auth/hosts/enrollments/pending",
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"auth", "hosts"},
-		Adjacent:  []string{"hosts.bridge.check_in", "hosts.enroll.approve", "hosts.enroll.complete", "hosts.enroll.deny", "hosts.enroll.headless", "hosts.enroll.poll", "hosts.enroll.start", "hosts.get", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
+		Adjacent:  []string{"hosts.bridge.check_in", "hosts.enroll.complete", "hosts.enroll.headless", "hosts.enroll.poll", "hosts.enroll.start", "hosts.enroll.approve", "hosts.enroll.deny", "hosts.get", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
 	},
 	{
 		CommandID:  "hosts.enroll.poll",
@@ -1268,7 +1303,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"auth", "hosts"},
-		Adjacent:   []string{"hosts.bridge.check_in", "hosts.enroll.approve", "hosts.enroll.complete", "hosts.enroll.deny", "hosts.enroll.headless", "hosts.enroll.pending", "hosts.enroll.start", "hosts.get", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
+		Adjacent:   []string{"hosts.bridge.check_in", "hosts.enroll.complete", "hosts.enroll.headless", "hosts.enroll.start", "hosts.enroll.approve", "hosts.enroll.deny", "hosts.enroll.pending", "hosts.get", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
 	},
 	{
 		CommandID: "hosts.enroll.start",
@@ -1279,7 +1314,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "hosts"},
-		Adjacent:  []string{"hosts.bridge.check_in", "hosts.enroll.approve", "hosts.enroll.complete", "hosts.enroll.deny", "hosts.enroll.headless", "hosts.enroll.pending", "hosts.enroll.poll", "hosts.get", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
+		Adjacent:  []string{"hosts.bridge.check_in", "hosts.enroll.complete", "hosts.enroll.headless", "hosts.enroll.poll", "hosts.enroll.approve", "hosts.enroll.deny", "hosts.enroll.pending", "hosts.get", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
 	},
 	{
 		CommandID:  "hosts.get",
@@ -1291,7 +1326,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"hosts", "agents"},
-		Adjacent:   []string{"hosts.bridge.check_in", "hosts.enroll.approve", "hosts.enroll.complete", "hosts.enroll.deny", "hosts.enroll.headless", "hosts.enroll.pending", "hosts.enroll.poll", "hosts.enroll.start", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
+		Adjacent:   []string{"hosts.bridge.check_in", "hosts.enroll.complete", "hosts.enroll.headless", "hosts.enroll.poll", "hosts.enroll.start", "hosts.enroll.approve", "hosts.enroll.deny", "hosts.enroll.pending", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
 	},
 	{
 		CommandID: "hosts.list",
@@ -1302,7 +1337,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"hosts", "agents"},
-		Adjacent:  []string{"hosts.bridge.check_in", "hosts.enroll.approve", "hosts.enroll.complete", "hosts.enroll.deny", "hosts.enroll.headless", "hosts.enroll.pending", "hosts.enroll.poll", "hosts.enroll.start", "hosts.get", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
+		Adjacent:  []string{"hosts.bridge.check_in", "hosts.enroll.complete", "hosts.enroll.headless", "hosts.enroll.poll", "hosts.enroll.start", "hosts.enroll.approve", "hosts.enroll.deny", "hosts.enroll.pending", "hosts.get", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
 	},
 	{
 		CommandID:  "hosts.patch",
@@ -1314,7 +1349,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"hosts", "agents"},
-		Adjacent:   []string{"hosts.bridge.check_in", "hosts.enroll.approve", "hosts.enroll.complete", "hosts.enroll.deny", "hosts.enroll.headless", "hosts.enroll.pending", "hosts.enroll.poll", "hosts.enroll.start", "hosts.get", "hosts.list", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
+		Adjacent:   []string{"hosts.bridge.check_in", "hosts.enroll.complete", "hosts.enroll.headless", "hosts.enroll.poll", "hosts.enroll.start", "hosts.enroll.approve", "hosts.enroll.deny", "hosts.enroll.pending", "hosts.get", "hosts.list", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
 	},
 	{
 		CommandID:  "hosts.revoke",
@@ -1326,7 +1361,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"hosts", "auth"},
-		Adjacent:   []string{"hosts.bridge.check_in", "hosts.enroll.approve", "hosts.enroll.complete", "hosts.enroll.deny", "hosts.enroll.headless", "hosts.enroll.pending", "hosts.enroll.poll", "hosts.enroll.start", "hosts.get", "hosts.list", "hosts.patch", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
+		Adjacent:   []string{"hosts.bridge.check_in", "hosts.enroll.complete", "hosts.enroll.headless", "hosts.enroll.poll", "hosts.enroll.start", "hosts.enroll.approve", "hosts.enroll.deny", "hosts.enroll.pending", "hosts.get", "hosts.list", "hosts.patch", "hosts.tokens.create", "hosts.tokens.list", "hosts.tokens.revoke"},
 	},
 	{
 		CommandID: "hosts.tokens.create",
@@ -1337,7 +1372,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "hosts"},
-		Adjacent:  []string{"hosts.bridge.check_in", "hosts.enroll.approve", "hosts.enroll.complete", "hosts.enroll.deny", "hosts.enroll.headless", "hosts.enroll.pending", "hosts.enroll.poll", "hosts.enroll.start", "hosts.get", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.list", "hosts.tokens.revoke"},
+		Adjacent:  []string{"hosts.bridge.check_in", "hosts.enroll.complete", "hosts.enroll.headless", "hosts.enroll.poll", "hosts.enroll.start", "hosts.enroll.approve", "hosts.enroll.deny", "hosts.enroll.pending", "hosts.get", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.list", "hosts.tokens.revoke"},
 	},
 	{
 		CommandID: "hosts.tokens.list",
@@ -1348,7 +1383,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"auth", "hosts"},
-		Adjacent:  []string{"hosts.bridge.check_in", "hosts.enroll.approve", "hosts.enroll.complete", "hosts.enroll.deny", "hosts.enroll.headless", "hosts.enroll.pending", "hosts.enroll.poll", "hosts.enroll.start", "hosts.get", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.revoke"},
+		Adjacent:  []string{"hosts.bridge.check_in", "hosts.enroll.complete", "hosts.enroll.headless", "hosts.enroll.poll", "hosts.enroll.start", "hosts.enroll.approve", "hosts.enroll.deny", "hosts.enroll.pending", "hosts.get", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.revoke"},
 	},
 	{
 		CommandID:  "hosts.tokens.revoke",
@@ -1360,7 +1395,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"auth", "hosts"},
-		Adjacent:   []string{"hosts.bridge.check_in", "hosts.enroll.approve", "hosts.enroll.complete", "hosts.enroll.deny", "hosts.enroll.headless", "hosts.enroll.pending", "hosts.enroll.poll", "hosts.enroll.start", "hosts.get", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list"},
+		Adjacent:   []string{"hosts.bridge.check_in", "hosts.enroll.complete", "hosts.enroll.headless", "hosts.enroll.poll", "hosts.enroll.start", "hosts.enroll.approve", "hosts.enroll.deny", "hosts.enroll.pending", "hosts.get", "hosts.list", "hosts.patch", "hosts.revoke", "hosts.tokens.create", "hosts.tokens.list"},
 	},
 	{
 		CommandID:  "inbox.get",
@@ -2492,6 +2527,18 @@ func (c *Client) ArtifactsTrash(ctx context.Context, pathParams map[string]strin
 
 func (c *Client) ArtifactsUnarchive(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "artifacts.unarchive", pathParams, opts)
+}
+
+func (c *Client) AuthAdminsGrant(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.admins.grant", pathParams, opts)
+}
+
+func (c *Client) AuthAdminsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.admins.list", nil, opts)
+}
+
+func (c *Client) AuthAdminsRevoke(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.admins.revoke", pathParams, opts)
 }
 
 func (c *Client) AuthAuditList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

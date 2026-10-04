@@ -81,6 +81,9 @@ func handleIssueAuthToken(w http.ResponseWriter, r *http.Request, opts handlerOp
 			Signature: req.Signature,
 		})
 	case auth.TokenGrantTypeWorkspaceHuman:
+		if !allowHumanCredentialCeremony(w, r, opts) {
+			return
+		}
 		if opts.workspaceHumanGrantVerifier == nil {
 			writeError(w, http.StatusBadRequest, "invalid_request", "grant_type workspace_human_grant is not enabled")
 			return
@@ -208,7 +211,7 @@ func handleGetCurrentAgent(w http.ResponseWriter, r *http.Request, opts handlerO
 }
 
 func handleRevokePrincipal(w http.ResponseWriter, r *http.Request, opts handlerOptions, agentID string) {
-	principal, ok := requireAuthAdminPrincipal(w, r, opts)
+	principal, ok := requireHumanPrincipal(w, r, opts)
 	if !ok {
 		return
 	}
@@ -226,6 +229,8 @@ func handleRevokePrincipal(w http.ResponseWriter, r *http.Request, opts handlerO
 	})
 	if err != nil {
 		switch {
+		case errors.Is(err, auth.ErrHumanRequired):
+			writeError(w, 403, "human_required", "an active human principal is required")
 		case errors.Is(err, auth.ErrAgentNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "principal not found")
 		case errors.Is(err, auth.ErrLastActivePrincipal):
@@ -434,6 +439,9 @@ func sanitizeAuthError(err error) string {
 }
 
 func resolveOnboardingClaim(w http.ResponseWriter, r *http.Request, opts handlerOptions, bootstrapToken string, inviteToken string, principalKind auth.PrincipalKind) (auth.OnboardingClaim, bool) {
+	if principalKind == auth.PrincipalKindHuman && !allowHumanCredentialCeremony(w, r, opts) {
+		return auth.OnboardingClaim{}, false
+	}
 	if opts.authStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "auth_unavailable", "auth store is not configured")
 		return auth.OnboardingClaim{}, false
@@ -455,6 +463,21 @@ func resolveOnboardingClaim(w http.ResponseWriter, r *http.Request, opts handler
 	}
 
 	return claim, true
+}
+
+// A public onboarding/login ceremony derives authority from its human-issued
+// credential, never from an agent's administration bearer. Anonymous ceremonies
+// still require bootstrap/invite, WebAuthn, or external issuer proof.
+func allowHumanCredentialCeremony(w http.ResponseWriter, r *http.Request, opts handlerOptions) bool {
+	principal, ok := resolveOptionalPrincipal(w, r, opts)
+	if !ok {
+		return false
+	}
+	if principal != nil && !isHumanPrincipal(principal) {
+		writeError(w, http.StatusForbidden, "human_required", "agent credentials cannot mint human identities or credentials")
+		return false
+	}
+	return true
 }
 
 func onboardingRequiredMessage(err error) string {

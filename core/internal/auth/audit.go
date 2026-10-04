@@ -43,6 +43,7 @@ type AuthAuditListFilter struct {
 }
 
 type AuthPrincipalSummary struct {
+	AuthAdmin        bool               `json:"auth_admin"`
 	AgentID          string             `json:"agent_id"`
 	ActorID          string             `json:"actor_id"`
 	Username         string             `json:"username"`
@@ -103,7 +104,8 @@ func (s *Store) ListPrincipals(ctx context.Context, filter AuthPrincipalListFilt
 		` + principalLastSeenExpr("a") + `,
 		a.updated_at,
 		a.revoked_at,
-		a.metadata_json
+		a.metadata_json,
+        COALESCE(json_extract(a.metadata_json, '$.auth_admin'), 0)
 	 FROM agents a
 	 ORDER BY a.created_at DESC, a.id DESC`
 	args := make([]any, 0, 2)
@@ -141,6 +143,7 @@ func (s *Store) ListPrincipals(ctx context.Context, filter AuthPrincipalListFilt
 			&item.UpdatedAt,
 			&revokedRaw,
 			&metadataJSON,
+			&item.AuthAdmin,
 		); err != nil {
 			return nil, "", fmt.Errorf("scan auth principal row: %w", err)
 		}

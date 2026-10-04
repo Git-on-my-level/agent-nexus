@@ -52,6 +52,9 @@ const pageStore = vi.hoisted(() => {
 
 const coreClientMock = vi.hoisted(() => ({
   listPrincipals: vi.fn(),
+  listAuthAdmins: vi.fn(),
+  grantAuthAdmin: vi.fn(),
+  revokeAuthAdmin: vi.fn(),
   listInvites: vi.fn(),
   listAuthAudit: vi.fn(),
   createInvite: vi.fn(),
@@ -102,6 +105,9 @@ describe("access page", () => {
       principals: [],
       active_human_principal_count: 1,
     });
+    coreClientMock.listAuthAdmins.mockResolvedValue({ admins: [] });
+    coreClientMock.grantAuthAdmin.mockResolvedValue({});
+    coreClientMock.revokeAuthAdmin.mockResolvedValue({});
     coreClientMock.listInvites.mockResolvedValue({ invites: [] });
     coreClientMock.listAuthAudit.mockResolvedValue({ events: [] });
     coreClientMock.createInvite.mockResolvedValue({ token: "oinv_123" });
@@ -121,6 +127,83 @@ describe("access page", () => {
     cleanup();
     authenticatedAgent.set(null);
     vi.clearAllMocks();
+  });
+
+  it("lets a person explicitly grant and revoke agent administration", async () => {
+    coreClientMock.listAuthAdmins.mockResolvedValue({
+      admins: [
+        {
+          principal_id: "agent-fleet",
+          username: "fleet.host-a",
+          auth_admin: true,
+        },
+      ],
+    });
+    render(AccessPage, { props: { data: { outOfWorkspaceMode: "local" } } });
+    const input = await screen.findByLabelText(
+      "Agent username or principal ID",
+    );
+    await fireEvent.input(input, { target: { value: "codex.host-a" } });
+    await fireEvent.submit(input.closest("form"));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain(
+      "every process that can read the shared key",
+    );
+    expect(dialog.textContent).toContain(
+      "Principal and human invitation revocation require a person",
+    );
+    expect(dialog.textContent).toContain(
+      "decide host enrollments, manage enrollment tokens, revoke other hosts, and read inventory and audit",
+    );
+    await fireEvent.click(
+      [...dialog.querySelectorAll("button")].find(
+        (b) => b.textContent.trim() === "Grant administration",
+      ),
+    );
+    await waitFor(() =>
+      expect(coreClientMock.grantAuthAdmin).toHaveBeenCalledWith(
+        "codex.host-a",
+      ),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await fireEvent.click(
+      screen.getByRole("button", { name: "Revoke administration" }),
+    );
+    const revokeDialog = await screen.findByRole("dialog");
+    await fireEvent.click(
+      [...revokeDialog.querySelectorAll("button")].find(
+        (b) => b.textContent.trim() === "Revoke administration",
+      ),
+    );
+    await waitFor(() =>
+      expect(coreClientMock.revokeAuthAdmin).toHaveBeenCalledWith(
+        "agent-fleet",
+      ),
+    );
+  });
+
+  it("shows grants without offering changes to an agent", async () => {
+    authenticatedAgent.set({
+      agent_id: "agent-fleet",
+      principal_kind: "agent",
+    });
+    coreClientMock.listAuthAdmins.mockResolvedValue({
+      admins: [
+        {
+          principal_id: "agent-fleet",
+          username: "fleet.host-a",
+          auth_admin: true,
+        },
+      ],
+    });
+    render(AccessPage, { props: { data: { outOfWorkspaceMode: "local" } } });
+    await screen.findByText("fleet.host-a");
+    expect(
+      screen.queryByRole("button", { name: "Grant administration" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Revoke administration" }),
+    ).toBeNull();
   });
 
   it("offers no agent invites and sends hosted people to Organizations", async () => {
@@ -157,6 +240,32 @@ describe("access page", () => {
       });
     });
     expect(await screen.findByText("oinv_123")).toBeTruthy();
+  });
+
+  it("lets a human cancel an approved ceremony awaiting completion", async () => {
+    pageStore.setMode("local");
+    coreClientMock.listPendingHostEnrollments.mockResolvedValue({
+      enrollments: [{ ...PENDING, status: "approved" }],
+    });
+    coreClientMock.denyHostEnrollment.mockResolvedValue({
+      enrollment: { ...PENDING, status: "denied" },
+    });
+    render(AccessPage, { props: { data: { outOfWorkspaceMode: "local" } } });
+    expect(
+      await screen.findByRole("button", {
+        name: "Approved, awaiting completion",
+      }),
+    ).toHaveProperty("disabled", true);
+    coreClientMock.listPendingHostEnrollments.mockResolvedValue({
+      enrollments: [],
+    });
+    await fireEvent.click(
+      screen.getByRole("button", { name: "Cancel approval" }),
+    );
+    await waitFor(() => {
+      expect(coreClientMock.denyHostEnrollment).toHaveBeenCalledWith("henr_1");
+    });
+    expect(coreClientMock.approveHostEnrollment).not.toHaveBeenCalled();
   });
 
   it("approves a host only after the code is confirmed", async () => {

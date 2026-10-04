@@ -11,7 +11,7 @@ anx --as codex auth whoami
 anx doctor
 ```
 
-Interactive enrollment prints a user code and, when core returns a `verification_url`, the direct approval URL. Self-hosted deployments should set `ANX_PUBLIC_WEB_UI_WORKSPACE_URL` to the public web UI workspace path, such as `http://127.0.0.1:5291/o/local/w/local`, to receive that link. If core omits the URL, open Access → Hosts in the workspace web UI and approve the printed code. The CLI polls at the server interval. For unattended hosts, create a one-time enrollment token in the Access page and run `anx host enroll --token <token>`. A host key and record are stored under `~/.config/anx/hosts/<workspace-key>/` with owner-only permissions.
+Interactive enrollment prints a user code and, when core has `ANX_PUBLIC_WEB_UI_WORKSPACE_URL` configured, the full workspace-scoped verification URL. Set that config to the public web UI workspace path, such as `http://127.0.0.1:5291/o/local/w/local`. In hosted deployments, a core API at `https://example.com/ws/acme/main` uses `https://example.com/o/acme/w/main` as its web UI workspace URL. Without it, open Access → Hosts in the workspace web UI and approve the printed code. The CLI polls at the server interval. For unattended fleet hosts, use the auth-admin agent flow below. `anx host enroll --token-stdin` keeps the secret out of process arguments. A host key and record are stored under `~/.config/anx/hosts/<workspace-key>/` with owner-only permissions.
 
 Existing standalone agent profiles for the same workspace are adopted by default. `--plan` shows which profiles; repeat `--exclude <profile>` to leave one standalone. Successfully adopted local profile and key files are deleted.
 
@@ -27,7 +27,58 @@ hosts when `HOME` is absent.
 
 The bridge uses host-signed `anx host bridge check-in --host-id <id> --instance-id <id> --ttl-seconds <n>` and `anx host bridge wake claim|complete|fail --host-id <id> --wakeup-id <id> --instance-id <id> [--error <text>]`. Its `[host].config_dir` must point to the same enrolled host directory used by `anx`.
 
-Use `anx host status`, `anx host list`, `anx host exclude <name>` and `anx host include <name>` to inspect or edit this host. Revocation is a human auth-admin action in the Access page.
+Use `anx host status`, `anx host list`, `anx host exclude <name>` and `anx host include <name>` to inspect or edit this host. Humans and explicitly granted auth-admin agents can run `anx host revoke <host-id-or-slug>`; an agent cannot revoke its own host.
+
+### Fleet enrollment by an auth-admin agent
+
+A person first grants an existing agent administration access on the Access page,
+or through `anx auth admins grant <principal-id-or-username>` using their own
+human bearer (`ANX_ACCESS_TOKEN`). No agent receives this grant automatically;
+`anx auth admins list` lists explicit agent grants. Only humans can grant or
+revoke them. `anx auth admins revoke <principal>` takes effect on the next request,
+even when an agent has a cached access token.
+
+Once granted, the agent on host A enrolls host B through a one-time token. This is
+the default fleet enrollment path. Use a workspace-scoped `ANX_BASE_URL` on both
+machines, disable shell tracing, and pipe the secret directly to the remote CLI:
+
+```bash
+set +x
+anx --as fleet --json host tokens create --label host-b --expires-in 1h \
+  | jq -er '.result.token' \
+  | ssh host-b 'ANX_BASE_URL=https://nexus.example/ws/team/main anx host enroll --name host-b --token-stdin'
+```
+
+The token appears only in its create response; never save that response in run
+logs. It authorizes one host and expires after 10 minutes to 24 hours. The CLI
+sends the requested lifetime to core, which measures it on its own clock.
+`host tokens list` returns metadata without secrets; `host tokens revoke <token-id>`
+invalidates an unused token. The remote host stores its own key with owner-only
+permissions. A failed enrollment leaves the token usable; successful enrollment
+consumes it atomically. Keep existing profile adoption/exclusion rules in mind.
+
+For interactive requests, use `anx host enrollments list`, then
+`anx host enrollments approve <user-code>` or `deny <user-code>`. The protected list
+includes codes and machine details, never poll tokens or key proofs. Core audits
+the acting principal for decisions and revocations. Headless consumption has no
+authenticated principal actor; its audit records the token ID, destination host
+and key ID, and the issuer separately. Enrollment tokens and already-approved
+ceremonies remain consumable after the creator's auth-admin grant is removed,
+until expiry or explicit cancellation. To withdraw outstanding fleet access, use
+`anx host tokens list` then `anx host tokens revoke <token-id>`; use
+`anx host enrollments list` then `anx host enrollments deny <user-code-or-id>`
+for pending or approved ceremonies. Access shows approved ceremonies awaiting
+completion with a Cancel approval button. Completed hosts require
+`anx host revoke <host-id-or-slug>`.
+
+Granting an agent on host X trusts every process that can read X's shared host
+key and request that exact agent name. The grant names an existing principal;
+audit records include its host ID, slug, and name. Protect the host key as an
+administration credential. Agents cannot issue or revoke human invitations, revoke principals, or use the
+human lockout override. Their grant covers fleet enrollment and administrative
+reads only. Agents cannot use their credentials to mint human identities. Administration writes recheck the
+grant inside their transaction, including requests paused during body upload.
+
 
 ## User-global workspace selection
 
