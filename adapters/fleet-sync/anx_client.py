@@ -27,12 +27,6 @@ class AnxClient:
         # Open is the server default. This is a read; it does not respond.
         return self._call(["debug", "inbox", "list"], timeout=60)
 
-    def observations(self, ref: str, *, limit: int = 50, cursor: str = "") -> dict:
-        args = ["work", "observations", "list", ref, "--limit", str(limit)]
-        if cursor:
-            args.extend(["--cursor", cursor])
-        return self._call(args, timeout=45)
-
     def work_list(self, source: str) -> list[dict]:
         cards = []
         cursor = ""
@@ -41,19 +35,40 @@ class AnxClient:
             if cursor:
                 args.extend(["--cursor", cursor])
             result = self._call(args, timeout=60)
-            page = result.get("work") or []
-            if isinstance(page, list):
-                cards.extend(item for item in page if isinstance(item, dict))
+            page = result.get("work")
+            if not isinstance(page, list) or any(not isinstance(item, dict) for item in page):
+                raise AnxError("invalid_response", "work list missing or invalid work array")
+            cards.extend(page)
             cursor = result.get("next_cursor") or ""
             if not cursor:
                 break
+        if cursor:
+            raise AnxError("incomplete_read", "work list exceeded 50 pages; refusing partial inventory")
         return cards
 
-    def work_create(self, body: dict) -> dict:
-        return self._call_body(["work", "create"], body, timeout=60)
+    def work_get(self, ref: str) -> dict:
+        result = self._call(["work", "get", ref], timeout=60)
+        if not isinstance(result.get("work"), dict):
+            raise AnxError("invalid_response", "work get missing work")
+        return result["work"]
 
-    def observe(self, ref: str, body: dict) -> dict:
-        return self._call_body(["work", "observations", "submit", ref], body, timeout=60)
+    def card_get(self, ref: str) -> dict:
+        result = self._call(["cards", "get", ref], timeout=60)
+        if not isinstance(result.get("card"), dict):
+            raise AnxError("invalid_response", "cards get missing card")
+        return result["card"]
+
+    def card_revise(self, ref: str, body: dict) -> dict:
+        return self._call_body(["cards", "revise", ref], body, timeout=60)
+
+    def work_patch(self, ref: str, body: dict) -> dict:
+        return self._call_body(["work", "patch", ref], body, timeout=60)
+
+    def card_archive(self, ref: str, board_stamp: str) -> dict:
+        return self._call_body(["cards", "archive", ref], {"if_board_updated_at": board_stamp}, timeout=60)
+
+    def board_get(self, ref: str) -> dict:
+        return self._call(["boards", "get", ref], timeout=60)["board"]
 
     def docs_list(self) -> list[dict]:
         result = self._call(["docs", "list"], timeout=60)

@@ -79,6 +79,8 @@ def normalize_issue(issue: dict, agents: dict[str, dict[str, str | None]], *, ap
     updated = issue.get("updated_at")
     return {
         "native_id": str(issue.get("id") or ""),
+        "project": str(issue.get("project_id") or ""),
+        "labels": [str(label.get("name") or label.get("id") or "") if isinstance(label, dict) else str(label) for label in issue.get("labels") or []],
         "identifier": identifier,
         "title": title,
         "status": status,
