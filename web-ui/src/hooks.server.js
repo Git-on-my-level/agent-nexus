@@ -1,3 +1,4 @@
+import { initializeSessionAdapter } from "$lib/server/sessionAdapter.js";
 import { dev } from "$app/environment";
 import { env as privateEnv } from "$env/dynamic/private";
 import { AuthErrorCode } from "$lib/authErrorCodes.js";
@@ -382,10 +383,25 @@ export async function handle({ event, resolve }) {
   if (!event.locals) {
     event.locals = {};
   }
+  await initializeSessionAdapter(event, privateEnv, dev);
   event.locals.outOfWorkspace = getOutOfWorkspaceProvider(privateEnv);
 
   const pathname = stripBasePath(event.url.pathname);
   const method = event.request.method;
+  if (
+    event.locals.sessionAdapter &&
+    (pathname === "/auth/dev/session" ||
+      /^\/auth\/passkey\/(login|register)\/verify$/.test(pathname))
+  ) {
+    return new Response(JSON.stringify({ error: "use_session_adapter" }), {
+      status: 409,
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "private, no-store",
+      },
+    });
+  }
+
   if (isHostedWorkspaceProxyPath(pathname)) {
     if (
       shouldProxyHostedWorkspaceStreamInDev() &&

@@ -10,6 +10,7 @@ import {
   authSessionReady,
   clearAuthSession,
   initializeAuthSession,
+  getSessionEpoch,
   isHumanWorkspacePrincipal,
 } from "$lib/authSession";
 import {
@@ -441,11 +442,24 @@ export async function hydrateWorkspaceBootstrap({
   onDevFixturePersonas = () => {},
   refreshActors,
 }) {
-  // Hosted server loads have already checked membership, core auth and schema.
-  // Publish that identity before fetching optional directories.
+  // Adapter-managed activation runs independently of optional directories.
   if (hostedSession !== undefined) {
+    // Actual activation only: cached/preloaded route data is never an auth authority.
+    const epoch = getSessionEpoch();
+    const response = await fetchFn(appPath("/auth/workspace-session"), {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ organizationSlug, workspaceSlug }),
+    });
+    if (!response.ok)
+      throw new Error(`Workspace selection failed (${response.status})`);
+    hostedSession = await response.json();
+    if (epoch !== getSessionEpoch()) return;
     initializeActorSession(storage, workspaceSlug);
-    completeAuthSession(hostedSession.agent, workspaceSlug);
+    completeAuthSession(hostedSession.agent, workspaceSlug, {
+      organizationSlug,
+    });
     setDevActorMode(false);
     setDevActorModeReady(true);
     replacePrincipalRegistry(

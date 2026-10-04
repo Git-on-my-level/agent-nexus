@@ -341,7 +341,9 @@
     }
 
     hydratedWorkspaceSlug = workspaceKey;
-    void hydrateWorkspace(workspaceSlug);
+    void hydrateWorkspace(workspaceSlug).catch((error) => {
+      actorError = error.message;
+    });
   });
 
   $effect(() => {

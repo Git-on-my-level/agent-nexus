@@ -249,14 +249,15 @@ export function isHumanWorkspacePrincipal(agent) {
 export function completeAuthSession(
   agent,
   workspaceSlug = getCurrentWorkspaceSlug(),
+  { organizationSlug = getCurrentOrganizationSlug() } = {},
 ) {
-  const state = ensureAuthState(workspaceSlug);
+  const state = ensureAuthState(workspaceSlug, organizationSlug);
   state.generation += 1;
   state.initInflight = null;
   state.accessToken = "";
   state.authenticatedAgent = agent ?? null;
   state.ready = true;
-  syncCurrentAuthStores(workspaceSlug);
+  syncCurrentAuthStores(workspaceSlug, organizationSlug);
   return {
     agent: agent ?? null,
   };
@@ -493,13 +494,25 @@ export function startWorkspaceSessionMaintenance({ intervalMs = 60_000 } = {}) {
   };
 }
 
-/** End all tab-local sessions before removing the hosted account cookie. */
-export async function clearAllWorkspaceAuthSessions() {
-  const pending = [];
-  for (const [key, state] of authStateByWorkspace) {
-    if (state.initInflight) pending.push(state.initInflight);
+// Cross-tab notifications carry no credentials. Server cookie scoping remains
+// authoritative even if a tab is asleep or misses a notification.
+let sessionEpoch = 0;
+export const getSessionEpoch = () => sessionEpoch;
+let accountChannel;
+function invalidateWorkspaceSessions() {
+  sessionEpoch += 1;
+  for (const key of authStateByWorkspace.keys()) {
     const [organizationSlug, workspaceSlug] = key.split("/");
     clearAuthSession(workspaceSlug, { organizationSlug });
   }
-  await Promise.allSettled(pending);
+}
+if (browser && typeof globalThis.BroadcastChannel === "function") {
+  accountChannel = new BroadcastChannel("anx-session-changed");
+  accountChannel.onmessage = () => invalidateWorkspaceSessions();
+}
+
+/** Invalidate flights immediately; logout must not wait for old network calls. */
+export async function clearAllWorkspaceAuthSessions() {
+  invalidateWorkspaceSessions();
+  accountChannel?.postMessage("changed");
 }

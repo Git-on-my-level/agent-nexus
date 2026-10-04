@@ -33,69 +33,6 @@ function setup(fetchFn) {
     }),
   };
 }
-it("establishes a workspace session without a redirect or exposing grant/tokens to client data", async () => {
-  const fetchFn = vi.fn(
-    async () =>
-      new Response(JSON.stringify({ grant: { bearer_token: "grant-secret" } })),
-  );
-  const { event, values, provider } = setup(fetchFn);
-  const coreFetch = vi.fn(
-    async () =>
-      new Response(
-        JSON.stringify({
-          agent: { agent_id: "human" },
-          tokens: {
-            access_token: "access-secret",
-            refresh_token: "refresh-secret",
-          },
-        }),
-      ),
-  );
-  vi.stubGlobal("fetch", coreFetch);
-  const result = await provider.beginLaunchSession({
-    event,
-    workspaceId: "ws-alpha",
-    organizationSlug: "acme",
-    workspaceSlug: "alpha",
-    returnPath: "/",
-  });
-  expect(result).toEqual({ kind: "established", agent: { agent_id: "human" } });
-  expect(values.get("anx_ui_session_acme__alpha")).toBe("refresh-secret");
-  expect(values.get("anx_ui_session_acme__other")).toBe("other-refresh");
-  expect(
-    new Headers(fetchFn.mock.calls[0][1].headers).get("authorization"),
-  ).toBe("Bearer cp-session");
-  expect(coreFetch.mock.calls[0][0]).toBe(
-    "https://cp.test/ws/acme/alpha/auth/token",
-  );
-  expect(JSON.parse(coreFetch.mock.calls[0][1].body)).toEqual({
-    grant_type: "workspace_human_grant",
-    assertion: "grant-secret",
-  });
-  for (const [, , options] of event.cookies.set.mock.calls)
-    expect(options).toMatchObject({
-      httpOnly: true,
-      sameSite: "lax",
-      secure: true,
-    });
-});
-it("does not fall back to launch after access is revoked", async () => {
-  const fetchFn = vi.fn(async () => new Response("{}", { status: 403 }));
-  const { event, provider } = setup(fetchFn);
-  const coreFetch = vi.fn();
-  vi.stubGlobal("fetch", coreFetch);
-  const result = await provider.beginLaunchSession({
-    event,
-    workspaceId: "ws-alpha",
-    organizationSlug: "acme",
-    workspaceSlug: "alpha",
-    returnPath: "/",
-  });
-  expect(result.kind).toBe("needs_signin");
-  expect(fetchFn).toHaveBeenCalledTimes(1);
-  expect(coreFetch).not.toHaveBeenCalled();
-  expect(event.cookies.set).not.toHaveBeenCalled();
-});
 it("coalesces concurrent catalog reads only within the same request", async () => {
   const fetchFn = vi.fn(
     async (url) =>

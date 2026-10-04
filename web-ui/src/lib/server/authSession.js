@@ -105,6 +105,7 @@ function maybeMigrateWorkspaceAuthCookiesFromLegacy(
   organizationSlug,
   workspaceSlug,
 ) {
+  if (event.locals?.sessionCookieScope) return;
   const org = getOrganizationSlug(organizationSlug);
   const ws = getWorkspaceSlug(workspaceSlug);
   const nextSession = getAuthSessionCookieName(org, ws);
@@ -785,9 +786,31 @@ export async function loadWorkspaceAuthenticatedAgent({
   workspaceSlug,
   coreBaseUrl,
   headers = {},
+  readOnly = false,
 }) {
   if (!coreBaseUrl) {
     return null;
+  }
+
+  let accessToken = readWorkspaceAccessToken(
+    event,
+    organizationSlug,
+    workspaceSlug,
+  );
+
+  // Speculative route loads must never rotate sessions or mutate cookies.
+  if (readOnly) {
+    if (!accessToken) return null;
+    try {
+      const payload = await requestCoreJSON(coreBaseUrl, "/agents/me", {
+        token: accessToken,
+        headers,
+      });
+      return payload.agent ?? null;
+    } catch (failure) {
+      if (failure?.status === 401) return null;
+      throw failure;
+    }
   }
 
   const refreshToken = readWorkspaceRefreshToken(
@@ -795,7 +818,9 @@ export async function loadWorkspaceAuthenticatedAgent({
     organizationSlug,
     workspaceSlug,
   );
-  let accessToken = readWorkspaceAccessToken(
+
+  // Native legacy migration may have populated access while reading refresh.
+  accessToken = readWorkspaceAccessToken(
     event,
     organizationSlug,
     workspaceSlug,

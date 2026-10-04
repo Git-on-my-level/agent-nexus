@@ -8,18 +8,13 @@ import {
 } from "$lib/anxCoreClient";
 import { WORKSPACE_HEADER_CONSTANTS } from "$lib/compat/workspaceCompat";
 import { sanitizeHostedReturnPath } from "$lib/hosted/launchFlow.js";
-import {
-  loadWorkspaceAuthenticatedAgent,
-  getAuthAccessCookieName,
-  getAuthSessionCookieName,
-} from "$lib/server/authSession.js";
+import { loadWorkspaceAuthenticatedAgent } from "$lib/server/authSession.js";
 import { logServerEvent } from "$lib/server/devLog";
 import {
   hostedWorkspaceCoreBaseUrl,
   hostedWorkspaceCoreProxyHeaders,
 } from "$lib/server/hostedWorkspaceCore.js";
 import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
-import { handleLaunchInstruction } from "$lib/server/outOfWorkspace/launchSession.js";
 import {
   LAST_WORKSPACE_COOKIE,
   lastWorkspaceCookieValue,
@@ -88,20 +83,6 @@ function shouldDegradeCoreSchemaCheckInDev(error) {
 
 function isSecureCookieRequest(event) {
   return event.url.protocol === "https:";
-}
-
-function workspaceHasCoreSession(event, organizationSlug, workspaceSlug) {
-  const refreshToken = String(
-    event.cookies.get(
-      getAuthSessionCookieName(organizationSlug, workspaceSlug),
-    ) ?? "",
-  ).trim();
-  const accessToken = String(
-    event.cookies.get(
-      getAuthAccessCookieName(organizationSlug, workspaceSlug),
-    ) ?? "",
-  ).trim();
-  return refreshToken !== "" || accessToken !== "";
 }
 
 function workspaceRelativeReturnPath(event, organizationSlug, workspaceSlug) {
@@ -176,49 +157,25 @@ export async function load(event) {
     throw error(resolved.error.status, { message, code });
   }
 
-  event.cookies.set(
-    LAST_WORKSPACE_COOKIE,
-    lastWorkspaceCookieValue(
-      resolved.workspace.organizationSlug,
-      resolved.workspace.slug,
-    ),
-    {
-      path: "/",
-      httpOnly: true,
-      sameSite: "lax",
-      secure: !dev || isSecureCookieRequest(event),
-      maxAge: 60 * 60 * 24 * 180,
-    },
-  );
-
-  let sessionAgent;
-  const workspaceId = String(
-    resolved.workspace.workspaceId ?? resolved.workspace.id ?? "",
-  ).trim();
-  if (
-    provider.mode === "hosted" &&
-    workspaceId &&
-    !workspaceHasCoreSession(
-      event,
-      resolved.workspace.organizationSlug,
-      resolved.workspace.slug,
-    )
-  ) {
-    const instruction = await provider.beginLaunchSession({
-      event,
-      workspaceId,
-      organizationSlug: resolved.workspace.organizationSlug,
-      workspaceSlug: resolved.workspace.slug,
-      returnPath: workspaceRelativeReturnPath(
-        event,
+  if (provider.mode !== "hosted")
+    event.cookies.set(
+      LAST_WORKSPACE_COOKIE,
+      lastWorkspaceCookieValue(
         resolved.workspace.organizationSlug,
         resolved.workspace.slug,
       ),
-    });
-    handleLaunchInstruction(instruction);
-    sessionAgent = instruction?.agent;
-  }
+      {
+        path: "/",
+        httpOnly: true,
+        sameSite: "lax",
+        secure: !dev || isSecureCookieRequest(event),
+        maxAge: 60 * 60 * 24 * 180,
+      },
+    );
 
+  const workspaceId = String(
+    resolved.workspace.workspaceId ?? resolved.workspace.id ?? "",
+  ).trim();
   const catalog = await resolveWorkspaceCatalog(event, {
     prefetchedResolved: resolved,
   });
@@ -237,15 +194,14 @@ export async function load(event) {
   // Validate existing cookies while the compatibility check runs, not after hydration.
   const sessionPromise =
     provider.mode === "hosted"
-      ? sessionAgent
-        ? Promise.resolve(sessionAgent)
-        : loadWorkspaceAuthenticatedAgent({
-            event,
-            organizationSlug: workOrg,
-            workspaceSlug: workSlug,
-            coreBaseUrl: schemaCoreBaseUrl,
-            headers: hostedWorkspaceCoreProxyHeaders(event),
-          })
+      ? loadWorkspaceAuthenticatedAgent({
+          readOnly: true,
+          event,
+          organizationSlug: workOrg,
+          workspaceSlug: workSlug,
+          coreBaseUrl: schemaCoreBaseUrl,
+          headers: hostedWorkspaceCoreProxyHeaders(event),
+        })
       : Promise.resolve(undefined);
   // Attach a rejection handler immediately while the schema check is pending.
   const sessionResult = sessionPromise.then(

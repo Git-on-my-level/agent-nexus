@@ -1,9 +1,3 @@
-import {
-  writeWorkspaceAccessToken,
-  writeWorkspaceRefreshToken,
-} from "../authSession.js";
-import { postHostedWorkspaceCoreJSON } from "../hostedWorkspaceCore.js";
-
 import { error } from "@sveltejs/kit";
 
 import { normalizeBaseUrl } from "$lib/config.js";
@@ -18,10 +12,7 @@ import {
 } from "$lib/workspacePaths.js";
 
 import { allowHostedControlPlanePath } from "../hostedControlPlaneAllowlist.js";
-import {
-  readHostedControlPlaneProxyBearer,
-  renewHostedControlPlaneSessionCookie,
-} from "./cpSessionCookie.js";
+import { readHostedControlPlaneProxyBearer } from "./cpSessionCookie.js";
 
 import { createControlPlaneClient } from "./cpClient.js";
 
@@ -154,61 +145,6 @@ export function createHostedProvider({ controlPlaneBaseUrl, env }) {
       organizationSlug,
       workspaceSlug,
     }) {
-      // Same-origin BFF exchange: only httpOnly workspace cookies leave the server.
-      const grantResponse = await client.createWorkspaceSessionGrant({
-        event,
-        workspaceId,
-      });
-      if (grantResponse.ok) {
-        const assertion = grantResponse.body?.grant?.bearer_token;
-        if (!assertion) throw error(502, "Workspace grant is missing.");
-        const response = await postHostedWorkspaceCoreJSON({
-          event,
-          organizationSlug,
-          workspaceSlug,
-          path: "/auth/token",
-          body: { grant_type: "workspace_human_grant", assertion },
-        });
-        const payload = await response.json();
-        if (!response.ok)
-          throw error(
-            response.status,
-            payload?.error?.message || "Workspace sign-in failed.",
-          );
-        if (!payload.tokens?.access_token || !payload.tokens?.refresh_token)
-          throw error(502, "Workspace session is incomplete.");
-        writeWorkspaceAccessToken(
-          event,
-          organizationSlug,
-          workspaceSlug,
-          payload.tokens.access_token,
-        );
-        writeWorkspaceRefreshToken(
-          event,
-          organizationSlug,
-          workspaceSlug,
-          payload.tokens.refresh_token,
-        );
-        return { kind: "established", agent: payload.agent ?? null };
-      }
-      // Rolling upgrade compatibility only. Never fall back after an auth denial.
-      if (grantResponse.status !== 404 && grantResponse.status !== 405) {
-        if (grantResponse.status === 401 || grantResponse.status === 403) {
-          return {
-            kind: "needs_signin",
-            signInUrl: defaultSignInPath({
-              organizationSlug,
-              workspaceSlug,
-              workspaceId,
-              returnPath,
-            }),
-          };
-        }
-        throw error(
-          grantResponse.status || 502,
-          "Could not establish workspace session.",
-        );
-      }
       const launch = await client.createLaunchSession({
         event,
         workspaceId,
@@ -359,9 +295,6 @@ export function createHostedProvider({ controlPlaneBaseUrl, env }) {
       }
 
       const response = await fetch(target, init);
-      if (cookieToken && response.ok) {
-        renewHostedControlPlaneSessionCookie(event, cookieToken);
-      }
       const outHeaders = new Headers(response.headers);
       outHeaders.delete("content-encoding");
       outHeaders.delete("transfer-encoding");

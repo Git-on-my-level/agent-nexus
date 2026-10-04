@@ -310,19 +310,6 @@ export function createControlPlaneClient({ controlPlaneBaseUrl, env }) {
     return found;
   }
 
-  async function createWorkspaceSessionGrant({ event, workspaceId }) {
-    const token = controlPlaneAccessToken(env, event);
-    if (!token) return { ok: false, status: 401, body: {} };
-    return requestJSON(
-      event,
-      `${base}/workspaces/${encodeURIComponent(workspaceId)}/session-grants`,
-      {
-        method: "POST",
-        headers: bearerHeaders(token, { accept: "application/json" }),
-      },
-    );
-  }
-
   async function createLaunchSession({ event, workspaceId, returnPath }) {
     const token = controlPlaneAccessToken(env, event);
     const wsId = String(workspaceId ?? "").trim();
@@ -411,7 +398,6 @@ export function createControlPlaneClient({ controlPlaneBaseUrl, env }) {
     listWorkspacesByOrganizationId,
     findWorkspaceBySlug,
     getWorkspaceById,
-    createWorkspaceSessionGrant,
     createLaunchSession,
     exchangeLaunchSession,
   };

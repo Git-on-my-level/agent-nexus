@@ -114,3 +114,32 @@ it("settles an earlier refresh before deleting cookies on logout", async () => {
   expect(remove).toHaveBeenCalledTimes(1);
   expect(get(auth.authenticatedAgent)).toBeNull();
 });
+
+it("discards a refresh when another tab changes the account", async () => {
+  let channel;
+  vi.stubGlobal(
+    "BroadcastChannel",
+    class {
+      constructor() {
+        channel = this;
+      }
+      postMessage() {}
+    },
+  );
+  vi.resetModules();
+  auth = await import("../../src/lib/authSession.js");
+  context = await import("../../src/lib/workspaceContext.js");
+  select("one", "personal");
+  let finish;
+  const flight = auth.initializeAuthSession({
+    fetchFn: () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  });
+  channel.onmessage({ data: "changed" });
+  auth.completeAuthSession({ agent_id: "B" });
+  finish(response({ agent_id: "A" }));
+  await flight;
+  expect(get(auth.authenticatedAgent).agent_id).toBe("B");
+});

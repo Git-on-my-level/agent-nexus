@@ -255,10 +255,7 @@ describe("workspace +layout.server.js (integration with real resolver)", () => {
       organizationSlug: "my-org",
       coreBaseUrl: "http://127.0.0.1:18001",
     });
-    expect(event.cookies.set).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.stringContaining("my-org"),
-      expect.objectContaining({ path: "/", httpOnly: true }),
-    );
+    expect(event.cookies.set).not.toHaveBeenCalled();
+    expect(event.cookies.delete).not.toHaveBeenCalled();
   });
 });
