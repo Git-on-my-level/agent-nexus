@@ -21,8 +21,7 @@ type answerWakeBatchStore interface {
 	ListHumanAttentionAnswerWakeBatches(context.Context) ([]primitives.HumanAttentionAnswerWakeBatch, error)
 	CountOpenHumanAttentionAsks(context.Context, string) (int, error)
 	DeleteHumanAttentionAnswerWakeBatch(context.Context, string, string, string) (bool, error)
-	DeliverHumanAttentionAnswerWakeBatch(context.Context, primitives.HumanAttentionAnswerWakeBatch, primitives.AgentWakeup) (bool, error)
-	CreateArtifact(context.Context, string, map[string]any, any, string) (map[string]any, error)
+	DeliverHumanAttentionAnswerWakeBatch(context.Context, primitives.HumanAttentionAnswerWakeBatch, primitives.AgentWakeup, string, map[string]any, any, string) (bool, error)
 	UpsertAgentWakeup(context.Context, primitives.AgentWakeup) (primitives.AgentWakeup, error)
 }
 
@@ -208,16 +207,9 @@ func (m *AnswerWakeMaintainer) dispatch(ctx context.Context, batch primitives.Hu
 		TriggerText:      triggerText,
 		Refs:             refs,
 	}
-	delivered, err := m.store.DeliverHumanAttentionAnswerWakeBatch(ctx, batch, wakeup)
+	_, err := m.store.DeliverHumanAttentionAnswerWakeBatch(ctx, batch, wakeup, actors.SystemActorID, artifact, content, "structured")
 	if err != nil {
 		return fmt.Errorf("atomically deliver answer batch wake: %w", err)
-	}
-	if !delivered {
-		return nil
-	}
-	if _, artifactErr := m.store.CreateArtifact(ctx, actors.SystemActorID, artifact, content, "structured"); artifactErr != nil && !strings.Contains(strings.ToLower(artifactErr.Error()), "conflict") {
-		// The wakeup row is the durable signal; its refs and trigger text are
-		// enough for clients when artifact storage is unavailable.
 	}
 	return nil
 }

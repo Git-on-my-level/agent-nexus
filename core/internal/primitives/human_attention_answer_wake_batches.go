@@ -202,13 +202,31 @@ func (s *Store) DeleteHumanAttentionAnswerWakeBatch(ctx context.Context, targetA
 }
 
 // DeliverHumanAttentionAnswerWakeBatch atomically claims one persisted batch
-// generation, queues its durable wakeup, and removes the claimed batch. A
-// response queued before the claim changes TriggerEventID and makes the claim
-// fail; one queued after the claim creates a fresh generation after commit.
-func (s *Store) DeliverHumanAttentionAnswerWakeBatch(ctx context.Context, batch HumanAttentionAnswerWakeBatch, wakeup AgentWakeup) (bool, error) {
+// generation, queues its durable wakeup, persists its launch artifact, and
+// removes the claimed batch. A response queued before the claim changes
+// TriggerEventID and makes the claim fail; one queued after the claim creates
+// a fresh generation after commit.
+func (s *Store) DeliverHumanAttentionAnswerWakeBatch(ctx context.Context, batch HumanAttentionAnswerWakeBatch, wakeup AgentWakeup, artifactActorID string, artifact map[string]any, content any, contentType string) (bool, error) {
+	return s.deliverHumanAttentionAnswerWakeBatch(ctx, batch, wakeup, artifactActorID, artifact, content, contentType, nil)
+}
+
+// deliverHumanAttentionAnswerWakeBatch has a beforeCommit hook so the
+// subprocess crash test can terminate after every database row and the blob
+// have been staged, but before SQLite makes the transaction durable.
+func (s *Store) deliverHumanAttentionAnswerWakeBatch(ctx context.Context, batch HumanAttentionAnswerWakeBatch, wakeup AgentWakeup, artifactActorID string, artifact map[string]any, content any, contentType string, beforeCommit func() error) (bool, error) {
 	if s == nil || s.db == nil {
 		return false, fmt.Errorf("primitives store database is not initialized")
 	}
+	if s.quota.enabled() {
+		s.quotaMu.Lock()
+		defer s.quotaMu.Unlock()
+	}
+	preparedArtifact, err := s.prepareArtifactWrite(ctx, artifactActorID, artifact, content, contentType)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = preparedArtifact.stagedContent.Cleanup() }()
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, fmt.Errorf("begin answer wake delivery transaction: %w", err)
@@ -218,6 +236,14 @@ func (s *Store) DeliverHumanAttentionAnswerWakeBatch(ctx context.Context, batch 
 	claimed, err := claimHumanAttentionAnswerWakeBatchTx(ctx, tx, batch, wakeup)
 	if err != nil || !claimed {
 		return claimed, err
+	}
+	if err := s.insertPreparedArtifactTx(ctx, tx, preparedArtifact); err != nil {
+		return false, err
+	}
+	if beforeCommit != nil {
+		if err := beforeCommit(); err != nil {
+			return false, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return false, fmt.Errorf("commit answer wake delivery transaction: %w", err)

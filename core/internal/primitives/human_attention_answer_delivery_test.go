@@ -3,6 +3,8 @@ package primitives
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -26,7 +28,9 @@ func TestAnswerWakeDeliveryRollsBackClaimIfWakeInsertFails(t *testing.T) {
 
 	// An invalid wakeup fails after the transaction has claimed/deleted the
 	// generation. The rollback must restore it as if the process crashed there.
-	_, err = store.DeliverHumanAttentionAnswerWakeBatch(ctx, batches[0], AgentWakeup{TargetActorID: "agent-one"})
+	wakeup := AgentWakeup{TargetActorID: "agent-one"}
+	artifact, content := deliveryTestArtifact(batches[0], wakeup)
+	_, err = store.DeliverHumanAttentionAnswerWakeBatch(ctx, batches[0], wakeup, "actor-system", artifact, content, "structured")
 	if err == nil {
 		t.Fatal("expected invalid wakeup insert to fail")
 	}
@@ -37,6 +41,93 @@ func TestAnswerWakeDeliveryRollsBackClaimIfWakeInsertFails(t *testing.T) {
 	wakeups, err := store.ListAgentWakeups(ctx, AgentWakeupListFilter{TargetActorID: "agent-one"})
 	if err != nil || len(wakeups) != 0 {
 		t.Fatalf("failed delivery left a partial wake: wakeups=%#v err=%v", wakeups, err)
+	}
+}
+
+func TestAnswerWakeDeliveryCrashBeforeCommit(t *testing.T) {
+	const rootEnv = "ANX_TEST_ANSWER_WAKE_CRASH_ROOT"
+	if root := os.Getenv(rootEnv); root != "" {
+		ctx := context.Background()
+		workspace, err := storage.InitializeWorkspace(ctx, root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		store := NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+		batches, err := store.ListHumanAttentionAnswerWakeBatches(ctx)
+		if err != nil || len(batches) != 1 {
+			t.Fatalf("load subprocess batch: batches=%#v err=%v", batches, err)
+		}
+		batch := batches[0]
+		wakeup := deliveryTestWakeup(batch)
+		artifact, content := deliveryTestArtifact(batch, wakeup)
+		_, err = store.deliverHumanAttentionAnswerWakeBatch(ctx, batch, wakeup, "actor-system", artifact, content, "structured", func() error {
+			// This point is after the wake, batch deletion, artifact row, and blob
+			// promotion have all occurred, but before their SQLite transaction commits.
+			os.Exit(74)
+			return nil
+		})
+		t.Fatalf("crash hook returned unexpectedly: %v", err)
+	}
+
+	ctx := context.Background()
+	root := t.TempDir()
+	workspace, err := storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+	appendDeliveryTestAnswer(t, ctx, store, "agent-one", "crash-before-commit")
+	batches, err := store.ListHumanAttentionAnswerWakeBatches(ctx)
+	if err != nil || len(batches) != 1 {
+		t.Fatalf("load parent batch: batches=%#v err=%v", batches, err)
+	}
+	batch := batches[0]
+	if err := workspace.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=^TestAnswerWakeDeliveryCrashBeforeCommit$")
+	cmd.Env = append(os.Environ(), rootEnv+"="+root)
+	output, err := cmd.CombinedOutput()
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok || exitErr.ExitCode() != 74 {
+		t.Fatalf("subprocess did not crash at the pre-commit point: err=%v output=%s", err, output)
+	}
+
+	workspace, err = storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer workspace.Close()
+	store = NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+	remaining, err := store.ListHumanAttentionAnswerWakeBatches(ctx)
+	if err != nil || len(remaining) != 1 || remaining[0].BatchID != batch.BatchID {
+		t.Fatalf("crash lost pending batch: batches=%#v err=%v", remaining, err)
+	}
+	wakeups, err := store.ListAgentWakeups(ctx, AgentWakeupListFilter{TargetActorID: "agent-one"})
+	if err != nil || len(wakeups) != 0 {
+		t.Fatalf("crash left a committed wake without its transaction: wakeups=%#v err=%v", wakeups, err)
+	}
+	wakeup := deliveryTestWakeup(batch)
+	if _, err := store.GetArtifact(ctx, wakeup.WakeupID); err != ErrNotFound {
+		t.Fatalf("crash left artifact metadata committed without wake: err=%v", err)
+	}
+
+	artifact, content := deliveryTestArtifact(batch, wakeup)
+	delivered, err := store.DeliverHumanAttentionAnswerWakeBatch(ctx, batch, wakeup, "actor-system", artifact, content, "structured")
+	if err != nil || !delivered {
+		t.Fatalf("retry after restart did not deliver batch: delivered=%v err=%v", delivered, err)
+	}
+	wakeups, err = store.ListAgentWakeups(ctx, AgentWakeupListFilter{TargetActorID: "agent-one"})
+	if err != nil || len(wakeups) != 1 {
+		t.Fatalf("retry should commit exactly one wake: wakeups=%#v err=%v", wakeups, err)
+	}
+	if _, err := store.GetArtifact(ctx, wakeup.WakeupID); err != nil {
+		t.Fatalf("committed wake is missing launch artifact: %v", err)
+	}
+	artifactContent, _, err := store.GetArtifactContent(ctx, wakeup.WakeupID)
+	if err != nil || len(artifactContent) == 0 {
+		t.Fatalf("committed launch artifact content is unavailable: bytes=%d err=%v", len(artifactContent), err)
 	}
 }
 
@@ -156,6 +247,19 @@ func deliveryTestWakeup(batch HumanAttentionAnswerWakeBatch) AgentWakeup {
 		TriggerEventID: batch.TriggerEventID, TriggerCreatedAt: batch.TriggerCreatedAt,
 		TriggerText: fmt.Sprintf("%d answers are ready", batch.AnswerCount), Refs: refs,
 	}
+}
+
+func deliveryTestArtifact(batch HumanAttentionAnswerWakeBatch, wakeup AgentWakeup) (map[string]any, any) {
+	refs := append([]string(nil), batch.Refs...)
+	artifact := map[string]any{
+		"id": wakeup.WakeupID, "kind": "anx_wakeup", "summary": "Answer batch",
+		"thread_id": batch.ThreadID, "refs": refs,
+	}
+	content := map[string]any{
+		"wakeup_id": wakeup.WakeupID, "trigger_event_id": batch.TriggerEventID,
+		"answer_event_ids": batch.AnswerEventIDs, "ask_event_ids": batch.AskEventIDs,
+	}
+	return artifact, content
 }
 
 func containsStoredRef(refs []string, wanted string) bool {
