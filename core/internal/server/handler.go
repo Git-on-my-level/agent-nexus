@@ -1437,6 +1437,14 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleGetThread(w, r, opts, remainder)
 	})
 
+	registerRoute("/reports/preview", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/reports/preview" {
+			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+		handlePreviewReport(w, r, opts)
+	})
+
 	registerRoute("/docs", func(r *http.Request) routeAccessRequirement {
 		switch r.Method {
 		case http.MethodGet, http.MethodPost:

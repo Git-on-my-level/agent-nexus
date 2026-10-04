@@ -43,13 +43,46 @@ func handleRenderReport(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		writeError(w, 400, "invalid_request", err.Error())
 		return
 	}
+	observedAt, results := materializeReportPanels(r, opts, panels)
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, 200, map[string]any{"document_ref": doc["ref"], "revision_ref": revision["ref"], "observed_at": observedAt, "panels": results})
+}
+
+// File previews use the same bounded, permission-filtered materializer as saved
+// reports without creating a document or revision as a side effect.
+func handlePreviewReport(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+	var req struct {
+		Report json.RawMessage `json:"report"`
+	}
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	if len(req.Report) == 0 || string(req.Report) == "null" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "report is required")
+		return
+	}
+	var content any
+	if err := json.Unmarshal(req.Report, &content); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "report must be valid JSON")
+		return
+	}
+	panels, err := reports.Parse(content)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	observedAt, results := materializeReportPanels(r, opts, panels)
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]any{"observed_at": observedAt, "panels": results})
+}
+
+func materializeReportPanels(r *http.Request, opts handlerOptions, panels []reports.Panel) (string, []map[string]any) {
 	now := time.Now().UTC()
 	reader := reportReader{r: r, opts: opts, now: now, visibility: map[string]bool{}}
 	results := []map[string]any{}
 	for _, panel := range panels {
 		if panel.Source != nil {
-			result := reader.materializeSeries(panel)
-			results = append(results, result)
+			results = append(results, reader.materializeSeries(panel))
 			continue
 		}
 		data, truncated, err := reader.materialize(panel)
@@ -61,8 +94,7 @@ func handleRenderReport(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		}
 		results = append(results, result)
 	}
-	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, 200, map[string]any{"document_ref": doc["ref"], "revision_ref": revision["ref"], "observed_at": now.Format(time.RFC3339Nano), "panels": results})
+	return now.Format(time.RFC3339Nano), results
 }
 
 // Reads are shared across panels, scoped to this request and principal. Nothing is
@@ -267,6 +299,13 @@ func (reader *reportReader) materialize(panel reports.Panel) (map[string]any, bo
 			}
 			summary, progress, needs := reports.Summary(anyString(row["summary"]))
 			item := map[string]any{"ref": row["ref"], "title": row["title"], "summary": summary, "progress": progress, "needs": needs, "priority": anyString(row["priority"]), "phase": row["phase"], "board_ref": row["board_ref"], "updated_at": row["updated_at"]}
+			// Keep the authored plan and ownership fields from the same bounded card
+			// projection. Plan refs are carried by plan.steps[].ref; no N+1 reads.
+			for _, key := range []string{"plan", "plan_state", "assignee_refs"} {
+				if value, ok := row[key]; ok && value != nil {
+					item[key] = value
+				}
+			}
 			if state, ok := row["plan_state"].(plans.State); ok {
 				item["progress"] = state.Progress
 				item["plan_state"] = state
@@ -438,6 +477,9 @@ func (reader *reportReader) asks(q reports.Query) (map[string]any, bool, error) 
 			continue
 		}
 		row := request.Data
+		if q.CardRef != "" && anyString(row["subject_ref"]) != q.CardRef {
+			continue
+		}
 		response := answered[request.ID]
 		status := "open"
 		if response != nil {

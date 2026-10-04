@@ -263,6 +263,9 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `pm serve` (local-helper): Claim queued PM turns and run them through agentctl with the anx CLI as tools.
 - `pm ask` (local-helper): Create a PM conversation and post one human question.
 - `pm channels doctor` (local-helper): Check PM channel secrets, webhook reachability, and binding state without sending a chat message.
+- `report templates` (local-helper): List live report templates and their purpose.
+- `report init` (local-helper): Generate a report template wired to live workspace queries.
+- `report preview` (local-helper): Render a report to PNG and summarize each panel's source and freshness.
 - `report schema` (local-helper): Print the visual report types, limits, and minimal example.
 - `report validate` (local-helper): Validate a visual report file or stdin against the renderer's schema.
 - `report publish` (local-helper): Validate, publish, read back, and revalidate a visual report document.
@@ -407,7 +410,7 @@ Executive workspace
 - A card represents a human-level initiative or outcome that may span many executor tasks and outlive them. Keep issue, PR and run detail in its source; link that detail as evidence. Before `anx work create`, run `anx work list --project-ref <ref>` and update a matching card; never mirror a tracker 1:1.
 - Fleet ingestion: edit the workspace ANX mapping document (fleet-sync mapping_doc), pin a source identity or add an ordered project/label/repo/title rule to an existing initiative, and preview with fleet-sync --plan. Unmatched items share one Unsorted panel; promotion is deliberate. See adapters/fleet-sync/README.md. Linked evidence complements initiative plan steps; do not turn each source item into a card or milestone.
 - Keep one plan per initiative card. Add steps rather than writing progress prose; link steps to real refs. Never pick a view: the graph determines it. Read `anx plan show card:<slug>` for computed progress and health. Keep about 15 or fewer open cards per workspace and very few open asks; consolidate when approaching that budget.
-- For a human-facing dashboard, read `anx report schema`, then run `anx report publish <file> --topic <topic-ref> [--title <title>] [--doc <doc-ref>]`; it validates the report, writes a text document, and verifies the saved revision. `--doc` is an exact ref; use `--replace` only when intentionally replacing a non-report document.
+- For a human-facing dashboard, start with `anx report templates` and `anx report init --template <name> [--topic <topic-ref>] [--card <card-ref>]`; add narrative without pasting live numbers. Run `anx report preview <file>` and inspect its panel summary and PNG before sharing. Publish with `anx report publish <file> --topic <topic-ref> [--title <title>] [--doc <doc-ref>]`; it validates the report, writes a text document, and verifies the saved revision. `--doc` is an exact ref; use `--replace` only when intentionally replacing a non-report document.
 - Ask only for a decision that belongs to the human (direction, money, risk or an irreversible choice). Recommend one answer, give at most 2–3 alternatives, and batch related decisions into one ask. Do not also block the card or set its `next_actor` to the human for that same question; that duplicates the Inbox item. Keep `next_actor` on the agent and advance after the answer with its response event as evidence, for example `anx work done <card> --evidence event:<response_event_id>`.
 - Write for a busy executive: lead with the outcome and what needs them, then add detail. Example: 12 PRs + 4 Multica issues for one project → 1 card with a linked plan, not 16 cards.
 
@@ -4578,6 +4581,7 @@ Generated Help: report render
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `not_found`, `invalid_request`, `unavailable`
 - Concepts: `docs`, `cards`, `evidence`
 - Agent notes: Read-only. Both text and structured version 1 visual reports are supported. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows. Archived boards and their work are excluded. Private PM events remain private.
+- Adjacent commands: `report preview`
 
 Inputs:
   Required:
@@ -9222,6 +9226,83 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx pm channels doctor ... ; anx --json pm channels doctor ... ; anx pm channels doctor ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `report templates`
+
+List live report templates and their purpose.
+
+```text
+Local Help: report templates
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: List live report templates and their purpose.
+- Composition: Pure local helper; no credentials or network required.
+- JSON body: `templates[]` with `name` and `purpose`
+- Examples:
+  - `anx report templates`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx report templates ... ; anx --json report templates ... ; anx report templates ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `report init`
+
+Generate a report template wired to live workspace queries.
+
+```text
+Local Help: report init
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Generate a report template wired to live workspace queries.
+- Composition: Pure local helper. Start with a template, add narrative, then preview before sharing.
+- JSON body: A version 1 `anx.visual-report` document on stdout.
+- Examples:
+  - `anx report init --template workspace-overview > dashboard.json`
+  - `anx report init --template initiative --card card:launch > initiative.json`
+
+Flags:
+  --template <name>            One of workspace-overview, initiative, weekly-review, release-readiness, incident-review, fleet-health.
+  --topic <ref>                Scope project-based live queries to a topic.
+  --card <ref>                 Scope a card-centered template to an initiative card.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx report init ... ; anx --json report init ... ; anx report init ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `report preview`
+
+Render a report to PNG and summarize each panel's source and freshness.
+
+```text
+Local Help: report preview
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Render a report to PNG and summarize each panel's source and freshness.
+- Composition: Read-only. A document uses current authorized live data; a file is materialized in memory without publishing it.
+- JSON body: `png`, `rendered`, `panels[]` with `what`, `source`, and `freshness`
+- Examples:
+  - `anx report preview ./dashboard.json`
+  - `anx report preview doc:dashboard --output /tmp/dashboard.png`
+
+Flags:
+  <doc|file>                   Saved report document ref, or local visual report JSON path.
+  --output <png>               PNG destination; defaults to report-preview.png.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx report preview ... ; anx --json report preview ... ; anx report preview ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 

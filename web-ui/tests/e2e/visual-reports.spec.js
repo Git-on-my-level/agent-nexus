@@ -833,6 +833,29 @@ function liveObservation() {
               progress: { done: 3, total: 7 },
               priority: "p1",
               phase: "in_progress",
+              health: "stalled",
+              plan: {
+                steps: [
+                  {
+                    id: "review",
+                    title: "Finish review",
+                    ref: "card:review",
+                    after: [],
+                  },
+                ],
+              },
+              plan_state: {
+                shape: "chain",
+                steps: [
+                  {
+                    id: "review",
+                    status: "active",
+                    resolvable: true,
+                  },
+                ],
+                next_steps: ["review"],
+              },
+              assignee_refs: ["actor:agent-reviewer"],
               needs: ["Needs David: choose the launch date"],
             },
             {
@@ -954,6 +977,11 @@ for (const viewport of [
     ).toBeVisible();
     await expect(report).toContainText("3/7");
     await expect(report).toContainText("Needs David: choose the launch date");
+    await expect(report.getByText("stalled", { exact: true })).toBeVisible();
+    await expect(
+      report.getByRole("link", { name: "Finish review" }),
+    ).toHaveAttribute("href", /tasks\/review$/);
+    await expect(report).toContainText("On it: actor:agent-reviewer");
     await expect(report).toContainText("2h old");
     await expect(
       report.getByRole("link", { name: "Which launch theme?" }),

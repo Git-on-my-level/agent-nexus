@@ -23,10 +23,12 @@ const MaxRows = 2000
 type Query struct {
 	BoardRefs           []string `json:"board_refs,omitempty"`
 	ProjectRef          string   `json:"project_ref,omitempty"`
+	CardRef             string   `json:"card_ref,omitempty"`
 	Limit               int      `json:"limit,omitempty"`
 	Sort                string   `json:"sort,omitempty"`
 	GroupBy             string   `json:"group_by,omitempty"`
 	IncludeAnswered     bool     `json:"include_answered,omitempty"`
+	AnsweredOnly        bool     `json:"answered_only,omitempty"`
 	AnsweredWithinHours int      `json:"answered_within_hours,omitempty"`
 }
 
@@ -41,6 +43,7 @@ type Panel struct {
 var identifier = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$`)
 var boardRef = regexp.MustCompile(`^board:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 var projectRef = regexp.MustCompile(`^topic:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+var cardRef = regexp.MustCompile(`^card:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 func IsLive(kind string) bool {
 	switch kind {
@@ -110,11 +113,11 @@ func ParseQuery(kind string, raw []byte) (Query, error) {
 	allowed := map[string]bool{}
 	switch kind {
 	case "live-initiatives":
-		allowed = map[string]bool{"board_refs": true, "project_ref": true, "limit": true, "sort": true}
+		allowed = map[string]bool{"board_refs": true, "project_ref": true, "card_ref": true, "limit": true, "sort": true}
 	case "live-asks":
-		allowed = map[string]bool{"limit": true, "include_answered": true, "answered_within_hours": true}
+		allowed = map[string]bool{"limit": true, "include_answered": true, "answered_only": true, "answered_within_hours": true, "card_ref": true}
 	case "live-work-mix":
-		allowed = map[string]bool{"board_refs": true, "project_ref": true, "group_by": true}
+		allowed = map[string]bool{"board_refs": true, "project_ref": true, "card_ref": true, "group_by": true}
 	case "live-activity":
 		allowed = map[string]bool{"limit": true}
 	default:
@@ -156,6 +159,12 @@ func ParseQuery(kind string, raw []byte) (Query, error) {
 	}
 	if _, present := fields["project_ref"]; present && !projectRef.MatchString(q.ProjectRef) {
 		return q, fmt.Errorf("project_ref must be a topic ref")
+	}
+	if _, present := fields["card_ref"]; present && !cardRef.MatchString(q.CardRef) {
+		return q, fmt.Errorf("card_ref must be a card ref")
+	}
+	if q.AnsweredOnly {
+		q.IncludeAnswered = true
 	}
 	if q.Sort != "priority" && q.Sort != "updated" && q.Sort != "title" {
 		return q, fmt.Errorf("sort must be priority, updated, or title")

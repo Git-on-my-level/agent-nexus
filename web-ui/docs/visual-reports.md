@@ -12,11 +12,20 @@ external truth.
 1. Read the underlying evidence through authorized tools. Record the actual
    observation time and links; do not replace old observation times with the time
    you generated a report.
-2. Read the supported panel types, limits, and minimal example with
-   `anx report schema`. Write one raw JSON object matching schema version 1 below.
-   Keep actual observations separate from illustrative examples, and state the
-   outcome and remaining qualification boundaries.
-3. Validate the file locally before publishing:
+2. Start with `anx report templates`, then generate a live report skeleton:
+
+   ```sh
+   anx report init --template workspace-overview --topic topic:YOUR-TOPIC > report.json
+   anx report init --template initiative --card card:YOUR-INITIATIVE > initiative.json
+   ```
+
+   Templates keep workspace facts as bounded live queries. Add narrative only
+   where judgment or context is needed; do not paste live numbers into the report.
+
+3. Read supported panel types, limits, and the minimal example with
+   `anx report schema`. Keep actual observations separate from illustrative
+   examples, and state the outcome and remaining qualification boundaries.
+4. Validate the file locally before previewing:
 
    ```sh
    anx report validate /path/to/report.json
@@ -25,7 +34,19 @@ external truth.
 
    The command is available with only the `anx` binary and returns bounded
    diagnostics for malformed, unsupported, or oversized reports.
-4. Publish to an existing, authorized topic:
+
+5. Preview before telling a human what the report shows:
+
+   ```sh
+   anx report preview /path/to/report.json
+   ```
+
+   The command prints what each panel shows, its source, and freshness. It also
+   writes `report-preview.png` with the same web renderer used by the UI. If no
+   browser is available, the text summary still identifies each panel and its
+   live source status.
+
+6. Publish to an existing, authorized topic:
 
    ```sh
    anx report publish /path/to/report.json --topic topic:YOUR-TOPIC
@@ -37,7 +58,8 @@ external truth.
    revises that document directly. It reads the head back, validates it again, and
    prints the document ref and web URL when known. This avoids the proposal-only
    default of `docs revise` for an agent that intends to publish immediately.
-5. Open the document in Docs and check its project filter, outcome, panel metadata,
+
+7. Open the document in Docs and check its project filter, outcome, panel metadata,
    and evidence. The Overview prefers report titles beginning with `Dashboard` or
    `Fleet Dashboard`; the saved report remains an ordinary text document.
 
@@ -69,12 +91,12 @@ replaces freshness and observation time with the authorized materialization.
 The panel’s `project_id` groups presentation; use `data.project_ref` to scope a
 query to an actual workspace project (a topic).
 
-| Type | Query fields | Default |
-| --- | --- | --- |
-| `live-initiatives` | `board_refs`, `project_ref`, `limit`, `sort` | All active boards; 10 rows; priority then newest update |
-| `live-asks` | `limit`, `include_answered`, `answered_within_hours` | 10 oldest open asks, reviews and escalations; no answers |
-| `live-work-mix` | `board_refs`, `project_ref`, `group_by` | Open work by phase; `group_by: "board"` also supported |
-| `live-activity` | `limit` | 10 newest meaningful events, with same-actor board edits collapsed within five minutes |
+| Type               | Query fields                                                                      | Default                                                                                |
+| ------------------ | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `live-initiatives` | `board_refs`, `project_ref`, `card_ref`, `limit`, `sort`                          | All active boards; 10 rows; priority then newest update                                |
+| `live-asks`        | `limit`, `include_answered`, `answered_only`, `answered_within_hours`, `card_ref` | 10 oldest open asks, reviews and escalations; no answers                               |
+| `live-work-mix`    | `board_refs`, `project_ref`, `card_ref`, `group_by`                               | Open work by phase; `group_by: "board"` also supported                                 |
+| `live-activity`    | `limit`                                                                           | 10 newest meaningful events, with same-actor board edits collapsed within five minutes |
 
 Limits are 1–100 displayed rows, at most 16 unique `board:<handle>` refs, and
 1–720 hours for recent answers (168 by default). Sort is `priority`, `updated`,
@@ -98,6 +120,10 @@ Decision proposals are read through the same authorized service as the PM API;
 activity shows the work title and creation time without copying private instructions.
 Private PM history is filtered using ordinary event access rules.
 
+The `initiative` template scopes its plan query and answered decision history to
+one `card_ref`. Answered asks appear only when the request and response belong to
+that card and thread; other initiatives' decisions remain outside the panel.
+
 Agents read the same projection:
 
 ```sh
@@ -105,6 +131,9 @@ anx report render document:YOUR-DASHBOARD --json
 # Same workspace authentication and access rules as other reads:
 # GET /docs/document:YOUR-DASHBOARD/report
 ```
+
+For an unsaved local report, `POST /reports/preview` applies the same bounded
+live materializer without creating a document or revision.
 
 The response includes `document_ref`, `revision_ref`, `observed_at`, and only the
 live `panels`. Each panel has `id`, `type`, `status` (`ok` or `unavailable`),
@@ -123,25 +152,51 @@ A minimal mixed dashboard:
   "title": "Workspace dashboard",
   "summary": "Current initiatives with our authored focus alongside them.",
   "generated_at": "2026-10-04T12:00:00Z",
-  "projects": [{ "id": "workspace", "title": "Workspace", "summary": "Our priorities", "outcome": "Ship the launch" }],
+  "projects": [
+    {
+      "id": "workspace",
+      "title": "Workspace",
+      "summary": "Our priorities",
+      "outcome": "Ship the launch"
+    }
+  ],
   "sources": [],
   "panels": [
     {
-      "id": "initiatives", "project_id": "workspace", "type": "live-initiatives",
-      "title": "In flight", "author": "Workspace", "provenance": "reported",
-      "observed_at": null, "freshness": "unknown", "source_ids": [],
+      "id": "initiatives",
+      "project_id": "workspace",
+      "type": "live-initiatives",
+      "title": "In flight",
+      "author": "Workspace",
+      "provenance": "reported",
+      "observed_at": null,
+      "freshness": "unknown",
+      "source_ids": [],
       "data": { "limit": 7, "sort": "priority" }
     },
     {
-      "id": "focus", "project_id": "workspace", "type": "callout",
-      "title": "Our focus", "author": "Product team", "provenance": "reported",
-      "observed_at": "2026-10-04T12:00:00Z", "freshness": "current", "source_ids": [],
-      "data": { "tone": "info", "text": "Launch first, then measure adoption. This is an authored snapshot." }
+      "id": "focus",
+      "project_id": "workspace",
+      "type": "callout",
+      "title": "Our focus",
+      "author": "Product team",
+      "provenance": "reported",
+      "observed_at": "2026-10-04T12:00:00Z",
+      "freshness": "current",
+      "source_ids": [],
+      "data": {
+        "tone": "info",
+        "text": "Launch first, then measure adoption. This is an authored snapshot."
+      }
     }
   ],
   "layout": {
-    "type": "grid", "columns": 2,
-    "children": [{ "type": "panel", "panel_id": "initiatives" }, { "type": "panel", "panel_id": "focus" }]
+    "type": "grid",
+    "columns": 2,
+    "children": [
+      { "type": "panel", "panel_id": "initiatives" },
+      { "type": "panel", "panel_id": "focus" }
+    ]
   }
 }
 ```

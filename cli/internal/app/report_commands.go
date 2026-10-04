@@ -21,9 +21,12 @@ import (
 
 var reportSubcommandSpec = subcommandSpec{
 	command: "report",
-	valid:   []string{"schema", "validate", "publish"},
+	valid:   []string{"schema", "validate", "publish", "templates", "init", "preview"},
 	examples: []string{
 		"anx report schema",
+		"anx report templates",
+		"anx report init --template workspace-overview > dashboard.json",
+		"anx report preview dashboard.json",
 		"anx report validate ./dashboard.json",
 		"anx report publish ./dashboard.json --topic topic:launch",
 	},
@@ -41,6 +44,33 @@ func isReportLocalCommand(args []string) bool {
 
 func init() {
 	localHelperTopics = append(localHelperTopics,
+		localHelperTopic{
+			Path: "report templates", Summary: "List live report templates and their purpose.",
+			JSONShape:   "`templates[]` with `name` and `purpose`",
+			Composition: "Pure local helper; no credentials or network required.",
+			Examples:    []string{"anx report templates"},
+		},
+		localHelperTopic{
+			Path: "report init", Summary: "Generate a report template wired to live workspace queries.",
+			JSONShape:   "A version 1 `anx.visual-report` document on stdout.",
+			Composition: "Pure local helper. Start with a template, add narrative, then preview before sharing.",
+			Examples:    []string{"anx report init --template workspace-overview > dashboard.json", "anx report init --template initiative --card card:launch > initiative.json"},
+			Flags: []localHelperFlag{
+				{Name: "--template <name>", Description: "One of workspace-overview, initiative, weekly-review, release-readiness, incident-review, fleet-health."},
+				{Name: "--topic <ref>", Description: "Scope project-based live queries to a topic."},
+				{Name: "--card <ref>", Description: "Scope a card-centered template to an initiative card."},
+			},
+		},
+		localHelperTopic{
+			Path: "report preview", Summary: "Render a report to PNG and summarize each panel's source and freshness.",
+			JSONShape:   "`png`, `rendered`, `panels[]` with `what`, `source`, and `freshness`",
+			Composition: "Read-only. A document uses current authorized live data; a file is materialized in memory without publishing it.",
+			Examples:    []string{"anx report preview ./dashboard.json", "anx report preview doc:dashboard --output /tmp/dashboard.png"},
+			Flags: []localHelperFlag{
+				{Name: "<doc|file>", Description: "Saved report document ref, or local visual report JSON path."},
+				{Name: "--output <png>", Description: "PNG destination; defaults to report-preview.png."},
+			},
+		},
 		localHelperTopic{
 			Path: "report schema", Summary: "Print the visual report types, limits, and minimal example.",
 			JSONShape:   "`kind`, `schema_version`, `panel_types`, `limits`, `example`",
@@ -106,6 +136,18 @@ func (a *App) runReportCommand(ctx context.Context, args []string, cfg config.Re
 	}
 	sub := reportSubcommandSpec.normalize(args[0])
 	switch sub {
+	case "templates":
+		if len(args) != 1 {
+			return "report templates", nil, errnorm.Usage("invalid_args", "unexpected arguments for `anx report templates`")
+		}
+		result := reportTemplateList()
+		return "report templates", result, nil
+	case "init":
+		result, err := a.runReportInit(args[1:])
+		return "report init", result, err
+	case "preview":
+		result, err := a.runReportPreview(ctx, args[1:], cfg)
+		return "report preview", result, err
 	case "schema":
 		if len(args) != 1 {
 			return "report schema", nil, errnorm.Usage("invalid_args", "unexpected arguments for `anx report schema`")

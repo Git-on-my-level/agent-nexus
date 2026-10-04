@@ -5,7 +5,7 @@ description: Keep substantive Agent Nexus work visible with explicit task refs, 
 
 # ANX participant
 
-Skill contract: anx.participant.v9. Installation does not prove that a session loaded this version.
+Skill contract: anx.participant.v10. Installation does not prove that a session loaded this version.
 
 Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence.
 
@@ -33,7 +33,7 @@ Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence
 - A card is a human-level initiative or outcome that can span executor tasks and outlive them. Keep issues, PRs and run detail in their source; link them as evidence. Before `anx work create`, run `anx work list --project-ref <ref>` and update a matching card. Never mirror an issue tracker 1:1.
 - For fleet ingestion, edit the workspace ANX mapping document named by `mapping_doc` in the adapter config. Pin the full source identity or add an ordered project/label/repo/title rule to an existing initiative. Run `fleet_sync.py --plan --mapping-file mapping.json`, review membership, then publish with `anx docs revise <mapping-doc> --apply --body-file mapping.json`. Unmatched items share one Unsorted panel; threshold suggestions never create cards. See `adapters/fleet-sync/README.md`. Linked source evidence complements the initiative plan; only deliberate milestones become plan steps.
 - Keep one plan per initiative card. Add steps rather than writing progress prose, and link steps to real `card:`, `doc:` / `document:`, `topic:` refs or source issue/PR URLs. Never pick a view: the graph determines chain, DAG or lanes. Keep about 15 or fewer open cards and very few open asks.
-- For a human-facing dashboard, read `anx report schema`, then publish with `anx report publish <file> --topic <topic-ref> [--title <title>] [--doc <doc-ref>]`. It validates the report, writes a text document, and verifies the saved revision.
+- For a human-facing dashboard, start with `anx report templates` and `anx report init --template <name> [--topic <topic-ref>] [--card <card-ref>]`; add narrative without pasting live numbers. Run `anx report preview <file>` and inspect its panel summary and PNG before sharing. Publish with `anx report publish <file> --topic <topic-ref> [--title <title>] [--doc <doc-ref>]`. It validates the report, writes a text document, and verifies the saved revision.
 - Ask only for a human decision (direction, money, risk or an irreversible choice). Recommend one answer, offer at most 2–3 alternatives, and batch related questions. Do not also block the card or set `next_actor` to the human for the same ask. Keep `next_actor` on the agent and advance after the answer using its response event as evidence, for example `anx work done <card> --evidence event:<response_event_id>`.
 - Lead with the outcome and what needs the human, then details. Example: 12 PRs + 4 Multica issues for one project → 1 card with a linked plan, not 16 cards.
 

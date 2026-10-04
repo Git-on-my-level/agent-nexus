@@ -238,7 +238,7 @@ func needsAgentIdentity(args []string) bool {
 	if args[0] == "debug" && len(args) > 1 && args[1] == "meta" {
 		return false
 	}
-	if args[0] == "report" && len(args) > 1 && (args[1] == "schema" || args[1] == "validate") {
+	if args[0] == "report" && len(args) > 1 && (args[1] == "schema" || args[1] == "validate" || args[1] == "templates" || args[1] == "init") {
 		return false
 	}
 	switch args[0] {

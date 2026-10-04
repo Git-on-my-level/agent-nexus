@@ -7,6 +7,9 @@
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
+  let canNavigate = $derived(
+    Boolean($page.params.organization && $page.params.workspace),
+  );
   let { panel } = $props();
   let live = $derived(panel.live);
   let items = $derived(live?.data?.items ?? []);
@@ -36,11 +39,11 @@
       <ul class="rows">
         {#each items as item (item.id)}
           <li>
-            <a
-              href={workspaceHref(
-                `/inbox?${new URLSearchParams({ mailbox: item.status === "answered" ? "handled" : "needs-you", item: inboxItemMailboxId(item) })}`,
-              )}>{item.title}</a
-            >
+            {#if canNavigate}<a
+                href={workspaceHref(
+                  `/inbox?${new URLSearchParams({ mailbox: item.status === "answered" ? "handled" : "needs-you", item: inboxItemMailboxId(item) })}`,
+                )}>{item.title}</a
+              >{:else}<strong>{item.title}</strong>{/if}
             <p class="muted">
               {item.status === "answered" ? "Answered" : "Needs an answer"} · {formatLiveAge(
                 item.age_seconds,

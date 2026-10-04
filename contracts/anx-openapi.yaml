@@ -3000,6 +3000,42 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '404':
           $ref: '#/components/responses/ErrorResponse'
+  /reports/preview:
+    post:
+      operationId: previewReportContent
+      summary: Materialize live panels from unsaved visual report content
+      tags: [docs]
+      x-anx-surface: projection
+      x-anx-command-id: report.preview
+      x-anx-cli-path: report preview
+      x-anx-why: Preview an unsaved report with current live workspace data.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ observed_at, panels }`; no document or revision is created."
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, unavailable]
+      x-anx-concepts: [docs, cards, evidence]
+      x-anx-stability: beta
+      x-anx-agent-notes: >
+        Read-only and principal-scoped. Accepts the same bounded version 1 report
+        shape as a saved document and materializes its live queries without writing
+        a document. Each panel reports status, observation time, data and truncation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportPreviewRequest'
+      responses:
+        '200':
+          description: Materialized live report panels
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveReportPreviewResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
   /docs/{document_id}:
     get:
       operationId: getDocument
@@ -7815,6 +7851,25 @@ components:
       description: Base64 Ed25519 signature required for host self-access.
 
   schemas:
+    ReportPreviewRequest:
+      type: object
+      additionalProperties: false
+      required: [report]
+      properties:
+        report:
+          type: object
+          description: Bounded anx.visual-report v1 JSON, validated with the shared visual report contract.
+          additionalProperties: true
+    LiveReportPreviewResponse:
+      type: object
+      required: [observed_at, panels]
+      properties:
+        observed_at: {type: string, format: date-time}
+        panels:
+          type: array
+          maxItems: 32
+          items:
+            $ref: '#/components/schemas/LiveReportPanel'
     LiveReportResponse:
       type: object
       required: [document_ref, revision_ref, observed_at, panels]
@@ -7856,7 +7911,9 @@ components:
           additionalProperties: true
           description: >
             Initiatives return items (ref, title, summary, progress {done,total}, needs,
-            priority, phase, board_ref, updated_at). Asks return items (id, title,
+            priority, phase, board_ref, updated_at), plus optional plan, plan_state,
+            health, assignee_refs and linked_work when supplied by the plan projection.
+            Asks return items (id, title,
             status, created_at, age_seconds, request_event_ref, response_text, responded_at).
             Work mix returns group_by, total and buckets (key,label,count).
             Activity returns items (ref,type,summary,actor_id,ts,count). Series bindings return the panel type's static data shape, live provenance and freshness deadlines.
@@ -7865,9 +7922,12 @@ components:
       additionalProperties: false
       description: >
         Data-only query stored in a version 1 live panel's data field. Initiatives
-        allow board_refs, project_ref, limit, sort; work mix allows board_refs,
-        project_ref, group_by; asks allow limit, include_answered, answered_within_hours;
-        activity allows limit. No other field is allowed for that panel type.
+        allow board_refs, project_ref, card_ref, limit, sort; work mix allows
+        board_refs, project_ref, card_ref, group_by; asks allow card_ref, limit,
+        include_answered, answered_only, answered_within_hours; activity allows
+        limit. card_ref filters initiative rows and asks to one visible card.
+        answered_only returns answered asks only and implies include_answered.
+        No other field is allowed for that panel type.
       properties:
         board_refs:
           type: array
@@ -7875,11 +7935,13 @@ components:
           uniqueItems: true
           items: {type: string, pattern: '^board:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
         project_ref: {type: string, pattern: '^topic:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+        card_ref: {type: string, pattern: '^card:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
         limit: {type: integer, minimum: 1, maximum: 100, default: 10}
+        include_answered: {type: boolean, default: false}
+        answered_only: {type: boolean, default: false}
+        answered_within_hours: {type: integer, minimum: 1, maximum: 720, default: 168}
         sort: {type: string, enum: [priority, updated, title], default: priority}
         group_by: {type: string, enum: [phase, board], default: phase}
-        include_answered: {type: boolean, default: false}
-        answered_within_hours: {type: integer, minimum: 1, maximum: 720, default: 168}
     HumanInviteCreateRequest:
       type: object
       additionalProperties: false

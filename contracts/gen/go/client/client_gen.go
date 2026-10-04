@@ -2007,6 +2007,17 @@ var CommandRegistry = []CommandSpec{
 		Concepts:  []string{"read"},
 	},
 	{
+		CommandID: "report.preview",
+		CLIPath:   "report preview",
+		Group:     "report",
+		Method:    "POST",
+		Path:      "/reports/preview",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"docs", "cards", "evidence"},
+		Adjacent:  []string{"report.render"},
+	},
+	{
 		CommandID:  "report.render",
 		CLIPath:    "report render",
 		Group:      "report",
@@ -2016,6 +2027,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "cards", "evidence"},
+		Adjacent:   []string{"report.preview"},
 	},
 	{
 		CommandID:  "runs.get",
@@ -3312,6 +3324,10 @@ func (c *Client) RefEdgesList(ctx context.Context, opts RequestOptions) (*http.R
 
 func (c *Client) RefsResolve(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "refs.resolve", nil, opts)
+}
+
+func (c *Client) ReportPreview(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "report.preview", nil, opts)
 }
 
 func (c *Client) ReportRender(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

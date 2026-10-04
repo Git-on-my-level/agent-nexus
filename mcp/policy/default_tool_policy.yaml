@@ -29,6 +29,7 @@ hosted_default_commands:
   - "cards.revisions.list"
   - "cards.timeline"
   - "report.render"
+  - "report.preview"
   - "docs.get"
   - "docs.list"
   - "docs.search"
@@ -462,6 +463,9 @@ commands:
   "report.render":
     classification: exposed_read
     reason: "authorized live dashboard projection read"
+  "report.preview":
+    classification: exposed_read
+    reason: "bounded live materialization of an unsaved report without persistence"
   "ref_edges.list":
     classification: exposed_read
     reason: "reference edge inventory read"

@@ -9330,6 +9330,49 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "refsResolve"
   },
   {
+    "command_id": "report.preview",
+    "cli_path": "report preview",
+    "group": "report",
+    "method": "POST",
+    "path": "/reports/preview",
+    "operation_id": "previewReportContent",
+    "summary": "Materialize live panels from unsaved visual report content",
+    "why": "Preview an unsaved report with current live workspace data.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ observed_at, panels }`; no document or revision is created.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "forbidden",
+      "invalid_request",
+      "unavailable"
+    ],
+    "concepts": [
+      "docs",
+      "cards",
+      "evidence"
+    ],
+    "stability": "beta",
+    "surface": "projection",
+    "agent_notes": "Read-only and principal-scoped. Accepts the same bounded version 1 report shape as a saved document and materializes its live queries without writing a document. Each panel reports status, observation time, data and truncation.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "report",
+          "type": "object"
+        }
+      ]
+    },
+    "adjacent_commands": [
+      "report.render"
+    ],
+    "go_method": "ReportPreview",
+    "ts_method": "reportPreview"
+  },
+  {
     "command_id": "report.render",
     "cli_path": "report render",
     "group": "report",
@@ -9361,6 +9404,9 @@ export const commandRegistry: CommandSpec[] = [
     "agent_notes": "Read-only. Both text and structured version 1 visual reports are supported. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows. Archived boards and their work are excluded. Private PM events remain private.",
     "path_params": [
       "document_id"
+    ],
+    "adjacent_commands": [
+      "report.preview"
     ],
     "go_method": "ReportRender",
     "ts_method": "reportRender"
@@ -12635,6 +12681,10 @@ export class AnxClient {
 
   refsResolve(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("refs.resolve", {}, options);
+  }
+
+  reportPreview(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("report.preview", {}, options);
   }
 
   reportRender(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {

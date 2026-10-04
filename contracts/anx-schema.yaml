@@ -1041,6 +1041,7 @@ visual_report_live_panels:
     - Work is open when phase is neither done nor cancelled and lifecycle is active; its board must be active.
     - Checklist parsing counts Markdown dash checkboxes outside fenced code, including uppercase X.
     - Asks include ask, review and escalate requests, with optional answers from the last 168 hours by default.
+    - Initiatives and asks may filter to one visible card with card_ref; answered_only on live-asks returns only answered asks and includes recent answers.
     - Activity includes new asks, authorized PM decision proposals, answers, phase changes and completion; card edit bursts for the same actor and board within five minutes collapse.
     - Bounded or limited results declare truncated; source read failures are unavailable, never empty success.
 
