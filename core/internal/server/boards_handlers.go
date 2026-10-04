@@ -170,7 +170,13 @@ func handleCreateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 
-	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardCreatedEvent(board))
+	createdEvent := buildBoardCreatedEvent(board)
+	if move, ok := req.Board["workspace_move"]; ok {
+		if payload, ok := createdEvent["payload"].(map[string]any); ok {
+			payload["workspace_move"] = move
+		}
+	}
+	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, createdEvent)
 
 	summary, summaryErr := opts.primitiveStore.GetBoardSummary(r.Context(), board["id"].(string))
 	response := map[string]any{"board": board}

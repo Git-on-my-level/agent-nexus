@@ -539,6 +539,9 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		"revision_number":  revisionNumber,
 		"prev_revision_id": nil,
 	}
+	if move, ok := document["workspace_move"]; ok {
+		artifactMetadata["workspace_move"] = move
+	}
 	if title != "" {
 		artifactMetadata["summary"] = title
 	}
@@ -697,7 +700,12 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		artifactID,
 		revisionNumber,
 		title,
-		nil,
+		func() map[string]any {
+			if move, ok := document["workspace_move"]; ok {
+				return map[string]any{"workspace_move": move}
+			}
+			return nil
+		}(),
 	))
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {

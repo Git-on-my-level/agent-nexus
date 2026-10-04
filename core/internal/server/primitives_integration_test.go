@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -1746,6 +1747,60 @@ func TestDocumentCreateRequestKeyReplaysSingleWrite(t *testing.T) {
 	}
 	if countEventsOfType(timeline.Events, "document_created") != 1 {
 		t.Fatalf("expected one document_created event, got %d", countEventsOfType(timeline.Events, "document_created"))
+	}
+}
+
+func TestDocumentCreateCopiesBinaryBytesAndMoveCitation(t *testing.T) {
+	t.Parallel()
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-move","display_name":"Move Actor","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+	marker := map[string]any{
+		"move_id": "mv_binary", "source_ref": "document:source", "source_url": "https://src.example/docs/source",
+	}
+	encoded, err := json.Marshal(map[string]any{
+		"actor_id": "actor-move", "request_key": "move-binary-doc",
+		"document":     map[string]any{"document_id": "doc-move-binary", "title": "Binary copy", "workspace_move": marker},
+		"content_type": "binary", "content_base64": base64.StdEncoding.EncodeToString([]byte{0, 1, 255}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created := postJSONExpectStatus(t, h.baseURL+"/docs", string(encoded), http.StatusCreated)
+	defer created.Body.Close()
+	var payload map[string]any
+	if err := json.NewDecoder(created.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	revision, ok := payload["revision"].(map[string]any)
+	if !ok {
+		t.Fatalf("document response omitted revision: %#v", payload)
+	}
+	if revision["content_base64"] != base64.StdEncoding.EncodeToString([]byte{0, 1, 255}) {
+		t.Fatalf("binary content changed in transit: %#v", revision)
+	}
+	artifact, ok := revision["artifact"].(map[string]any)
+	if !ok {
+		t.Fatalf("document revision omitted artifact metadata: %#v", revision)
+	}
+	workspaceMove, ok := artifact["workspace_move"].(map[string]any)
+	if !ok || workspaceMove["move_id"] != "mv_binary" {
+		t.Fatalf("document revision did not retain move marker: %#v", artifact)
+	}
+	var rawPayload string
+	if err := h.workspace.DB().QueryRow(`SELECT payload_json FROM events WHERE type='document_created' ORDER BY ts DESC LIMIT 1`).Scan(&rawPayload); err != nil {
+		t.Fatal(err)
+	}
+	var eventPayload map[string]any
+	if err := json.Unmarshal([]byte(rawPayload), &eventPayload); err != nil {
+		t.Fatal(err)
+	}
+	eventBody, ok := eventPayload["payload"].(map[string]any)
+	if !ok {
+		t.Fatalf("document event omitted payload body: %#v", eventPayload)
+	}
+	eventMove, ok := eventBody["workspace_move"].(map[string]any)
+	if !ok || eventMove["source_url"] != "https://src.example/docs/source" {
+		t.Fatalf("first document event omitted the source citation: %#v", eventPayload)
 	}
 }
 

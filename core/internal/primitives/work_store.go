@@ -83,7 +83,11 @@ func insertWorkMetadata(ctx context.Context, tx *sql.Tx, cardID, actorID string,
 	if err = tx.QueryRowContext(ctx, `SELECT thread_id,board_id FROM cards WHERE id=?`, cardID).Scan(&threadID, &boardID); err != nil {
 		return err
 	}
-	return insertWorkEvent(ctx, tx, actorID, map[string]any{"id": cardID, "thread_id": threadID, "board_id": boardID}, "card_updated", "Commitment registered: "+workString(m["title"]), map[string]any{"changed_fields": []string{"work"}, "source": source})
+	payload := map[string]any{"changed_fields": []string{"work"}, "source": source}
+	if move, ok := m["workspace_move"]; ok {
+		payload["workspace_move"] = move
+	}
+	return insertWorkEvent(ctx, tx, actorID, map[string]any{"id": cardID, "thread_id": threadID, "board_id": boardID}, "card_updated", "Commitment registered: "+workString(m["title"]), payload)
 }
 
 // workLocalInvalid gives callers enough field-specific guidance to repair a value.
@@ -107,7 +111,7 @@ func workLocalInvalid(field, reason string) error {
 }
 
 func validateWorkLocal(m map[string]any) error {
-	for _, k := range []string{"project_ref", "priority", "next_actor", "next_action", "wake_condition", "start_at", "due_at"} {
+	for _, k := range []string{"project_ref", "priority", "next_actor", "next_action", "wake_condition", "start_at", "due_at", "risk"} {
 		if v, ok := m[k]; ok && v != nil {
 			if _, ok := v.(string); !ok {
 				return workLocalInvalid(k, "must be a string or null")
@@ -116,6 +120,9 @@ func validateWorkLocal(m map[string]any) error {
 	}
 	if p := workString(m["priority"]); p != "" && p != "p0" && p != "p1" && p != "p2" && p != "p3" {
 		return workLocalInvalid("priority", "invalid priority")
+	}
+	if risk := workString(m["risk"]); risk != "" && risk != "low" && risk != "medium" && risk != "high" && risk != "critical" {
+		return workLocalInvalid("risk", "invalid risk")
 	}
 	for _, k := range []string{"start_at", "due_at"} {
 		if workString(m[k]) != "" {
@@ -258,6 +265,7 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 		}
 	}
 	id := workString(m["id"])
+	moveID := workString(workMap(m["workspace_move"])["move_id"])
 	delete(m, "id")
 	title := workString(m["title"])
 	if title == "" {
@@ -304,8 +312,43 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 		}
 		boardID = resolved
 	}
-	result, err := s.CreateBoardCard(ctx, actorID, boardID, AddBoardCardInput{CardID: id, Title: title, Body: workString(m["summary"]), ColumnKey: column, DefinitionOfDone: dod, Assignee: assignee, WorkMetadata: m})
+	refs := []string{}
+	if topicRef := workString(m["topic_ref"]); topicRef != "" {
+		refs = append(refs, topicRef)
+	}
+	if related, err := optionalStringListField(m, "related_refs"); err == nil {
+		refs = append(refs, related...)
+	}
+	var dueAt *string
+	if raw := workString(m["due_at"]); raw != "" {
+		dueAt = &raw
+	}
+	var pinnedDocumentID *string
+	if documentRef := workString(m["document_ref"]); documentRef != "" {
+		resolved, resolveErr := s.ResolveResourceRef(ctx, ResourceRefInput{Type: "document", Ref: documentRef})
+		if resolveErr != nil {
+			return nil, workLocalInvalid("document_ref", "must resolve to an existing workspace document")
+		}
+		pinnedDocumentID = &resolved.ID
+	}
+	var risk *string
+	if raw := workString(m["risk"]); raw != "" {
+		risk = &raw
+	}
+	result, err := s.CreateBoardCard(ctx, actorID, boardID, AddBoardCardInput{
+		CardID: id, Title: title, Body: workString(m["summary"]), ColumnKey: column,
+		DefinitionOfDone: dod, Assignee: assignee, DueAt: dueAt, PinnedDocumentID: pinnedDocumentID,
+		Risk: risk, Refs: uniqueSortedStrings(refs), WorkMetadata: m,
+	})
 	if err != nil {
+		// Caller-selected ids make native work creation replay-safe for a
+		// workspace move. Reuse only when the persisted move marker proves this
+		// is the same operation; an unrelated id collision remains a conflict.
+		if errors.Is(err, ErrConflict) && authority == "nexus" && id != "" && moveID != "" {
+			if existing, getErr := s.GetWork(ctx, id); getErr == nil && workString(workMap(existing["workspace_move"])["move_id"]) == moveID {
+				return existing, nil
+			}
+		}
 		if authority != "nexus" {
 			var existing string
 			if lookupErr := s.db.QueryRowContext(ctx, `SELECT card_id FROM work_metadata WHERE authority=? AND connection_id=? AND native_id=?`, authority, workString(source["connection_id"]), workString(source["native_id"])).Scan(&existing); lookupErr == nil {
@@ -380,7 +423,7 @@ func projectWork(card, m map[string]any, version int64, latest, attempt, refresh
 	if refs, ok := card["assignee_refs"].([]string); ok && len(refs) > 0 {
 		out["owner"] = refs[0]
 	}
-	for _, key := range []string{"source", "project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions"} {
+	for _, key := range []string{"source", "project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "topic_ref", "document_ref", "related_refs", "risk", "plan"} {
 		if v, ok := m[key]; ok {
 			out[key] = v
 		}
@@ -704,7 +747,7 @@ func (s *Store) ensureWorkMetadata(ctx context.Context, id, actor string) error 
 
 // WorkAnnotationKeys returns the keys writable through local work annotations.
 func WorkAnnotationKeys() []string {
-	return []string{"project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions"}
+	return []string{"project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "plan"}
 }
 
 // ValidateWorkAnnotations is shared by proposal validation and canonical writes.
@@ -1384,6 +1427,27 @@ func (s *Store) validateWorkReferences(ctx context.Context, m map[string]any) er
 			return workLocalInvalid("project_ref", "must resolve to an existing workspace topic")
 		}
 		m["project_ref"] = resolved.CanonicalRef
+	}
+	if ref := workString(m["topic_ref"]); ref != "" {
+		resolved, err := s.ResolveResourceRef(ctx, ResourceRefInput{Type: "topic", Ref: ref})
+		if err != nil {
+			return workLocalInvalid("topic_ref", "must resolve to an existing workspace topic")
+		}
+		m["topic_ref"] = resolved.CanonicalRef
+	}
+	if ref := workString(m["document_ref"]); ref != "" {
+		resolved, err := s.ResolveResourceRef(ctx, ResourceRefInput{Type: "document", Ref: ref})
+		if err != nil {
+			return workLocalInvalid("document_ref", "must resolve to an existing workspace document")
+		}
+		m["document_ref"] = resolved.CanonicalRef
+	}
+	if _, exists := m["related_refs"]; exists {
+		refs, err := optionalStringListField(m, "related_refs")
+		if err != nil {
+			return workLocalInvalid("related_refs", "must be an array of typed refs")
+		}
+		m["related_refs"] = refs
 	}
 	if value, ok := m["relations"]; ok {
 		b, _ := json.Marshal(value)

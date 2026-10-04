@@ -538,12 +538,16 @@ func (s *Store) CreateTopic(ctx context.Context, actorID string, topic map[strin
 	changedFields = append(changedFields, "provenance")
 	sort.Strings(changedFields)
 
+	createPayload := map[string]any{"changed_fields": changedFields}
+	if move, ok := topicBody["workspace_move"]; ok {
+		createPayload["workspace_move"] = move
+	}
 	createEvent := map[string]any{
 		"type":       "topic_created",
 		"thread_id":  primaryThreadID,
 		"refs":       []string{"topic:" + topicID},
 		"summary":    "topic created",
-		"payload":    map[string]any{"changed_fields": changedFields},
+		"payload":    createPayload,
 		"provenance": eventProvenance(),
 	}
 	preparedEvent, err := prepareEventForInsert(actorID, createEvent)

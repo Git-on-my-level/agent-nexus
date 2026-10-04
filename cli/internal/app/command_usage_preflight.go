@@ -207,6 +207,9 @@ func preflightKnownCommandShape(args []string) error {
 		return preflightSubcommand(args[1:], secretSubcommandSpec)
 	case "workspace":
 		return preflightWorkspaceSubcommand(args[1:])
+	case "move":
+		_, err := parseMoveCommand(args[1:])
+		return err
 	case "read":
 		return nil
 	case "url":
@@ -460,7 +463,7 @@ func preflightRootCommands() map[string]struct{} {
 		"version": {}, "doctor": {}, "update": {}, "bridge": {}, "auth": {}, "host": {}, "runs": {}, "config": {}, "debug": {}, "notifications": {},
 		"import": {}, "install": {}, "skills": {}, "draft": {}, "provenance": {}, "orient": {}, "ask": {}, "review": {}, "escalate": {}, "await": {}, "secret": {}, "workspace": {}, "overview": {}, "read": {}, "url": {}, "concepts": {}, "primitives": {},
 		"topics": {}, "cards": {}, "artifacts": {}, "boards": {}, "docs": {},
-		"api": {}, "report": {}, "inbox": {}, "help": {}, "--help": {}, "-h": {},
+		"api": {}, "report": {}, "inbox": {}, "move": {}, "help": {}, "--help": {}, "-h": {},
 	}
 }
 
@@ -576,6 +579,12 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		return out
 	}
 	return map[string]map[string]preflightFlagSpec{
+		"move card": {
+			"to": valueFlag, "dry-run": boolFlag,
+		},
+		"move topic": {
+			"to": valueFlag, "dry-run": boolFlag,
+		},
 		"api call": {
 			"method":    valueFlag,
 			"path":      valueFlag,

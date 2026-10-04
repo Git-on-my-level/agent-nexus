@@ -475,6 +475,37 @@ func TestCreateWorkHonorsStableCardID(t *testing.T) {
 	}
 }
 
+func TestCreateWorkMoveReplayReusesOnlyMatchingMove(t *testing.T) {
+	s, b := newWorkTestStore(t)
+	ctx := context.Background()
+	input := map[string]any{
+		"id": "move-card-stable-id", "title": "Moved commitment",
+		"source":         map[string]any{"authority": "nexus"},
+		"plan":           map[string]any{"steps": []any{"copy", "verify"}},
+		"workspace_move": map[string]any{"move_id": "mv_stable", "source_ref": "card:source"},
+	}
+	first, err := s.CreateWork(ctx, "actor-1", b, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayed, err := s.CreateWork(ctx, "actor-1", b, input)
+	if err != nil {
+		t.Fatalf("replay same move: %v", err)
+	}
+	marker, _ := replayed["workspace_move"].(map[string]any)
+	if first["ref"] != replayed["ref"] || replayed["plan"] == nil || marker["move_id"] != "mv_stable" {
+		t.Fatalf("move replay lost identity or annotations: first=%#v replay=%#v", first, replayed)
+	}
+	conflicting := map[string]any{
+		"id": "move-card-stable-id", "title": "Moved commitment",
+		"source":         map[string]any{"authority": "nexus"},
+		"workspace_move": map[string]any{"move_id": "mv_other"},
+	}
+	if _, err := s.CreateWork(ctx, "actor-1", b, conflicting); !errors.Is(err, primitives.ErrConflict) {
+		t.Fatalf("unrelated move reused deterministic card id: %v", err)
+	}
+}
+
 func TestBoardMoveBindsAndAdvancesWorkRevision(t *testing.T) {
 	s, b := newWorkTestStore(t)
 	ctx := context.Background()

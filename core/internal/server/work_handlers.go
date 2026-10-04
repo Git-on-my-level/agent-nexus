@@ -62,7 +62,7 @@ func publicWork(w map[string]any) map[string]any {
 	out["decision_revision"] = primitives.WorkDecisionRevision(w)
 	delete(out, "id")
 	delete(out, "thread_id")
-	for _, key := range []string{"source", "project_ref", "owner", "phase", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "version", "freshness", "latest_observation"} {
+	for _, key := range []string{"source", "project_ref", "owner", "phase", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "version", "freshness", "latest_observation"} {
 		if value, ok := w[key]; ok {
 			out[key] = value
 		}

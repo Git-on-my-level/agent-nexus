@@ -48,6 +48,9 @@ func commandSideEffectClass(command string) string {
 	if parts[0] == "overview" {
 		return "read_only"
 	}
+	if parts[0] == "move" {
+		return "remote_coordination_write"
+	}
 	if parts[0] == "version" || parts[0] == "doctor" || parts[0] == "workspace" || parts[0] == "read" || parts[0] == "url" || parts[0] == "concepts" || parts[0] == "primitives" || parts[0] == "provenance" {
 		return "read_only"
 	}

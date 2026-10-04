@@ -76,6 +76,21 @@ var localHelperTopics = []localHelperTopic{
 		Flags:       []localHelperFlag{},
 	},
 	{
+		Path:        "move",
+		Summary:     "Move a Card or Topic and its related Boards, Cards, and Docs between enrolled workspaces.",
+		JSONShape:   "Returns a stable move id, source/destination refs, and the exact planned or completed resource actions.",
+		Composition: "Uses the user-global workspace aliases and separate workspace-local host credentials. Moves are idempotent and resume from the source move manifest.",
+		Examples: []string{
+			"anx move card card:launch-checklist --to archive",
+			"anx move topic topic:launch --to archive --dry-run",
+		},
+		Flags: []localHelperFlag{
+			{Name: "<ref>", Description: "Source card or topic ref, handle, or id."},
+			{Name: "--to <workspace-alias>", Description: "Destination alias from ~/.config/anx/workspaces.json."},
+			{Name: "--dry-run", Description: "Read both workspaces and show the exact create, archive, and tombstone actions."},
+		},
+	},
+	{
 		Path:        "lifecycle verbs",
 		Summary:     "Uniform lifecycle surface for archive, unarchive, trash, restore, and purge across artifacts, boards, docs, events, cards, and topics.",
 		JSONShape:   "Optional `--from-file` JSON object body; `--reason`, `--actor-id` (except purge), and `--dry-run` augment or replace JSON fields.",
@@ -1033,6 +1048,7 @@ Core Commands:
   pm            Query PM context, decisions, conversations and action receipts
   workspace     Summarize workspace boards and counts for first-run orientation
   report        Validate and publish visual report documents
+  move          Move cards and topics between configured workspaces
   read          Read an ANX resource from a URL or typed ref
   url           Print a shareable ANX URL for a resource
   api call      Perform an arbitrary HTTP API request
@@ -1106,6 +1122,9 @@ func helpTopicTextRaw(topic string) (string, bool) {
 	topic = strings.TrimSpace(topic)
 	if strings.HasPrefix(topic, "debug ") {
 		topic = strings.TrimPrefix(topic, "debug ")
+	}
+	if topic == "move" || topic == "move card" || topic == "move topic" {
+		return "anx move card <ref> --to <workspace-alias> [--dry-run]; anx move topic <ref> --to <workspace-alias> [--dry-run]. Topic moves include linked Cards and Docs. Moves record a stable id on both sides and can be resumed after partial failure.\n", true
 	}
 	if topic == "work" {
 		return "Daily work: anx work start [card]; anx work note <text> [card]; anx work block <why> [card] [--ask --recommend <answer>]; anx work done [card] --evidence <url|ref>. Omitted cards use presence. For inventory use anx work list.\n", true

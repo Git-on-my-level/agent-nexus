@@ -157,6 +157,9 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 	case "workspace":
 		result, name, err := a.runWorkspaceCommand(ctx, args[1:], cfg)
 		return name, result, err
+	case "move":
+		result, name, err := a.runMoveCommand(ctx, args[1:], cfg)
+		return name, result, err
 	case "read":
 		result, err := a.runReadCommand(ctx, args[1:], cfg)
 		return "read", result, err

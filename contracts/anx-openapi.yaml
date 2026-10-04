@@ -9001,6 +9001,11 @@ components:
             required:
             - authority
             - run_id
+        workspace_move:
+          type: object
+          additionalProperties: true
+          description: Stable client-side move marker used to resume cross-workspace copies.
+        plan: {}
         ref:
           type: string
         handle:
@@ -9117,6 +9122,9 @@ components:
       properties:
         actor_id:
           type: string
+        id:
+          type: string
+          description: Optional caller-selected card id for idempotent native work creation.
         board_ref:
           type: string
           description: Optional board to place the card on (`board:<handle-or-id>`). When omitted, the server uses the
@@ -9145,6 +9153,17 @@ components:
         blockers: *id009
         relations: *id010
         executions: *id011
+        workspace_move:
+          type: object
+          additionalProperties: true
+          description: Stable client-side move marker used to resume cross-workspace copies.
+        plan: {}
+        topic_ref: { $ref: '#/components/schemas/TypedRef' }
+        document_ref: { $ref: '#/components/schemas/TypedRef' }
+        related_refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+        risk: { type: string, enum: [low, medium, high, critical] }
       required:
       - title
     WorkPatchRequest:
@@ -9169,6 +9188,10 @@ components:
             due_at: *id008
             blockers: *id009
             relations: *id010
+            workspace_move:
+              type: object
+              additionalProperties: true
+            plan: {}
             executions: *id011
       required:
       - if_version
@@ -9451,6 +9474,10 @@ components:
         related_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
+        workspace_move:
+          type: object
+          additionalProperties: true
+          description: Stable client-side move marker retained for resumable cross-workspace copies.
         created_at: { type: string, format: date-time }
         created_by: { type: string }
         updated_at: { type: string, format: date-time }
@@ -9856,6 +9883,9 @@ components:
     TopicWriteInput:
       type: object
       properties:
+        id:
+          type: string
+          description: Optional caller-selected topic id for replay-safe copies.
         title: { type: string }
         summary: { type: string }
         owner_refs:
@@ -9870,6 +9900,13 @@ components:
         related_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
+        workspace_move:
+          type: object
+          additionalProperties: true
+          description: Stable client-side move marker included in the topic creation event.
+        thread_id:
+          type: string
+          description: Optional caller-selected backing thread id for an idempotent topic copy.
         provenance: { $ref: '#/components/schemas/Provenance' }
       required: [title, summary, owner_refs, document_refs, board_refs, related_refs, provenance]
 
@@ -9890,17 +9927,26 @@ components:
         related_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
+        workspace_move:
+          type: object
+          additionalProperties: true
         provenance: { $ref: '#/components/schemas/Provenance' }
 
     DocumentCreateInput:
       type: object
       properties:
+        document_id:
+          type: string
+          description: Optional caller-selected document id for replay-safe copies.
         handle:
           $ref: '#/components/schemas/ResourceHandle'
         title: { type: string }
         summary:
           type: string
           description: Optional resource-level blurb (list/detail); distinct from revision content.
+        thread_id:
+          type: string
+          description: Optional backing thread id for a replay-safe document copy.
         source:
           type: string
           description: Canonical origin URL or typed ref this document aggregates.
@@ -9921,6 +9967,10 @@ components:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
         provenance: { $ref: '#/components/schemas/Provenance' }
+        workspace_move:
+          type: object
+          additionalProperties: true
+          description: Stable client-side move marker included in the document creation event and revision artifact metadata.
       required: [title]
 
     DocumentRevisionCreateInput:
@@ -9935,6 +9985,12 @@ components:
     BoardCreateInput:
       type: object
       properties:
+        id:
+          type: string
+          description: Optional caller-selected board id for replay-safe copies.
+        thread_id:
+          type: string
+          description: Optional backing thread id for a replay-safe board copy.
         title: { type: string }
         summary:
           type: string
@@ -9946,6 +10002,14 @@ components:
         pinned_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
+        column_schema:
+          type: object
+          additionalProperties: true
+          description: Optional board column definitions retained when copying a board.
+        workspace_move:
+          type: object
+          additionalProperties: true
+          description: Stable client-side move marker included in the board creation event.
         provenance: { $ref: '#/components/schemas/Provenance' }
       required: [title, document_refs, pinned_refs, provenance]
 
@@ -10101,6 +10165,7 @@ components:
     CreateTopicRequest:
       type: object
       properties:
+        request_key: { type: string, description: Stable idempotency key for replay-safe topic creation. }
         topic: { $ref: '#/components/schemas/TopicWriteInput' }
       required: [topic]
 
@@ -10120,13 +10185,20 @@ components:
         request_key: { type: string }
         document: { $ref: '#/components/schemas/DocumentCreateInput' }
         content: {}
+        content_base64:
+          type: string
+          format: byte
+          description: Binary document bytes encoded as standard base64; mutually exclusive with content.
         content_type:
           type: string
           enum: [text, structured, binary]
         refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
-      required: [document, content, content_type]
+      required: [document, content_type]
+      anyOf:
+      - required: [content]
+      - required: [content_base64]
 
     PutDocumentRequest:
       type: object
