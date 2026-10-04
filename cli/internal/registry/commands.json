@@ -509,6 +509,10 @@
           {
             "name": "actor_id",
             "type": "string"
+          },
+          {
+            "name": "if_updated_at",
+            "type": "datetime"
           }
         ]
       },
@@ -838,6 +842,10 @@
           {
             "name": "actor_id",
             "type": "string"
+          },
+          {
+            "name": "if_updated_at",
+            "type": "datetime"
           }
         ]
       },
@@ -947,6 +955,10 @@
           {
             "name": "actor_id",
             "type": "string"
+          },
+          {
+            "name": "if_updated_at",
+            "type": "datetime"
           }
         ]
       },
@@ -1864,6 +1876,10 @@
           {
             "name": "actor_id",
             "type": "string"
+          },
+          {
+            "name": "if_updated_at",
+            "type": "datetime"
           }
         ]
       },
@@ -2405,6 +2421,10 @@
           {
             "name": "actor_id",
             "type": "string"
+          },
+          {
+            "name": "if_updated_at",
+            "type": "datetime"
           }
         ]
       },
@@ -2521,6 +2541,10 @@
           {
             "name": "actor_id",
             "type": "string"
+          },
+          {
+            "name": "if_updated_at",
+            "type": "datetime"
           }
         ]
       },
@@ -2626,6 +2650,10 @@
           {
             "name": "if_board_updated_at",
             "type": "datetime"
+          },
+          {
+            "name": "if_version",
+            "type": "integer"
           }
         ]
       },
@@ -3580,6 +3608,10 @@
           {
             "name": "actor_id",
             "type": "string"
+          },
+          {
+            "name": "if_updated_at",
+            "type": "datetime"
           }
         ]
       },
@@ -4968,6 +5000,10 @@
           {
             "name": "actor_id",
             "type": "string"
+          },
+          {
+            "name": "if_updated_at",
+            "type": "datetime"
           }
         ]
       },
@@ -5029,6 +5065,10 @@
           {
             "name": "actor_id",
             "type": "string"
+          },
+          {
+            "name": "if_updated_at",
+            "type": "datetime"
           }
         ]
       },
@@ -5270,6 +5310,10 @@
           {
             "name": "actor_id",
             "type": "string"
+          },
+          {
+            "name": "if_updated_at",
+            "type": "datetime"
           }
         ]
       },
@@ -5411,6 +5455,10 @@
           {
             "name": "actor_id",
             "type": "string"
+          },
+          {
+            "name": "if_updated_at",
+            "type": "datetime"
           }
         ]
       },
@@ -9826,6 +9874,10 @@
           {
             "name": "actor_id",
             "type": "string"
+          },
+          {
+            "name": "if_updated_at",
+            "type": "datetime"
           }
         ]
       },
@@ -10154,6 +10206,10 @@
           {
             "name": "actor_id",
             "type": "string"
+          },
+          {
+            "name": "if_updated_at",
+            "type": "datetime"
           }
         ]
       },
@@ -10323,6 +10379,10 @@
           {
             "name": "actor_id",
             "type": "string"
+          },
+          {
+            "name": "if_updated_at",
+            "type": "datetime"
           }
         ]
       },

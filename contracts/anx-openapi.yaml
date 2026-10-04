@@ -10524,6 +10524,9 @@ components:
       type: object
       properties:
         actor_id: { type: string }
+        if_updated_at:
+          type: string
+          format: date-time
 
     TopicTrashRequest:
       type: object
@@ -10536,6 +10539,9 @@ components:
       type: object
       properties:
         actor_id: { type: string }
+        if_updated_at:
+          type: string
+          format: date-time
 
     BoardOnlyResponse:
       type: object
@@ -10564,6 +10570,9 @@ components:
       type: object
       properties:
         actor_id: { type: string }
+        if_updated_at:
+          type: string
+          format: date-time
 
     DocumentRestoreFromTrashRequest:
       type: object
@@ -11403,6 +11412,10 @@ components:
         if_board_updated_at:
           type: string
           format: date-time
+        if_version:
+          type: integer
+          minimum: 0
+          description: Optional source work-version fence for atomic archive after a transfer has been verified.
 
     SecretMetadata:
       type: object

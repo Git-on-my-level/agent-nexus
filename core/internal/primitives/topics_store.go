@@ -809,6 +809,10 @@ func (s *Store) ArchiveTopic(ctx context.Context, actorID, topicID string) (map[
 	return s.applyTopicLifecycle(ctx, actorID, topicID, "archive")
 }
 
+func (s *Store) ArchiveTopicIfUpdatedAt(ctx context.Context, actorID, topicID string, ifUpdatedAt *string) (map[string]any, error) {
+	return s.applyTopicLifecycleWithReasonAndPrecondition(ctx, actorID, topicID, "archive", "", ifUpdatedAt)
+}
+
 func (s *Store) UnarchiveTopic(ctx context.Context, actorID, topicID string) (map[string]any, error) {
 	return s.applyTopicLifecycle(ctx, actorID, topicID, "unarchive")
 }
@@ -852,6 +856,10 @@ func (s *Store) applyTopicLifecycle(ctx context.Context, actorID, topicID, actio
 }
 
 func (s *Store) applyTopicLifecycleWithReason(ctx context.Context, actorID, topicID, action, reason string) (map[string]any, error) {
+	return s.applyTopicLifecycleWithReasonAndPrecondition(ctx, actorID, topicID, action, reason, nil)
+}
+
+func (s *Store) applyTopicLifecycleWithReasonAndPrecondition(ctx context.Context, actorID, topicID, action, reason string, ifUpdatedAt *string) (map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -867,6 +875,11 @@ func (s *Store) applyTopicLifecycleWithReason(ctx context.Context, actorID, topi
 	row, err := s.getTopicRow(ctx, topicID)
 	if err != nil {
 		return nil, err
+	}
+	if action == "archive" {
+		if err := ensureUpdatedAtMatches(row.UpdatedAt, ifUpdatedAt); err != nil {
+			return nil, err
+		}
 	}
 	if row.TrashedAt.Valid && strings.TrimSpace(row.TrashedAt.String) != "" && action != "restore" {
 		return nil, ErrAlreadyTrashed
@@ -957,11 +970,24 @@ func (s *Store) applyTopicLifecycleWithReason(ctx context.Context, actorID, topi
 
 	switch action {
 	case "archive":
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE topics SET archived_at = ?, archived_by = ?, trashed_at = NULL, trashed_by = NULL, trash_reason = NULL, summary = ?, extensions_json = ?, updated_at = ?, updated_by = ? WHERE id = ?`,
-			now, actorID, summaryCol, topicExtensionsJSON, now, actorID, topicID,
-		); err != nil {
-			return nil, fmt.Errorf("archive topic: %w", err)
+		query := `UPDATE topics SET archived_at = ?, archived_by = ?, trashed_at = NULL, trashed_by = NULL, trash_reason = NULL, summary = ?, extensions_json = ?, updated_at = ?, updated_by = ? WHERE id = ?`
+		args := []any{now, actorID, summaryCol, topicExtensionsJSON, now, actorID, topicID}
+		if ifUpdatedAt != nil {
+			query += ` AND updated_at = ?`
+			args = append(args, *ifUpdatedAt)
+		}
+		result, updateErr := tx.ExecContext(ctx, query, args...)
+		if updateErr != nil {
+			return nil, fmt.Errorf("archive topic: %w", updateErr)
+		}
+		if ifUpdatedAt != nil {
+			rows, rowsErr := result.RowsAffected()
+			if rowsErr != nil {
+				return nil, rowsErr
+			}
+			if rows != 1 {
+				return nil, ErrConflict
+			}
 		}
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE threads SET archived_at = ?, archived_by = ?, body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ?

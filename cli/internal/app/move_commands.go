@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/sha1"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -18,6 +20,7 @@ import (
 type parsedMoveCommand struct {
 	kind, ref, target string
 	dryRun            bool
+	connectionMaps    map[string]string
 }
 
 func parseMoveCommand(args []string) (parsedMoveCommand, error) {
@@ -31,7 +34,9 @@ func parseMoveCommand(args []string) (parsedMoveCommand, error) {
 	}
 	fs := newSilentFlagSet("move " + out.kind)
 	var target trackedString
+	var connectionMaps trackedStrings
 	fs.Var(&target, "to", "Destination workspace alias")
+	fs.Var(&connectionMaps, "connection-map", "Map a source connection id to a destination-local connection id (source=destination)")
 	fs.BoolVar(&out.dryRun, "dry-run", false, "Show the planned move without writing")
 	tail := args[1:]
 	var leading []string
@@ -54,6 +59,18 @@ func parseMoveCommand(args []string) (parsedMoveCommand, error) {
 		return out, errnorm.Usage("invalid_request", "--to <workspace-alias> is required")
 	}
 	out.target = strings.TrimSpace(target.value)
+	out.connectionMaps = make(map[string]string, len(connectionMaps.values))
+	for _, raw := range connectionMaps.values {
+		sourceID, destinationID, ok := strings.Cut(raw, "=")
+		sourceID, destinationID = strings.TrimSpace(sourceID), strings.TrimSpace(destinationID)
+		if !ok || sourceID == "" || destinationID == "" {
+			return out, errnorm.Usage("invalid_request", "--connection-map must be <source-connection-id>=<destination-connection-id>")
+		}
+		if previous, exists := out.connectionMaps[sourceID]; exists && previous != destinationID {
+			return out, errnorm.Usage("invalid_request", "--connection-map contains conflicting mappings for source connection "+sourceID)
+		}
+		out.connectionMaps[sourceID] = destinationID
+	}
 	return out, nil
 }
 
@@ -75,10 +92,10 @@ func (a *App) runMoveCommand(ctx context.Context, args []string, cfg config.Reso
 		return nil, name, errnorm.Usage("invalid_request", "source and destination workspaces are the same")
 	}
 	if parsed.kind == "card" {
-		result, err := a.moveCard(ctx, cfg, targetCfg, parsed.ref, parsed.dryRun)
+		result, err := a.moveCard(ctx, cfg, targetCfg, parsed.ref, parsed.dryRun, parsed.connectionMaps)
 		return result, name, err
 	}
-	result, err := a.moveTopic(ctx, cfg, targetCfg, parsed.ref, parsed.dryRun)
+	result, err := a.moveTopic(ctx, cfg, targetCfg, parsed.ref, parsed.dryRun, parsed.connectionMaps)
 	return result, name, err
 }
 
@@ -173,6 +190,143 @@ func moveMarker(moveID, kind, sourceRef, sourceURL, destinationURL, destinationR
 		"destination_workspace_url": strings.TrimRight(destinationURL, "/"),
 		"destination_ref":           destinationRef,
 		"status":                    status,
+		"phase":                     "snapshot",
+	}
+}
+
+func moveSourceRevision(kind string, object map[string]any) string {
+	switch kind {
+	case "card":
+		return fmt.Sprintf("version:%v|head:%s|number:%v", object["version"], moveFieldString(object, "head_revision_ref"), object["head_revision_number"])
+	case "document":
+		revision := asMap(object["revision"])
+		return fmt.Sprintf("updated_at:%s|head:%s|revision:%v", moveFieldString(object, "updated_at"), firstNonEmpty(moveFieldString(object, "head_revision_ref"), moveFieldString(revision, "ref")), revision["revision_number"])
+	default:
+		return "updated_at:" + moveFieldString(object, "updated_at")
+	}
+}
+
+func moveSnapshotFingerprint(kind string, object map[string]any) string {
+	fields := map[string][]string{
+		"topic":    {"id", "ref", "handle", "title", "summary", "owner_refs", "document_refs", "board_refs", "related_refs", "provenance"},
+		"board":    {"id", "ref", "handle", "thread_id", "title", "summary", "primary_topic_ref", "document_refs", "pinned_refs", "column_schema", "provenance"},
+		"card":     {"id", "ref", "handle", "board_ref", "title", "summary", "definition_of_done", "phase", "priority", "due_at", "risk", "source", "topic_ref", "document_ref", "related_refs", "plan", "project_ref", "relations"},
+		"document": {"document", "revision"},
+	}
+	selected := make(map[string]any, len(fields[kind]))
+	for _, key := range fields[kind] {
+		if value, ok := object[key]; ok {
+			selected[key] = value
+		}
+	}
+	if kind == "document" {
+		doc := asMap(object["document"])
+		if doc == nil {
+			doc = object
+		}
+		revision := asMap(object["revision"])
+		metadata := map[string]any{}
+		for _, key := range []string{"id", "ref", "handle", "thread_id", "title", "summary", "source", "tags", "hosts", "verified_at", "provenance", "refs", "subject_ref"} {
+			if value, ok := doc[key]; ok {
+				metadata[key] = value
+			}
+		}
+		content := map[string]any{}
+		for _, key := range []string{"ref", "revision_number", "content", "content_base64", "content_type", "refs"} {
+			if value, ok := revision[key]; ok {
+				content[key] = value
+			}
+		}
+		selected = map[string]any{"document": metadata, "revision": content}
+	}
+	encoded, err := json.Marshal(selected)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(encoded)
+	return hex.EncodeToString(sum[:])
+}
+
+func moveSourceObjectID(kind, sourceRef string, object map[string]any) string {
+	id := moveFieldString(object, "id")
+	if id == "" && kind == "document" {
+		id = moveFieldString(asMap(object["document"]), "id")
+	}
+	if id == "" {
+		id = moveRefID(sourceRef)
+	}
+	return id
+}
+
+func moveJournalKey(sourceWorkspace, kind, sourceObjectID, sourceRevision string) string {
+	encoded := strings.TrimRight(sourceWorkspace, "/") + "\n" + kind + "\n" + sourceObjectID + "\n" + sourceRevision
+	sum := sha256.Sum256([]byte(encoded))
+	return "mj_" + hex.EncodeToString(sum[:16])
+}
+
+func moveAttachSnapshot(marker map[string]any, sourceWorkspace, kind, sourceRef string, object map[string]any) {
+	revision := moveSourceRevision(kind, object)
+	objectID := moveSourceObjectID(kind, sourceRef, object)
+	marker["source_workspace_url"] = strings.TrimRight(sourceWorkspace, "/")
+	marker["source_object_id"] = objectID
+	marker["source_revision"] = revision
+	marker["source_fingerprint"] = moveSnapshotFingerprint(kind, object)
+	marker["journal_key"] = moveJournalKey(sourceWorkspace, kind, objectID, revision)
+}
+
+func moveValidateSnapshot(marker map[string]any, sourceWorkspace, kind, sourceRef string, object map[string]any, allowJournalRevision bool) error {
+	wantRevision := moveFieldString(marker, "source_revision")
+	wantFingerprint := moveFieldString(marker, "source_fingerprint")
+	gotRevision := moveSourceRevision(kind, object)
+	gotFingerprint := moveSnapshotFingerprint(kind, object)
+	if wantRevision == "" || wantFingerprint == "" {
+		return errnorm.New(errnorm.KindRemote, "move_journal_missing_snapshot", "destination move journal has no source revision snapshot; refusing to resume without a safe fence")
+	}
+	if wantFingerprint != gotFingerprint {
+		return errnorm.New(errnorm.KindRemote, "source_changed", fmt.Sprintf("source %s %s changed after move snapshot (%s, now %s); no remaining source resources will be archived", kind, sourceRef, wantRevision, gotRevision))
+	}
+	if kind == "card" && allowJournalRevision {
+		if expectedVersion := moveInt64(marker["source_archive_version"]); expectedVersion > 0 && moveInt64(object["version"]) != expectedVersion {
+			return errnorm.New(errnorm.KindRemote, "source_changed", fmt.Sprintf("source card %s revision changed after the verified move journal; source remains active", sourceRef))
+		}
+	}
+	if wantRevision != gotRevision && !allowJournalRevision {
+		return errnorm.New(errnorm.KindRemote, "source_changed", fmt.Sprintf("source %s %s revision changed after move snapshot (%s, now %s); no remaining source resources will be archived", kind, sourceRef, wantRevision, gotRevision))
+	}
+	objectID := moveSourceObjectID(kind, sourceRef, object)
+	if moveFieldString(marker, "source_object_id") != objectID {
+		return errnorm.New(errnorm.KindRemote, "move_journal_key_mismatch", "move journal source object id does not match the object being resumed")
+	}
+	if expected := moveJournalKey(sourceWorkspace, kind, objectID, wantRevision); moveFieldString(marker, "journal_key") != expected {
+		return errnorm.New(errnorm.KindRemote, "move_journal_key_mismatch", "move journal source key does not match its source workspace, object, and revision")
+	}
+	return nil
+}
+
+func moveRewriteValue(value any, mapping map[string]string) any {
+	switch typed := value.(type) {
+	case string:
+		return moveRewriteRef(typed, mapping)
+	case []any:
+		out := make([]any, len(typed))
+		for index, item := range typed {
+			out[index] = moveRewriteValue(item, mapping)
+		}
+		return out
+	case []string:
+		out := make([]string, len(typed))
+		for index, item := range typed {
+			out[index] = moveRewriteRef(item, mapping)
+		}
+		return out
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		for key, item := range typed {
+			out[key] = moveRewriteValue(item, mapping)
+		}
+		return out
+	default:
+		return value
 	}
 }
 
@@ -342,9 +496,16 @@ func moveMapGet(ctx context.Context, a *App, cfg config.Resolved, method, path s
 }
 
 func (a *App) updateMoveTopicMarker(ctx context.Context, cfg config.Resolved, ref string, marker map[string]any, patch map[string]any) (map[string]any, error) {
+	return a.updateMoveTopicMarkerAt(ctx, cfg, ref, marker, patch, nil)
+}
+
+func (a *App) updateMoveTopicMarkerAt(ctx context.Context, cfg config.Resolved, ref string, marker map[string]any, patch map[string]any, expectedUpdatedAt *string) (map[string]any, error) {
 	current, err := moveRead(ctx, a, cfg, "/topics/"+url.PathEscape(ref), "topic")
 	if err != nil {
 		return nil, err
+	}
+	if expectedUpdatedAt != nil && moveFieldString(current, "updated_at") != *expectedUpdatedAt {
+		return nil, errnorm.New(errnorm.KindRemote, "source_changed", "source topic revision changed after snapshot; destination remains available for resume and source was not archived")
 	}
 	if err := moveCheckExistingMarker(current, anyString(marker["move_id"])); err != nil {
 		return nil, err
@@ -363,9 +524,16 @@ func (a *App) updateMoveTopicMarker(ctx context.Context, cfg config.Resolved, re
 }
 
 func (a *App) updateMoveWorkMarker(ctx context.Context, cfg config.Resolved, ref string, marker map[string]any) (map[string]any, error) {
+	return a.updateMoveWorkMarkerAt(ctx, cfg, ref, marker, nil)
+}
+
+func (a *App) updateMoveWorkMarkerAt(ctx context.Context, cfg config.Resolved, ref string, marker map[string]any, expectedVersion *int64) (map[string]any, error) {
 	current, err := moveRead(ctx, a, cfg, "/work/"+url.PathEscape(ref), "work")
 	if err != nil {
 		return nil, err
+	}
+	if expectedVersion != nil && moveInt64(current["version"]) != *expectedVersion {
+		return nil, errnorm.New(errnorm.KindRemote, "source_changed", "source card revision changed after snapshot; destination remains available for resume and source was not archived")
 	}
 	if err := moveCheckExistingMarker(current, anyString(marker["move_id"])); err != nil {
 		return nil, err
@@ -383,9 +551,35 @@ func (a *App) updateMoveWorkMarker(ctx context.Context, cfg config.Resolved, ref
 	return current, nil
 }
 
+func moveInt64(value any) int64 {
+	switch typed := value.(type) {
+	case int:
+		return int64(typed)
+	case int64:
+		return typed
+	case float64:
+		return int64(typed)
+	case json.Number:
+		parsed, _ := typed.Int64()
+		return parsed
+	default:
+		return 0
+	}
+}
+
+func moveInt64Pointer(value int64) *int64 { return &value }
+
 func moveState(object map[string]any) string { return strings.TrimSpace(anyString(object["state"])) }
 
-func (a *App) moveCard(ctx context.Context, sourceCfg, destCfg config.Resolved, requestedRef string, dryRun bool) (*commandResult, error) {
+func moveSetPhase(marker map[string]any, phase string) {
+	order := map[string]int{"snapshot": 0, "create_destination": 1, "refs_rewritten": 2, "verified": 3, "source_transition": 4, "complete": 5}
+	current := moveFieldString(marker, "phase")
+	if order[phase] >= order[current] {
+		marker["phase"] = phase
+	}
+}
+
+func (a *App) moveCard(ctx context.Context, sourceCfg, destCfg config.Resolved, requestedRef string, dryRun bool, connectionMappings map[string]string) (*commandResult, error) {
 	source, err := moveRead(ctx, a, sourceCfg, "/work/"+url.PathEscape(requestedRef), "work")
 	if err != nil {
 		return nil, err
@@ -394,52 +588,93 @@ func (a *App) moveCard(ctx context.Context, sourceCfg, destCfg config.Resolved, 
 	boardRef := moveFieldString(source, "board_ref")
 	sourceURL := moveURL(sourceCfg, "card", sourceRef, boardRef)
 	moveID := moveStableID(sourceCfg.BaseURL, sourceRef, destCfg.BaseURL)
-	marker := asMap(source["workspace_move"])
-	if len(marker) > 0 && !moveHasMarker(marker, moveID) {
+	sourceMarker := asMap(source["workspace_move"])
+	if len(sourceMarker) > 0 && !moveHasMarker(sourceMarker, moveID) {
 		if err := moveCheckExistingMarker(source, moveID); err != nil {
 			return nil, err
 		}
 	}
-	if state := moveState(source); state == "archived" && !moveHasMarker(marker, moveID) {
+	if state := moveState(source); state == "archived" && !moveHasMarker(sourceMarker, moveID) {
 		return nil, errnorm.New(errnorm.KindRemote, "source_archived", "archived source card has no matching move marker")
 	}
-	if moveState(source) == "archived" && moveHasMarker(marker, moveID) && anyString(marker["status"]) == "complete" {
-		return movePlanResult("card", moveID, sourceRef, sourceURL, destCfg.BaseURL, anyString(marker["destination_ref"]), []map[string]any{}, dryRun), nil
+	if moveState(source) == "archived" && moveHasMarker(sourceMarker, moveID) && anyString(sourceMarker["status"]) == "complete" {
+		return movePlanResult("card", moveID, sourceRef, sourceURL, destCfg.BaseURL, anyString(sourceMarker["destination_ref"]), []map[string]any{}, dryRun), nil
 	}
-	sourceMarker := moveMarker(moveID, "card", sourceRef, sourceURL, destCfg.BaseURL, "", "pending")
-	source = map[string]any(source)
+	snapshotRevision := moveSourceRevision("card", source)
+	snapshotFingerprint := moveSnapshotFingerprint("card", source)
+	journalMarker := moveMarker(moveID, "card", sourceRef, sourceURL, destCfg.BaseURL, "", "pending")
+	moveAttachSnapshot(journalMarker, sourceCfg.BaseURL, "card", sourceRef, source)
+	if moveHasMarker(sourceMarker, moveID) {
+		if err := moveValidateSnapshot(sourceMarker, sourceCfg.BaseURL, "card", sourceRef, source, true); err != nil {
+			return nil, err
+		}
+		journalMarker = sourceMarker
+		snapshotRevision = moveFieldString(sourceMarker, "source_revision")
+		snapshotFingerprint = moveFieldString(sourceMarker, "source_fingerprint")
+	}
 
 	targetRef := ""
 	sourceIdentity := asMap(source["source"])
 	authority := moveFieldString(sourceIdentity, "authority")
+	destinationIdentity := map[string]any{}
+	for key, value := range sourceIdentity {
+		destinationIdentity[key] = value
+	}
+	destinationConnection := ""
 	if authority != "" && authority != "nexus" {
-		if existing, findErr := a.findMoveExternalWork(ctx, destCfg, sourceIdentity); findErr != nil {
+		destinationConnection = strings.TrimSpace(connectionMappings[moveFieldString(sourceIdentity, "connection_id")])
+		if destinationConnection == "" {
+			return nil, errnorm.New(errnorm.KindUsage, "connection_mapping_required", "source-backed card requires --connection-map <source-connection-id>=<destination-connection-id>")
+		}
+		if savedConnection := moveFieldString(sourceMarker, "destination_connection_id"); savedConnection != "" && savedConnection != destinationConnection {
+			return nil, errnorm.New(errnorm.KindRemote, "connection_mapping_changed", "source-backed card move was snapshotted with a different destination connection mapping")
+		}
+		destinationIdentity["connection_id"] = destinationConnection
+		if existing, findErr := a.findMoveExternalWork(ctx, destCfg, destinationIdentity); findErr != nil {
 			return nil, findErr
 		} else if existing != nil {
+			if !moveHasMarker(asMap(existing["workspace_move"]), moveID) {
+				return nil, errnorm.New(errnorm.KindRemote, "destination_source_identity_conflict", "destination already contains this source identity under the mapped connection but it belongs to a different move")
+			}
 			targetRef = moveFieldString(existing, "ref")
 		}
 	}
 	if targetRef == "" {
 		targetRef = moveResourceRef("card", moveDeterministicUUID(moveID, "card", sourceRef))
 	}
-	sourceMarker["destination_ref"] = targetRef
+	journalMarker["destination_ref"] = targetRef
 	if authority == "" || authority == "nexus" {
-		markCuratedTombstone(sourceMarker, targetRef, moveURL(destCfg, "card", targetRef, ""))
+		markCuratedTombstone(journalMarker, targetRef, moveURL(destCfg, "card", targetRef, ""))
 	} else {
-		sourceMarker["source_action"] = "archive"
+		journalMarker["source_action"] = "archive"
+		journalMarker["destination_connection_id"] = destinationConnection
 	}
 	destExisting, destExists, err := moveGetWorkIfExists(ctx, a, destCfg, targetRef)
 	if err != nil {
 		return nil, err
 	}
-	if destExists && (authority == "" || authority == "nexus") && !moveHasMarker(asMap(destExisting["workspace_move"]), moveID) {
+	if destExists && !moveHasMarker(asMap(destExisting["workspace_move"]), moveID) {
 		return nil, errnorm.New(errnorm.KindRemote, "destination_id_conflict", "destination card id is already used by an unrelated card")
 	}
+	if destExists {
+		if err := moveValidateSnapshot(asMap(destExisting["workspace_move"]), sourceCfg.BaseURL, "card", sourceRef, source, moveHasMarker(sourceMarker, moveID)); err != nil {
+			return nil, err
+		}
+	}
 
-	workInput, err := moveCardCreateInput(source, moveID, sourceRef, sourceURL, destCfg.BaseURL, targetRef, nil)
+	workInput, err := moveCardCreateInput(source, moveID, sourceRef, sourceURL, destCfg.BaseURL, targetRef, nil, destinationConnection)
 	if err != nil {
 		return nil, err
 	}
+	workMarker := asMap(workInput["workspace_move"])
+	if moveHasMarker(sourceMarker, moveID) {
+		workMarker = cloneMoveMap(journalMarker)
+		workMarker["destination_ref"] = targetRef
+		workInput["workspace_move"] = workMarker
+	} else {
+		moveAttachSnapshot(workMarker, sourceCfg.BaseURL, "card", sourceRef, source)
+	}
+	workMarker["phase"] = "create_destination"
 	createAction := "create"
 	if authority != "" && authority != "nexus" {
 		createAction = "resync"
@@ -451,14 +686,31 @@ func (a *App) moveCard(ctx context.Context, sourceCfg, destCfg config.Resolved, 
 	if authority == "" || authority == "nexus" {
 		archiveAction = "tombstone"
 	}
+	if authority != "" && authority != "nexus" {
+		actions[0]["source_connection_id"] = moveFieldString(sourceIdentity, "connection_id")
+		actions[0]["destination_connection_id"] = destinationConnection
+	}
 	actions = append(actions, map[string]any{"action": archiveAction, "kind": "card", "ref": sourceRef, "url": sourceURL})
 	if dryRun {
 		return movePlanResult("card", moveID, sourceRef, sourceURL, destCfg.BaseURL, targetRef, actions, true), nil
 	}
-
-	if _, err := a.updateMoveWorkMarker(ctx, sourceCfg, sourceRef, sourceMarker); err != nil {
-		return nil, err
+	if !moveHasMarker(sourceMarker, moveID) {
+		sourceSnapshot := cloneMoveMap(journalMarker)
+		sourceSnapshot["status"] = "pending"
+		moveSetPhase(sourceSnapshot, "snapshot")
+		sourceSnapshot["destination_ref"] = targetRef
+		if authority == "" || authority == "nexus" {
+			markCuratedTombstone(sourceSnapshot, targetRef, moveURL(destCfg, "card", targetRef, ""))
+		} else {
+			sourceSnapshot["source_action"] = "archive"
+		}
+		patched, patchErr := a.updateMoveWorkMarkerAt(ctx, sourceCfg, sourceRef, sourceSnapshot, moveInt64Pointer(moveInt64(source["version"])))
+		if patchErr != nil {
+			return nil, patchErr
+		}
+		sourceMarker = asMap(patched["workspace_move"])
 	}
+
 	destWork := destExisting
 	if !destExists || (authority != "" && authority != "nexus") {
 		destBody, callErr := moveCall(ctx, a, destCfg, http.MethodPost, "/work", workInput)
@@ -471,22 +723,69 @@ func (a *App) moveCard(ctx context.Context, sourceCfg, destCfg config.Resolved, 
 		}
 	}
 	destinationRef := firstNonEmpty(moveFieldString(destWork, "ref"), targetRef)
-	finalMarker := moveMarker(moveID, "card", sourceRef, sourceURL, destCfg.BaseURL, destinationRef, "complete")
-	if _, err := a.updateMoveWorkMarker(ctx, destCfg, destinationRef, finalMarker); err != nil {
+	destMarker := asMap(destWork["workspace_move"])
+	if !moveHasMarker(destMarker, moveID) {
+		return nil, errnorm.New(errnorm.KindRemote, "destination_id_conflict", "destination card create resolved to a card without the expected move journal")
+	}
+	if err := moveValidateSnapshot(destMarker, sourceCfg.BaseURL, "card", sourceRef, source, moveHasMarker(sourceMarker, moveID)); err != nil {
 		return nil, err
 	}
-	sourceMarker["destination_ref"] = destinationRef
+	verifyResource := &topicMoveResource{
+		kind: "card", sourceRef: sourceRef, sourceURL: sourceURL, destinationRef: destinationRef,
+		object: source, work: source, marker: journalMarker, destinationConnection: destinationConnection,
+	}
+	if err := a.verifyMovedResource(ctx, sourceCfg, destCfg, verifyResource, moveID, nil, "", ""); err != nil {
+		return nil, err
+	}
+	destMarker["destination_ref"] = destinationRef
+	moveSetPhase(destMarker, "verified")
+	destMarker["status"] = "verified"
+	if _, err := a.updateMoveWorkMarker(ctx, destCfg, destinationRef, destMarker); err != nil {
+		return nil, err
+	}
+	currentSource, err := moveRead(ctx, a, sourceCfg, "/work/"+url.PathEscape(sourceRef), "work")
+	if err != nil {
+		return nil, err
+	}
+	if !moveHasMarker(asMap(currentSource["workspace_move"]), moveID) {
+		if moveSourceRevision("card", currentSource) != snapshotRevision || moveSnapshotFingerprint("card", currentSource) != snapshotFingerprint {
+			return nil, errnorm.New(errnorm.KindRemote, "source_changed", "source card changed after snapshot; destination copy is retained for resume and source was not archived")
+		}
+	} else if err := moveValidateSnapshot(asMap(currentSource["workspace_move"]), sourceCfg.BaseURL, "card", sourceRef, currentSource, true); err != nil {
+		return nil, err
+	}
+	sourceMarker = cloneMoveMap(journalMarker)
+	sourceMarker["move_id"], sourceMarker["resource_kind"], sourceMarker["source_ref"] = moveID, "card", sourceRef
+	sourceMarker["source_url"], sourceMarker["destination_workspace_url"], sourceMarker["destination_ref"] = sourceURL, strings.TrimRight(destCfg.BaseURL, "/"), destinationRef
 	sourceMarker["status"] = "complete"
 	if authority == "" || authority == "nexus" {
 		markCuratedTombstone(sourceMarker, destinationRef, moveURL(destCfg, "card", destinationRef, moveFieldString(destWork, "board_ref")))
+	} else {
+		sourceMarker["source_action"] = "archive"
 	}
-	if _, err := a.updateMoveWorkMarker(ctx, sourceCfg, sourceRef, sourceMarker); err != nil {
-		return nil, err
-	}
-	if moveState(source) != "archived" {
-		if _, err := moveCall(ctx, a, sourceCfg, http.MethodPost, "/cards/"+url.PathEscape(sourceRef)+"/archive", map[string]any{}); err != nil {
+	currentVersion := moveInt64(currentSource["version"])
+	if moveState(currentSource) != "archived" {
+		archiveVersion := moveInt64(asMap(currentSource["workspace_move"])["source_archive_version"])
+		if archiveVersion == 0 || archiveVersion != currentVersion {
+			moveSetPhase(sourceMarker, "source_transition")
+			sourceMarker["source_archive_version"] = currentVersion + 1
+			patched, patchErr := a.updateMoveWorkMarkerAt(ctx, sourceCfg, sourceRef, sourceMarker, &currentVersion)
+			if patchErr != nil {
+				return nil, patchErr
+			}
+			archiveVersion = moveInt64(patched["version"])
+			if archiveVersion == 0 {
+				archiveVersion = currentVersion + 1
+			}
+			if archiveVersion != moveInt64(sourceMarker["source_archive_version"]) {
+				return nil, errnorm.New(errnorm.KindRemote, "source_changed", "source card revision changed while recording the completed move; source was not archived")
+			}
+		}
+		if _, err := moveCall(ctx, a, sourceCfg, http.MethodPost, "/cards/"+url.PathEscape(sourceRef)+"/archive", map[string]any{"if_version": archiveVersion}); err != nil {
 			return nil, err
 		}
+	} else if _, err := moveCall(ctx, a, sourceCfg, http.MethodPost, "/cards/"+url.PathEscape(sourceRef)+"/archive", map[string]any{"if_version": currentVersion}); err != nil {
+		return nil, err
 	}
 	return movePlanResult("card", moveID, sourceRef, sourceURL, destCfg.BaseURL, destinationRef, actions, false), nil
 }
@@ -548,7 +847,7 @@ func moveGetWorkIfExists(ctx context.Context, a *App, cfg config.Resolved, ref s
 	return work, true, nil
 }
 
-func moveCardCreateInput(source map[string]any, moveID, sourceRef, sourceURL, destinationURL, destinationRef string, mapping map[string]string) (map[string]any, error) {
+func moveCardCreateInput(source map[string]any, moveID, sourceRef, sourceURL, destinationURL, destinationRef string, mapping map[string]string, destinationConnection string) (map[string]any, error) {
 	if mapping == nil {
 		mapping = map[string]string{}
 	}
@@ -562,7 +861,7 @@ func moveCardCreateInput(source map[string]any, moveID, sourceRef, sourceURL, de
 		"due_at":             source["due_at"],
 		"risk":               source["risk"],
 		"source":             source["source"],
-		"plan":               source["plan"],
+		"plan":               moveRewriteValue(source["plan"], mapping),
 		"workspace_move":     marker,
 	}
 	phase := moveFieldString(source, "phase")
@@ -613,6 +912,16 @@ func moveCardCreateInput(source map[string]any, moveID, sourceRef, sourceURL, de
 	}
 	if raw := asMap(source["source"]); len(raw) == 0 {
 		input["source"] = map[string]any{"authority": "nexus"}
+	} else if authority := moveFieldString(raw, "authority"); authority != "" && authority != "nexus" {
+		identity := map[string]any{}
+		for key, value := range raw {
+			identity[key] = value
+		}
+		if strings.TrimSpace(destinationConnection) == "" {
+			return nil, errnorm.New(errnorm.KindUsage, "connection_mapping_required", "source-backed card requires an explicit destination connection mapping")
+		}
+		identity["connection_id"] = destinationConnection
+		input["source"] = identity
 	}
 	return input, nil
 }
@@ -622,6 +931,8 @@ type topicMoveResource struct {
 	object                                                                         map[string]any
 	work                                                                           map[string]any
 	marker                                                                         map[string]any
+	problem                                                                        string
+	destinationConnection                                                          string
 }
 
 func moveListRefs(workspace map[string]any, key, kind string) []string {
@@ -639,7 +950,242 @@ func moveListRefs(workspace map[string]any, key, kind string) []string {
 	return refs
 }
 
-func (a *App) moveTopic(ctx context.Context, sourceCfg, destCfg config.Resolved, requestedRef string, dryRun bool) (*commandResult, error) {
+func cloneMoveMap(source map[string]any) map[string]any {
+	copy := make(map[string]any, len(source))
+	for key, value := range source {
+		copy[key] = value
+	}
+	return copy
+}
+
+func stringPointer(value string) *string { return &value }
+
+func resourceMarker(moveID string, resource *topicMoveResource, sourceCfg, destCfg config.Resolved) map[string]any {
+	marker := moveMarker(moveID, resource.kind, resource.sourceRef, resource.sourceURL, destCfg.BaseURL, resource.destinationRef, "pending")
+	moveAttachSnapshot(marker, sourceCfg.BaseURL, resource.kind, resource.sourceRef, resource.object)
+	marker["phase"] = "create_destination"
+	return marker
+}
+
+func moveManifestResource(resources any, kind, sourceRef string) map[string]any {
+	for _, raw := range asSlice(resources) {
+		item := asMap(raw)
+		if moveFieldString(item, "kind") == kind && moveFieldString(item, "source_ref") == sourceRef {
+			return item
+		}
+	}
+	return nil
+}
+
+func moveJSONEqual(left, right any) bool {
+	leftJSON, leftErr := json.Marshal(left)
+	rightJSON, rightErr := json.Marshal(right)
+	return leftErr == nil && rightErr == nil && string(leftJSON) == string(rightJSON)
+}
+
+func moveVerifyFields(kind, ref string, expected, actual map[string]any, keys []string) error {
+	for _, key := range keys {
+		want, ok := expected[key]
+		if !ok || want == nil {
+			continue
+		}
+		if !moveJSONEqual(want, actual[key]) {
+			return errnorm.New(errnorm.KindRemote, "destination_verification_failed", fmt.Sprintf("destination %s %s failed verification for %s", kind, ref, key))
+		}
+	}
+	return nil
+}
+
+func (a *App) readMoveSourceResource(ctx context.Context, cfg config.Resolved, resource *topicMoveResource) (map[string]any, error) {
+	path, key := "", ""
+	switch resource.kind {
+	case "document":
+		path, key = "/docs/"+url.PathEscape(resource.sourceRef), "document"
+	case "board":
+		path, key = "/boards/"+url.PathEscape(resource.sourceRef), "board"
+	case "card":
+		path, key = "/work/"+url.PathEscape(resource.sourceRef), "work"
+	default:
+		return nil, errnorm.Internal("move_resource_kind_invalid", "unsupported move resource kind "+resource.kind)
+	}
+	if resource.kind != "document" {
+		return moveRead(ctx, a, cfg, path, key)
+	}
+	body, err := moveCall(ctx, a, cfg, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	doc := asMap(body["document"])
+	if doc == nil {
+		return nil, errnorm.Internal("move_response_invalid", "document read omitted document")
+	}
+	out := cloneMoveMap(doc)
+	out["revision"] = body["revision"]
+	return out, nil
+}
+
+func (a *App) verifyMovedResource(ctx context.Context, sourceCfg, destCfg config.Resolved, resource *topicMoveResource, moveID string, mapping map[string]string, topicRef, topicURL string) error {
+	path := "/" + map[string]string{"document": "docs", "board": "boards", "card": "work"}[resource.kind] + "/" + url.PathEscape(resource.destinationRef)
+	var actual map[string]any
+	var err error
+	switch resource.kind {
+	case "document":
+		var body map[string]any
+		body, err = moveCall(ctx, a, destCfg, http.MethodGet, path, nil)
+		if err == nil {
+			actual = cloneMoveMap(asMap(body["document"]))
+			actual["revision"] = asMap(body["revision"])
+		}
+	case "board":
+		actual, err = moveRead(ctx, a, destCfg, path, "board")
+	case "card":
+		actual, err = moveRead(ctx, a, destCfg, path, "work")
+	default:
+		return errnorm.Internal("move_resource_kind_invalid", "unsupported move resource kind "+resource.kind)
+	}
+	if err != nil {
+		return err
+	}
+	marker := asMap(actual["workspace_move"])
+	switch resource.kind {
+	case "document":
+		marker = moveDocumentExistingMarker(map[string]any{"revision": actual["revision"]})
+	case "board":
+		marker, err = moveBoardExistingMarker(ctx, a, destCfg, actual)
+		if err != nil {
+			return err
+		}
+	}
+	if !moveHasMarker(marker, moveID) || moveFieldString(marker, "source_fingerprint") != moveFieldString(resource.marker, "source_fingerprint") || moveFieldString(marker, "source_revision") != moveFieldString(resource.marker, "source_revision") {
+		return errnorm.New(errnorm.KindRemote, "destination_verification_failed", fmt.Sprintf("destination %s %s is missing the matching snapshot journal", resource.kind, resource.destinationRef))
+	}
+	switch resource.kind {
+	case "card":
+		expected, err := moveCardCreateInput(resource.work, moveID, resource.sourceRef, resource.sourceURL, destCfg.BaseURL, resource.destinationRef, mapping, resource.destinationConnection)
+		if err != nil {
+			return err
+		}
+		if board := moveFieldString(resource.work, "board_ref"); board != "" {
+			if mapped := moveRewriteRef(board, mapping); mapped != board {
+				expected["board_ref"] = mapped
+			}
+		}
+		if err := moveVerifyFields("card", resource.destinationRef, expected, actual, []string{"title", "summary", "definition_of_done", "priority", "due_at", "risk", "source", "plan", "phase", "board_ref", "topic_ref", "document_ref", "related_refs"}); err != nil {
+			return err
+		}
+	case "board":
+		expected := map[string]any{
+			"title": moveRewriteValue(resource.object["title"], mapping), "summary": resource.object["summary"],
+			"primary_topic_ref": moveRewriteRef(moveFieldString(resource.object, "primary_topic_ref"), mapping),
+			"document_refs":     moveRewriteRefs(resource.object["document_refs"], mapping), "pinned_refs": moveRewriteRefs(resource.object["pinned_refs"], mapping),
+			"column_schema": resource.object["column_schema"],
+		}
+		if moveFieldString(expected, "primary_topic_ref") == "" {
+			expected["primary_topic_ref"] = topicRef
+		}
+		if err := moveVerifyFields("board", resource.destinationRef, expected, actual, []string{"title", "summary", "primary_topic_ref", "document_refs", "pinned_refs", "column_schema"}); err != nil {
+			return err
+		}
+	case "document":
+		expectedRefs := moveRewriteRefs(resource.object["refs"], mapping)
+		expected := map[string]any{"title": resource.object["title"], "summary": resource.object["summary"], "refs": expectedRefs, "source": resource.object["source"]}
+		if err := moveVerifyFields("document", resource.destinationRef, expected, actual, []string{"title", "summary", "refs", "source"}); err != nil {
+			return err
+		}
+		wantRevision, gotRevision := asMap(resource.object["revision"]), asMap(actual["revision"])
+		if moveFieldString(wantRevision, "content_type") != moveFieldString(gotRevision, "content_type") {
+			return errnorm.New(errnorm.KindRemote, "destination_verification_failed", "destination document content type differs from its source snapshot")
+		}
+		if moveFieldString(wantRevision, "content_type") == "binary" {
+			wantBytes, wantErr := base64.StdEncoding.DecodeString(moveFieldString(wantRevision, "content_base64"))
+			gotBytes, gotErr := base64.StdEncoding.DecodeString(moveFieldString(gotRevision, "content_base64"))
+			if wantErr != nil || gotErr != nil || string(wantBytes) != string(gotBytes) {
+				return errnorm.New(errnorm.KindRemote, "destination_verification_failed", "destination document bytes differ from the source snapshot")
+			}
+		} else if !moveJSONEqual(wantRevision["content"], gotRevision["content"]) {
+			return errnorm.New(errnorm.KindRemote, "destination_verification_failed", "destination document content differs from the source snapshot")
+		}
+		if !moveJSONEqual(moveRewriteRefs(wantRevision["refs"], mapping), gotRevision["refs"]) {
+			return errnorm.New(errnorm.KindRemote, "destination_verification_failed", "destination document refs differ from the rewritten source snapshot")
+		}
+	}
+	return nil
+}
+
+func (a *App) verifyMovedTopic(ctx context.Context, cfg config.Resolved, destinationRef string, source map[string]any, moveID, sourceRef, sourceURL string, mapping map[string]string) error {
+	destination, err := moveRead(ctx, a, cfg, "/topics/"+url.PathEscape(destinationRef), "topic")
+	if err != nil {
+		return err
+	}
+	marker := asMap(destination["workspace_move"])
+	expectedRevision := moveSourceRevision("topic", source)
+	if sourceMarker := asMap(source["workspace_move"]); moveHasMarker(sourceMarker, moveID) && moveFieldString(sourceMarker, "source_revision") != "" {
+		expectedRevision = moveFieldString(sourceMarker, "source_revision")
+	}
+	if !moveHasMarker(marker, moveID) || moveFieldString(marker, "source_fingerprint") != moveSnapshotFingerprint("topic", source) || moveFieldString(marker, "source_revision") != expectedRevision {
+		return errnorm.New(errnorm.KindRemote, "destination_verification_failed", "destination topic is missing the matching source snapshot journal")
+	}
+	expected := map[string]any{
+		"title": source["title"], "summary": source["summary"],
+		"document_refs": moveRewriteRefs(source["document_refs"], mapping),
+		"board_refs":    moveRewriteRefs(source["board_refs"], mapping),
+		"related_refs":  moveRewriteRefs(source["related_refs"], mapping),
+	}
+	if err := moveVerifyFields("topic", destinationRef, expected, destination, []string{"title", "summary", "document_refs", "board_refs", "related_refs"}); err != nil {
+		return err
+	}
+	_ = sourceRef
+	_ = sourceURL
+	return nil
+}
+
+func (a *App) archiveMovedSourceCard(ctx context.Context, sourceCfg, destCfg config.Resolved, resource *topicMoveResource, moveID string, mapping map[string]string) error {
+	current, err := moveRead(ctx, a, sourceCfg, "/work/"+url.PathEscape(resource.sourceRef), "work")
+	if err != nil {
+		return err
+	}
+	marker := asMap(current["workspace_move"])
+	if moveState(current) == "archived" {
+		return nil
+	}
+	if moveHasMarker(marker, moveID) {
+		if err := moveValidateSnapshot(marker, sourceCfg.BaseURL, "card", resource.sourceRef, current, true); err != nil {
+			return err
+		}
+		archiveVersion := moveInt64(marker["source_archive_version"])
+		if archiveVersion == 0 || moveInt64(current["version"]) != archiveVersion {
+			return errnorm.New(errnorm.KindRemote, "source_changed", "source card changed after the verified move journal; source remains active")
+		}
+		_, err = moveCall(ctx, a, sourceCfg, http.MethodPost, "/cards/"+url.PathEscape(resource.sourceRef)+"/archive", map[string]any{"if_version": archiveVersion})
+		return err
+	}
+	if moveSourceRevision("card", current) != moveSourceRevision("card", resource.work) || moveSnapshotFingerprint("card", current) != moveSnapshotFingerprint("card", resource.work) {
+		return errnorm.New(errnorm.KindRemote, "source_changed", "source card changed after snapshot; destination is verified and source remains active")
+	}
+	sourceMarker := moveMarker(moveID, "card", resource.sourceRef, resource.sourceURL, destCfg.BaseURL, resource.destinationRef, "complete")
+	moveAttachSnapshot(sourceMarker, sourceCfg.BaseURL, "card", resource.sourceRef, resource.work)
+	if authority := moveFieldString(asMap(resource.work["source"]), "authority"); authority == "" || authority == "nexus" {
+		boardRef := moveRewriteRef(moveFieldString(resource.work, "board_ref"), mapping)
+		markCuratedTombstone(sourceMarker, resource.destinationRef, moveURL(destCfg, "card", resource.destinationRef, boardRef))
+	} else {
+		sourceMarker["source_action"] = "archive"
+	}
+	version := moveInt64(current["version"])
+	sourceMarker["phase"] = "source_transition"
+	sourceMarker["source_archive_version"] = version + 1
+	patched, err := a.updateMoveWorkMarkerAt(ctx, sourceCfg, resource.sourceRef, sourceMarker, &version)
+	if err != nil {
+		return err
+	}
+	archiveVersion := moveInt64(patched["version"])
+	if archiveVersion != version+1 {
+		return errnorm.New(errnorm.KindRemote, "source_changed", "source card revision changed while writing the completed move marker; source remains active")
+	}
+	_, err = moveCall(ctx, a, sourceCfg, http.MethodPost, "/cards/"+url.PathEscape(resource.sourceRef)+"/archive", map[string]any{"if_version": archiveVersion})
+	return err
+}
+
+func (a *App) moveTopic(ctx context.Context, sourceCfg, destCfg config.Resolved, requestedRef string, dryRun bool, connectionMappings map[string]string) (*commandResult, error) {
 	sourceTopic, err := moveRead(ctx, a, sourceCfg, "/topics/"+url.PathEscape(requestedRef), "topic")
 	if err != nil {
 		return nil, err
@@ -647,6 +1193,21 @@ func (a *App) moveTopic(ctx context.Context, sourceCfg, destCfg config.Resolved,
 	sourceRef := firstNonEmpty(moveFieldString(sourceTopic, "ref"), requestedRef)
 	sourceURL := moveURL(sourceCfg, "topic", sourceRef, "")
 	moveID := moveStableID(sourceCfg.BaseURL, sourceRef, destCfg.BaseURL)
+	initialMarker := asMap(sourceTopic["workspace_move"])
+	if moveState(sourceTopic) == "archived" {
+		if moveHasMarker(initialMarker, moveID) && anyString(initialMarker["status"]) == "complete" {
+			return movePlanResult("topic", moveID, sourceRef, sourceURL, destCfg.BaseURL, anyString(initialMarker["destination_ref"]), []map[string]any{}, dryRun), nil
+		}
+		return nil, errnorm.New(errnorm.KindRemote, "source_archived", "archived source topic has no completed matching move marker")
+	}
+	workspaceBody, err := moveCall(ctx, a, sourceCfg, http.MethodGet, "/topics/"+url.PathEscape(sourceRef)+"/workspace", nil)
+	if err != nil {
+		return nil, err
+	}
+	workspace := workspaceBody
+	if topic := asMap(workspaceBody["topic"]); topic != nil {
+		sourceTopic = topic
+	}
 	sourceMarker := asMap(sourceTopic["workspace_move"])
 	if len(sourceMarker) > 0 && !moveHasMarker(sourceMarker, moveID) {
 		if err := moveCheckExistingMarker(sourceTopic, moveID); err != nil {
@@ -659,13 +1220,14 @@ func (a *App) moveTopic(ctx context.Context, sourceCfg, destCfg config.Resolved,
 		}
 		return nil, errnorm.New(errnorm.KindRemote, "source_archived", "archived source topic has no completed matching move marker")
 	}
-	workspaceBody, err := moveCall(ctx, a, sourceCfg, http.MethodGet, "/topics/"+url.PathEscape(sourceRef)+"/workspace", nil)
-	if err != nil {
-		return nil, err
-	}
-	workspace := workspaceBody
-	if topic := asMap(workspaceBody["topic"]); topic != nil {
-		sourceTopic = topic
+	topicMarker := moveMarker(moveID, "topic", sourceRef, sourceURL, destCfg.BaseURL, "", "pending")
+	moveAttachSnapshot(topicMarker, sourceCfg.BaseURL, "topic", sourceRef, sourceTopic)
+	isResuming := moveHasMarker(sourceMarker, moveID)
+	if isResuming {
+		if err := moveValidateSnapshot(sourceMarker, sourceCfg.BaseURL, "topic", sourceRef, sourceTopic, true); err != nil {
+			return nil, err
+		}
+		topicMarker = sourceMarker
 	}
 
 	resources, err := a.readTopicMoveResources(ctx, sourceCfg, destCfg, sourceTopic, workspace, moveID)
@@ -679,8 +1241,46 @@ func (a *App) moveTopic(ctx context.Context, sourceCfg, destCfg config.Resolved,
 	moveAddIdentity(mapping, sourceTopic, "topic", destinationTopicRef)
 	mapping[moveResourceRef("thread", moveFieldString(sourceTopic, "thread_id"))] = moveResourceRef("thread", topicThreadID)
 	for _, resource := range resources {
+		if resource.problem != "" {
+			continue
+		}
 		resource.destinationID = moveDeterministicUUID(moveID, resource.kind, resource.sourceRef)
 		resource.destinationRef = moveResourceRef(resource.kind, resource.destinationID)
+		resource.marker = resourceMarker(moveID, resource, sourceCfg, destCfg)
+		savedDestinationConnection := ""
+		if isResuming {
+			saved := moveManifestResource(topicMarker["resources"], resource.kind, resource.sourceRef)
+			if saved == nil {
+				return nil, errnorm.New(errnorm.KindRemote, "move_journal_incomplete", fmt.Sprintf("move journal has no snapshot entry for source %s %s", resource.kind, resource.sourceRef))
+			}
+			if moveFieldString(saved, "source_fingerprint") != moveSnapshotFingerprint(resource.kind, resource.object) {
+				return nil, errnorm.New(errnorm.KindRemote, "source_changed", fmt.Sprintf("source %s %s changed after snapshot; destination remains available for resume and source was not archived", resource.kind, resource.sourceRef))
+			}
+			if moveFieldString(saved, "source_revision") != moveSourceRevision(resource.kind, resource.object) {
+				savedSourceMarker := asMap(resource.object["workspace_move"])
+				ownCardTransition := resource.kind == "card" && moveHasMarker(savedSourceMarker, moveID)
+				ownArchiveTransition := (resource.kind == "document" || resource.kind == "board") && moveState(resource.object) == "archived"
+				if !ownCardTransition && !ownArchiveTransition {
+					return nil, errnorm.New(errnorm.KindRemote, "source_changed", fmt.Sprintf("source %s %s revision changed after snapshot; destination remains available for resume and source was not archived", resource.kind, resource.sourceRef))
+				}
+				if ownCardTransition {
+					if err := moveValidateSnapshot(savedSourceMarker, sourceCfg.BaseURL, "card", resource.sourceRef, resource.object, true); err != nil {
+						return nil, err
+					}
+				} else if moveFieldString(saved, "source_fingerprint") != moveSnapshotFingerprint(resource.kind, resource.object) {
+					return nil, errnorm.New(errnorm.KindRemote, "source_changed", fmt.Sprintf("archived source %s %s no longer matches the snapshotted content", resource.kind, resource.sourceRef))
+				}
+			}
+			resource.destinationRef = moveFieldString(saved, "destination_ref")
+			resource.destinationID = firstNonEmpty(moveFieldString(saved, "destination_id"), moveRefID(resource.destinationRef))
+			savedDestinationConnection = moveFieldString(saved, "destination_connection_id")
+			if savedDestinationConnection != "" {
+				resource.marker["destination_connection_id"] = savedDestinationConnection
+			}
+			resource.marker["source_revision"] = saved["source_revision"]
+			resource.marker["source_fingerprint"] = saved["source_fingerprint"]
+			resource.marker["journal_key"] = saved["journal_key"]
+		}
 		if resource.kind == "document" {
 			resource.destinationThreadID = moveDeterministicUUID(moveID, "document_thread", resource.sourceRef)
 			if sourceThreadID := moveFieldString(resource.object, "thread_id"); sourceThreadID != "" {
@@ -696,9 +1296,25 @@ func (a *App) moveTopic(ctx context.Context, sourceCfg, destCfg config.Resolved,
 		if resource.kind == "card" {
 			identity := asMap(resource.work["source"])
 			if authority := moveFieldString(identity, "authority"); authority != "" && authority != "nexus" {
-				if existing, findErr := a.findMoveExternalWork(ctx, destCfg, identity); findErr != nil {
+				resource.destinationConnection = strings.TrimSpace(connectionMappings[moveFieldString(identity, "connection_id")])
+				if resource.destinationConnection == "" {
+					resource.problem = "source-backed card requires --connection-map <source-connection-id>=<destination-connection-id>"
+					continue
+				}
+				if savedDestinationConnection != "" && savedDestinationConnection != resource.destinationConnection {
+					resource.problem = "destination connection mapping differs from the source move journal"
+					continue
+				}
+				resource.marker["destination_connection_id"] = resource.destinationConnection
+				destinationIdentity := cloneMoveMap(identity)
+				destinationIdentity["connection_id"] = resource.destinationConnection
+				if existing, findErr := a.findMoveExternalWork(ctx, destCfg, destinationIdentity); findErr != nil {
 					return nil, findErr
 				} else if existing != nil {
+					if !moveHasMarker(asMap(existing["workspace_move"]), moveID) {
+						resource.problem = "destination already contains the mapped source identity but it belongs to another move"
+						continue
+					}
 					resource.destinationRef = moveFieldString(existing, "ref")
 					resource.destinationID = moveRefID(resource.destinationRef)
 				}
@@ -709,26 +1325,63 @@ func (a *App) moveTopic(ctx context.Context, sourceCfg, destCfg config.Resolved,
 			moveAddIdentity(mapping, resource.work, resource.kind, resource.destinationRef)
 		}
 	}
-
-	manifest := make([]any, 0, len(resources))
+	blocked := false
 	for _, resource := range resources {
-		manifest = append(manifest, map[string]any{
-			"kind": resource.kind, "source_ref": resource.sourceRef, "source_url": resource.sourceURL,
-			"destination_ref": resource.destinationRef, "destination_id": resource.destinationID,
-		})
+		blocked = blocked || resource.problem != ""
 	}
-	topicMarker := moveMarker(moveID, "topic", sourceRef, sourceURL, destCfg.BaseURL, destinationTopicRef, "pending")
-	topicMarker["resources"] = manifest
-	topicMarker["source_owner_refs"] = moveStringList(sourceTopic["owner_refs"])
+	if blocked && !dryRun {
+		for _, resource := range resources {
+			if resource.problem != "" {
+				return nil, errnorm.New(errnorm.KindRemote, "move_source_unavailable", fmt.Sprintf("cannot move topic: %s %s: %s; source resources were left unchanged", resource.kind, resource.sourceRef, resource.problem))
+			}
+		}
+	}
 
-	if dryRun {
-		actions := make([]map[string]any, 0, len(resources)+2)
-		topicAction, err := moveExistingAction(ctx, a, destCfg, "/topics/"+url.PathEscape(topicID), "topic", moveID)
+	if !isResuming {
+		manifest := make([]any, 0, len(resources))
+		for _, resource := range resources {
+			item := map[string]any{
+				"kind": resource.kind, "source_ref": resource.sourceRef, "source_url": resource.sourceURL,
+				"destination_ref": resource.destinationRef, "destination_id": resource.destinationID,
+			}
+			if resource.problem != "" {
+				item["unavailable"] = resource.problem
+			} else {
+				moveAttachSnapshot(item, sourceCfg.BaseURL, resource.kind, resource.sourceRef, resource.object)
+			}
+			if resource.destinationConnection != "" {
+				item["destination_connection_id"] = resource.destinationConnection
+			}
+			manifest = append(manifest, item)
+		}
+		topicMarker["resources"] = manifest
+	}
+	topicMarker["destination_ref"] = destinationTopicRef
+	topicMarker["source_owner_refs"] = moveStringList(sourceTopic["owner_refs"])
+	moveSetPhase(topicMarker, "snapshot")
+
+	rootAction, err := moveExistingAction(ctx, a, destCfg, "/topics/"+url.PathEscape(topicID), "topic", moveID)
+	if err != nil {
+		return nil, err
+	}
+	if rootAction == "reuse" {
+		existing, err := moveRead(ctx, a, destCfg, "/topics/"+url.PathEscape(topicID), "topic")
 		if err != nil {
 			return nil, err
 		}
-		actions = append(actions, map[string]any{"action": topicAction, "kind": "topic", "source_ref": sourceRef, "destination_ref": destinationTopicRef})
+		if err := moveValidateSnapshot(asMap(existing["workspace_move"]), sourceCfg.BaseURL, "topic", sourceRef, sourceTopic, isResuming); err != nil {
+			return nil, err
+		}
+	}
+
+	if dryRun {
+		actions := make([]map[string]any, 0, len(resources)*2+3)
+		actions = append(actions, map[string]any{"action": rootAction, "kind": "topic", "source_ref": sourceRef, "destination_ref": destinationTopicRef})
 		for _, resource := range resources {
+			if resource.problem != "" {
+				actions = append(actions, map[string]any{"action": "fail", "kind": resource.kind, "source_ref": resource.sourceRef, "reason": resource.problem})
+				continue
+			}
 			action, err := moveExistingAction(ctx, a, destCfg, "/"+map[string]string{"document": "docs", "board": "boards", "card": "work"}[resource.kind]+"/"+url.PathEscape(resource.destinationID), map[string]string{"document": "document", "board": "board", "card": "work"}[resource.kind], moveID)
 			if err != nil {
 				return nil, err
@@ -737,6 +1390,11 @@ func (a *App) moveTopic(ctx context.Context, sourceCfg, destCfg config.Resolved,
 				identity := asMap(resource.work["source"])
 				if authority := moveFieldString(identity, "authority"); authority != "" && authority != "nexus" {
 					action = "resync"
+					if existing, exists, getErr := moveGetWorkIfExists(ctx, a, destCfg, resource.destinationRef); getErr != nil {
+						return nil, getErr
+					} else if exists && !moveHasMarker(asMap(existing["workspace_move"]), moveID) {
+						return nil, errnorm.New(errnorm.KindRemote, "destination_source_identity_conflict", "destination already contains the mapped source identity but it belongs to another move")
+					}
 				} else if action == "reuse" {
 					existing, getErr := moveRead(ctx, a, destCfg, "/work/"+url.PathEscape(resource.destinationRef), "work")
 					if getErr != nil {
@@ -747,25 +1405,38 @@ func (a *App) moveTopic(ctx context.Context, sourceCfg, destCfg config.Resolved,
 					}
 				}
 			}
-			actions = append(actions, map[string]any{"action": action, "kind": resource.kind, "source_ref": resource.sourceRef, "destination_ref": resource.destinationRef})
-		}
-		for _, resource := range resources {
-			action := "archive"
-			if resource.kind == "card" && (moveFieldString(asMap(resource.work["source"]), "authority") == "" || moveFieldString(asMap(resource.work["source"]), "authority") == "nexus") {
-				action = "tombstone"
+			moveAction := map[string]any{"action": action, "kind": resource.kind, "source_ref": resource.sourceRef, "destination_ref": resource.destinationRef}
+			if resource.destinationConnection != "" {
+				moveAction["destination_connection_id"] = resource.destinationConnection
 			}
-			actions = append(actions, map[string]any{"action": action, "kind": resource.kind, "ref": resource.sourceRef, "url": resource.sourceURL})
+			actions = append(actions, moveAction)
 		}
-		actions = append(actions, map[string]any{"action": "archive", "kind": "topic", "ref": sourceRef, "url": sourceURL})
+		if blocked {
+			actions = append(actions, map[string]any{"action": "blocked", "kind": "source_set", "reason": "one or more linked resources are inaccessible or lack an explicit connection mapping; no source resources will be archived"})
+		} else {
+			for _, resource := range resources {
+				action := "archive"
+				if resource.kind == "card" && (moveFieldString(asMap(resource.work["source"]), "authority") == "" || moveFieldString(asMap(resource.work["source"]), "authority") == "nexus") {
+					action = "tombstone"
+				}
+				actions = append(actions, map[string]any{"action": action, "kind": resource.kind, "ref": resource.sourceRef, "url": resource.sourceURL})
+			}
+			actions = append(actions, map[string]any{"action": "archive", "kind": "topic", "ref": sourceRef, "url": sourceURL})
+		}
 		return movePlanResult("topic", moveID, sourceRef, sourceURL, destCfg.BaseURL, destinationTopicRef, actions, true), nil
 	}
-
-	patch := map[string]any{}
-	if _, err := a.updateMoveTopicMarker(ctx, sourceCfg, sourceRef, topicMarker, patch); err != nil {
-		return nil, err
+	if !isResuming {
+		persisted, persistErr := a.updateMoveTopicMarkerAt(ctx, sourceCfg, sourceRef, topicMarker, map[string]any{}, stringPointer(moveFieldString(sourceTopic, "updated_at")))
+		if persistErr != nil {
+			return nil, persistErr
+		}
+		sourceMarker = asMap(persisted["workspace_move"])
+		topicMarker = sourceMarker
+		isResuming = true
 	}
-	topicCreateMarker := moveMarker(moveID, "topic", sourceRef, sourceURL, destCfg.BaseURL, destinationTopicRef, "pending")
-	topicCreateMarker["source_owner_refs"] = moveStringList(sourceTopic["owner_refs"])
+
+	topicCreateMarker := cloneMoveMap(topicMarker)
+	moveSetPhase(topicCreateMarker, "create_destination")
 	topicInput := map[string]any{
 		"id": topicID, "thread_id": topicThreadID,
 		"title": sourceTopic["title"], "summary": sourceTopic["summary"],
@@ -773,26 +1444,40 @@ func (a *App) moveTopic(ctx context.Context, sourceCfg, destCfg config.Resolved,
 		"document_refs": []string{}, "board_refs": []string{}, "related_refs": []string{},
 		"provenance": moveRewriteProvenance(sourceTopic["provenance"], mapping), "workspace_move": topicCreateMarker,
 	}
-	if _, err := moveCall(ctx, a, destCfg, http.MethodPost, "/topics", map[string]any{"request_key": moveID + ":topic", "topic": topicInput}); err != nil {
+	topicBody, err := moveCall(ctx, a, destCfg, http.MethodPost, "/topics", map[string]any{"request_key": moveID + ":topic", "topic": topicInput})
+	if err != nil {
+		return nil, err
+	}
+	destTopic := asMap(topicBody["topic"])
+	if destTopic == nil {
+		destTopic, err = moveRead(ctx, a, destCfg, "/topics/"+url.PathEscape(destinationTopicRef), "topic")
+		if err != nil {
+			return nil, err
+		}
+	}
+	if !moveHasMarker(asMap(destTopic["workspace_move"]), moveID) {
+		return nil, errnorm.New(errnorm.KindRemote, "destination_id_conflict", "destination topic id is used by a topic without the expected move journal")
+	}
+	if err := moveValidateSnapshot(asMap(destTopic["workspace_move"]), sourceCfg.BaseURL, "topic", sourceRef, sourceTopic, isResuming); err != nil {
 		return nil, err
 	}
 	for _, resource := range resources {
-		if resource.kind == "document" {
+		if resource.problem == "" && resource.kind == "document" {
 			if _, err := a.createMovedDocument(ctx, sourceCfg, destCfg, resource, moveID, mapping); err != nil {
 				return nil, err
 			}
 		}
 	}
 	for _, resource := range resources {
-		if resource.kind == "board" {
+		if resource.problem == "" && resource.kind == "board" {
 			if _, err := a.createMovedBoard(ctx, destCfg, resource, moveID, sourceRef, sourceURL, mapping); err != nil {
 				return nil, err
 			}
 		}
 	}
 	for _, resource := range resources {
-		if resource.kind == "card" {
-			input, err := moveCardCreateInput(resource.work, moveID, resource.sourceRef, resource.sourceURL, destCfg.BaseURL, resource.destinationRef, mapping)
+		if resource.problem == "" && resource.kind == "card" {
+			input, err := moveCardCreateInput(resource.work, moveID, resource.sourceRef, resource.sourceURL, destCfg.BaseURL, resource.destinationRef, mapping, resource.destinationConnection)
 			if err != nil {
 				return nil, err
 			}
@@ -801,22 +1486,28 @@ func (a *App) moveTopic(ctx context.Context, sourceCfg, destCfg config.Resolved,
 					input["board_ref"] = mapped
 				}
 			}
+			cardMarker := cloneMoveMap(resource.marker)
+			cardMarker["phase"] = "create_destination"
+			input["workspace_move"] = cardMarker
 			destWork, exists, err := moveGetWorkIfExists(ctx, a, destCfg, resource.destinationRef)
 			if err != nil {
 				return nil, err
 			}
 			authority := moveFieldString(asMap(resource.work["source"]), "authority")
-			if exists && (authority == "" || authority == "nexus") && !moveHasMarker(asMap(destWork["workspace_move"]), moveID) {
+			if exists && !moveHasMarker(asMap(destWork["workspace_move"]), moveID) {
 				return nil, errnorm.New(errnorm.KindRemote, "destination_id_conflict", "destination card id is already used by an unrelated card")
 			}
-			if !exists || authority != "" && authority != "nexus" {
-				if _, err := moveCall(ctx, a, destCfg, http.MethodPost, "/work", input); err != nil {
+			if exists {
+				if err := moveValidateSnapshot(asMap(destWork["workspace_move"]), sourceCfg.BaseURL, "card", resource.sourceRef, resource.work, isResuming); err != nil {
 					return nil, err
 				}
 			}
-			finalMarker := moveMarker(moveID, "card", resource.sourceRef, resource.sourceURL, destCfg.BaseURL, resource.destinationRef, "complete")
-			if _, err := a.updateMoveWorkMarker(ctx, destCfg, resource.destinationRef, finalMarker); err != nil {
-				return nil, err
+			if !exists || authority != "" && authority != "nexus" {
+				body, err := moveCall(ctx, a, destCfg, http.MethodPost, "/work", input)
+				if err != nil {
+					return nil, err
+				}
+				destWork = asMap(body["work"])
 			}
 		}
 	}
@@ -824,58 +1515,127 @@ func (a *App) moveTopic(ctx context.Context, sourceCfg, destCfg config.Resolved,
 	documentRefs := moveRewriteRefs(sourceTopic["document_refs"], mapping)
 	boardRefs := moveRewriteRefs(sourceTopic["board_refs"], mapping)
 	relatedRefs := moveRewriteRefs(sourceTopic["related_refs"], mapping)
-	topicMarker["status"] = "archiving"
+	moveSetPhase(topicMarker, "refs_rewritten")
 	if _, err := a.updateMoveTopicMarker(ctx, destCfg, destinationTopicRef, topicMarker, map[string]any{
 		"owner_refs":    []string{},
 		"document_refs": documentRefs, "board_refs": boardRefs, "related_refs": relatedRefs,
 	}); err != nil {
 		return nil, err
 	}
-	topicMarker["status"] = "complete"
+	for _, resource := range resources {
+		if resource.problem != "" {
+			continue
+		}
+		if err := a.verifyMovedResource(ctx, sourceCfg, destCfg, resource, moveID, mapping, sourceRef, sourceURL); err != nil {
+			return nil, err
+		}
+	}
+	if err := a.verifyMovedTopic(ctx, destCfg, destinationTopicRef, sourceTopic, moveID, sourceRef, sourceURL, mapping); err != nil {
+		return nil, err
+	}
+	moveSetPhase(topicMarker, "verified")
+	topicMarker["status"] = "verified"
 	if _, err := a.updateMoveTopicMarker(ctx, destCfg, destinationTopicRef, topicMarker, map[string]any{}); err != nil {
 		return nil, err
 	}
 	for _, resource := range resources {
-		resource.marker = moveMarker(moveID, resource.kind, resource.sourceRef, resource.sourceURL, destCfg.BaseURL, resource.destinationRef, "complete")
-		if resource.kind == "card" {
-			authority := moveFieldString(asMap(resource.work["source"]), "authority")
-			if authority == "" || authority == "nexus" {
-				destinationBoardRef := moveRewriteRef(moveFieldString(resource.work, "board_ref"), mapping)
-				markCuratedTombstone(resource.marker, resource.destinationRef, moveURL(destCfg, "card", resource.destinationRef, destinationBoardRef))
-			} else {
-				resource.marker["source_action"] = "archive"
+		if resource.problem == "" && resource.kind == "card" {
+			destMarker := asMap(asMap(resource.work["workspace_move"]))
+			if destMarker == nil {
+				destMarker = moveMarker(moveID, resource.kind, resource.sourceRef, resource.sourceURL, destCfg.BaseURL, resource.destinationRef, "verified")
+				moveAttachSnapshot(destMarker, sourceCfg.BaseURL, resource.kind, resource.sourceRef, resource.work)
 			}
-			if _, err := a.updateMoveWorkMarker(ctx, sourceCfg, resource.sourceRef, resource.marker); err != nil {
+			moveSetPhase(destMarker, "verified")
+			destMarker["status"] = "verified"
+			if _, err := a.updateMoveWorkMarker(ctx, destCfg, resource.destinationRef, destMarker); err != nil {
 				return nil, err
 			}
 		}
 	}
-	if _, err := a.updateMoveTopicMarker(ctx, sourceCfg, sourceRef, topicMarker, map[string]any{}); err != nil {
+
+	// Re-read every source object before the first destructive transition. The
+	// final archive calls also carry atomic revision preconditions.
+	currentTopic, err := moveRead(ctx, a, sourceCfg, "/topics/"+url.PathEscape(sourceRef), "topic")
+	if err != nil {
+		return nil, err
+	}
+	if err := moveValidateSnapshot(topicMarker, sourceCfg.BaseURL, "topic", sourceRef, currentTopic, moveHasMarker(asMap(currentTopic["workspace_move"]), moveID)); err != nil {
 		return nil, err
 	}
 	for _, resource := range resources {
-		if resource.kind == "board" && moveState(resource.object) != "archived" {
-			if _, err := moveCall(ctx, a, sourceCfg, http.MethodPost, "/boards/"+url.PathEscape(resource.sourceRef)+"/archive", map[string]any{}); err != nil {
-				return nil, err
-			}
+		if resource.problem != "" {
+			continue
 		}
-		if resource.kind == "document" && moveState(resource.object) != "archived" {
-			if _, err := moveCall(ctx, a, sourceCfg, http.MethodPost, "/docs/"+url.PathEscape(resource.sourceRef)+"/archive", map[string]any{}); err != nil {
-				return nil, err
-			}
+		current, err := a.readMoveSourceResource(ctx, sourceCfg, resource)
+		if err != nil {
+			return nil, err
 		}
-		if resource.kind == "card" && moveState(resource.work) != "archived" {
-			if _, err := moveCall(ctx, a, sourceCfg, http.MethodPost, "/cards/"+url.PathEscape(resource.sourceRef)+"/archive", map[string]any{}); err != nil {
-				return nil, err
-			}
+		if moveSourceRevision(resource.kind, current) != moveSourceRevision(resource.kind, resource.object) || moveSnapshotFingerprint(resource.kind, current) != moveSnapshotFingerprint(resource.kind, resource.object) {
+			return nil, errnorm.New(errnorm.KindRemote, "source_changed", fmt.Sprintf("source %s %s changed after snapshot; destination is complete and verified, but no source resources will be archived", resource.kind, resource.sourceRef))
 		}
 	}
-	if _, err := moveCall(ctx, a, sourceCfg, http.MethodPost, "/topics/"+url.PathEscape(sourceRef)+"/archive", map[string]any{}); err != nil {
+
+	moveSetPhase(topicMarker, "source_transition")
+	currentTopic, err = a.updateMoveTopicMarkerAt(ctx, sourceCfg, sourceRef, topicMarker, map[string]any{}, stringPointer(moveFieldString(currentTopic, "updated_at")))
+	if err != nil {
+		return nil, err
+	}
+	// Archive docs and boards before cards; card archival updates board clocks.
+	for _, resource := range resources {
+		if resource.problem != "" || (resource.kind != "document" && resource.kind != "board") || moveState(resource.object) == "archived" {
+			continue
+		}
+		current, err := a.readMoveSourceResource(ctx, sourceCfg, resource)
+		if err != nil {
+			return nil, err
+		}
+		if moveSnapshotFingerprint(resource.kind, current) != moveSnapshotFingerprint(resource.kind, resource.object) || moveSourceRevision(resource.kind, current) != moveSourceRevision(resource.kind, resource.object) {
+			return nil, errnorm.New(errnorm.KindRemote, "source_changed", fmt.Sprintf("source %s %s changed before archive; it remains active", resource.kind, resource.sourceRef))
+		}
+		archiveBody := map[string]any{"if_updated_at": moveFieldString(current, "updated_at")}
+		path := "/docs/" + url.PathEscape(resource.sourceRef) + "/archive"
+		if resource.kind == "board" {
+			path = "/boards/" + url.PathEscape(resource.sourceRef) + "/archive"
+		}
+		if _, err := moveCall(ctx, a, sourceCfg, http.MethodPost, path, archiveBody); err != nil {
+			return nil, err
+		}
+	}
+	for _, resource := range resources {
+		if resource.problem != "" || resource.kind != "card" || moveState(resource.work) == "archived" {
+			continue
+		}
+		if err := a.archiveMovedSourceCard(ctx, sourceCfg, destCfg, resource, moveID, mapping); err != nil {
+			return nil, err
+		}
+	}
+	currentTopic, err = moveRead(ctx, a, sourceCfg, "/topics/"+url.PathEscape(sourceRef), "topic")
+	if err != nil {
+		return nil, err
+	}
+	if err := moveValidateSnapshot(topicMarker, sourceCfg.BaseURL, "topic", sourceRef, currentTopic, true); err != nil {
+		return nil, err
+	}
+	moveSetPhase(topicMarker, "complete")
+	topicMarker["status"] = "complete"
+	currentTopic, err = a.updateMoveTopicMarkerAt(ctx, sourceCfg, sourceRef, topicMarker, map[string]any{}, stringPointer(moveFieldString(currentTopic, "updated_at")))
+	if err != nil {
+		return nil, err
+	}
+	if _, err := moveCall(ctx, a, sourceCfg, http.MethodPost, "/topics/"+url.PathEscape(sourceRef)+"/archive", map[string]any{"if_updated_at": moveFieldString(currentTopic, "updated_at")}); err != nil {
+		return nil, err
+	}
+	moveSetPhase(topicMarker, "complete")
+	topicMarker["status"] = "complete"
+	if _, err := a.updateMoveTopicMarker(ctx, destCfg, destinationTopicRef, topicMarker, map[string]any{}); err != nil {
 		return nil, err
 	}
 	actions := make([]map[string]any, 0, len(resources)*2+2)
 	actions = append(actions, map[string]any{"action": "create_or_resume", "kind": "topic", "source_ref": sourceRef, "destination_ref": destinationTopicRef})
 	for _, resource := range resources {
+		if resource.problem != "" {
+			continue
+		}
 		actions = append(actions, map[string]any{"action": "create_or_resume", "kind": resource.kind, "source_ref": resource.sourceRef, "destination_ref": resource.destinationRef})
 	}
 	for _, resource := range resources {
@@ -940,6 +1700,7 @@ func moveBoardExistingMarker(ctx context.Context, a *App, cfg config.Resolved, b
 }
 
 func (a *App) readTopicMoveResources(ctx context.Context, sourceCfg, destCfg config.Resolved, topic, workspace map[string]any, moveID string) ([]*topicMoveResource, error) {
+	_ = destCfg
 	refs := map[string]map[string]struct{}{"document": {}, "board": {}, "card": {}}
 	for _, spec := range []struct{ key, kind string }{{"documents", "document"}, {"boards", "board"}, {"cards", "card"}} {
 		for _, ref := range moveListRefs(workspace, spec.key, spec.kind) {
@@ -987,16 +1748,26 @@ func (a *App) readTopicMoveResources(ctx context.Context, sourceCfg, destCfg con
 			case "card":
 				path, responseKey = "/work/"+url.PathEscape(ref), "work"
 			}
-			object, err := moveRead(ctx, a, sourceCfg, path, responseKey)
-			if err != nil {
-				return nil, fmt.Errorf("read source %s %s: %w", kind, ref, err)
-			}
+			var object map[string]any
 			if kind == "document" {
 				full, err := moveCall(ctx, a, sourceCfg, http.MethodGet, path, nil)
 				if err != nil {
-					return nil, err
+					resourceRef := ref
+					items = append(items, &topicMoveResource{kind: kind, sourceRef: resourceRef, sourceURL: moveURL(sourceCfg, kind, resourceRef, ""), problem: err.Error()})
+					continue
 				}
+				doc := asMap(full["document"])
+				if doc == nil {
+					return nil, fmt.Errorf("read source document %s: response omitted document", ref)
+				}
+				object = cloneMoveMap(doc)
 				object["revision"] = full["revision"]
+			} else {
+				var err error
+				object, err = moveRead(ctx, a, sourceCfg, path, responseKey)
+				if err != nil {
+					return nil, fmt.Errorf("read source %s %s: %w", kind, ref, err)
+				}
 			}
 			resourceRef := firstNonEmpty(moveFieldString(object, "ref"), ref)
 			boardRef := ""
@@ -1014,7 +1785,10 @@ func (a *App) readTopicMoveResources(ctx context.Context, sourceCfg, destCfg con
 
 func (a *App) createMovedDocument(ctx context.Context, sourceCfg, destCfg config.Resolved, resource *topicMoveResource, moveID string, mapping map[string]string) (map[string]any, error) {
 	doc := resource.object
-	marker := moveMarker(moveID, "document", resource.sourceRef, resource.sourceURL, destCfg.BaseURL, resource.destinationRef, "pending")
+	marker := resource.marker
+	if marker == nil {
+		marker = resourceMarker(moveID, resource, sourceCfg, destCfg)
+	}
 	docInput := map[string]any{
 		"document_id": resource.destinationID,
 		"thread_id":   resource.destinationThreadID,
@@ -1052,7 +1826,10 @@ func (a *App) createMovedDocument(ctx context.Context, sourceCfg, destCfg config
 
 func (a *App) createMovedBoard(ctx context.Context, cfg config.Resolved, resource *topicMoveResource, moveID, topicRef, topicURL string, mapping map[string]string) (map[string]any, error) {
 	board := resource.object
-	marker := moveMarker(moveID, "board", resource.sourceRef, resource.sourceURL, cfg.BaseURL, resource.destinationRef, "pending")
+	marker := resource.marker
+	if marker == nil {
+		marker = moveMarker(moveID, "board", resource.sourceRef, resource.sourceURL, cfg.BaseURL, resource.destinationRef, "pending")
+	}
 	boardInput := map[string]any{
 		"id": resource.destinationID, "thread_id": resource.destinationThreadID, "title": board["title"], "summary": board["summary"],
 		"primary_topic_ref": moveRewriteRef(moveFieldString(board, "primary_topic_ref"), mapping),

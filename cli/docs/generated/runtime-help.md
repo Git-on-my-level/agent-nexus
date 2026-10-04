@@ -1780,6 +1780,7 @@ Inputs:
   - path `topic_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 CLI input:
   - JSON body is optional; `--from-file` remains available for advanced request bodies.
@@ -1814,6 +1815,7 @@ Inputs:
   - path `topic_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 CLI input:
   - JSON body is optional; `--from-file` remains available for advanced request bodies.
@@ -1848,6 +1850,7 @@ Inputs:
   - path `topic_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 CLI input:
   - JSON body is optional; `--from-file` remains available for advanced request bodies.
@@ -1976,6 +1979,7 @@ Inputs:
   - path `board_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2007,6 +2011,7 @@ Inputs:
   - path `board_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2070,6 +2075,7 @@ Inputs:
   - path `board_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2314,6 +2320,7 @@ Inputs:
   - path `document_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2347,6 +2354,7 @@ Inputs:
   - path `document_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2534,6 +2542,7 @@ Inputs:
   Optional:
   - body `actor_id` (string)
   - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-ref-or-handle>`, `anx boards workspace <board-ref-or-handle>`, or the latest board mutation response.
+  - body `if_version` (integer): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2924,6 +2933,7 @@ Inputs:
   - path `event_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2955,6 +2965,7 @@ Inputs:
   - path `event_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3018,6 +3029,7 @@ Inputs:
   - path `event_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3282,6 +3294,7 @@ Inputs:
   - path `artifact_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3313,6 +3326,7 @@ Inputs:
   - path `artifact_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3376,6 +3390,7 @@ Inputs:
   - path `artifact_id`
   Optional:
   - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -5377,7 +5392,7 @@ Global flags:
 Move a Card or Topic and its related Boards, Cards, and Docs between enrolled workspaces.
 
 ```text
-anx move card <ref> --to <workspace-alias> [--dry-run]; anx move topic <ref> --to <workspace-alias> [--dry-run]. Topic moves include linked Cards and Docs. Moves record a stable id on both sides and can be resumed after partial failure.
+anx move card <ref> --to <workspace-alias> [--connection-map <source-id>=<destination-id>] [--dry-run]; anx move topic <ref> --to <workspace-alias> [--connection-map <source-id>=<destination-id>] [--dry-run]. Topic moves journal source revisions, rewrite refs, verify every destination resource, and only then archive or tombstone the source.
 ```
 
 ## `lifecycle verbs`

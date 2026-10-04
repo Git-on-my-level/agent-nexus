@@ -580,10 +580,10 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 	}
 	return map[string]map[string]preflightFlagSpec{
 		"move card": {
-			"to": valueFlag, "dry-run": boolFlag,
+			"to": valueFlag, "connection-map": valueFlag, "dry-run": boolFlag,
 		},
 		"move topic": {
-			"to": valueFlag, "dry-run": boolFlag,
+			"to": valueFlag, "connection-map": valueFlag, "dry-run": boolFlag,
 		},
 		"api call": {
 			"method":    valueFlag,

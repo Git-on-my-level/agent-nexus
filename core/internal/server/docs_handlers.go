@@ -770,10 +770,18 @@ func handleArchiveDocument(w http.ResponseWriter, r *http.Request, opts handlerO
 	}
 
 	var req struct {
-		ActorID string `json:"actor_id"`
+		ActorID     string  `json:"actor_id"`
+		IfUpdatedAt *string `json:"if_updated_at"`
 	}
 	if !decodeJSONBody(w, r, &req) {
 		return
+	}
+	if req.IfUpdatedAt != nil {
+		normalized, ok := normalizeRequiredTimestamp(w, req.IfUpdatedAt, "if_updated_at")
+		if !ok {
+			return
+		}
+		req.IfUpdatedAt = &normalized
 	}
 
 	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
@@ -781,7 +789,7 @@ func handleArchiveDocument(w http.ResponseWriter, r *http.Request, opts handlerO
 		return
 	}
 
-	document, revision, err := opts.primitiveStore.ArchiveDocument(r.Context(), actorID, documentID)
+	document, revision, err := opts.primitiveStore.ArchiveDocumentIfUpdatedAt(r.Context(), actorID, documentID, req.IfUpdatedAt)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "document not found")
