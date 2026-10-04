@@ -300,7 +300,7 @@ paths:
         schema: {type: string}
       - name: step
         in: query
-        description: Duration; at most 200 buckets. Historical rollups require at least 1d.
+        description: Duration; at most 200 buckets. Steps of at least 1d use daily summaries. Raw queries are limited to 4096 observations; dense ranges of at least 1d downsample to whole UTC days. Daily queries are limited to 20000 summary rows. Narrower ranges or label filters are required beyond those bounds. Historical rollups require whole-day steps.
         schema: {type: string}
       - name: agg
         in: query
@@ -7542,7 +7542,7 @@ components:
             last_push: {type: string, format: date-time, nullable: true}
             expected_interval_seconds: {type: integer}
             labels: {$ref: '#/components/schemas/SeriesLabels'}
-            resolution: {type: string, enum: [raw, daily+raw]}
+            resolution: {type: string, enum: [raw, daily, daily+raw]}
         data:
           type: object
           additionalProperties: true
