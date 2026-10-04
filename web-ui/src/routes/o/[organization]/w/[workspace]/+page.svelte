@@ -1,3 +1,5 @@
-<p class="py-10 text-center text-meta text-fg-muted">
-  Redirecting to Overview…
-</p>
+<script>
+  import Overview from "./overview/+page.svelte";
+</script>
+
+<Overview />

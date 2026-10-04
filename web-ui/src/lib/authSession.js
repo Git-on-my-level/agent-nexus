@@ -1,5 +1,5 @@
 /**
- * Client workspace auth state machine (per workspace slug):
+ * Client workspace auth state machine (per organization and workspace):
  *
  * - **authSessionReady** / internal `ready`: `/auth/session` hydration finished
  *   (success or handled failure).
@@ -18,6 +18,8 @@
 
 import { get, writable } from "svelte/store";
 
+import { clearWorkspaceViews } from "./workspaceViewCache.js";
+
 import { AuthErrorCode } from "./authErrorCodes.js";
 import { clearSelectedActor } from "./actorSession.js";
 import { buildCoreRequestContextHeaders } from "./coreClientRequestHeaders.js";
@@ -26,6 +28,7 @@ import {
   getCurrentOrganizationSlug,
   getCurrentWorkspaceSlug,
   currentWorkspaceSlug,
+  currentOrganizationSlug,
 } from "./workspaceContext.js";
 import { APP_BASE_PATH, WORKSPACE_HEADER, appPath } from "./workspacePaths.js";
 
@@ -56,11 +59,15 @@ function createEmptyAuthState() {
      * requests while one is already running.
      */
     initInflight: null,
+    generation: 0,
   };
 }
 
-function ensureAuthState(workspaceSlug = getCurrentWorkspaceSlug()) {
-  const slug = String(workspaceSlug ?? "").trim();
+function ensureAuthState(
+  workspaceSlug = getCurrentWorkspaceSlug(),
+  organizationSlug = getCurrentOrganizationSlug(),
+) {
+  const slug = `${organizationSlug}/${String(workspaceSlug ?? "").trim()}`;
   if (!authStateByWorkspace.has(slug)) {
     authStateByWorkspace.set(slug, createEmptyAuthState());
   }
@@ -68,16 +75,24 @@ function ensureAuthState(workspaceSlug = getCurrentWorkspaceSlug()) {
   return authStateByWorkspace.get(slug);
 }
 
-function syncCurrentAuthStores(workspaceSlug = getCurrentWorkspaceSlug()) {
-  const state = ensureAuthState(workspaceSlug);
+function syncCurrentAuthStores(
+  workspaceSlug = getCurrentWorkspaceSlug(),
+  organizationSlug = getCurrentOrganizationSlug(),
+) {
+  const state = ensureAuthState(workspaceSlug, organizationSlug);
+  if (
+    getCurrentWorkspaceSlug() &&
+    (workspaceSlug !== getCurrentWorkspaceSlug() ||
+      organizationSlug !== getCurrentOrganizationSlug())
+  )
+    return state;
   authSessionReady.set(state.ready);
   authenticatedAgent.set(state.authenticatedAgent);
   return state;
 }
 
-currentWorkspaceSlug.subscribe((workspaceSlug) => {
-  syncCurrentAuthStores(workspaceSlug);
-});
+currentWorkspaceSlug.subscribe(() => syncCurrentAuthStores());
+currentOrganizationSlug.subscribe(() => syncCurrentAuthStores());
 
 function resolveFetch(fetchFn) {
   if (typeof fetchFn === "function") {
@@ -105,7 +120,12 @@ function createErrorFromResponse(status, details) {
   return error;
 }
 
-function applySessionEndedByAccountStatus(status, payload, workspaceSlug) {
+function applySessionEndedByAccountStatus(
+  status,
+  payload,
+  workspaceSlug,
+  organizationSlug,
+) {
   if (
     status !== 401 ||
     payload?.error?.code !== AuthErrorCode.SESSION_ENDED_BY_ACCOUNT_STATUS
@@ -114,7 +134,7 @@ function applySessionEndedByAccountStatus(status, payload, workspaceSlug) {
   }
   sessionEndedByAccountStatus.set(true);
   const slug = String(workspaceSlug ?? "").trim() || getCurrentWorkspaceSlug();
-  clearAuthSession(slug);
+  clearAuthSession(slug, { organizationSlug });
   return true;
 }
 
@@ -146,7 +166,7 @@ function wait(ms) {
 
 async function requestJSON(
   pathname,
-  { fetchFn, method = "GET", body, baseUrl, headers, workspaceSlug } = {},
+  { fetchFn, method = "GET", body, baseUrl, headers } = {},
 ) {
   const mergedHeaders = {
     ...(browser
@@ -163,6 +183,7 @@ async function requestJSON(
   };
   const response = await resolveFetch(fetchFn)(buildUrl(pathname, baseUrl), {
     method,
+    signal: AbortSignal.timeout(15_000),
     headers: mergedHeaders,
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -177,7 +198,6 @@ async function requestJSON(
     }
   }
   if (!response.ok) {
-    applySessionEndedByAccountStatus(response.status, payload, workspaceSlug);
     throw createErrorFromResponse(response.status, payload);
   }
 
@@ -231,6 +251,8 @@ export function completeAuthSession(
   workspaceSlug = getCurrentWorkspaceSlug(),
 ) {
   const state = ensureAuthState(workspaceSlug);
+  state.generation += 1;
+  state.initInflight = null;
   state.accessToken = "";
   state.authenticatedAgent = agent ?? null;
   state.ready = true;
@@ -244,37 +266,42 @@ export function clearAuthSession(
   workspaceSlug = getCurrentWorkspaceSlug(),
   options = {},
 ) {
+  clearWorkspaceViews();
   const clearActor = Boolean(options.clearActor);
-  const state = ensureAuthState(workspaceSlug);
+  const organizationSlug =
+    options.organizationSlug ?? getCurrentOrganizationSlug();
+  const state = ensureAuthState(workspaceSlug, organizationSlug);
   state.accessToken = "";
   state.authenticatedAgent = null;
   state.ready = true;
   state.initInflight = null;
+  state.generation += 1;
   if (browser && clearActor) {
     clearSelectedActor(localStorage, workspaceSlug);
   }
-  syncCurrentAuthStores(workspaceSlug);
+  syncCurrentAuthStores(workspaceSlug, organizationSlug);
 }
 
 export async function initializeAuthSession({
   fetchFn,
   baseUrl = "",
   workspaceSlug = getCurrentWorkspaceSlug(),
+  organizationSlug = getCurrentOrganizationSlug(),
   /** @type {"layout" | "login" | string | undefined} */
   authDriver,
 } = {}) {
   const slug = String(workspaceSlug ?? "").trim();
   if (authDriver) {
-    const prev = authDriverByWorkspace.get(slug);
+    const prev = authDriverByWorkspace.get(`${organizationSlug}/${slug}`);
     if (prev && prev !== authDriver && import.meta.env.DEV) {
       console.warn(
         `[auth] initializeAuthSession: conflicting authDriver for workspace "${slug}" (${prev} vs ${authDriver})`,
       );
     }
-    authDriverByWorkspace.set(slug, authDriver);
+    authDriverByWorkspace.set(`${organizationSlug}/${slug}`, authDriver);
   }
 
-  const state = ensureAuthState(workspaceSlug);
+  const state = ensureAuthState(workspaceSlug, organizationSlug);
 
   // Single-flight: if a previous call is still pending for this workspace,
   // return that same promise. Prevents reactive effects (e.g. those watching
@@ -292,6 +319,7 @@ export async function initializeAuthSession({
     fetchFn,
     baseUrl,
     workspaceSlug,
+    organizationSlug,
     state,
   }).finally(() => {
     if (state.initInflight === promise) {
@@ -307,8 +335,10 @@ async function runInitializeAuthSession({
   fetchFn,
   baseUrl,
   workspaceSlug,
+  organizationSlug,
   state,
 }) {
+  const generation = state.generation;
   const previousAgent = state.authenticatedAgent;
   // Track whether this is the first time we're hydrating this workspace.
   // On first init, flip `ready` to false so consumers can show a loading
@@ -320,13 +350,13 @@ async function runInitializeAuthSession({
 
   if (!browser && typeof fetchFn !== "function") {
     state.ready = true;
-    syncCurrentAuthStores(workspaceSlug);
+    syncCurrentAuthStores(workspaceSlug, organizationSlug);
     return null;
   }
 
   if (isInitialHydration) {
     state.ready = false;
-    syncCurrentAuthStores(workspaceSlug);
+    syncCurrentAuthStores(workspaceSlug, organizationSlug);
   }
 
   for (
@@ -341,17 +371,27 @@ async function runInitializeAuthSession({
         workspaceSlug,
         headers: {
           [WORKSPACE_HEADER]: workspaceSlug,
+          "x-anx-organization-slug": organizationSlug,
         },
       });
+      if (generation !== state.generation) return null;
       const nextAgent = result.agent ?? null;
       const agentChanged = !sameAgent(previousAgent, nextAgent);
+      if (!nextAgent && previousAgent) clearWorkspaceViews();
       state.authenticatedAgent = nextAgent;
       state.ready = true;
       if (isInitialHydration || agentChanged) {
-        syncCurrentAuthStores(workspaceSlug);
+        syncCurrentAuthStores(workspaceSlug, organizationSlug);
       }
       return nextAgent;
     } catch (error) {
+      if (generation !== state.generation) return null;
+      applySessionEndedByAccountStatus(
+        error.status,
+        error.details,
+        workspaceSlug,
+        organizationSlug,
+      );
       if (
         isRetryableAuthSessionFailure(error) &&
         attempt < AUTH_SESSION_INIT_MAX_ATTEMPTS - 1
@@ -364,10 +404,11 @@ async function runInitializeAuthSession({
         ? previousAgent
         : null;
       const agentChanged = !sameAgent(previousAgent, nextAgent);
+      if (!nextAgent && previousAgent) clearWorkspaceViews();
       state.authenticatedAgent = nextAgent;
       state.ready = true;
       if (isInitialHydration || agentChanged) {
-        syncCurrentAuthStores(workspaceSlug);
+        syncCurrentAuthStores(workspaceSlug, organizationSlug);
       }
       return state.authenticatedAgent;
     }
@@ -392,6 +433,11 @@ export async function logoutAuthSession({
   workspaceSlug = getCurrentWorkspaceSlug(),
   clearActor = false,
 } = {}) {
+  const organizationSlug = getCurrentOrganizationSlug();
+  const pending = ensureAuthState(workspaceSlug, organizationSlug).initInflight;
+  clearAuthSession(workspaceSlug, { clearActor, organizationSlug });
+  // Let earlier Set-Cookie responses settle before the DELETE clears cookies.
+  if (pending) await pending.catch(() => {});
   if (browser || typeof fetchFn === "function") {
     try {
       await requestJSON("/auth/session", {
@@ -401,14 +447,13 @@ export async function logoutAuthSession({
         method: "DELETE",
         headers: {
           [WORKSPACE_HEADER]: workspaceSlug,
+          "x-anx-organization-slug": organizationSlug,
         },
       });
     } catch {
       // Fall through to local cleanup. Logout should be best-effort.
     }
   }
-
-  clearAuthSession(workspaceSlug, { clearActor });
 }
 
 export function createAuthTokenProvider() {
@@ -424,4 +469,37 @@ export function createAuthTokenProvider() {
     },
     async handleRefreshFailure() {},
   };
+}
+
+/** Revalidate visited sessions without blocking navigation. Tokens never enter JS. */
+export function startWorkspaceSessionMaintenance({ intervalMs = 60_000 } = {}) {
+  const refresh = () => {
+    if (globalThis.document?.visibilityState === "hidden") return;
+    for (const [key, state] of authStateByWorkspace) {
+      if (!state.authenticatedAgent) continue;
+      const [organizationSlug, workspaceSlug] = key.split("/");
+      void initializeAuthSession({
+        organizationSlug,
+        workspaceSlug,
+        authDriver: "layout",
+      });
+    }
+  };
+  const timer = setInterval(refresh, intervalMs);
+  globalThis.document?.addEventListener("visibilitychange", refresh);
+  return () => {
+    clearInterval(timer);
+    globalThis.document?.removeEventListener("visibilitychange", refresh);
+  };
+}
+
+/** End all tab-local sessions before removing the hosted account cookie. */
+export async function clearAllWorkspaceAuthSessions() {
+  const pending = [];
+  for (const [key, state] of authStateByWorkspace) {
+    if (state.initInflight) pending.push(state.initInflight);
+    const [organizationSlug, workspaceSlug] = key.split("/");
+    clearAuthSession(workspaceSlug, { organizationSlug });
+  }
+  await Promise.allSettled(pending);
 }

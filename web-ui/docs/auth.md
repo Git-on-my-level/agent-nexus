@@ -64,3 +64,11 @@ Workspace home (`/o/.../w/...`) runs `initializeAuthSession` (GET `/auth/session
 
 - Provider contract: [out-of-workspace-provider.md](./out-of-workspace-provider.md)
 - Test guide: [tests/README.md](../tests/README.md)
+
+## Seamless workspace navigation
+
+Workspace auth state is keyed by organization and workspace. Late responses cannot overwrite another workspace's current identity or resurrect a cleared session. Hosted server loads can supply a checked `workspaceSession.agent`; the shell hydrates from that public row without a second browser auth/handshake waterfall. Actor directories are optional background work. The shell stays mounted; page content is keyed by workspace to prevent stale onMount-only views.
+
+Visible hosted tabs revalidate visited sessions every 60 seconds and on visibility resume. Core access tokens are opaque: `anx_ui_access_{org}__{workspace}_expires` is an httpOnly scheduling hint, never authorization. Two minutes before expiry, the BFF rotates through the existing single-flight refresh path and validates the resulting bearer with core. Missing expiry metadata on old cookies is adopted on their next rotation. The existing process-local refresh replay limitation above still applies.
+
+Overview snapshots live only in browser memory, keyed by organization/workspace/principal, with a 30-second admission TTL and a 12-entry bound. Revisits render and revalidate them; logout or observed revocation clears them. Hidden/offline tabs cannot promise a wall-clock revocation display bound; active connected tabs recheck at most one maintenance interval later, while API authorization remains server-enforced on each request. Hosted layout data is private/no-store, and no credentials are returned to browser JavaScript.

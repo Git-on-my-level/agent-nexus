@@ -117,3 +117,39 @@ describe("hosted /api/session", () => {
     });
   });
 });
+
+it("clears all workspace cookies on account replacement and hosted logout", async () => {
+  const { POST, DELETE } = await loadSessionHandlers(false);
+  const names = [
+    "anx_ui_session_org__one",
+    "anx_ui_access_org__one",
+    "anx_ui_access_org__one_expires",
+    "anx_ui_session_org__two",
+  ];
+  const cookies = {
+    get: () => "previous-account",
+    getAll: () => names.map((name) => ({ name, value: "secret" })),
+    set: vi.fn(),
+    delete: vi.fn(),
+  };
+  const url = new URL("https://app.example/hosted/api/session");
+  await POST({
+    url,
+    cookies,
+    request: new Request(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ access_token: "new-account" }),
+    }),
+  });
+  for (const name of names)
+    expect(cookies.delete).toHaveBeenCalledWith(name, { path: "/" });
+  cookies.delete.mockClear();
+  await DELETE({
+    url,
+    cookies,
+    request: new Request(url, { method: "DELETE" }),
+  });
+  for (const name of names)
+    expect(cookies.delete).toHaveBeenCalledWith(name, { path: "/" });
+});

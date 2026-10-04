@@ -9,6 +9,7 @@ import {
 import { WORKSPACE_HEADER_CONSTANTS } from "$lib/compat/workspaceCompat";
 import { sanitizeHostedReturnPath } from "$lib/hosted/launchFlow.js";
 import {
+  loadWorkspaceAuthenticatedAgent,
   getAuthAccessCookieName,
   getAuthSessionCookieName,
 } from "$lib/server/authSession.js";
@@ -123,6 +124,8 @@ function workspaceRelativeReturnPath(event, organizationSlug, workspaceSlug) {
 export async function load(event) {
   const provider =
     event.locals?.outOfWorkspace ?? getOutOfWorkspaceProvider(privateEnv);
+  if (provider.mode === "hosted")
+    event.setHeaders?.({ "cache-control": "private, no-store" });
   const resolved = await resolveWorkspaceInRoute({
     event,
     organizationSlug: event.params.organization,
@@ -188,6 +191,7 @@ export async function load(event) {
     },
   );
 
+  let sessionAgent;
   const workspaceId = String(
     resolved.workspace.workspaceId ?? resolved.workspace.id ?? "",
   ).trim();
@@ -212,6 +216,7 @@ export async function load(event) {
       ),
     });
     handleLaunchInstruction(instruction);
+    sessionAgent = instruction?.agent;
   }
 
   const catalog = await resolveWorkspaceCatalog(event, {
@@ -229,6 +234,24 @@ export async function load(event) {
         })
       : coreBaseUrl;
 
+  // Validate existing cookies while the compatibility check runs, not after hydration.
+  const sessionPromise =
+    provider.mode === "hosted"
+      ? sessionAgent
+        ? Promise.resolve(sessionAgent)
+        : loadWorkspaceAuthenticatedAgent({
+            event,
+            organizationSlug: workOrg,
+            workspaceSlug: workSlug,
+            coreBaseUrl: schemaCoreBaseUrl,
+            headers: hostedWorkspaceCoreProxyHeaders(event),
+          })
+      : Promise.resolve(undefined);
+  // Attach a rejection handler immediately while the schema check is pending.
+  const sessionResult = sessionPromise.then(
+    (agent) => ({ agent }),
+    (failure) => ({ failure }),
+  );
   let coreSchemaCheckWarning = "";
 
   if (
@@ -267,7 +290,16 @@ export async function load(event) {
     coreSchemaCheckWarning = await schemaCheckPromises.get(cacheKey);
   }
 
+  const session = await sessionResult;
+  if (session.failure)
+    throw error(
+      session.failure.status || 503,
+      "Could not validate workspace session.",
+    );
   return {
+    ...(provider.mode === "hosted"
+      ? { workspaceSession: { agent: session.agent ?? null } }
+      : {}),
     ...toPublicWorkspaceCatalog(catalog),
     workspace: {
       organizationSlug: workOrg,

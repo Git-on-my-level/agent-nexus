@@ -231,12 +231,25 @@ describe("workspace +layout.server.js (integration with real resolver)", () => {
       ],
     });
 
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              agent: { agent_id: "human", principal_kind: "human" },
+            }),
+          ),
+      ),
+    );
     const event = createEvent({ fetchFn });
     event.cookies.get = vi.fn((name) =>
-      name === "anx_ui_session_my-org__my-ws" ? "refresh-token" : "",
+      name === "anx_ui_access_my-org__my-ws" ? "access-token" : "",
     );
     const result = await load(event);
 
+    vi.unstubAllGlobals();
+    expect(result.workspaceSession.agent.agent_id).toBe("human");
     expect(result.workspace).toMatchObject({
       slug: "my-ws",
       organizationSlug: "my-org",

@@ -22,7 +22,8 @@
  * @typedef {{ kind: "redirect", finishUrl: string }} LaunchInstructionRedirect
  * @typedef {{ kind: "needs_signin", signInUrl: string }} LaunchInstructionNeedsSignin
  * @typedef {{ kind: "workspace_native_login" }} LaunchInstructionWorkspaceNativeLogin
- * @typedef {LaunchInstructionRedirect | LaunchInstructionNeedsSignin | LaunchInstructionWorkspaceNativeLogin} LaunchInstruction
+ * @typedef {{ kind: "established", agent: object | null }} LaunchInstructionEstablished
+ * @typedef {LaunchInstructionRedirect | LaunchInstructionNeedsSignin | LaunchInstructionWorkspaceNativeLogin | LaunchInstructionEstablished} LaunchInstruction
  */
 
 /**

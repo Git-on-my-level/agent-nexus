@@ -125,7 +125,7 @@ describe("server auth session helpers", () => {
 
     writeWorkspaceAccessToken(event, DEFAULT_ORG, DEFAULT_WS, "access-token");
 
-    expect(recorder.setCalls).toHaveLength(1);
+    expect(recorder.setCalls).toHaveLength(2);
     expect(recorder.setCalls[0]).toMatchObject({
       name: "anx_ui_access_local__alpha",
       value: "access-token",
@@ -166,6 +166,10 @@ describe("server auth session helpers", () => {
     clearWorkspaceAccessToken(event, DEFAULT_ORG, DEFAULT_WS);
 
     expect(recorder.deleteCalls).toEqual([
+      {
+        name: "anx_ui_access_local__alpha_expires",
+        options: { path: "/" },
+      },
       {
         name: "anx_ui_access_local__alpha",
         options: {
@@ -238,6 +242,17 @@ describe("server auth session helpers", () => {
           path: "/",
         },
       },
+      {
+        name: "anx_ui_access_local__alpha_expires",
+        value: expect.any(String),
+        options: {
+          httpOnly: true,
+          maxAge: 15 * 60 + 60,
+          sameSite: "lax",
+          secure: true,
+          path: "/",
+        },
+      },
     ]);
   });
 
@@ -286,10 +301,12 @@ describe("server auth session helpers", () => {
     await expect(firstRefresh).resolves.toEqual({
       accessToken: "next-access-token",
       refreshToken: "next-refresh-token",
+      expiresAt: expect.any(Number),
     });
     await expect(secondRefresh).resolves.toEqual({
       accessToken: "next-access-token",
       refreshToken: "next-refresh-token",
+      expiresAt: expect.any(Number),
     });
     const sessionName = getAuthSessionCookieName(DEFAULT_ORG, DEFAULT_WS);
     expect(first.recorder.values.get(sessionName)).toBe("next-refresh-token");
@@ -369,6 +386,7 @@ describe("server auth session helpers", () => {
     ).resolves.toEqual({
       accessToken: "next-access-token",
       refreshToken: "next-refresh-token",
+      expiresAt: expect.any(Number),
     });
 
     await expect(
@@ -381,6 +399,7 @@ describe("server auth session helpers", () => {
     ).resolves.toEqual({
       accessToken: "next-access-token",
       refreshToken: "next-refresh-token",
+      expiresAt: expect.any(Number),
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -579,6 +598,10 @@ describe("server auth session helpers", () => {
       },
       {
         name: "anx_ui_session_local__alpha",
+        options: { path: "/" },
+      },
+      {
+        name: "anx_ui_access_local__alpha_expires",
         options: { path: "/" },
       },
       {
@@ -781,7 +804,7 @@ describe("production secure cookie behavior (TLS termination)", () => {
 
     writeWorkspaceAccessToken(event, DEFAULT_ORG, DEFAULT_WS, "access-token");
 
-    expect(recorder.setCalls).toHaveLength(1);
+    expect(recorder.setCalls).toHaveLength(2);
     expect(recorder.setCalls[0].options.secure).toBe(true);
   });
 
@@ -813,7 +836,7 @@ describe("production secure cookie behavior (TLS termination)", () => {
     for (const call of recorder.setCalls) {
       expect(call.options.secure).toBe(true);
     }
-    expect(recorder.setCalls).toHaveLength(2);
+    expect(recorder.setCalls).toHaveLength(3);
   });
 
   it("allows insecure cookies on HTTP in dev mode", () => {

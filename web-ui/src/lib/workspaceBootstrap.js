@@ -6,6 +6,7 @@ import { dev } from "$app/environment";
 
 import {
   authenticatedAgent,
+  completeAuthSession,
   authSessionReady,
   clearAuthSession,
   initializeAuthSession,
@@ -428,6 +429,7 @@ export async function refreshWorkspacePrincipals({
 
 export async function hydrateWorkspaceBootstrap({
   workspaceSlug,
+  hostedSession,
   workspaceHeader,
   organizationSlug = "",
   coreClient,
@@ -439,6 +441,21 @@ export async function hydrateWorkspaceBootstrap({
   onDevFixturePersonas = () => {},
   refreshActors,
 }) {
+  // Hosted server loads have already checked membership, core auth and schema.
+  // Publish that identity before fetching optional directories.
+  if (hostedSession !== undefined) {
+    initializeActorSession(storage, workspaceSlug);
+    completeAuthSession(hostedSession.agent, workspaceSlug);
+    setDevActorMode(false);
+    setDevActorModeReady(true);
+    replacePrincipalRegistry(
+      hostedSession.agent ? [hostedSession.agent] : [],
+      workspaceSlug,
+    );
+    onDevFixturePersonas([]);
+    void refreshActors(workspaceSlug);
+    return;
+  }
   setDevActorModeReady(false);
   initializeActorSession(storage, workspaceSlug);
   let agent = await initializeAuthSession({

@@ -1,7 +1,13 @@
 <script>
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
+
+  import { getAuthenticatedAgent } from "$lib/authSession";
+  import {
+    readWorkspaceView,
+    writeWorkspaceView,
+  } from "$lib/workspaceViewCache";
 
   import { coreClient } from "$lib/coreClient";
   import {
@@ -19,9 +25,15 @@
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
 
-  // The server load stays empty so the skeleton is the first paint.
-  // The browser is the only business loader, matching Tasks and Inbox.
-  let fetched = $state(null);
+  // The shell keys this component by organization/workspace. Snapshots are
+  // memory-only, principal-scoped, at most 30 seconds old, and revalidated.
+  const cacheKey = JSON.stringify([
+    $page.params.organization,
+    $page.params.workspace,
+    getAuthenticatedAgent()?.agent_id,
+    "overview",
+  ]);
+  let fetched = $state(readWorkspaceView(cacheKey));
   let model = $derived(fetched);
   let refreshing = $state(false);
   let loadingMoreReports = $state(false);
@@ -65,7 +77,10 @@
     refreshing = true;
     try {
       const next = await loadOverview(coreClient);
-      if (id === request) fetched = next;
+      if (id === request) {
+        fetched = next;
+        writeWorkspaceView(cacheKey, next);
+      }
     } catch (error) {
       const message =
         error instanceof Error
@@ -120,6 +135,10 @@
       if (id === request) loadingMoreReports = false;
     }
   }
+
+  onDestroy(() => {
+    request += 1;
+  });
 
   onMount(() => {
     void refresh();

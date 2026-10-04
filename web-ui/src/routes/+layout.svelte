@@ -1,6 +1,6 @@
 <script>
   import { browser } from "$app/environment";
-  import { goto } from "$app/navigation";
+  import { goto, preloadData } from "$app/navigation";
   import { page } from "$app/stores";
   import { tick } from "svelte";
   import { get } from "svelte/store";
@@ -26,6 +26,7 @@
     isHumanWorkspacePrincipal,
     logoutAuthSession,
     sessionEndedByAccountStatus,
+    startWorkspaceSessionMaintenance,
   } from "$lib/authSession";
   import SessionEndedOverlay from "$lib/components/SessionEndedOverlay.svelte";
   import CommandPalette from "$lib/components/CommandPalette.svelte";
@@ -329,16 +330,17 @@
       return;
     }
 
-    setCurrentWorkspaceSlug(workspaceSlug);
     setCurrentOrganizationSlug(
       activeOrganizationSlug || $page.params?.organization || "",
     );
+    setCurrentWorkspaceSlug(workspaceSlug);
     setCurrentCoreBaseUrl(activeWorkspace?.coreBaseUrl ?? "");
-    if (hydratedWorkspaceSlug === workspaceSlug) {
+    const workspaceKey = `${activeOrganizationSlug}/${workspaceSlug}`;
+    if (hydratedWorkspaceSlug === workspaceKey) {
       return;
     }
 
-    hydratedWorkspaceSlug = workspaceSlug;
+    hydratedWorkspaceSlug = workspaceKey;
     void hydrateWorkspace(workspaceSlug);
   });
 
@@ -444,6 +446,7 @@
   async function hydrateWorkspace(workspaceSlug) {
     await hydrateWorkspaceBootstrap({
       workspaceSlug,
+      hostedSession: hostedMode ? $page.data.workspaceSession : undefined,
       workspaceHeader: WORKSPACE_HEADER,
       organizationSlug: activeOrganizationSlug,
       coreClient,
@@ -570,25 +573,46 @@
   }
 
   function isActive(href) {
-    return currentAppPath === href || currentAppPath.startsWith(`${href}/`);
+    return (
+      (href === "/overview" && currentAppPath === "/") ||
+      currentAppPath === href ||
+      currentAppPath.startsWith(`${href}/`)
+    );
   }
 
   let workspaceHref = $derived(
     bindWorkspaceHref(activeOrganizationSlug, activeWorkspaceSlug),
   );
 
-  async function switchWorkspace(nextWorkspaceSlug) {
-    if (!nextWorkspaceSlug || nextWorkspaceSlug === activeWorkspaceSlug) {
-      return;
-    }
-
-    const entry = (data.workspaces ?? []).find(
-      (w) => w.slug === nextWorkspaceSlug,
+  function switchDestination(workspace) {
+    // Resource IDs belong to one workspace. Switch to the corresponding list.
+    const section = currentAppPath.split("/")[1] || "overview";
+    return workspacePath(
+      workspace.organizationSlug,
+      workspace.slug,
+      `/${section}`,
     );
-    const nextOrg = entry?.organizationSlug ?? activeOrganizationSlug;
-    const destination = `${workspacePath(nextOrg, nextWorkspaceSlug, currentAppPath)}${$page.url.search}${$page.url.hash}`;
-    await goto(destination);
   }
+
+  async function switchWorkspace(workspace) {
+    if (
+      !workspace ||
+      (workspace.slug === activeWorkspaceSlug &&
+        workspace.organizationSlug === activeOrganizationSlug)
+    )
+      return;
+    await goto(switchDestination(workspace));
+  }
+
+  function preloadWorkspace(workspace) {
+    if (!workspace._loadFailed)
+      void preloadData(switchDestination(workspace)).catch(() => {});
+  }
+
+  $effect(() => {
+    if (!browser || !hostedMode) return;
+    return startWorkspaceSessionMaintenance();
+  });
 
   /** @param {string} href */
   function dataTourForNav(href) {
@@ -731,7 +755,7 @@
 <div class="shell-root">
   {#if !activeWorkspaceSlug}
     {@render children()}
-  {:else if !identityReady || workspaceBootstrapPending}
+  {:else if (!identityReady || workspaceBootstrapPending) && !hostedMode}
     <main class="shell-loading" aria-live="polite">
       <div class="shell-loading-card">
         <svg
@@ -929,8 +953,9 @@
                       class:workspace-switcher-option--active={isCurrent}
                       role="option"
                       aria-selected={isCurrent}
-                      onclick={() =>
-                        !loadFailed && pickWorkspace(workspace.slug)}
+                      onclick={() => !loadFailed && pickWorkspace(workspace)}
+                      onpointerenter={() => preloadWorkspace(workspace)}
+                      onfocus={() => preloadWorkspace(workspace)}
                       disabled={loadFailed}
                       type="button"
                     >
@@ -1009,13 +1034,17 @@
                 {#if item.count === "inbox-needs-you"}
                   <InboxNavCount
                     workspace={activeWorkspaceSlug}
-                    enabled={identityReady}
+                    enabled={identityReady &&
+                      !workspaceBootstrapPending &&
+                      !shouldRedirectToLogin}
                   />
                 {/if}
                 {#if item.count === "agents-working"}
                   <AgentsNavCount
                     workspace={activeWorkspaceSlug}
-                    enabled={identityReady}
+                    enabled={identityReady &&
+                      !workspaceBootstrapPending &&
+                      !shouldRedirectToLogin}
                   />
                 {/if}
               </a>
@@ -1247,7 +1276,20 @@
             class={`shell-content shell-content--${shellContentConfig.mode}`}
             style={`--shell-content-max: ${shellContentConfig.maxWidth}`}
           >
-            {@render children?.()}
+            {#if !identityReady || workspaceBootstrapPending || shouldRedirectToLogin || hydratedWorkspaceSlug !== `${activeOrganizationSlug}/${activeWorkspaceSlug}`}
+              <div
+                class="p-6"
+                aria-label="Loading workspace content"
+                aria-busy="true"
+              >
+                <div class="h-6 w-48 rounded bg-slate-200/20"></div>
+                <div class="mt-6 h-40 rounded bg-slate-200/10"></div>
+              </div>
+            {:else}
+              {#key `${activeOrganizationSlug}/${activeWorkspaceSlug}`}
+                {@render children?.()}
+              {/key}
+            {/if}
           </div>
         </main>
       </div>
@@ -1280,14 +1322,18 @@
           {#if item.count === "inbox-needs-you"}
             <InboxNavCount
               workspace={activeWorkspaceSlug}
-              enabled={identityReady}
+              enabled={identityReady &&
+                !workspaceBootstrapPending &&
+                !shouldRedirectToLogin}
               variant="bottom"
             />
           {/if}
           {#if item.count === "agents-working"}
             <AgentsNavCount
               workspace={activeWorkspaceSlug}
-              enabled={identityReady}
+              enabled={identityReady &&
+                !workspaceBootstrapPending &&
+                !shouldRedirectToLogin}
               variant="bottom"
             />
           {/if}
