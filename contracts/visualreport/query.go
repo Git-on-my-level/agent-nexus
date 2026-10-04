@@ -255,6 +255,9 @@ func Summary(markdown string) (string, Progress, []string) {
 		return ast.WalkContinue, nil
 	})
 
+	// Goldmark marks only visible, non-code leaf-block lines above. Apply that
+	// boundary before trimming indentation so indented-code examples cannot
+	// become either the summary or a Needs request.
 	for i, raw := range strings.Split(markdown, "\n") {
 		if i >= len(visible) || !visible[i] || taskLines[i] {
 			continue
