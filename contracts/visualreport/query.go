@@ -8,7 +8,14 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"sort"
 	"strings"
+
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
+	extensionast "github.com/yuin/goldmark/extension/ast"
+	"github.com/yuin/goldmark/text"
 )
 
 const MaxRows = 2000
@@ -156,47 +163,104 @@ type Progress struct {
 	Total int `json:"total"`
 }
 
-var checkbox = regexp.MustCompile(`^\s*-\s+\[([ xX])\](?:\s|$)`)
 var needsLine = regexp.MustCompile(`(?i)^Needs\s+[^:]+:`)
 
-// Ignore fenced examples; they are not commitments. Preserve plain text for the UI.
+var summaryMarkdown = goldmark.New(goldmark.WithExtensions(extension.GFM))
+
+func lineStarts(source []byte) []int {
+	starts := []int{0}
+	for offset, b := range source {
+		if b == '\n' {
+			starts = append(starts, offset+1)
+		}
+	}
+	return starts
+}
+
+func sourceLine(starts []int, offset int) int {
+	line := sort.Search(len(starts), func(i int) bool { return starts[i] > offset }) - 1
+	if line < 0 {
+		return 0
+	}
+	return line
+}
+
+func markVisibleBlockLines(node ast.Node, starts []int, visible []bool) {
+	if node.Type() != ast.TypeBlock || node.Lines() == nil {
+		return
+	}
+	if _, fenced := node.(*ast.FencedCodeBlock); fenced {
+		return
+	}
+	if _, indented := node.(*ast.CodeBlock); indented {
+		return
+	}
+	// Containers span their descendants, including code. Only mark leaf block
+	// text so a list or quote cannot make a nested code block visible again.
+	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+		if child.Type() == ast.TypeBlock {
+			return
+		}
+	}
+	for i := 0; i < node.Lines().Len(); i++ {
+		segment := node.Lines().At(i)
+		first := sourceLine(starts, segment.Start)
+		lastOffset := segment.Stop - 1
+		if lastOffset < segment.Start {
+			lastOffset = segment.Start
+		}
+		last := sourceLine(starts, lastOffset)
+		for line := first; line <= last && line < len(visible); line++ {
+			visible[line] = true
+		}
+	}
+}
+
+func markTaskLine(node ast.Node, starts []int, taskLines []bool) {
+	for parent := node.Parent(); parent != nil; parent = parent.Parent() {
+		if parent.Type() != ast.TypeBlock || parent.Lines() == nil || parent.Lines().Len() == 0 {
+			continue
+		}
+		line := sourceLine(starts, parent.Lines().At(0).Start)
+		if line < len(taskLines) {
+			taskLines[line] = true
+		}
+		return
+	}
+}
+
+// Ignore code examples; they are not commitments. Goldmark's GFM AST defines
+// task items and code boundaries so counting follows CommonMark containers.
 func Summary(markdown string) (string, Progress, []string) {
+	source := []byte(markdown)
+	doc := summaryMarkdown.Parser().Parse(text.NewReader(source))
+	starts := lineStarts(source)
+	visible := make([]bool, len(starts))
+	taskLines := make([]bool, len(starts))
 	first := ""
 	progress := Progress{}
 	needs := []string{}
-	var fence byte
-	fenceLength := 0
-	for _, raw := range strings.Split(markdown, "\n") {
-		line := strings.TrimSpace(raw)
-		// CommonMark: at most three spaces of indentation; closing fences use
-		// the same character, at least the opening length, and no info string.
-		indent := len(raw) - len(strings.TrimLeft(raw, " "))
-		markerLine := strings.TrimLeft(raw, " ")
-		if indent <= 3 && len(markerLine) >= 3 && (markerLine[0] == '`' || markerLine[0] == '~') {
-			marker := markerLine[0]
-			length := 0
-			for length < len(markerLine) && markerLine[length] == marker {
-				length++
-			}
-			tail := markerLine[length:]
-			if fence == 0 && length >= 3 && (marker != '`' || !strings.Contains(tail, "`")) {
-				fence = marker
-				fenceLength = length
-				continue
-			}
-			if fence == marker && length >= fenceLength && strings.Trim(tail, " \t\r") == "" {
-				fence = 0
-				continue
-			}
+	_ = ast.Walk(doc, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
 		}
-		if fence != 0 || line == "" {
-			continue
-		}
-		if match := checkbox.FindStringSubmatch(raw); match != nil {
+		if checkbox, ok := node.(*extensionast.TaskCheckBox); ok {
 			progress.Total++
-			if strings.EqualFold(match[1], "x") {
+			if checkbox.IsChecked {
 				progress.Done++
 			}
+			markTaskLine(node, starts, taskLines)
+		}
+		markVisibleBlockLines(node, starts, visible)
+		return ast.WalkContinue, nil
+	})
+
+	for i, raw := range strings.Split(markdown, "\n") {
+		if i >= len(visible) || !visible[i] || taskLines[i] {
+			continue
+		}
+		line := strings.TrimSpace(raw)
+		if line == "" {
 			continue
 		}
 		if needsLine.MatchString(line) {

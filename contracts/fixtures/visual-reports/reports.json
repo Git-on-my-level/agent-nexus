@@ -6868,5 +6868,111 @@
     "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Report\",\"summary\":\"Current work\",\"generated_at\":\"2026-10-04T10:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Summary\",\"outcome\":\"Ship\"}],\"sources\":[{\"id\":\"source\",\"label\":\"Source\",\"kind\":\"evidence\",\"observed_at\":null,\"url\":\"https://[2001:db8::1]/\"}],\"panels\":[{\"id\":\"panel\",\"project_id\":\"workspace\",\"type\":\"live-activity\",\"title\":\"Context\",\"author\":\"ANX\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unavailable\",\"source_ids\":[],\"data\":{}}]}",
     "recognized": true,
     "valid": true
+  },
+  {
+    "name": "overflowing hexadecimal IPv4 host",
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Report\",\"summary\":\"Current work\",\"generated_at\":\"2026-10-04T10:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Summary\",\"outcome\":\"Ship\"}],\"sources\":[{\"id\":\"source\",\"label\":\"Source\",\"kind\":\"evidence\",\"observed_at\":null,\"url\":\"http://example.0xFFFFFFFFFFFFFFFFF/\"}],\"panels\":[{\"id\":\"panel\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"ANX\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unavailable\",\"source_ids\":[],\"data\":{\"text\":\"Evidence needed\"}}]}",
+    "recognized": true,
+    "valid": false
+  },
+  {
+    "name": "64-bit hexadecimal IPv4 suffix",
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Report\",\"summary\":\"Current work\",\"generated_at\":\"2026-10-04T10:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Summary\",\"outcome\":\"Ship\"}],\"sources\":[{\"id\":\"source\",\"label\":\"Source\",\"kind\":\"evidence\",\"observed_at\":null,\"url\":\"http://example.0xFFFFFFFFFFFFFFFF/\"}],\"panels\":[{\"id\":\"panel\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"ANX\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unavailable\",\"source_ids\":[],\"data\":{\"text\":\"Evidence needed\"}}]}",
+    "recognized": true,
+    "valid": false
+  },
+  {
+    "name": "out-of-range hexadecimal IPv4 suffix",
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Report\",\"summary\":\"Current work\",\"generated_at\":\"2026-10-04T10:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Summary\",\"outcome\":\"Ship\"}],\"sources\":[{\"id\":\"source\",\"label\":\"Source\",\"kind\":\"evidence\",\"observed_at\":null,\"url\":\"http://example.0x100000000/\"}],\"panels\":[{\"id\":\"panel\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"ANX\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unavailable\",\"source_ids\":[],\"data\":{\"text\":\"Evidence needed\"}}]}",
+    "recognized": true,
+    "valid": false
+  },
+  {
+    "name": "empty hexadecimal IPv4 suffix",
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Report\",\"summary\":\"Current work\",\"generated_at\":\"2026-10-04T10:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Summary\",\"outcome\":\"Ship\"}],\"sources\":[{\"id\":\"source\",\"label\":\"Source\",\"kind\":\"evidence\",\"observed_at\":null,\"url\":\"http://example.0x/\"}],\"panels\":[{\"id\":\"panel\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"ANX\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unavailable\",\"source_ids\":[],\"data\":{\"text\":\"Evidence needed\"}}]}",
+    "recognized": true,
+    "valid": false
+  },
+  {
+    "name": "non-hexadecimal DNS suffix",
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Report\",\"summary\":\"Current work\",\"generated_at\":\"2026-10-04T10:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Summary\",\"outcome\":\"Ship\"}],\"sources\":[{\"id\":\"source\",\"label\":\"Source\",\"kind\":\"evidence\",\"observed_at\":null,\"url\":\"http://example.0xg/\"}],\"panels\":[{\"id\":\"panel\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"ANX\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unavailable\",\"source_ids\":[],\"data\":{\"text\":\"Evidence needed\"}}]}",
+    "recognized": true,
+    "valid": true
+  },
+  {
+    "name": "IDNA-invalid zero-width joiner",
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Report\",\"summary\":\"Current work\",\"generated_at\":\"2026-10-04T10:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Summary\",\"outcome\":\"Ship\"}],\"sources\":[{\"id\":\"source\",\"label\":\"Source\",\"kind\":\"evidence\",\"observed_at\":null,\"url\":\"http://‍.com/\"}],\"panels\":[{\"id\":\"panel\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"ANX\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unavailable\",\"source_ids\":[],\"data\":{\"text\":\"Evidence needed\"}}]}",
+    "recognized": true,
+    "valid": false
+  },
+  {
+    "name": "browser accepts Unicode hostname; Go requires punycode",
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Report\",\"summary\":\"Current work\",\"generated_at\":\"2026-10-04T10:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Summary\",\"outcome\":\"Ship\"}],\"sources\":[{\"id\":\"source\",\"label\":\"Source\",\"kind\":\"evidence\",\"observed_at\":null,\"url\":\"http://bücher.example/\"}],\"panels\":[{\"id\":\"panel\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"ANX\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unavailable\",\"source_ids\":[],\"data\":{\"text\":\"Evidence needed\"}}]}",
+    "recognized": true,
+    "valid": true,
+    "go_valid": false
+  },
+  {
+    "name": "invalid empty punycode label",
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Report\",\"summary\":\"Current work\",\"generated_at\":\"2026-10-04T10:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Summary\",\"outcome\":\"Ship\"}],\"sources\":[{\"id\":\"source\",\"label\":\"Source\",\"kind\":\"evidence\",\"observed_at\":null,\"url\":\"http://xn--/\"}],\"panels\":[{\"id\":\"panel\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"ANX\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unavailable\",\"source_ids\":[],\"data\":{\"text\":\"Evidence needed\"}}]}",
+    "recognized": true,
+    "valid": false,
+    "go_valid": false
+  },
+  {
+    "name": "Unicode host delimiter",
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Report\",\"summary\":\"Current work\",\"generated_at\":\"2026-10-04T10:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Summary\",\"outcome\":\"Ship\"}],\"sources\":[{\"id\":\"source\",\"label\":\"Source\",\"kind\":\"evidence\",\"observed_at\":null,\"url\":\"http://a＃b.example/\"}],\"panels\":[{\"id\":\"panel\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"ANX\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unavailable\",\"source_ids\":[],\"data\":{\"text\":\"Evidence needed\"}}]}",
+    "recognized": true,
+    "valid": false,
+    "go_valid": false
+  },
+  {
+    "name": "Arabic numeral hostname",
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Report\",\"summary\":\"Current work\",\"generated_at\":\"2026-10-04T10:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Summary\",\"outcome\":\"Ship\"}],\"sources\":[{\"id\":\"source\",\"label\":\"Source\",\"kind\":\"evidence\",\"observed_at\":null,\"url\":\"http://١٢٣.example/\"}],\"panels\":[{\"id\":\"panel\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"ANX\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unavailable\",\"source_ids\":[],\"data\":{\"text\":\"Evidence needed\"}}]}",
+    "recognized": true,
+    "valid": true,
+    "go_valid": false
+  },
+  {
+    "name": "overflowing hexadecimal host with trailing dot",
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Report\",\"summary\":\"Current work\",\"generated_at\":\"2026-10-04T10:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Summary\",\"outcome\":\"Ship\"}],\"sources\":[{\"id\":\"source\",\"label\":\"Source\",\"kind\":\"evidence\",\"observed_at\":null,\"url\":\"http://example.0xFFFFFFFFFFFFFFFFF./\"}],\"panels\":[{\"id\":\"panel\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"ANX\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unavailable\",\"source_ids\":[],\"data\":{\"text\":\"Evidence needed\"}}]}",
+    "recognized": true,
+    "valid": false,
+    "go_valid": false
+  },
+  {
+    "name": "fullwidth dotted-decimal IPv4",
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Report\",\"summary\":\"Current work\",\"generated_at\":\"2026-10-04T10:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Summary\",\"outcome\":\"Ship\"}],\"sources\":[{\"id\":\"source\",\"label\":\"Source\",\"kind\":\"evidence\",\"observed_at\":null,\"url\":\"http://１２７.０.０.１/\"}],\"panels\":[{\"id\":\"panel\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"ANX\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unavailable\",\"source_ids\":[],\"data\":{\"text\":\"Evidence needed\"}}]}",
+    "recognized": true,
+    "valid": true,
+    "go_valid": false
+  },
+  {
+    "name": "canonical punycode hostname",
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Report\",\"summary\":\"Current work\",\"generated_at\":\"2026-10-04T10:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Summary\",\"outcome\":\"Ship\"}],\"sources\":[{\"id\":\"source\",\"label\":\"Source\",\"kind\":\"evidence\",\"observed_at\":null,\"url\":\"http://xn--bcher-kva.example/\"}],\"panels\":[{\"id\":\"panel\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"ANX\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unavailable\",\"source_ids\":[],\"data\":{\"text\":\"Evidence needed\"}}]}",
+    "recognized": true,
+    "valid": true,
+    "go_valid": false
+  },
+  {
+    "name": "A-label rejected by browser IDNA lookup",
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Report\",\"summary\":\"Current work\",\"generated_at\":\"2026-10-04T10:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Summary\",\"outcome\":\"Ship\"}],\"sources\":[{\"id\":\"source\",\"label\":\"Source\",\"kind\":\"evidence\",\"observed_at\":null,\"url\":\"http://xn--a-ecp.example/\"}],\"panels\":[{\"id\":\"panel\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"ANX\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unavailable\",\"source_ids\":[],\"data\":{\"text\":\"Evidence needed\"}}]}",
+    "recognized": true,
+    "valid": false,
+    "go_valid": false
+  },
+  {
+    "name": "A-label rejected by browser IDNA lookup: xn--exb4j",
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Report\",\"summary\":\"Current work\",\"generated_at\":\"2026-10-04T10:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Summary\",\"outcome\":\"Ship\"}],\"sources\":[{\"id\":\"source\",\"label\":\"Source\",\"kind\":\"evidence\",\"observed_at\":null,\"url\":\"http://xn--exb4j.example/\"}],\"panels\":[{\"id\":\"panel\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"ANX\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unavailable\",\"source_ids\":[],\"data\":{\"text\":\"Evidence needed\"}}]}",
+    "recognized": true,
+    "valid": false,
+    "go_valid": false
+  },
+  {
+    "name": "A-label rejected by browser IDNA lookup: xn--oxbiscj9nkj3jtk",
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Report\",\"summary\":\"Current work\",\"generated_at\":\"2026-10-04T10:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Summary\",\"outcome\":\"Ship\"}],\"sources\":[{\"id\":\"source\",\"label\":\"Source\",\"kind\":\"evidence\",\"observed_at\":null,\"url\":\"http://xn--oxbiscj9nkj3jtk.example/\"}],\"panels\":[{\"id\":\"panel\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"ANX\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unavailable\",\"source_ids\":[],\"data\":{\"text\":\"Evidence needed\"}}]}",
+    "recognized": true,
+    "valid": false,
+    "go_valid": false
   }
 ]

@@ -7,6 +7,50 @@ const marked = new Marked({
 });
 
 /**
+ * Count GFM task-list items using the same CommonMark parser as rendering.
+ * Code blocks are opaque lexer tokens, so checkbox examples inside them do not
+ * contribute to progress.
+ *
+ * @param {string} source
+ * @returns {{ done: number, total: number }}
+ */
+export function countMarkdownTaskProgress(source) {
+  const progress = { done: 0, total: 0 };
+  if (typeof source !== "string" || source === "") return progress;
+
+  function visit(tokens) {
+    for (const token of tokens ?? []) {
+      if (token?.type === "code") continue;
+      if (token?.type === "list") {
+        for (const item of token.items ?? []) {
+          // Marked's GFM task tokenizer does not recognize a checkbox-only
+          // first line when the list item continues on the next line. The
+          // CommonMark list AST still gives us the item boundary, so recognize
+          // a task marker at the start of that item's text as well.
+          const leadingTask = /^\[([ xX])\](?=$|[ \t\n])/.exec(item.text ?? "");
+          if (item.task || leadingTask) {
+            progress.total++;
+            if (
+              item.task ? item.checked : leadingTask?.[1]?.toLowerCase() === "x"
+            )
+              progress.done++;
+          }
+          visit(item.tokens);
+        }
+      }
+      visit(token?.tokens);
+    }
+  }
+
+  try {
+    visit(marked.lexer(source));
+  } catch {
+    return { done: 0, total: 0 };
+  }
+  return progress;
+}
+
+/**
  * Build a slug generator that mirrors GitHub-style heading anchors and
  * de-duplicates repeats within a single document (e.g. two "Notes" headings
  * become `notes` and `notes-1`). A fresh slugger must be used per parse so the

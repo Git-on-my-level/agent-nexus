@@ -49,7 +49,9 @@ jobs:
               - 'pnpm-lock.yaml'
             contracts:
               - 'contracts/**'
+              - 'Makefile'
               - 'scripts/contract-*'
+              - 'scripts/check-visual-report-conformance.mjs'
               - 'core/cmd/contract-gen/**'
             core:
               - 'core/**'

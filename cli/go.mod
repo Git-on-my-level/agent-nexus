@@ -14,4 +14,10 @@ replace agent-nexus-contracts-go-client => ../contracts/gen/go
 
 require agent-nexus-visualreport v0.0.0
 
+require (
+	github.com/yuin/goldmark v1.7.8 // indirect
+	golang.org/x/net v0.41.0 // indirect
+	golang.org/x/text v0.26.0 // indirect
+)
+
 replace agent-nexus-visualreport => ../contracts/visualreport

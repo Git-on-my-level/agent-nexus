@@ -1,11 +1,31 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 
 import {
+  countMarkdownTaskProgress,
   extractDocumentOutline,
   renderMarkdown,
 } from "../../src/lib/markdown.js";
 
+const summaryFixtures = JSON.parse(
+  readFileSync(
+    new URL(
+      "../../../contracts/fixtures/visual-reports/summaries.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+);
+
 describe("markdown", () => {
+  for (const fixture of summaryFixtures) {
+    it(`counts GFM tasks for ${fixture.name}`, () => {
+      expect(countMarkdownTaskProgress(fixture.markdown)).toEqual(
+        fixture.progress,
+      );
+    });
+  }
+
   it("returns an empty string for empty or non-string input", () => {
     expect(renderMarkdown("")).toBe("");
     expect(renderMarkdown(null)).toBe("");
@@ -190,6 +210,15 @@ describe("markdown", () => {
     expect(renderMarkdown("**bold**")).toContain("<strong");
     expect(renderMarkdown("*italic*")).toContain("<em");
     expect(renderMarkdown("~~strikethrough~~")).toContain("<del");
+  });
+
+  it("keeps fenced list examples out of task controls", () => {
+    const html = renderMarkdown(
+      "-   Container\n    ```markdown\n    - [x] Example\n    ```\n- [ ] Real task",
+    );
+
+    expect(html.match(/type="checkbox"/g) ?? []).toHaveLength(1);
+    expect(html).toContain("- [x] Example");
   });
 
   it("normalizes outbound links with safe rel and target attributes", () => {

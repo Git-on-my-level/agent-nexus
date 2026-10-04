@@ -52,5 +52,85 @@
     "needs": [
       "Needs operator: approve"
     ]
+  },
+  {
+    "name": "fenced example inside padded list item",
+    "markdown": "-   Container\n    ```markdown\n    - [x] Example\n    Needs David: example\n    ```\n- [ ] Real task",
+    "summary": "-   Container",
+    "progress": {
+      "done": 0,
+      "total": 1
+    },
+    "needs": []
+  },
+  {
+    "name": "fenced example inside nested list container",
+    "markdown": "- Parent\n  -   Nested\n      ```markdown\n      - [x] Example\n      Needs David: example\n      ```\n  - [ ] Real nested task",
+    "summary": "- Parent",
+    "progress": {
+      "done": 0,
+      "total": 1
+    },
+    "needs": []
+  },
+  {
+    "name": "blank line before nested task after padded item",
+    "markdown": "-   Container\n\n    - [ ] Nested task",
+    "summary": "-   Container",
+    "progress": {
+      "done": 0,
+      "total": 1
+    },
+    "needs": []
+  },
+  {
+    "name": "nested lists count each task exactly once",
+    "markdown": "- Parent\n  - [x] Nested done\n    - [ ] Deep open\n- [ ] Sibling",
+    "summary": "- Parent",
+    "progress": {
+      "done": 1,
+      "total": 3
+    },
+    "needs": []
+  },
+  {
+    "name": "tab indented fenced example inside a list",
+    "markdown": "- Parent\n\t```markdown\n\t- [x] Example\n\tNeeds David: example\n\t```\n- [ ] Real task",
+    "summary": "- Parent",
+    "progress": {
+      "done": 0,
+      "total": 1
+    },
+    "needs": []
+  },
+  {
+    "name": "unclosed fence ends with its list container",
+    "markdown": "- Container\n  ```\n  - [x] Example\n- [ ] Outside task",
+    "summary": "- Container",
+    "progress": {
+      "done": 0,
+      "total": 1
+    },
+    "needs": []
+  },
+  {
+    "name": "checked task with continuation text",
+    "markdown": "- [x]\n  continuation",
+    "summary": "continuation",
+    "progress": {
+      "done": 1,
+      "total": 1
+    },
+    "needs": []
+  },
+  {
+    "name": "unchecked task with continuation text",
+    "markdown": "- [ ]\n  continuation",
+    "summary": "continuation",
+    "progress": {
+      "done": 0,
+      "total": 1
+    },
+    "needs": []
   }
 ]
