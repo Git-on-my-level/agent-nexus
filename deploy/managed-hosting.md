@@ -108,8 +108,8 @@ For source-run or launchd deployments, use the same values from
 
 ## Reverse proxy edge limits
 
-Core already enforces request-size limits, workspace quotas, and in-process
-route-class throttles. The reverse proxy should add complementary edge limits
+Core always enforces request-size limits and in-process route-class throttles.
+Capacity quotas default off; deployments may explicitly opt in to generic caps. The reverse proxy should add complementary edge limits
 so abusive traffic is rejected before it reaches the workspace instance.
 
 Example nginx configuration:

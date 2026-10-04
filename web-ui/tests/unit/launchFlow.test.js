@@ -1,37 +1,36 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  buildHostedSignInPath,
-  normalizeHostedLaunchFinishURL,
-  readHostedLaunchParams,
-  sanitizeHostedReturnPath,
-} from "../../src/lib/hosted/launchFlow.js";
+  buildSignInPath,
+  readLaunchParams,
+  sanitizeReturnPath,
+} from "../../src/lib/workspaceLaunchFlow.js";
 
 describe("launchFlow helpers", () => {
   it("sanitizes return paths to app-local absolute paths", () => {
-    expect(sanitizeHostedReturnPath("/topics?filter=open")).toBe(
+    expect(sanitizeReturnPath("/topics?filter=open")).toBe(
       "/topics?filter=open",
     );
-    expect(sanitizeHostedReturnPath("/docs/v1.2/release-notes")).toBe(
+    expect(sanitizeReturnPath("/docs/v1.2/release-notes")).toBe(
       "/docs/v1.2/release-notes",
     );
-    expect(sanitizeHostedReturnPath("/a..b/c")).toBe("/a..b/c");
-    expect(sanitizeHostedReturnPath("topics")).toBe("/");
-    expect(sanitizeHostedReturnPath("//evil.test/path")).toBe("/");
-    expect(sanitizeHostedReturnPath("/topics\nmalformed")).toBe("/");
-    expect(sanitizeHostedReturnPath("/../x")).toBe("/");
-    expect(sanitizeHostedReturnPath("/a/../x")).toBe("/");
-    expect(sanitizeHostedReturnPath("/./x")).toBe("/");
-    expect(sanitizeHostedReturnPath("/%2e%2e/x")).toBe("/");
-    expect(sanitizeHostedReturnPath("/%2E./x")).toBe("/");
-    expect(sanitizeHostedReturnPath("/%252e%252e/x")).toBe("/");
+    expect(sanitizeReturnPath("/a..b/c")).toBe("/a..b/c");
+    expect(sanitizeReturnPath("topics")).toBe("/");
+    expect(sanitizeReturnPath("//evil.test/path")).toBe("/");
+    expect(sanitizeReturnPath("/topics\nmalformed")).toBe("/");
+    expect(sanitizeReturnPath("/../x")).toBe("/");
+    expect(sanitizeReturnPath("/a/../x")).toBe("/");
+    expect(sanitizeReturnPath("/./x")).toBe("/");
+    expect(sanitizeReturnPath("/%2e%2e/x")).toBe("/");
+    expect(sanitizeReturnPath("/%2E./x")).toBe("/");
+    expect(sanitizeReturnPath("/%252e%252e/x")).toBe("/");
   });
 
   it("reads launch continuation params from search params", () => {
     const params = new URLSearchParams(
       "workspace=Acme-Prod&workspace_id=ws_123&return_to=%2Ftopics%3Ftag%3Dhot",
     );
-    expect(readHostedLaunchParams(params)).toEqual({
+    expect(readLaunchParams(params)).toEqual({
       organizationSlug: "",
       workspaceSlug: "acme-prod",
       workspaceId: "ws_123",
@@ -40,40 +39,24 @@ describe("launchFlow helpers", () => {
     });
   });
 
-  it("builds hosted sign-in path with launch continuation params", () => {
+  it("builds sign-in path with launch continuation params", () => {
     expect(
-      buildHostedSignInPath({
+      buildSignInPath({
         organizationSlug: "David Zhang",
         workspaceSlug: "Acme Prod",
         workspaceId: "ws_123",
         returnPath: "/topics",
       }),
     ).toBe(
-      "/hosted/signin?organization=david-zhang&workspace=acme-prod&workspace_id=ws_123&return_path=%2Ftopics",
+      "/?organization=david-zhang&workspace=acme-prod&workspace_id=ws_123&return_path=%2Ftopics",
     );
 
     expect(
-      buildHostedSignInPath({
+      buildSignInPath({
         workspaceSlug: "acme-prod",
         workspaceId: "ws_123",
         returnPath: "/",
       }),
-    ).toBe("/hosted/signin?workspace=acme-prod&workspace_id=ws_123");
-  });
-
-  it("normalizes control-plane launch finish urls for browser navigation", () => {
-    expect(
-      normalizeHostedLaunchFinishURL("/workspaces/ws/launch-finish?lid=1"),
-    ).toBe("/hosted/api/workspaces/ws/launch-finish?lid=1");
-    expect(
-      normalizeHostedLaunchFinishURL(
-        "https://control.example.test/workspaces/ws/launch-finish?lid=1",
-      ),
-    ).toBe("");
-    expect(
-      normalizeHostedLaunchFinishURL(
-        "/hosted/api/workspaces/ws/launch-finish?lid=1",
-      ),
-    ).toBe("/hosted/api/workspaces/ws/launch-finish?lid=1");
+    ).toBe("/?workspace=acme-prod&workspace_id=ws_123");
   });
 });

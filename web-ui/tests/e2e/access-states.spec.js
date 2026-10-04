@@ -680,11 +680,11 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expectCleanLayout(page, "invite revoked");
     });
 
-    test("hosted mode sends people to Organizations", async ({ page }) => {
+    test("external mode sends people to the account", async ({ page }) => {
       await installAccessApi(page, { pending: [] });
       await gotoAccessAsHosted(page);
       await expect(
-        page.getByRole("link", { name: "your Organizations" }),
+        page.getByRole("link", { name: "your account" }),
       ).toBeVisible();
       await expect(
         page.getByRole("button", { name: "Invite a person" }),

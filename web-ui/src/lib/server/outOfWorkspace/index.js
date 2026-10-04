@@ -2,8 +2,7 @@ import { env as privateEnv } from "$env/dynamic/private";
 
 import { normalizeBaseUrl } from "$lib/config.js";
 
-import { createHostedProvider } from "./hosted.js";
-import { createLocalProvider } from "./local.js";
+import { createExtensionProvider } from "$lib/server/extensions/provider.js";
 
 /** @type {import("./contract.js").OutOfWorkspaceProvider | null} */
 let cachedProvider = null;
@@ -12,14 +11,7 @@ let cachedEnvRef = null;
 let cachedControlBaseUrl = "";
 
 export function createOutOfWorkspaceProvider(env = privateEnv) {
-  const controlPlaneBaseUrl = normalizeBaseUrl(env?.ANX_CONTROL_BASE_URL ?? "");
-  if (!controlPlaneBaseUrl) {
-    return createLocalProvider();
-  }
-  return createHostedProvider({
-    env,
-    controlPlaneBaseUrl,
-  });
+  return createExtensionProvider(env);
 }
 
 export function getOutOfWorkspaceProvider(env = privateEnv) {

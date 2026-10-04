@@ -192,7 +192,7 @@ jobs:
       - name: Run web-ui check
         run: make -C web-ui check
 
-      - name: Build web-ui
+      - name: Build standalone UI and enforce commercial source/output boundary
         run: pnpm -C web-ui run build
 
   # Browser-based visual QA against committed baselines (after static checks).

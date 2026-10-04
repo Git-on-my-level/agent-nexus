@@ -38,7 +38,6 @@ It gives operators fast, glanceable visibility into the shared workspace maintai
 - Real-world side effects outside the Agent Nexus workspace.
 
 ## Canonical References
-- **Hosted billing / plan catalog** (customer-facing plan cards, org plan badge labels, Enterprise sales contact): `src/lib/hosted/planCatalog.js`. **Numeric quotas** come from the control plane usage APIs / `planForTier` (see `controlplane/PLANS.md`); do not hardcode limit numbers in hosted route code—use API fields (e.g. usage summary) for meters.
 - Workspace auth (modes, cookies, errors, limitations): `docs/auth.md` (includes refresh-token **replay window** limitation — do not paper over with retries)
 - Out-of-workspace provider contract and invariants: `docs/out-of-workspace-provider.md`
 - Product and UX spec: `docs/anx-ui-spec.md`

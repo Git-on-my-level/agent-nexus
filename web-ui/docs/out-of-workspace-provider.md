@@ -6,14 +6,13 @@
 
 The web-ui previously spread hosted-mode checks across multiple helpers and env flags. That produced inconsistent behavior between resolver paths, login flows, callback routes, and hosted API proxying. This provider collapses all of that behind one mode switch.
 
-## Mode selection
+## Implementation selection
 
-One signal decides the implementation:
-
-- `ANX_CONTROL_BASE_URL` unset -> `local` provider
-- `ANX_CONTROL_BASE_URL` set -> `hosted` provider
-
-Implementation entrypoint: `src/lib/server/outOfWorkspace/index.js`.
+The standalone build selects `local`. The optional factory in
+`src/lib/server/extensions/provider.js` is the single extension point for an
+external workspace provider. Composition replaces the factory explicitly;
+setting an external service URL cannot import an implementation into OSS.
+See [UI extensions](ui-extensions.md).
 
 ## Contract
 
@@ -35,12 +34,9 @@ Key methods:
   - Launch-session begin always returns `workspace_native_login`
   - Exchange always returns structured `control_plane_unavailable`
 
-- `hosted.js`
-  - Uses `cpClient.js` for control-plane HTTP calls
-  - Maps CP rows to resolver/catalog workspace entries
-  - Handles launch-session redirects / signin fallback
-  - Owns CP session-exchange error canonicalization
-  - Enforces hosted API allowlist (`hostedControlPlaneAllowlist.js`)
+External implementations, including their account routes and components, live
+outside this repository. They implement the same provider contract without
+introducing service-specific dependencies into core.
 
 ## Request plumbing
 

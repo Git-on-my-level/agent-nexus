@@ -97,7 +97,7 @@ describe("workspaceBootstrap", () => {
         },
       }),
     ).toBe(
-      "/hosted/signin?organization=acme&workspace=ops&workspace_id=ws-1&return_path=%2Fsecrets%3Ftab%3Dkeys",
+      "/?organization=acme&workspace=ops&workspace_id=ws-1&return_path=%2Fsecrets%3Ftab%3Dkeys",
     );
 
     expect(

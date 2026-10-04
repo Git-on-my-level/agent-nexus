@@ -218,11 +218,9 @@ describe("access page", () => {
       screen.queryByRole("button", { name: "Invite a person" }),
     ).toBeNull();
     const organizationsLink = screen.getByRole("link", {
-      name: /your Organizations/i,
+      name: /your account/i,
     });
-    expect(organizationsLink.getAttribute("href")).toBe(
-      "/hosted/organizations",
-    );
+    expect(organizationsLink.getAttribute("href")).toBe("/");
   });
 
   it("invites a person with a human invite", async () => {

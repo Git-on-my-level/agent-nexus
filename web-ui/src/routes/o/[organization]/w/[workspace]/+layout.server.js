@@ -7,7 +7,7 @@ import {
   verifyCoreSchemaVersion,
 } from "$lib/anxCoreClient";
 import { WORKSPACE_HEADER_CONSTANTS } from "$lib/compat/workspaceCompat";
-import { sanitizeHostedReturnPath } from "$lib/hosted/launchFlow.js";
+import { sanitizeReturnPath } from "$lib/workspaceLaunchFlow.js";
 import { loadWorkspaceAuthenticatedAgent } from "$lib/server/authSession.js";
 import { logServerEvent } from "$lib/server/devLog";
 import {
@@ -92,14 +92,14 @@ function workspaceRelativeReturnPath(event, organizationSlug, workspaceSlug) {
     workspaceSlug,
   );
   if (appPath === "/login") {
-    return sanitizeHostedReturnPath(
+    return sanitizeReturnPath(
       event.url.searchParams.get("return_to") ??
         event.url.searchParams.get("return_path") ??
         "/",
       "/",
     );
   }
-  return sanitizeHostedReturnPath(`${appPath}${event.url.search}`, "/");
+  return sanitizeReturnPath(`${appPath}${event.url.search}`, "/");
 }
 
 export async function load(event) {

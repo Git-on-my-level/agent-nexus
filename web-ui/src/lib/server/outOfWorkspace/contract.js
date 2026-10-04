@@ -87,6 +87,11 @@
  *   describeShellCapabilities(): {
  *     mode: OutOfWorkspaceMode,
  *     accountPath: string | null,
+ *     accountDescription?: string,
+ *     chooserPath?: string,
+ *     recoveryPath?: string,
+ *     peoplePath?: string,
+ *     peopleLabel?: string,
  *     publicOrigin: string | null,
  *     allowsEmptyStaticCatalog: boolean,
  *   },

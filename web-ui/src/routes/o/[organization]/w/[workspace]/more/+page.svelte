@@ -12,7 +12,10 @@
     selectedActorId,
   } from "$lib/actorSession";
   import { authenticatedAgent, logoutAuthSession } from "$lib/authSession";
-  import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
+  import {
+    hostedSession,
+    loadHostedSession,
+  } from "$lib/extensions/accountSession.js";
   import { navIconPath } from "$lib/icons.js";
   import CopyButton from "$lib/components/CopyButton.svelte";
   import { settingsNavGroups } from "$lib/navigation";
@@ -25,8 +28,7 @@
   let hasMultipleWorkspaces = $derived(workspaces.length > 1);
   let hostedMode = $derived($page.data?.shellCapabilities?.mode === "hosted");
   let hostedAccountPath = $derived(
-    String($page.data?.shellCapabilities?.accountPath ?? "").trim() ||
-      "/hosted/onboarding",
+    String($page.data?.shellCapabilities?.accountPath ?? "").trim() || "/",
   );
 
   let workspaceHref = $derived(
@@ -186,7 +188,8 @@
           </svg>
           <span class="flex-1">Account</span>
           <span class="hidden text-micro text-fg-muted sm:inline"
-            >Organizations, billing, all workspaces</span
+            >{$page.data?.shellCapabilities?.accountDescription ||
+              "Account and workspaces"}</span
           >
           <svg
             class="h-4 w-4 shrink-0 text-fg-muted"

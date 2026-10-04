@@ -37,7 +37,13 @@ export default defineConfig(() => {
     plugins: [sveltekit()],
     server: {
       fs: {
-        allow: [searchForWorkspaceRoot(process.cwd()), ...linkedPackageRoots()],
+        allow: [
+          searchForWorkspaceRoot(process.cwd()),
+          ...linkedPackageRoots(),
+          ...(process.env.ANX_UI_SHARED_ROOT
+            ? [path.resolve(process.env.ANX_UI_SHARED_ROOT)]
+            : []),
+        ],
       },
     },
   };

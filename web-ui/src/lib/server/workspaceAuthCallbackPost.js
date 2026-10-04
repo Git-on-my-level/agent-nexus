@@ -5,8 +5,8 @@ import {
   CALLBACK_CODES_UNKNOWN_COPY,
   CALLBACK_CODES_WITH_TABLE_COPY,
   CALLBACK_COPY,
-} from "$lib/hosted/callbackErrorCopy.js";
-import { sanitizeHostedReturnPath } from "$lib/hosted/launchFlow.js";
+} from "$lib/workspaceCallbackErrorCopy.js";
+import { sanitizeReturnPath } from "$lib/workspaceLaunchFlow.js";
 import {
   clearRetryableWorkspaceAuthFailureCount,
   writeWorkspaceAccessToken,
@@ -164,13 +164,14 @@ function isRecoverableExchangeFailure(code) {
   );
 }
 
-function callbackRecoveryURL(code, workspaceID) {
+function callbackRecoveryURL(code, workspaceID, provider) {
   const params = new URLSearchParams();
   params.set("launch_error", code || "session_exchange_failed");
   if (workspaceID) {
     params.set("workspace_id", workspaceID);
   }
-  return `/hosted/dashboard?${params.toString()}`;
+  const path = provider.describeShellCapabilities?.().recoveryPath || "/";
+  return `${path}?${params.toString()}`;
 }
 
 /**
@@ -305,7 +306,7 @@ export async function runWorkspaceAuthCallbackPost(
 
   const exchangeToken = String(form.get("exchange_token") ?? "").trim();
   const state = String(form.get("state") ?? "").trim();
-  const returnPath = sanitizeHostedReturnPath(form.get("return_path") ?? "/");
+  const returnPath = sanitizeReturnPath(form.get("return_path") ?? "/");
   // A deployment adapter owns session identity. Never import an older launch's
   // credential into the current login scope; activation establishes it afresh.
   if (event.locals?.sessionAdapter) {
@@ -379,7 +380,10 @@ export async function runWorkspaceAuthCallbackPost(
       !wantsJson(event.request) &&
       isRecoverableExchangeFailure(failureCode)
     ) {
-      throw redirect(303, callbackRecoveryURL(failureCode, workspaceID));
+      throw redirect(
+        303,
+        callbackRecoveryURL(failureCode, workspaceID, provider),
+      );
     }
     return respondWithCallbackError(
       event,

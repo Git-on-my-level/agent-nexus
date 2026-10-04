@@ -8,7 +8,7 @@
     CALLBACK_ERROR_SURFACE_CODES,
     callbackBodyForCode,
     callbackHeadingForCode,
-  } from "$lib/hosted/callbackErrorCopy.js";
+  } from "$lib/workspaceCallbackErrorCopy.js";
 
   let { data } = $props();
 
