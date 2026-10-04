@@ -29,6 +29,35 @@ The bridge uses host-signed `anx host bridge check-in --host-id <id> --instance-
 
 Use `anx host status`, `anx host list`, `anx host exclude <name>` and `anx host include <name>` to inspect or edit this host. Revocation is a human auth-admin action in the Access page.
 
+## User-global workspace selection
+
+Run `anx config workspaces` when unsure. It lists enrolled workspaces and aliases, the default, and which directory rule applies to cwd, even when selection is ambiguous. Enrollment discovers an alias from the workspace slug (falling back to local workspace metadata), preserves the default, and prints the command to select the new workspace.
+
+```bash
+anx config workspaces
+anx config use personal
+anx config map "~/workspace/omi/**" omi
+anx config show
+anx --workspace personal orient
+anx config unmap "~/workspace/omi/**"
+```
+
+Preferences live in `~/.config/anx/workspaces.json`, alongside the JSON host records, or under `ANX_CONFIG_DIR` / `--config-dir`. No repository metadata is read or written. `config use` and `config map` accept aliases or absolute HTTP(S) base URLs; saved choices use URLs so alias changes cannot reroute them. Discovered aliases are persisted by enrollment and preference writes; reads remain read-only. Collisions receive stable numeric suffixes without rebinding existing aliases.
+
+Selection order is `--base-url` or `--workspace` > `ANX_BASE_URL` > directory rule > configured default > single enrolled host (`bridge:auto-single`). Only zero enrolled hosts retain the localhost development default. Multiple enrolled workspaces with no selection fail before networking and name the aliases and exact `anx config use` repairs. `anx doctor` reports the selected workspace and source, and fails on ambiguity. Use `config workspaces` and user-global preferences for agent orientation; never hardcode `--base-url` in agent prompts.
+
+Directory globs must be absolute or begin with `~/`; quote them against shell expansion. `**` matches zero or more complete components; `*`, `?`, and character classes match within a component. Matching follows the cwd volume's case sensitivity for every component, including literals after wildcards. Rules rank by longest literal prefix, then most literal characters, with lexical order breaking ties. Existing symlink prefixes are resolved when matching against cwd, so logical home/work paths also match physical directories. A rule wins over the configured default. `sources.base_url` names the winning rule as `config:directory-rule:<glob>`, the default as `config:default`, or an explicit alias as `flag:--workspace`. Use either URL flag or alias flag, not both.
+
+An example file:
+
+```json
+{
+  "default": "https://anx.example.com/ws/personal/main",
+  "aliases": {"personal": "https://anx.example.com/ws/personal/main", "omi": "https://anx.example.com/ws/omi/main"},
+  "directory_rules": {"/Users/me/workspace/omi/**": "https://anx.example.com/ws/omi/main"}
+}
+```
+
 ## Generic sessions and nonlocking task participation
 
 An already authenticated agent can use these commands without `agentctl`, a
@@ -100,8 +129,8 @@ assigns and moves native work; it is not a registration shortcut. Project
 association should use clear configured evidence and ask when ambiguous. A
 successful run/session does not satisfy the task's acceptance criteria.
 
-The bundled participant skill advertises `anx.participant.v2`; explicitly
-designated PMs can load the additional `anx.pm.v1` skill. Use `anx skills
+The bundled participant skill advertises `anx.participant.v4`; explicitly
+designated PMs can load the additional `anx.pm.v3` skill. Use `anx skills
 configure|status|verify --path <skill-directory> --role participant|pm` for
 versioned local ownership, clean refresh and read-only verification. Existing
 unmanaged or edited content is preserved. File verification never proves an
@@ -288,7 +317,7 @@ Maintainer checklist:
 
 ### Host identity failures
 
-Run `anx doctor` for enrollment, host key permissions, identity resolution, agentctl, and CLI/core version checks. Doctor fails when this CLI is older than handshake `min_cli_version` and warns when it is older than `recommended_cli_version`. The repair is `anx update --version <recommended>`. Use `--as <name>` when no harness or agentctl context can be detected. If the host was revoked, ask a human auth-admin to enroll a replacement. A bare invocation with no `--base-url` and no `ANX_BASE_URL` uses the single enrolled host's `host.json` base URL.
+Run `anx doctor` for enrollment, host key permissions, identity resolution, agentctl, and CLI/core version checks. Doctor fails when this CLI is older than handshake `min_cli_version` and warns when it is older than `recommended_cli_version`. The repair is `anx update --version <recommended>`. Use `--as <name>` when no harness or agentctl context can be detected. If the host was revoked, ask a human auth-admin to enroll a replacement. Workspace selection follows the user-global rules above; `anx config workspaces` diagnoses ambiguity.
 
 ### Version mismatch
 
@@ -348,7 +377,7 @@ curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/stream/inbox
 
 `anx work` reads the central work projection of existing cards. Projects are
 existing topics (`anx topics list`); boards and native card workflow commands keep
-their existing meaning. Select the workspace with `--base-url` and the derived
+their existing meaning. Select the workspace with user-global config or `--workspace` and the derived
 agent with `--as`; reports use the enrolled host identity. No local tracker store or
 remote daemon is required.
 

@@ -366,19 +366,32 @@ func (a *App) runImportPlan(args []string) (*commandResult, error) {
 	return &commandResult{Text: text, Data: data}, nil
 }
 
-func (a *App) runImportApply(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
+type importApplyFlags struct {
+	plan, out   trackedString
+	execute     trackedBool
+	positionals []string
+}
+
+// Workspace classification and execution must use the same parser, including
+// string values that look like flags and Go's last-value-wins bool semantics.
+func parseImportApplyFlags(args []string) (importApplyFlags, error) {
+	var flags importApplyFlags
 	fs := newSilentFlagSet("import apply")
-	var planFlag trackedString
-	var outFlag trackedString
-	var executeFlag trackedBool
-	fs.Var(&planFlag, "plan", "Plan produced by import plan")
-	fs.Var(&outFlag, "out", "Output directory")
-	fs.Var(&executeFlag, "execute", "Execute creates instead of writing previews only")
-	if err := fs.Parse(args); err != nil {
+	fs.Var(&flags.plan, "plan", "Plan produced by import plan")
+	fs.Var(&flags.out, "out", "Output directory")
+	fs.Var(&flags.execute, "execute", "Execute creates instead of writing previews only")
+	err := fs.Parse(args)
+	flags.positionals = append([]string(nil), fs.Args()...)
+	return flags, err
+}
+
+func (a *App) runImportApply(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
+	flags, err := parseImportApplyFlags(args)
+	if err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
-	positionals := append([]string(nil), fs.Args()...)
-	planPath := strings.TrimSpace(planFlag.value)
+	positionals := flags.positionals
+	planPath := strings.TrimSpace(flags.plan.value)
 	if planPath == "" && len(positionals) > 0 {
 		planPath = strings.TrimSpace(positionals[0])
 		positionals = positionals[1:]
@@ -389,11 +402,11 @@ func (a *App) runImportApply(ctx context.Context, args []string, cfg config.Reso
 	if planPath == "" {
 		return nil, errnorm.Usage("invalid_request", "--plan is required")
 	}
-	outDir := strings.TrimSpace(outFlag.value)
+	outDir := strings.TrimSpace(flags.out.value)
 	if outDir == "" {
 		outDir = filepath.Join(filepath.Dir(planPath), "apply")
 	}
-	execute := executeFlag.set && executeFlag.value
+	execute := flags.execute.set && flags.execute.value
 	createFn := importer.CreateFunc(nil)
 	if execute {
 		createFn = func(kind string, payload map[string]any) (map[string]any, error) {

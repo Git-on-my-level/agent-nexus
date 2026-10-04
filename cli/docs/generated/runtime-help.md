@@ -15,7 +15,12 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `draft` (manual): Local draft staging, listing, commit, and discard workflow.
 - `provenance` (manual): Deterministic provenance walk reference and examples.
 - `auth whoami` (manual): Show the enrolled host, derived agent and resolution source.
+- `config workspaces` (manual): List workspace aliases and the rule applying to cwd.
+- `config use` (manual): Set the user-global default workspace.
+- `config map` (manual): Map a directory glob to a workspace.
+- `config unmap` (manual): Remove a directory rule.
 - `config show` (manual): Print effective CLI settings, per-field sources, precedence, and env var hints (tokens redacted).
+- `doctor` (manual): Report workspace resolution and local/network preconditions.
 - `bridge` (manual): One bridge per enrolled host for derived-agent wake routing.
 - `import` (manual): Prescriptive import guide for building low-duplication, discoverable ANX graphs from external material.
 - `work` (group): Query commitments, evidence, freshness and refresh state
@@ -242,7 +247,7 @@ Onboarding: daily loop
 Every ANX reader is a CEO by default: group execution detail into a small set of outcome cards, with status in a summary, checklist or visual report.
 
 1. Enroll this machine once per workspace with anx host enroll; a human approves it.
-2. Let agentctl supply the adapter context, or select a persona with ANX_AS / --as.
+2. Run anx config workspaces when unsure; set a default with anx config use <alias>. Do not hardcode --base-url in agent prompts. Let agentctl supply adapter context, or select ANX_AS / --as.
 3. Run anx orient. Confirm your handle, host, assigned work and next actions.
 4. Run anx work start card:<slug>, then anx work note "Progress" as you go.
 5. When blocked, use anx ask "Question" --recommend "Answer" and anx await <ask-id>.
@@ -347,6 +352,7 @@ Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence
 Setup and identity
 
 - Enroll a host once per workspace and machine with `anx host enroll`. A human approves the enrollment. Other agents on that host use the same host enrollment.
+- Run `anx config workspaces` when unsure which workspace applies. Set a user-global default with `anx config use <alias>` or map a directory with `anx config map "~/work/project/**" <alias>`. Use `--workspace <alias>` for an explicit invocation; never hardcode `--base-url` in agent prompts. Preferences live outside git repositories.
 - Set `ANX_AS=<name>` or pass `--as <name>` to select an explicit stable principal. Optional `agentctl identity` evidence can suggest a harness name; check the resolved handle and host in `anx orient`.
 - `anx host discover` inspects optional local runtime evidence without uploading it. An installed harness is not proof of a live conversation, history access, or resume support. Generic registration does not require agentctl.
 
@@ -395,7 +401,8 @@ Host enrollment and derived-agent identity resolution.
 Host identity
 
 Enroll once per workspace with anx host enroll. The owner-only host key lives below ~/.config/anx/hosts/<workspace-key>/.
-Enrollment stores that workspace core in host.json. When no --base-url or ANX_BASE_URL is set and exactly one host is enrolled, commands use that base URL (source bridge:auto-single).
+Enrollment stores that workspace core in host.json, persists a workspace alias and prints anx config use <alias> to make it default. Enrollment never changes the configured default.
+Run anx config workspaces to inspect aliases, enrolled workspaces and the directory rule for cwd. Selection follows --base-url or --workspace, ANX_BASE_URL, directory rule, configured default, then a single enrolled host (source bridge:auto-single). With several enrolled workspaces and no selection, commands fail with repair instructions.
 Use --as <name> or ANX_AS to select a derived agent; agentctl run context and verified harness detection are automatic. anx auth whoami reports the selected host, agent and resolution source.
 
 Old ~/.config/anx/profiles/*.json agent profiles are considered only for adoption during host enrollment. Use anx host enroll --plan to inspect them.
@@ -412,7 +419,9 @@ ANX_AS selects a derived agent. --as wins over ANX_AS. When neither is set, anx 
 ANX_BASE_URL selects the core workspace. ANX_CONFIG_DIR or --config-dir selects the absolute host config directory when HOME is unavailable, including agentctl command callbacks. ANX_TIMEOUT, ANX_JSON and ANX_NO_COLOR control request and output behavior.
 ANX_ACCESS_TOKEN supplies an explicit bearer for controlled human or test contexts. It does not use the host assertion grant.
 
-Run anx config show to inspect effective values without printing secrets.
+Run anx config workspaces when unsure which workspace applies. Use anx config use <alias|url> to set a user-global default, or anx config map "~/work/project/**" <alias|url> for a directory rule. anx config unmap "~/work/project/**" removes a rule. Quote globs so the shell does not expand them.
+Selection: --base-url or --workspace > ANX_BASE_URL > most-specific directory rule > configured default > single enrolled host > localhost only with zero enrolled hosts. --workspace is the alias equivalent of --base-url; pass only one. Multiple enrolled workspaces with no selection fail before a network request and show exact repair commands. Do not hardcode --base-url in agent prompts.
+Run anx config show to inspect effective values and sources without printing secrets. Preferences live in ~/.config/anx/workspaces.json (or the selected ANX_CONFIG_DIR), never in git repositories.
 ```
 
 ## `config`
@@ -420,7 +429,7 @@ Run anx config show to inspect effective values without printing secrets.
 CLI config surface: effective settings and their sources.
 
 ```text
-Config: anx config show prints the workspace URL, selected agent name, and sources (secrets redacted).
+Config: anx config workspaces lists aliases and the cwd rule; anx config use <alias|url> sets a user-global default. Use anx config map <path-glob> <alias|url> and anx config unmap <path-glob> for directory rules. anx config show prints the resolved workspace and sources (secrets redacted).
 ```
 
 ## `agent-bridge`
@@ -584,7 +593,92 @@ Next steps:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth whoami ... ; anx --json auth whoami ... ; anx auth whoami ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `config workspaces`
+
+List workspace aliases and the rule applying to cwd.
+
+```text
+Local Help: config workspaces
+
+List enrolled workspaces, aliases, the configured default and the rule applying to cwd. Works even when selection is ambiguous.
+
+Usage:
+  anx config workspaces
+
+Examples:
+  anx config workspaces
+  anx config workspaces --json
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx config workspaces ... ; anx --json config workspaces ... ; anx config workspaces ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `config use`
+
+Set the user-global default workspace.
+
+```text
+Local Help: config use
+
+Set the user-global default workspace by alias or absolute http(s) base URL. Directory rules still take precedence.
+
+Usage:
+  anx config use <alias|url>
+
+Examples:
+  anx config use personal
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx config use ... ; anx --json config use ... ; anx config use ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `config map`
+
+Map a directory glob to a workspace.
+
+```text
+Local Help: config map
+
+Map an absolute or ~/ directory glob to a workspace. Quote globs. ** matches zero or more path components; longest literal prefix wins, then most literal characters, then lexical order.
+
+Usage:
+  anx config map <path-glob> <alias|url>
+
+Examples:
+  anx config map "~/work/omi/**" omi
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx config map ... ; anx --json config map ... ; anx config map ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `config unmap`
+
+Remove a directory rule.
+
+```text
+Local Help: config unmap
+
+Remove a directory rule by its path glob (idempotent).
+
+Usage:
+  anx config unmap <path-glob>
+
+Examples:
+  anx config unmap "~/work/omi/**"
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx config unmap ... ; anx --json config unmap ... ; anx config unmap ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `config show`
@@ -606,7 +700,23 @@ Examples:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx config show ... ; anx --json config show ... ; anx config show ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `doctor`
+
+Report workspace resolution and local/network preconditions.
+
+```text
+Doctor: report the resolved workspace and source, enrollment, host key permissions, identity, agentctl and CLI/core version checks. Ambiguous workspace selection fails before networking.
+
+Usage:
+  anx doctor
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx doctor ... ; anx --json doctor ... ; anx doctor ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `bridge`
@@ -771,7 +881,7 @@ Agent-facing topic surface:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics ... ; anx --json topics ... ; anx topics ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -819,7 +929,7 @@ Read paths:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards ... ; anx --json boards ... ; anx boards ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -880,7 +990,7 @@ Local inspection helpers:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs ... ; anx --json docs ... ; anx docs ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -924,7 +1034,7 @@ Agent-facing Card workflow:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards ... ; anx --json cards ... ; anx cards ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -977,7 +1087,7 @@ Read-only backing-thread diagnostics and direct thread messages:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug threads ... ; anx --json debug threads ... ; anx debug threads ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -1010,7 +1120,7 @@ Local inspection helpers:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug events ... ; anx --json debug events ... ; anx debug events ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -1031,7 +1141,7 @@ Commands:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug inbox ... ; anx --json debug inbox ... ; anx debug inbox ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -1074,7 +1184,7 @@ Lower-level helpers:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts ... ; anx --json artifacts ... ; anx artifacts ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -1093,7 +1203,7 @@ Commands:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug actors ... ; anx --json debug actors ... ; anx debug actors ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -1111,7 +1221,7 @@ Commands:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug ref-edges ... ; anx --json debug ref-edges ... ; anx debug ref-edges ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -1179,7 +1289,7 @@ Generated Help: runs list
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx runs list ... ; anx --json runs list ... ; anx runs list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `runs get`
@@ -1209,7 +1319,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx runs get ... ; anx --json runs get ... ; anx runs get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `host list`
@@ -1236,7 +1346,7 @@ Generated Help: host list
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx host list ... ; anx --json host list ... ; anx host list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `auth invites list`
@@ -1262,7 +1372,7 @@ Generated Help: auth invites list
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth invites list ... ; anx --json auth invites list ... ; anx auth invites list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `auth invites create`
@@ -1294,7 +1404,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth invites create ... ; anx --json auth invites create ... ; anx auth invites create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `auth invites revoke`
@@ -1323,7 +1433,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth invites revoke ... ; anx --json auth invites revoke ... ; anx auth invites revoke ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `auth bootstrap status`
@@ -1348,7 +1458,7 @@ Generated Help: auth bootstrap status
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth bootstrap status ... ; anx --json auth bootstrap status ... ; anx auth bootstrap status ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `auth principals list`
@@ -1374,7 +1484,7 @@ Generated Help: auth principals list
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth principals list ... ; anx --json auth principals list ... ; anx auth principals list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `auth principals revoke`
@@ -1403,7 +1513,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth principals revoke ... ; anx --json auth principals revoke ... ; anx auth principals revoke ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `auth audit list`
@@ -1429,7 +1539,7 @@ Generated Help: auth audit list
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth audit list ... ; anx --json auth audit list ... ; anx auth audit list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `actors list`
@@ -1455,7 +1565,7 @@ Generated Help: actors list
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug actors list ... ; anx --json debug actors list ... ; anx debug actors list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `actors create`
@@ -1481,7 +1591,7 @@ Generated Help: actors create
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug actors create ... ; anx --json debug actors create ... ; anx debug actors create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics list`
@@ -1507,7 +1617,7 @@ Generated Help: topics list
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics list ... ; anx --json topics list ... ; anx topics list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics get`
@@ -1536,7 +1646,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics get ... ; anx --json topics get ... ; anx topics get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics timeline`
@@ -1565,7 +1675,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics timeline ... ; anx --json topics timeline ... ; anx topics timeline ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics workspace`
@@ -1594,7 +1704,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics workspace ... ; anx --json topics workspace ... ; anx topics workspace ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics archive`
@@ -1628,7 +1738,7 @@ CLI input:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics archive ... ; anx --json topics archive ... ; anx topics archive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics unarchive`
@@ -1662,7 +1772,7 @@ CLI input:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics unarchive ... ; anx --json topics unarchive ... ; anx topics unarchive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics restore`
@@ -1696,7 +1806,7 @@ CLI input:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics restore ... ; anx --json topics restore ... ; anx topics restore ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards list`
@@ -1722,7 +1832,7 @@ Generated Help: boards list
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards list ... ; anx --json boards list ... ; anx boards list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards get`
@@ -1751,7 +1861,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards get ... ; anx --json boards get ... ; anx boards get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards patch`
@@ -1790,7 +1900,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards patch ... ; anx --json boards patch ... ; anx boards patch ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards archive`
@@ -1821,7 +1931,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards archive ... ; anx --json boards archive ... ; anx boards archive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards unarchive`
@@ -1852,7 +1962,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards unarchive ... ; anx --json boards unarchive ... ; anx boards unarchive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards trash`
@@ -1884,7 +1994,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards trash ... ; anx --json boards trash ... ; anx boards trash ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards restore`
@@ -1915,7 +2025,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards restore ... ; anx --json boards restore ... ; anx boards restore ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards purge`
@@ -1946,7 +2056,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards purge ... ; anx --json boards purge ... ; anx boards purge ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards cards`
@@ -1975,7 +2085,7 @@ Canonical card workflow:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards cards ... ; anx --json boards cards ... ; anx boards cards ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -2019,7 +2129,7 @@ Agent tip: run `anx boards get <board-ref-or-handle> --json` (or `boards workspa
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards cards create-batch ... ; anx --json boards cards create-batch ... ; anx boards cards create-batch ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards cards get`
@@ -2049,7 +2159,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards cards get ... ; anx --json boards cards get ... ; anx boards cards get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs list`
@@ -2077,7 +2187,7 @@ Generated Help: docs list
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs list ... ; anx --json docs list ... ; anx docs list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs history`
@@ -2108,7 +2218,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs history ... ; anx --json docs history ... ; anx docs history ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs revision`
@@ -2124,7 +2234,7 @@ Commands:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs revision ... ; anx --json docs revision ... ; anx docs revision ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -2159,7 +2269,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs archive ... ; anx --json docs archive ... ; anx docs archive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs unarchive`
@@ -2192,7 +2302,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs unarchive ... ; anx --json docs unarchive ... ; anx docs unarchive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs restore`
@@ -2226,7 +2336,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs restore ... ; anx --json docs restore ... ; anx docs restore ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs purge`
@@ -2259,7 +2369,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs purge ... ; anx --json docs purge ... ; anx docs purge ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs revision get`
@@ -2289,7 +2399,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs revision get ... ; anx --json docs revision get ... ; anx docs revision get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards get`
@@ -2318,7 +2428,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards get ... ; anx --json cards get ... ; anx cards get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards history`
@@ -2347,7 +2457,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards history ... ; anx --json cards history ... ; anx cards history ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards archive`
@@ -2379,7 +2489,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards archive ... ; anx --json cards archive ... ; anx cards archive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards purge`
@@ -2410,7 +2520,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards purge ... ; anx --json cards purge ... ; anx cards purge ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards restore`
@@ -2442,7 +2552,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards restore ... ; anx --json cards restore ... ; anx cards restore ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards timeline`
@@ -2471,7 +2581,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards timeline ... ; anx --json cards timeline ... ; anx cards timeline ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `threads list`
@@ -2497,7 +2607,7 @@ Generated Help: threads list
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug threads list ... ; anx --json debug threads list ... ; anx debug threads list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `threads get`
@@ -2526,7 +2636,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug threads get ... ; anx --json debug threads get ... ; anx debug threads get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `threads timeline`
@@ -2563,7 +2673,7 @@ Note: by default, archived and trashed events are excluded from the timeline out
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug threads timeline ... ; anx --json debug threads timeline ... ; anx debug threads timeline ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `threads context`
@@ -2592,7 +2702,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug threads context ... ; anx --json debug threads context ... ; anx debug threads context ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events get`
@@ -2621,7 +2731,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug events get ... ; anx --json debug events get ... ; anx debug events get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events create`
@@ -2684,7 +2794,7 @@ Local CLI notes:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug events create ... ; anx --json debug events create ... ; anx debug events create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events stream`
@@ -2710,7 +2820,7 @@ Generated Help: events stream
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug events stream ... ; anx --json debug events stream ... ; anx debug events stream ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events tail`
@@ -2736,7 +2846,7 @@ Generated Help: events tail
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug events tail ... ; anx --json debug events tail ... ; anx debug events tail ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events archive`
@@ -2767,7 +2877,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug events archive ... ; anx --json debug events archive ... ; anx debug events archive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events unarchive`
@@ -2798,7 +2908,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug events unarchive ... ; anx --json debug events unarchive ... ; anx debug events unarchive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events trash`
@@ -2830,7 +2940,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug events trash ... ; anx --json debug events trash ... ; anx debug events trash ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events restore`
@@ -2861,7 +2971,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug events restore ... ; anx --json debug events restore ... ; anx debug events restore ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `inbox list`
@@ -2895,7 +3005,7 @@ Inbox kinds:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug inbox list ... ; anx --json debug inbox list ... ; anx debug inbox list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `inbox get`
@@ -2924,7 +3034,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug inbox get ... ; anx --json debug inbox get ... ; anx debug inbox get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `inbox respond`
@@ -2974,7 +3084,7 @@ CLI flags (`inbox respond`):
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug inbox respond ... ; anx --json debug inbox respond ... ; anx debug inbox respond ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `inbox stream`
@@ -3000,7 +3110,7 @@ Generated Help: inbox stream
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug inbox stream ... ; anx --json debug inbox stream ... ; anx debug inbox stream ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `inbox tail`
@@ -3026,7 +3136,7 @@ Generated Help: inbox tail
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug inbox tail ... ; anx --json debug inbox tail ... ; anx debug inbox tail ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts list`
@@ -3052,7 +3162,7 @@ Generated Help: artifacts list
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts list ... ; anx --json artifacts list ... ; anx artifacts list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts content`
@@ -3081,7 +3191,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts content ... ; anx --json artifacts content ... ; anx artifacts content ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts download`
@@ -3110,7 +3220,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts download ... ; anx --json artifacts download ... ; anx artifacts download ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts attachments`
@@ -3126,7 +3236,7 @@ Commands:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts attachments ... ; anx --json artifacts attachments ... ; anx artifacts attachments ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -3159,7 +3269,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts archive ... ; anx --json artifacts archive ... ; anx artifacts archive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts unarchive`
@@ -3190,7 +3300,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts unarchive ... ; anx --json artifacts unarchive ... ; anx artifacts unarchive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts trash`
@@ -3222,7 +3332,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts trash ... ; anx --json artifacts trash ... ; anx artifacts trash ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts restore`
@@ -3253,7 +3363,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts restore ... ; anx --json artifacts restore ... ; anx artifacts restore ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts purge`
@@ -3284,7 +3394,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts purge ... ; anx --json artifacts purge ... ; anx artifacts purge ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `ref-edges list`
@@ -3309,7 +3419,7 @@ Generated Help: ref-edges list
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug ref-edges list ... ; anx --json debug ref-edges list ... ; anx debug ref-edges list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `derived rebuild`
@@ -3334,7 +3444,7 @@ Generated Help: derived rebuild
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug derived rebuild ... ; anx --json debug derived rebuild ... ; anx debug derived rebuild ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `meta commands`
@@ -3360,7 +3470,7 @@ Generated Help: meta commands
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug meta commands ... ; anx --json debug meta commands ... ; anx debug meta commands ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `meta command`
@@ -3389,7 +3499,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug meta command ... ; anx --json debug meta command ... ; anx debug meta command ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `meta concepts`
@@ -3415,7 +3525,7 @@ Generated Help: meta concepts
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug meta concepts ... ; anx --json debug meta concepts ... ; anx debug meta concepts ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `meta concept`
@@ -3444,7 +3554,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug meta concept ... ; anx --json debug meta concept ... ; anx debug meta concept ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `pm context`
@@ -4967,7 +5077,7 @@ Generated Help: secret list
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx secret list ... ; anx --json secret list ... ; anx secret list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `secret create`
@@ -5000,7 +5110,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx secret create ... ; anx --json secret create ... ; anx secret create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `secret delete`
@@ -5030,7 +5140,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx secret delete ... ; anx --json secret delete ... ; anx secret delete ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `secret get --reveal`
@@ -5060,7 +5170,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx secret get --reveal ... ; anx --json secret get --reveal ... ; anx secret get --reveal ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `secret exec`
@@ -5090,7 +5200,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx secret exec ... ; anx --json secret exec ... ; anx secret exec ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `secret update`
@@ -5123,7 +5233,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx secret update ... ; anx --json secret update ... ; anx secret update ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `lifecycle verbs`
@@ -5153,7 +5263,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx lifecycle verbs ... ; anx --json lifecycle verbs ... ; anx lifecycle verbs ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics create`
@@ -5215,7 +5325,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics create ... ; anx --json topics create ... ; anx topics create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics patch`
@@ -5276,7 +5386,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics patch ... ; anx --json topics patch ... ; anx topics patch ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics trash`
@@ -5330,7 +5440,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics trash ... ; anx --json topics trash ... ; anx topics trash ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics message`
@@ -5364,7 +5474,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics message ... ; anx --json topics message ... ; anx topics message ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics messages`
@@ -5394,7 +5504,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics messages ... ; anx --json topics messages ... ; anx topics messages ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics reply`
@@ -5429,7 +5539,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics reply ... ; anx --json topics reply ... ; anx topics reply ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards create`
@@ -5488,7 +5598,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards create ... ; anx --json boards create ... ; anx boards create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards list`
@@ -5533,7 +5643,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards list ... ; anx --json cards list ... ; anx cards list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs create`
@@ -5608,7 +5718,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs create ... ; anx --json docs create ... ; anx docs create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs search`
@@ -5656,7 +5766,7 @@ Generated Help: docs search
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs search ... ; anx --json docs search ... ; anx docs search ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs put`
@@ -5728,7 +5838,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs put ... ; anx --json docs put ... ; anx docs put ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs ingest`
@@ -5758,7 +5868,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs ingest ... ; anx --json docs ingest ... ; anx docs ingest ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs comment`
@@ -5814,7 +5924,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs comment ... ; anx --json docs comment ... ; anx docs comment ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs comments`
@@ -5863,7 +5973,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs comments ... ; anx --json docs comments ... ; anx docs comments ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs comments reply`
@@ -5917,7 +6027,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs comments reply ... ; anx --json docs comments reply ... ; anx docs comments reply ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs get`
@@ -5964,7 +6074,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs get ... ; anx --json docs get ... ; anx docs get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs comments edit`
@@ -6016,7 +6126,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs comments edit ... ; anx --json docs comments edit ... ; anx docs comments edit ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs comments delete`
@@ -6064,7 +6174,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs comments delete ... ; anx --json docs comments delete ... ; anx docs comments delete ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards create`
@@ -6145,7 +6255,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards create ... ; anx --json cards create ... ; anx cards create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards patch`
@@ -6210,7 +6320,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards patch ... ; anx --json cards patch ... ; anx cards patch ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards message`
@@ -6243,7 +6353,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards message ... ; anx --json cards message ... ; anx cards message ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards messages`
@@ -6274,7 +6384,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards messages ... ; anx --json cards messages ... ; anx cards messages ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards reply`
@@ -6307,7 +6417,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards reply ... ; anx --json cards reply ... ; anx cards reply ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards revise`
@@ -6366,7 +6476,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards revise ... ; anx --json cards revise ... ; anx cards revise ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `threads message`
@@ -6398,7 +6508,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug threads message ... ; anx --json debug threads message ... ; anx debug threads message ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `threads reply`
@@ -6431,7 +6541,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug threads reply ... ; anx --json debug threads reply ... ; anx debug threads reply ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards move`
@@ -6487,7 +6597,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards move ... ; anx --json cards move ... ; anx cards move ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards assign`
@@ -6516,7 +6626,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards assign ... ; anx --json cards assign ... ; anx cards assign ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards resolve`
@@ -6555,7 +6665,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards resolve ... ; anx --json cards resolve ... ; anx cards resolve ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards reopen`
@@ -6583,7 +6693,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards reopen ... ; anx --json cards reopen ... ; anx cards reopen ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards trash`
@@ -6634,7 +6744,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards trash ... ; anx --json cards trash ... ; anx cards trash ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events list`
@@ -6684,7 +6794,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug events list ... ; anx --json debug events list ... ; anx debug events list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events validate`
@@ -6710,7 +6820,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug events validate ... ; anx --json debug events validate ... ; anx debug events validate ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events explain`
@@ -6736,7 +6846,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug events explain ... ; anx --json debug events explain ... ; anx debug events explain ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts create`
@@ -6790,7 +6900,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts create ... ; anx --json artifacts create ... ; anx artifacts create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts attachments create`
@@ -6835,7 +6945,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts attachments create ... ; anx --json artifacts attachments create ... ; anx artifacts attachments create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts inspect`
@@ -6861,7 +6971,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts inspect ... ; anx --json artifacts inspect ... ; anx artifacts inspect ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `threads inspect`
@@ -6908,7 +7018,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug threads inspect ... ; anx --json debug threads inspect ... ; anx debug threads inspect ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `threads workspace`
@@ -6955,7 +7065,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug threads workspace ... ; anx --json debug threads workspace ... ; anx debug threads workspace ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards workspace`
@@ -6998,7 +7108,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards workspace ... ; anx --json boards workspace ... ; anx boards workspace ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards cards list`
@@ -7042,7 +7152,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards cards list ... ; anx --json boards cards list ... ; anx boards cards list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `workspace summary`
@@ -7065,7 +7175,7 @@ Local Help: workspace summary
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx workspace summary ... ; anx --json workspace summary ... ; anx workspace summary ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs revise`
@@ -7130,7 +7240,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs revise ... ; anx --json docs revise ... ; anx docs revise ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs trash`
@@ -7183,7 +7293,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs trash ... ; anx --json docs trash ... ; anx docs trash ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs content`
@@ -7208,7 +7318,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs content ... ; anx --json docs content ... ; anx docs content ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs messages`
@@ -7242,7 +7352,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs messages ... ; anx --json docs messages ... ; anx docs messages ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs message`
@@ -7275,7 +7385,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs message ... ; anx --json docs message ... ; anx docs message ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs reply`
@@ -7309,7 +7419,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs reply ... ; anx --json docs reply ... ; anx docs reply ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `meta skill`
@@ -7339,7 +7449,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug meta skill ... ; anx --json debug meta skill ... ; anx debug meta skill ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `install skill`
@@ -7386,7 +7496,7 @@ Local Help: bridge install
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx bridge install ... ; anx --json bridge install ... ; anx bridge install ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `bridge doctor`
@@ -7411,7 +7521,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx bridge doctor ... ; anx --json bridge doctor ... ; anx bridge doctor ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `bridge start`
@@ -7436,7 +7546,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx bridge start ... ; anx --json bridge start ... ; anx bridge start ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `bridge stop`
@@ -7461,7 +7571,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx bridge stop ... ; anx --json bridge stop ... ; anx bridge stop ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `bridge status`
@@ -7486,7 +7596,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx bridge status ... ; anx --json bridge status ... ; anx bridge status ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `host token`
@@ -7508,7 +7618,7 @@ Local Help: host token
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx host token ... ; anx --json host token ... ; anx host token ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `host bridge check-in`
@@ -7530,7 +7640,7 @@ Local Help: host bridge check-in
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx host bridge check-in ... ; anx --json host bridge check-in ... ; anx host bridge check-in ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `host bridge wake claim`
@@ -7552,7 +7662,7 @@ Local Help: host bridge wake claim
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx host bridge wake claim ... ; anx --json host bridge wake claim ... ; anx host bridge wake claim ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `host bridge wake complete`
@@ -7574,7 +7684,7 @@ Local Help: host bridge wake complete
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx host bridge wake complete ... ; anx --json host bridge wake complete ... ; anx host bridge wake complete ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `host bridge wake fail`
@@ -7596,7 +7706,7 @@ Local Help: host bridge wake fail
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx host bridge wake fail ... ; anx --json host bridge wake fail ... ; anx host bridge wake fail ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `runs ingest`
@@ -7653,7 +7763,7 @@ Local Help: runs ingest
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx runs ingest ... ; anx --json runs ingest ... ; anx runs ingest ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `import scan`
@@ -7682,7 +7792,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx import scan ... ; anx --json import scan ... ; anx import scan ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `import dedupe`
@@ -7709,7 +7819,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx import dedupe ... ; anx --json import dedupe ... ; anx import dedupe ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `import plan`
@@ -7739,7 +7849,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx import plan ... ; anx --json import plan ... ; anx import plan ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `import apply`
@@ -7767,7 +7877,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx import apply ... ; anx --json import apply ... ; anx import apply ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `skills configure`
@@ -7883,7 +7993,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx pm serve ... ; anx --json pm serve ... ; anx pm serve ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `pm ask`
@@ -7913,7 +8023,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx pm ask ... ; anx --json pm ask ... ; anx pm ask ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `pm channels doctor`
@@ -7940,7 +8050,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx pm channels doctor ... ; anx --json pm channels doctor ... ; anx pm channels doctor ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `host discover`
@@ -7963,7 +8073,7 @@ Local Help: host discover
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx host discover ... ; anx --json host discover ... ; anx host discover ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `work context`

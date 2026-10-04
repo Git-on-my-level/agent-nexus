@@ -21,6 +21,7 @@ type App struct {
 	Stderr          io.Writer
 	Getenv          func(string) string
 	UserHomeDir     func() (string, error)
+	Getwd           func() (string, error)
 	ReadFile        func(string) ([]byte, error)
 	StdinIsTTY      func() bool
 	hasOMPAncestor  func() bool
@@ -77,6 +78,7 @@ func New() *App {
 		Stderr:         os.Stderr,
 		Getenv:         os.Getenv,
 		UserHomeDir:    os.UserHomeDir,
+		Getwd:          os.Getwd,
 		ReadFile:       os.ReadFile,
 		hasOMPAncestor: ompAncestor,
 		pmTurns:        newPMTurnMemory(),
@@ -119,12 +121,23 @@ func (a *App) Run(args []string) int {
 		return 0
 	}
 
+	// Parsed help is dispatched to a local renderer immediately. No command
+	// exempted as help can later enter a network-capable command handler.
+	if topic, help := commandHelpTopic(remaining); help {
+		text, ok := helpTopicText(topic)
+		if !ok {
+			return a.renderError(resolveMachineCommandIdentity("help"), jsonMode, errnorm.Usage("unknown_command", "unknown help topic "+topic))
+		}
+		a.renderEnvelope(a.Stdout, jsonMode, output.Envelope{OK: true, Command: "help", Result: map[string]any{"help_text": text}})
+		return 0
+	}
+
 	cmdPeek := remaining[0]
 	subPeek := ""
 	if len(remaining) > 1 {
 		subPeek = remaining[1]
 	}
-	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "debug" && subPeek == "meta" || cmdPeek == "host" && subPeek == "discover" || cmdPeek == "update" || cmdPeek == "bridge" || cmdPeek == "install" || cmdPeek == "skills" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
+	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "debug" && subPeek == "meta" && workspaceIndependentCommand(remaining) || cmdPeek == "host" && subPeek == "discover" || cmdPeek == "update" || cmdPeek == "bridge" && workspaceIndependentCommand(remaining) || cmdPeek == "install" || cmdPeek == "skills" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
 		(cmdPeek == "import" && isConfigLenientImportCommand(remaining[1:])) ||
 		isAPICallHelpOnly(remaining) ||
 		isTrailingHelpOnlyInvocation(remaining) ||
@@ -152,7 +165,12 @@ func (a *App) Run(args []string) int {
 			return a.renderError(resolveMachineCommandIdentity(configErrorCommand), jsonMode, wrapped)
 		}
 	}
-	resolved = a.applySingleHostBaseURL(resolved)
+	if !workspaceIndependentCommand(remaining) || cmdPeek == "config" && subPeek == "workspaces" && overrides.Workspace != nil {
+		resolved, err = a.resolveWorkspace(resolved, overrides.Workspace)
+		if err != nil {
+			return a.renderError(resolveMachineCommandIdentity(preflightCommandName), resolved.JSON, err)
+		}
+	}
 	if resolved.AccessToken == "" && len(remaining) > 0 && needsAgentIdentity(remaining) {
 		if _, _, nameErr := a.identityName(resolved); nameErr == nil {
 			if _, hostErr := a.resolvedHost(resolved); hostErr == nil {
@@ -202,7 +220,7 @@ func needsAgentIdentity(args []string) bool {
 	if len(args) == 0 {
 		return false
 	}
-	if hasHelpToken(args) {
+	if _, help := commandHelpTopic(args); help {
 		return false
 	}
 	if args[0] == "debug" && len(args) > 1 && args[1] == "meta" {
@@ -272,6 +290,7 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	var (
 		jsonFlag      trackedBool
 		baseURLFlag   trackedString
+		workspaceFlag trackedString
 		asFlag        trackedString
 		configDirFlag trackedString
 		noColorFlag   trackedBool
@@ -282,6 +301,7 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	)
 	fs.Var(&jsonFlag, "json", "Emit JSON envelope output")
 	fs.Var(&baseURLFlag, "base-url", "Core base URL")
+	fs.Var(&workspaceFlag, "workspace", "Workspace alias (see anx config workspaces)")
 	fs.Var(&asFlag, "as", "Derived agent name")
 	fs.Var(&configDirFlag, "config-dir", "Absolute ANX config directory")
 	fs.Var(&noColorFlag, "no-color", "Disable colorized output")
@@ -304,6 +324,9 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	}
 	if baseURLFlag.set {
 		overrides.BaseURL = &baseURLFlag.value
+	}
+	if workspaceFlag.set {
+		overrides.Workspace = &workspaceFlag.value
 	}
 	if asFlag.set {
 		overrides.As = &asFlag.value
@@ -330,6 +353,12 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	}
 	if versionFlag.set && versionFlag.value && len(remaining) == 0 {
 		remaining = []string{"version"}
+	}
+	if overrides.BaseURL != nil && overrides.Workspace != nil {
+		return overrides, nil, false, errnorm.Usage("invalid_flags", "use either --base-url or --workspace")
+	}
+	if overrides.Workspace != nil && *overrides.Workspace == "" {
+		return overrides, nil, false, errnorm.Usage("invalid_flags", "--workspace requires a non-empty alias")
 	}
 	return overrides, remaining, helpRequested, nil
 }
@@ -406,6 +435,13 @@ func normalizeTrailingGlobalFlags(args []string, overrides *config.Overrides) ([
 			}
 			parsed := strings.TrimSpace(rawValue)
 			overrides.BaseURL = &parsed
+		case "workspace":
+			rawValue, err := readValue(name)
+			if err != nil {
+				return nil, err
+			}
+			parsed := strings.TrimSpace(rawValue)
+			overrides.Workspace = &parsed
 		case "as":
 			rawValue, err := readValue(name)
 			if err != nil {
@@ -511,31 +547,9 @@ func isConfigLenientImportCommand(args []string) bool {
 	if len(args) == 0 {
 		return true
 	}
-	for _, arg := range args {
-		if isHelpToken(arg) {
-			return true
-		}
-	}
 	if importSubcommandSpec.normalize(args[0]) != "apply" {
 		return true
 	}
-	return !hasTrueBoolFlag(args[1:], "execute")
-}
-
-func hasTrueBoolFlag(args []string, flagName string) bool {
-	for _, arg := range args {
-		name, value, hasValue, isFlag := parseLongOptionToken(arg)
-		if !isFlag || name != flagName {
-			continue
-		}
-		if !hasValue {
-			return true
-		}
-		parsed, err := strconvParseBool(value)
-		if err != nil {
-			return true
-		}
-		return parsed
-	}
-	return false
+	flags, err := parseImportApplyFlags(args[1:])
+	return err == nil && !flags.execute.value
 }

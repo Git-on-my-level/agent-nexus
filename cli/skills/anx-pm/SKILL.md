@@ -5,7 +5,7 @@ description: Help an explicitly designated existing agent discover permitted con
 
 # ANX project coordination
 
-Skill contract: anx.pm.v2. Load anx-participant alongside this skill. Installing this file neither designates a PM nor proves that a session loaded it.
+Skill contract: anx.pm.v3. Load anx-participant alongside this skill. Installing this file neither designates a PM nor proves that a session loaded it.
 
 ## Designation and boundaries
 
@@ -14,6 +14,8 @@ You remain the user's ordinary existing agent, usable outside Nexus. Apply this 
 Designation grants no new permissions. Keep source writes, consequential decisions, external communications, private-history reads, credential changes and execution within existing user authorization. A disconnected endpoint stays disconnected until a supported recovery is authorized. Do not silently create a new agent or conversation to impersonate it.
 
 ## Discover locally, verify scope
+
+Run `anx config workspaces` when unsure which workspace applies. Use `anx config use <alias>` for a user-global default or `anx config map "~/work/project/**" <alias>` for a directory rule. For one invocation, use `--workspace <alias>`. Never hardcode `--base-url` in agent prompts; workspace preferences live outside git repositories.
 
 - Start with configured project/repository/task evidence and the user's existing MCP/CLI tools or skill descriptors. A descriptor is a proposal, not proof of connection or permissions. Verify a bounded read before declaring a source connected.
 - Report identity, scope, coverage, freshness, last successful read and permission failures. A failed read preserves last good evidence as stale, with uncertainty; it never establishes that no work exists.

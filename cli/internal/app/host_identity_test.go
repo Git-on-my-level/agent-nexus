@@ -16,6 +16,7 @@ import (
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/profile"
+	"agent-nexus-cli/internal/workspaceconfig"
 )
 
 func TestHostIdentityErrorsOfferNextActions(t *testing.T) {
@@ -113,7 +114,7 @@ func TestHostEnrollmentAdoptsOrExcludesLocalProfile(t *testing.T) {
 				w.Header().Set("Content-Type", "application/json")
 				switch r.URL.Path {
 				case "/meta/handshake":
-					fmt.Fprint(w, `{"workspace_id":"ws_test"}`)
+					fmt.Fprint(w, `{"workspace_id":"ws_test","workspace_slug":"personal"}`)
 				case "/auth/hosts/enrollments/headless":
 					if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
 						t.Error(err)
@@ -144,9 +145,24 @@ func TestHostEnrollmentAdoptsOrExcludesLocalProfile(t *testing.T) {
 			if (len(adoptedPlan) == 0) != exclude {
 				t.Fatalf("bad adoption plan: %#v", plan.Data)
 			}
-			_, err = a.hostEnroll(context.Background(), args, cfg)
+			configDir := filepath.Join(home, ".config", "anx")
+			if err := workspaceconfig.Update(configDir, func(c *workspaceconfig.Catalog) error { c.File.Default = "https://existing.example"; return nil }); err != nil {
+				t.Fatal(err)
+			}
+			enrolled, err := a.hostEnroll(context.Background(), args, cfg)
 			if err != nil {
 				t.Fatal(err)
+			}
+			prefs, err := workspaceconfig.Load(configDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if prefs.File.Default != "https://existing.example" || prefs.File.Aliases["personal"] != server.URL {
+				t.Fatalf("enrollment changed selection: %#v", prefs.File)
+			}
+			actions := deriveNextActions("host enroll", nil, enrolled.Data)
+			if len(actions) != 2 || strings.Join(actions[0].Argv, " ") != "anx config use personal" {
+				t.Fatalf("enrollment repairs=%#v", actions)
 			}
 			proofs := asSlice(posted["adoptions"])
 			if (len(proofs) == 0) != exclude {

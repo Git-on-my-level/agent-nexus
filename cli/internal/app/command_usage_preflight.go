@@ -12,9 +12,13 @@ func preflightConfigIndependentUsage(args []string) (string, error) {
 }
 
 func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string, error) {
-	if len(args) == 0 || hasHelpToken(args) {
+	if len(args) == 0 {
 		return "", nil
 	}
+	if _, help := commandHelpTopic(args); help {
+		return "help", nil
+	}
+
 	if args[0] == "debug" {
 		if len(args) < 2 || !isDiagnosticGroup(args[1]) {
 			return "debug", errnorm.Usage("unknown_subcommand", "unknown debug group")
@@ -120,7 +124,10 @@ func preflightKnownCommandShape(args []string) error {
 	case "bridge":
 		return preflightSubcommand(args[1:], bridgeSubcommandSpec)
 	case "config":
-		return preflightSubcommand(args[1:], configSubcommandSpec)
+		if err := preflightSubcommand(args[1:], configSubcommandSpec); err != nil {
+			return err
+		}
+		return preflightConfigArgs(args[1:])
 	case "meta":
 		if err := preflightSubcommand(args[1:], metaSubcommandSpec); err != nil {
 			return err
@@ -756,7 +763,7 @@ func preflightMinInt(a, b int) int {
 
 func looksLikeStringFlagValue(raw string) bool {
 	raw = strings.TrimSpace(raw)
-	return raw == "-" || looksLikeNegativeNumericFlagValue(raw)
+	return raw == "-" || raw == "--help" || raw == "-h" || looksLikeNegativeNumericFlagValue(raw)
 }
 
 func looksLikeNegativeNumericFlagValue(raw string) bool {
@@ -779,4 +786,20 @@ func hasHelpToken(args []string) bool {
 		}
 	}
 	return false
+}
+
+func preflightConfigArgs(args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+	expected := map[string]int{"show": 0, "workspaces": 0, "use": 1, "map": 2, "unmap": 1}
+	for _, arg := range args[1:] {
+		if strings.HasPrefix(arg, "-") {
+			return errnorm.Usage("invalid_flags", "config commands accept positional arguments only")
+		}
+	}
+	if len(args)-1 != expected[args[0]] {
+		return errnorm.Usage("invalid_args", "use anx help config "+args[0]+" for command arguments")
+	}
+	return nil
 }

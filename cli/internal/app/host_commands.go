@@ -24,6 +24,7 @@ import (
 	"agent-nexus-cli/internal/hostidentity"
 	"agent-nexus-cli/internal/httpclient"
 	"agent-nexus-cli/internal/profile"
+	"agent-nexus-cli/internal/workspaceconfig"
 )
 
 func (a *App) hostCall(ctx context.Context, cfg config.Resolved, method, path string, body any, headers map[string]string) (map[string]any, error) {
@@ -337,7 +338,7 @@ func (a *App) hostEnroll(ctx context.Context, args []string, cfg config.Resolved
 		return nil, err
 	}
 	hostData := asMap(response["host"])
-	host := hostidentity.Host{ID: anyString(hostData["id"]), KeyID: anyString(hostData["key_id"]), Slug: anyString(hostData["slug"]), WorkspaceID: workspace, BaseURL: cfg.BaseURL}
+	host := hostidentity.Host{ID: anyString(hostData["id"]), KeyID: anyString(hostData["key_id"]), Slug: anyString(hostData["slug"]), WorkspaceID: workspace, WorkspaceSlug: anyString(handshake["workspace_slug"]), BaseURL: cfg.BaseURL}
 	if host.ID == "" || host.KeyID == "" {
 		return nil, fmt.Errorf("invalid host enrollment response")
 	}
@@ -355,7 +356,18 @@ func (a *App) hostEnroll(ctx context.Context, args []string, cfg config.Resolved
 			}
 		}
 	}
-	return &commandResult{Data: map[string]any{"host": hostData, "adopted": names, "excluded": excludes.values}}, nil
+	alias := ""
+	if err := workspaceconfig.Update(configDir, func(c *workspaceconfig.Catalog) error {
+		alias = c.File.AddAlias(workspaceconfig.DerivedAlias(host), cfg.BaseURL)
+		return nil
+	}); err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "workspace_alias_persist_failed", "host enrolled; workspace alias could not be saved (inspect anx config workspaces)", err)
+	}
+	data := map[string]any{"host": hostData, "adopted": names, "excluded": excludes.values, "workspace_alias": alias, "base_url": cfg.BaseURL}
+	if cfg.ConfigDir != "" {
+		data["config_dir"] = cfg.ConfigDir
+	}
+	return &commandResult{Data: data}, nil
 }
 
 func hostInt(v any) int {
@@ -458,7 +470,7 @@ func (a *App) hostExclusion(ctx context.Context, verb string, args []string, cfg
 }
 
 func (a *App) runHostDoctor(ctx context.Context, cfg config.Resolved) (*commandResult, error) {
-	checks := []doctorCheck{}
+	checks := []doctorCheck{{Name: "workspace_resolution", OK: true, Status: "pass", Message: cfg.BaseURL + " via " + cfg.Sources["base_url"]}}
 	add := func(name string, ok bool, message string) {
 		checks = append(checks, doctorCheck{Name: name, OK: ok, Message: message})
 	}
@@ -514,13 +526,14 @@ func (a *App) runHostDoctor(ctx context.Context, cfg config.Resolved) (*commandR
 	} else {
 		checks = append(checks, doctorCheck{Name: "cli_version", OK: false, Status: "fail", Message: "core client unavailable"})
 	}
-	data := map[string]any{"base_url": cfg.BaseURL, "checks": checks}
+	data := map[string]any{"base_url": cfg.BaseURL, "source": cfg.Sources["base_url"], "checks": checks}
 	if versionErr != nil {
 		details, _ := versionErr.Details.(map[string]any)
 		if details == nil {
 			details = map[string]any{}
 		}
 		details["base_url"] = cfg.BaseURL
+		details["source"] = cfg.Sources["base_url"]
 		details["checks"] = checks
 		versionErr.Details = details
 		return nil, versionErr

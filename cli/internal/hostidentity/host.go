@@ -20,6 +20,7 @@ type Host struct {
 	KeyID          string `json:"key_id"`
 	Slug           string `json:"slug"`
 	WorkspaceID    string `json:"workspace_id"`
+	WorkspaceSlug  string `json:"workspace_slug,omitempty"`
 	BaseURL        string `json:"base_url"`
 	PrivateKeyPath string `json:"private_key_path"`
 }
@@ -84,14 +85,33 @@ func Load(home, baseURL string) (Host, bool, error) {
 	return LoadAt(filepath.Join(home, ".config", "anx"), baseURL)
 }
 func LoadAt(configDir, baseURL string) (Host, bool, error) {
-	dirs, err := os.ReadDir(RootAt(configDir))
-	if os.IsNotExist(err) {
-		return Host{}, false, nil
-	}
+	hosts, err := ListAt(configDir)
 	if err != nil {
 		return Host{}, false, err
 	}
 	var found Host
+	for _, h := range hosts {
+		if baseURL != "" && strings.TrimRight(h.BaseURL, "/") != strings.TrimRight(baseURL, "/") {
+			continue
+		}
+		if found.ID != "" {
+			return Host{}, false, fmt.Errorf("multiple enrolled hosts for %s", baseURL)
+		}
+		found = h
+	}
+	return found, found.ID != "", nil
+}
+
+// ListAt reads host records only; workspace discovery never loads private keys.
+func ListAt(configDir string) ([]Host, error) {
+	dirs, err := os.ReadDir(RootAt(configDir))
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	hosts := []Host{}
 	for _, entry := range dirs {
 		if !entry.IsDir() {
 			continue
@@ -102,24 +122,21 @@ func LoadAt(configDir, baseURL string) (Host, bool, error) {
 			continue
 		}
 		if err != nil {
-			return Host{}, false, err
+			return nil, err
 		}
 		var h Host
 		if err := json.Unmarshal(data, &h); err != nil {
-			return Host{}, false, fmt.Errorf("decode host %s: %w", dir, err)
+			return nil, fmt.Errorf("decode host %s: %w", dir, err)
 		}
-		if baseURL != "" && strings.TrimRight(h.BaseURL, "/") != strings.TrimRight(baseURL, "/") {
-			continue
-		}
-		if found.ID != "" {
-			return Host{}, false, fmt.Errorf("multiple enrolled hosts for %s", baseURL)
+		if h.ID == "" || strings.TrimSpace(h.BaseURL) == "" {
+			return nil, fmt.Errorf("invalid host record %s", dir)
 		}
 		if h.PrivateKeyPath == "" {
 			h.PrivateKeyPath = filepath.Join(dir, "host.ed25519")
 		}
-		found = h
+		hosts = append(hosts, h)
 	}
-	return found, found.ID != "", nil
+	return hosts, nil
 }
 
 func Key(host Host) (ed25519.PrivateKey, error) {

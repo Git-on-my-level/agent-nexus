@@ -154,33 +154,6 @@ func ompAncestor() bool {
 	return false
 }
 
-// applySingleHostBaseURL uses the only enrolled host when the caller did not
-// pass --base-url or ANX_BASE_URL. host.json already stores that workspace
-// URL; scanning ~/.config/anx/hosts is the same lookup LoadAt uses for one host.
-func (a *App) applySingleHostBaseURL(cfg config.Resolved) config.Resolved {
-	if cfg.Sources["base_url"] != "default" {
-		return cfg
-	}
-	configDir, err := a.configDir(cfg)
-	if err != nil {
-		return cfg
-	}
-	host, ok, err := hostidentity.LoadAt(configDir, "")
-	if err != nil || !ok {
-		return cfg
-	}
-	baseURL := strings.TrimSpace(host.BaseURL)
-	if baseURL == "" {
-		return cfg
-	}
-	cfg.BaseURL = baseURL
-	if cfg.Sources == nil {
-		cfg.Sources = map[string]string{}
-	}
-	cfg.Sources["base_url"] = "bridge:auto-single"
-	return cfg
-}
-
 func (a *App) resolvedHost(cfg config.Resolved) (hostidentity.Host, error) {
 	configDir, err := a.configDir(cfg)
 	if err != nil {

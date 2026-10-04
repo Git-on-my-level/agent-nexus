@@ -38,10 +38,12 @@ var notificationsSubcommandSpec = subcommandSpec{
 
 var configSubcommandSpec = subcommandSpec{
 	command: "config",
-	valid:   []string{"show"},
+	valid:   []string{"show", "use", "map", "unmap", "workspaces"},
 	examples: []string{
 		"anx config show",
-		"anx config show --json   # optional: JSON envelope for scripts",
+		"anx config workspaces",
+		"anx config use personal",
+		`anx config map "~/work/omi/**" omi`,
 	},
 }
 
