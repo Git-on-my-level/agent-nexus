@@ -35,7 +35,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `notifications` (group): Inspect and clear durable wake notifications for the active agent
 - `threads` (group): Read-only backing-thread inspection (tooling and diagnostics)
 - `events` (group): Manage events and event streams
-- `inbox` (group): Operator diagnostics for human attention inbox items
+- `inbox` (group): Read your asks and process human attention inbox items
 - `artifacts` (group): Manage artifact resources and content
 - `actors` (group): Diagnostic actor inventory and fixture helpers
 - `ref-edges` (group): Diagnostic typed-ref edge inspection
@@ -97,7 +97,6 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `events unarchive` (command): Unarchive event
 - `events trash` (command): Move event to trash
 - `events restore` (command): Restore event from trash
-- `inbox list` (command): List inbox items
 - `inbox get` (command): Get one inbox item
 - `inbox respond` (command): Respond to human attention inbox item
 - `inbox stream` (command): Stream inbox items (SSE)
@@ -162,6 +161,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `secret get --reveal` (command): Reveal secret value
 - `secret exec` (command): Reveal multiple secrets by name
 - `secret update` (command): Update secret value
+- `inbox list` (local-helper): List asks addressed to the active agent, including answer and unread state.
+- `inbox read` (local-helper): Mark the durable answer notification batch for one of your asks as read.
 - `lifecycle verbs` (local-helper): Uniform lifecycle surface for archive, unarchive, trash, restore, and purge across artifacts, boards, docs, events, cards, and topics.
 - `topics create` (local-helper): Create a topic from plain flags, or from advanced JSON.
 - `topics patch` (local-helper): Patch a topic from scalar flags, or from advanced JSON.
@@ -408,8 +409,9 @@ Daily loop
 2. Read `anx work context card:<slug>` and register participation when doing substantive work. Use `anx work start card:<slug>` only when explicitly taking ownership of a Nexus-native task: it adds an assignee and marks in progress.
 3. Post `anx cards message card:<slug> --body "What changed and why"` after meaningful progress. Include evidence, decisions, blockers, uncertainty and next steps; avoid raw chat copies and repeated unchanged updates. Always name the task explicitly: participation does not change legacy current-card selection.
 4. Report execution blockers on the card. For a consequential human decision, create one recommended ask with `anx ask "Question" --subject-ref card:<slug> --recommend "Preferred answer"`; keep `next_actor` on the agent and do not also block the card for that question. Use `anx work block` only for an authorized Nexus-native task blocked by an execution issue, not as a duplicate of a human ask.
-5. Run `anx await <ask-id>` when an answer gates the next step. It prints one terminal result with outcome. Exit 8 means timeout; exit 9 means rejected.
-6. Verify acceptance criteria before changing task completion. For an authorized Nexus-native task, `anx work done card:<slug> --evidence <url|event:ref|artifact:ref>` resolves that explicit task and clears legacy presence. Report source-owned completion as attributed evidence for its authorized source workflow. Closing a session or finishing a run never completes a task.
+5. Run `anx await <ask-id>` when one answer gates the next step. For a batch, use `anx await --answers`; `anx orient` and `anx inbox list --status answered` also show replies. Exit 8 means timeout; exit 9 means an individual answer was rejected.
+6. Hermes, Claude Code, and Codex harnesses consume the same workspace-local agent notification: on wake, read `anx inbox list --unread` or `anx orient`, then mark the processed batch with `anx inbox read event:<ask-id>`. One read marks every answer in that batch read.
+7. Verify acceptance criteria before changing task completion. For an authorized Nexus-native task, `anx work done card:<slug> --evidence <url|event:ref|artifact:ref>` resolves that explicit task and clears legacy presence. Report source-owned completion as attributed evidence for its authorized source workflow. Closing a session or finishing a run never completes a task.
 
 
 Runs and output
@@ -1171,20 +1173,20 @@ Tip: `anx help <command path>` for full command-level generated details.
 
 ## `inbox`
 
-Operator diagnostics for human attention inbox items
+Read your asks and process human attention inbox items
 
 ```text
 Generated Help: inbox
 
 Commands:
-  debug inbox get          Get one inbox item
-  debug inbox list         List inbox items
-  debug inbox respond      Respond to human attention inbox item
-  debug inbox stream       Stream inbox items (SSE)
+  inbox get                Get one inbox item
+  inbox list               List inbox items
+  inbox respond            Respond to human attention inbox item
+  inbox stream             Stream inbox items (SSE)
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx debug inbox ... ; anx --json debug inbox ... ; anx debug inbox ... --json (last two: JSON envelope on stdout)
+  Examples: anx inbox ... ; anx --json inbox ... ; anx inbox ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
@@ -3018,40 +3020,6 @@ Global flags:
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `inbox list`
-
-List inbox items
-
-```text
-Generated Help: inbox list
-
-- Command ID: `inbox.list`
-- CLI path: `debug inbox list`
-- HTTP: `GET /inbox`
-- Side effect class: `read_only`
-- Input mode: `none`
-- Why: Load the operator-only human attention queue derived from explicit human_attention_requested events.
-- Output: Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Adjacent commands: `debug inbox get`, `debug inbox respond`, `debug inbox stream`
-
-
-View scoping:
-  - `inbox list` is read from the active CLI identity's perspective.
-  - The response includes `viewing_as` so you can confirm the resolved agent, username, and actor_id.
-  - Switch perspective with `--as <name>` or `ANX_AS` before reading or acting.
-
-Inbox kinds:
-  - `ask`: A requesting agent needs an answer, judgment, or missing context.
-  - `review`: A requesting agent wants review of generated work or a proposed action.
-  - `escalate`: A requesting agent surfaced a risk or abnormal condition.
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx debug inbox list ... ; anx --json debug inbox list ... ; anx debug inbox list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
 ## `inbox get`
 
 Get one inbox item
@@ -3060,7 +3028,7 @@ Get one inbox item
 Generated Help: inbox get
 
 - Command ID: `inbox.get`
-- CLI path: `debug inbox get`
+- CLI path: `inbox get`
 - HTTP: `GET /inbox/{inbox_id}`
 - Side effect class: `read_only`
 - Stability: `beta`
@@ -3069,7 +3037,7 @@ Generated Help: inbox get
 - Output: Returns `{ item, generated_at, projection_freshness }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Concepts: `inbox`
-- Adjacent commands: `debug inbox list`, `debug inbox respond`, `debug inbox stream`
+- Adjacent commands: `inbox list`, `inbox respond`, `inbox stream`
 
 Inputs:
   Required:
@@ -3077,7 +3045,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx debug inbox get ... ; anx --json debug inbox get ... ; anx debug inbox get ... --json (last two: JSON envelope on stdout)
+  Examples: anx inbox get ... ; anx --json inbox get ... ; anx inbox get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3089,7 +3057,7 @@ Respond to human attention inbox item
 Generated Help: inbox respond
 
 - Command ID: `inbox.respond`
-- CLI path: `debug inbox respond`
+- CLI path: `inbox respond`
 - HTTP: `POST /inbox/{inbox_id}/respond`
 - Side effect class: `remote_coordination_write`
 - Stability: `beta`
@@ -3098,7 +3066,7 @@ Generated Help: inbox respond
 - Output: Returns `{ event, notify }`.
 - Error codes: `auth_required`, `human_required`, `invalid_request`, `invalid_token`, `notification_target_required`, `not_found`, `conflict`, `idempotency_conflict`
 - Concepts: `inbox`, `write`
-- Adjacent commands: `debug inbox get`, `debug inbox list`, `debug inbox stream`
+- Adjacent commands: `inbox get`, `inbox list`, `inbox stream`
 
 Inputs:
   Required:
@@ -3116,7 +3084,7 @@ Inputs:
   Enum values: notify_mode: none, original, replacement; outcome: acknowledged, answered, approved, rejected
 
 CLI flags (`inbox respond`):
-  --inbox-item-id <id>    Inbox item id or list alias (see `inbox list`).
+  --inbox-item-id <id>    Inbox item id or list alias (see `debug inbox list`).
   --response-text <text>  Freeform response text.
   --outcome <value>       answered, approved, rejected, or acknowledged (required).
   --notify-mode <mode>    original, target, or none.
@@ -3127,7 +3095,7 @@ CLI flags (`inbox respond`):
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx debug inbox respond ... ; anx --json debug inbox respond ... ; anx debug inbox respond ... --json (last two: JSON envelope on stdout)
+  Examples: anx inbox respond ... ; anx --json inbox respond ... ; anx inbox respond ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3139,7 +3107,7 @@ Stream inbox items (SSE)
 Generated Help: inbox stream
 
 - Command ID: `inbox.stream`
-- CLI path: `debug inbox stream`
+- CLI path: `inbox stream`
 - HTTP: `GET /stream/inbox`
 - Side effect class: `read_only`
 - Stability: `beta`
@@ -3148,12 +3116,12 @@ Generated Help: inbox stream
 - Output: SSE `inbox_item` events with JSON payloads.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `inbox`
-- Adjacent commands: `debug inbox get`, `debug inbox list`, `debug inbox respond`
+- Adjacent commands: `inbox get`, `inbox list`, `inbox respond`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx debug inbox stream ... ; anx --json debug inbox stream ... ; anx debug inbox stream ... --json (last two: JSON envelope on stdout)
+  Examples: anx inbox stream ... ; anx --json inbox stream ... ; anx inbox stream ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3165,7 +3133,7 @@ Stream inbox items (SSE)
 Generated Help: inbox tail
 
 - Command ID: `inbox.stream`
-- CLI path: `debug inbox stream`
+- CLI path: `inbox stream`
 - HTTP: `GET /stream/inbox`
 - Side effect class: `read_only`
 - Stability: `beta`
@@ -3174,12 +3142,12 @@ Generated Help: inbox tail
 - Output: SSE `inbox_item` events with JSON payloads.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `inbox`
-- Adjacent commands: `debug inbox get`, `debug inbox list`, `debug inbox respond`
+- Adjacent commands: `inbox get`, `inbox list`, `inbox respond`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx debug inbox tail ... ; anx --json debug inbox tail ... ; anx debug inbox tail ... --json (last two: JSON envelope on stdout)
+  Examples: anx inbox tail ... ; anx --json inbox tail ... ; anx inbox tail ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -5311,6 +5279,80 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx secret update ... ; anx --json secret update ... ; anx secret update ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `inbox list`
+
+List asks addressed to the active agent, including answer and unread state.
+
+```text
+Generated Help: inbox list
+
+- Command ID: `inbox.list`
+- CLI path: `inbox list`
+- HTTP: `GET /inbox`
+- Side effect class: `read_only`
+- Input mode: `none`
+- Why: Project human_attention_requested events into a queryable inbox view.
+- Output: Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Adjacent commands: `inbox get`, `inbox respond`, `inbox stream`
+
+
+View scoping:
+  - `anx inbox list` lists your own open asks. Use `--status answered` to read replies, or `--status all` for both.
+  - Add `--unread` to show answers whose wake notification is unread.
+  - `anx inbox read event:<ask-id>` marks the whole answer batch read.
+  - Human attention triage remains available as `anx debug inbox list`; use `anx inbox respond` to answer an inbox item.
+  - Select an agent with `--as <name>` or `ANX_AS`.
+
+Inbox kinds:
+  - `ask`: A requesting agent needs an answer, judgment, or missing context.
+  - `review`: A requesting agent wants review of generated work or a proposed action.
+  - `escalate`: A requesting agent surfaced a risk or abnormal condition.
+
+Local Help: inbox list
+
+- Kind: `local helper`
+- Side effect class: `read_only`
+- Summary: List asks addressed to the active agent, including answer and unread state.
+- Quick start: Use `--status answered` to read replies and `--unread` to focus on new answer batches.
+- Composition: Composes the active agent's request and response events with its durable wake notifications. Use `anx debug inbox list` for operator inbox diagnostics.
+- Examples:
+  - `anx inbox list`
+  - `anx inbox list --status answered`
+  - `anx inbox list --unread`
+
+Flags:
+  --status <open|answered|all> Filter your asks; default is open.
+  --unread                     Show only answered asks with unread wake notifications.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx inbox list ... ; anx --json inbox list ... ; anx inbox list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `inbox read`
+
+Mark the durable answer notification batch for one of your asks as read.
+
+```text
+Local Help: inbox read
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Mark the durable answer notification batch for one of your asks as read.
+- Quick start: Pass the `event:<ask-id>` returned by `anx ask`.
+- Composition: Marks the matching workspace-local agent notification read; all answers in that batch transition together.
+- Examples:
+  - `anx inbox read event:<ask-id>`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx inbox read ... ; anx --json inbox read ... ; anx inbox read ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 

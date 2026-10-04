@@ -1398,7 +1398,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - HTTP: `GET /inbox`
 - Surface: `projection`
 - Input mode: `none`
-- Why: Load the operator-only human attention queue derived from explicit human_attention_requested events.
+- Why: Project human_attention_requested events into a queryable inbox view.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }`.
 

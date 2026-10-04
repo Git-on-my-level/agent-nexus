@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"sort"
@@ -395,7 +396,7 @@ func (a *App) runTypedResource(ctx context.Context, resource string, args []stri
 	case "events":
 		return a.runEventsCommand(ctx, args, cfg)
 	case "inbox":
-		return a.runInboxCommand(ctx, args, cfg)
+		return a.runInboxCommand(ctx, args, cfg, false)
 	case "derived":
 		return a.runDerivedCommand(ctx, args, cfg)
 	default:
@@ -2202,7 +2203,7 @@ func (a *App) runEventsExplainCommand(args []string) (*commandResult, error) {
 	return &commandResult{Text: strings.Join(textLines, "\n"), Data: data}, nil
 }
 
-func (a *App) runInboxCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
+func (a *App) runInboxCommand(ctx context.Context, args []string, cfg config.Resolved, debug bool) (*commandResult, string, error) {
 	if len(args) == 0 {
 		return nil, "inbox", inboxSubcommandSpec.requiredError()
 	}
@@ -2250,11 +2251,22 @@ func (a *App) runInboxCommand(ctx context.Context, args []string, cfg config.Res
 			apiBody,
 		)
 		return result, "inbox respond", callErr
+	case "read":
+		result, err := a.runAgentInboxRead(ctx, args[1:], cfg)
+		return result, "inbox read", err
 	case "stream":
-		result, err := a.runInboxStream(ctx, args[1:], cfg, "inbox stream", false)
+		commandName := "inbox stream"
+		if debug {
+			commandName = "debug inbox stream"
+		}
+		result, err := a.runInboxStream(ctx, args[1:], cfg, commandName, false)
 		return result, "inbox stream", err
 	case "tail":
-		result, err := a.runInboxStream(ctx, args[1:], cfg, "inbox stream", true)
+		commandName := "inbox stream"
+		if debug {
+			commandName = "debug inbox stream"
+		}
+		result, err := a.runInboxStream(ctx, args[1:], cfg, commandName, true)
 		return result, "inbox stream", err
 	default:
 		return nil, "inbox", inboxSubcommandSpec.unknownError(args[0])
@@ -2403,6 +2415,18 @@ func (a *App) runInboxGet(ctx context.Context, args []string, cfg config.Resolve
 	}
 	if err := validateID(rawID, "inbox item id"); err != nil {
 		return nil, "inbox get", err
+	}
+	if strings.HasPrefix(rawID, "event:") {
+		eventID := strings.TrimPrefix(rawID, "event:")
+		result, err := a.invokeRawJSON(ctx, cfg, "inbox ask get", http.MethodGet, "/events/"+url.PathEscape(eventID), nil)
+		if err != nil {
+			return nil, "inbox get", err
+		}
+		event := asMap(commandResultBody(result)["event"])
+		if anyString(event["type"]) != humanAttentionRequestedEventType {
+			return nil, "inbox get", errnorm.Usage("invalid_request", "event id does not identify an ask; pass an inbox item id or ask event id")
+		}
+		return &commandResult{Data: map[string]any{"ask_id": rawID, "event": event}}, "inbox get", nil
 	}
 
 	listResult, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, nil, nil)

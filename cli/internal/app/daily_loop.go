@@ -179,6 +179,11 @@ func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved)
 	for _, raw := range allNotifications {
 		item := asMap(raw)
 		unreadEvents[anyString(item["trigger_event_id"])] = true
+		for _, ref := range stringList(item["related_refs"]) {
+			if strings.HasPrefix(ref, "event:") {
+				unreadEvents[strings.TrimPrefix(ref, "event:")] = true
+			}
+		}
 	}
 	for _, raw := range ownRequests {
 		ask := asMap(raw)
@@ -407,12 +412,28 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 	leading, rest := splitLeadingPositionals(args)
 	fs := newSilentFlagSet("await")
 	var until, timeout trackedString
+	var answers trackedBool
 	fs.Var(&until, "until", "answered or state=<phase>")
 	fs.Var(&timeout, "timeout", "Maximum wait duration, default 30m")
+	fs.Var(&answers, "answers", "Wait for a debounced batch of answers to my asks")
 	if err := fs.Parse(rest); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	refs := append(leading, fs.Args()...)
+	if answers.value {
+		if len(refs) != 0 || until.set {
+			return nil, errnorm.Usage("invalid_args", "usage: anx await --answers [--timeout <dur>]")
+		}
+		wait := 30 * time.Minute
+		if timeout.set {
+			var err error
+			wait, err = time.ParseDuration(timeout.value)
+			if err != nil || wait <= 0 {
+				return nil, errnorm.Usage("invalid_request", "--timeout must be a positive duration")
+			}
+		}
+		return a.runAwaitAnswers(ctx, cfg, wait)
+	}
 	if len(refs) != 1 {
 		return nil, errnorm.Usage("invalid_args", "usage: anx await <ask-id|card-ref> [--until answered|state=<phase>] [--timeout <dur>]")
 	}
@@ -569,6 +590,42 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 		}
 	}
 	return nil, errnorm.WithDetails(errnorm.New(errnorm.KindNetwork, "timeout", "await timed out"), map[string]any{"target": target, "timeout": wait.String()})
+}
+
+func (a *App) runAwaitAnswers(ctx context.Context, cfg config.Resolved, timeout time.Duration) (*commandResult, error) {
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	readBatch := func() (*commandResult, bool, error) {
+		result, err := a.runAgentInboxList(waitCtx, []string{"--status", "answered", "--unread"}, cfg)
+		if err != nil {
+			return nil, false, err
+		}
+		data := asMap(result.Data)
+		items := asSlice(data["items"])
+		if len(items) == 0 {
+			return nil, false, nil
+		}
+		return &commandResult{Data: map[string]any{"answers": items, "count": len(items)}}, true, nil
+	}
+	if result, ready, err := readBatch(); err != nil || ready {
+		return result, err
+	}
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-waitCtx.Done():
+			return nil, errnorm.WithDetails(errnorm.New(errnorm.KindNetwork, "timeout", "await timed out waiting for answer batch"), map[string]any{"target": "answers", "timeout": timeout.String()})
+		case <-ticker.C:
+			result, ready, err := readBatch()
+			if err != nil {
+				return nil, err
+			}
+			if ready {
+				return result, nil
+			}
+		}
+	}
 }
 
 func awaitResponseResult(target string, event map[string]any) (map[string]any, error) {

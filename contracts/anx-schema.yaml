@@ -810,6 +810,7 @@ derived:
       target_actor_id: { type: string, required: true }
       thread_ref: { type: typed_ref, required: false }
       trigger_event_ref: { type: typed_ref, required: true }
+      related_refs: { type: "list<typed_ref>", required: false, description: "All ask and answer events included in one debounced answer wake." }
       created_at: { type: datetime, required: true }
       read_at: { type: datetime, required: false }
       dismissed_at: { type: datetime, required: false }

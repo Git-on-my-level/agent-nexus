@@ -115,6 +115,9 @@ func (s *Store) AppendHumanAttentionResponse(ctx context.Context, actorID, sourc
 		}
 		return nil, false, ErrHumanAttentionAlreadyResponded
 	}
+	if err := queueHumanAttentionAnswerWakeBatchTx(ctx, tx, sourceEventID, prepared.Body, initialNotify); err != nil {
+		return nil, false, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, false, err
 	}

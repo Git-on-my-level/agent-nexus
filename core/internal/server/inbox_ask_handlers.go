@@ -269,7 +269,19 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 		return
 	}
 
-	initialNotify := map[string]any{"requested": target.Mode != "none", "queued": false, "message": "Response recorded; notification pending.", "target_actor_id": target.ActorID, "target_agent_id": target.AgentID, "target_handle": target.Handle, "mode": target.Mode}
+	notifyRequested := target.Mode != "none"
+	initialNotify := map[string]any{
+		"requested":       notifyRequested,
+		"queued":          notifyRequested,
+		"message":         map[bool]string{true: "Answer wake queued for the requester.", false: "Response recorded without notification target."}[notifyRequested],
+		"target_actor_id": target.ActorID,
+		"target_agent_id": target.AgentID,
+		"target_handle":   target.Handle,
+		"workspace_id":    opts.workspaceID,
+		"thread_id":       threadID,
+		"subject_ref":     subjectRef,
+		"mode":            target.Mode,
+	}
 	storedResponse, replayed, err := responseStore.AppendHumanAttentionResponse(r.Context(), actorID, sourceEventID, inboxItemID, req.IdempotencyKey, requestHash, responseEvent, initialNotify)
 	if err != nil {
 		if errors.Is(err, primitives.ErrHumanAttentionAlreadyResponded) {
@@ -290,24 +302,23 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 	responseStored := storedResponse["event"].(map[string]any)
 	_ = refreshDerivedTopicProjection(r.Context(), opts, threadID, time.Now().UTC(), actorID)
 
-	notifyRequested := target.Mode != "none"
-	notifyQueued := false
-	notifyMessage := ""
-	if notifyRequested {
-		notifyQueued, notifyMessage = sendHumanAttentionResponseWakeBestEffort(
-			r.Context(),
-			opts,
-			actorID,
-			threadID,
-			subjectRef,
-			target.ActorID,
-			target.Handle,
-			summary,
-			strings.TrimSpace(anyString(responseStored["id"])),
-			strings.TrimSpace(anyString(responseStored["ts"])),
-		)
-	} else {
-		notifyMessage = "Response recorded without notification target."
+	notifyQueued := notifyRequested
+	notifyMessage := anyString(initialNotify["message"])
+	if notifyRequested && opts.answerWakeFlushWhenNoOpenAsks {
+		if batchStore, ok := opts.primitiveStore.(interface {
+			CountOpenHumanAttentionAsks(context.Context, string) (int, error)
+		}); ok {
+			if openAsks, countErr := batchStore.CountOpenHumanAttentionAsks(r.Context(), requesterActorID); countErr == nil && openAsks == 0 {
+				maintainer := NewAnswerWakeMaintainer(AnswerWakeMaintainerConfig{
+					PrimitiveStore:      opts.primitiveStore,
+					WorkspaceID:         opts.workspaceID,
+					FlushWhenNoOpenAsks: true,
+				})
+				if flushErr := maintainer.FlushTarget(r.Context(), target.ActorID); flushErr == nil {
+					notifyMessage = "All of your open asks are answered; the answer batch is queued now."
+				}
+			}
+		}
 	}
 
 	response := map[string]any{

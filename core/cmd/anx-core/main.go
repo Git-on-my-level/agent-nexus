@@ -97,6 +97,8 @@ func main() {
 		projectionMode              = envString("ANX_PROJECTION_MODE", server.ProjectionModeBackground)
 		projectionPollInterval      = envDuration("ANX_PROJECTION_MAINTENANCE_INTERVAL", 5*time.Second)
 		projectionBatchSize         = envInt("ANX_PROJECTION_MAINTENANCE_BATCH_SIZE", 50)
+		answerWakeQuietWindow       = envDuration("ANX_ANSWER_WAKE_QUIET_WINDOW", server.DefaultAnswerWakeQuietWindow)
+		flushAnswerWakeWhenEmpty    = envBool("ANX_ANSWER_WAKE_FLUSH_WHEN_NO_OPEN_ASKS", true)
 		devRegisterLinkedActors     = envBool("ANX_DEV_REGISTER_LINKED_ACTORS", false)
 		allowPasskeyDevBypass       = envBool("ANX_ALLOW_PASSKEY_DEV_BYPASS", false)
 		enableDevActorMode          = envBool("ANX_ENABLE_DEV_ACTOR_MODE", false)
@@ -408,6 +410,13 @@ func main() {
 		DirtyBatchSize: projectionBatchSize,
 		SystemActorID:  actors.SystemActorID,
 	})
+	answerWakeMaintainer := server.NewAnswerWakeMaintainer(server.AnswerWakeMaintainerConfig{
+		PrimitiveStore:      primitiveStore,
+		WorkspaceID:         workspaceID,
+		WorkspaceName:       workspaceName,
+		QuietWindow:         answerWakeQuietWindow,
+		FlushWhenNoOpenAsks: flushAnswerWakeWhenEmpty,
+	})
 	sidecarHost := sidecar.NewHost()
 	if sidecarRouterEnabled {
 		routerState, err := router.NewStateStore(sidecarRouterStatePath)
@@ -536,6 +545,7 @@ func main() {
 			AllowedOrigins: webAuthnAllowedOrigins,
 		}),
 		server.WithWorkspaceID(workspaceID),
+		server.WithAnswerWakeFlushWhenNoOpenAsks(flushAnswerWakeWhenEmpty),
 		server.WithWorkspaceAccessMode(workspaceAccessMode),
 		server.WithSecretsStore(secretsStore),
 		server.WithEnableDevActorMode(enableDevActorMode),
@@ -572,6 +582,9 @@ func main() {
 	defer maintenanceCancel()
 	if projectionMode == server.ProjectionModeBackground {
 		go projectionMaintainer.Run(maintenanceCtx)
+	}
+	if answerWakeMaintainer != nil {
+		go answerWakeMaintainer.Run(maintenanceCtx)
 	}
 	sidecarHost.Run(maintenanceCtx)
 	if observationRuntime != nil {

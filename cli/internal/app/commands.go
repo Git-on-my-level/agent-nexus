@@ -23,10 +23,14 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 
 func isDiagnosticGroup(group string) bool {
 	switch group {
-	case "threads", "events", "ref-edges", "derived", "actors", "inbox", "meta":
+	case "threads", "events", "ref-edges", "derived", "actors", "meta":
 		return true
 	}
 	return false
+}
+
+func isDebugGroup(group string) bool {
+	return group == "inbox" || isDiagnosticGroup(group)
 }
 
 func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config.Resolved, debug bool) (string, *commandResult, error) {
@@ -34,11 +38,19 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 		return "root", nil, errnorm.Usage("command_required", "a command is required")
 	}
 	if args[0] == "debug" {
-		if len(args) < 2 || !isDiagnosticGroup(args[1]) {
+		if len(args) < 2 || !isDebugGroup(args[1]) {
 			return "debug", nil, errnorm.Usage("unknown_subcommand", "unknown debug group")
 		}
 		name, result, err := a.runCommandWithDebug(ctx, args[1:], cfg, true)
 		return "debug " + name, result, err
+	}
+	if args[0] == "inbox" && !debug {
+		result, name, err := a.runFirstClassInboxCommand(ctx, args[1:], cfg)
+		return name, result, err
+	}
+	if args[0] == "inbox" && debug {
+		result, name, err := a.runInboxCommand(ctx, args[1:], cfg, true)
+		return name, result, err
 	}
 	if isDiagnosticGroup(args[0]) && !debug {
 		return args[0], nil, errnorm.Usage("unknown_command", "unknown command "+args[0]+"; use anx debug "+args[0])

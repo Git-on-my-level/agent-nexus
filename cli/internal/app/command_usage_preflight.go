@@ -20,7 +20,7 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 	}
 
 	if args[0] == "debug" {
-		if len(args) < 2 || !isDiagnosticGroup(args[1]) {
+		if len(args) < 2 || !isDebugGroup(args[1]) {
 			return "debug", errnorm.Usage("unknown_subcommand", "unknown debug group")
 		}
 		name, err := preflightConfigIndependentUsageWithDebug(args[1:], true)
@@ -416,7 +416,7 @@ func preflightRootCommands() map[string]struct{} {
 		"version": {}, "doctor": {}, "update": {}, "bridge": {}, "auth": {}, "host": {}, "runs": {}, "config": {}, "debug": {}, "notifications": {},
 		"import": {}, "install": {}, "skills": {}, "draft": {}, "provenance": {}, "orient": {}, "ask": {}, "review": {}, "escalate": {}, "await": {}, "secret": {}, "workspace": {}, "overview": {}, "read": {}, "url": {}, "concepts": {}, "primitives": {},
 		"topics": {}, "cards": {}, "artifacts": {}, "boards": {}, "docs": {},
-		"api": {}, "report": {}, "help": {}, "--help": {}, "-h": {},
+		"api": {}, "report": {}, "inbox": {}, "help": {}, "--help": {}, "-h": {},
 	}
 }
 
@@ -440,7 +440,7 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 	}
 	addLayer(map[string]map[string]preflightFlagSpec{
 		"orient":     {"stale-hours": {kind: preflightFlagString}},
-		"await":      {"until": {kind: preflightFlagString}, "timeout": {kind: preflightFlagString}},
+		"await":      {"until": {kind: preflightFlagString}, "timeout": {kind: preflightFlagString}, "answers": {kind: preflightFlagBool}},
 		"work start": {},
 		"work note":  {},
 		"work block": {"ask": {kind: preflightFlagBool}, "recommend": {kind: preflightFlagString}, "alt": {kind: preflightFlagString}},
@@ -654,6 +654,8 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"thread-id": valueFlag,
 			"type":      valueFlag,
 			"full-id":   boolFlag,
+			"status":    valueFlag,
+			"unread":    boolFlag,
 		},
 		"inbox respond": {
 			"from-file":     valueFlag,

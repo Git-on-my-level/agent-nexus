@@ -184,6 +184,7 @@ type handlerOptions struct {
 	allowUnauthenticatedWrites     bool
 	allowLoopbackVerificationReads bool
 	inboxRiskHorizon               time.Duration
+	answerWakeFlushWhenNoOpenAsks  bool
 	coreVersion                    string
 	apiVersion                     string
 	minCLIVersion                  string
@@ -262,6 +263,10 @@ func WithWorkspaceManagedAgentGrantVerifier(verifier auth.WorkspaceManagedAgentG
 	return func(opts *handlerOptions) {
 		opts.workspaceManagedGrantVerifier = verifier
 	}
+}
+
+func WithAnswerWakeFlushWhenNoOpenAsks(enabled bool) HandlerOption {
+	return func(opts *handlerOptions) { opts.answerWakeFlushWhenNoOpenAsks = enabled }
 }
 
 func WithPasskeySessionStore(store *auth.PasskeySessionStore) HandlerOption {
@@ -607,13 +612,14 @@ func enforceRouteAccess(w http.ResponseWriter, r *http.Request, opts handlerOpti
 
 func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	opts := handlerOptions{
-		coreVersion:                strings.TrimSpace(schemaVersion),
-		apiVersion:                 "v0",
-		minCLIVersion:              "0.1.0",
-		recommendedCLIVersion:      "0.1.0",
-		coreInstanceID:             "core-local",
-		streamPollInterval:         time.Second,
-		allowUnauthenticatedWrites: false,
+		coreVersion:                   strings.TrimSpace(schemaVersion),
+		apiVersion:                    "v0",
+		minCLIVersion:                 "0.1.0",
+		recommendedCLIVersion:         "0.1.0",
+		coreInstanceID:                "core-local",
+		streamPollInterval:            time.Second,
+		answerWakeFlushWhenNoOpenAsks: true,
+		allowUnauthenticatedWrites:    false,
 	}
 	for _, option := range options {
 		option(&opts)

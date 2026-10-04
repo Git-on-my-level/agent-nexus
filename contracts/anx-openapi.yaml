@@ -5285,7 +5285,7 @@ paths:
       x-anx-surface: projection
       x-anx-command-id: inbox.list
       x-anx-cli-path: inbox list
-      x-anx-why: Load the operator-only human attention queue derived from explicit human_attention_requested events.
+      x-anx-why: Project human_attention_requested events into a queryable inbox view.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }`."
@@ -10638,6 +10638,10 @@ components:
         target_actor_id: { type: string }
         thread_id: { type: string }
         trigger_event_id: { type: string }
+        related_refs:
+          type: array
+          description: Ask and answer event refs included in a debounced answer wake batch.
+          items: { $ref: '#/components/schemas/TypedRef' }
         created_at: { type: string, format: date-time }
         claimed_at: { type: string, format: date-time }
         completed_at: { type: string, format: date-time }

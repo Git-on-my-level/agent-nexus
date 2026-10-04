@@ -650,7 +650,7 @@ func TestInboxUnknownSubcommandGuidance(t *testing.T) {
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
 	message := anyStringValue(errObj["message"])
-	if !strings.Contains(message, "valid subcommands: list, get, respond, stream, tail") {
+	if !strings.Contains(message, "valid subcommands: list, get, respond, read, stream, tail") {
 		t.Fatalf("expected valid-subcommands guidance, got %q", message)
 	}
 	if !strings.Contains(message, "`anx inbox get --id <id-or-alias>`") || !strings.Contains(message, "`anx inbox respond --inbox-item-id <id-or-alias> --response-text <text>`") {
@@ -696,6 +696,27 @@ func TestInboxGetAliasMapsToList(t *testing.T) {
 	item, _ := items[0].(map[string]any)
 	if _, ok := item["category_description"]; ok {
 		t.Fatalf("did not expect category_description on inbox item, got %#v", payload)
+	}
+}
+
+func TestInboxGetAcceptsAskEventReference(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/events/ask-1" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"event":{"id":"ask-1","type":"human_attention_requested","thread_id":"thread-1"}}`))
+	}))
+	defer server.Close()
+
+	got := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "--base-url", server.URL, "inbox", "get", "event:ask-1"}))
+	result := asMap(got["result"])
+	event := asMap(result["event"])
+	if anyStringValue(result["ask_id"]) != "event:ask-1" || anyStringValue(event["type"]) != "human_attention_requested" {
+		t.Fatalf("ask event reference did not round-trip: %#v", got)
 	}
 }
 

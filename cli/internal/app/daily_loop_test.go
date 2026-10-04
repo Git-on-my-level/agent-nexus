@@ -144,6 +144,120 @@ func TestAwaitOutcomesTimeoutAndReconnect(t *testing.T) {
 	}
 }
 
+func TestAwaitAnswersReturnsUnreadAnswerBatch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/agents/agent-1":
+			fmt.Fprint(w, `{"agent":{"id":"agent-1","actor_id":"actor-1","handle":"worker.host"}}`)
+		case r.URL.Path == "/events" && r.URL.Query().Get("type") == "human_attention_requested":
+			fmt.Fprint(w, `{"events":[{"id":"ask-1","payload":{"requester_actor_id":"actor-1","title":"First"}},{"id":"ask-2","payload":{"requester_actor_id":"actor-1","title":"Second"}}]}`)
+		case r.URL.Path == "/events" && r.URL.Query().Get("type") == "human_attention_responded":
+			fmt.Fprint(w, `{"events":[{"id":"response-1","payload":{"requester_actor_id":"actor-1","request_event_ref":"event:ask-1","response_text":"Yes","outcome":"answered"}},{"id":"response-2","payload":{"requester_actor_id":"actor-1","request_event_ref":"event:ask-2","response_text":"Ship it","outcome":"approved"}}]}`)
+		case r.URL.Path == "/agent-notifications":
+			fmt.Fprint(w, `{"items":[{"wakeup_id":"wake-1","status":"unread","trigger_event_id":"response-2","related_refs":["event:response-1","event:response-2"]}]}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	a, out := dailyTestApp(t, server.URL)
+	if exit := a.Run([]string{"--json", "--as", "worker", "await", "--answers", "--timeout", "1s"}); exit != 0 {
+		t.Fatalf("await answers exit=%d output=%s", exit, out.String())
+	}
+	result := asMap(dailyJSON(t, out)["result"])
+	answers := asSlice(result["answers"])
+	if result["count"] != float64(2) || len(answers) != 2 {
+		t.Fatalf("expected both answers in the returned batch: %#v", result)
+	}
+}
+
+func TestInboxListFiltersOpenAnsweredAllAndUnread(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/agents/agent-1":
+			fmt.Fprint(w, `{"agent":{"id":"agent-1","actor_id":"actor-1","handle":"worker.host"}}`)
+		case r.URL.Path == "/events" && r.URL.Query().Get("type") == "human_attention_requested":
+			fmt.Fprint(w, `{"events":[{"id":"ask-1","payload":{"requester_actor_id":"actor-1","title":"Answered"}},{"id":"ask-2","payload":{"requester_actor_id":"actor-1","title":"Still open"}}]}`)
+		case r.URL.Path == "/events" && r.URL.Query().Get("type") == "human_attention_responded":
+			fmt.Fprint(w, `{"events":[{"id":"response-1","payload":{"requester_actor_id":"actor-1","request_event_ref":"event:ask-1","response_text":"Yes","outcome":"answered"}}]}`)
+		case r.URL.Path == "/agent-notifications":
+			fmt.Fprint(w, `{"items":[{"wakeup_id":"wake-1","status":"unread","trigger_event_id":"response-1","related_refs":["event:ask-1","event:response-1"]}]}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	for _, tc := range []struct {
+		name       string
+		args       []string
+		wantCount  int
+		wantAsk    string
+		wantUnread bool
+	}{
+		{name: "open", args: []string{"--status", "open"}, wantCount: 1, wantAsk: "event:ask-2"},
+		{name: "answered", args: []string{"--status", "answered"}, wantCount: 1, wantAsk: "event:ask-1", wantUnread: true},
+		{name: "all", args: []string{"--status", "all"}, wantCount: 2},
+		{name: "unread answers", args: []string{"--status", "answered", "--unread"}, wantCount: 1, wantAsk: "event:ask-1", wantUnread: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, out := dailyTestApp(t, server.URL)
+			args := append([]string{"--json", "--as", "worker", "inbox", "list"}, tc.args...)
+			if exit := a.Run(args); exit != 0 {
+				t.Fatalf("inbox list exit=%d output=%s", exit, out.String())
+			}
+			result := asMap(dailyJSON(t, out)["result"])
+			items := asSlice(result["items"])
+			if len(items) != tc.wantCount {
+				t.Fatalf("matched %d asks, want %d: %#v", len(items), tc.wantCount, result)
+			}
+			if tc.wantAsk != "" {
+				item := asMap(items[0])
+				if anyString(item["ask_id"]) != tc.wantAsk || item["answer_unread"] != tc.wantUnread {
+					t.Fatalf("wrong ask or read state: %#v", item)
+				}
+			}
+		})
+	}
+}
+
+func TestInboxReadMarksTheAnswerBatchRead(t *testing.T) {
+	var readWakeup string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/agents/agent-1":
+			fmt.Fprint(w, `{"agent":{"id":"agent-1","actor_id":"actor-1","handle":"worker.host"}}`)
+		case r.URL.Path == "/events" && r.URL.Query().Get("type") == "human_attention_requested":
+			fmt.Fprint(w, `{"events":[{"id":"ask-1","payload":{"requester_actor_id":"actor-1","title":"First"}}]}`)
+		case r.URL.Path == "/events" && r.URL.Query().Get("type") == "human_attention_responded":
+			fmt.Fprint(w, `{"events":[{"id":"response-1","payload":{"requester_actor_id":"actor-1","request_event_ref":"event:ask-1","response_text":"Yes","outcome":"answered"}}]}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/agent-notifications":
+			fmt.Fprint(w, `{"items":[{"wakeup_id":"wake-batch","status":"unread","trigger_event_id":"response-1","related_refs":["event:response-1"]}]}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/agent-notifications/read":
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatalf("decode read request: %v", err)
+			}
+			readWakeup = anyString(body["wakeup_id"])
+			fmt.Fprint(w, `{"notification":{"wakeup_id":"wake-batch","status":"read"}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	a, out := dailyTestApp(t, server.URL)
+	if exit := a.Run([]string{"--json", "--as", "worker", "inbox", "read", "event:ask-1"}); exit != 0 {
+		t.Fatalf("inbox read exit=%d output=%s", exit, out.String())
+	}
+	result := asMap(dailyJSON(t, out)["result"])
+	if readWakeup != "wake-batch" || result["status"] != "read" || result["ask_id"] != "event:ask-1" {
+		t.Fatalf("answer notification did not transition to read: request=%q result=%#v", readWakeup, result)
+	}
+}
+
 func TestHumanGroupRemoved(t *testing.T) {
 	a, out := dailyTestApp(t, "http://127.0.0.1:1")
 	exit := a.Run([]string{"--json", "--as", "worker", "human", "ask"})

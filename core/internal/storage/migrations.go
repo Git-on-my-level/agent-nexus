@@ -888,6 +888,28 @@ var migrations = []migration{
 	{Version: 43, AfterApply: applyMigration43ReportIndexes},
 	{Version: 44, AfterApply: applyMigration44CardPlans},
 	{Version: 45, Statements: []string{`CREATE TABLE workspace_dashboard (singleton INTEGER PRIMARY KEY CHECK(singleton=1), document_id TEXT, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL);`}},
+	{
+		Version: 46,
+		Statements: []string{
+			`CREATE TABLE human_attention_answer_wake_batches (
+				target_actor_id TEXT PRIMARY KEY,
+				target_handle TEXT NOT NULL,
+				workspace_id TEXT NOT NULL,
+				batch_id TEXT NOT NULL,
+				first_answered_at TEXT NOT NULL,
+				last_answered_at TEXT NOT NULL,
+				thread_id TEXT NOT NULL DEFAULT '',
+				trigger_event_id TEXT NOT NULL,
+				trigger_created_at TEXT NOT NULL,
+				answer_count INTEGER NOT NULL,
+				ask_event_ids_json TEXT NOT NULL DEFAULT '[]',
+				answer_event_ids_json TEXT NOT NULL DEFAULT '[]',
+				refs_json TEXT NOT NULL DEFAULT '[]',
+				updated_at TEXT NOT NULL
+			);`,
+			`CREATE INDEX idx_human_attention_answer_wake_batches_updated ON human_attention_answer_wake_batches(last_answered_at,target_actor_id);`,
+		},
+	},
 }
 
 func applyMigration44CardPlans(ctx context.Context, tx *sql.Tx) error {

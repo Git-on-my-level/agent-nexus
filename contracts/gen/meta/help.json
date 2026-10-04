@@ -6677,7 +6677,7 @@
       "path": "/inbox",
       "operation_id": "listInboxItems",
       "summary": "List inbox items",
-      "why": "Load the operator-only human attention queue derived from explicit human_attention_requested events.",
+      "why": "Project human_attention_requested events into a queryable inbox view.",
       "input_mode": "none",
       "streaming": {
         "mode": "none"
