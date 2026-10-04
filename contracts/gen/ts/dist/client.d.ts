@@ -180,6 +180,8 @@ export declare class AnxClient {
     opsBlobUsageRebuild(options?: RequestOptions): Promise<InvokeResult>;
     opsHealth(options?: RequestOptions): Promise<InvokeResult>;
     opsUsageSummary(options?: RequestOptions): Promise<InvokeResult>;
+    planSet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    planShow(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     pmActionsAcknowledge(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     pmActionsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     pmActionsList(options?: RequestOptions): Promise<InvokeResult>;
@@ -205,6 +207,7 @@ export declare class AnxClient {
     pmTurnsHeartbeat(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     pmTurnsRelease(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     refEdgesList(options?: RequestOptions): Promise<InvokeResult>;
+    refsResolve(options?: RequestOptions): Promise<InvokeResult>;
     reportRender(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     runsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     runsList(options?: RequestOptions): Promise<InvokeResult>;

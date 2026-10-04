@@ -13,7 +13,7 @@ const agentGuideSkillName = "anx-participant"
 
 const agentGuideSkillDescription = "Participate in Agent Nexus work with source authority, scoped session identity, meaningful updates, and evidence-backed completion."
 
-const agentGuideSkillVersion = "anx.participant.v4"
+const agentGuideSkillVersion = "anx.participant.v5"
 
 type guideSection struct {
 	Title string
@@ -43,10 +43,14 @@ func agentGuideSections() []guideSection {
 		}},
 		{Title: "Executive workspace", Lines: []string{
 			"- A card represents a human-level initiative or outcome that may span many executor tasks and outlive them. Keep issue, PR and run detail in its source; link that detail as evidence. Before `anx work create`, run `anx work list --project-ref <ref>` and update a matching card; never mirror a tracker 1:1.",
-			"- Put status in a short plain-language card summary, checklist, or `anx.visual-report` dashboard/chart, not a stream of cards or notes. Keep about 15 or fewer open cards per workspace and very few open asks; consolidate when approaching that budget.",
+			"- Keep one plan per initiative card. Add steps rather than writing progress prose; link steps to real refs. Never pick a view: the graph determines it. Read `anx plan show card:<slug>` for computed progress and health. Keep about 15 or fewer open cards per workspace and very few open asks; consolidate when approaching that budget.",
 			"- For a human-facing dashboard, read `anx report schema`, then run `anx report publish <file> --topic <topic-ref> [--title <title>] [--doc <doc-ref>]`; it validates the report, writes a text document, and verifies the saved revision. `--doc` is an exact ref; use `--replace` only when intentionally replacing a non-report document.",
 			"- Ask only for a decision that belongs to the human (direction, money, risk or an irreversible choice). Recommend one answer, give at most 2–3 alternatives, and batch related decisions into one ask. Do not also block the card or set its `next_actor` to the human for that same question; that duplicates the Inbox item. Keep `next_actor` on the agent and advance after the answer with its response event as evidence, for example `anx work done <card> --evidence event:<response_event_id>`.",
-			"- Write for a busy executive: lead with the outcome and what needs them, then add detail. Example: 12 PRs + 4 Multica issues for one project → 1 card with a checklist and links, not 16 cards.",
+			"- Write for a busy executive: lead with the outcome and what needs them, then add detail. Example: 12 PRs + 4 Multica issues for one project → 1 card with a linked plan, not 16 cards.",
+		}},
+		{Title: "Initiative plans", Lines: []string{
+			"Use `anx plan step add card:<slug> --step-id build --title \"Build\" --ref <ref-or-url>` to add a linked step. Branch with `anx plan step add card:<slug> --title \"QA\" --after build`. Stable ids belong to the plan; agents never select a view.",
+			"Use `anx plan set card:<slug> --from-file plan.json` with {steps:[...]} for a full plan, or `step update <card> <step-id>` and `step rm <card> <step-id>` for edits. Writes compare the token from a fresh read; reconcile conflicts explicitly. Known refs override fallback status. Resolve chips in one request with `anx refs resolve <ref>...`.",
 		}},
 		{Title: "Daily loop", Lines: []string{
 			"1. Run `anx orient` to see your identity, assigned work, asks and answers, notifications, stale work, and next commands.",

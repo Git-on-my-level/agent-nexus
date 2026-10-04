@@ -1086,6 +1086,9 @@ func helpTopicTextRaw(topic string) (string, bool) {
 	if strings.HasPrefix(topic, "work ") && isDailyWorkVerb(strings.TrimPrefix(topic, "work ")) {
 		return "anx " + topic + " [card]: use anx help work for the daily loop.\n", true
 	}
+	if text, ok := planHelpText(topic); ok {
+		return text, true
+	}
 	if text, ok := workHelpText(topic); ok {
 		return text, true
 	}

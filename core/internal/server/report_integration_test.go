@@ -16,10 +16,13 @@ import (
 	reports "agent-nexus-visualreport"
 )
 
-func createReportFixture(t *testing.T, h primitivesTestHarness, structured bool) string {
+func createReportFixture(t *testing.T, h primitivesTestHarness, structured bool, kinds ...string) string {
 	t.Helper()
 	panels := []map[string]any{}
-	for _, kind := range []string{"live-initiatives", "live-asks", "live-work-mix", "live-activity"} {
+	if len(kinds) == 0 {
+		kinds = []string{"live-initiatives", "live-asks", "live-work-mix", "live-activity"}
+	}
+	for _, kind := range kinds {
 		panels = append(panels, map[string]any{"id": kind, "type": kind, "data": map[string]any{}, "project_id": "workspace", "title": kind, "author": "ANX", "provenance": "reported", "observed_at": nil, "freshness": "unavailable", "source_ids": []any{}})
 	}
 	report := map[string]any{"kind": "anx.visual-report", "schema_version": 1, "panels": panels, "title": "Dashboard", "summary": "Workspace report", "generated_at": "2026-10-04T10:00:00Z", "sources": []any{}, "projects": []any{map[string]any{"id": "workspace", "title": "Workspace", "summary": "Current work", "outcome": "Ship"}}}

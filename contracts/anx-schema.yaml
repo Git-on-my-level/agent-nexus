@@ -632,6 +632,8 @@ resources:
       title: { type: string, required: true }
       summary: { type: string, required: true }
       column_key: { type: string, required: true, ref: enums.board_column_key }
+      plan: { type: object, required: false, ref: initiative_plan }
+      plan_state: { type: object, required: false, ref: initiative_plan.computed }
       rank: { type: string, required: true }
       assignee_refs: { type: "list<typed_ref>", required: true }
       due_at: { type: datetime, required: false, description: "Optional due instant for the work item." }
@@ -1031,3 +1033,43 @@ visual_report_live_panels:
     - Asks include ask, review and escalate requests, with optional answers from the last 168 hours by default.
     - Activity includes new asks, authorized PM decision proposals, answers, phase changes and completion; card edit bursts for the same actor and board within five minutes collapse.
     - Bounded or limited results declare truncated; source read failures are unavailable, never empty success.
+
+initiative_plan:
+  description: One optional plan per initiative card; agents add linked steps and never select a view.
+  max_steps: 200
+  max_dependencies_per_step: 50
+  step:
+    required: [id, title]
+    fields:
+      id: {type: string, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', max_length: 64}
+      title: {type: string, max_length: 500}
+      ref: {type: string, description: 'card:, doc:, document: or topic: ref, or absolute HTTP(S) URL. External URLs use existing source-backed work only; no network fetch.'}
+      after: {type: 'list<string>', description: Existing step ids; unique; graph must be acyclic.}
+      due: {type: datetime, description: RFC3339 instant or YYYY-MM-DD date.}
+      status: {type: string, values: [done, active, blocked, not_started], description: Fallback only when ref has no known workflow state.}
+  computed:
+    fields: [steps, progress, critical_path, next_steps, shape, health, last_movement_at]
+    progress: {fields: [done, total]}
+    shape: [chain, dag, lanes]
+    health: [on_track, stalled, blocked]
+    semantics:
+      - A chain is a connected path (including an empty plan); lanes are multiple disconnected paths; all other graphs are dag.
+      - Critical path maximizes unfinished steps through sink nodes; done steps have zero weight. Ties use lexicographic step ids.
+      - Health is blocked if a blocked step lies on any longest remaining path, else stalled after the threshold, else on_track. Complete and empty plans are on_track.
+      - Next steps are unfinished, unblocked steps whose dependencies are all done.
+      - Known card/source workflow states override fallback status; context refs (docs/topics) have lifecycle state only and use fallback status; done/published/closed/resolved map to done, blocked to blocked, in_progress/active/review to active; other states map to not_started.
+      - Source activity and meaningful progress reset recency; unchanged observation timestamps do not. Plan edits reset recency.
+      - Default stall threshold is 432000 seconds (5 days), configurable with ANX_PLAN_STALLED_AFTER duration.
+      - Plan writes require if_updated_at from cards get or plan show; edits and before/after plans are atomic card_updated events, visible in the card timeline.
+      - Live initiatives keep the existing progress and needs array; a plan supplies computed progress, blocked step titles in needs, plan_state and health. Cards without plans keep the existing summary projection.
+
+batch_ref_resolve:
+  max_refs: 200
+  input: {refs: 'list<string>'}
+  output: {items: 'list<object>'}
+  fields: [ref, kind, title, phase, status, owner, progress, url, resolvable]
+  semantics:
+    - Preserve input order and duplicates, including unknown or inaccessible refs as resolvable false without metadata.
+    - Resolve card, doc/document, topic, and board refs by exact handle or internal id. External URLs resolve only through existing source-backed cards.
+    - URLs for native card/document entities are workspace-relative paths; topics and boards have no current UI detail surface and omit url. No caller-supplied origin is trusted.
+    - Read access is checked for every resource and referenced plan step; unavailable refs never expose hidden state.

@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Groups: `24`
+- Groups: `26`
 
 ## `topics`
 
@@ -222,6 +222,13 @@ Generated from `contracts/anx-openapi.yaml`.
   - `ops.health` (`ops health`)
   - `ops.usage.summary` (`ops usage summary`)
 
+## `plan`
+
+- Commands: `2`
+- Command IDs:
+  - `plan.set` (`plan set`)
+  - `plan.show` (`plan show`)
+
 ## `pm`
 
 - Commands: `24`
@@ -256,6 +263,12 @@ Generated from `contracts/anx-openapi.yaml`.
 - Commands: `1`
 - Command IDs:
   - `ref_edges.list` (`ref-edges list`)
+
+## `refs`
+
+- Commands: `1`
+- Command IDs:
+  - `refs.resolve` (`refs resolve`)
 
 ## `report`
 

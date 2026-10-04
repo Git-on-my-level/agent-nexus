@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `189`
+- Commands: `192`
 
 ## `actors.create`
 
@@ -1567,6 +1567,32 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`
 - Output: Returns usage envelope JSON.
 
+## `plan.set`
+
+- CLI path: `plan set`
+- HTTP: `PUT /cards/{card_id}/plan`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Add linked steps rather than writing progress prose. Never select a view.
+- Concepts: `cards`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns the current principal-scoped read projection.
+- Agent notes: One plan per initiative. CLI --from-file contains {steps:[...]}; the CLI reads the card token before writing, or accepts --if-updated-at. Step helpers compose the same PUT. Conflicts require reconciliation; never choose a view.
+
+## `plan.show`
+
+- CLI path: `plan show`
+- HTTP: `GET /cards/{card_id}/plan`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `flags`
+- Why: Read live initiative steps, progress and health.
+- Concepts: `cards`, `read`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns the current principal-scoped read projection.
+- Agent notes: Read plan_state for effective status, progress, shape, critical path and health. An unset plan returns null plan and plan_state.
+
 ## `pm.actions.acknowledge`
 
 - CLI path: `pm actions acknowledge`
@@ -1890,6 +1916,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `refs`, `inspection`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: Returns `{ ref_edges }`.
+
+## `refs.resolve`
+
+- CLI path: `refs resolve`
+- HTTP: `POST /refs/resolve`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Resolve ref chips and previews in one read request; unknown refs remain in the result.
+- Concepts: `read`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns the current principal-scoped read projection.
+- Agent notes: Read-only POST. CLI accepts positional refs or --from-file containing {refs:[...]}. Preserve unknown refs, order and duplicates; maximum 200.
 
 ## `report.render`
 

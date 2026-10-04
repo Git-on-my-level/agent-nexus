@@ -112,6 +112,9 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 			workStoreError(w, err)
 			return
 		}
+		if !enrichPlans(w, r, opts, page.Work) {
+			return
+		}
 		items := make([]map[string]any, 0, len(page.Work))
 		for _, item := range page.Work {
 			items = append(items, publicWork(item))
@@ -157,6 +160,9 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 			item, err := store.GetWork(r.Context(), id)
 			if err != nil {
 				workStoreError(w, err)
+				return
+			}
+			if !enrichPlans(w, r, opts, []map[string]any{item}) {
 				return
 			}
 			writeJSON(w, 200, map[string]any{"work": publicWork(item)})

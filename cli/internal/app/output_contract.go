@@ -12,6 +12,12 @@ import (
 // commandSideEffectClass is the CLI's command policy. New command families must
 // be added here before they are published in help or meta commands.
 func commandSideEffectClass(command string) string {
+	if command == "refs resolve" {
+		return "read_only"
+	}
+	if strings.HasPrefix(command, "plan step ") || command == "plan set" {
+		return "remote_coordination_write"
+	}
 	parts := strings.Fields(command)
 	if len(parts) == 0 {
 		return "read_only"

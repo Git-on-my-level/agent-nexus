@@ -5,7 +5,7 @@ description: Keep substantive Agent Nexus work visible with explicit task refs, 
 
 # ANX participant
 
-Skill contract: anx.participant.v4. Installation does not prove that a session loaded this version.
+Skill contract: anx.participant.v5. Installation does not prove that a session loaded this version.
 
 Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence.
 
@@ -30,10 +30,10 @@ Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence
 ## Keep the workspace executive-readable
 
 - A card is a human-level initiative or outcome that can span executor tasks and outlive them. Keep issues, PRs and run detail in their source; link them as evidence. Before `anx work create`, run `anx work list --project-ref <ref>` and update a matching card. Never mirror an issue tracker 1:1.
-- Put status in a short plain-language summary, checklist or `anx.visual-report` dashboard/chart. Keep about 15 or fewer open cards per workspace and very few open asks; consolidate as you approach that budget.
+- Keep one plan per initiative card. Add steps rather than writing progress prose, and link steps to real `card:`, `doc:` / `document:`, `topic:` refs or source issue/PR URLs. Never pick a view: the graph determines chain, DAG or lanes. Keep about 15 or fewer open cards and very few open asks.
 - For a human-facing dashboard, read `anx report schema`, then publish with `anx report publish <file> --topic <topic-ref> [--title <title>] [--doc <doc-ref>]`. It validates the report, writes a text document, and verifies the saved revision.
 - Ask only for a human decision (direction, money, risk or an irreversible choice). Recommend one answer, offer at most 2–3 alternatives, and batch related questions. Do not also block the card or set `next_actor` to the human for the same ask. Keep `next_actor` on the agent and advance after the answer using its response event as evidence, for example `anx work done <card> --evidence event:<response_event_id>`.
-- Lead with the outcome and what needs the human, then details. Example: 12 PRs + 4 Multica issues for one project → 1 card with a checklist and links, not 16 cards.
+- Lead with the outcome and what needs the human, then details. Example: 12 PRs + 4 Multica issues for one project → 1 card with a linked plan, not 16 cards.
 
 ## Privacy and handoff
 
@@ -41,3 +41,9 @@ Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence
 - Prefer fresh context from durable evidence. Prior sessions are provenance/recovery clues for unfinished or unreflected work; resume/history support must be observed, never assumed.
 - When using agentctl, label work `anx.card.<card-slug>` to link run evidence. Native execution remains with the user's harness. Use compact text output for reading, `--json` for scripts, and returned next actions rather than guessed refs.
 - PM designation requires the richer anx-pm skill and an explicit user designation. It grants no new source-write, private-history, approval, or execution authority.
+
+## Initiative plans
+
+Read `anx plan show card:<slug>` before editing. Use `anx plan set card:<slug> --from-file plan.json` with `{ "steps": [] }` to replace the plan, or add a step with `anx plan step add card:<slug> --step-id build --title "Build" --ref <ref-or-url>`. Stable step ids are agent-chosen slugs; omitting `--step-id` derives one from the title. Branch with `anx plan step add card:<slug> --title "QA" --after build`. Use `step update <card> <step-id>` for fields and `step rm <card> <step-id>` to remove an unreferenced step. Update dependent `--after` lists before removal.
+
+Use `--status` for unlinked steps or as a fallback for a ref ANX cannot yet resolve. Known card/source workflow state takes precedence. Context refs (docs/topics) have lifecycle state only, so use fallback status for those steps. Unknown external URLs are not fetched. Due dates accept YYYY-MM-DD or RFC3339. The server validates cycles, ids and caps; writes use a concurrency token and preserve event history. A conflict means read again and reconcile the plan. Read `progress`, `health`, `critical_path` and `next_steps` from computed state; never overwrite them with a prose claim. Resolve up to 200 chips in one read using `anx refs resolve <ref>...`.

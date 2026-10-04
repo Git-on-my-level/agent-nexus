@@ -367,6 +367,12 @@ func (s *Store) GetWork(ctx context.Context, identifier string) (map[string]any,
 	if err != nil {
 		return nil, err
 	}
+	return projectWork(card, m, version, latest, attempt, refresh), nil
+}
+
+// projectWork shares canonical projection logic with batched report hydration.
+// It performs no I/O; general ListWork retains its existing read path.
+func projectWork(card, m map[string]any, version int64, latest, attempt, refresh map[string]any) map[string]any {
 	source := workMap(m["source"])
 	out := workClone(card)
 	out["phase"] = card["column_key"]
@@ -442,7 +448,7 @@ func (s *Store) GetWork(ctx context.Context, identifier string) (map[string]any,
 		fresh["last_error"] = refresh["last_error"]
 	}
 	out["freshness"] = fresh
-	return out, nil
+	return out
 }
 
 // ReportWorkFilter selects a bounded candidate set before projection. BoardIDs
@@ -452,9 +458,16 @@ type ReportWorkFilter struct {
 	ProjectRef string
 	Limit      int
 }
+type ReportWorkBoard struct {
+	Title, ThreadID, PrivateOwner string
+}
+
 type ReportWorkPage struct {
 	Work      []map[string]any
 	Truncated bool
+	// Request-local context from the same batch; never serialized in API work rows.
+	Boards        map[string]ReportWorkBoard
+	PrivateOwners map[string]string
 }
 
 func reportWorkQuery(filter ReportWorkFilter) (string, []any) {
@@ -479,11 +492,22 @@ func reportWorkQuery(filter ReportWorkFilter) (string, []any) {
 		}
 	}
 	// Match GetWork's source-authority rule, including the latest observation.
-	from += ` LEFT JOIN work_observations o ON o.id=m.latest_observation_id`
+	from += ` LEFT JOIN work_observations o ON o.id=m.latest_observation_id
+	 LEFT JOIN work_observations a ON a.id=m.latest_attempt_id
+	 LEFT JOIN threads ct ON ct.id=COALESCE(NULLIF(trim(c.thread_id),''),trim(c.parent_thread_id))
+	 LEFT JOIN threads bt ON bt.id=trim(b.thread_id)
+	 LEFT JOIN ref_edges placement ON placement.source_type='board' AND placement.target_type='card' AND placement.edge_type='board_card' AND placement.source_id=b.id AND placement.target_id=c.id`
 	where += ` AND (CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN c.column_key ELSE COALESCE(json_extract(o.body_json,'$.facts.phase'),json_extract(m.metadata_json,'$.phase'),c.column_key) END) NOT IN ('done','cancelled')`
 	args = append(args, limit+1)
 	// No global sort: only the bounded candidates are materialized and sorted.
-	return `SELECT c.id FROM ` + from + ` WHERE ` + where + ` LIMIT ?`, args
+	return `SELECT b.id,b.handle,c.id,c.handle,
+	 COALESCE(json_extract(placement.metadata_json,'$.column_key'),c.column_key),COALESCE(json_extract(placement.metadata_json,'$.rank'),c.rank),
+	 c.title,c.summary,c.version,c.head_revision_id,c.head_revision_number,c.thread_id,c.parent_thread_id,c.due_at,c.definition_of_done_json,
+	 c.pinned_document_id,c.assignee,c.risk,c.resolution,c.resolution_refs_json,c.refs_json,c.created_at,c.created_by,c.updated_at,c.updated_by,c.provenance_json,
+	 c.archived_at,c.archived_by,c.trashed_at,c.trashed_by,c.trash_reason,
+	 COALESCE(m.metadata_json,'{"source":{"authority":"nexus"}}'),COALESCE(m.version,0),COALESCE(m.refresh_json,'{"state":"idle"}'),o.body_json,a.body_json,
+	 b.title,COALESCE(b.thread_id,''),COALESCE(json_extract(bt.body_json,'$.pm_actor_id'),''),COALESCE(json_extract(ct.body_json,'$.pm_actor_id'),'')
+	 FROM ` + from + ` WHERE ` + where + ` LIMIT ?`, args
 }
 
 func (s *Store) ListReportWork(ctx context.Context, filter ReportWorkFilter) (ReportWorkPage, error) {
@@ -492,36 +516,45 @@ func (s *Store) ListReportWork(ctx context.Context, filter ReportWorkFilter) (Re
 	if err != nil {
 		return ReportWorkPage{}, err
 	}
-	ids := []string{}
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return ReportWorkPage{}, err
-		}
-		ids = append(ids, id)
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return ReportWorkPage{}, err
-	}
+	defer rows.Close()
 	limit := filter.Limit
 	if limit < 1 || limit > 2000 {
 		limit = 2000
 	}
-	page := ReportWorkPage{Work: []map[string]any{}, Truncated: len(ids) > limit}
-	if len(ids) > limit {
-		ids = ids[:limit]
-	}
-	for _, id := range ids {
-		work, err := s.GetWork(ctx, id)
+	page := ReportWorkPage{Work: []map[string]any{}, Boards: map[string]ReportWorkBoard{}, PrivateOwners: map[string]string{}}
+	for rows.Next() {
+		if len(page.Work) == limit {
+			page.Truncated = true
+			break
+		}
+		var metadataJSON, refreshJSON, privateOwner string
+		var latestJSON, attemptJSON sql.NullString
+		var version int64
+		var board ReportWorkBoard
+		row, err := scanBoardCardRow(rows, &metadataJSON, &version, &refreshJSON, &latestJSON, &attemptJSON, &board.Title, &board.ThreadID, &board.PrivateOwner, &privateOwner)
 		if err != nil {
 			return ReportWorkPage{}, err
 		}
-		page.Work = append(page.Work, work)
+		card, err := row.toMap()
+		if err != nil {
+			return ReportWorkPage{}, err
+		}
+		var metadata, refresh, latest, attempt map[string]any
+		for _, item := range []struct {
+			raw string
+			out *map[string]any
+		}{{metadataJSON, &metadata}, {refreshJSON, &refresh}, {latestJSON.String, &latest}, {attemptJSON.String, &attempt}} {
+			if item.raw != "" {
+				if err := json.Unmarshal([]byte(item.raw), item.out); err != nil {
+					return ReportWorkPage{}, fmt.Errorf("decode report work: %w", err)
+				}
+			}
+		}
+		page.Work = append(page.Work, projectWork(card, metadata, version, latest, attempt, refresh))
+		page.Boards[workString(card["board_ref"])] = board
+		page.PrivateOwners[row.CardID] = privateOwner
 	}
-	return page, nil
+	return page, rows.Err()
 }
 
 func (s *Store) ListWork(ctx context.Context, f WorkListFilter) (WorkPage, error) {

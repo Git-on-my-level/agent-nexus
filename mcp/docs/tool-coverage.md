@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 189
+- Command count: 192
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -25,8 +25,10 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | inbox | 4 |
 | meta | 9 |
 | ops | 3 |
+| plan | 2 |
 | pm | 24 |
 | ref-edges | 1 |
+| refs | 1 |
 | report | 1 |
 | runs | 3 |
 | secret | 6 |
@@ -40,8 +42,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 69 |
-| exposed_write | 63 |
+| exposed_read | 71 |
+| exposed_write | 64 |
 | gated_admin | 24 |
 | gated_sensitive | 12 |
 | unsupported_bootstrap_auth | 9 |
@@ -54,7 +56,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 132 | exposed_read + exposed_write + adapted |
+| standalone default | 135 | exposed_read + exposed_write + adapted |
 | hosted default | 60 | explicit read-only private-app allowlist |
 | gated | 36 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
@@ -189,6 +191,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | ops.blob.usage.rebuild | ops | POST | /ops/blob-usage/rebuild | gated_admin | blob usage rebuild is maintenance/ops |
 | ops.health | ops | GET | /ops/health | gated_admin | ops health can expose operational diagnostics |
 | ops.usage.summary | ops | GET | /ops/usage-summary | gated_admin | unversioned usage summary is ops/quota telemetry |
+| plan.set | plan | PUT | /cards/{card_id}/plan | exposed_write | Replace a local initiative plan with a card concurrency token; no upstream source writes. |
+| plan.show | plan | GET | /cards/{card_id}/plan | exposed_read | Read a principal-scoped initiative plan and computed state. |
 | pm.actions.acknowledge | pm | POST | /pm/actions/{action_id}/acknowledge | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | pm.actions.get | pm | GET | /pm/actions/{action_id} | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | pm.actions.list | pm | GET | /pm/actions | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
@@ -214,6 +218,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | pm.turns.heartbeat | pm | POST | /pm/turns/{turn_id}/heartbeat | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | pm.turns.release | pm | POST | /pm/turns/{turn_id}/release | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | ref_edges.list | ref-edges | GET | /ref-edges | exposed_read | reference edge inventory read |
+| refs.resolve | refs | POST | /refs/resolve | exposed_read | Read-only batch ref previews; core preserves unknown refs and enforces per-resource visibility. |
 | report.render | report | GET | /docs/{document_id}/report | exposed_read | authorized live dashboard projection read |
 | runs.get | runs | GET | /runs/{run_id} | exposed_read | run reports are workspace presence data |
 | runs.list | runs | GET | /runs | exposed_read | run reports are workspace presence data |

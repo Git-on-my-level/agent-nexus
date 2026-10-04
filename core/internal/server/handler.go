@@ -2021,6 +2021,14 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleMarkHomeRead(w, r, opts)
 	})
 
+	registerRoute("/refs/resolve", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, 405, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleResolveRefs(w, r, opts)
+	})
+
 	registerRoute("/ref-edges", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		handleListRefEdges(w, r, opts)
 	})
@@ -2049,6 +2057,8 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return routeAccessRequirement{}
 		}
 		switch {
+		case strings.HasSuffix(remainder, "/plan"):
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: r.Method == http.MethodGet || r.Method == http.MethodPut}
 		case strings.HasSuffix(remainder, "/timeline"):
 			if r.Method == http.MethodGet {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
@@ -2088,6 +2098,19 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	}, func(w http.ResponseWriter, r *http.Request) {
 		remainder := strings.TrimPrefix(r.URL.Path, "/cards/")
+		if strings.HasSuffix(remainder, "/plan") {
+			id := strings.TrimSuffix(remainder, "/plan")
+			if id == "" || strings.Contains(id, "/") {
+				writeError(w, 404, "not_found", "endpoint not found")
+				return
+			}
+			if r.Method != http.MethodGet && r.Method != http.MethodPut {
+				writeError(w, 405, "method_not_allowed", "only GET and PUT are supported")
+				return
+			}
+			handleCardPlan(w, r, opts, id)
+			return
+		}
 		if remainder == "" {
 			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
 			return

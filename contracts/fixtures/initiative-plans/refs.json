@@ -1,0 +1,18 @@
+{
+  "refs": [
+    "card:initiative",
+    "doc:brief",
+    "topic:launch",
+    "board:portfolio",
+    "card:missing",
+    "card:initiative"
+  ],
+  "resolvable": [
+    true,
+    true,
+    true,
+    true,
+    false,
+    true
+  ]
+}
