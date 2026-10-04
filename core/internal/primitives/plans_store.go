@@ -248,12 +248,15 @@ func (s *Store) ResolveRefs(ctx context.Context, refs []string, visible func(str
 			state := plans.Compute(p, facts, movement[row.ID], now, threshold)
 			out[i].Progress = &state.Progress
 			if len(state.NextSteps) > 0 {
+				steps := make(map[string]plans.Step, len(p.Steps))
 				for _, step := range p.Steps {
-					if step.ID == state.NextSteps[0] {
-						// The title of an unreadable linked resource must not leak through an authored step title.
-						if step.Ref == "" || facts[step.Ref].Known {
-							out[i].NextStep = &PreviewStep{Title: step.Title}
-						}
+					steps[step.ID] = step
+				}
+				for _, id := range state.NextSteps {
+					step := steps[id]
+					// Skip unreadable linked resources, including their authored titles.
+					if step.Ref == "" || facts[step.Ref].Known {
+						out[i].NextStep = &PreviewStep{Title: step.Title}
 						break
 					}
 				}

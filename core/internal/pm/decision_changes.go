@@ -7,8 +7,9 @@ import (
 )
 
 // NewDecisions is a single bounded candidate read for compact digests. It uses
-// the ordinary PM authorization policy without loading conversation bodies or
-// computing actionable decision state. Callers must also check native lifecycle.
+// workspace PM authorization policy without loading conversation bodies or
+// computing actionable decision state. Callers must batch-check native resource
+// visibility and lifecycle before exposing candidates to the viewer.
 func (s *Service) NewDecisions(ctx context.Context, p Principal, since, now time.Time) ([]Decision, bool, error) {
 	if err := s.authorize(ctx, p, "pm.read", ""); err != nil {
 		return nil, false, err
@@ -37,7 +38,7 @@ func (s *Service) NewDecisions(ctx context.Context, p Principal, since, now time
 			return nil, false, err
 		}
 		if d.CreatedAt.After(since) && !d.CreatedAt.After(now) {
-			ds = append(ds, d)
+			ds = append(ds, Decision{ID: d.ID, WorkRef: d.WorkRef, CreatedAt: d.CreatedAt})
 		}
 	}
 	err = rows.Err()
@@ -45,17 +46,5 @@ func (s *Service) NewDecisions(ctx context.Context, p Principal, since, now time
 	if err != nil {
 		return nil, false, err
 	}
-	truncated := candidates > 200
-	out := []Decision{}
-	allowed, checked := map[string]bool{}, map[string]bool{}
-	for _, d := range ds {
-		if !checked[d.WorkRef] {
-			allowed[d.WorkRef] = s.authorize(ctx, p, "pm.read", d.WorkRef) == nil
-			checked[d.WorkRef] = true
-		}
-		if allowed[d.WorkRef] {
-			out = append(out, Decision{ID: d.ID, WorkRef: d.WorkRef, CreatedAt: d.CreatedAt})
-		}
-	}
-	return out, truncated, nil
+	return ds, candidates > 200, nil
 }

@@ -134,6 +134,53 @@ func TestOverviewDigestDecisionsRespectCurrentWorkVisibility(t *testing.T) {
 	}
 }
 
+func TestOverviewDigestDistinctDecisionRefsQueryBudget(t *testing.T) {
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	ctx := context.Background()
+	owner := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "digest-human", "digest-human-actor", "digest-human", "digest-token")
+	db, counter := testsql.Open("file:" + env.workspace.Layout().DatabasePath)
+	t.Cleanup(func() { db.Close() })
+	store := primitives.NewTestStore(db, env.workspace.Layout().ArtifactContentDir)
+	runtime, err := NewPMRuntime(db, store, auth.NewStore(db), PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	since := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339Nano)
+	req := httptest.NewRequest("GET", "/overview/changes", nil)
+	cacheAuthenticatedPrincipal(req, &auth.Principal{ActorID: owner.ActorID, AgentID: owner.AgentID, PrincipalKind: "human"})
+	opts := handlerOptions{primitiveStore: store, pmRuntime: runtime}
+	for i := 1; i <= 200; i++ {
+		w, err := store.CreateWork(ctx, owner.ActorID, "", map[string]any{"title": fmt.Sprintf("Initiative %d", i)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		p := plans.Plan{Steps: []plans.Step{{ID: "build", Title: "Build", Ref: anyString(w["ref"]), After: []string{}}}}
+		if err = store.SetCardPlan(ctx, owner.ActorID, anyString(w["id"]), anyString(w["updated_at"]), p); err != nil {
+			t.Fatal(err)
+		}
+		_, err = runtime.Service.ProposeDecision(ctx, pm.Principal{WorkspaceID: "ws_main", ActorID: owner.ActorID, Human: true}, pm.DecisionInput{RequestKey: fmt.Sprint(i), WorkRef: anyString(w["ref"]), Instruction: `{"next_action":"private instruction"}`, Scope: "work.annotate", TargetRevision: "1.1"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i != 1 && i != 20 && i != 200 {
+			continue
+		}
+		t.Run(fmt.Sprint(i), func(t *testing.T) {
+			counter.Reset()
+			d := primitives.OverviewChanges{Since: &since, Items: []primitives.OverviewChange{}}
+			if err := appendOverviewDecisions(req, opts, &d, time.Now().UTC()); err != nil {
+				t.Fatal(err)
+			}
+			if len(d.Items) != min(i, 100) || d.Truncated != (i > 100) {
+				t.Fatalf("items=%d truncated=%v", len(d.Items), d.Truncated)
+			}
+			if got := counter.Count(); got != 5 {
+				t.Fatalf("%d distinct decision refs used %d queries; want 5", i, got)
+			}
+		})
+	}
+}
+
 func TestOverviewVisitsPersistPerPrincipalAndDigestDoesNotAdvance(t *testing.T) {
 	h := newPrimitivesTestServer(t)
 	ctx := context.Background()
