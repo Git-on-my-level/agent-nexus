@@ -54,23 +54,23 @@ func (s *Store) readRefFacts(ctx context.Context, refs []string, visible func(st
 		if len(values) == 0 {
 			continue
 		}
-		marks := strings.TrimSuffix(strings.Repeat("?,", len(values)), ",")
+		encoded, err := json.Marshal(values)
+		if err != nil {
+			return nil, err
+		}
+		marks := "SELECT value FROM json_each(?)"
 		args := []any{}
 		for j := 0; j < 2; j++ {
-			for _, v := range values {
-				args = append(args, v)
-			}
+			args = append(args, string(encoded))
 		}
 		var query string
 		switch kind {
 		case "card":
-			for _, v := range values {
-				args = append(args, v)
-			}
+			args = append(args, string(encoded))
 			query = `SELECT c.id,c.handle,CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN c.title ELSE COALESCE(json_extract(o.body_json,'$.facts.title'),json_extract(m.metadata_json,'$.title'),c.title) END,
 			 CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN c.column_key ELSE COALESCE(json_extract(o.body_json,'$.facts.phase'),json_extract(m.metadata_json,'$.phase'),'unknown') END,
 			 CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN CASE WHEN COALESCE(c.assignee,'')='' THEN '' WHEN c.assignee LIKE '%:%' THEN c.assignee ELSE 'actor:'||c.assignee END ELSE COALESCE(json_extract(o.body_json,'$.facts.owner'),json_extract(m.metadata_json,'$.owner'),'') END,
-			 COALESCE(json_extract(m.metadata_json,'$.source.url'),''),COALESCE(c.thread_id,''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=c.thread_id),''),
+			 COALESCE(json_extract(m.metadata_json,'$.source.url'),''),COALESCE(NULLIF(trim(c.thread_id),''),trim(c.parent_thread_id),''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=COALESCE(NULLIF(trim(c.thread_id),''),trim(c.parent_thread_id))),''),
 			 CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN c.updated_at ELSE COALESCE(CASE WHEN julianday(json_extract(o.body_json,'$.source_activity_at')) > julianday(json_extract(o.body_json,'$.meaningful_progress_at')) THEN json_extract(o.body_json,'$.source_activity_at') END,json_extract(o.body_json,'$.meaningful_progress_at'),json_extract(o.body_json,'$.source_activity_at'),c.created_at) END
 			 FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id
 			 WHERE c.trashed_at IS NULL AND (c.id IN (` + marks + `) OR c.handle IN (` + marks + `) OR (m.authority!='nexus' AND json_extract(m.metadata_json,'$.source.url') IN (` + marks + `))) ORDER BY c.id`
@@ -150,11 +150,11 @@ func (s *Store) loadPlans(ctx context.Context, ids []string) (map[string]plans.P
 	if len(ids) == 0 {
 		return out, movement, nil
 	}
-	args := []any{}
-	for _, id := range ids {
-		args = append(args, id)
+	encoded, err := json.Marshal(ids)
+	if err != nil {
+		return nil, nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT card_id,body_json,updated_at FROM card_plans WHERE card_id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")+`)`, args...)
+	rows, err := s.db.QueryContext(ctx, `SELECT card_id,body_json,updated_at FROM card_plans WHERE card_id IN (SELECT value FROM json_each(?))`, string(encoded))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -185,19 +185,12 @@ func (s *Store) planFacts(ctx context.Context, ps map[string]plans.Plan, visible
 	}
 	refs = uniqueSortedStrings(refs)
 	facts := map[string]plans.Fact{}
-	for len(refs) > 0 {
-		n := len(refs)
-		if n > 200 {
-			n = 200
-		}
-		rows, err := s.readRefFacts(ctx, refs[:n], visible)
-		if err != nil {
-			return nil, err
-		}
-		for _, row := range rows {
-			facts[row.Ref] = plans.Fact{Known: row.Resolvable, Status: row.Phase, MovementAt: row.MovementAt}
-		}
-		refs = refs[n:]
+	rows, err := s.readRefFacts(ctx, refs, visible)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		facts[row.Ref] = plans.Fact{Known: row.Resolvable, Status: row.Phase, MovementAt: row.MovementAt}
 	}
 	return facts, nil
 }

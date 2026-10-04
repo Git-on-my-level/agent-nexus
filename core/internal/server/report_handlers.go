@@ -118,21 +118,15 @@ func (reader *reportReader) loadWork(filter primitives.ReportWorkFilter) {
 		reader.workPartial, reader.workErr = page.Truncated, err
 		for _, work := range page.Work {
 			ref := anyString(work["board_ref"])
-			board := reader.boards[ref]
-			if board == nil {
-				resolved, err := reader.opts.primitiveStore.ResolveResourceRef(reader.r.Context(), primitives.ResourceRefInput{Type: "board", Ref: ref})
-				if err != nil {
-					reader.workErr = err
-					break
-				}
-				board, err = reader.opts.primitiveStore.GetBoard(reader.r.Context(), resolved.ID)
-				if err != nil {
-					reader.workErr = err
-					break
-				}
-				reader.boards[ref] = board
+			board, ok := page.Boards[ref]
+			if !ok {
+				reader.workErr = fmt.Errorf("report board context unavailable")
+				break
 			}
-			if !reportActive(board) || !reportActive(work) || !threadAccessible(reader.r, reader.opts, anyString(board["thread_id"])) || !threadAccessible(reader.r, reader.opts, anyString(work["thread_id"])) {
+			reader.boards[ref] = map[string]any{"title": board.Title}
+			// Both owners were joined by the batch read; no per-card thread or
+			// board hydration is needed to enforce the same privacy rule.
+			if !reportActive(work) || !canAccessPMThread(reader.r, reader.opts, map[string]any{"pm_actor_id": board.PrivateOwner}) || !canAccessPMThread(reader.r, reader.opts, map[string]any{"pm_actor_id": page.PrivateOwners[anyString(work["id"])]}) {
 				continue
 			}
 			phase := anyString(work["phase"])

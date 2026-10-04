@@ -3852,9 +3852,9 @@ func loadThreadTitleForBoardCard(ctx context.Context, rower queryRower, threadID
 	return title, nil
 }
 
-func scanBoardCardRow(scanner interface{ Scan(dest ...any) error }) (boardCardRow, error) {
+func scanBoardCardRow(scanner interface{ Scan(dest ...any) error }, extra ...any) (boardCardRow, error) {
 	row := boardCardRow{}
-	if err := scanner.Scan(
+	if err := scanner.Scan(append([]any{
 		&row.BoardID,
 		&row.BoardHandle,
 		&row.CardID,
@@ -3886,7 +3886,7 @@ func scanBoardCardRow(scanner interface{ Scan(dest ...any) error }) (boardCardRo
 		&row.TrashedAt,
 		&row.TrashedBy,
 		&row.TrashReason,
-	); err != nil {
+	}, extra...)...); err != nil {
 		return boardCardRow{}, fmt.Errorf("scan board card row: %w", err)
 	}
 	return row, nil
