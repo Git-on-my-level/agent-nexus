@@ -240,6 +240,23 @@ func TestTimestampAndLabelSafetyBounds(t *testing.T) {
 		t.Fatalf("label key cap: %v", err)
 	}
 }
+
+func TestScopedCredentialCannotInheritOwnersFleetAdministration(t *testing.T) {
+	ctx := context.Background()
+	s, _, owner, writer := fixture(t)
+	if _, err := s.DB.Exec(`UPDATE agents SET metadata_json=json_set(metadata_json,'$.auth_admin',1) WHERE id='owner'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.Exec(`INSERT INTO hosts(id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at) VALUES('other-host','other-host','Other','test','test','[]',?)`, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Auth.RevokeHost(ctx, "other-host", writer); !errors.Is(err, auth.ErrAuthAdminRequired) {
+		t.Fatalf("scoped identity inherited fleet administration: %v", err)
+	}
+	if _, err := s.Auth.RevokeHost(ctx, "other-host", owner); err != nil {
+		t.Fatalf("ordinary explicitly granted owner could not administer: %v", err)
+	}
+}
 func number(v float64) *float64 { return &v }
 func TestGrantScopeRevocationAndAudit(t *testing.T) {
 	ctx := context.Background()

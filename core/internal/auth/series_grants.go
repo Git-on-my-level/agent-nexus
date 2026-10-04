@@ -37,19 +37,11 @@ func RequireSeriesAdministratorTx(ctx context.Context, tx *sql.Tx, actor Princip
 	if actor.SeriesAdapter != "" {
 		return ErrSeriesForbidden
 	}
-	var kind string
-	var granted bool
-	err := tx.QueryRowContext(ctx, `SELECT `+principalKindExpr("a")+`,COALESCE(json_extract(metadata_json,'$.auth_admin'),0) FROM agents a WHERE id=? AND actor_id=? AND revoked_at IS NULL`, actor.AgentID, actor.ActorID).Scan(&kind, &granted)
-	if errors.Is(err, sql.ErrNoRows) {
+	err := requireAdministrationTx(ctx, tx, actor, false)
+	if errors.Is(err, ErrAuthAdminRequired) {
 		return ErrSeriesForbidden
 	}
-	if err != nil {
-		return err
-	}
-	if kind == "human" || (kind == "agent" && granted) {
-		return nil
-	}
-	return ErrSeriesForbidden
+	return err
 }
 
 func (s *Store) AuditSeriesTx(ctx context.Context, tx *sql.Tx, actor Principal, event, adapter string) error {
