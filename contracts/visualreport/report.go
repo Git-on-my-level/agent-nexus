@@ -253,15 +253,18 @@ func safeURL(value any) bool {
 	if strings.ContainsAny(host, "%<>^|{}\"`") {
 		return false
 	}
-	if strings.Contains(host, ":") {
-		if !strings.HasPrefix(u.Host, "[") {
-			return false
-		}
+	// net/url before Go 1.27 accepts bracketed non-IP hosts. Validate the
+	// brackets ourselves so all supported toolchains follow the same contract.
+	if strings.HasPrefix(u.Host, "[") {
 		addr, err := netip.ParseAddr(host)
 		if err != nil || !addr.Is6() {
 			return false
 		}
+		return true
+	} else if strings.ContainsAny(host, "[]:") {
+		return false
 	}
+
 	// Numeric host suffixes are IPv4 in WHATWG URL. Require canonical dotted
 	// decimal so Go and the browser cannot interpret the same hostname differently.
 	tail := host[strings.LastIndex(host, ".")+1:]
