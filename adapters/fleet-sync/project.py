@@ -11,7 +11,7 @@ import hashlib
 import json
 from datetime import datetime, timedelta, timezone
 
-ADAPTER_VERSION = "0.1.0"
+ADAPTER_VERSION = "0.2.0"
 PHASES = {"backlog", "ready", "in_progress", "blocked", "review", "done", "cancelled", "unknown"}
 MULTICA_PHASE = {
     "backlog": "backlog",

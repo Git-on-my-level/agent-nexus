@@ -6,11 +6,6 @@
   "anx_binary": "anx",
   "node_bin": "node",
   "repo_root": "",
-  "boards": {
-    "agent_work": "board:example-agent-work",
-    "pull_requests": "board:example-pull-requests",
-    "ops_hygiene": "board:example-ops-hygiene"
-  },
   "multica": {
     "connection_id": "multica-main",
     "app_url": "https://multica.example.invalid",
@@ -21,8 +16,14 @@
     "owner": "Example Owner"
   },
   "hosts": [
-    {"label": "local-host", "local": true},
-    {"label": "remote-host", "ssh": "remote-alias"}
+    {
+      "label": "local-host",
+      "local": true
+    },
+    {
+      "label": "remote-host",
+      "ssh": "remote-alias"
+    }
   ],
   "fleetctl": {
     "binary": "fleetctl",
@@ -38,5 +39,6 @@
   },
   "nexus": {
     "loose_ends_board": "board:example-loose-ends"
-  }
+  },
+  "mapping_doc": "doc:fleet-sync-mapping"
 }

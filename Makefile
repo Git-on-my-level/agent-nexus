@@ -49,6 +49,7 @@ web-ui-static-ci: ## Same steps as CI job web-ui-static-check (frozen lockfile +
 	pnpm -C $(WEB_UI_DIR) run build
 
 check: ## Run repo, core, cli, and web-ui checks
+	$(MAKE) fleet-sync-check
 	$(MAKE) contract-check
 	$(MAKE) workflow-check
 	$(MAKE) -C $(CORE_DIR) check
@@ -202,3 +203,7 @@ visualreport-check: ## Verify the shared Go report contract and browser conforma
 	@test -z "$$(gofmt -l contracts/visualreport)"
 	cd contracts/visualreport && go vet ./... && go test ./...
 	node scripts/check-visual-report-conformance.mjs
+
+.PHONY: fleet-sync-check
+fleet-sync-check: ## Run fleet ingestion and migration unit tests
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s adapters/fleet-sync/tests -v
