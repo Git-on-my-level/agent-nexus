@@ -1,0 +1,406 @@
+import AxeBuilder from "@axe-core/playwright";
+import { expect, test } from "@playwright/test";
+
+import { installWorkspaceApi } from "../helpers/workspaceApiMock.js";
+
+/**
+ * The Overview initiative tiles and the initiative page, in a real browser.
+ *
+ * Only one theme is captured because only one exists: `app.css` defines a
+ * single dark token set, with no `data-theme` and no `prefers-color-scheme`
+ * block. `chart-interaction.spec.js` covers the one thing a light theme would
+ * change here — that chart series colours are chosen from the background
+ * rather than baked in.
+ */
+
+const WORKSPACE = "/o/local/w/local";
+const CARD_REF = "card:release-b";
+const CARD_PATH = `${WORKSPACE}/tasks/${encodeURIComponent(CARD_REF)}`;
+const NOW = "2026-10-04T12:00:00Z";
+
+const plan = {
+  steps: [
+    {
+      id: "contracts",
+      title: "Shared report contracts",
+      after: [],
+      ref: "card:contracts",
+    },
+    { id: "plan-model", title: "Plan model on cards", after: ["contracts"] },
+    { id: "ui-chips", title: "Ref chips everywhere", after: ["contracts"] },
+    { id: "tiles", title: "Overview tiles", after: ["plan-model", "ui-chips"] },
+  ],
+};
+
+const planState = {
+  steps: [
+    { id: "contracts", status: "done", resolvable: true },
+    { id: "plan-model", status: "active", resolvable: false },
+    { id: "ui-chips", status: "blocked", resolvable: false },
+    { id: "tiles", status: "not_started", resolvable: false },
+  ],
+  progress: { done: 1, total: 4 },
+  critical_path: ["plan-model", "tiles"],
+  next_steps: ["plan-model"],
+  shape: "dag",
+  health: "blocked",
+  last_movement_at: "2026-10-04T09:00:00Z",
+};
+
+/** A live initiatives projection row, as core sends it. */
+const initiative = (overrides = {}) => ({
+  ref: CARD_REF,
+  title: "Release B",
+  summary: "Initiative plans, live dashboards and agent ergonomics.",
+  priority: "high",
+  phase: "in_progress",
+  progress: { done: 1, total: 4 },
+  needs: [],
+  updated_at: "2026-10-04T09:00:00Z",
+  ...overrides,
+});
+
+async function installInitiativePage(page) {
+  await page.clock.setFixedTime(new Date(NOW));
+  await installWorkspaceApi(page, {});
+  await page.route("**/*", async (route) => {
+    const request = route.request();
+    if (!["fetch", "xhr"].includes(request.resourceType())) {
+      return route.fallback();
+    }
+    const url = new URL(request.url());
+    const path = decodeURIComponent(url.pathname);
+    const json = (body) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(body),
+      });
+
+    if (path.endsWith("/plan") && request.method() === "GET") {
+      return json({ plan, plan_state: planState });
+    }
+    if (path === "/refs/resolve" && request.method() === "POST") {
+      return json({
+        items: [
+          {
+            ref: "card:contracts",
+            kind: "card",
+            title: "Shared report contracts",
+            status: "done",
+            owner: "Codex Luna",
+            progress: { done: 5, total: 5 },
+            resolvable: true,
+          },
+        ],
+      });
+    }
+    if (path.startsWith("/work/") && request.method() === "GET") {
+      return json({
+        work: {
+          ref: CARD_REF,
+          handle: "release-b",
+          title: "Release B",
+          summary:
+            "Initiative plans, live dashboards and agent ergonomics.\n\nThe card body sits below the plan.",
+          phase: "in_progress",
+          priority: "high",
+          definition_of_done: [
+            "Plans render in the shape the plan has",
+            "Tiles answer state and progress in ten seconds",
+          ],
+          next_action: "Wire the Overview tiles",
+          source: { authority: "nexus" },
+        },
+      });
+    }
+    return route.fallback();
+  });
+}
+
+test("initiative page leads with the plan, and the card body follows", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  await installInitiativePage(page);
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  await page.goto(CARD_PATH);
+
+  const planSection = page.locator("[data-initiative-plan]");
+  await expect(planSection).toBeVisible({ timeout: 60_000 });
+
+  // Status line and health lead the page. Scoped to the health badge, since
+  // "Blocked" also labels the blocked steps inside the diagram.
+  await expect(planSection.locator(".ui-badge").first()).toHaveText("Blocked");
+  await expect(page.locator("[data-plan-progress]")).toHaveText("1/4 steps");
+
+  // The plan's shape picks the view: this one branches, so it is a tree.
+  await expect(page.locator("[data-plan-shape='dag']")).toBeVisible();
+  await expect(page.locator(".plan-node")).toHaveCount(4);
+  await expect(page.locator(".plan-edge--critical")).toHaveCount(1);
+
+  // A step with a ref renders as a resolved chip, not a bare id.
+  await expect(
+    page.locator(".plan-node [data-anx-ref='card:contracts']"),
+  ).toContainText("Shared report contracts");
+
+  // The card body is present, and below the plan.
+  const order = await page
+    .locator("[data-initiative-plan], [data-initiative-body]")
+    .evaluateAll((nodes) =>
+      nodes.map((node) =>
+        node.hasAttribute("data-initiative-plan") ? "plan" : "body",
+      ),
+    );
+  expect(order).toEqual(["plan", "body"]);
+
+  await page.screenshot({
+    path: testInfo.outputPath("initiative-desktop.png"),
+    animations: "disabled",
+  });
+  await testInfo.attach("initiative-desktop", {
+    path: testInfo.outputPath("initiative-desktop.png"),
+    contentType: "image/png",
+  });
+});
+
+test("the plan diagram keeps a readable fallback and a focusable chip", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await installInitiativePage(page);
+  await page.goto(CARD_PATH);
+  await expect(page.locator("[data-initiative-plan]")).toBeVisible({
+    timeout: 60_000,
+  });
+
+  // Edges are decoration; the dependencies they draw are also written out.
+  await expect(page.locator(".plan-tree__edges")).toHaveAttribute(
+    "aria-hidden",
+    "true",
+  );
+  await page.getByText("View plan steps").click();
+  const steps = page.locator(".plan-steps li");
+  await expect(steps).toHaveCount(4);
+  await expect(
+    steps.filter({ hasText: "after Shared report contracts" }),
+  ).not.toHaveCount(0);
+
+  // A chip inside the diagram is a real link the keyboard can reach.
+  const chip = page.locator(".plan-node a[data-anx-ref='card:contracts']");
+  await chip.focus();
+  await expect(chip).toBeFocused();
+  await expect(page.locator(".anx-ref-preview")).toBeVisible();
+  await expect(page.locator(".anx-ref-preview")).toContainText("Codex Luna");
+});
+
+test("initiative page has no accessibility violations", async ({ page }) => {
+  test.setTimeout(90_000);
+  await installInitiativePage(page);
+  await page.goto(CARD_PATH);
+  await expect(page.locator("[data-initiative-plan]")).toBeVisible({
+    timeout: 60_000,
+  });
+  const results = await new AxeBuilder({ page })
+    .include("[data-initiative-plan]")
+    .withTags(["wcag2a", "wcag2aa"])
+    .analyze();
+  expect(results.violations).toEqual([]);
+});
+
+test("the plan reads at phone width", async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
+  await installInitiativePage(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(CARD_PATH);
+  await expect(page.locator("[data-initiative-plan]")).toBeVisible({
+    timeout: 60_000,
+  });
+
+  // The tree scrolls sideways rather than squashing or overflowing the page.
+  const scroller = page.locator(".plan-tree-scroll");
+  await expect(scroller).toBeVisible();
+  const overflows = await scroller.evaluate(
+    (node) => node.scrollWidth > node.clientWidth,
+  );
+  expect(overflows).toBe(true);
+  const documentOverflows = await page.evaluate(
+    () => document.documentElement.scrollWidth > window.innerWidth + 1,
+  );
+  expect(documentOverflows).toBe(false);
+
+  await page.screenshot({
+    path: testInfo.outputPath("initiative-phone.png"),
+    animations: "disabled",
+  });
+  await testInfo.attach("initiative-phone", {
+    path: testInfo.outputPath("initiative-phone.png"),
+    contentType: "image/png",
+  });
+});
+
+/**
+ * The Overview tiles with real plan state behind them: health, a mini-viz sized
+ * to the plan's shape, what is next, and when it last moved. The seeded fixture
+ * in overview.spec.js predates plans, so a tile there degrades to progress
+ * alone; this one shows the whole tile.
+ */
+const OVERVIEW = `${WORKSPACE}/overview`;
+
+async function installOverviewTiles(page) {
+  await page.clock.setFixedTime(new Date(NOW));
+  await installWorkspaceApi(page, {});
+  const snapshot = {
+    generated_at: NOW,
+    needs_you: {
+      status: "ok",
+      count: 2,
+      rows: [],
+      href: "/inbox?mailbox=needs-you",
+    },
+    initiatives: {
+      status: "ok",
+      count: 3,
+      items: [
+        initiative({
+          plan_state: planState,
+          health: "blocked",
+          needs: ["Ref chips everywhere"],
+        }),
+        initiative({
+          ref: "card:dashboards",
+          title: "Live dashboards",
+          summary: "Panels that never go stale.",
+          progress: { done: 4, total: 5 },
+          plan_state: {
+            ...planState,
+            steps: [
+              { id: "contracts", status: "done" },
+              { id: "panels", status: "done" },
+              { id: "queries", status: "done" },
+              { id: "publish", status: "done" },
+              { id: "adopt", status: "active" },
+            ],
+            progress: { done: 4, total: 5 },
+            critical_path: ["adopt"],
+            next_steps: ["adopt-the-dashboard"],
+            shape: "chain",
+            health: "on_track",
+            last_movement_at: "2026-10-04T11:30:00Z",
+          },
+          health: "on_track",
+        }),
+        initiative({
+          ref: "card:ergonomics",
+          title: "Agent ergonomics",
+          summary: "Fewer traps in the CLI and the skills.",
+          progress: { done: 1, total: 6 },
+          plan_state: {
+            ...planState,
+            steps: [
+              { id: "audit", status: "done" },
+              { id: "cli", status: "not_started" },
+              { id: "skills", status: "not_started" },
+            ],
+            progress: { done: 1, total: 3 },
+            critical_path: ["cli"],
+            next_steps: ["cli-first-class-inbox"],
+            shape: "lanes",
+            health: "stalled",
+            last_movement_at: "2026-09-26T09:00:00Z",
+          },
+          health: "stalled",
+        }),
+      ],
+    },
+    dashboard: { status: "ok", pinned_ref: "", has_more: false, reports: [] },
+    agents: { status: "ok", rows: [], count: 0 },
+    work: { status: "ok", total: 3, human_count: 0, items: [] },
+  };
+  await page.route("**/*", async (route) => {
+    const request = route.request();
+    if (!["fetch", "xhr"].includes(request.resourceType())) {
+      return route.fallback();
+    }
+    const path = decodeURIComponent(new URL(request.url()).pathname);
+    if (path === "/overview" || path === "/workspace/dashboard") {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(snapshot),
+      });
+    }
+    return route.fallback();
+  });
+}
+
+for (const viewport of [
+  { width: 1440, height: 1000, label: "desktop" },
+  { width: 390, height: 844, label: "phone" },
+]) {
+  test(`Overview initiative tiles @ ${viewport.label}`, async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(90_000);
+    await installOverviewTiles(page);
+    await page.setViewportSize({
+      width: viewport.width,
+      height: viewport.height,
+    });
+    await page.goto(OVERVIEW);
+
+    const tiles = page.locator("[data-initiative-tile]");
+    await expect(tiles.first()).toBeVisible({ timeout: 60_000 });
+    await expect(tiles).toHaveCount(3);
+
+    // Each tile answers state and progress without opening anything.
+    await expect(tiles.first()).toContainText("Release B");
+    await expect(tiles.first()).toContainText("Blocked");
+    await expect(tiles.first()).toContainText("Tech tree");
+    await expect(tiles.first()).toContainText("Next: Plan model");
+    await expect(tiles.first()).toContainText("moved 3h ago");
+    await expect(tiles.first().locator("[data-tile-needs]")).toContainText(
+      "Ref chips everywhere",
+    );
+
+    await expect(tiles.nth(1)).toContainText("On track");
+    await expect(tiles.nth(1)).toContainText("Timeline");
+    await expect(tiles.nth(2)).toContainText("Stalled");
+    await expect(tiles.nth(2)).toContainText("Lanes");
+
+    // The whole tile is the link to the initiative page.
+    await expect(tiles.first()).toHaveAttribute(
+      "href",
+      new RegExp("/tasks/card%3Arelease-b$"),
+    );
+
+    // One Inbox line, not a restatement of the Inbox.
+    await expect(
+      page.getByRole("link", { name: "2 decisions waiting in Inbox →" }),
+    ).toBeVisible();
+
+    const section = page.locator('[data-overview-section="initiatives"]');
+    await section.screenshot({
+      path: testInfo.outputPath(`tiles-${viewport.label}.png`),
+      animations: "disabled",
+    });
+    await testInfo.attach(`tiles-${viewport.label}`, {
+      path: testInfo.outputPath(`tiles-${viewport.label}.png`),
+      contentType: "image/png",
+    });
+  });
+}
+
+test("Overview tiles have no accessibility violations", async ({ page }) => {
+  test.setTimeout(90_000);
+  await installOverviewTiles(page);
+  await page.goto(OVERVIEW);
+  await expect(page.locator("[data-initiative-tile]").first()).toBeVisible({
+    timeout: 60_000,
+  });
+  const results = await new AxeBuilder({ page })
+    .include('[data-overview-section="initiatives"]')
+    .withTags(["wcag2a", "wcag2aa"])
+    .analyze();
+  expect(results.violations).toEqual([]);
+});

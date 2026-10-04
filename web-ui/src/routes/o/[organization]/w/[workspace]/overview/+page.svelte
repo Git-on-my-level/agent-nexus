@@ -15,12 +15,12 @@
     formatPartialCount,
     loadOverview,
   } from "$lib/overview.js";
+  import { inboxWaitingLine } from "$lib/initiativeTiles.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import LiveInitiatives from "$lib/components/reports/LiveInitiatives.svelte";
   import VisualReport from "$lib/components/reports/VisualReport.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
-  import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
 
@@ -34,6 +34,7 @@
   ]);
   let fetched = $state(readWorkspaceView(cacheKey));
   let model = $derived(fetched);
+  let inboxWaiting = $derived(inboxWaitingLine(model?.needsYou));
   let refreshing = $state(false);
   let loadingMoreReports = $state(false);
   let pinning = $state(false);
@@ -188,6 +189,12 @@
       <Skeleton rows={6} />
     </div>
   {:else}
+    <!--
+      One line, not a second Inbox. The dashboard says how many decisions are
+      waiting and links across; which initiative each belongs to is a pill on
+      that initiative's tile. Restating the Inbox here was the duplication the
+      brief rules out.
+    -->
     <section
       class="rounded-md border border-line bg-panel"
       aria-labelledby="overview-needs-you"
@@ -195,22 +202,21 @@
       data-overview-status={model.needsYou.status}
     >
       <header
-        class="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-3 py-2"
+        class="flex flex-wrap items-baseline justify-between gap-2 px-3 py-2"
       >
         <h2 id="overview-needs-you" class="text-subtitle text-fg">Needs you</h2>
-        {#if model.needsYou.status === "ok"}
+        {#if inboxWaiting}
           <a
             class="text-meta text-accent-text hover:underline"
-            href={workspaceHref(model.needsYou.href)}
+            href={workspaceHref(inboxWaiting.href)}
             data-overview-needs-you-count
           >
-            {model.needsYou.count}{model.needsYou.truncated ? "+" : ""}
-            {model.needsYou.count === 1 ? "item" : "items"}
+            {inboxWaiting.label} →
           </a>
         {/if}
       </header>
       {#if model.needsYou.status !== "ok"}
-        <div class="p-3">
+        <div class="px-3 pb-3">
           <StateError
             title="Needs you is unavailable"
             message={model.needsYou.message}
@@ -218,49 +224,10 @@
             retrying={refreshing}
           />
         </div>
-      {:else if model.needsYou.count === 0}
-        <p class="px-3 py-4 text-meta text-fg-muted" data-overview-empty>
+      {:else if !inboxWaiting}
+        <p class="px-3 pb-3 text-meta text-fg-muted" data-overview-empty>
           Nothing is waiting on you.
         </p>
-      {:else}
-        <ul class="divide-y divide-line-subtle">
-          {#each model.needsYou.rows as row (row.id)}
-            <li>
-              <a
-                class="flex min-w-0 flex-col gap-0.5 px-3 py-2 hover:bg-panel-hover"
-                href={workspaceHref(row.href)}
-                data-overview-needs-you-row
-              >
-                <span class="flex min-w-0 items-center gap-2">
-                  <span
-                    class="min-w-0 flex-1 truncate text-meta font-medium text-fg"
-                    >{row.title}</span
-                  >
-                  {#if row.badge}
-                    <SignalBadge tone={row.badge.tone} class="shrink-0"
-                      >{row.badge.label}</SignalBadge
-                    >
-                  {/if}
-                  {#if row.wait}
-                    <span
-                      class="shrink-0 text-micro tabular-nums text-warn-text"
-                      >{row.wait}</span
-                    >
-                  {/if}
-                </span>
-                {#if row.requester || row.source}
-                  <span class="truncate text-micro text-fg-muted">
-                    {#if row.requester}<span class="text-fg"
-                        >{row.requester}</span
-                      >{/if}{#if row.requester && row.source}
-                      ·
-                    {/if}{row.source}
-                  </span>
-                {/if}
-              </a>
-            </li>
-          {/each}
-        </ul>
       {/if}
     </section>
     <section

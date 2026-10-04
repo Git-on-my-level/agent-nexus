@@ -20,8 +20,11 @@
     principalRegistry,
   } from "$lib/actorSession";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
+  import AnxRefPreview from "$lib/components/AnxRefPreview.svelte";
+  import PlanView from "$lib/components/PlanView.svelte";
   import EvidenceHandoff from "$lib/components/participation/EvidenceHandoff.svelte";
   import TaskParticipation from "$lib/components/participation/TaskParticipation.svelte";
+  import { collectPageRefs, indexResolvedRefs } from "$lib/refResolve.js";
   import ReceiptSignal from "$lib/components/pm/ReceiptSignal.svelte";
   import {
     decisionPayload,
@@ -58,8 +61,60 @@
     decisionsLoading = $state(false),
     notice = $state(""),
     refreshing = $state(false),
-    ready = $state(false);
+    ready = $state(false),
+    plan = $state(null),
+    planState = $state(null),
+    planRefs = $state(new Map()),
+    planError = $state("");
   let requestId = 0;
+  let refPreview = $state();
+
+  const PLAN_HEALTH_BADGES = {
+    on_track: { label: "On track", tone: "ok" },
+    stalled: { label: "Stalled", tone: "warn" },
+    blocked: { label: "Blocked", tone: "danger" },
+  };
+  let planHealth = $derived(PLAN_HEALTH_BADGES[planState?.health] ?? null);
+  let planProgress = $derived(
+    Number(planState?.progress?.total) > 0 ? planState.progress : null,
+  );
+
+  /**
+   * The plan and every ref its steps point at, in two reads: one plan, one
+   * batch resolve. Chips never fetch for themselves, so a twenty-step plan is
+   * still two requests rather than twenty-one.
+   */
+  async function loadPlan(ticket, id) {
+    plan = null;
+    planState = null;
+    planRefs = new Map();
+    planError = "";
+    let result;
+    try {
+      result = await coreClient.getCardPlan(id);
+    } catch {
+      // A card without a plan is the common case, not a failure worth shouting
+      // about; only a card that has one and could not be read is.
+      return;
+    }
+    if (ticket !== requestId) return;
+    const steps = Array.isArray(result?.plan?.steps) ? result.plan.steps : [];
+    if (!steps.length) return;
+    plan = result.plan;
+    planState = result.plan_state ?? null;
+
+    const refs = collectPageRefs([], {
+      extraRefs: steps.map((step) => step?.ref).filter(Boolean),
+    });
+    if (!refs.length) return;
+    try {
+      const resolved = await coreClient.resolveRefs(refs);
+      if (ticket === requestId) planRefs = indexResolvedRefs(resolved, refs);
+    } catch {
+      // Chips fall back to "not found" rather than the plan failing to render.
+      if (ticket === requestId) planRefs = indexResolvedRefs({}, refs);
+    }
+  }
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
@@ -114,6 +169,10 @@
     mirrors = [];
     showAllLinks = false;
     nextCursor = "";
+    plan = null;
+    planState = null;
+    planRefs = new Map();
+    planError = "";
     const results = await Promise.allSettled([
       coreClient.getWork(id),
       coreClient.listWorkObservations(id, { limit: 30 }),
@@ -125,6 +184,7 @@
       else {
         void loadDecisions(ticket, work);
         void loadMirrors(ticket, work);
+        void loadPlan(ticket, id);
       }
     } else error = errorMessage(results[0].reason);
     if (results[1].status === "fulfilled") {
@@ -325,7 +385,45 @@
     </WorkspacePageHeader>
     <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
       <div class="min-w-0 space-y-7">
-        {#if work.summary}
+        <!--
+          An initiative leads with its plan: where it stands, how healthy it is
+          and what the shape of the remaining work looks like. The card body is
+          still here, below the sections that answer those questions first.
+        -->
+        {#if plan}
+          <section data-initiative-plan>
+            <div class="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 class="ui-label">Plan</h2>
+              <span class="flex items-center gap-2">
+                {#if planHealth}
+                  <SignalBadge tone={planHealth.tone}>
+                    {planHealth.label}
+                  </SignalBadge>
+                {/if}
+                {#if planProgress}
+                  <span class="text-micro text-fg-muted" data-plan-progress
+                    >{planProgress.done}/{planProgress.total} steps</span
+                  >
+                {/if}
+              </span>
+            </div>
+            {#if planError}
+              <p class="mt-2 text-meta text-fg-muted">{planError}</p>
+            {:else}
+              <div class="mt-3">
+                <PlanView
+                  {plan}
+                  {planState}
+                  resolved={planRefs}
+                  organizationSlug={$page.params.organization}
+                  workspaceSlug={$page.params.workspace}
+                  onpreview={(model, anchor) => refPreview?.open(model, anchor)}
+                  onpreviewclose={() => refPreview?.close()}
+                />
+              </div>
+            {/if}
+          </section>
+        {:else if work.summary}
           <p class="whitespace-pre-wrap break-words text-meta text-fg">
             {work.summary}
           </p>
@@ -647,6 +745,14 @@
             {/each}
           </ul>
         </section>
+        {#if plan && work.summary}
+          <section data-initiative-body>
+            <h2 class="ui-label">Card body</h2>
+            <p class="mt-2 whitespace-pre-wrap break-words text-meta text-fg">
+              {work.summary}
+            </p>
+          </section>
+        {/if}
         <!--
           One Details disclosure. Relations, run provenance and the raw reader
           reports are the answers to "prove it" — real, occasionally needed,
@@ -821,3 +927,5 @@
     </div>
   {/if}
 </WorkspacePageShell>
+<!-- One preview layer for every chip on the page. -->
+<AnxRefPreview bind:this={refPreview} />
