@@ -44,6 +44,24 @@ ensure_clean_worktree() {
   [[ -z "${untracked_files}" ]] || die "$(printf 'working tree has untracked files; commit, stash, or remove them first:\n%s' "${untracked_files}")"
 }
 
+ensure_release_tooling() {
+  local hook
+  local hook_path
+  # Check the active hooks, including hooksPath and linked-worktree layouts.
+  # Only our tracked wrappers have the repo-local pre-commit dependency.
+  for hook in pre-commit pre-push; do
+    hook_path="$(git rev-parse --git-path "hooks/${hook}")"
+    if [[ -x "${hook_path}" ]] && cmp -s "${hook_path}" "${SCRIPT_DIR}/git-hooks/${hook}"; then
+      [[ -x "${REPO_ROOT}/.venv/bin/pre-commit" ]] \
+        || die "release hook tooling is missing; run make setup in ${REPO_ROOT} before releasing"
+      "${REPO_ROOT}/.venv/bin/pre-commit" --version >/dev/null \
+        || die "release hook tooling is broken; run make setup in ${REPO_ROOT} before releasing"
+    fi
+  done
+  git var GIT_AUTHOR_IDENT >/dev/null || die "configure a Git author identity before releasing"
+  git var GIT_COMMITTER_IDENT >/dev/null || die "configure a Git committer identity before releasing"
+}
+
 next_patch_version() {
   local latest_tag
   latest_tag="$(git describe --tags --abbrev=0 origin/main 2>/dev/null || true)"
@@ -163,8 +181,10 @@ cd "${REPO_ROOT}"
 
 require_cmd git
 require_cmd make
+ensure_clean_worktree
 
 if [[ "${DRY_RUN}" != "1" ]]; then
+  ensure_release_tooling
   require_cmd gh
   gh auth status >/dev/null
 fi
@@ -209,6 +229,9 @@ if [[ "${SKIP_CHECKS}" != "1" ]]; then
   make hosted-ops-test
 fi
 
+# Checks may regenerate tracked files or create untracked output. Fail before
+# mixing those changes with the version bump, leaving them available to inspect.
+ensure_clean_worktree
 "${SCRIPT_DIR}/set-version.sh" "${TARGET_VERSION}"
 VERSION_FILES=()
 while IFS= read -r path; do

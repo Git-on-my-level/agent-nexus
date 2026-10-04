@@ -1,0 +1,26 @@
+name: Release preflight
+
+on:
+  pull_request:
+    paths:
+      - scripts/release-patch.sh
+      - scripts/git-hooks/**
+      - scripts/tests/test_release_preflight.py
+      - .github/workflows/release-preflight.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/release-patch.sh
+      - scripts/git-hooks/**
+      - scripts/tests/test_release_preflight.py
+      - .github/workflows/release-preflight.yml
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/tests/test_release_preflight.py
