@@ -15,6 +15,7 @@
     formatPartialCount,
     loadOverview,
   } from "$lib/overview.js";
+  import SinceYouLastLooked from "$lib/components/SinceYouLastLooked.svelte";
   import { inboxWaitingLine } from "$lib/initiativeTiles.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import LiveInitiatives from "$lib/components/reports/LiveInitiatives.svelte";
@@ -189,6 +190,7 @@
       <Skeleton rows={6} />
     </div>
   {:else}
+    <SinceYouLastLooked digest={model.sinceYouLastLooked} />
     <!--
       One line, not a second Inbox. The dashboard says how much is waiting and
       links across; which initiative an item belongs to is a pill on that

@@ -264,12 +264,17 @@ export function indexResolvedRefs(response, requested = []) {
       url: asText(row?.url),
       progress: normalizeProgress(row?.progress),
       resolvable: row?.resolvable !== false,
-      // Not in the batch resolve contract today. Read defensively so a preview
-      // fills in if a later revision adds them, and renders without otherwise.
-      board: asText(row?.board ?? row?.board_ref),
+      // `owner` is an actor ref; `owner_display` is the name a reader knows it
+      // by, and core falls back to the ref when it cannot resolve a name.
+      ownerDisplay: asText(row?.owner_display) || asText(row?.owner),
+      // `board` and `next_step` are objects in the contract. Board metadata
+      // needs independent board visibility, so it can be absent on a ref the
+      // reader can otherwise see.
+      board: asText(row?.board?.title ?? row?.board?.ref ?? row?.board),
+      boardRef: asText(row?.board?.ref),
       priority: asText(row?.priority),
-      lastMovedAt: asText(row?.last_moved_at ?? row?.updated_at),
-      nextStep: asText(row?.next_step ?? row?.next_action),
+      lastMovedAt: asText(row?.last_moved_at),
+      nextStep: asText(row?.next_step?.title ?? row?.next_step),
     });
   }
   for (const ref of requested) {
@@ -331,7 +336,11 @@ export function refChipModel(ref, resolved, context = {}) {
   const external = classifyWorkUrl(raw);
   const { prefix, value } = parseRef(raw);
 
-  const kind = asText(hit?.kind) || external?.kind || prefix;
+  // For a work URL the URL itself is the more specific answer: core resolves
+  // an external link through a source-backed card and so calls it a `card`,
+  // but "PR" is what the reader recognises, and it is read off the URL rather
+  // than guessed.
+  const kind = external?.kind || asText(hit?.kind) || prefix;
   const resolvable = hit ? hit.resolvable !== false : Boolean(external);
   const title =
     asText(hit?.title) || external?.label || (resolvable ? raw : "");
@@ -345,7 +354,7 @@ export function refChipModel(ref, resolved, context = {}) {
     status,
     statusLabel: status ? status.replaceAll("_", " ") : "",
     statusTone: STATUS_TONES[status] ?? "neutral",
-    owner: asText(hit?.owner),
+    owner: asText(hit?.ownerDisplay) || asText(hit?.owner),
     priority: asText(hit?.priority),
     board: asText(hit?.board),
     nextStep: asText(hit?.nextStep),

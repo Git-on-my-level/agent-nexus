@@ -55,18 +55,29 @@
         {/if}
 
         {#if tile.segments.length}
+          <!--
+            The shape core computed picks the mini-viz: one track for a chain,
+            a track per independent run for lanes, a column per dependency
+            layer for a tree. Core sends `layer` and `after`, so a tree here is
+            the real graph in miniature rather than a bar standing in for one.
+          -->
           <span class="tile-viz" data-tile-shape={tile.shape}>
             <span
               class="tile-bar"
+              data-viz-kind={tile.viz.kind}
               role="img"
               aria-label={`${tile.title} checklist: ${tile.progress?.done ?? 0} of ${tile.progress?.total ?? 0} steps done`}
             >
-              {#each tile.segments as segment (segment.id)}
-                <span
-                  class="seg"
-                  data-status={segment.status}
-                  class:seg--critical={segment.onCriticalPath}
-                ></span>
+              {#each tile.viz.tracks as track, index (index)}
+                <span class="tile-track">
+                  {#each track as segment (segment.id)}
+                    <span
+                      class="seg"
+                      data-status={segment.status}
+                      class:seg--critical={segment.onCriticalPath}
+                    ></span>
+                  {/each}
+                </span>
               {/each}
             </span>
             <span class="tile-meta">
@@ -176,9 +187,27 @@
     gap: 5px;
   }
   .tile-bar {
+    display: grid;
+    gap: 2px;
+  }
+  /* A tree reads left to right by layer, so its columns sit side by side. */
+  .tile-bar[data-viz-kind="tree"] {
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+  }
+  .tile-track {
     display: flex;
     gap: 2px;
     height: 6px;
+  }
+  /* A tree's layers stack within their column. */
+  .tile-bar[data-viz-kind="tree"] .tile-track {
+    flex-direction: column;
+    height: auto;
+    min-height: 6px;
+  }
+  .tile-bar[data-viz-kind="tree"] .seg {
+    min-height: 6px;
   }
   .seg {
     flex: 1;

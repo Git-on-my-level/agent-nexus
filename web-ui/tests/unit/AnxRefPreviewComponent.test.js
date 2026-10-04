@@ -63,16 +63,30 @@ describe("AnxRefPreview", () => {
     expect(progress.getAttribute("max")).toBe("7");
   });
 
-  it("omits the rows the contract does not supply", async () => {
-    // board, priority, next step and last-moved are not batch resolve fields.
+  it("shows the rows the contract now supplies", async () => {
     const { container, component } = render(AnxRefPreview);
     component.open(model("card:initiative-plans"), anchor());
     await waitFor(() =>
       expect(container.querySelector(".anx-ref-preview")).not.toBeNull(),
     );
     const text = container.querySelector(".anx-ref-preview").textContent;
-    expect(text).not.toContain("Next:");
-    expect(text).not.toContain("moved");
+    expect(text).toContain("Release B");
+    expect(text).toContain("p1");
+    expect(text).toContain("Next: Computed progress and health");
+    expect(text).toContain("moved");
+  });
+
+  it("omits a row the response did not carry", async () => {
+    // Board metadata needs independent board visibility, so a readable ref can
+    // arrive without one.
+    const { container, component } = render(AnxRefPreview);
+    component.open(model("doc:release-b-plan"), anchor());
+    await waitFor(() =>
+      expect(container.querySelector(".anx-ref-preview")).not.toBeNull(),
+    );
+    expect(
+      container.querySelector(".anx-ref-preview").textContent,
+    ).not.toContain("Next:");
   });
 
   it("offers Open and Copy ref for a resolvable ref", async () => {
@@ -87,7 +101,7 @@ describe("AnxRefPreview", () => {
     const open = container.querySelector(".anx-ref-preview__actions a");
     expect(open.textContent.trim()).toBe("Open");
     expect(open.getAttribute("href")).toBe(
-      "/o/scaling/w/anx/tasks/card%3Ainitiative-plans",
+      "/o/scaling/w/anx/tasks/initiative-plans",
     );
     expect(
       container.querySelector(".anx-ref-preview__actions button").textContent,

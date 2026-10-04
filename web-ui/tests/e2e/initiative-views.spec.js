@@ -52,12 +52,21 @@ const initiative = (overrides = {}) => ({
   ref: CARD_REF,
   title: "Release B",
   summary: "Initiative plans, live dashboards and agent ergonomics.",
-  priority: "high",
+  priority: "p1",
   phase: "in_progress",
   progress: { done: 1, total: 4 },
   needs: [],
+  board_ref: "board:release-b",
   updated_at: "2026-10-04T09:00:00Z",
   ...overrides,
+});
+
+/** `geometry` as core serializes it: layer and `after` per node, bounded. */
+const geometry = (shape, nodes, collapsed = 0) => ({
+  shape,
+  nodes,
+  total_nodes: nodes.length + collapsed,
+  collapsed_nodes: collapsed,
 });
 
 async function installInitiativePage(page) {
@@ -264,7 +273,31 @@ async function installOverviewTiles(page) {
       items: [
         initiative({
           plan_state: planState,
-          health: "blocked",
+          health: {
+            status: "blocked",
+            reason: "A step on the critical path is blocked.",
+          },
+          geometry: geometry("dag", [
+            { id: "contracts", status: "done", layer: 0, after: [] },
+            {
+              id: "plan-model",
+              status: "active",
+              layer: 1,
+              after: ["contracts"],
+            },
+            {
+              id: "ui-chips",
+              status: "blocked",
+              layer: 1,
+              after: ["contracts"],
+            },
+            {
+              id: "tiles",
+              status: "not_started",
+              layer: 2,
+              after: ["plan-model", "ui-chips"],
+            },
+          ]),
           needs: ["Ref chips everywhere"],
         }),
         initiative({
@@ -288,7 +321,18 @@ async function installOverviewTiles(page) {
             health: "on_track",
             last_movement_at: "2026-10-04T11:30:00Z",
           },
-          health: "on_track",
+          health: { status: "on_track", reason: "Work is progressing." },
+          geometry: geometry(
+            "chain",
+            [
+              { id: "contracts", status: "done", layer: 0, after: [] },
+              { id: "panels", status: "done", layer: 1, after: ["contracts"] },
+              { id: "queries", status: "done", layer: 2, after: ["panels"] },
+              { id: "publish", status: "done", layer: 3, after: ["queries"] },
+              { id: "adopt", status: "active", layer: 4, after: ["publish"] },
+            ],
+            0,
+          ),
         }),
         initiative({
           ref: "card:ergonomics",
@@ -309,9 +353,41 @@ async function installOverviewTiles(page) {
             health: "stalled",
             last_movement_at: "2026-09-26T09:00:00Z",
           },
-          health: "stalled",
+          health: {
+            status: "stalled",
+            reason: "Nothing has moved for 8 days.",
+          },
+          geometry: geometry("lanes", [
+            { id: "audit", status: "done", layer: 0, after: [] },
+            { id: "cli", status: "not_started", layer: 0, after: [] },
+            { id: "skills", status: "not_started", layer: 1, after: ["cli"] },
+          ]),
         }),
       ],
+    },
+    since_you_last_looked: {
+      since: "2026-10-03T12:00:00Z",
+      generated_at: NOW,
+      items: [
+        {
+          kind: "initiative_blocked",
+          ref: "card:release-b",
+          title: "Release B",
+        },
+        {
+          kind: "step_completed",
+          ref: "card:dashboards",
+          title: "Publish",
+          step_id: "publish",
+        },
+        {
+          kind: "ask_answered",
+          ref: "event:launch",
+          title: "Launch date",
+          ts: "2026-10-04T11:00:00Z",
+        },
+      ],
+      truncated: false,
     },
     dashboard: { status: "ok", pinned_ref: "", has_more: false, reports: [] },
     agents: { status: "ok", rows: [], count: 0 },
@@ -368,6 +444,35 @@ for (const viewport of [
     await expect(tiles.nth(2)).toContainText("Stalled");
     await expect(tiles.nth(2)).toContainText("Lanes");
 
+    // The mini-viz follows the shape core computed: a tree draws a column per
+    // dependency layer, lanes a track per run, a chain one track.
+    await expect(tiles.first().locator("[data-viz-kind]")).toHaveAttribute(
+      "data-viz-kind",
+      "tree",
+    );
+    await expect(tiles.first().locator(".tile-track")).toHaveCount(3);
+    await expect(tiles.nth(1).locator("[data-viz-kind]")).toHaveAttribute(
+      "data-viz-kind",
+      "track",
+    );
+    await expect(tiles.nth(2).locator("[data-viz-kind]")).toHaveAttribute(
+      "data-viz-kind",
+      "lanes",
+    );
+    await expect(tiles.nth(2).locator(".tile-track")).toHaveCount(2);
+
+    // What changed since this viewer last looked, from the server digest.
+    const strip = page.locator("[data-since-you-last-looked]");
+    await expect(strip).toBeVisible();
+    await expect(strip).toContainText("Since you last looked");
+    await expect(strip).toContainText(
+      "1 step done · 1 blocked · 1 ask answered",
+    );
+    await expect(strip.locator("[data-since-kind]").first()).toHaveAttribute(
+      "data-since-kind",
+      "initiative_blocked",
+    );
+
     // The whole tile is the link to the initiative page.
     await expect(tiles.first()).toHaveAttribute(
       "href",
@@ -386,6 +491,17 @@ for (const viewport of [
     });
     await testInfo.attach(`tiles-${viewport.label}`, {
       path: testInfo.outputPath(`tiles-${viewport.label}.png`),
+      contentType: "image/png",
+    });
+
+    // The whole page, so the digest strip and the single Inbox line are in
+    // frame alongside the tiles.
+    await page.screenshot({
+      path: testInfo.outputPath(`overview-${viewport.label}.png`),
+      animations: "disabled",
+    });
+    await testInfo.attach(`overview-${viewport.label}`, {
+      path: testInfo.outputPath(`overview-${viewport.label}.png`),
       contentType: "image/png",
     });
   });

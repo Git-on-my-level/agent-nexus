@@ -28,7 +28,7 @@ describe("AnxRefChip", () => {
     const chip = container.querySelector("[data-anx-ref]");
     expect(chip.tagName).toBe("A");
     expect(chip.getAttribute("href")).toBe(
-      "/o/scaling/w/anx/tasks/card%3Ainitiative-plans",
+      "/o/scaling/w/anx/tasks/initiative-plans",
     );
     expect(chip.textContent).toContain("Initiative plans on cards");
     expect(chip.textContent).toContain("Task");

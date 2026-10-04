@@ -2,14 +2,17 @@
  * The Overview initiative tiles.
  *
  * A tile answers "what is the state and progress of this initiative" in a
- * glance, from the live initiatives projection alone. That projection is the
- * constraint worth knowing about: it carries `plan_state` — step ids with their
- * statuses, progress, critical path, next step ids, shape, health — but **not**
- * the step graph or the step titles. So a tile can show how much is done, what
- * shape the plan is and which steps are next, and it cannot draw the real tree
- * or print a step's title. Both of those are one click away on the initiative
- * page, which is the right place for them and the only place that can fetch
- * them without an N+1 across the grid.
+ * glance, from `/overview` alone — no per-tile fetch.
+ *
+ * Everything shown is computed by core and read here as given: `health` is
+ * `{status, reason}`, `plan_state` carries progress, the critical path and the
+ * next step ids, and `geometry` carries the bounded graph a mini-viz is drawn
+ * from — `{shape, nodes: [{id, status, layer, after}], total_nodes,
+ * collapsed_nodes}`, capped at 24 nodes with the remainder counted.
+ *
+ * The one thing the projection does not carry is step *titles*, so "Next: …"
+ * reads the step id. Ids are lowercase slugs by contract, which makes that a
+ * fair approximation; the titles are one click away on the initiative page.
  */
 
 import { formatMovedAgo } from "./refResolve.js";
@@ -43,26 +46,97 @@ export function humanizeStepId(id) {
 }
 
 /**
- * Segments for the tile's mini-viz: one per step, in plan order, carrying the
- * status that colours it and whether it sits on the critical path.
+ * Segments for the tile's mini-viz: one per step, carrying the status that
+ * colours it and whether it sits on the critical path.
  *
- * Capped, because a tile is a glance and a 200-step plan would render 200
- * hairlines. The overflow is reported so the caption can say so.
+ * Core's `geometry` is preferred — it is already bounded to 24 nodes and counts
+ * what it omitted — and `plan_state.steps` is the fallback for a projection
+ * that carries one without the other.
  */
-export function planSegments(planState, limit = 24) {
-  const steps = Array.isArray(planState?.steps) ? planState.steps : [];
+export function planSegments(planState, geometry = null, limit = 24) {
   const critical = new Set(
     Array.isArray(planState?.critical_path) ? planState.critical_path : [],
   );
+  const nodes = Array.isArray(geometry?.nodes) ? geometry.nodes : null;
+  const steps =
+    nodes ?? (Array.isArray(planState?.steps) ? planState.steps : []);
   const shown = steps.slice(0, limit);
+  const omitted = nodes
+    ? Number(geometry?.collapsed_nodes) || 0
+    : Math.max(0, steps.length - shown.length);
   return {
     segments: shown.map((step) => ({
       id: asText(step?.id),
       status: asText(step?.status) || "not_started",
+      layer: Number.isFinite(Number(step?.layer)) ? Number(step.layer) : 0,
+      after: Array.isArray(step?.after) ? step.after.map(asText) : [],
       onCriticalPath: critical.has(asText(step?.id)),
     })),
-    overflow: Math.max(0, steps.length - shown.length),
+    overflow: omitted,
   };
+}
+
+/**
+ * The mini-viz, laid out the way the plan's shape asks for.
+ *
+ * A chain is one track of steps. Lanes are one track per independent run. A
+ * tree is a column per dependency layer — core sends `layer` and `after`, so
+ * this is the real graph in miniature rather than a bar standing in for one.
+ *
+ * @param {{segments: object[]}} input
+ * @param {string} shape
+ * @returns {{kind: "track"|"lanes"|"tree", tracks: object[][]}}
+ */
+export function miniViz({ segments = [] } = {}, shape = "") {
+  if (!segments.length) return { kind: "track", tracks: [] };
+
+  if (shape === "dag") {
+    const byLayer = new Map();
+    for (const segment of segments) {
+      if (!byLayer.has(segment.layer)) byLayer.set(segment.layer, []);
+      byLayer.get(segment.layer).push(segment);
+    }
+    return {
+      kind: "tree",
+      tracks: [...byLayer.keys()]
+        .sort((a, b) => a - b)
+        .map((layer) => byLayer.get(layer)),
+    };
+  }
+
+  if (shape === "lanes") {
+    // Independent runs, grouped over the edges core sent.
+    const byId = new Map(segments.map((segment) => [segment.id, segment]));
+    const neighbours = new Map(segments.map((segment) => [segment.id, []]));
+    for (const segment of segments) {
+      for (const parent of segment.after) {
+        if (!byId.has(parent)) continue;
+        neighbours.get(segment.id).push(parent);
+        neighbours.get(parent).push(segment.id);
+      }
+    }
+    const seen = new Set();
+    const tracks = [];
+    for (const segment of segments) {
+      if (seen.has(segment.id)) continue;
+      const group = [];
+      const stack = [segment.id];
+      seen.add(segment.id);
+      while (stack.length) {
+        const id = stack.pop();
+        group.push(byId.get(id));
+        for (const next of neighbours.get(id)) {
+          if (seen.has(next)) continue;
+          seen.add(next);
+          stack.push(next);
+        }
+      }
+      tracks.push(group);
+    }
+    return { kind: "lanes", tracks };
+  }
+
+  return { kind: "track", tracks: [segments] };
 }
 
 /**
@@ -75,8 +149,11 @@ export function initiativeTileModel(item, options = {}) {
   const { now = Date.now(), href = () => "" } = options;
   const ref = asText(item?.ref);
   const planState = item?.plan_state ?? null;
+  const geometry = item?.geometry ?? null;
 
-  const health = asText(item?.health);
+  // `health` is `{status, reason}`; core also sends a reason for a planless
+  // initiative, derived from its native phase.
+  const health = asText(item?.health?.status ?? item?.health);
   const badge = HEALTH[health] ?? null;
 
   // The plan's own progress wins over the row's. Core already copies one onto
@@ -107,7 +184,7 @@ export function initiativeTileModel(item, options = {}) {
   const movedAt =
     asText(planState?.last_movement_at) || asText(item?.updated_at);
 
-  const shape = asText(planState?.shape);
+  const shape = asText(geometry?.shape ?? planState?.shape);
 
   return {
     ref,
@@ -119,11 +196,18 @@ export function initiativeTileModel(item, options = {}) {
     health,
     healthLabel: badge?.label ?? "",
     healthTone: badge?.tone ?? "neutral",
+    healthReason: asText(item?.health?.reason),
     progress,
     shape,
     shapeLabel: SHAPE_LABELS[shape] ?? "",
     hasPlan: Boolean(planState),
-    ...planSegments(planState),
+    ...(() => {
+      const bars = planSegments(planState, geometry);
+      return {
+        ...bars,
+        viz: miniViz(bars, asText(geometry?.shape ?? planState?.shape)),
+      };
+    })(),
     // "Next: …" from the step id, since the projection has no titles.
     next: nextSteps.length ? humanizeStepId(nextSteps[0]) : "",
     extraNext: Math.max(0, nextSteps.length - 1),

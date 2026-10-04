@@ -1,18 +1,16 @@
 /**
- * A batch ref resolve response, in the wire shape core returns:
- * `{items: [{ref, kind, title, phase, status, owner, progress, url, resolvable}]}`.
+ * Batch ref resolve responses for the UI's own tests and dev surfaces.
  *
- * Only contract fields appear here. In particular there is no board, priority,
- * next step or last-moved on a resolved ref — the preview card renders those
- * when present and omits them otherwise, which today means it omits them.
+ * The authoritative shape is `contracts/fixtures/initiative-overview/refs.json`,
+ * which core serializes its production response against. Tests that only need
+ * "a real response" should import that file directly — see
+ * `tests/unit/initiativeContractConformance.test.js`.
  *
- * `url` is workspace-relative for native entities and absent for topics and
- * boards, which have no detail surface; the components derive their own link
- * for those rather than inventing a server URL.
- *
- * The rows cover each case a chip has to render: work in flight, finished
- * work, blocked work, a doc, a project, a board, an external pull request, and
- * a ref that resolves to nothing.
+ * What lives here is a wider cast of rows in that same shape: the cases a chip
+ * has to render that one contract fixture does not happen to include — a doc, a
+ * project, a board with no detail surface, an external pull request, work in
+ * flight, finished work and blocked work. Every field below exists in the
+ * contract; nothing is invented.
  */
 export const refResolveExample = {
   items: [
@@ -21,9 +19,15 @@ export const refResolveExample = {
       kind: "card",
       title: "Initiative plans on cards",
       status: "in_progress",
-      owner: "Codex Sol",
+      phase: "in_progress",
+      owner: "actor:codex-sol",
+      owner_display: "Codex Sol",
+      board: { ref: "board:release-b", title: "Release B" },
+      priority: "p1",
+      last_moved_at: "2026-10-04T09:12:00Z",
+      next_step: { title: "Computed progress and health" },
       progress: { done: 3, total: 7 },
-      url: "",
+      url: "/tasks/initiative-plans",
       resolvable: true,
     },
     {
@@ -31,8 +35,14 @@ export const refResolveExample = {
       kind: "card",
       title: "Shared report contracts",
       status: "done",
-      owner: "Codex Luna",
+      phase: "done",
+      owner: "actor:codex-luna",
+      owner_display: "Codex Luna",
+      board: { ref: "board:release-b", title: "Release B" },
+      priority: "p2",
+      last_moved_at: "2026-10-03T17:40:00Z",
       progress: { done: 5, total: 5 },
+      url: "/tasks/shared-report-contracts",
       resolvable: true,
     },
     {
@@ -40,42 +50,53 @@ export const refResolveExample = {
       kind: "card",
       title: "Pushed series and declared adapters",
       status: "blocked",
-      owner: "Codex Sol",
+      phase: "blocked",
+      owner: "actor:codex-sol",
+      owner_display: "Codex Sol",
+      board: { ref: "board:release-b", title: "Release B" },
+      priority: "p1",
+      last_moved_at: "2026-09-27T11:02:00Z",
+      next_step: { title: "Waiting on the panel binding decision" },
       progress: { done: 1, total: 6 },
+      url: "/tasks/pushed-series",
       resolvable: true,
     },
     {
       ref: "doc:release-b-plan",
-      kind: "doc",
+      kind: "document",
       title: "Release B plan",
-      status: "",
-      owner: "David Zhang",
+      owner: "actor:david",
+      owner_display: "David Zhang",
+      last_moved_at: "2026-10-04T08:00:00Z",
+      url: "/docs/release-b-plan",
       resolvable: true,
     },
     {
+      // Topics and boards have no detail surface, so core sends no `url`.
       ref: "topic:release-b",
       kind: "topic",
       title: "Release B",
-      status: "",
       resolvable: true,
     },
     {
       ref: "board:release-b",
       kind: "board",
       title: "Release B",
-      status: "",
       resolvable: true,
     },
     {
+      // An external source URL is returned as-is, never prefixed.
       ref: "https://github.com/Git-on-my-level/agent-nexus/pull/246",
-      kind: "pull_request",
+      kind: "card",
       title: "SCA-598: live dashboards with shared report contracts",
       status: "merged",
-      owner: "Codex Luna",
+      owner: "actor:codex-luna",
+      owner_display: "Codex Luna",
       url: "https://github.com/Git-on-my-level/agent-nexus/pull/246",
       resolvable: true,
     },
     {
+      // Unknown or inaccessible refs come back without metadata.
       ref: "card:deleted-thing",
       resolvable: false,
     },

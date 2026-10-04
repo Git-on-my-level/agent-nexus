@@ -172,7 +172,11 @@ describe("indexResolvedRefs", () => {
       kind: "card",
       title: "Initiative plans on cards",
       status: "in_progress",
-      owner: "Codex Sol",
+      // `owner` is an actor ref on the wire; `owner_display` is the name.
+      ownerDisplay: "Codex Sol",
+      board: "Release B",
+      priority: "p1",
+      nextStep: "Computed progress and health",
       progress: { done: 3, total: 7 },
       resolvable: true,
     });
@@ -245,7 +249,8 @@ describe("refChipModel", () => {
       resolvable: true,
       isExternal: false,
     });
-    expect(model.href).toBe("/o/scaling/w/anx/tasks/card%3Ainitiative-plans");
+    // Core sends `/tasks/<handle>`; the UI rebases it onto the workspace route.
+    expect(model.href).toBe("/o/scaling/w/anx/tasks/initiative-plans");
   });
 
   it("tones a done ref ok and a blocked ref danger", () => {
@@ -277,7 +282,9 @@ describe("refChipModel", () => {
     );
   });
 
-  it("marks an external pull request external and links it out", () => {
+  it("labels an external pull request by its URL, not core's card kind", () => {
+    // Core resolves external links through source-backed cards, so it sends
+    // `kind: "card"`; the URL says more, and says it reliably.
     const model = refChipModel(
       "https://github.com/Git-on-my-level/agent-nexus/pull/246",
       resolved,
@@ -320,7 +327,7 @@ describe("refChipModel", () => {
     expect(refChipModel("card:initiative-plans", resolved, {}).href).toBe("");
   });
 
-  it("carries the preview fields the contract returns", () => {
+  it("shows the owner by name", () => {
     const model = refChipModel("card:pushed-series", resolved, context);
     expect(model).toMatchObject({
       owner: "Codex Sol",
@@ -329,15 +336,22 @@ describe("refChipModel", () => {
     });
   });
 
-  it("leaves out the preview fields batch resolve does not return", () => {
-    // board, priority, next step and last-moved are not in the contract today.
-    // The preview renders them if a later revision adds them; until then the
-    // model must report them absent rather than inventing anything.
+  it("carries the preview fields the contract now returns", () => {
     const model = refChipModel("card:pushed-series", resolved, context);
+    expect(model).toMatchObject({
+      board: "Release B",
+      priority: "p1",
+      nextStep: "Waiting on the panel binding decision",
+      lastMovedAt: "2026-09-27T11:02:00Z",
+    });
+  });
+
+  it("reports a field the response omitted as absent, not invented", () => {
+    // Board metadata needs independent board visibility, so a readable ref can
+    // still arrive without one.
+    const model = refChipModel("doc:release-b-plan", resolved, context);
     expect(model.board).toBe("");
-    expect(model.priority).toBe("");
     expect(model.nextStep).toBe("");
-    expect(model.lastMovedAt).toBe("");
   });
 
   it("still reads those fields when a response does carry them", () => {
