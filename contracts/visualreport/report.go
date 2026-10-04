@@ -316,11 +316,11 @@ func safeDNSHost(host string) bool {
 }
 
 func roundTripsPunycode(label string) bool {
-	decoded, err := idna.Punycode.ToUnicode(label)
+	decoded, err := idna.Lookup.ToUnicode(label)
 	if err != nil || decoded == label {
 		return false
 	}
-	encoded, err := idna.Punycode.ToASCII(decoded)
+	encoded, err := idna.Lookup.ToASCII(decoded)
 	return err == nil && strings.EqualFold(encoded, label)
 }
 func (v *validator) url(value any, path string) {

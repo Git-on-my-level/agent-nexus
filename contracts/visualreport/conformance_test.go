@@ -55,6 +55,7 @@ func TestURLHostAllowlist(t *testing.T) {
 		{name: "canonical IPv4", url: "https://192.0.2.1/", ok: true},
 		{name: "bracketed IPv6", url: "https://[2001:db8::1]/", ok: true},
 		{name: "invalid A-label", url: "https://xn--/", ok: false},
+		{name: "A-label disallowed by IDNA", url: "https://xn--a-ecp.example/", ok: false},
 		{name: "empty label", url: "https://example..com/", ok: false},
 		{name: "leading hyphen", url: "https://-bad.example/", ok: false},
 		{name: "trailing hyphen", url: "https://bad-.example/", ok: false},
