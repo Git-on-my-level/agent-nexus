@@ -2006,6 +2006,8 @@ var runtimeRegistrySecretHelpPaths = []string{
 func onboardingHelpText() string {
 	return strings.TrimSpace(`Onboarding: daily loop
 
+Every ANX reader is a CEO by default: group execution detail into a small set of outcome cards, with status in a summary, checklist or visual report.
+
 1. Enroll this machine once per workspace with anx host enroll; a human approves it.
 2. Let agentctl supply the adapter context, or select a persona with ANX_AS / --as.
 3. Run anx orient. Confirm your handle, host, assigned work and next actions.

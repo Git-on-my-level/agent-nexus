@@ -38,9 +38,9 @@ var conceptsGuidePrimitives = []conceptsPrimitive{
 	},
 	{
 		Name:        "cards",
-		UseWhen:     "You need the canonical card store: create/list/get, body and revisions, assignees, column/rank (`cards.move`), messages, resolve/reopen, and lifecycle. Cards are the durable rows behind operator Tasks.",
+		UseWhen:     "You need the canonical card store for human-level initiatives and outcomes: create/list/get, body and revisions, assignees, column/rank (`cards.move`), messages, resolve/reopen, and lifecycle. One card can group many executor tasks; search for an existing card before creating one.",
 		NotFor:      "The operator Tasks projection. Use `anx work list` / `anx work get` for inventory, freshness, observations, and annotations as operators see them. `work.*` is layered over the same rows, not an alias of `cards.*`.",
-		Examples:    []string{"implementation task", "review item", "follow-up", "blocked work"},
+		Examples:    []string{"project outcome", "release readiness", "incident recovery"},
 		RelatedRead: []string{"anx cards list", "anx cards list --board <board-ref>", "anx cards get", "anx cards move", "anx work list"},
 	},
 	{
@@ -118,7 +118,7 @@ func conceptsSelectionRules() []string {
 func conceptsGuideText() string {
 	var b strings.Builder
 	b.WriteString("ANX concepts guide\n\n")
-	b.WriteString("Use this command when you need to decide which primitive fits the use case before you start issuing writes.\n\n")
+	b.WriteString("Every ANX reader is a CEO by default: group execution detail into a small set of outcome cards, with status in summaries, checklists or visual reports. Use this command to choose a primitive before writing.\n\n")
 	b.WriteString("Selection rules:\n")
 	for _, rule := range conceptsSelectionRules() {
 		b.WriteString("- ")

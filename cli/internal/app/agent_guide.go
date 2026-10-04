@@ -13,7 +13,7 @@ const agentGuideSkillName = "anx-participant"
 
 const agentGuideSkillDescription = "Participate in Agent Nexus work with source authority, scoped session identity, meaningful updates, and evidence-backed completion."
 
-const agentGuideSkillVersion = "anx.participant.v2"
+const agentGuideSkillVersion = "anx.participant.v3"
 
 type guideSection struct {
 	Title string
@@ -21,7 +21,7 @@ type guideSection struct {
 }
 
 func agentGuideIntro() string {
-	return "Use Agent Nexus (`anx`) to keep your current task and its evidence visible to the workspace."
+	return "Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence. Use Agent Nexus (`anx`) to keep meaningful work visible to the workspace."
 }
 
 func agentGuideSections() []guideSection {
@@ -38,11 +38,17 @@ func agentGuideSections() []guideSection {
 			"- Native Nexus tasks and externally authoritative tasks can coexist. Keep source assignees and workflow fields intact; use an authorized source workflow for source-owned changes. A mandatory project owner is not required.",
 			"- Share only task-scoped facts and references. Do not upload raw transcripts, secrets, unrelated session history, or local paths as globally reachable links. A session reference grants no history access.",
 		}},
+		{Title: "Executive workspace", Lines: []string{
+			"- A card represents a human-level initiative or outcome that may span many executor tasks and outlive them. Keep issue, PR and run detail in its source; link that detail as evidence. Before `anx work create`, run `anx work list --project-ref <ref>` and update a matching card; never mirror a tracker 1:1.",
+			"- Put status in a short plain-language card summary, checklist, or `anx.visual-report` dashboard/chart, not a stream of cards or notes. Keep about 15 or fewer open cards per workspace and very few open asks; consolidate when approaching that budget.",
+			"- Ask only for a decision that belongs to the human (direction, money, risk or an irreversible choice). Recommend one answer, give at most 2–3 alternatives, and batch related decisions into one ask. Do not also block the card or set its `next_actor` to the human for that same question; that duplicates the Inbox item. Keep `next_actor` on the agent and advance after the answer with its response event as evidence, for example `anx work done <card> --evidence event:<response_event_id>`.",
+			"- Write for a busy executive: lead with the outcome and what needs them, then add detail. Example: 12 PRs + 4 Multica issues for one project → 1 card with a checklist and links, not 16 cards.",
+		}},
 		{Title: "Daily loop", Lines: []string{
 			"1. Run `anx orient` to see your identity, assigned work, asks and answers, notifications, stale work, and next commands.",
 			"2. Read `anx work context card:<slug>` and register participation when doing substantive work. Use `anx work start card:<slug>` only when explicitly taking ownership of a Nexus-native task: it adds an assignee and marks in progress.",
 			"3. Post `anx cards message card:<slug> --body \"What changed and why\"` after meaningful progress. Include evidence, decisions, blockers, uncertainty and next steps; avoid raw chat copies and repeated unchanged updates. Always name the task explicitly: participation does not change legacy current-card selection.",
-			"4. Report a blocker with `anx cards message card:<slug> --body \"Blocked: reason and next step\"` and, when a decision is needed, `anx ask \"Question\" --subject-ref card:<slug> --recommend \"Preferred answer\"`. These do not move source-owned task status. Use `anx work block \"Why\" card:<slug> --ask --recommend \"Preferred answer\"` only when deliberately changing an authorized Nexus-native task to blocked.",
+			"4. Report execution blockers on the card. For a consequential human decision, create one recommended ask with `anx ask \"Question\" --subject-ref card:<slug> --recommend \"Preferred answer\"`; keep `next_actor` on the agent and do not also block the card for that question. Use `anx work block` only for an authorized Nexus-native task blocked by an execution issue, not as a duplicate of a human ask.",
 			"5. Run `anx await <ask-id>` when an answer gates the next step. It prints one terminal result with outcome. Exit 8 means timeout; exit 9 means rejected.",
 			"6. Verify acceptance criteria before changing task completion. For an authorized Nexus-native task, `anx work done card:<slug> --evidence <url|event:ref|artifact:ref>` resolves that explicit task and clears legacy presence. Report source-owned completion as attributed evidence for its authorized source workflow. Closing a session or finishing a run never completes a task.",
 		}},

@@ -66,12 +66,12 @@ func TestCanonicalSkillMetadataAndPacks(t *testing.T) {
 func TestSkillAuthorityBoundaries(t *testing.T) {
 	participant, _ := Get("participant")
 	pm, _ := Get("pm")
-	for _, term := range []string{"explicit task ref", "source-owned", "raw transcripts", "ambiguous", "Reading context alone", "A finished run or closed session never completes a task"} {
+	for _, term := range []string{"explicit task ref", "source-owned", "raw transcripts", "ambiguous", "Reading context alone", "A finished run or closed session never completes a task", "CEO by default", "human-level initiative or outcome", "Never mirror an issue tracker 1:1", "15 or fewer open cards", "2–3 alternatives", "event:<response_event_id>", "12 PRs + 4 Multica issues"} {
 		if !strings.Contains(participant.Content, term) {
 			t.Errorf("participant lacks %q", term)
 		}
 	}
-	for _, term := range []string{"explicitly designated", "ordinary existing agent", "independent goal driver", "Designation grants no new permissions", "last successful read", "excluded paths", "human decision gates", "Load anx-participant alongside"} {
+	for _, term := range []string{"explicitly designated", "ordinary existing agent", "independent goal driver", "Designation grants no new permissions", "last successful read", "excluded paths", "human decision gates", "Load anx-participant alongside", "CEO by default", "never mirror a tracker 1:1", "15 or fewer open cards", "2–3 alternatives", "next_actor"} {
 		if !strings.Contains(pm.Content, term) {
 			t.Errorf("PM lacks %q", term)
 		}

@@ -239,6 +239,8 @@ Offline quick-start mental model and first command flow.
 ```text
 Onboarding: daily loop
 
+Every ANX reader is a CEO by default: group execution detail into a small set of outcome cards, with status in a summary, checklist or visual report.
+
 1. Enroll this machine once per workspace with anx host enroll; a human approves it.
 2. Let agentctl supply the adapter context, or select a persona with ANX_AS / --as.
 3. Run anx orient. Confirm your handle, host, assigned work and next actions.
@@ -258,7 +260,7 @@ Quick guide to the core ANX primitives and when to use each.
 ```text
 ANX concepts guide
 
-Use this command when you need to decide which primitive fits the use case before you start issuing writes.
+Every ANX reader is a CEO by default: group execution detail into a small set of outcome cards, with status in summaries, checklists or visual reports. Use this command to choose a primitive before writing.
 
 Selection rules:
 - Use topics for agent-facing discussion and context around a topic, project, incident, decision, or recurring process.
@@ -290,9 +292,9 @@ docs
 - Read next: anx docs list ; anx docs get ; anx docs content
 
 cards
-- Use when: You need the canonical card store: create/list/get, body and revisions, assignees, column/rank (`cards.move`), messages, resolve/reopen, and lifecycle. Cards are the durable rows behind operator Tasks.
+- Use when: You need the canonical card store for human-level initiatives and outcomes: create/list/get, body and revisions, assignees, column/rank (`cards.move`), messages, resolve/reopen, and lifecycle. One card can group many executor tasks; search for an existing card before creating one.
 - Not for: The operator Tasks projection. Use `anx work list` / `anx work get` for inventory, freshness, observations, and annotations as operators see them. `work.*` is layered over the same rows, not an alias of `cards.*`.
-- Examples: implementation task, review item, follow-up, blocked work
+- Examples: project outcome, release readiness, incident recovery
 - Read next: anx cards list ; anx cards list --board <board-ref> ; anx cards get ; anx cards move ; anx work list
 
 work
@@ -340,7 +342,7 @@ Prescriptive agent guide for choosing ANX primitives, operating safely, and auto
 ```text
 Agent guide
 
-Use Agent Nexus (`anx`) to keep your current task and its evidence visible to the workspace.
+Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence. Use Agent Nexus (`anx`) to keep meaningful work visible to the workspace.
 
 Setup and identity
 
@@ -358,12 +360,20 @@ Participation and source authority
 - Share only task-scoped facts and references. Do not upload raw transcripts, secrets, unrelated session history, or local paths as globally reachable links. A session reference grants no history access.
 
 
+Executive workspace
+
+- A card represents a human-level initiative or outcome that may span many executor tasks and outlive them. Keep issue, PR and run detail in its source; link that detail as evidence. Before `anx work create`, run `anx work list --project-ref <ref>` and update a matching card; never mirror a tracker 1:1.
+- Put status in a short plain-language card summary, checklist, or `anx.visual-report` dashboard/chart, not a stream of cards or notes. Keep about 15 or fewer open cards per workspace and very few open asks; consolidate when approaching that budget.
+- Ask only for a decision that belongs to the human (direction, money, risk or an irreversible choice). Recommend one answer, give at most 2–3 alternatives, and batch related decisions into one ask. Do not also block the card or set its `next_actor` to the human for that same question; that duplicates the Inbox item. Keep `next_actor` on the agent and advance after the answer with its response event as evidence, for example `anx work done <card> --evidence event:<response_event_id>`.
+- Write for a busy executive: lead with the outcome and what needs them, then add detail. Example: 12 PRs + 4 Multica issues for one project → 1 card with a checklist and links, not 16 cards.
+
+
 Daily loop
 
 1. Run `anx orient` to see your identity, assigned work, asks and answers, notifications, stale work, and next commands.
 2. Read `anx work context card:<slug>` and register participation when doing substantive work. Use `anx work start card:<slug>` only when explicitly taking ownership of a Nexus-native task: it adds an assignee and marks in progress.
 3. Post `anx cards message card:<slug> --body "What changed and why"` after meaningful progress. Include evidence, decisions, blockers, uncertainty and next steps; avoid raw chat copies and repeated unchanged updates. Always name the task explicitly: participation does not change legacy current-card selection.
-4. Report a blocker with `anx cards message card:<slug> --body "Blocked: reason and next step"` and, when a decision is needed, `anx ask "Question" --subject-ref card:<slug> --recommend "Preferred answer"`. These do not move source-owned task status. Use `anx work block "Why" card:<slug> --ask --recommend "Preferred answer"` only when deliberately changing an authorized Nexus-native task to blocked.
+4. Report execution blockers on the card. For a consequential human decision, create one recommended ask with `anx ask "Question" --subject-ref card:<slug> --recommend "Preferred answer"`; keep `next_actor` on the agent and do not also block the card for that question. Use `anx work block` only for an authorized Nexus-native task blocked by an execution issue, not as a duplicate of a human ask.
 5. Run `anx await <ask-id>` when an answer gates the next step. It prints one terminal result with outcome. Exit 8 means timeout; exit 9 means rejected.
 6. Verify acceptance criteria before changing task completion. For an authorized Nexus-native task, `anx work done card:<slug> --evidence <url|event:ref|artifact:ref>` resolves that explicit task and clears legacy presence. Report source-owned completion as attributed evidence for its authorized source workflow. Closing a session or finishing a run never completes a task.
 
