@@ -389,8 +389,8 @@
       if (results[0].status === "fulfilled") {
         decisions = results[0].value.items || [];
       } else nextError = errorMessage(results[0].reason);
-      // Each list is one page. Counts drawn from partial pages are lower
-      // bounds, and the reader must be told so rather than shown a total.
+      // Lists follow cursors up to a bound. Counts drawn from a capped list
+      // are lower bounds, and the reader must be told so rather than shown a total.
       truncated = results.some(
         (result) =>
           result.status === "fulfilled" &&
