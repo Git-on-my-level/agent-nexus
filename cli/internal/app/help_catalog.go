@@ -24,9 +24,9 @@ type runtimeHelpCatalog struct {
 }
 
 type runtimeHelpDocTopic struct {
-	Path            string
-	Kind            string
-	Summary         string
+	Path            string `json:"path"`
+	Kind            string `json:"kind"`
+	Summary         string `json:"summary"`
 	SideEffectClass string `json:"side_effect_class"`
 }
 
