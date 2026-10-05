@@ -9,15 +9,22 @@
     writeWorkspaceView,
   } from "$lib/workspaceViewCache";
 
-  import { coreClient } from "$lib/coreClient";
+  import { coreClient, workspaceScopedCoreClient } from "$lib/coreClient";
   import {
     WORK_ROW_CAP,
     formatPartialCount,
     loadOverview,
   } from "$lib/overview.js";
   import SinceYouLastLooked from "$lib/components/SinceYouLastLooked.svelte";
-  import { inboxWaitingLine } from "$lib/initiativeTiles.js";
+  import { initiativeTiles } from "$lib/initiativeTiles.js";
+  import {
+    asksFromSnapshot,
+    readWorkspaceOpenAsks,
+    urgentBandModel,
+  } from "$lib/overviewUrgent.js";
+  import UrgentBand from "$lib/components/overview/UrgentBand.svelte";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
+  import { workspacePath } from "$lib/workspacePaths";
   import LiveInitiatives from "$lib/components/reports/LiveInitiatives.svelte";
   import VisualReport from "$lib/components/reports/VisualReport.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
@@ -35,7 +42,6 @@
   ]);
   let fetched = $state(readWorkspaceView(cacheKey));
   let model = $derived(fetched);
-  let inboxWaiting = $derived(inboxWaitingLine(model?.needsYou));
   let refreshing = $state(false);
   let loadingMoreReports = $state(false);
   let pinning = $state(false);
@@ -56,6 +62,92 @@
         ]
       : [],
   );
+
+  /**
+   * The urgent band's cross-workspace read.
+   *
+   * The current workspace contributes `needs_you` from the snapshot the page
+   * already loaded, so it costs nothing. Every other workspace in the catalog
+   * gets one request through a client bound to it — same session, different
+   * routing headers. On a self-hosted single-workspace deployment there is
+   * nothing else to ask and this is a no-op.
+   *
+   * Reads settle independently: a workspace the reader has lost access to
+   * becomes a note in the band rather than blanking it.
+   */
+  let otherWorkspaceAsks = $state([]);
+  let fanningOut = $state(false);
+  let fanOutRequest = 0;
+
+  let currentWorkspace = $derived({
+    organizationSlug: $page.params.organization,
+    slug: $page.params.workspace,
+    label:
+      ($page.data.workspaces ?? []).find(
+        (entry) =>
+          entry.slug === $page.params.workspace &&
+          entry.organizationSlug === $page.params.organization,
+      )?.label || "",
+  });
+  let otherWorkspaces = $derived(
+    ($page.data.workspaces ?? []).filter(
+      (entry) =>
+        !(
+          entry.slug === $page.params.workspace &&
+          entry.organizationSlug === $page.params.organization
+        ),
+    ),
+  );
+
+  let initiativeTileList = $derived(
+    model?.initiatives?.status === "ok"
+      ? initiativeTiles(model.initiatives.items, {
+          href: (ref) => workspaceHref(`/tasks/${encodeURIComponent(ref)}`),
+        })
+      : [],
+  );
+  let urgentBand = $derived(
+    urgentBandModel({
+      asks: [
+        ...(model ? [asksFromSnapshot(model.needsYou, currentWorkspace)] : []),
+        ...otherWorkspaceAsks,
+      ],
+      tiles: initiativeTileList,
+    }),
+  );
+
+  /** An ask's link belongs to the workspace it came from, not to this one. */
+  function urgentHref(path, workspace) {
+    const target = workspace?.slug ? workspace : currentWorkspace;
+    if (!target?.slug || !target?.organizationSlug) return path;
+    return workspacePath(target.organizationSlug, target.slug, path);
+  }
+
+  async function fanOutOpenAsks() {
+    const ticket = ++fanOutRequest;
+    const targets = otherWorkspaces;
+    if (!targets.length) {
+      otherWorkspaceAsks = [];
+      return;
+    }
+    fanningOut = true;
+    try {
+      const reads = await Promise.all(
+        targets.map((workspace) =>
+          readWorkspaceOpenAsks(
+            workspaceScopedCoreClient({
+              organizationSlug: workspace.organizationSlug,
+              workspaceSlug: workspace.slug,
+            }),
+            workspace,
+          ),
+        ),
+      );
+      if (ticket === fanOutRequest) otherWorkspaceAsks = reads;
+    } finally {
+      if (ticket === fanOutRequest) fanningOut = false;
+    }
+  }
 
   function countClass(key, count) {
     if (count && (key === "waiting" || key === "stale"))
@@ -169,10 +261,12 @@
 
   onDestroy(() => {
     request += 1;
+    fanOutRequest += 1;
   });
 
   onMount(() => {
     void refresh();
+    void fanOutOpenAsks();
   });
 </script>
 
@@ -181,7 +275,7 @@
 <WorkspacePageShell>
   <WorkspacePageHeader title="Overview">
     {#snippet subtitle()}
-      What needs you, what is in flight, and which reports are current.
+      What needs you, then every initiative worst first, then your dashboard.
     {/snippet}
   </WorkspacePageHeader>
 
@@ -190,49 +284,57 @@
       <Skeleton rows={6} />
     </div>
   {:else}
-    <SinceYouLastLooked digest={model.sinceYouLastLooked} />
     <!--
-      One line, not a second Inbox. The dashboard says how much is waiting and
-      links across; which initiative an item belongs to is a pill on that
-      initiative's tile. Restating the Inbox here was the duplication the brief
-      rules out. "Items", not "decisions": the count mixes decisions with tasks
-      that need a person.
+      One urgent band, not a second Inbox. It is the top of the page because it
+      is the only part of the page that might need doing in the next minute:
+      open asks for this reader across every workspace they can reach, then
+      initiatives that have stopped moving. Each row links to the surface that
+      owns it; the band never answers anything itself.
+    -->
+    <UrgentBand
+      band={urgentBand}
+      hrefFor={urgentHref}
+      loading={fanningOut && !otherWorkspaceAsks.length}
+    />
+    <!--
+      Initiatives, worst first: blocked, at risk, stale, on track, done. The
+      sort lives in `planHealth.js` so this section and the band above it
+      cannot disagree about which initiative is more urgent. Done and planless
+      initiatives collapse at the bottom rather than pushing live work off the
+      first screen.
     -->
     <section
       class="rounded-md border border-line bg-panel"
-      aria-labelledby="overview-needs-you"
-      data-overview-section="needs-you"
-      data-overview-status={model.needsYou.status}
+      aria-labelledby="overview-initiatives"
+      data-overview-section="initiatives"
     >
       <header
-        class="flex flex-wrap items-baseline justify-between gap-2 px-3 py-2"
+        class="flex items-baseline justify-between border-b border-line px-3 py-2"
       >
-        <h2 id="overview-needs-you" class="text-subtitle text-fg">Needs you</h2>
-        {#if inboxWaiting}
-          <a
-            class="text-meta text-accent-text hover:underline"
-            href={workspaceHref(inboxWaiting.href)}
-            data-overview-needs-you-count
-          >
-            {inboxWaiting.label} →
-          </a>
-        {/if}
+        <h2 id="overview-initiatives" class="text-subtitle text-fg">
+          Initiatives
+        </h2>
+        <a
+          class="text-meta text-accent-text hover:underline"
+          href={workspaceHref("/tasks")}>All tasks</a
+        >
       </header>
-      {#if model.needsYou.status !== "ok"}
-        <div class="px-3 pb-3">
+      {#if model.initiatives.status !== "ok"}
+        <div class="p-3">
           <StateError
-            title="Needs you is unavailable"
-            message={model.needsYou.message}
+            title="Initiatives are unavailable"
+            message={model.initiatives.message}
             onretry={refresh}
             retrying={refreshing}
           />
         </div>
-      {:else if !inboxWaiting}
-        <p class="px-3 pb-3 text-meta text-fg-muted" data-overview-empty>
-          Nothing is waiting on you.
-        </p>
+      {:else}
+        <div class="p-3">
+          <LiveInitiatives items={model.initiatives.items} />
+        </div>
       {/if}
     </section>
+    <SinceYouLastLooked digest={model.sinceYouLastLooked} />
     <section
       class="rounded-md border border-line bg-panel"
       aria-labelledby="overview-reports"
@@ -334,39 +436,6 @@
       {/if}
     </section>
 
-    <section
-      class="rounded-md border border-line bg-panel"
-      aria-labelledby="overview-initiatives"
-      data-overview-section="initiatives"
-    >
-      <header
-        class="flex items-baseline justify-between border-b border-line px-3 py-2"
-      >
-        <h2 id="overview-initiatives" class="text-subtitle text-fg">
-          Initiatives
-        </h2>
-        <a
-          class="text-meta text-accent-text hover:underline"
-          href={workspaceHref("/tasks")}>All tasks</a
-        >
-      </header>
-      {#if model.initiatives.status !== "ok"}
-        <div class="p-3">
-          <StateError
-            title="Initiatives are unavailable"
-            message={model.initiatives.message}
-            onretry={refresh}
-            retrying={refreshing}
-          />
-        </div>
-      {:else if !model.initiatives.items.length}
-        <p class="px-3 py-4 text-meta text-fg-muted">No open initiatives.</p>
-      {:else}
-        <div class="p-3">
-          <LiveInitiatives items={model.initiatives.items} />
-        </div>
-      {/if}
-    </section>
     <details
       class="rounded-md border border-line bg-panel"
       data-overview-detail

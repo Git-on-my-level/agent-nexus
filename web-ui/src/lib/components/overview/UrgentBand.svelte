@@ -1,0 +1,226 @@
+<script>
+  /**
+   * The one urgent band at the top of the Overview.
+   *
+   * It is the first thing on the page because it is the only thing on the page
+   * that might need doing in the next minute: open asks for the reader across
+   * every workspace they can reach, then initiatives that have stopped moving.
+   *
+   * It is not a second Inbox. Each row links to the surface that owns it — the
+   * right workspace's Inbox for an ask, the initiative page for an initiative
+   * — and the band never offers to answer anything itself.
+   *
+   * Empty is the common case and it stays one line, because a dashboard whose
+   * top third says "nothing is waiting" in a big empty box has spent a third
+   * of the screen on good news.
+   */
+  import AgeBadge from "$lib/components/AgeBadge.svelte";
+  import HealthBadge from "$lib/components/HealthBadge.svelte";
+
+  let {
+    /** `urgentBandModel` output. */
+    band = null,
+    /** `(path, workspace) => href` — the ask's own workspace, not this one. */
+    hrefFor = (path) => path,
+    /** True while the cross-workspace fan-out is still in flight. */
+    loading = false,
+  } = $props();
+
+  let asks = $derived(band?.asks ?? { rows: [], count: 0 });
+  let initiatives = $derived(band?.initiatives ?? { rows: [], count: 0 });
+  let unavailable = $derived(band?.unavailable ?? []);
+  let empty = $derived(
+    asks.count === 0 && initiatives.count === 0 && !unavailable.length,
+  );
+</script>
+
+<section
+  class="urgent"
+  class:urgent--empty={empty}
+  aria-labelledby="overview-urgent"
+  data-overview-section="urgent"
+  data-urgent-state={empty ? "empty" : "active"}
+>
+  <header class="urgent__head">
+    <h2 id="overview-urgent" class="urgent__title">Needs you</h2>
+    {#if loading}
+      <span class="urgent__note" role="status">Checking workspaces…</span>
+    {:else if empty}
+      <span class="urgent__note" data-urgent-empty
+        >Nothing is waiting on you.</span
+      >
+    {:else}
+      <span class="urgent__counts">
+        {#if asks.count}
+          <span data-urgent-ask-count
+            >{asks.count}{asks.truncated ? "+" : ""}
+            {asks.count === 1 ? "ask" : "asks"}</span
+          >
+        {/if}
+        {#if initiatives.count}
+          <span data-urgent-initiative-count
+            >{initiatives.count}
+            {initiatives.count === 1 ? "initiative" : "initiatives"} need attention</span
+          >
+        {/if}
+      </span>
+    {/if}
+  </header>
+
+  {#if !empty}
+    <ul class="urgent__rows">
+      {#each asks.rows as row (`${row.workspace?.slug ?? ""}:${row.id}`)}
+        <li class="urgent__row" data-urgent-ask={row.id}>
+          <a class="urgent__link" href={hrefFor(row.href, row.workspace)}>
+            <span class="urgent__row-title">{row.title}</span>
+          </a>
+          <span class="urgent__row-meta">
+            {#if row.workspace?.label}
+              <span class="urgent__chip" data-urgent-workspace
+                >{row.workspace.label}</span
+              >
+            {/if}
+            {#if row.source}<span>{row.source}</span>{/if}
+          </span>
+        </li>
+      {/each}
+
+      {#each initiatives.rows as tile (tile.ref)}
+        <li class="urgent__row" data-urgent-initiative={tile.ref}>
+          <a class="urgent__link" href={tile.href}>
+            <span class="urgent__row-title">{tile.title}</span>
+          </a>
+          <span class="urgent__row-meta">
+            <HealthBadge health={tile.health} variant="pill" />
+            {#if tile.movedAt}
+              <AgeBadge at={tile.movedAt} verb="moved" />
+            {/if}
+          </span>
+        </li>
+      {/each}
+    </ul>
+
+    {#if asks.truncated || initiatives.truncated}
+      <p class="urgent__note" data-urgent-truncated>
+        More is waiting than fits here. Open the Inbox for the rest.
+      </p>
+    {/if}
+  {/if}
+
+  {#if unavailable.length}
+    <!-- A workspace the reader has lost access to is a gap in the band, not a
+         reason to blank it: say which, and that the count is short. -->
+    <p class="urgent__note urgent__note--warn" role="status">
+      {unavailable.length}
+      {unavailable.length === 1 ? "workspace" : "workspaces"} could not be read, so
+      this may be short: {unavailable
+        .map(
+          (entry) => entry.workspace?.label || entry.workspace?.slug || "one",
+        )
+        .join(", ")}.
+    </p>
+  {/if}
+</section>
+
+<style>
+  .urgent {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--panel);
+  }
+  /* Something is wrong: the band says so at the edge, not with a fill that
+     would make the page's first third shout on every visit. */
+  .urgent:not(.urgent--empty) {
+    border-left: 3px solid var(--warn-text);
+  }
+  .urgent__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+  .urgent:not(.urgent--empty) .urgent__head {
+    border-bottom: 1px solid var(--line);
+  }
+  .urgent__title {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--fg);
+  }
+  .urgent__counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 10px;
+    color: var(--warn-text);
+    font-size: 12px;
+  }
+  .urgent__note {
+    color: var(--fg-muted);
+    font-size: 12px;
+  }
+  .urgent__head .urgent__note {
+    margin: 0;
+  }
+  .urgent__rows,
+  p.urgent__note {
+    margin: 0;
+  }
+  .urgent__rows {
+    padding: 0;
+    list-style: none;
+  }
+  .urgent__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px 10px;
+    padding: 6px 12px;
+    border-top: 1px solid var(--line-subtle);
+  }
+  .urgent__row:first-child {
+    border-top: 0;
+  }
+  .urgent__link {
+    min-width: 0;
+    flex: 1 1 14rem;
+    color: var(--fg);
+    font-size: 12px;
+    text-decoration: none;
+  }
+  .urgent__link:hover .urgent__row-title {
+    color: var(--accent-text);
+    text-decoration: underline;
+  }
+  .urgent__row-title {
+    display: block;
+    overflow-wrap: anywhere;
+  }
+  .urgent__row-meta {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    color: var(--fg-muted);
+    font-size: 11px;
+  }
+  /* Which workspace a row came from. The fan-out is the point of the band, so
+     a row from elsewhere has to say where it is from. */
+  .urgent__chip {
+    padding: 0 6px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-full, 999px);
+    background: var(--bg-soft);
+    white-space: nowrap;
+  }
+  p.urgent__note {
+    padding: 6px 12px;
+  }
+  .urgent__note--warn {
+    color: var(--warn-text);
+  }
+</style>

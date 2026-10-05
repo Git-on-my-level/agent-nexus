@@ -54,6 +54,7 @@
   } from "$lib/workspaceContext";
   import WorkspaceTour from "$lib/components/onboarding/WorkspaceTour.svelte";
   import InboxNavCount from "$lib/components/inbox/InboxNavCount.svelte";
+  import PanelToggle from "$lib/components/layout/PanelToggle.svelte";
   import AgentsNavCount from "$lib/components/agents/AgentsNavCount.svelte";
   import {
     handleEscapeTextBlurCommit,
@@ -68,6 +69,13 @@
     WORKSPACE_HEADER,
     workspacePath,
   } from "$lib/workspacePaths";
+  import {
+    panelAutoCollapsed,
+    panelCollapsed,
+    readPanelPreference,
+    SHELL_PANELS,
+    writePanelPreference,
+  } from "$lib/shellPanels.js";
   import {
     activateDevPersonaSession as activateWorkspaceDevPersonaSession,
     buildLoginRedirectDestination,
@@ -226,6 +234,38 @@
     }
     void loadHostedSession();
   });
+
+  /**
+   * The left nav collapses to an icon rail.
+   *
+   * The viewer's choice is remembered per viewer; a window too narrow for a
+   * 232px nav plus a readable content column collapses it anyway, and the
+   * remembered choice comes back when the window widens. See
+   * `$lib/shellPanels.js` for why the override is not written to storage.
+   */
+  let navPreference = $state(null);
+  let viewportWidth = $state(0);
+  let navViewerId = $derived(
+    $authenticatedAgent?.agent_id || $selectedActorId || "",
+  );
+  $effect(() => {
+    if (!browser) return;
+    navPreference = readPanelPreference(SHELL_PANELS.NAV, navViewerId);
+  });
+  let navCollapsed = $derived(
+    panelCollapsed({
+      panel: SHELL_PANELS.NAV,
+      preference: navPreference,
+      viewportWidth,
+    }),
+  );
+  let navAutoCollapsed = $derived(
+    panelAutoCollapsed({ panel: SHELL_PANELS.NAV, viewportWidth }),
+  );
+  function toggleNav(collapsed) {
+    navPreference = collapsed;
+    writePanelPreference(SHELL_PANELS.NAV, collapsed, navViewerId);
+  }
 
   let shellIdentity = $derived(
     computeWorkspaceShellIdentity({
@@ -794,7 +834,11 @@
   <title>{pageTitle()}</title>
 </svelte:head>
 
-<svelte:window onkeydown={handleWindowKeydown} onclick={handleWindowClick} />
+<svelte:window
+  onkeydown={handleWindowKeydown}
+  onclick={handleWindowClick}
+  bind:innerWidth={viewportWidth}
+/>
 
 <div class="shell-root">
   {#if !activeWorkspaceSlug}
@@ -897,12 +941,32 @@
     </main>
   {:else}
     <div class="shell-frame">
-      <aside class="shell-sidebar" aria-label="Primary">
+      <aside
+        class="shell-sidebar"
+        class:shell-sidebar--collapsed={navCollapsed}
+        aria-label="Primary"
+        data-shell-nav={navCollapsed ? "collapsed" : "expanded"}
+      >
         <div class="shell-sidebar-top">
+          <!--
+            The toggle sits above Search in both states, so the control that
+            collapses the nav does not move when you use it.
+          -->
+          <div class="shell-sidebar-toggle-row">
+            <PanelToggle
+              label="menu"
+              side="left"
+              collapsed={navCollapsed}
+              auto={navAutoCollapsed}
+              onToggle={toggleNav}
+            />
+          </div>
           <button
             class="shell-search-trigger"
             onclick={() => (commandPaletteOpen = true)}
             type="button"
+            aria-label="Search"
+            title={navCollapsed ? "Search" : undefined}
           >
             <svg
               class="shell-search-trigger-icon"
@@ -924,6 +988,7 @@
             href={workspaceHref("/pm")}
             data-tour="pm"
             aria-label="Ask PM"
+            title={navCollapsed ? "Ask PM" : undefined}
             aria-current={isActive("/pm") ? "page" : undefined}
           >
             <svg
@@ -1055,6 +1120,7 @@
                 class={`shell-nav-link ${active ? "shell-nav-link--active" : ""}`}
                 href={workspaceHref(item.href)}
                 aria-label={item.label}
+                title={navCollapsed ? item.label : undefined}
                 data-tour={tour}
               >
                 <svg

@@ -37,6 +37,14 @@ export const PLAN_HEALTH = Object.freeze(["on_track", "stalled", "blocked"]);
  */
 export const PLAN_LIMITS = Object.freeze({ steps: 200, afterPerStep: 50 });
 
+/**
+ * How many finished steps it takes before folding them is worth it.
+ *
+ * Folding one step replaces a box with a box: no width saved, and a reader
+ * loses a step they can see. Two is where the summary starts paying.
+ */
+export const PLAN_COLLAPSE_MIN = 2;
+
 const asText = (value) => String(value ?? "").trim();
 
 const isStepStatus = (value) => PLAN_STEP_STATUSES.includes(value);
@@ -321,69 +329,189 @@ export function planLayout(plan, options = {}) {
 /**
  * Pixel geometry for the tech tree.
  *
- * Node boxes are a fixed size and the gaps are constants, so positions come
- * straight from each node's layer and row with nothing measured. That keeps the
- * layout deterministic — the same plan always draws the same diagram, and the
- * geometry can be unit-tested without a browser — and it is why the tree needs
- * no layout library.
+ * Node boxes and gaps come from constants and from how much room the caller
+ * has, so positions come straight from each node's layer and row with nothing
+ * measured per node. That keeps the layout deterministic — the same plan in
+ * the same width always draws the same diagram, and the geometry can be
+ * unit-tested without a browser — and it is why the tree needs no layout
+ * library.
  *
- * Coordinates are a plain left-to-right grid; the caller scrolls horizontally
- * when `width` exceeds the viewport.
+ * Two things it does to keep the remaining work on screen:
+ *
+ * - **Done layers collapse.** A plan's finished prefix is the part the reader
+ *   is least interested in and the part that takes the most width: a 10-step
+ *   plan with 7 steps done used to be 70% history. A leading run of
+ *   all-done layers becomes one narrow summary column, so what is left is
+ *   what is shown.
+ * - **Columns shrink to fit.** Given the width the caller actually has, nodes
+ *   and gaps scale down to a legible floor before anything scrolls. Past that
+ *   floor the diagram does scroll sideways, which is the one deliberate
+ *   sideways scroller on the page.
  *
  * @param {ReturnType<typeof planLayout>} layout
- * @param {{nodeWidth?: number, nodeHeight?: number, gapX?: number, gapY?: number}} [options]
+ * @param {{
+ *   nodeWidth?: number, nodeHeight?: number, gapX?: number, gapY?: number,
+ *   minNodeWidth?: number, minGapX?: number, collapsedWidth?: number,
+ *   availableWidth?: number, collapseDone?: boolean,
+ * }} [options]
+ * @returns {{
+ *   width: number, height: number, nodes: object[], edges: object[],
+ *   collapsed: {count: number, x: number, y: number, width: number, height: number}|null,
+ * }}
  */
 export function planTreeGeometry(layout, options = {}) {
-  const nodeWidth = options.nodeWidth ?? 168;
-  const nodeHeight = options.nodeHeight ?? 52;
-  const gapX = options.gapX ?? 48;
-  const gapY = options.gapY ?? 14;
+  const preferredNodeWidth = options.nodeWidth ?? 176;
+  const nodeHeight = options.nodeHeight ?? 60;
+  const preferredGapX = options.gapX ?? 44;
+  const gapY = options.gapY ?? 12;
+  const minNodeWidth = options.minNodeWidth ?? 108;
+  const minGapX = options.minGapX ?? 18;
+  const collapsedWidth = options.collapsedWidth ?? 68;
+  const availableWidth = Number(options.availableWidth) || 0;
+  const collapseDone = options.collapseDone !== false;
 
-  const nodes = (layout?.nodes ?? []).map((node) => ({
-    id: node.id,
-    x: node.layer * (nodeWidth + gapX),
-    y: node.row * (nodeHeight + gapY),
-    width: nodeWidth,
-    height: nodeHeight,
-    onCriticalPath: Boolean(node.onCriticalPath),
-  }));
-  const positionById = new Map(nodes.map((node) => [node.id, node]));
+  const nodesById = new Map(
+    (layout?.nodes ?? []).map((node) => [node.id, node]),
+  );
+  const layers = (layout?.layers ?? []).map((layer) => layer ?? []);
+  const cyclic = layout?.cyclic ?? [];
+
+  // Columns, in reading order: the dependency layers, then one extra for any
+  // step the layering could not place.
+  const columns = layers.map((ids) => ({ ids, cyclic: false }));
+  if (cyclic.length) columns.push({ ids: cyclic, cyclic: true });
+
+  /*
+   * The finished prefix. Only a *leading* run collapses: a done layer in the
+   * middle of a plan is between two live ones, and hiding it would break the
+   * reader's sense of what depends on what.
+   */
+  let collapsedCount = 0;
+  let visibleColumns = columns;
+  if (collapseDone) {
+    let prefix = 0;
+    while (prefix < columns.length) {
+      const column = columns[prefix];
+      if (column.cyclic || !column.ids.length) break;
+      const allDone = column.ids.every(
+        (id) => nodesById.get(id)?.status === "done",
+      );
+      if (!allDone) break;
+      prefix += 1;
+    }
+    // Collapsing every column would leave nothing to look at; a plan that is
+    // entirely done draws in full instead. And folding a single step is not a
+    // fold — it swaps one box for another box — so it takes two to be worth it.
+    if (prefix > 0 && prefix < columns.length) {
+      const folded = columns
+        .slice(0, prefix)
+        .reduce((total, column) => total + column.ids.length, 0);
+      if (folded >= PLAN_COLLAPSE_MIN) {
+        collapsedCount = folded;
+        visibleColumns = columns.slice(prefix);
+      }
+    }
+  }
+
+  const columnCount = visibleColumns.length;
+  const collapsedLane = collapsedCount > 0 ? 1 : 0;
+
+  /*
+   * Fit. The gaps give first — they carry no information — and then the nodes,
+   * down to the width a step title is still readable in.
+   */
+  let nodeWidth = preferredNodeWidth;
+  let gapX = preferredGapX;
+  const gapCount = Math.max(0, columnCount + collapsedLane - 1);
+  const fixedWidth = collapsedLane ? collapsedWidth : 0;
+  const totalWidth = (node, gap) =>
+    fixedWidth + columnCount * node + gapCount * gap;
+  if (availableWidth > 0 && columnCount > 0) {
+    if (totalWidth(nodeWidth, gapX) > availableWidth) {
+      const gapRoom = availableWidth - totalWidth(nodeWidth, 0);
+      gapX = Math.max(minGapX, Math.floor(gapRoom / Math.max(1, gapCount)));
+    }
+    if (totalWidth(nodeWidth, gapX) > availableWidth) {
+      const nodeRoom = availableWidth - fixedWidth - gapCount * gapX;
+      nodeWidth = Math.max(minNodeWidth, Math.floor(nodeRoom / columnCount));
+    }
+  }
+
+  const laneX = [];
+  let cursor = 0;
+  if (collapsedLane) {
+    laneX.push({ x: cursor, width: collapsedWidth });
+    cursor += collapsedWidth + gapX;
+  }
+  for (let index = 0; index < columnCount; index += 1) {
+    laneX.push({ x: cursor, width: nodeWidth });
+    cursor += nodeWidth + gapX;
+  }
+  const width = cursor > 0 ? cursor - gapX : 0;
+
+  const nodes = [];
+  const positionById = new Map();
+  visibleColumns.forEach((column, columnIndex) => {
+    const lane = laneX[columnIndex + collapsedLane];
+    column.ids.forEach((id, row) => {
+      const box = {
+        id,
+        x: lane.x,
+        y: row * (nodeHeight + gapY),
+        width: lane.width,
+        height: nodeHeight,
+        onCriticalPath: Boolean(nodesById.get(id)?.onCriticalPath),
+      };
+      nodes.push(box);
+      positionById.set(id, box);
+    });
+  });
+
+  const rows = visibleColumns.reduce(
+    (widest, column) => Math.max(widest, column.ids.length),
+    0,
+  );
+  const height = rows > 0 ? rows * nodeHeight + (rows - 1) * gapY : 0;
+
+  const collapsed = collapsedLane
+    ? {
+        count: collapsedCount,
+        x: laneX[0].x,
+        y: 0,
+        width: collapsedWidth,
+        height: Math.max(nodeHeight, height),
+      }
+    : null;
 
   const edges = [];
   for (const edge of layout?.edges ?? []) {
-    const from = positionById.get(edge.from);
     const to = positionById.get(edge.to);
-    if (!from || !to) continue;
-    const startX = from.x + from.width;
-    const startY = from.y + from.height / 2;
+    // An edge into the collapsed prefix has nothing on screen to point at.
+    if (!to) continue;
+    const from = positionById.get(edge.from);
+    const start = from
+      ? { x: from.x + from.width, y: from.y + from.height / 2 }
+      : collapsed
+        ? // A step that depends on finished work: the edge comes out of the
+          // summary column, so the dependency is still visible as an edge.
+          { x: collapsed.x + collapsed.width, y: to.y + to.height / 2 }
+        : null;
+    if (!start) continue;
     const endX = to.x;
     const endY = to.y + to.height / 2;
     // A horizontal-tangent cubic: the control points sit halfway between the
     // boxes, so edges leave and enter level with the node they touch.
-    const bend = Math.max(12, (endX - startX) / 2);
+    const bend = Math.max(12, (endX - start.x) / 2);
     edges.push({
       from: edge.from,
       to: edge.to,
+      fromCollapsed: !from,
       onCriticalPath: Boolean(edge.onCriticalPath),
-      path: `M ${startX} ${startY} C ${startX + bend} ${startY}, ${endX - bend} ${endY}, ${endX} ${endY}`,
+      path: `M ${start.x} ${start.y} C ${start.x + bend} ${start.y}, ${endX - bend} ${endY}, ${endX} ${endY}`,
     });
   }
 
-  const layerCount = layout?.layers?.length ?? 0;
-  const widestLayer = (layout?.layers ?? []).reduce(
-    (widest, layer) => Math.max(widest, layer.length),
-    0,
-  );
-  // Cyclic steps are parked in one extra column after the layered ones.
-  const columns = layerCount + (layout?.cyclic?.length ? 1 : 0);
-  const rows = Math.max(widestLayer, layout?.cyclic?.length ?? 0);
-
-  return {
-    width: columns > 0 ? columns * nodeWidth + (columns - 1) * gapX : 0,
-    height: rows > 0 ? rows * nodeHeight + (rows - 1) * gapY : 0,
-    nodes,
-    edges,
-  };
+  return { width, height, nodes, edges, collapsed };
 }
 
 /**

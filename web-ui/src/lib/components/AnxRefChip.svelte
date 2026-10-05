@@ -57,8 +57,21 @@
   <span class="anx-ref-chip__title">{model.title}</span>
   {#if !model.resolvable}
     <span class="anx-ref-chip__kind">not found</span>
-  {:else if showKind && model.kindLabel}
-    <span class="anx-ref-chip__kind">{model.kindLabel}</span>
+  {:else}
+    <!--
+      An external record's status belongs on the chip: a plan step pointing at
+      a GitHub pull request is answered by "merged" or "open", and that word is
+      the reason the step is where it is. An ANX ref's status is already in the
+      dot's tone and in the column it sits in.
+    -->
+    {#if model.isExternal && model.statusLabel}
+      <span class="anx-ref-chip__status" data-tone={model.statusTone}
+        >{model.statusLabel}</span
+      >
+    {/if}
+    {#if showKind && model.kindLabel}
+      <span class="anx-ref-chip__kind">{model.kindLabel}</span>
+    {/if}
   {/if}
 {/snippet}
 
@@ -168,5 +181,17 @@
     color: var(--fg-muted);
     font-size: 10px;
     text-transform: lowercase;
+  }
+  .anx-ref-chip__status {
+    flex: none;
+    color: var(--fg-muted);
+    font-size: 10px;
+    text-transform: lowercase;
+  }
+  .anx-ref-chip__status[data-tone="ok"] {
+    color: var(--ok-text, var(--accent-text));
+  }
+  .anx-ref-chip__status[data-tone="danger"] {
+    color: var(--danger-text, var(--warn-text));
   }
 </style>

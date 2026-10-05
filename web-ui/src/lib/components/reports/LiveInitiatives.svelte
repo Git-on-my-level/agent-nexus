@@ -3,8 +3,14 @@
    * The initiatives section of the Overview, as a grid of tiles.
    *
    * One tile answers "what is the state and progress of this initiative" in a
-   * glance: name, health, a one-line status, a mini-viz sized to the plan's
-   * shape, and what is next. The whole tile is the link to the initiative page.
+   * glance: name, health, a one-line plain-text excerpt of the body, a
+   * mini-viz sized to the plan's shape, and the next step.
+   *
+   * The order is the point. Tiles are sorted by attention — blocked, at risk,
+   * stale, on track, done — so the top-left tile is always the one that most
+   * needs a decision. Finished initiatives and ones with no plan are real but
+   * are not what a dashboard is for, so they collapse at the bottom instead of
+   * pushing live work off the first screen.
    *
    * Everything comes from the live initiatives projection the panel already
    * reads — see `initiativeTiles.js` for what that projection does and does not
@@ -12,8 +18,9 @@
    */
   import { page } from "$app/stores";
 
-  import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
-  import { initiativeTiles } from "$lib/initiativeTiles.js";
+  import AgeBadge from "$lib/components/AgeBadge.svelte";
+  import HealthBadge from "$lib/components/HealthBadge.svelte";
+  import { groupedInitiativeTiles } from "$lib/initiativeTiles.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
 
   let { items = [], now = Date.now() } = $props();
@@ -21,104 +28,141 @@
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
-  let tiles = $derived(
-    initiativeTiles(items, {
+  let grouped = $derived(
+    groupedInitiativeTiles(items, {
       now,
       href: (ref) => workspaceHref(`/tasks/${encodeURIComponent(ref)}`),
     }),
   );
 </script>
 
-<ul class="tiles" aria-label="Open initiatives">
-  {#each tiles as tile (tile.ref)}
-    <li>
-      <a class="tile" href={tile.href} data-initiative-tile={tile.ref}>
-        <span class="tile-head">
-          <span class="tile-title">{tile.title}</span>
-          {#if tile.healthLabel}
-            <SignalBadge tone={tile.healthTone}>{tile.healthLabel}</SignalBadge>
-          {/if}
+{#snippet tileCard(tile)}
+  <li>
+    <a
+      class="tile"
+      href={tile.href}
+      data-initiative-tile={tile.ref}
+      data-tile-health={tile.health.state || "unknown"}
+    >
+      <span class="tile-head">
+        <span class="tile-title">{tile.title}</span>
+        <HealthBadge health={tile.health} />
+      </span>
+
+      {#if tile.excerpt}
+        <!-- A plain line. The body is markdown; a tile that rendered it
+             verbatim read `**Goal:** …`. -->
+        <span class="tile-excerpt" data-tile-excerpt>{tile.excerpt}</span>
+      {/if}
+
+      {#if tile.needs.length}
+        <!-- A pill on the initiative the decision belongs to, rather than a
+             second copy of the Inbox on the dashboard. -->
+        <span class="tile-needs" data-tile-needs
+          >Needs you: {tile.needs[0]}{tile.needs.length > 1
+            ? ` +${tile.needs.length - 1}`
+            : ""}</span
+        >
+      {/if}
+
+      {#if tile.segments.length}
+        <!--
+          The shape core computed picks the mini-viz: one track for a chain,
+          a track per independent run for lanes, a column per dependency
+          layer for a tree. Core sends `layer` and `after`, so a tree here is
+          the real graph in miniature rather than a bar standing in for one.
+        -->
+        <span class="tile-viz" data-tile-shape={tile.shape}>
+          <span
+            class="tile-bar"
+            data-viz-kind={tile.viz.kind}
+            role="img"
+            aria-label={`${tile.title} checklist: ${tile.progress?.done ?? 0} of ${tile.progress?.total ?? 0} steps done`}
+          >
+            {#each tile.viz.tracks as track, index (index)}
+              <span class="tile-track">
+                {#each track as segment (segment.id)}
+                  <span
+                    class="seg"
+                    data-status={segment.status}
+                    class:seg--critical={segment.onCriticalPath}
+                  ></span>
+                {/each}
+              </span>
+            {/each}
+          </span>
+          <span class="tile-meta">
+            {#if tile.progress}{tile.progress.done}/{tile.progress.total}{/if}
+            {#if tile.shapeLabel}
+              <span class="tile-shape">{tile.shapeLabel}</span>
+            {/if}
+            {#if tile.overflow}<span>+{tile.overflow} more</span>{/if}
+          </span>
         </span>
+      {:else if tile.progress}
+        <span class="tile-viz">
+          <progress
+            value={tile.progress.done}
+            max={tile.progress.total}
+            aria-label={`${tile.title} checklist`}
+          ></progress>
+          <span class="tile-meta"
+            >{tile.progress.done}/{tile.progress.total}</span
+          >
+        </span>
+      {/if}
 
-        {#if tile.status}
-          <span class="tile-status">{tile.status}</span>
-        {/if}
-
-        {#if tile.needs.length}
-          <!-- A pill on the initiative the decision belongs to, rather than a
-               second copy of the Inbox on the dashboard. -->
-          <span class="tile-needs" data-tile-needs
-            >Needs you: {tile.needs[0]}{tile.needs.length > 1
-              ? ` +${tile.needs.length - 1}`
+      <span class="tile-foot">
+        {#if tile.next}
+          <span class="tile-next" data-tile-next
+            >Next: {tile.next.title}{tile.next.extra
+              ? ` +${tile.next.extra}`
               : ""}</span
           >
         {/if}
-
-        {#if tile.segments.length}
-          <!--
-            The shape core computed picks the mini-viz: one track for a chain,
-            a track per independent run for lanes, a column per dependency
-            layer for a tree. Core sends `layer` and `after`, so a tree here is
-            the real graph in miniature rather than a bar standing in for one.
-          -->
-          <span class="tile-viz" data-tile-shape={tile.shape}>
-            <span
-              class="tile-bar"
-              data-viz-kind={tile.viz.kind}
-              role="img"
-              aria-label={`${tile.title} checklist: ${tile.progress?.done ?? 0} of ${tile.progress?.total ?? 0} steps done`}
-            >
-              {#each tile.viz.tracks as track, index (index)}
-                <span class="tile-track">
-                  {#each track as segment (segment.id)}
-                    <span
-                      class="seg"
-                      data-status={segment.status}
-                      class:seg--critical={segment.onCriticalPath}
-                    ></span>
-                  {/each}
-                </span>
-              {/each}
-            </span>
-            <span class="tile-meta">
-              {#if tile.progress}{tile.progress.done}/{tile.progress.total}{/if}
-              {#if tile.shapeLabel}
-                <span class="tile-shape">{tile.shapeLabel}</span>
-              {/if}
-              {#if tile.overflow}<span>+{tile.overflow} more</span>{/if}
-            </span>
-          </span>
-        {:else if tile.progress}
-          <span class="tile-viz">
-            <progress
-              value={tile.progress.done}
-              max={tile.progress.total}
-              aria-label={`${tile.title} checklist`}
-            ></progress>
-            <span class="tile-meta"
-              >{tile.progress.done}/{tile.progress.total}</span
-            >
-          </span>
-        {:else}
-          <span class="tile-meta">No plan yet</span>
+        {#if tile.movedAt}
+          <AgeBadge at={tile.movedAt} verb="moved" {now} />
         {/if}
+      </span>
+    </a>
+  </li>
+{/snippet}
 
-        <span class="tile-foot">
-          {#if tile.next}
-            <span class="tile-next"
-              >Next: {tile.next}{tile.extraNext
-                ? ` +${tile.extraNext}`
-                : ""}</span
-            >
-          {/if}
-          {#if tile.movedLabel}
-            <span class="tile-moved">moved {tile.movedLabel}</span>
-          {/if}
-        </span>
-      </a>
-    </li>
-  {/each}
-</ul>
+{#if grouped.attention.length}
+  <ul
+    class="tiles"
+    aria-label="Open initiatives"
+    data-initiative-group="attention"
+  >
+    {#each grouped.attention as tile (tile.ref)}
+      {@render tileCard(tile)}
+    {/each}
+  </ul>
+{:else if !grouped.done.length && !grouped.noPlan.length}
+  <p class="tiles-empty">No open initiatives.</p>
+{/if}
+
+{#if grouped.done.length}
+  <details class="tiles-fold" data-initiative-group="done">
+    <summary>Done <span>({grouped.done.length})</span> </summary>
+    <ul class="tiles" aria-label="Finished initiatives">
+      {#each grouped.done as tile (tile.ref)}
+        {@render tileCard(tile)}
+      {/each}
+    </ul>
+  </details>
+{/if}
+
+{#if grouped.noPlan.length}
+  <details class="tiles-fold" data-initiative-group="no-plan">
+    <summary>No plan <span>({grouped.noPlan.length})</span> </summary>
+    <ul class="tiles" aria-label="Initiatives with no plan">
+      {#each grouped.noPlan as tile (tile.ref)}
+        {@render tileCard(tile)}
+      {/each}
+    </ul>
+  </details>
+{/if}
 
 <style>
   .tiles {
@@ -128,6 +172,28 @@
     margin: 0;
     padding: 0;
     list-style: none;
+  }
+  .tiles-empty {
+    margin: 0;
+    color: var(--fg-muted);
+    font-size: 12px;
+  }
+  /* Done and planless initiatives: present, counted, out of the way. */
+  .tiles-fold {
+    margin-top: 10px;
+    border-top: 1px solid var(--line-subtle);
+  }
+  .tiles-fold summary {
+    cursor: pointer;
+    padding: 8px 0;
+    color: var(--fg-muted);
+    font-size: 11px;
+  }
+  .tiles-fold summary span {
+    color: var(--fg-subtle);
+  }
+  .tiles-fold[open] summary {
+    margin-bottom: 8px;
   }
   .tile {
     display: grid;
@@ -148,6 +214,14 @@
     outline: 2px solid var(--accent-solid);
     outline-offset: 2px;
   }
+  /* The worst state gets an edge, so the sort is visible and not just true. */
+  .tile[data-tile-health="blocked"] {
+    border-left: 3px solid var(--danger-text, var(--warn-text));
+  }
+  .tile[data-tile-health="at_risk"],
+  .tile[data-tile-health="stale"] {
+    border-left: 3px solid var(--warn-text);
+  }
   .tile-head {
     display: flex;
     align-items: baseline;
@@ -163,7 +237,7 @@
   .tile:hover .tile-title {
     color: var(--accent-text);
   }
-  .tile-status {
+  .tile-excerpt {
     color: var(--fg-muted);
     font-size: 12px;
     line-height: 1.5;
@@ -240,6 +314,7 @@
   .tile-foot {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 3px 8px;
     color: var(--fg-muted);
     font-size: 11px;

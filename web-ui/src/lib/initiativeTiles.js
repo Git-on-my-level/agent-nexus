@@ -4,25 +4,24 @@
  * A tile answers "what is the state and progress of this initiative" in a
  * glance, from `/overview` alone — no per-tile fetch.
  *
- * Everything shown is computed by core and read here as given: `health` is
- * `{status, reason}`, `plan_state` carries progress, the critical path and the
- * next step ids, and `geometry` carries the bounded graph a mini-viz is drawn
- * from — `{shape, nodes: [{id, status, layer, after}], total_nodes,
+ * Everything shown is computed by core and read here as given: `plan_health`
+ * (or the older `health`) carries the state and the reason, `plan_state`
+ * carries progress, the critical path and the next step, `next_step` names it,
+ * and `geometry` carries the bounded graph a mini-viz is drawn from —
+ * `{shape, nodes: [{id, status, layer, after}], total_nodes,
  * collapsed_nodes}`, capped at 24 nodes with the remainder counted.
  *
- * The one thing the projection does not carry is step *titles*, so "Next: …"
- * reads the step id. Ids are lowercase slugs by contract, which makes that a
- * fair approximation; the titles are one click away on the initiative page.
+ * Two things the tile does rather than shows raw:
+ *
+ * - The description is a **plain-text excerpt**. `summary` is authored
+ *   markdown, so a tile rendering it verbatim read `**Goal:** ship the…`.
+ * - Tiles are **sorted by attention** and grouped, because a dashboard's job
+ *   is to put what is wrong at the top. The order lives in `planHealth.js` so
+ *   a tile and a page header cannot disagree about which is worse.
  */
 
-import { formatMovedAgo } from "./refResolve.js";
-
-/** Health to the badge tones `SignalBadge` already defines. */
-const HEALTH = Object.freeze({
-  on_track: { label: "On track", tone: "ok" },
-  stalled: { label: "Stalled", tone: "warn" },
-  blocked: { label: "Blocked", tone: "danger" },
-});
+import { markdownExcerpt } from "./markdown.js";
+import { nextStepModel, planHealthModel } from "./planHealth.js";
 
 const SHAPE_LABELS = Object.freeze({
   chain: "Timeline",
@@ -33,16 +32,21 @@ const SHAPE_LABELS = Object.freeze({
 const asText = (value) => String(value ?? "").trim();
 
 /**
- * A step id read as prose. Step ids are lowercase slugs by contract
- * (`^[a-z0-9]+(-[a-z0-9]+)*$`), and the projection does not carry titles, so
- * this is the closest a tile can get to naming the next step without fetching
- * each plan separately.
+ * Which block of the Overview a tile belongs to.
+ *
+ * Finished and planless initiatives are real but are not what a dashboard is
+ * for, so they collapse at the bottom instead of pushing live work down.
  */
-export function humanizeStepId(id) {
-  const text = asText(id);
-  if (!text) return "";
-  const words = text.replaceAll("-", " ");
-  return words.charAt(0).toUpperCase() + words.slice(1);
+export const TILE_GROUPS = Object.freeze({
+  ATTENTION: "attention",
+  DONE: "done",
+  NO_PLAN: "no_plan",
+});
+
+export function tileGroup(state) {
+  if (state === "done") return TILE_GROUPS.DONE;
+  if (state === "no_plan" || !state) return TILE_GROUPS.NO_PLAN;
+  return TILE_GROUPS.ATTENTION;
 }
 
 /**
@@ -143,18 +147,15 @@ export function miniViz({ segments = [] } = {}, shape = "") {
  * One tile.
  *
  * @param {object} item a live initiatives projection row
- * @param {{ now?: number, href?: (ref: string) => string }} [options]
+ * @param {{ now?: number, href?: (ref: string) => string, excerptLimit?: number }} [options]
  */
 export function initiativeTileModel(item, options = {}) {
-  const { now = Date.now(), href = () => "" } = options;
+  const { href = () => "", excerptLimit = 120 } = options;
   const ref = asText(item?.ref);
   const planState = item?.plan_state ?? null;
   const geometry = item?.geometry ?? null;
 
-  // `health` is `{status, reason}`; core also sends a reason for a planless
-  // initiative, derived from its native phase.
-  const health = asText(item?.health?.status ?? item?.health);
-  const badge = HEALTH[health] ?? null;
+  const health = planHealthModel(item);
 
   // The plan's own progress wins over the row's. Core already copies one onto
   // the other, but if they ever disagree the bar is drawn from the plan's steps
@@ -177,47 +178,43 @@ export function initiativeTileModel(item, options = {}) {
     .map(asText)
     .filter(Boolean);
 
-  const nextSteps = Array.isArray(planState?.next_steps)
-    ? planState.next_steps.map(asText).filter(Boolean)
-    : [];
-
   const movedAt =
     asText(planState?.last_movement_at) || asText(item?.updated_at);
 
   const shape = asText(geometry?.shape ?? planState?.shape);
+  const bars = planSegments(planState, geometry);
+  const next = nextStepModel(item);
 
   return {
     ref,
     title: asText(item?.title) || ref,
     href: href(ref),
-    status: asText(item?.summary),
+    // A plain line, never the markdown source.
+    excerpt: markdownExcerpt(item?.summary, { limit: excerptLimit }),
     phase: asText(item?.phase).replaceAll("_", " "),
     priority: asText(item?.priority),
     health,
-    healthLabel: badge?.label ?? "",
-    healthTone: badge?.tone ?? "neutral",
-    healthReason: asText(item?.health?.reason),
+    rank: health.rank,
+    group: tileGroup(health.state),
     progress,
     shape,
     shapeLabel: SHAPE_LABELS[shape] ?? "",
     hasPlan: Boolean(planState),
-    ...(() => {
-      const bars = planSegments(planState, geometry);
-      return {
-        ...bars,
-        viz: miniViz(bars, asText(geometry?.shape ?? planState?.shape)),
-      };
-    })(),
-    // "Next: …" from the step id, since the projection has no titles.
-    next: nextSteps.length ? humanizeStepId(nextSteps[0]) : "",
-    extraNext: Math.max(0, nextSteps.length - 1),
+    ...bars,
+    viz: miniViz(bars, shape),
+    next,
     needs,
-    movedLabel: formatMovedAgo(movedAt, now),
+    /** ISO instant for the age badge; the badge owns the wording. */
+    movedAt,
   };
 }
 
 /**
- * Tiles for the grid, in the order the projection sent them.
+ * Tiles for the grid, worst first.
+ *
+ * Within a health state the projection's own order is kept — core sorts by
+ * priority or recency, and re-sorting it here would throw that away. The sort
+ * is stable, so equal ranks come out in the order they arrived.
  *
  * @param {object[]} items
  * @param {{ now?: number, href?: (ref: string) => string }} [options]
@@ -225,7 +222,23 @@ export function initiativeTileModel(item, options = {}) {
 export function initiativeTiles(items = [], options = {}) {
   return (Array.isArray(items) ? items : [])
     .filter((item) => asText(item?.ref))
-    .map((item) => initiativeTileModel(item, options));
+    .map((item) => initiativeTileModel(item, options))
+    .sort((a, b) => a.rank - b.rank);
+}
+
+/**
+ * The tiles, split into the blocks the Overview renders.
+ *
+ * @param {object[]} items
+ * @param {{ now?: number, href?: (ref: string) => string }} [options]
+ */
+export function groupedInitiativeTiles(items = [], options = {}) {
+  const tiles = initiativeTiles(items, options);
+  return {
+    attention: tiles.filter((tile) => tile.group === TILE_GROUPS.ATTENTION),
+    done: tiles.filter((tile) => tile.group === TILE_GROUPS.DONE),
+    noPlan: tiles.filter((tile) => tile.group === TILE_GROUPS.NO_PLAN),
+  };
 }
 
 /**
