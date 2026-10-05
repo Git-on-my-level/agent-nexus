@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"agent-nexus-visualreport"
 	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
 
@@ -479,6 +480,9 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	encodedContent, err := encodeContent(content)
 	if err != nil {
 		return nil, nil, invalidDocumentRequestError(err)
+	}
+	if err := rejectInvalidVisualReport(encodedContent); err != nil {
+		return nil, nil, err
 	}
 	searchText := documentSearchText(title, docSummary, source, tags, encodedContent, contentType)
 
@@ -1079,6 +1083,9 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	encodedContent, err := encodeContent(content)
 	if err != nil {
 		return nil, nil, invalidDocumentRequestError(err)
+	}
+	if err := rejectInvalidVisualReport(encodedContent); err != nil {
+		return nil, nil, err
 	}
 	nextTagsJSON, err := json.Marshal(nextTags)
 	if err != nil {
@@ -2701,6 +2708,30 @@ func isUniqueViolation(err error) bool {
 	}
 	text := strings.ToLower(strings.TrimSpace(err.Error()))
 	return strings.Contains(text, "unique constraint") || strings.Contains(text, "constraint failed")
+}
+
+// VisualReportValidationError is an invalid document write whose content is a
+// recognized anx.visual-report that failed the shared validator.
+type VisualReportValidationError struct {
+	Errors []string
+}
+
+func (e *VisualReportValidationError) Error() string {
+	message := "visual report validation failed"
+	if e != nil && len(e.Errors) > 0 {
+		message += ": " + strings.Join(e.Errors, "; ")
+	}
+	return message
+}
+
+func (e *VisualReportValidationError) Unwrap() error { return ErrInvalidDocumentRequest }
+
+func rejectInvalidVisualReport(content []byte) error {
+	result := visualreport.Validate(content)
+	if !result.Recognized || result.Valid {
+		return nil
+	}
+	return &VisualReportValidationError{Errors: append([]string(nil), result.Errors...)}
 }
 
 func invalidDocumentRequest(message string) error {

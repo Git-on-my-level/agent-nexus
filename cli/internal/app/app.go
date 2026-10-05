@@ -197,6 +197,11 @@ func (a *App) Run(args []string) int {
 	commandName, result, runErr := a.runCommand(context.Background(), normalizedArgs, resolved)
 	identity := resolveMachineCommandIdentity(commandName)
 	if runErr != nil {
+		if code, nextErr, retried := a.recoverCLIOutdated(context.Background(), args, resolved, identity.Command, runErr); retried {
+			return code
+		} else if nextErr != nil {
+			runErr = nextErr
+		}
 		return a.renderError(identity, resolved.JSON, runErr)
 	}
 	if !isGoTestBinary() {

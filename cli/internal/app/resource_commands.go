@@ -4947,6 +4947,11 @@ func validateDocsCreateBody(body any, commandName string) error {
 	if len(issues) > 0 {
 		return errnorm.Usage("invalid_request", fmt.Sprintf("docs create payload failed local validation: %s", strings.Join(issues, "; ")))
 	}
+	if hasContent {
+		if err := visualReportContentError(rawContent); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -4984,6 +4989,9 @@ func validateDocsRevisionBody(body any, commandName string) error {
 	appendDocsCommonValidationIssues(payload, &issues)
 	if len(issues) > 0 {
 		return errnorm.Usage("invalid_request", fmt.Sprintf("docs.revisions.create payload failed local validation: %s", strings.Join(issues, "; ")))
+	}
+	if err := visualReportContentError(rawContent); err != nil {
+		return err
 	}
 	return nil
 }

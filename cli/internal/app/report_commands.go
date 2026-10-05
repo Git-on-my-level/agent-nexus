@@ -225,6 +225,36 @@ func (a *App) runReportValidate(args []string) (*commandResult, error) {
 	return &commandResult{Text: fmt.Sprintf("Visual report is valid (%d panels).", len(asSlice(report["panels"]))), Data: map[string]any{"recognized": true, "valid": true, "errors": []string{}, "panel_count": len(asSlice(report["panels"]))}}, nil
 }
 
+func visualReportContentError(content any) error {
+	if content == nil {
+		return nil
+	}
+	bytes, ok := visualReportContentBytes(content)
+	if !ok {
+		return nil
+	}
+	result := visualreport.Validate(bytes)
+	if !result.Recognized || result.Valid {
+		return nil
+	}
+	return reportValidationError(result)
+}
+
+func visualReportContentBytes(content any) ([]byte, bool) {
+	switch value := content.(type) {
+	case string:
+		return []byte(value), true
+	case []byte:
+		return value, true
+	default:
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return nil, false
+		}
+		return encoded, true
+	}
+}
+
 func reportContentWarning(content any) []output.Warning {
 	if content == nil {
 		return nil

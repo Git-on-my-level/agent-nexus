@@ -115,6 +115,14 @@ git push origin "$VERSION"
 
 The workflow fails if the pushed tag does not match the committed [`VERSION`](../VERSION) file or if generated CLI version metadata is stale.
 
+### CLI compatibility floor
+
+`min_cli_version` is the wire-compatibility floor in [`core/internal/buildinfo/compatibility.go`](../core/internal/buildinfo/compatibility.go) (`MinCompatibleCLI`). Ordinary releases must not change it, and [`scripts/set-version.sh`](../scripts/set-version.sh) does not. `recommended_cli_version` tracks this core release (`VERSION`).
+
+Raise `MinCompatibleCLI` only when a release breaks CLI/core wire compatibility, in the same release that requires the newer CLI, and record the break in this runbook. Operators can override a deployment with `ANX_MIN_CLI_VERSION` or `--min-cli-version` without changing the recommended version (`ANX_RECOMMENDED_CLI_VERSION`, `--recommended-cli-version`).
+
+A client below the floor receives HTTP 426 `cli_outdated`. A managed CLI whose update policy is `auto` installs the recommended release with the verified updater and retries the original command once. Policy `notify` or `off`, and every unmanaged install, prints `anx update --version <recommended>` and does not replace the binary.
+
 ### Python `anx-agent-bridge` package version sync
 
 [`scripts/sync-version.sh`](../scripts/sync-version.sh) bumps `project.version` in [`adapters/agent-bridge/pyproject.toml`](../adapters/agent-bridge/pyproject.toml) alongside the CLI/core/UI metadata so packaged bridge semver stays aligned with the repo tag. Run it (via `./scripts/set-version.sh` release prep or directly) before you tag. Publishing wheels to PyPI is optional and not wired in OSS CI yet; when you publish, ship the artifact for the tagged version after the Git tag exists so `pip install anx-agent-bridge` does not drift from `anx bridge install`'s pinned source install.
@@ -196,4 +204,4 @@ anx --base-url http://127.0.0.1:8000 --as release-check api call --path /meta/ha
 
 - If release build matrix fails: inspect failed target archive build job logs.
 - If checksum generation fails: verify artifact download and file naming patterns in the workflow.
-- If clients fail with `cli_outdated`: check `/meta/handshake` and publish updated CLI binaries.
+- If clients fail with `cli_outdated`: check `/meta/handshake`. `min_cli_version` should stay at `MinCompatibleCLI` unless this release broke wire compatibility. `recommended_cli_version` should match the published CLI. Managed `auto` installs update on the 426 and retry once; other installs need `anx update --version <recommended>`.

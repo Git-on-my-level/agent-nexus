@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -74,22 +75,14 @@ func TestReportTemplatesAndInitAreLocalAndProduceValidReports(t *testing.T) {
 	}
 }
 
-func TestDocsCreateWarnsForInvalidVisualReportInTextAndJSON(t *testing.T) {
+func TestDocsCreateRefusesInvalidVisualReportBeforeWrite(t *testing.T) {
 	t.Parallel()
-	var receivedContentType, receivedContent string
+	posts := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/docs" {
-			http.NotFound(w, r)
-			return
+		if r.Method == http.MethodPost && r.URL.Path == "/docs" {
+			posts++
 		}
-		var body map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			t.Fatalf("decode create body: %v", err)
-		}
-		receivedContentType = anyStringValue(body["content_type"])
-		receivedContent = anyStringValue(body["content"])
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"document":{"id":"doc_1","handle":"broken-report"}}`))
+		http.NotFound(w, r)
 	}))
 	defer server.Close()
 
@@ -101,17 +94,10 @@ func TestDocsCreateWarnsForInvalidVisualReportInTextAndJSON(t *testing.T) {
 	}
 	args := []string{"--base-url", server.URL, "docs", "create", "--topic", "topic:launch", "--title", "Broken report", "--body-file", file}
 
-	jsonOutput := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, append([]string{"--json"}, args...)))
-	warnings := asSlice(jsonOutput["warnings"])
-	if len(warnings) != 1 || anyStringValue(asMap(warnings[0])["code"]) != "invalid_visual_report" || !strings.Contains(anyStringValue(asMap(warnings[0])["message"]), "required fields") {
-		t.Fatalf("expected validation warning with first errors: %#v", jsonOutput)
-	}
-	textOutput := runCLIForTest(t, home, nil, nil, args)
-	if !strings.Contains(textOutput, "warning code=invalid_visual_report") || !strings.Contains(textOutput, "required fields") {
-		t.Fatalf("expected text warning with validation details, got %q", textOutput)
-	}
-	if receivedContentType != "text" || receivedContent != content {
-		t.Fatalf("expected text report content, got type=%q content=%q", receivedContentType, receivedContent)
+	jsonOutput := assertEnvelopeError(t, runCLIForTest(t, home, nil, nil, append([]string{"--json"}, args...)))
+	errObj := asMap(jsonOutput["error"])
+	if posts != 0 || anyStringValue(errObj["code"]) != "invalid_visual_report" || len(asSlice(asMap(errObj["details"])["errors"])) == 0 || !strings.Contains(anyStringValue(errObj["message"]), "required fields") {
+		t.Fatalf("expected local refusal before write, posts=%d payload=%#v", posts, jsonOutput)
 	}
 }
 
@@ -508,5 +494,92 @@ func TestDocsRevisionProposalReportsUnappliedState(t *testing.T) {
 	}
 	if actions := deriveNextActions("docs revise", nil, data); len(actions) != 1 || strings.Join(actions[0].Argv, " ") != "anx docs revise --apply --proposal-id draft-1" {
 		t.Fatalf("expected explicit apply next action, got %#v", actions)
+	}
+}
+
+func TestDocsReviseValidatesVisualReportBeforeWrite(t *testing.T) {
+	t.Parallel()
+	const invalidVisualReport = `{"kind":"anx.visual-report","schema_version":1}`
+	var posts int
+	var lastBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/docs/doc_1":
+			_, _ = w.Write([]byte(`{"document":{"id":"doc_1","head_revision_id":"rev_1"},"revision":{"revision_id":"rev_1","content":"old","content_type":"text"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/docs/doc_1/revisions":
+			posts++
+			body, _ := io.ReadAll(r.Body)
+			lastBody = string(body)
+			_, _ = w.Write([]byte(`{"document":{"id":"doc_1","head_revision_id":"rev_2"},"revision":{"revision_id":"rev_2"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	home := t.TempDir()
+	revise := func(content string, apply bool) string {
+		posts = 0
+		lastBody = ""
+		payload, _ := json.Marshal(map[string]any{"actor_id": "actor_test", "if_base_revision": "rev_1", "content": content, "content_type": "text"})
+		args := []string{"--json", "--base-url", server.URL, "docs", "revise", "--document-id", "doc_1"}
+		if apply {
+			args = append(args, "--apply")
+		}
+		return runCLIForTest(t, home, nil, strings.NewReader(string(payload)), args)
+	}
+
+	invalidApply := assertEnvelopeError(t, revise(invalidVisualReport, true))
+	invalidErr := asMap(invalidApply["error"])
+	if posts != 0 || anyString(invalidErr["code"]) != "invalid_visual_report" || len(asSlice(asMap(invalidErr["details"])["errors"])) == 0 {
+		t.Fatalf("invalid apply posts=%d payload=%#v", posts, invalidApply)
+	}
+	invalidProposal := assertEnvelopeError(t, revise(invalidVisualReport, false))
+	if posts != 0 || anyString(asMap(invalidProposal["error"])["code"]) != "invalid_visual_report" {
+		t.Fatalf("invalid proposal posts=%d payload=%#v", posts, invalidProposal)
+	}
+	validApply := assertEnvelopeOK(t, revise(minimalVisualReport, true))
+	var posted map[string]any
+	if err := json.Unmarshal([]byte(lastBody), &posted); err != nil || posts != 1 || anyString(posted["content"]) != minimalVisualReport {
+		t.Fatalf("valid apply posts=%d body=%s err=%v payload=%#v", posts, lastBody, err, validApply)
+	}
+	validProposal := assertEnvelopeOK(t, revise(minimalVisualReport, false))
+	if posts != 0 {
+		t.Fatalf("valid proposal wrote immediately: %s", lastBody)
+	}
+	proposed := asMap(asMap(validProposal["result"])["body"])
+	if anyString(proposed["content"]) != minimalVisualReport {
+		t.Fatalf("proposal content=%#v", proposed["content"])
+	}
+}
+
+func TestDocsCreateValidatesVisualReportBeforeWrite(t *testing.T) {
+	t.Parallel()
+	const invalidVisualReport = `{"kind":"anx.visual-report","schema_version":1}`
+	posts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost && r.URL.Path == "/docs" {
+			posts++
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"document":{"id":"doc_1"},"revision":{"revision_id":"rev_1"}}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+	home := t.TempDir()
+	create := func(content string) string {
+		posts = 0
+		payload, _ := json.Marshal(map[string]any{"document": map[string]any{"title": "Report"}, "content": content, "content_type": "text"})
+		return runCLIForTest(t, home, nil, strings.NewReader(string(payload)), []string{"--json", "--base-url", server.URL, "docs", "create"})
+	}
+	invalid := assertEnvelopeError(t, create(invalidVisualReport))
+	invalidErr := asMap(invalid["error"])
+	if posts != 0 || anyString(invalidErr["code"]) != "invalid_visual_report" || len(asSlice(asMap(invalidErr["details"])["errors"])) == 0 {
+		t.Fatalf("invalid create posts=%d payload=%#v", posts, invalid)
+	}
+	if posts = 0; assertEnvelopeOK(t, create(minimalVisualReport)) == nil || posts != 1 {
+		t.Fatalf("valid create posts=%d", posts)
 	}
 }
