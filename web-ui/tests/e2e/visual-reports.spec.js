@@ -1013,6 +1013,27 @@ for (const viewport of [
   });
 }
 
+test("live initiative reports keep unresolvable linked work non-navigable", async ({
+  page,
+}) => {
+  const state = await installLiveDashboard(page);
+  state.live.panels[0].data.items[0].plan_state.steps[0].resolvable = false;
+  await page.goto(DOC_PATH);
+  const report = reportRegion(page);
+  const initiativePlan = report
+    .locator('[data-report-initiative="card:launch"]')
+    .locator("[data-initiative-plan]");
+  const hiddenRef = initiativePlan.locator(
+    '.anx-ref-chip[data-anx-ref="card:review"]',
+  );
+  await expect(hiddenRef).toHaveAttribute("role", "note");
+  await expect(hiddenRef).toContainText("not found");
+  await expect(
+    initiativePlan.getByRole("link", { name: "Finish review" }),
+  ).toHaveCount(0);
+  expectReadOnly(state);
+});
+
 test("Current filter retains RFC3339Nano live panels", async ({ page }) => {
   await installLiveDashboard(page);
   await page.goto(DOC_PATH);

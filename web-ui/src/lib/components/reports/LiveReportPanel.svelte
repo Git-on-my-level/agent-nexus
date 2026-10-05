@@ -1,5 +1,5 @@
 <script>
-  import LiveInitiatives from "./LiveInitiatives.svelte";
+  import LiveInitiativeDetails from "./LiveInitiativeDetails.svelte";
   import { inboxItemMailboxId } from "$lib/inboxUtils.js";
   import { formatLiveAge } from "$lib/liveReports.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
@@ -44,7 +44,7 @@
     </p>
   {:else if panel.type === "live-initiatives"}
     {#if items.length}
-      <LiveInitiatives
+      <LiveInitiativeDetails
         {items}
         {resolved}
         {organizationSlug}
