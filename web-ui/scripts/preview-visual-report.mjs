@@ -97,6 +97,9 @@ export async function main(
   try {
     browser = await launchBrowser({
       headless: true,
+      // Use full Chromium's new headless mode. The default headless shell
+      // can segfault during sandboxed startup on Linux runners.
+      channel: "chromium",
       chromiumSandbox: true,
     });
   } catch (error) {
@@ -144,9 +147,7 @@ export async function main(
     await reportSurface.waitFor({ state: "visible", timeout: 15_000 });
     await page.waitForFunction(
       () => {
-        const surface = document.querySelector(
-          '[aria-label="Visual report"]',
-        );
+        const surface = document.querySelector('[aria-label="Visual report"]');
         return surface && !surface.innerText.includes("Reading workspace…");
       },
       null,
