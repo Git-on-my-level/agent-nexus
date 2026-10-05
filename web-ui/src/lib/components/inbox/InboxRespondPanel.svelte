@@ -1,4 +1,12 @@
 <script>
+  import { tick } from "svelte";
+
+  import {
+    ACCESS_APPROVE_OUTCOME,
+    ACCESS_DENY_OUTCOME,
+    describeGrantAuthority,
+    grantConfirmTitle,
+  } from "$lib/accessGrant.js";
   import { formatShortcut } from "$lib/keyboardHints.js";
 
   /**
@@ -9,9 +17,19 @@
    *
    * Sending is the caller's job (`onSend(text, outcome)`); it queues the response
    * behind the undo toast.
+   *
+   * An access request (`access` set) is not an ordinary review. Core accepts
+   * only approved or rejected on those items, so a freeform reply, a canned
+   * proposal and Acknowledge all fail with `invalid_request` and leave the
+   * request pending — the reader would think they had answered. Approving
+   * also hands over real authority, so it asks the same second question the
+   * Access page asks, in the same words, and only of a person
+   * (`canDecideAccess`), since core accepts that decision from nobody else.
    */
   let {
     kind = "",
+    access = null,
+    canDecideAccess = false,
     proposals = [],
     draft = $bindable(""),
     chosen = "",
@@ -29,16 +47,114 @@
 
   const MAX_KEYED = 5;
   let isReview = $derived(String(kind ?? "").toLowerCase() === "review");
+  let isAccess = $derived(Boolean(access?.requestId));
+
+  // The confirmation belongs to one request, not to the panel. This component
+  // is reused as the reader moves between inbox items, so a boolean would
+  // stay true under the next request and put its Grant button one click away
+  // from a reader who never saw its authority text.
+  let confirmingRequestId = $state("");
+  let confirming = $derived(
+    isAccess && confirmingRequestId === access.requestId,
+  );
+  let confirmEl = $state(null);
+
+  let who = $derived(access?.requesterLabel || "This agent");
+  let authority = $derived(
+    describeGrantAuthority({ who, grant: access?.grant }),
+  );
 
   function send(text, outcome = "answered") {
     const body = String(text ?? "").trim();
     if (!body || busy) return;
     onSend?.(body, outcome);
   }
+
+  async function startConfirm() {
+    if (!isAccess) return;
+    confirmingRequestId = access.requestId;
+    // Clicking Approve unmounts the focused button, and the panel below it
+    // carries the authority the reader is about to hand over.
+    await tick();
+    confirmEl?.focus?.();
+  }
+
+  /** Decide the request the confirmation was opened for, or nothing. */
+  function decide(requestId, text, outcome) {
+    if (!canDecideAccess || requestId !== access?.requestId) return;
+    send(text, outcome);
+  }
 </script>
 
 <div class="space-y-4">
-  {#if isReview}
+  {#if isAccess && !canDecideAccess}
+    <!-- Core takes this decision from a person only, so an agent principal
+         is told who can decide rather than shown controls that 403. -->
+    <p class="text-meta text-fg-muted" data-inbox-access-human-only>
+      A person has to decide this request. Signed in as an agent, you can read
+      it but not approve or deny it.
+    </p>
+  {:else if isAccess}
+    <div data-inbox-access-decision>
+      {#if confirming}
+        <div
+          class="space-y-2 rounded-md border border-line bg-bg-soft px-3 py-2.5"
+          data-inbox-access-confirm
+          role="group"
+          aria-label="Confirm this grant"
+          tabindex="-1"
+          bind:this={confirmEl}
+        >
+          <p class="text-meta font-medium text-fg">
+            {grantConfirmTitle({ who, grant: access?.grant })}
+          </p>
+          <p class="text-micro text-fg-muted">{authority}</p>
+          <div class="flex flex-wrap gap-2 pt-0.5">
+            <button
+              class="ui-btn-primary"
+              type="button"
+              disabled={busy}
+              onclick={() =>
+                decide(
+                  confirmingRequestId,
+                  `Approved ${access?.grant || "the grant"}.`,
+                  ACCESS_APPROVE_OUTCOME,
+                )}>Grant administration</button
+            >
+            <button
+              class="ui-btn-secondary"
+              type="button"
+              disabled={busy}
+              onclick={() => (confirmingRequestId = "")}>Cancel</button
+            >
+          </div>
+        </div>
+      {:else}
+        <div class="flex flex-wrap gap-2">
+          <button
+            class="ui-btn-secondary"
+            type="button"
+            disabled={busy}
+            onclick={startConfirm}>Approve…</button
+          >
+          <button
+            class="ui-btn-secondary"
+            type="button"
+            disabled={busy}
+            onclick={() =>
+              decide(
+                access?.requestId,
+                "Denied the request.",
+                ACCESS_DENY_OUTCOME,
+              )}>Deny request</button
+          >
+        </div>
+      {/if}
+      <p class="mt-2 text-micro text-fg-subtle">
+        An access request takes a decision, not a reply.
+      </p>
+    </div>
+  {:else if isReview}
     <div class="flex flex-wrap gap-2">
       <button
         class="ui-btn-secondary"
@@ -55,7 +171,7 @@
     </div>
   {/if}
 
-  {#if proposals.length}
+  {#if proposals.length && !isAccess}
     <div role="group" aria-labelledby={`${replyId}-suggested`}>
       <p class="ui-label" id={`${replyId}-suggested`}>Suggested responses</p>
       <ul class="space-y-1.5">
@@ -102,42 +218,51 @@
     </div>
   {/if}
 
-  <form
-    class="space-y-2"
-    onsubmit={(event) => {
-      event.preventDefault();
-      send(draft);
-    }}
-  >
-    <label class="ui-label" for={replyId}>{replyLabel}</label>
-    <textarea
-      id={replyId}
-      class="ui-input {tall ? 'min-h-[160px]' : 'min-h-20'}"
-      bind:value={draft}
-      {placeholder}
-      data-inbox-shortcut="reply"
-      aria-keyshortcuts="R"
-    ></textarea>
-    {@render extras?.()}
-    <div class="flex flex-wrap items-center gap-2">
-      <button
-        class="ui-btn-primary"
-        type="submit"
-        disabled={busy || !draft.trim()}
-        title={`${sendLabel} (${formatShortcut("Enter")})`}>{sendLabel}</button
-      >
-      {#if onAcknowledge}
+  <!-- Core rejects every other outcome on an access-backed item, so the
+       freeform reply and Acknowledge are not offered there at all. -->
+  {#if !isAccess}
+    <form
+      class="space-y-2"
+      onsubmit={(event) => {
+        event.preventDefault();
+        send(draft);
+      }}
+    >
+      <label class="ui-label" for={replyId}>{replyLabel}</label>
+      <textarea
+        id={replyId}
+        class="ui-input {tall ? 'min-h-[160px]' : 'min-h-20'}"
+        bind:value={draft}
+        {placeholder}
+        data-inbox-shortcut="reply"
+        aria-keyshortcuts="R"
+      ></textarea>
+      {@render extras?.()}
+      <div class="flex flex-wrap items-center gap-2">
         <button
-          class="ui-btn-secondary"
-          type="button"
-          disabled={busy}
-          data-inbox-shortcut="done"
-          aria-keyshortcuts="E"
-          title="Acknowledge (E)"
-          onclick={() => onAcknowledge()}>Acknowledge</button
+          class="ui-btn-primary"
+          type="submit"
+          disabled={busy || !draft.trim()}
+          title={`${sendLabel} (${formatShortcut("Enter")})`}
+          >{sendLabel}</button
         >
-      {/if}
-      {@render after?.()}
-    </div>
-  </form>
+        {#if onAcknowledge}
+          <button
+            class="ui-btn-secondary"
+            type="button"
+            disabled={busy}
+            data-inbox-shortcut="done"
+            aria-keyshortcuts="E"
+            title="Acknowledge (E)"
+            onclick={() => onAcknowledge()}>Acknowledge</button
+          >
+        {/if}
+        {@render after?.()}
+      </div>
+    </form>
+  {:else}
+    <!-- The access decision stands alone; `after` still carries the caller's
+         own affordances (Open item, shortcut hints). -->
+    <div class="flex flex-wrap items-center gap-2">{@render after?.()}</div>
+  {/if}
 </div>

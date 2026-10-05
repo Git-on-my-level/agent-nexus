@@ -5699,6 +5699,7 @@ paths:
     post:
       operationId: respondInboxItem
       summary: Respond to human attention inbox item
+      description: For a server-linked access request, approved atomically grants the persisted requested grant and rejected denies it. Other outcomes return 400 invalid_request without mutation. Ordinary attention event metadata never authorizes a grant.
       tags: [inbox]
       x-anx-surface: projection
       x-anx-command-id: inbox.respond
@@ -6878,6 +6879,137 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
 
+  /auth/access-requests:
+    get:
+      operationId: listAccessRequests
+      summary: List pending access requests
+      description: Human only. Lists pending requests in creation order, including requester identity, grant, reason and Inbox correlation.
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: auth.access-requests.list
+      x-anx-cli-path: auth access-requests list
+      x-anx-agent-notes: Agents request their own grant. Humans alone decide requests and read the Access queue.
+      x-anx-why: Request and review explicit workspace authority.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `AccessRequestsResponse`.
+      x-anx-error-codes: [auth_required, invalid_token, agent_required, human_required, invalid_request, not_found, conflict]
+      x-anx-concepts: [auth]
+      x-anx-stability: beta
+      responses:
+        '200': {description: Access result, content: {application/json: {schema: {$ref: '#/components/schemas/AccessRequestsResponse'}}}}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+    post:
+      operationId: createAccessRequest
+      x-anx-cli-input:
+        mode: flags
+        flags:
+          - {name: grant, body_path: grant, required: true, description: Named grant; currently auth-admin.}
+          - {name: reason, body_path: reason, required: true, description: Why this agent needs the grant.}
+      summary: Request a named grant
+      description: Agent only. Requests auth-admin for the authenticated principal, with a nonempty reason. Idempotent per principal and grant for the lifetime of the request; retries return the original request without changing its reason or decision. Creates a review Inbox item.
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: auth.access-requests.request
+      x-anx-cli-path: auth access-requests request
+      x-anx-agent-notes: Agents request their own grant. Humans alone decide requests and read the Access queue.
+      x-anx-why: Request and review explicit workspace authority.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `AccessRequestResponse`.
+      x-anx-error-codes: [auth_required, invalid_token, agent_required, human_required, invalid_request, not_found, conflict]
+      x-anx-concepts: [auth]
+      x-anx-stability: beta
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AccessRequestCreate'}}}}
+      responses:
+        '200': {description: Access result, content: {application/json: {schema: {$ref: '#/components/schemas/AccessRequestResponse'}}}}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+
+  /auth/access-requests/{request_id}/approve:
+    post:
+      operationId: approveAccessRequest
+      summary: Approve an access request
+      description: Human only. Atomically grants auth-admin using the existing grant semantics and records an approved Inbox response. Same decision retries are idempotent; opposite decisions conflict. Revoked requesters cannot be approved.
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: auth.access-requests.approve
+      x-anx-cli-path: auth access-requests approve
+      x-anx-agent-notes: Agents request their own grant. Humans alone decide requests and read the Access queue.
+      x-anx-why: Request and review explicit workspace authority.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `AccessRequestResponse`.
+      x-anx-error-codes: [auth_required, invalid_token, agent_required, human_required, invalid_request, not_found, conflict]
+      x-anx-concepts: [auth]
+      x-anx-stability: beta
+      parameters: [{name: request_id, in: path, required: true, schema: {type: string}, description: Access request ID.}]
+      responses:
+        '200': {description: Access result, content: {application/json: {schema: {$ref: '#/components/schemas/AccessRequestResponse'}}}}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+
+  /auth/access-requests/{request_id}/deny:
+    post:
+      operationId: denyAccessRequest
+      summary: Deny an access request
+      description: Human only. Records a denied request and rejected Inbox response without granting authority. Same decision retries are idempotent; opposite decisions conflict.
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: auth.access-requests.deny
+      x-anx-cli-path: auth access-requests deny
+      x-anx-agent-notes: Agents request their own grant. Humans alone decide requests and read the Access queue.
+      x-anx-why: Request and review explicit workspace authority.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `AccessRequestResponse`.
+      x-anx-error-codes: [auth_required, invalid_token, agent_required, human_required, invalid_request, not_found, conflict]
+      x-anx-concepts: [auth]
+      x-anx-stability: beta
+      parameters: [{name: request_id, in: path, required: true, schema: {type: string}, description: Access request ID.}]
+      responses:
+        '200': {description: Access result, content: {application/json: {schema: {$ref: '#/components/schemas/AccessRequestResponse'}}}}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+
+  /auth/access/summary:
+    get:
+      operationId: getAccessSummary
+      summary: Count pending access actions
+      description: Human only. Cheap pending count covering pending access requests and unexpired pending or approved host enrollments awaiting completion.
+      tags: [auth]
+      x-anx-surface: utility
+      x-anx-command-id: auth.access-requests.summary
+      x-anx-cli-path: auth access-requests summary
+      x-anx-agent-notes: Agents request their own grant. Humans alone decide requests and read the Access queue.
+      x-anx-why: Request and review explicit workspace authority.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `AccessSummary`.
+      x-anx-error-codes: [auth_required, invalid_token, agent_required, human_required, invalid_request, not_found, conflict]
+      x-anx-concepts: [auth]
+      x-anx-stability: beta
+      responses:
+        '200': {description: Access result, content: {application/json: {schema: {$ref: '#/components/schemas/AccessSummary'}}}}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+
   /auth/admins:
     get:
       operationId: listAuthAdmins
@@ -7236,6 +7368,43 @@ paths:
         '401':
           $ref: '#/components/responses/ErrorResponse'
         '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /inbox/summary:
+    get:
+      operationId: getInboxSummary
+      x-anx-agent-notes: Uses current workspace permissions; limit 0 returns the count only. No cross-workspace identity.
+      summary: Count open asks and return the top asks visible to the caller
+      tags: [inbox]
+      x-anx-surface: projection
+      x-anx-command-id: inbox.summary
+      x-anx-cli-path: inbox summary
+      x-anx-why: Cheap workspace-local human attention read for UI fan-out across existing workspace sessions.
+      x-anx-input-mode: query
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ open_ask_count, asks, generated_at }`; shared human asks visible to the caller, not agent answer notifications."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-concepts: [inbox]
+      x-anx-stability: beta
+      parameters:
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 0, maximum: 50, default: 5}
+      responses:
+        '200':
+          description: Workspace-local count and severity-priority ordered top asks (urgent/p0/critical, high/p1, normal/medium/p2, low/p3, then unspecified; oldest first on ties); private threads excluded before counting; open requests survive linked subject archive.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [open_ask_count, asks, generated_at]
+                properties:
+                  open_ask_count: {type: integer, minimum: 0}
+                  asks: {type: array, items: { $ref: '#/components/schemas/JsonObject' }}
+                  generated_at: {type: string, format: date-time}
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
           $ref: '#/components/responses/ErrorResponse'
 
   /inbox/{inbox_id}:
@@ -8114,6 +8283,47 @@ components:
       properties:
         hosts: {type: array, items: {$ref: '#/components/schemas/Host'}}
       required: [hosts]
+    AccessRequestCreate:
+      type: object
+      additionalProperties: false
+      required: [grant, reason]
+      properties:
+        grant: {type: string, enum: [auth-admin]}
+        reason: {type: string, minLength: 1, maxLength: 4000}
+    AccessRequest:
+      type: object
+      required: [id, principal_id, actor_id, username, grant, reason, status, created_at, request_event_ref, inbox_item_id]
+      properties:
+        id: {type: string}
+        principal_id: {type: string}
+        actor_id: {type: string}
+        username: {type: string}
+        grant: {type: string, enum: [auth-admin]}
+        reason: {type: string}
+        status: {type: string, enum: [pending, approved, denied]}
+        created_at: {type: string, format: date-time}
+        decided_at: {type: string, format: date-time}
+        decided_by: {type: string}
+        request_event_ref: {$ref: '#/components/schemas/TypedRef'}
+        inbox_item_id: {type: string}
+    AccessRequestResponse:
+      type: object
+      required: [request]
+      properties:
+        request: {$ref: '#/components/schemas/AccessRequest'}
+    AccessRequestsResponse:
+      type: object
+      required: [requests]
+      properties:
+        requests: {type: array, items: {$ref: '#/components/schemas/AccessRequest'}}
+    AccessSummary:
+      type: object
+      required: [pending_count, pending_access_request_count, pending_host_enrollment_count]
+      properties:
+        pending_count: {type: integer, minimum: 0}
+        pending_access_request_count: {type: integer, minimum: 0}
+        pending_host_enrollment_count: {type: integer, minimum: 0}
+
     AuthAdmin:
       type: object
       required: [principal_id, actor_id, username, auth_admin]
@@ -10248,6 +10458,7 @@ components:
       required: [board_ref, board_title, column_key]
 
     InboxItem:
+      description: Open human attention requests remain actionable until response or withdrawal, independently of linked subject lifecycle. Thread privacy still applies.
       type: object
       properties:
         id: { type: string }
@@ -10280,6 +10491,9 @@ components:
         requester_agent_id: { type: string }
         requester_label: { type: string }
         severity: { type: string }
+        access_request_id: {type: string}
+        requested_grant: {type: string}
+        requester_principal_id: {type: string}
         notification_target_status:
           type: object
           additionalProperties: true
@@ -10877,6 +11091,9 @@ components:
       description: >
         Records a human response to a human attention inbox item. The response target must be
         resolvable unless `notify_mode` is `none` or a replacement target is supplied.
+        Server-linked access requests accept only approved or rejected; other outcomes
+        return 400 without mutation. Approval atomically grants the persisted requested
+        grant to its persisted principal. Event-supplied correlation never grants authority.
       properties:
         idempotency_key: {type: string, minLength: 1, maxLength: 128, description: Stable key for one intended response. Reuse the same key and body after an ambiguous failure to retrieve the original event and result.}
         actor_id: { type: string }

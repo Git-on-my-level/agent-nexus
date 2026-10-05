@@ -56,6 +56,11 @@
   import InboxNavCount from "$lib/components/inbox/InboxNavCount.svelte";
   import PanelToggle from "$lib/components/layout/PanelToggle.svelte";
   import AgentsNavCount from "$lib/components/agents/AgentsNavCount.svelte";
+  import AccessNavCount from "$lib/components/access/AccessNavCount.svelte";
+  import {
+    pendingAccessCount,
+    pendingAccessLabel,
+  } from "$lib/pendingAccessCount.js";
   import {
     handleEscapeTextBlurCommit,
     handleModEnterBlurCommit,
@@ -278,6 +283,30 @@
     }),
   );
   let initials = $derived(shellIdentity.initials);
+  // Access lives inside this menu, so the trigger carries its badge. An
+  // explicit aria-label on a button suppresses any name its children would
+  // contribute, so the number has to be part of the label itself or a screen
+  // reader never hears it.
+  // Deciding access is human-only in core, so an agent principal would only
+  // ever get 403 here. Do not ask.
+  let accessBadgeEnabled = $derived(
+    identityReady &&
+      !workspaceBootstrapPending &&
+      !shouldRedirectToLogin &&
+      hasHumanAuthSession,
+  );
+  let pendingAccess = $derived(
+    accessBadgeEnabled &&
+      $pendingAccessCount.workspace === activeWorkspaceSlug &&
+      !$pendingAccessCount.forbidden
+      ? ($pendingAccessCount.count ?? 0)
+      : 0,
+  );
+  let accountMenuLabel = $derived(
+    pendingAccess > 0
+      ? `Account menu, ${pendingAccessLabel(pendingAccess)}`
+      : "Account menu",
+  );
   let shellContentConfig = $derived(getShellContentConfig(currentAppPath));
   let moreBottomNavActive = $derived(isMoreHubActivePath(currentAppPath));
   const shellNavForTitle = [
@@ -1248,6 +1277,12 @@
                         <span class="shell-settings-link-text"
                           >{item.label}</span
                         >
+                        {#if item.count === "access-pending"}
+                          <AccessNavCount
+                            workspace={activeWorkspaceSlug}
+                            enabled={accessBadgeEnabled}
+                          />
+                        {/if}
                       </a>
                     {/each}
                   </div>
@@ -1368,7 +1403,7 @@
               type="button"
               aria-expanded={accountMenuOpen}
               aria-haspopup="menu"
-              aria-label="Account menu"
+              aria-label={accountMenuLabel}
               onclick={toggleAccountMenu}
             >
               <span class="shell-account-avatar" aria-hidden="true"
@@ -1379,6 +1414,13 @@
                 title={shellIdentity.primaryLabel}
                 >{shellIdentity.primaryLabel}</span
               >
+              <!-- Access lives inside this menu, so what waits there has to
+                   be visible while the menu is shut. -->
+              <AccessNavCount
+                workspace={activeWorkspaceSlug}
+                enabled={accessBadgeEnabled}
+                variant="trigger"
+              />
               <svg
                 class="shell-account-chevron"
                 fill="none"

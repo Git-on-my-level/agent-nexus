@@ -93,13 +93,23 @@ func (s *Store) SetAuthAdmin(ctx context.Context, target string, grant bool, act
 		return AuthAdmin{}, err
 	}
 	defer tx.Rollback()
+	out, err := s.SetAuthAdminTx(ctx, tx, target, grant, actor)
+	if err != nil {
+		return out, err
+	}
+	return out, tx.Commit()
+}
+
+// SetAuthAdminTx shares the grant boundary with transactional access decisions.
+// It rechecks human authority and target liveness within the caller's transaction.
+func (s *Store) SetAuthAdminTx(ctx context.Context, tx *sql.Tx, target string, grant bool, actor Principal) (AuthAdmin, error) {
 	if err := requireAdministrationTx(ctx, tx, actor, true); err != nil {
 		return AuthAdmin{}, err
 	}
 	var kind string
 	var out AuthAdmin
 	var revoked sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT id,actor_id,username,`+principalKindExpr("a")+`,COALESCE(json_extract(metadata_json,'$.auth_admin'),0),revoked_at FROM agents a WHERE id=? OR username=? ORDER BY CASE WHEN id=? THEN 0 ELSE 1 END LIMIT 1`, strings.TrimSpace(target), strings.TrimSpace(target), strings.TrimSpace(target)).Scan(&out.PrincipalID, &out.ActorID, &out.Username, &kind, &out.AuthAdmin, &revoked)
+	err := tx.QueryRowContext(ctx, `SELECT id,actor_id,username,`+principalKindExpr("a")+`,COALESCE(json_extract(metadata_json,'$.auth_admin'),0),revoked_at FROM agents a WHERE id=? OR username=? ORDER BY CASE WHEN id=? THEN 0 ELSE 1 END LIMIT 1`, strings.TrimSpace(target), strings.TrimSpace(target), strings.TrimSpace(target)).Scan(&out.PrincipalID, &out.ActorID, &out.Username, &kind, &out.AuthAdmin, &revoked)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out, ErrAgentNotFound
 	}
@@ -125,7 +135,7 @@ func (s *Store) SetAuthAdmin(ctx context.Context, target string, grant bool, act
 		}
 	}
 	out.AuthAdmin = grant
-	return out, tx.Commit()
+	return out, nil
 }
 
 func boolJSON(value bool) string {
@@ -133,4 +143,28 @@ func boolJSON(value bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+// RequireHumanTx rechecks durable human authority for an access decision.
+func RequireHumanTx(ctx context.Context, tx *sql.Tx, actor Principal) error {
+	return requireAdministrationTx(ctx, tx, actor, true)
+}
+
+// RequireAgentTx permits only the active, authenticated agent itself.
+func RequireAgentTx(ctx context.Context, tx *sql.Tx, actor Principal) error {
+	if actor.SeriesAdapter != "" || actor.PrincipalKind != string(PrincipalKindAgent) {
+		return ErrInvalidRequest
+	}
+	var kind string
+	err := tx.QueryRowContext(ctx, `SELECT `+principalKindExpr("a")+` FROM agents a WHERE id=? AND actor_id=? AND revoked_at IS NULL`, actor.AgentID, actor.ActorID).Scan(&kind)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrAgentNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if kind != string(PrincipalKindAgent) {
+		return ErrInvalidRequest
+	}
+	return nil
 }

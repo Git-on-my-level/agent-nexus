@@ -100,6 +100,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `events trash` (command): Move event to trash
 - `events restore` (command): Restore event from trash
 - `inbox get` (command): Get one inbox item
+- `inbox summary` (command): Count open asks and return the top asks visible to the caller
 - `inbox respond` (command): Respond to human attention inbox item
 - `inbox stream` (command): Stream inbox items (SSE)
 - `inbox tail` (command): Stream inbox items (SSE)
@@ -227,6 +228,11 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `docs messages` (local-helper): List messages from a Document conversation.
 - `docs message` (local-helper): Post a message to a Document conversation without hand-authoring event JSON.
 - `docs reply` (local-helper): Reply to an existing Document message.
+- `auth access-requests request` (local-helper): Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision.
+- `auth access-requests list` (local-helper): Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision.
+- `auth access-requests approve` (local-helper): Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision.
+- `auth access-requests deny` (local-helper): Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision.
+- `auth access-requests summary` (local-helper): Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision.
 - `host enroll` (local-helper): Enroll this machine with interactive approval or a one-time fleet token.
 - `auth admins list` (local-helper): Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
 - `auth admins grant` (local-helper): Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents. Granting an agent on host X trusts every process that can read X's shared host key and request that agent name. Agents cannot issue or revoke human invitations, revoke principals, or use the human lockout override.
@@ -1252,6 +1258,7 @@ Commands:
   inbox list               List inbox items
   inbox respond            Respond to human attention inbox item
   inbox stream             Stream inbox items (SSE)
+  inbox summary            Count open asks and return the top asks visible to the caller
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1481,7 +1488,7 @@ Generated Help: auth invites list
 - Output: Returns `{ invites }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `auth`
-- Adjacent commands: `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth access-requests approve`, `auth access-requests deny`, `auth access-requests list`, `auth access-requests request`, `auth access-requests summary`, `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 
 Global flags:
@@ -1507,7 +1514,7 @@ Generated Help: auth invites create
 - Output: Returns `{ invite, token }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `human_required`
 - Concepts: `auth`
-- Adjacent commands: `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth access-requests approve`, `auth access-requests deny`, `auth access-requests list`, `auth access-requests request`, `auth access-requests summary`, `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 Inputs:
   Required:
@@ -1539,7 +1546,7 @@ Generated Help: auth invites revoke
 - Output: Returns `{ invite }`.
 - Error codes: `human_required`, `auth_required`, `invalid_request`, `not_found`, `invalid_token`
 - Concepts: `auth`
-- Adjacent commands: `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth access-requests approve`, `auth access-requests deny`, `auth access-requests list`, `auth access-requests request`, `auth access-requests summary`, `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 Inputs:
   Required:
@@ -1567,7 +1574,7 @@ Generated Help: auth bootstrap status
 - Why: Report whether first-human passkey bootstrap registration is still available; hosts cannot bootstrap.
 - Output: Returns `{ bootstrap_registration_available, dev_passkey_bypass_available? }`, where the dev bypass field reflects the effective local-only passkey bypass capability.
 - Concepts: `auth`
-- Adjacent commands: `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth access-requests approve`, `auth access-requests deny`, `auth access-requests list`, `auth access-requests request`, `auth access-requests summary`, `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 
 Global flags:
@@ -1593,7 +1600,7 @@ Generated Help: auth principals list
 - Output: Returns principal list JSON.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `auth`
-- Adjacent commands: `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth access-requests approve`, `auth access-requests deny`, `auth access-requests list`, `auth access-requests request`, `auth access-requests summary`, `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals revoke`, `auth token`
 
 
 Global flags:
@@ -1619,7 +1626,7 @@ Generated Help: auth principals revoke
 - Output: Returns result JSON.
 - Error codes: `human_required`, `auth_required`, `invalid_request`, `not_found`, `invalid_token`, `conflict`
 - Concepts: `auth`
-- Adjacent commands: `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth token`
+- Adjacent commands: `auth access-requests approve`, `auth access-requests deny`, `auth access-requests list`, `auth access-requests request`, `auth access-requests summary`, `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth token`
 
 Inputs:
   Required:
@@ -1648,7 +1655,7 @@ Generated Help: auth audit list
 - Output: Returns audit list JSON.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `auth`, `audit`
-- Adjacent commands: `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth access-requests approve`, `auth access-requests deny`, `auth access-requests list`, `auth access-requests request`, `auth access-requests summary`, `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 
 Global flags:
@@ -3121,7 +3128,7 @@ Generated Help: inbox get
 - Output: Returns `{ item, generated_at, projection_freshness }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Concepts: `inbox`
-- Adjacent commands: `inbox list`, `inbox respond`, `inbox stream`
+- Adjacent commands: `inbox list`, `inbox respond`, `inbox stream`, `inbox summary`
 
 Inputs:
   Required:
@@ -3130,6 +3137,33 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx inbox get ... ; anx --json inbox get ... ; anx inbox get ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `inbox summary`
+
+Count open asks and return the top asks visible to the caller
+
+```text
+Generated Help: inbox summary
+
+- Command ID: `inbox.summary`
+- CLI path: `inbox summary`
+- HTTP: `GET /inbox/summary`
+- Side effect class: `read_only`
+- Stability: `beta`
+- Input mode: `query`
+- Why: Cheap workspace-local human attention read for UI fan-out across existing workspace sessions.
+- Output: Returns `{ open_ask_count, asks, generated_at }`; shared human asks visible to the caller, not agent answer notifications.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Concepts: `inbox`
+- Agent notes: Uses current workspace permissions; limit 0 returns the count only. No cross-workspace identity.
+- Adjacent commands: `inbox get`, `inbox list`, `inbox respond`, `inbox stream`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx inbox summary ... ; anx --json inbox summary ... ; anx inbox summary ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3150,7 +3184,7 @@ Generated Help: inbox respond
 - Output: Returns `{ event, notify }`.
 - Error codes: `auth_required`, `human_required`, `invalid_request`, `invalid_token`, `notification_target_required`, `not_found`, `conflict`, `idempotency_conflict`
 - Concepts: `inbox`, `write`
-- Adjacent commands: `inbox get`, `inbox list`, `inbox stream`
+- Adjacent commands: `inbox get`, `inbox list`, `inbox stream`, `inbox summary`
 
 Inputs:
   Required:
@@ -3200,7 +3234,7 @@ Generated Help: inbox stream
 - Output: SSE `inbox_item` events with JSON payloads.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `inbox`
-- Adjacent commands: `inbox get`, `inbox list`, `inbox respond`
+- Adjacent commands: `inbox get`, `inbox list`, `inbox respond`, `inbox summary`
 
 
 Global flags:
@@ -3226,7 +3260,7 @@ Generated Help: inbox tail
 - Output: SSE `inbox_item` events with JSON payloads.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `inbox`
-- Adjacent commands: `inbox get`, `inbox list`, `inbox respond`
+- Adjacent commands: `inbox get`, `inbox list`, `inbox respond`, `inbox summary`
 
 
 Global flags:
@@ -5905,7 +5939,7 @@ Generated Help: inbox list
 - Why: Project human_attention_requested events into a queryable inbox view.
 - Output: Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Adjacent commands: `inbox get`, `inbox respond`, `inbox stream`
+- Adjacent commands: `inbox get`, `inbox respond`, `inbox stream`, `inbox summary`
 
 
 View scoping:
@@ -8172,6 +8206,120 @@ Global flags:
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
+## `auth access-requests request`
+
+Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision.
+
+```text
+Local Help: auth access-requests request
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision.
+- Examples:
+  - `anx auth access-requests request --grant auth-admin --reason 'Enroll a build host'`
+  - `anx auth access-requests list`
+  - `anx auth access-requests approve <request-id>`
+
+Flags:
+  --grant <name>               Named grant; currently auth-admin.
+  --reason <text>              Why this agent needs the grant.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx auth access-requests request ... ; anx --json auth access-requests request ... ; anx auth access-requests request ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth access-requests list`
+
+Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision.
+
+```text
+Local Help: auth access-requests list
+
+- Kind: `local helper`
+- Side effect class: `read_only`
+- Summary: Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision.
+- Examples:
+  - `anx auth access-requests request --grant auth-admin --reason 'Enroll a build host'`
+  - `anx auth access-requests list`
+  - `anx auth access-requests approve <request-id>`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx auth access-requests list ... ; anx --json auth access-requests list ... ; anx auth access-requests list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth access-requests approve`
+
+Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision.
+
+```text
+Local Help: auth access-requests approve
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision.
+- Examples:
+  - `anx auth access-requests request --grant auth-admin --reason 'Enroll a build host'`
+  - `anx auth access-requests list`
+  - `anx auth access-requests approve <request-id>`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx auth access-requests approve ... ; anx --json auth access-requests approve ... ; anx auth access-requests approve ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth access-requests deny`
+
+Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision.
+
+```text
+Local Help: auth access-requests deny
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision.
+- Examples:
+  - `anx auth access-requests request --grant auth-admin --reason 'Enroll a build host'`
+  - `anx auth access-requests list`
+  - `anx auth access-requests approve <request-id>`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx auth access-requests deny ... ; anx --json auth access-requests deny ... ; anx auth access-requests deny ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth access-requests summary`
+
+Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision.
+
+```text
+Local Help: auth access-requests summary
+
+- Kind: `local helper`
+- Side effect class: `read_only`
+- Summary: Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision.
+- Examples:
+  - `anx auth access-requests request --grant auth-admin --reason 'Enroll a build host'`
+  - `anx auth access-requests list`
+  - `anx auth access-requests approve <request-id>`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx auth access-requests summary ... ; anx --json auth access-requests summary ... ; anx auth access-requests summary ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
 ## `host enroll`
 
 Enroll this machine with interactive approval or a one-time fleet token.
@@ -8218,7 +8366,7 @@ Generated Help: auth admins list
 - Error codes: `auth_required`, `invalid_token`, `auth_admin_required`
 - Concepts: `auth`
 - Agent notes: Only a human can change a grant. No default grant is assigned to agents or hosts.
-- Adjacent commands: `auth admins grant`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth access-requests approve`, `auth access-requests deny`, `auth access-requests list`, `auth access-requests request`, `auth access-requests summary`, `auth admins grant`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 Local Help: auth admins list
 
@@ -8254,7 +8402,7 @@ Generated Help: auth admins grant
 - Error codes: `auth_required`, `invalid_token`, `human_required`, `invalid_request`, `not_found`
 - Concepts: `auth`
 - Agent notes: Only a human can change a grant. No default grant is assigned to agents or hosts.
-- Adjacent commands: `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth access-requests approve`, `auth access-requests deny`, `auth access-requests list`, `auth access-requests request`, `auth access-requests summary`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 Inputs:
   Required:
@@ -8294,7 +8442,7 @@ Generated Help: auth admins revoke
 - Error codes: `auth_required`, `invalid_token`, `human_required`, `invalid_request`, `not_found`
 - Concepts: `auth`
 - Agent notes: Only a human can change a grant. No default grant is assigned to agents or hosts.
-- Adjacent commands: `auth admins grant`, `auth admins list`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth access-requests approve`, `auth access-requests deny`, `auth access-requests list`, `auth access-requests request`, `auth access-requests summary`, `auth admins grant`, `auth admins list`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 Inputs:
   Required:

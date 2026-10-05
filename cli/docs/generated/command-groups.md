@@ -84,8 +84,13 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `auth`
 
-- Commands: `17`
+- Commands: `22`
 - Command IDs:
+  - `auth.access-requests.approve` (`auth access-requests approve`)
+  - `auth.access-requests.deny` (`auth access-requests deny`)
+  - `auth.access-requests.list` (`auth access-requests list`)
+  - `auth.access-requests.request` (`auth access-requests request`)
+  - `auth.access-requests.summary` (`auth access-requests summary`)
   - `auth.admins.grant` (`auth admins grant`)
   - `auth.admins.list` (`auth admins list`)
   - `auth.admins.revoke` (`auth admins revoke`)
@@ -205,12 +210,13 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `inbox`
 
-- Commands: `4`
+- Commands: `5`
 - Command IDs:
   - `inbox.get` (`inbox get`)
   - `inbox.list` (`inbox list`)
   - `inbox.respond` (`inbox respond`)
   - `inbox.stream` (`inbox stream`)
+  - `inbox.summary` (`inbox summary`)
 
 ## `meta`
 

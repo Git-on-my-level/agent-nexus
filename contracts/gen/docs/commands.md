@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `208`
+- Commands: `214`
 
 ## `actors.create`
 
@@ -355,6 +355,71 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `artifacts`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ artifact }`.
+
+## `auth.access-requests.approve`
+
+- CLI path: `auth access-requests approve`
+- HTTP: `POST /auth/access-requests/{request_id}/approve`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Request and review explicit workspace authority.
+- Concepts: `auth`
+- Error codes: `auth_required`, `invalid_token`, `agent_required`, `human_required`, `invalid_request`, `not_found`, `conflict`
+- Output: Returns `AccessRequestResponse`.
+- Agent notes: Agents request their own grant. Humans alone decide requests and read the Access queue.
+
+## `auth.access-requests.deny`
+
+- CLI path: `auth access-requests deny`
+- HTTP: `POST /auth/access-requests/{request_id}/deny`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Request and review explicit workspace authority.
+- Concepts: `auth`
+- Error codes: `auth_required`, `invalid_token`, `agent_required`, `human_required`, `invalid_request`, `not_found`, `conflict`
+- Output: Returns `AccessRequestResponse`.
+- Agent notes: Agents request their own grant. Humans alone decide requests and read the Access queue.
+
+## `auth.access-requests.list`
+
+- CLI path: `auth access-requests list`
+- HTTP: `GET /auth/access-requests`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Request and review explicit workspace authority.
+- Concepts: `auth`
+- Error codes: `auth_required`, `invalid_token`, `agent_required`, `human_required`, `invalid_request`, `not_found`, `conflict`
+- Output: Returns `AccessRequestsResponse`.
+- Agent notes: Agents request their own grant. Humans alone decide requests and read the Access queue.
+
+## `auth.access-requests.request`
+
+- CLI path: `auth access-requests request`
+- HTTP: `POST /auth/access-requests`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `flags`
+- Why: Request and review explicit workspace authority.
+- Concepts: `auth`
+- Error codes: `auth_required`, `invalid_token`, `agent_required`, `human_required`, `invalid_request`, `not_found`, `conflict`
+- Output: Returns `AccessRequestResponse`.
+- Agent notes: Agents request their own grant. Humans alone decide requests and read the Access queue.
+
+## `auth.access-requests.summary`
+
+- CLI path: `auth access-requests summary`
+- HTTP: `GET /auth/access/summary`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Request and review explicit workspace authority.
+- Concepts: `auth`
+- Error codes: `auth_required`, `invalid_token`, `agent_required`, `human_required`, `invalid_request`, `not_found`, `conflict`
+- Output: Returns `AccessSummary`.
+- Agent notes: Agents request their own grant. Humans alone decide requests and read the Access queue.
 
 ## `auth.admins.grant`
 
@@ -1518,6 +1583,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `inbox`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: SSE `inbox_item` events with JSON payloads.
+
+## `inbox.summary`
+
+- CLI path: `inbox summary`
+- HTTP: `GET /inbox/summary`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `query`
+- Why: Cheap workspace-local human attention read for UI fan-out across existing workspace sessions.
+- Concepts: `inbox`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Output: Returns `{ open_ask_count, asks, generated_at }`; shared human asks visible to the caller, not agent answer notifications.
+- Agent notes: Uses current workspace permissions; limit 0 returns the count only. No cross-workspace identity.
 
 ## `meta.commands.get`
 

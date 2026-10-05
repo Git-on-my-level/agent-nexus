@@ -16,6 +16,9 @@ func (a *App) runFirstClassInboxCommand(ctx context.Context, args []string, cfg 
 	}
 	sub := inboxSubcommandSpec.normalize(args[0])
 	switch sub {
+	case "summary":
+		result, err := a.runInboxSummary(ctx, args[1:], cfg)
+		return result, "inbox summary", err
 	case "list":
 		result, err := a.runAgentInboxList(ctx, args[1:], cfg)
 		if err != nil && len(args[1:]) == 0 && cfg.AgentID == "" && cfg.Agent == "" {
@@ -177,4 +180,24 @@ func (a *App) runAgentInboxRead(ctx context.Context, args []string, cfg config.R
 		"ask_id": wanted, "answer_event_ref": "event:" + answerEventID,
 		"status": "read", "already_read": answer["already_read"], "answer": answer,
 	}}, nil
+}
+
+func parseInboxSummary(args []string) (int, error) {
+	fs := newSilentFlagSet("inbox summary")
+	limit := fs.Int("limit", 5, "Top visible human asks (0..50); zero returns the count only")
+	if err := fs.Parse(args); err != nil {
+		return 0, errnorm.Usage("invalid_flags", err.Error())
+	}
+	if len(fs.Args()) != 0 || *limit < 0 || *limit > 50 {
+		return 0, errnorm.Usage("invalid_args", "usage: anx inbox summary [--limit 0..50]")
+	}
+	return *limit, nil
+}
+
+func (a *App) runInboxSummary(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
+	limit, err := parseInboxSummary(args)
+	if err != nil {
+		return nil, err
+	}
+	return a.invokeTypedJSON(ctx, cfg, "inbox summary", "inbox.summary", nil, []queryParam{{name: "limit", values: []string{fmt.Sprint(limit)}}}, nil)
 }

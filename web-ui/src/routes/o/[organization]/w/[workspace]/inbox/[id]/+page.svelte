@@ -4,6 +4,11 @@
   import { page } from "$app/stores";
   import { onDestroy, onMount } from "svelte";
 
+  import { accessRequestFromInboxItem } from "$lib/accessGrant.js";
+  import {
+    authenticatedAgent,
+    isHumanWorkspacePrincipal,
+  } from "$lib/authSession";
   import Button from "$lib/components/Button.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
@@ -158,6 +163,12 @@
   function draftStorageKey(workspace = workspaceSlug, id = inboxItemID) {
     return `anx.human-response.draft:${workspace}:${id}`;
   }
+
+  // A request from an agent for a grant. The panel then offers only the two
+  // decisions core accepts, behind the same confirmation the Access page asks.
+  let accessRequest = $derived(accessRequestFromInboxItem(item));
+  // Core accepts an access decision from a person only.
+  let decidesAccess = $derived(isHumanWorkspacePrincipal($authenticatedAgent));
 
   function itemKind(value = item) {
     return String(value?.kind ?? value?.category ?? "unknown")
@@ -794,6 +805,8 @@
       {:else}
         <InboxRespondPanel
           kind={itemKind(item)}
+          access={accessRequest}
+          canDecideAccess={decidesAccess}
           proposals={proposalStrings}
           bind:draft={responseDraft}
           {chosen}
@@ -803,10 +816,12 @@
           tall
           sendLabel="Send response"
           onSend={(text, outcome) => submitResponseWithText(text, { outcome })}
-          onAcknowledge={() =>
-            submitResponseWithText("Acknowledged from inbox", {
-              acknowledge: true,
-            })}
+          onAcknowledge={accessRequest
+            ? null
+            : () =>
+                submitResponseWithText("Acknowledged from inbox", {
+                  acknowledge: true,
+                })}
         >
           {#snippet after()}
             <span class="ml-auto hidden text-micro text-fg-subtle sm:inline"

@@ -11,13 +11,18 @@
     principalRegistry,
     selectedActorId,
   } from "$lib/actorSession";
-  import { authenticatedAgent, logoutAuthSession } from "$lib/authSession";
+  import {
+    authenticatedAgent,
+    isHumanWorkspacePrincipal,
+    logoutAuthSession,
+  } from "$lib/authSession";
   import {
     hostedSession,
     loadHostedSession,
   } from "$lib/extensions/accountSession.js";
   import { navIconPath } from "$lib/icons.js";
   import CopyButton from "$lib/components/CopyButton.svelte";
+  import AccessNavCount from "$lib/components/access/AccessNavCount.svelte";
   import { settingsNavGroups } from "$lib/navigation";
   import { bindWorkspaceHref, workspacePath } from "$lib/workspacePaths";
   import { computeWorkspaceShellIdentity } from "$lib/workspaceShellIdentity.js";
@@ -139,6 +144,12 @@
               />
             </svg>
             <span class="flex-1">{item.label}</span>
+            {#if item.count === "access-pending"}
+              <AccessNavCount
+                workspace={workspaceSlug}
+                enabled={isHumanWorkspacePrincipal($authenticatedAgent)}
+              />
+            {/if}
             {#if item.hint}
               <span class="hidden text-micro text-fg-muted sm:inline"
                 >{item.hint}</span

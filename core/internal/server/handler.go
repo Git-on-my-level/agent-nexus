@@ -103,6 +103,7 @@ type PrimitiveStore interface {
 	GetBoardSummary(ctx context.Context, boardID string) (map[string]any, error)
 	UpdateBoard(ctx context.Context, actorID string, boardID string, patch map[string]any, ifUpdatedAt *string) (map[string]any, error)
 	ListCards(ctx context.Context, filter primitives.CardListFilter) ([]map[string]any, error)
+	InboxThreadAccessOwners(ctx context.Context, threadID string) ([]string, error)
 	ListBoardCards(ctx context.Context, boardID string) ([]map[string]any, error)
 	GetBoardCard(ctx context.Context, boardID string, identifier string) (map[string]any, error)
 	CreateBoardCard(ctx context.Context, actorID string, boardID string, input primitives.AddBoardCardInput) (primitives.BoardCardMutationResult, error)
@@ -960,6 +961,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	})
 
 	registerRoute("/auth/admins", authAdminRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleAuthAdminRoutes(w, r, opts) })
+	registerRoute("/auth/access-requests", accessRequestRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleAccessRequestRoutes(w, r, opts) })
+	registerRoute("/auth/access-requests/", accessRequestRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleAccessRequestRoutes(w, r, opts) })
+	registerRoute("/auth/access/summary", accessRequestRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleAccessRequestRoutes(w, r, opts) })
 	registerRoute("/auth/admins/", authAdminRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleAuthAdminRoutes(w, r, opts) })
 
 	registerRoute("/auth/principals", exactRouteAccess(routeAccessAuthenticatedPrincipal, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
@@ -2543,6 +2547,14 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 		handleGetInbox(w, r, opts)
+	})
+
+	registerRoute("/inbox/summary", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, 405, "method_not_allowed", "only GET is supported")
+			return
+		}
+		handleGetInboxSummary(w, r, opts)
 	})
 
 	registerRoute("/inbox/", func(r *http.Request) routeAccessRequirement {

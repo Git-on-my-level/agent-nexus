@@ -4,9 +4,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `208`
+- Command operations: `214`
 - Baseline-allowed required-field gaps: `120`
-- Missing recommended examples: `188`
+- Missing recommended examples: `194`
 
 ## Baseline gap counts
 
@@ -168,6 +168,11 @@ Generated from `contracts/anx-openapi.yaml`.
 - `artifacts.restore` `POST /artifacts/{artifact_id}/restore`
 - `artifacts.trash` `POST /artifacts/{artifact_id}/trash`
 - `artifacts.unarchive` `POST /artifacts/{artifact_id}/unarchive`
+- `auth.access-requests.approve` `POST /auth/access-requests/{request_id}/approve`
+- `auth.access-requests.deny` `POST /auth/access-requests/{request_id}/deny`
+- `auth.access-requests.list` `GET /auth/access-requests`
+- `auth.access-requests.request` `POST /auth/access-requests`
+- `auth.access-requests.summary` `GET /auth/access/summary`
 - `auth.admins.grant` `POST /auth/admins/{principal_id}/grant`
 - `auth.admins.list` `GET /auth/admins`
 - `auth.admins.revoke` `POST /auth/admins/{principal_id}/revoke`
@@ -242,6 +247,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - `inbox.list` `GET /inbox`
 - `inbox.respond` `POST /inbox/{inbox_id}/respond`
 - `inbox.stream` `GET /stream/inbox`
+- `inbox.summary` `GET /inbox/summary`
 - `meta.commands.get` `GET /meta/commands/{command_id}`
 - `meta.commands.list` `GET /meta/commands`
 - `meta.concepts.get` `GET /meta/concepts/{concept_name}`

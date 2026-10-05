@@ -46,6 +46,13 @@ func (s *Store) AppendHumanAttentionWithdrawal(ctx context.Context, actorID, sou
 	if requesterActorID != actorID {
 		return nil, ErrForbidden
 	}
+	var accessRequestCount int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM access_requests WHERE request_event_id=?`, sourceEventID).Scan(&accessRequestCount); err != nil {
+		return nil, err
+	}
+	if accessRequestCount > 0 {
+		return nil, ErrForbidden
+	}
 
 	var sourceWrapper map[string]any
 	if err := json.Unmarshal([]byte(payloadJSON), &sourceWrapper); err != nil {
