@@ -95,9 +95,12 @@ The selected PM agent and the private owner retain access; unrelated humans,
 agents, and anonymous development readers do not.
 
 Canonical event payloads (including nested refs), notification triggers/refs,
-plans, and runs participate in inherited ownership. Migration 55 backfills
+plans, work metadata, and runs participate in inherited ownership. Work metadata
+constrains the whole card before projection or search. Migration 55 backfills
 `resource_access_edges`; database triggers maintain that index atomically with
-canonical JSON/scalar writes, including imports. Use `resourceaccess.ReferenceSQL`
+canonical JSON/scalar writes, including imports. Migration 56 reconciles earlier
+55 previews with metadata edges and the normalized project/wakeup indexes.
+Use `resourceaccess.ReferenceSQL`
 for SQL reference matching so aliases and Unicode whitespace match the parser.
 Event content and navigational `ref_edges` also commit in a single transaction.
 Filtering a linked plan suppresses its stored refs and titles, not merely live

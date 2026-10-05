@@ -997,6 +997,9 @@ var migrations = []migration{
 		`CREATE INDEX IF NOT EXISTS access_requests_pending ON access_requests(status,created_at,id);`,
 		`CREATE INDEX IF NOT EXISTS host_enrollments_pending_expiry ON host_enrollments(status,expires_at);`,
 	}, AfterApply: installResourceAccess},
+	// Earlier PR previews already recorded 55. Reconcile them as well: new
+	// ownership sources and repaired indexes must not depend on a fresh install.
+	{Version: 56, AfterApply: installResourceAccess},
 }
 
 func installResourceAccess(ctx context.Context, tx *sql.Tx) error {
@@ -1013,12 +1016,18 @@ func installResourceAccess(ctx context.Context, tx *sql.Tx) error {
 	if err := installResourceAccessEdges(ctx, tx); err != nil {
 		return err
 	}
+	// Privacy-54 previews used an unnormalized expression under this name.
+	// Rebuild it so reconciliation cannot retain an index the graph cannot use.
+	if _, err := tx.ExecContext(ctx, `DROP INDEX IF EXISTS idx_work_access_project`); err != nil {
+		return err
+	}
 	// Some legacy migration tests intentionally have only a partial schema.
 	for table, statement := range map[string]string{
 		"ref_edges":           `CREATE INDEX IF NOT EXISTS idx_ref_edges_access_target ON ref_edges(target_type,target_id COLLATE NOCASE,edge_type)`,
 		"cards":               `CREATE INDEX IF NOT EXISTS idx_cards_access_thread ON cards(thread_id)`,
 		"derived_inbox_items": `CREATE INDEX IF NOT EXISTS idx_inbox_access_card ON derived_inbox_items(source_card_id)`,
 		"work_metadata":       `CREATE INDEX IF NOT EXISTS idx_work_access_project ON work_metadata(` + resourceaccess.ReferenceSQL("json_extract(metadata_json,'$.project_ref')") + ` COLLATE NOCASE)`,
+		"agent_wakeups":       `CREATE INDEX IF NOT EXISTS idx_wakeups_access_trigger_event ON agent_wakeups(trigger_event_id)`,
 	} {
 		exists, err := sqliteTableExists(ctx, tx, table)
 		if err != nil {
@@ -1052,6 +1061,9 @@ func installResourceAccessEdges(ctx context.Context, tx *sql.Tx) error {
 		{"events", "event", "id", []string{"refs_json", "payload_json"}},
 		{"agent_wakeups", "wakeup", "wakeup_id", []string{"refs_json"}},
 		{"card_plans", "plan", "card_id", []string{"body_json"}},
+		// Work metadata is part of the card projection, including search. Its
+		// references therefore constrain the whole work item before projection.
+		{"work_metadata", "card", "card_id", []string{"metadata_json"}},
 		{"runs", "run", "id", []string{"card_ref"}},
 	} {
 		exists, err := sqliteTableExists(ctx, tx, source.table)
