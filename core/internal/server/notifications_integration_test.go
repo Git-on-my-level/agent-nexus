@@ -20,6 +20,7 @@ import (
 )
 
 func TestNotificationsListReadAndDismissAreTargetScoped(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{
@@ -212,6 +213,7 @@ func TestNotificationsListReadAndDismissAreTargetScoped(t *testing.T) {
 }
 
 func TestAgentWakeupRefsCorruptionFailsNotificationReads(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{
@@ -262,6 +264,7 @@ func TestAgentWakeupRefsCorruptionFailsNotificationReads(t *testing.T) {
 }
 
 func TestCardAssignmentEnqueuesAgentWakeupNotification(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{
@@ -384,6 +387,7 @@ func TestCardAssignmentEnqueuesAgentWakeupNotification(t *testing.T) {
 }
 
 func TestAgentNotificationReceiptsStreamTracksWakeupStatus(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{
@@ -538,6 +542,7 @@ func TestAgentNotificationReceiptsStreamTracksWakeupStatus(t *testing.T) {
 }
 
 func TestNotificationReceiptRecordsAfterIDResumesAfterCursor(t *testing.T) {
+	requireIntegrationTest(t)
 	records := []notificationReceiptStreamRecord{
 		{eventID: "receipt:wake-1@aaa", wakeupID: "wake-1", digest: "aaa"},
 		{eventID: "receipt:wake-2@bbb", wakeupID: "wake-2", digest: "bbb"},

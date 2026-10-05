@@ -13,6 +13,7 @@ import (
 )
 
 func TestTopicWorkspaceResolvesBoardsCardsAndDocsViaRefEdges(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -122,6 +123,7 @@ func TestTopicWorkspaceResolvesBoardsCardsAndDocsViaRefEdges(t *testing.T) {
 }
 
 func TestTopicWorkspaceResolvesResourcesThatPointAtTopic(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)

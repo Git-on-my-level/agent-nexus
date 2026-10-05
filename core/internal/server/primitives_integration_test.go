@@ -28,6 +28,7 @@ import (
 )
 
 func TestPrimitivesCRUDRoundTrip(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -219,6 +220,7 @@ func TestPrimitivesCRUDRoundTrip(t *testing.T) {
 }
 
 func TestNamedResourceAPIsUsePublicRefsAndHandles(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -341,6 +343,7 @@ func TestNamedResourceAPIsUsePublicRefsAndHandles(t *testing.T) {
 }
 
 func TestListFiltersResolvePublicRefsAndHandles(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -617,6 +620,7 @@ func assertGETStatus(t *testing.T, targetURL string, want int) {
 }
 
 func TestWriteHandlersRejectTrailingJSONBody(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -655,6 +659,7 @@ func TestWriteHandlersRejectTrailingJSONBody(t *testing.T) {
 }
 
 func TestMarkdownHygieneNormalizesEventAndIdempotencyReplay(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -704,6 +709,7 @@ func TestMarkdownHygieneNormalizesEventAndIdempotencyReplay(t *testing.T) {
 }
 
 func TestMarkdownHygieneNormalizesTopicDocumentAndCardWrites(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -772,6 +778,7 @@ func TestMarkdownHygieneNormalizesTopicDocumentAndCardWrites(t *testing.T) {
 }
 
 func TestListEventsFiltersByEventType(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -823,6 +830,7 @@ func TestListEventsFiltersByEventType(t *testing.T) {
 }
 
 func TestListEventsFiltersByGroupAndBackingScope(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -902,6 +910,7 @@ func TestListEventsFiltersByGroupAndBackingScope(t *testing.T) {
 }
 
 func TestEventLifecycleHTTPPreservesAppendOnlyEventContent(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -1000,6 +1009,7 @@ func TestEventLifecycleHTTPPreservesAppendOnlyEventContent(t *testing.T) {
 }
 
 func TestListArtifactsFiltersByBackingScope(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -1093,6 +1103,7 @@ func TestListArtifactsFiltersByBackingScope(t *testing.T) {
 }
 
 func TestPrimitivesCRUDRoundTripWithObjectBackend(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
@@ -1148,6 +1159,7 @@ func TestPrimitivesCRUDRoundTripWithObjectBackend(t *testing.T) {
 }
 
 func TestArtifactsListBySecondaryThreadRef(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -1196,6 +1208,7 @@ func TestArtifactsListBySecondaryThreadRef(t *testing.T) {
 }
 
 func TestCreateArtifactReturnsConflictForDuplicateID(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -1240,6 +1253,7 @@ func TestCreateArtifactReturnsConflictForDuplicateID(t *testing.T) {
 }
 
 func TestDocumentsLifecycleRoundTrip(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -1657,6 +1671,7 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 }
 
 func TestDocumentCreateRequestKeyReplaysSingleWrite(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -1751,6 +1766,7 @@ func TestDocumentCreateRequestKeyReplaysSingleWrite(t *testing.T) {
 }
 
 func TestDocumentCreateCopiesBinaryBytesAndMoveCitation(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-move","display_name":"Move Actor","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
@@ -1805,6 +1821,7 @@ func TestDocumentCreateCopiesBinaryBytesAndMoveCitation(t *testing.T) {
 }
 
 func TestEventCreateRequestKeyReplaysSingleWrite(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -1862,6 +1879,7 @@ func countEventsOfType(events []map[string]any, eventType string) int {
 }
 
 func TestArtifactContentDeduplication(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -1922,6 +1940,7 @@ func TestArtifactContentDeduplication(t *testing.T) {
 }
 
 func TestLegacyContentPathIsStrippedFromArtifactAndRevisionResponses(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -2059,6 +2078,7 @@ func TestLegacyContentPathIsStrippedFromArtifactAndRevisionResponses(t *testing.
 }
 
 func TestDocumentRevisionMerkleChainIntegrity(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -2168,6 +2188,7 @@ func testComputeRevisionHash(contentHash, prevRevisionHash, documentID string, r
 }
 
 func TestDocumentsInvalidInputReturnsInvalidRequest(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -2230,6 +2251,7 @@ func TestDocumentsInvalidInputReturnsInvalidRequest(t *testing.T) {
 }
 
 func TestInvalidTypedRefsRejectedForEventsAndArtifacts(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -2256,6 +2278,7 @@ func TestInvalidTypedRefsRejectedForEventsAndArtifacts(t *testing.T) {
 }
 
 func TestUnknownTypedRefPrefixesRejectedForResourceWrites(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -2314,6 +2337,7 @@ func TestUnknownTypedRefPrefixesRejectedForResourceWrites(t *testing.T) {
 }
 
 func TestCreateArtifactRejectsUnsafeArtifactIDs(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -2367,6 +2391,7 @@ type primitivesTestHarness struct {
 }
 
 func newPrimitivesTestServer(t *testing.T) primitivesTestHarness {
+	requireIntegrationTest(t)
 	t.Helper()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
@@ -2409,6 +2434,7 @@ func newPrimitivesTestServer(t *testing.T) primitivesTestHarness {
 }
 
 func newPrimitivesTestServerWithHumanPrincipal(t *testing.T) primitivesTestHarness {
+	requireIntegrationTest(t)
 	t.Helper()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
@@ -2568,6 +2594,7 @@ func requestJSONExpectStatus(t *testing.T, method string, url string, body strin
 }
 
 func TestArtifactTrashLifecycle(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -2703,6 +2730,7 @@ func TestArtifactTrashLifecycle(t *testing.T) {
 }
 
 func TestArtifactRestoreLifecycle(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -2783,6 +2811,7 @@ func TestArtifactRestoreLifecycle(t *testing.T) {
 }
 
 func TestArtifactPurgeLifecycle(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServerWithHumanPrincipal(t)
@@ -2854,6 +2883,7 @@ func TestArtifactPurgeLifecycle(t *testing.T) {
 }
 
 func TestArtifactPurgeUnauthenticatedDevHumanTaggedActor(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -2896,6 +2926,7 @@ func TestArtifactPurgeUnauthenticatedDevHumanTaggedActor(t *testing.T) {
 }
 
 func TestArtifactPurgeUnauthenticatedDevRejectsNonHumanTag(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -2930,6 +2961,7 @@ func TestArtifactPurgeUnauthenticatedDevRejectsNonHumanTag(t *testing.T) {
 }
 
 func TestArtifactPurgeNotTrashed(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServerWithHumanPrincipal(t)
@@ -2962,6 +2994,7 @@ func TestArtifactPurgeNotTrashed(t *testing.T) {
 }
 
 func TestArtifactTrashedOnlyListFilter(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -3018,6 +3051,7 @@ func TestArtifactTrashedOnlyListFilter(t *testing.T) {
 }
 
 func TestArtifactPurgeOwnedDocRevisionArtifactPurgesDocument(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServerWithHumanPrincipal(t)
@@ -3056,6 +3090,7 @@ func TestArtifactPurgeOwnedDocRevisionArtifactPurgesDocument(t *testing.T) {
 }
 
 func TestDocumentTrashLifecycle(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -3184,6 +3219,7 @@ func TestDocumentTrashLifecycle(t *testing.T) {
 }
 
 func TestArtifactArchiveLifecycle(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -3310,6 +3346,7 @@ func TestArtifactArchiveLifecycle(t *testing.T) {
 }
 
 func TestArtifactArchiveThenTrash(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -3361,6 +3398,7 @@ func TestArtifactArchiveThenTrash(t *testing.T) {
 }
 
 func TestArtifactCannotArchiveTrashed(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -3387,6 +3425,7 @@ func TestArtifactCannotArchiveTrashed(t *testing.T) {
 }
 
 func TestDocumentArchiveLifecycle(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -3519,6 +3558,7 @@ func TestDocumentArchiveLifecycle(t *testing.T) {
 }
 
 func TestDocumentRestoreLifecycle(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -3570,6 +3610,7 @@ func TestDocumentRestoreLifecycle(t *testing.T) {
 }
 
 func TestDocumentPurgeLifecycle(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServerWithHumanPrincipal(t)
@@ -3611,6 +3652,7 @@ func TestDocumentPurgeLifecycle(t *testing.T) {
 }
 
 func TestDocumentTrashedOnlyFilter(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -3666,6 +3708,7 @@ func TestDocumentTrashedOnlyFilter(t *testing.T) {
 }
 
 func TestTopicArchiveLifecycle(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -3806,6 +3849,7 @@ func TestTopicArchiveLifecycle(t *testing.T) {
 }
 
 func TestListTopicsPaginationIncludesNextCursor(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -3877,6 +3921,7 @@ func TestListTopicsPaginationIncludesNextCursor(t *testing.T) {
 }
 
 func TestListTopicsSearchQueryMatchesTitleAndSummary(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -3931,6 +3976,7 @@ func TestListTopicsSearchQueryMatchesTitleAndSummary(t *testing.T) {
 }
 
 func TestListTopicsSearchMatchesNumericSummaryInBodyJSON(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -4001,6 +4047,7 @@ func TestListTopicsSearchMatchesNumericSummaryInBodyJSON(t *testing.T) {
 }
 
 func TestListTopicsSearchSucceedsWhenAnotherRowHasMalformedBodyJSON(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -4079,6 +4126,7 @@ func TestListTopicsSearchSucceedsWhenAnotherRowHasMalformedBodyJSON(t *testing.T
 }
 
 func TestTopicTrashLifecycle(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -4173,6 +4221,7 @@ func TestTopicTrashLifecycle(t *testing.T) {
 }
 
 func TestTopicRestoreLifecycle(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -4226,6 +4275,7 @@ func TestTopicRestoreLifecycle(t *testing.T) {
 }
 
 func TestTopicArchiveThenTrash(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -4286,6 +4336,7 @@ func TestTopicArchiveThenTrash(t *testing.T) {
 }
 
 func TestBoardArchiveLifecycle(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -4427,6 +4478,7 @@ func TestBoardArchiveLifecycle(t *testing.T) {
 }
 
 func TestBoardTrashLifecycle(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -4486,6 +4538,7 @@ func TestBoardTrashLifecycle(t *testing.T) {
 }
 
 func TestBoardRestoreLifecycle(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -4532,6 +4585,7 @@ func TestBoardRestoreLifecycle(t *testing.T) {
 }
 
 func TestDocumentArchiveThenTrash(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -4597,6 +4651,7 @@ func TestDocumentArchiveThenTrash(t *testing.T) {
 }
 
 func TestDocumentCannotArchiveTrashed(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -4623,6 +4678,7 @@ func TestDocumentCannotArchiveTrashed(t *testing.T) {
 }
 
 func TestTopicCannotArchiveTrashed(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -4657,6 +4713,7 @@ func TestTopicCannotArchiveTrashed(t *testing.T) {
 }
 
 func TestBoardArchiveThenTrash(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -4723,6 +4780,7 @@ func TestBoardArchiveThenTrash(t *testing.T) {
 }
 
 func TestBoardCannotArchiveTrashed(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -4750,6 +4808,7 @@ func TestBoardCannotArchiveTrashed(t *testing.T) {
 }
 
 func TestThreadPurgeRemovedFromPublicAPI(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServerWithHumanPrincipal(t)
@@ -4775,6 +4834,7 @@ func TestThreadPurgeRemovedFromPublicAPI(t *testing.T) {
 }
 
 func TestBoardPurgeLifecycle(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServerWithHumanPrincipal(t)

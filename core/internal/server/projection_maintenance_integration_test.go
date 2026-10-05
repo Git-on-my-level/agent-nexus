@@ -32,6 +32,7 @@ func newProjectionMaintenanceTestServer(t *testing.T) projectionMaintenanceTestH
 }
 
 func newProjectionMaintenanceTestServerWithMode(t *testing.T, mode string) projectionMaintenanceTestHarness {
+	requireIntegrationTest(t)
 	t.Helper()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
@@ -116,6 +117,7 @@ func (s *blockingProjectionStore) PutDerivedTopicProjection(ctx context.Context,
 }
 
 func TestProjectionMaintainerEmitsStaleExceptionsAndRefreshesInbox(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newProjectionMaintenanceTestServer(t)
@@ -156,6 +158,7 @@ func TestProjectionMaintainerEmitsStaleExceptionsAndRefreshesInbox(t *testing.T)
 }
 
 func TestProjectionMaintainerSuppressesStaleInboxAfterNewActivity(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newProjectionMaintenanceTestServer(t)
@@ -218,6 +221,7 @@ func TestProjectionMaintainerSuppressesStaleInboxAfterNewActivity(t *testing.T) 
 }
 
 func TestPublicHealthEndpointsDoNotExposeProjectionMaintenance(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newProjectionMaintenanceTestServer(t)
@@ -249,6 +253,7 @@ func TestPublicHealthEndpointsDoNotExposeProjectionMaintenance(t *testing.T) {
 }
 
 func TestOpsHealthEndpointReportsProjectionMaintenanceLag(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newProjectionMaintenanceTestServer(t)
@@ -294,6 +299,7 @@ func TestOpsHealthEndpointReportsProjectionMaintenanceLag(t *testing.T) {
 }
 
 func TestProjectionMaintainerManualModeRunExitsWithoutProcessingQueue(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newProjectionMaintenanceTestServerWithMode(t, ProjectionModeManual)
@@ -346,6 +352,7 @@ func TestProjectionMaintainerManualModeRunExitsWithoutProcessingQueue(t *testing
 }
 
 func TestManualModeDerivedRebuildClearsPendingProjectionWork(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newProjectionMaintenanceTestServerWithMode(t, ProjectionModeManual)
@@ -392,6 +399,7 @@ func TestManualModeDerivedRebuildClearsPendingProjectionWork(t *testing.T) {
 }
 
 func TestProjectionMaintainerKeepsProjectionPendingForConcurrentWrites(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
@@ -547,6 +555,7 @@ func TestProjectionMaintainerKeepsProjectionPendingForConcurrentWrites(t *testin
 }
 
 func TestProjectionMaintainerNotifyWakesRunLoopPromptly(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
@@ -635,6 +644,7 @@ func (s *projectionMaintenanceFailureStore) PutDerivedTopicProjection(ctx contex
 }
 
 func TestOpsHealthEndpointReportsProjectionMaintenanceErrors(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
@@ -711,6 +721,7 @@ func TestOpsHealthEndpointReportsProjectionMaintenanceErrors(t *testing.T) {
 }
 
 func TestOpsHealthEndpointKeepsDiagnosticsWhenReadinessFails(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())

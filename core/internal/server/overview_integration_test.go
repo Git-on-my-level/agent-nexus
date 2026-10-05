@@ -15,6 +15,7 @@ import (
 )
 
 func TestDashboardEndpointsPreserveHeadRevisionIdentity(t *testing.T) {
+	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	store := h.primitiveStore.(*primitives.Store)
 	ctx := context.Background()
@@ -70,6 +71,7 @@ func TestDashboardEndpointsPreserveHeadRevisionIdentity(t *testing.T) {
 }
 
 func TestOverviewArchivePinAndInitiativeProjection(t *testing.T) {
+	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"executive","display_name":"Alex","created_at":"2026-10-04T12:00:00Z","tags":["human"]}}`, 201).Body.Close()
 	ctx := context.Background()

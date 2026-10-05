@@ -9,6 +9,7 @@ import (
 )
 
 func TestEventReferenceConventionsRejectMissingRequiredRefs(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -94,6 +95,7 @@ func TestEventReferenceConventionsRejectMissingRequiredRefs(t *testing.T) {
 }
 
 func TestEventReferenceConventionsRejectMissingRequiredPayloadFields(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -127,6 +129,7 @@ func TestEventReferenceConventionsRejectMissingRequiredPayloadFields(t *testing.
 }
 
 func TestEventReferenceConventionsRejectUnknownEventType(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)

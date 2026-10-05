@@ -10,6 +10,7 @@ import (
 )
 
 func TestWorkHTTPRegistrationObservationAndAuthority(t *testing.T) {
+	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 	b := workPostJSON(t, h.baseURL+"/boards", `{"actor_id":"actor-1","board":{"title":"Work portfolio"}}`, http.StatusCreated)
@@ -43,6 +44,7 @@ func TestWorkHTTPRegistrationObservationAndAuthority(t *testing.T) {
 }
 
 func TestWorkCreateOmittingBoardRefProvisionsDefaultBoard(t *testing.T) {
+	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 	listed := workGetJSON(t, h.baseURL+"/boards", http.StatusOK)
@@ -74,6 +76,7 @@ func TestWorkCreateOmittingBoardRefProvisionsDefaultBoard(t *testing.T) {
 }
 
 func TestWorkHTTPMigrationRelationRoundTrip(t *testing.T) {
+	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 	created := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"actor-1","title":"Legacy detail","source":{"authority":"github","connection_id":"fixture","native_id":"org/repo/issues/7"}}`, http.StatusCreated)
@@ -159,6 +162,7 @@ func workGetJSON(t *testing.T, url string, status int) map[string]any {
 }
 
 func TestArchiveCardLatestObservationFence(t *testing.T) {
+	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 	created := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"actor-1","title":"Legacy detail","source":{"authority":"github","connection_id":"fixture","native_id":"org/repo/issues/observation-fence"}}`, http.StatusCreated)

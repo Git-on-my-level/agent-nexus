@@ -59,7 +59,10 @@ async function webUIReportFixtures() {
   return [...unique.values()];
 }
 
-describe("Go CLI and web visual report validator conformance", () => {
+// Real-binary cross-module integration stays in the full CI unit job.
+const integration =
+  process.env.ANX_TEST_FAST === "1" ? describe.skip : describe;
+integration("Go CLI and web visual report validator conformance", () => {
   beforeAll(() => {
     tempDir = mkdtempSync(join(tmpdir(), "anx-report-conformance-"));
     anxBinary = join(tempDir, "anx");

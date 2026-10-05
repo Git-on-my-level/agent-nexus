@@ -12,6 +12,7 @@ import (
 )
 
 func TestAgentInboxProjectionPaginatesPastInterveningEventsAndTracksAnswersIndividually(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken})
 	target := seedNotificationTestAgent(t, env, "inbox.target")

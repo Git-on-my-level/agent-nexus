@@ -7,6 +7,7 @@ import (
 )
 
 func TestStalenessRebuildDoesNotEmitCadenceBasedExceptions(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -43,6 +44,7 @@ func TestStalenessRebuildDoesNotEmitCadenceBasedExceptions(t *testing.T) {
 }
 
 func TestStalenessActorStatementAndDocumentActivityKeepsThreadNotStale(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -122,6 +124,7 @@ func TestStalenessActorStatementAndDocumentActivityKeepsThreadNotStale(t *testin
 }
 
 func TestStalenessRebuildTreatsRecentCardActivityAsFresh(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)

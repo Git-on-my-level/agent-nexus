@@ -18,6 +18,7 @@ import (
 )
 
 func TestActorEndpointsRegisterAndListStableOrder(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
@@ -74,6 +75,7 @@ func TestActorEndpointsRegisterAndListStableOrder(t *testing.T) {
 }
 
 func TestPostThreadsRejectsUnknownActorID(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())

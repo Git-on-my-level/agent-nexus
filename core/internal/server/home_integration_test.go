@@ -7,6 +7,7 @@ import (
 )
 
 func TestHomeUnreadGroupsEligibleEventsAndMarksRead(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -129,6 +130,7 @@ func TestHomeUnreadGroupsEligibleEventsAndMarksRead(t *testing.T) {
 }
 
 func TestHomeUnreadGroupsCardLifecycleUnderBoardWhenBoardRefPresent(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -222,6 +224,7 @@ func TestHomeUnreadGroupsCardLifecycleUnderBoardWhenBoardRefPresent(t *testing.T
 }
 
 func TestEventsHomeFeedPresetMatchesHomeEligibility(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
