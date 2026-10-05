@@ -12,9 +12,13 @@ format, validation, CLI commands, public dogfood example, and evidence boundarie
 
 ## Configuration
 
-### Core-backed Playwright (optional)
+### Browser checks and core-backed Playwright
 
-`tests/e2e/integration-core-golden-path.spec.js` exercises the UI against a **real** `anx-core`. It is **opt-in**: the spec skips unless you set `ANX_CORE_BASE_URL` or `PUBLIC_ANX_CORE_BASE_URL`. Default CI for the web UI does not assume a running core; enable that env in a dedicated job or locally when you want this coverage (see `docs/spec-compliance.md` — integration execution notes).
+Run `pnpm -C web-ui run test:e2e` for the full browser suite. The default Playwright config starts an isolated real `anx-core` and UI servers for both the normal mount and `/anx`. `tests/e2e/integration-core-golden-path.spec.js` runs against that core, including actor registration, messages and replies, receipt/review evidence, and Inbox acknowledgement. Set `PLAYWRIGHT_CORE_PORT`, `PLAYWRIGHT_PORT`, and `PLAYWRIGHT_BASE_PATH_PORT` to avoid port conflicts locally.
+
+CI's `web-ui-e2e-check` runs every spec in both projects across four shards on web UI, core, contract, or shared tooling changes. It disables retries so a failing browser test fails its shard and retains failure traces. The separate `web-ui-visual-check` keeps screenshot baseline comparison and visual-report examples.
+
+To target a fresh development core, set `ANX_CORE_BASE_URL` or `PUBLIC_ANX_CORE_BASE_URL` and use `web-ui/playwright.integration.config.js`. Start core and the test process with the same `ANX_BOOTSTRAP_TOKEN`; the golden path consumes it to register its test human. The core and the UI workspace catalog must point to the same runtime.
 
 ### Workspace catalog
 
@@ -46,6 +50,9 @@ Route model:
 - `/o/:organization/w/:workspace/...` is the canonical UI shape.
 - `/` redirects to the last-used workspace when a cookie is set; otherwise to the
   workspace chooser. There is no silent default workspace.
+- `/o/:organization/w/:workspace` navigates to Overview after workspace activation
+  and identity checks, preserving query parameters and fragments without a page
+  reload or an extra history entry.
 - Optional mount prefix: set `ANX_UI_BASE_PATH=/anx`
   - External routes become `/anx/o/:organization/w/:workspace/...`
   - `ANX_UI_BASE_PATH` is applied by SvelteKit at dev/build startup, so use the

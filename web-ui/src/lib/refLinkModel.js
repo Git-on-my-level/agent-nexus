@@ -276,7 +276,7 @@ function normalizeEventRoute(route, eventId, options = {}) {
     sourcePrefix: "event",
     sourceValue: asText(eventId),
     prefix: "message",
-    value: asText(eventId),
+    value: asText(candidate.eventId || candidate.event_id || eventId),
     kind: "message",
     label: routeLabelHint(candidate),
     topicId: asText(candidate.topicId || candidate.topic_id),
@@ -621,12 +621,17 @@ export function buildPrimitiveRefRoutes({
     eventRoutesById[id] = {
       kind: "message",
       type: "message_posted",
+      eventId: id,
       topicId: eventTopic,
       threadId:
         asText(event?.thread_id || event?.threadId) ||
         (eventThread.prefix === "thread" ? eventThread.value : "") ||
         asText(threadId),
     };
+    const handle = asText(event?.handle);
+    if (handle && handle !== id) {
+      eventRoutesById[handle] = eventRoutesById[id];
+    }
   }
 
   return { artifactRoutesById, eventRoutesById };

@@ -7,20 +7,21 @@ known limitations, and test coverage.
 
 ## Integration Execution Notes
 
-`tests/e2e/integration-core-golden-path.spec.js` is **opt-in** via `ANX_CORE_BASE_URL` / `PUBLIC_ANX_CORE_BASE_URL`; without it, those tests are skipped. It is not default CI unless the pipeline sets that environment (see `docs/runbook.md`).
+`tests/e2e/integration-core-golden-path.spec.js` runs against the real core started by the default Playwright config and is included in CI's full browser suite. The external-core integration config also accepts `ANX_CORE_BASE_URL` / `PUBLIC_ANX_CORE_BASE_URL` (see `docs/runbook.md`).
 
 Backend (Terminal A):
 
 ```bash
 cd ../core
-./scripts/dev
+ANX_BOOTSTRAP_TOKEN=playwright-local-bootstrap-token ./scripts/dev
 ```
 
 UI integration test (Terminal B):
 
 ```bash
 cd ../web-ui
-ANX_WORKSPACES='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
+ANX_BOOTSTRAP_TOKEN=playwright-local-bootstrap-token \
+ANX_WORKSPACES='[{"organizationSlug":"local","slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
 ANX_DEFAULT_WORKSPACE=local \
 ./scripts/e2e-with-core
 ```

@@ -21,6 +21,10 @@ const coreWorkspaceRoot =
 
 const coreWebServer = {
   command: `rm -rf ${coreWorkspaceRoot} && cd ../core && HOST=127.0.0.1 PORT=${corePort} WORKSPACE_ROOT=${coreWorkspaceRoot} ./scripts/dev`,
+  env: {
+    ANX_BOOTSTRAP_TOKEN:
+      process.env.ANX_BOOTSTRAP_TOKEN ?? "playwright-local-bootstrap-token",
+  },
   port: corePort,
   timeout: 120000,
   reuseExistingServer: !process.env.CI,

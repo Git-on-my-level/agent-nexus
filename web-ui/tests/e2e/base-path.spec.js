@@ -21,12 +21,8 @@ function appPath(pathname = "/") {
     : `${APP_BASE_PATH}${normalizedPathname}`;
 }
 
-test("preserves a configured mount prefix in redirects and generated links", async ({
-  page,
-}) => {
+test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
-    window.localStorage.setItem("anx_ui_actor_id:local", "actor-ops-ai");
-    window.localStorage.setItem("workspaceTourSeen.local", "1");
     window.localStorage.setItem("anx_ui_actor_id:local", "actor-ops-ai");
     window.localStorage.setItem("workspaceTourSeen.local", "1");
   });
@@ -49,7 +45,11 @@ test("preserves a configured mount prefix in redirects and generated links", asy
       }),
     });
   });
+});
 
+test("preserves a configured mount prefix in redirects and generated links", async ({
+  page,
+}) => {
   await page.goto(appPath("/"));
 
   await expect(page).toHaveURL(
@@ -76,4 +76,24 @@ test("preserves a configured mount prefix in redirects and generated links", asy
   await expect(
     page.getByRole("heading", { name: "Docs", exact: true }),
   ).toBeVisible();
+});
+
+test("workspace root preserves query and fragment under a mount prefix without reloading", async ({
+  page,
+  baseURL,
+}) => {
+  const documents = [];
+  page.on("request", (request) => {
+    if (request.resourceType() === "document") documents.push(request.url());
+  });
+  await page.goto(
+    appPath("/o/local/w/local?dashboard=weekly#overview-reports"),
+  );
+  await expect(page).toHaveURL(
+    `${baseURL}${appPath("/o/local/w/local/overview?dashboard=weekly#overview-reports")}`,
+  );
+  await expect(
+    page.getByRole("heading", { name: "Overview", exact: true }),
+  ).toBeVisible();
+  expect(documents).toHaveLength(1);
 });

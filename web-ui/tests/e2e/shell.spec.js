@@ -39,18 +39,34 @@ test("registers actor, unlocks shell, and opens Overview", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("workspace root routes to Overview", async ({ page }) => {
+test("workspace root routes to Overview after activation without reloading", async ({
+  page,
+}) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("workspaceTourSeen.local", "1");
   });
 
-  await page.goto(WS_HOME);
+  const documents = [];
+  page.on("request", (request) => {
+    if (request.resourceType() === "document") documents.push(request.url());
+  });
+
+  await page.goto(`${WS_HOME}?dashboard=weekly#overview-reports`);
+  await expect(page).toHaveURL(
+    `${test.info().project.use.baseURL}${WS_HOME}?dashboard=weekly#overview-reports`,
+  );
+  await expect(page.getByLabel("Display name")).toBeVisible();
+  const historyLength = await page.evaluate(() => history.length);
   await unlockShellWithActor(page, `Inbox User ${Date.now()}`);
 
-  await expect(page).toHaveURL(/\/o\/local\/w\/local\/overview/);
+  await expect(page).toHaveURL(
+    `${test.info().project.use.baseURL}${WS_HOME}/overview?dashboard=weekly#overview-reports`,
+  );
   await expect(
     page.getByRole("heading", { name: "Overview", exact: true }),
   ).toBeVisible();
+  expect(documents).toHaveLength(1);
+  expect(await page.evaluate(() => history.length)).toBe(historyLength);
 });
 
 test("mobile bottom navigation switches workspace routes", async ({ page }) => {
