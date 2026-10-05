@@ -181,7 +181,7 @@ func handleWorkParticipants(w http.ResponseWriter, r *http.Request, opts handler
 	}
 	work, err := workStore.GetWork(r.Context(), id)
 	if err != nil {
-		workStoreError(w, err)
+		workStoreError(w, r, err)
 		return
 	}
 	if !sessionWorkAccessible(w, r, opts, work) {

@@ -2696,7 +2696,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			}
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-ANX-CLI-Version")
-			w.Header().Set("Access-Control-Expose-Headers", "X-ANX-Core-Version, X-ANX-API-Version, X-ANX-Schema-Version, X-ANX-Min-CLI-Version, X-ANX-Recommended-CLI-Version")
+			w.Header().Set("Access-Control-Expose-Headers", "X-ANX-Core-Version, X-ANX-API-Version, X-ANX-Schema-Version, X-ANX-Min-CLI-Version, X-ANX-Recommended-CLI-Version, X-Request-ID")
 			w.Header().Set("Access-Control-Max-Age", "3600")
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)

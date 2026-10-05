@@ -22,6 +22,7 @@ import (
 
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/commandcenter"
+	"agent-nexus-core/internal/handles"
 	"agent-nexus-core/internal/schema"
 )
 
@@ -2391,7 +2392,16 @@ func insertPreparedEvent(ctx context.Context, exec eventExec, prepared preparedE
 		prepared.PayloadJSON = string(encoded)
 	}
 	eventID := anyStringValue(prepared.Body["id"])
-	handle, err := uniqueHandleTx(ctx, exec, "event", prepared.Type, "event-"+eventID)
+	// Events share a type across an unbounded history. Using only that type
+	// exhausted the allocator after 1,000 events and rolled back valid writes.
+	// Keep a readable prefix while deriving uniqueness from the event identity.
+	prefix := handles.Candidate(prepared.Type, "event-"+eventID)
+	if len(prefix) > 31 {
+		prefix = strings.TrimRight(prefix[:31], "-")
+	}
+	digest := sha256.Sum256([]byte(eventID))
+	candidate := prefix + "-" + hex.EncodeToString(digest[:16])
+	handle, err := uniqueHandleTx(ctx, exec, "event", candidate, "event-"+eventID)
 	if err != nil {
 		return fmt.Errorf("allocate event handle: %w", err)
 	}

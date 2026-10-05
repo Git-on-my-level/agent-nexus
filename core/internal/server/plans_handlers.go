@@ -37,7 +37,7 @@ func enrichPlans(w http.ResponseWriter, r *http.Request, opts handlerOptions, ca
 		return true
 	}
 	if err := store.EnrichCardPlans(r.Context(), cards, planVisibility(r, opts), time.Now().UTC(), planStalledAfter()); err != nil {
-		workStoreError(w, err)
+		workStoreError(w, r, err)
 		return false
 	}
 	return true
@@ -55,7 +55,7 @@ func handleCardPlan(w http.ResponseWriter, r *http.Request, opts handlerOptions,
 	}
 	card, err := opts.primitiveStore.GetBoardCard(r.Context(), "", id)
 	if err != nil {
-		workStoreError(w, err)
+		workStoreError(w, r, err)
 		return
 	}
 	if !requireAccessibleThreadFilter(w, r, opts, anyString(card["thread_id"]), "card") {
@@ -86,12 +86,12 @@ func handleCardPlan(w http.ResponseWriter, r *http.Request, opts handlerOptions,
 			return
 		}
 		if err = store.SetCardPlan(r.Context(), actor, id, req.IfUpdatedAt, p); err != nil {
-			workStoreError(w, err)
+			workStoreError(w, r, err)
 			return
 		}
 		card, err = opts.primitiveStore.GetBoardCard(r.Context(), "", id)
 		if err != nil {
-			workStoreError(w, err)
+			workStoreError(w, r, err)
 			return
 		}
 	}
@@ -122,7 +122,7 @@ func handleResolveRefs(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	}
 	items, err := store.ResolveRefs(r.Context(), req.Refs, planVisibility(r, opts), time.Now().UTC(), planStalledAfter())
 	if err != nil {
-		workStoreError(w, err)
+		workStoreError(w, r, err)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")

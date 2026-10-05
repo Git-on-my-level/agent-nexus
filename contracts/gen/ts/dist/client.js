@@ -11586,6 +11586,7 @@ export const commandRegistry = [
         "path": "/work/{card_ref}",
         "operation_id": "workPatch",
         "summary": "Update local commitment annotations",
+        "description": "Relation objects preserve additional metadata fields. Invalid relation shapes, kinds, or workspace refs return 400 invalid_request with field-specific guidance. Unmapped store failures return 500 internal_error with a server-generated X-Request-ID that correlates with a secret-safe diagnostic log.",
         "why": "Update local commitment annotations.",
         "input_mode": "json-body",
         "streaming": {

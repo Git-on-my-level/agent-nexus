@@ -12,6 +12,7 @@ import (
 )
 
 var ErrInvalidResourceRef = errors.New("invalid resource ref")
+var ErrHandleAllocation = errors.New("could not allocate unique resource handle")
 
 type ResourceRefInput struct {
 	// Type is used for endpoint-implied refs such as GET /topics/{handle}.
@@ -271,5 +272,5 @@ func uniqueHandleTx(ctx context.Context, q queryRower, typ, desired, fallbackSee
 			return candidate, nil
 		}
 	}
-	return "", fmt.Errorf("could not allocate unique %s handle", typ)
+	return "", fmt.Errorf("%w: %s", ErrHandleAllocation, typ)
 }

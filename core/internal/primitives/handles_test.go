@@ -2,11 +2,55 @@ package primitives
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"agent-nexus-core/internal/storage"
 )
+
+func TestEventHandlesUseFullIdentityWithLongCommonPrefixes(t *testing.T) {
+	ctx := context.Background()
+	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	store := NewTestStore(ws.DB(), "")
+	refs := map[string]bool{}
+	for _, suffix := range []string{"one", "two"} {
+		event, err := store.AppendEvent(ctx, "actor-1", map[string]any{"id": strings.Repeat("identity", 10) + suffix, "type": strings.Repeat("event-type", 10), "thread_id": "thread-1", "refs": []string{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ref := anyStringValue(event["ref"])
+		if len(anyStringValue(event["handle"])) > 64 || refs[ref] {
+			t.Fatalf("invalid or duplicate handle: %s", ref)
+		}
+		refs[ref] = true
+		resolved, err := store.ResolveResourceRef(ctx, ResourceRefInput{Ref: ref})
+		if err != nil || resolved.ID != event["id"] {
+			t.Fatalf("new event ref failed to resolve: %v %v", resolved, err)
+		}
+	}
+}
+
+func TestWorkRelationStoreFailureIsNotInvalidInput(t *testing.T) {
+	ctx := context.Background()
+	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := NewTestStore(ws.DB(), "")
+	if err := ws.Close(); err != nil {
+		t.Fatal(err)
+	}
+	err = store.validateWorkReferences(ctx, map[string]any{"relations": []any{map[string]any{"kind": "related", "ref": "card:target"}}})
+	if err == nil || errors.Is(err, ErrInvalidWorkRequest) || !strings.Contains(err.Error(), "resolve work relation") {
+		t.Fatalf("database failure classified as user input: %v", err)
+	}
+}
 
 func TestResolveResourceRef(t *testing.T) {
 	t.Parallel()
