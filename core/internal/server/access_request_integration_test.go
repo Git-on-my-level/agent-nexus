@@ -333,3 +333,40 @@ func TestAccessRequestCreationIsSelfScopedAndConcurrentIdempotent(t *testing.T) 
 		t.Fatalf("events=%d err=%v", count, err)
 	}
 }
+
+func TestInboxSummaryRanksProjectedAskSeverity(t *testing.T) {
+	env, human := accessTestEnv(t)
+	agent := seedAccessTestAgent(t, env, "summary.severity")
+	status, p := hostHTTP(t, "POST", env.server.URL+"/auth/access-requests", agent.AccessToken, map[string]any{"grant": "auth-admin", "reason": "Create shared attention context"})
+	hostStatus(t, status, 200, p)
+	request := p["request"].(map[string]any)
+	store := env.primitiveStore.(*primitives.Store)
+	source, err := store.GetEvent(context.Background(), request["request_event_ref"].(string)[6:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	threadID := source["thread_id"].(string)
+	ids := []string{}
+	for i, severity := range []string{"low", "high", " HIGH ", ""} {
+		event := map[string]any{
+			"type": "human_attention_requested", "thread_id": threadID,
+			"ts":   fmt.Sprintf("2026-01-01T00:00:0%dZ", i),
+			"refs": []string{"thread:" + threadID}, "summary": "Summary ranking",
+			"payload": map[string]any{"kind": "ask", "title": "Summary ranking", "body": "A decision is needed", "severity": severity,
+				"requester_actor_id": agent.ActorID, "requester_agent_id": agent.AgentID,
+				"subject_ref": "thread:" + threadID, "related_refs": []string{"thread:" + threadID}, "response_proposals": []string{"Proceed"}},
+			"provenance": eventProvenance(),
+		}
+		status, p = hostHTTP(t, "POST", env.server.URL+"/events", agent.AccessToken, map[string]any{"event": event})
+		hostStatus(t, status, 201, p)
+		ids = append(ids, p["event"].(map[string]any)["id"].(string))
+	}
+	status, p = hostHTTP(t, "POST", env.server.URL+"/derived/rebuild", human, map[string]any{})
+	hostStatus(t, status, 200, p)
+	status, p = hostHTTP(t, "GET", env.server.URL+"/inbox/summary?limit=2", human, nil)
+	hostStatus(t, status, 200, p)
+	asks := p["asks"].([]any)
+	if p["open_ask_count"] != float64(4) || len(asks) != 2 || asks[0].(map[string]any)["source_event_id"] != ids[1] || asks[1].(map[string]any)["source_event_id"] != ids[2] {
+		t.Fatalf("severity rank, oldest tie, or unbounded count incorrect: %#v", p)
+	}
+}

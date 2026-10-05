@@ -7392,7 +7392,7 @@ paths:
           schema: {type: integer, minimum: 0, maximum: 50, default: 5}
       responses:
         '200':
-          description: Workspace-local count and priority ordered top asks (oldest first on ties); private threads excluded before counting; open requests survive linked subject archive.
+          description: Workspace-local count and severity-priority ordered top asks (urgent/p0/critical, high/p1, normal/medium/p2, low/p3, then unspecified; oldest first on ties); private threads excluded before counting; open requests survive linked subject archive.
           content:
             application/json:
               schema:

@@ -42,6 +42,18 @@ func TestAccessRequestsAndFileAsksReachHumanInbox(t *testing.T) {
 		ask := h.runCLIExpectOK(t, "requester", nil, "ask", "--from-file", path)
 		askIDs = append(askIDs, mustStringPath(t, ask.Payload, "result.ask_id"))
 	}
+	for i, subject := range []string{"", cardRef} {
+		path := filepath.Join(t.TempDir(), "ask.txt")
+		if err := os.WriteFile(path, []byte("A plain-file decision is needed.\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		args := []string{"ask", fmt.Sprintf("Plain file ask %d", i), "--body-file", path, "--recommend", "Proceed"}
+		if subject != "" {
+			args = append(args, "--subject-ref", subject)
+		}
+		ask := h.runCLIExpectOK(t, "requester", nil, args...)
+		askIDs = append(askIDs, mustStringPath(t, ask.Payload, "result.ask_id"))
+	}
 	verify := func() {
 		t.Helper()
 		inbox := h.runCLIExpectOK(t, "operator", nil, "debug", "inbox", "list")

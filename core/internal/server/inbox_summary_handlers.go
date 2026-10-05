@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -39,7 +40,16 @@ func handleGetInboxSummary(w http.ResponseWriter, r *http.Request, opts handlerO
 		}
 	}
 	sort.SliceStable(asks, func(i, j int) bool {
-		a, b := anyString(asks[i]["priority"]), anyString(asks[j]["priority"])
+		// Attention events project severity, not the linked subject's priority.
+		// Keep priority compatible with older/custom derived rows.
+		priority := func(item map[string]any) string {
+			value := strings.TrimSpace(anyString(item["priority"]))
+			if value == "" {
+				value = strings.TrimSpace(anyString(item["severity"]))
+			}
+			return strings.ToLower(value)
+		}
+		a, b := priority(asks[i]), priority(asks[j])
 		rank := func(p string) int {
 			switch p {
 			case "urgent", "p0", "critical":
