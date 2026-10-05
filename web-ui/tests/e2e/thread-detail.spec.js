@@ -349,6 +349,8 @@ test("thread detail separates messages from timeline and nests replies", async (
   });
 
   await page.route(/\/events$/, async (route) => {
+    // Stream GETs also end in /events; leave them to the SSE mock above.
+    if (route.request().method() !== "POST") return route.fallback();
     const payload = JSON.parse(route.request().postData() ?? "{}");
     postedEvents += 1;
 
