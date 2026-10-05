@@ -180,6 +180,7 @@ export declare class AnxClient {
     inboxList(options?: RequestOptions): Promise<InvokeResult>;
     inboxRespond(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     inboxStream(options?: RequestOptions): Promise<InvokeResult>;
+    inboxSummary(options?: RequestOptions): Promise<InvokeResult>;
     metaCommandsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     metaCommandsList(options?: RequestOptions): Promise<InvokeResult>;
     metaConceptsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

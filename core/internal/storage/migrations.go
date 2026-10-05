@@ -970,6 +970,18 @@ var migrations = []migration{
 		_, err = tx.ExecContext(ctx, `CREATE INDEX idx_events_overview_answers ON events(type,ts,id)`)
 		return err
 	}},
+	{Version: 54, Statements: []string{
+		`CREATE TABLE access_requests (
+            id TEXT PRIMARY KEY, principal_id TEXT NOT NULL REFERENCES agents(id),
+            actor_id TEXT NOT NULL, username TEXT NOT NULL, grant_name TEXT NOT NULL,
+            reason TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+            created_at TEXT NOT NULL, decided_at TEXT NOT NULL DEFAULT '', decided_by TEXT NOT NULL DEFAULT '',
+            request_event_id TEXT NOT NULL UNIQUE REFERENCES events(id), inbox_item_id TEXT NOT NULL UNIQUE,
+            UNIQUE(principal_id,grant_name), CHECK(status IN ('pending','approved','denied'))
+        );`,
+		`CREATE INDEX access_requests_pending ON access_requests(status,created_at,id);`,
+		`CREATE INDEX host_enrollments_pending_expiry ON host_enrollments(status,expires_at);`,
+	}},
 }
 
 func applyMigration49SeriesTokenScope(ctx context.Context, tx *sql.Tx) error {

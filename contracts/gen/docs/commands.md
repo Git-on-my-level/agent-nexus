@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `213`
+- Commands: `214`
 
 ## `actors.create`
 
@@ -365,7 +365,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Request and review explicit workspace authority.
 - Concepts: `auth`
-- Error codes: `auth_required`, `invalid_token`, `human_required`, `invalid_request`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_token`, `agent_required`, `human_required`, `invalid_request`, `not_found`, `conflict`
 - Output: Returns `AccessRequestResponse`.
 - Agent notes: Agents request their own grant. Humans alone decide requests and read the Access queue.
 
@@ -378,7 +378,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Request and review explicit workspace authority.
 - Concepts: `auth`
-- Error codes: `auth_required`, `invalid_token`, `human_required`, `invalid_request`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_token`, `agent_required`, `human_required`, `invalid_request`, `not_found`, `conflict`
 - Output: Returns `AccessRequestResponse`.
 - Agent notes: Agents request their own grant. Humans alone decide requests and read the Access queue.
 
@@ -391,7 +391,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Request and review explicit workspace authority.
 - Concepts: `auth`
-- Error codes: `auth_required`, `invalid_token`, `human_required`, `invalid_request`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_token`, `agent_required`, `human_required`, `invalid_request`, `not_found`, `conflict`
 - Output: Returns `AccessRequestsResponse`.
 - Agent notes: Agents request their own grant. Humans alone decide requests and read the Access queue.
 
@@ -401,10 +401,10 @@ Generated from `contracts/anx-openapi.yaml`.
 - HTTP: `POST /auth/access-requests`
 - Stability: `beta`
 - Surface: `utility`
-- Input mode: `json-body`
+- Input mode: `flags`
 - Why: Request and review explicit workspace authority.
 - Concepts: `auth`
-- Error codes: `auth_required`, `invalid_token`, `human_required`, `invalid_request`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_token`, `agent_required`, `human_required`, `invalid_request`, `not_found`, `conflict`
 - Output: Returns `AccessRequestResponse`.
 - Agent notes: Agents request their own grant. Humans alone decide requests and read the Access queue.
 
@@ -417,7 +417,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Request and review explicit workspace authority.
 - Concepts: `auth`
-- Error codes: `auth_required`, `invalid_token`, `human_required`, `invalid_request`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_token`, `agent_required`, `human_required`, `invalid_request`, `not_found`, `conflict`
 - Output: Returns `AccessSummary`.
 - Agent notes: Agents request their own grant. Humans alone decide requests and read the Access queue.
 
@@ -1583,6 +1583,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `inbox`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: SSE `inbox_item` events with JSON payloads.
+
+## `inbox.summary`
+
+- CLI path: `inbox summary`
+- HTTP: `GET /inbox/summary`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Cheap workspace-local human attention read for UI fan-out across existing workspace sessions.
+- Concepts: `inbox`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Output: Returns `{ open_ask_count, asks, generated_at }`; shared human asks visible to the caller, not agent answer notifications.
+- Agent notes: Uses current workspace permissions; limit 0 returns the count only. No cross-workspace identity.
 
 ## `meta.commands.get`
 

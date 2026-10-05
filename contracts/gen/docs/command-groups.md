@@ -210,12 +210,13 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `inbox`
 
-- Commands: `4`
+- Commands: `5`
 - Command IDs:
   - `inbox.get` (`inbox get`)
   - `inbox.list` (`inbox list`)
   - `inbox.respond` (`inbox respond`)
   - `inbox.stream` (`inbox stream`)
+  - `inbox.summary` (`inbox summary`)
 
 ## `meta`
 

@@ -6893,7 +6893,7 @@ paths:
       x-anx-input-mode: none
       x-anx-streaming: {mode: none}
       x-anx-output-envelope: Returns `AccessRequestsResponse`.
-      x-anx-error-codes: [auth_required, invalid_token, human_required, invalid_request, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_token, agent_required, human_required, invalid_request, not_found, conflict]
       x-anx-concepts: [auth]
       x-anx-stability: beta
       responses:
@@ -6905,6 +6905,11 @@ paths:
         '409': {$ref: '#/components/responses/ErrorResponse'}
     post:
       operationId: createAccessRequest
+      x-anx-cli-input:
+        mode: flags
+        flags:
+          - {name: grant, body_path: grant, required: true, description: Named grant; currently auth-admin.}
+          - {name: reason, body_path: reason, required: true, description: Why this agent needs the grant.}
       summary: Request a named grant
       description: Agent only. Requests auth-admin for the authenticated principal, with a nonempty reason. Idempotent per principal and grant for the lifetime of the request; retries return the original request without changing its reason or decision. Creates a review Inbox item.
       tags: [auth]
@@ -6916,7 +6921,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: {mode: none}
       x-anx-output-envelope: Returns `AccessRequestResponse`.
-      x-anx-error-codes: [auth_required, invalid_token, human_required, invalid_request, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_token, agent_required, human_required, invalid_request, not_found, conflict]
       x-anx-concepts: [auth]
       x-anx-stability: beta
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AccessRequestCreate'}}}}
@@ -6942,7 +6947,7 @@ paths:
       x-anx-input-mode: none
       x-anx-streaming: {mode: none}
       x-anx-output-envelope: Returns `AccessRequestResponse`.
-      x-anx-error-codes: [auth_required, invalid_token, human_required, invalid_request, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_token, agent_required, human_required, invalid_request, not_found, conflict]
       x-anx-concepts: [auth]
       x-anx-stability: beta
       parameters: [{name: request_id, in: path, required: true, schema: {type: string}, description: Access request ID.}]
@@ -6968,7 +6973,7 @@ paths:
       x-anx-input-mode: none
       x-anx-streaming: {mode: none}
       x-anx-output-envelope: Returns `AccessRequestResponse`.
-      x-anx-error-codes: [auth_required, invalid_token, human_required, invalid_request, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_token, agent_required, human_required, invalid_request, not_found, conflict]
       x-anx-concepts: [auth]
       x-anx-stability: beta
       parameters: [{name: request_id, in: path, required: true, schema: {type: string}, description: Access request ID.}]
@@ -6994,7 +6999,7 @@ paths:
       x-anx-input-mode: none
       x-anx-streaming: {mode: none}
       x-anx-output-envelope: Returns `AccessSummary`.
-      x-anx-error-codes: [auth_required, invalid_token, human_required, invalid_request, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_token, agent_required, human_required, invalid_request, not_found, conflict]
       x-anx-concepts: [auth]
       x-anx-stability: beta
       responses:
@@ -7363,6 +7368,43 @@ paths:
         '401':
           $ref: '#/components/responses/ErrorResponse'
         '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /inbox/summary:
+    get:
+      operationId: getInboxSummary
+      x-anx-agent-notes: Uses current workspace permissions; limit 0 returns the count only. No cross-workspace identity.
+      summary: Count open asks and return the top asks visible to the caller
+      tags: [inbox]
+      x-anx-surface: projection
+      x-anx-command-id: inbox.summary
+      x-anx-cli-path: inbox summary
+      x-anx-why: Cheap workspace-local human attention read for UI fan-out across existing workspace sessions.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ open_ask_count, asks, generated_at }`; shared human asks visible to the caller, not agent answer notifications."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-concepts: [inbox]
+      x-anx-stability: beta
+      parameters:
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 0, maximum: 50, default: 5}
+      responses:
+        '200':
+          description: Workspace-local count and priority ordered top asks (oldest first on ties); private threads excluded before counting; open requests survive linked subject archive.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [open_ask_count, asks, generated_at]
+                properties:
+                  open_ask_count: {type: integer, minimum: 0}
+                  asks: {type: array, items: { $ref: '#/components/schemas/JsonObject' }}
+                  generated_at: {type: string, format: date-time}
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
           $ref: '#/components/responses/ErrorResponse'
 
   /inbox/{inbox_id}:
@@ -10416,6 +10458,7 @@ components:
       required: [board_ref, board_title, column_key]
 
     InboxItem:
+      description: Open human attention requests remain actionable until response or withdrawal, independently of linked subject lifecycle. Thread privacy still applies.
       type: object
       properties:
         id: { type: string }

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 219,
+  "route_count": 220,
   "routes": [
     {
       "method": "GET",
@@ -635,6 +635,11 @@
     {
       "method": "GET",
       "path": "/inbox",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/inbox/summary",
       "access_class": "workspace_business_surface"
     },
     {

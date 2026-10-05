@@ -319,3 +319,33 @@ preserves the existing archive behavior. Pair it with `if_board_updated_at` and
 `if_version` to also fence canonical card/board edits and work annotations.
 Successful source polls can change the observation ID without changing phase,
 board timestamp, or work version, so neither existing token replaces this fence.
+
+## Structured access requests
+
+An authenticated agent requests its own named grant with `POST /auth/access-requests`
+(`grant: "auth-admin"`, nonempty `reason`, at most 4000 characters). The response
+contains `request`, including durable identity, status and Inbox correlation.
+Retries for that principal/grant return the original request, reason and decision.
+
+Humans use `GET /auth/access-requests` for pending requests and
+`POST /auth/access-requests/{request_id}/approve` or `/deny` to decide them. Approval
+uses the same human-only grant transaction as `/auth/admins/{principal_id}/grant`,
+with one canonical Inbox response and decision. Matching retries return the stored
+decision and never reapply a subsequently revoked grant; opposite decisions conflict.
+A revoked requester cannot be approved, but may be denied.
+
+`GET /auth/access/summary` is human-only and returns `pending_count`,
+`pending_access_request_count` and `pending_host_enrollment_count`. Enrollments count
+while unexpired and pending or approved, until completion.
+
+Each access request has a dedicated shared thread and a review Inbox item. Its
+`access_request_id`, `requested_grant`, and `requester_principal_id` are server-owned
+correlation from the persisted request, never trusted event-supplied grant inputs.
+Existing `POST /inbox/{inbox_id}/respond` accepts `approved` (grant) or `rejected`
+(deny) for these items. Other outcomes return 400 without a response or mutation.
+Agents cannot withdraw an access-backed review; only humans decide it.
+
+Open human attention requests survive linked subject archive; thread privacy still
+applies. `GET /inbox/summary` uses the same visibility rules as `/inbox`, counts
+open asks, and returns up to `limit` asks (default 5, range 0–50), with priority
+and oldest-first ordering. Access reviews are counted by the Access summary.

@@ -285,6 +285,14 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 	}
 	storedResponse, replayed, err := responseStore.AppendHumanAttentionResponse(r.Context(), actorID, sourceEventID, inboxItemID, req.IdempotencyKey, requestHash, responseEvent, initialNotify)
 	if err != nil {
+		if errors.Is(err, primitives.ErrInvalidAccessDecision) || errors.Is(err, auth.ErrInvalidRequest) || errors.Is(err, auth.ErrAgentNotFound) {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		if errors.Is(err, auth.ErrHumanRequired) {
+			writeError(w, http.StatusForbidden, "human_required", "only active humans can decide access requests")
+			return
+		}
 		if errors.Is(err, primitives.ErrHumanAttentionAlreadyResponded) {
 			writeError(w, http.StatusConflict, "conflict", "human attention request already has a response")
 			return

@@ -397,7 +397,7 @@ var CommandRegistry = []CommandSpec{
 		Group:     "auth",
 		Method:    "POST",
 		Path:      "/auth/access-requests",
-		InputMode: "json-body",
+		InputMode: "flags",
 		Stability: "beta",
 		Concepts:  []string{"auth"},
 		Adjacent:  []string{"auth.access-requests.approve", "auth.access-requests.deny", "auth.access-requests.list", "auth.access-requests.summary", "auth.admins.grant", "auth.admins.list", "auth.admins.revoke", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.dev.login", "auth.passkey.dev.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
@@ -1550,7 +1550,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"inbox"},
-		Adjacent:   []string{"inbox.list", "inbox.respond", "inbox.stream"},
+		Adjacent:   []string{"inbox.list", "inbox.respond", "inbox.stream", "inbox.summary"},
 	},
 	{
 		CommandID: "inbox.list",
@@ -1559,7 +1559,7 @@ var CommandRegistry = []CommandSpec{
 		Method:    "GET",
 		Path:      "/inbox",
 		InputMode: "none",
-		Adjacent:  []string{"inbox.get", "inbox.respond", "inbox.stream"},
+		Adjacent:  []string{"inbox.get", "inbox.respond", "inbox.stream", "inbox.summary"},
 	},
 	{
 		CommandID:  "inbox.respond",
@@ -1571,7 +1571,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"inbox", "write"},
-		Adjacent:   []string{"inbox.get", "inbox.list", "inbox.stream"},
+		Adjacent:   []string{"inbox.get", "inbox.list", "inbox.stream", "inbox.summary"},
 	},
 	{
 		CommandID: "inbox.stream",
@@ -1582,7 +1582,18 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"inbox"},
-		Adjacent:  []string{"inbox.get", "inbox.list", "inbox.respond"},
+		Adjacent:  []string{"inbox.get", "inbox.list", "inbox.respond", "inbox.summary"},
+	},
+	{
+		CommandID: "inbox.summary",
+		CLIPath:   "inbox summary",
+		Group:     "inbox",
+		Method:    "GET",
+		Path:      "/inbox/summary",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"inbox"},
+		Adjacent:  []string{"inbox.get", "inbox.list", "inbox.respond", "inbox.stream"},
 	},
 	{
 		CommandID:  "meta.commands.get",
@@ -3233,6 +3244,10 @@ func (c *Client) InboxRespond(ctx context.Context, pathParams map[string]string,
 
 func (c *Client) InboxStream(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "inbox.stream", nil, opts)
+}
+
+func (c *Client) InboxSummary(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "inbox.summary", nil, opts)
 }
 
 func (c *Client) MetaCommandsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

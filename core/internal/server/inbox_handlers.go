@@ -314,6 +314,10 @@ func loadOpenInbox(r *http.Request, opts handlerOptions, now time.Time) (map[str
 // Overview needs the same permission-filtered asks, but not the inbox's
 // workspace-wide thread freshness scan and public-ref hydration.
 func loadOpenInboxItems(r *http.Request, opts handlerOptions) ([]map[string]any, error) {
+	return loadVisibleInboxItems(r, opts, true)
+}
+
+func loadVisibleInboxItems(r *http.Request, opts handlerOptions, notifications bool) ([]map[string]any, error) {
 	projected, err := opts.primitiveStore.ListDerivedInboxItems(r.Context(), primitives.DerivedInboxListFilter{})
 	if err != nil {
 		return nil, err
@@ -321,7 +325,10 @@ func loadOpenInboxItems(r *http.Request, opts handlerOptions) ([]map[string]any,
 	payloadItems := make([]map[string]any, 0, len(projected))
 	for _, item := range projected {
 		payload := payloadFromDerivedInboxItem(item)
-		enrichHumanAttentionNotificationStatus(r.Context(), opts, payload)
+		if notifications {
+			enrichHumanAttentionNotificationStatus(r.Context(), opts, payload)
+			enrichAccessRequestInboxItem(r.Context(), opts, payload)
+		}
 		payloadItems = append(payloadItems, payload)
 	}
 	payloadItems = filterAccessibleInboxItems(r, opts, payloadItems, projected)
@@ -334,6 +341,13 @@ func loadOpenInboxItems(r *http.Request, opts handlerOptions) ([]map[string]any,
 		}
 		visible := payloadItems[:0]
 		for _, item := range payloadItems {
+			// Requests have their own response/withdrawal lifecycle. Archiving
+			// linked context must not silently withdraw a pending decision.
+			// Thread privacy has already been enforced above.
+			if canonicalHumanAttentionKind(anyString(item["kind"])) != "" {
+				visible = append(visible, item)
+				continue
+			}
 			refs, _ := extractStringSlice(item["related_refs"])
 			hide := false
 			for _, ref := range refs {
@@ -403,8 +417,10 @@ func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 
+	payload := enrichHumanAttentionNotificationStatus(r.Context(), opts, payloadFromDerivedInboxItem(item))
+	enrichAccessRequestInboxItem(r.Context(), opts, payload)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"item":                 enrichHumanAttentionNotificationStatus(r.Context(), opts, payloadFromDerivedInboxItem(item)),
+		"item":                 payload,
 		"generated_at":         now.Format(time.RFC3339Nano),
 		"projection_freshness": cloneWorkspaceMap(states[item.ThreadID].Freshness),
 	})

@@ -110,6 +110,10 @@ func (s *Store) AppendHumanAttentionResponse(ctx context.Context, actorID, sourc
 		}
 		return nil, false, ErrHumanAttentionAlreadyResponded
 	}
+	payload, _ := event["payload"].(map[string]any)
+	if err := s.applyAccessDecisionTx(ctx, tx, sourceEventID, actorID, anyStringValue(payload["outcome"]), anyStringValue(prepared.Body["ts"])); err != nil {
+		return nil, false, err
+	}
 	publicNotify := cloneMap(initialNotify)
 	delete(publicNotify, "quiet_window_ns")
 	response := map[string]any{"event": prepared.Body, "notify": publicNotify}

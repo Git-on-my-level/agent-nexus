@@ -2548,6 +2548,14 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleGetInbox(w, r, opts)
 	})
 
+	registerRoute("/inbox/summary", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, 405, "method_not_allowed", "only GET is supported")
+			return
+		}
+		handleGetInboxSummary(w, r, opts)
+	})
+
 	registerRoute("/inbox/", func(r *http.Request) routeAccessRequirement {
 		remainder := strings.TrimPrefix(r.URL.Path, "/inbox/")
 		if remainder == "" {

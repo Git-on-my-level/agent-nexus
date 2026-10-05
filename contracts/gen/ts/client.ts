@@ -1282,6 +1282,7 @@ export const commandRegistry: CommandSpec[] = [
     "error_codes": [
       "auth_required",
       "invalid_token",
+      "agent_required",
       "human_required",
       "invalid_request",
       "not_found",
@@ -1340,6 +1341,7 @@ export const commandRegistry: CommandSpec[] = [
     "error_codes": [
       "auth_required",
       "invalid_token",
+      "agent_required",
       "human_required",
       "invalid_request",
       "not_found",
@@ -1398,6 +1400,7 @@ export const commandRegistry: CommandSpec[] = [
     "error_codes": [
       "auth_required",
       "invalid_token",
+      "agent_required",
       "human_required",
       "invalid_request",
       "not_found",
@@ -1445,7 +1448,25 @@ export const commandRegistry: CommandSpec[] = [
     "summary": "Request a named grant",
     "description": "Agent only. Requests auth-admin for the authenticated principal, with a nonempty reason. Idempotent per principal and grant for the lifetime of the request; retries return the original request without changing its reason or decision. Creates a review Inbox item.",
     "why": "Request and review explicit workspace authority.",
-    "input_mode": "json-body",
+    "input_mode": "flags",
+    "http_input_mode": "json-body",
+    "cli_input": {
+      "mode": "flags",
+      "flags": [
+        {
+          "name": "grant",
+          "body_path": "grant",
+          "required": true,
+          "description": "Named grant; currently auth-admin."
+        },
+        {
+          "name": "reason",
+          "body_path": "reason",
+          "required": true,
+          "description": "Why this agent needs the grant."
+        }
+      ]
+    },
     "streaming": {
       "mode": "none"
     },
@@ -1453,6 +1474,7 @@ export const commandRegistry: CommandSpec[] = [
     "error_codes": [
       "auth_required",
       "invalid_token",
+      "agent_required",
       "human_required",
       "invalid_request",
       "not_found",
@@ -1523,6 +1545,7 @@ export const commandRegistry: CommandSpec[] = [
     "error_codes": [
       "auth_required",
       "invalid_token",
+      "agent_required",
       "human_required",
       "invalid_request",
       "not_found",
@@ -7139,7 +7162,8 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "inbox.list",
       "inbox.respond",
-      "inbox.stream"
+      "inbox.stream",
+      "inbox.summary"
     ],
     "go_method": "InboxGet",
     "ts_method": "inboxGet"
@@ -7167,7 +7191,8 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "inbox.get",
       "inbox.respond",
-      "inbox.stream"
+      "inbox.stream",
+      "inbox.summary"
     ],
     "go_method": "InboxList",
     "ts_method": "inboxList"
@@ -7262,7 +7287,8 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "inbox.get",
       "inbox.list",
-      "inbox.stream"
+      "inbox.stream",
+      "inbox.summary"
     ],
     "go_method": "InboxRespond",
     "ts_method": "inboxRespond"
@@ -7294,10 +7320,45 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "inbox.get",
       "inbox.list",
-      "inbox.respond"
+      "inbox.respond",
+      "inbox.summary"
     ],
     "go_method": "InboxStream",
     "ts_method": "inboxStream"
+  },
+  {
+    "command_id": "inbox.summary",
+    "cli_path": "inbox summary",
+    "group": "inbox",
+    "method": "GET",
+    "path": "/inbox/summary",
+    "operation_id": "getInboxSummary",
+    "summary": "Count open asks and return the top asks visible to the caller",
+    "why": "Cheap workspace-local human attention read for UI fan-out across existing workspace sessions.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ open_ask_count, asks, generated_at }`; shared human asks visible to the caller, not agent answer notifications.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token"
+    ],
+    "concepts": [
+      "inbox"
+    ],
+    "stability": "beta",
+    "surface": "projection",
+    "agent_notes": "Uses current workspace permissions; limit 0 returns the count only. No cross-workspace identity.",
+    "adjacent_commands": [
+      "inbox.get",
+      "inbox.list",
+      "inbox.respond",
+      "inbox.stream"
+    ],
+    "go_method": "InboxSummary",
+    "ts_method": "inboxSummary"
   },
   {
     "command_id": "meta.commands.get",
@@ -12919,6 +12980,10 @@ export class AnxClient {
 
   inboxStream(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("inbox.stream", {}, options);
+  }
+
+  inboxSummary(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("inbox.summary", {}, options);
   }
 
   metaCommandsGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
