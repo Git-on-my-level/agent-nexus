@@ -18,6 +18,12 @@
     now,
     evidence = "",
     tabSelections,
+    /** Page-level ref resolution and preview handlers, forwarded to panels. */
+    resolved = new Map(),
+    organizationSlug = "",
+    workspaceSlug = "",
+    onpreview = null,
+    onpreviewclose = null,
     oninspect,
     ontab,
     path = "root",
@@ -66,6 +72,11 @@
 
 {#snippet renderChild(child, childPath)}
   <ReportLayout
+    {resolved}
+    {organizationSlug}
+    {workspaceSlug}
+    {onpreview}
+    {onpreviewclose}
     {compact}
     node={child}
     {panelsById}
@@ -89,6 +100,11 @@
         freshness={getPanelFreshness(panel, now)}
         evidenceOpen={evidence === panel.id}
         {oninspect}
+        {resolved}
+        {organizationSlug}
+        {workspaceSlug}
+        {onpreview}
+        {onpreviewclose}
       />
     </div>
   {:else if node.type === "stack"}

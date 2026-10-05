@@ -58,7 +58,9 @@ describe("bounded ECharts report vocabulary", () => {
       const option = buildReportChartOption(panel.data);
       expect(option).toEqual(buildReportChartOption(panel.data));
       expect(option).not.toBe(panel.data.option);
-      expect(option.tooltip.renderMode).toBe("richText");
+      // `html` so the tooltip formatter can return a built element; see
+      // reportChartInteraction.js for why that stays injection-safe.
+      expect(option.tooltip.renderMode).toBe("html");
       expect(option.animation).toBe(false);
       expect(panel.data).toEqual(before);
       expect(reportChartRows(panel.data).rows.length).toBeGreaterThan(0);
@@ -185,15 +187,20 @@ describe("bounded ECharts report vocabulary", () => {
     expectInvalid(categoryLine);
   });
 
-  it("hides redundant single-series legends unless the author asks for one", () => {
+  it("leaves the legend to the Svelte one, whatever the author asked for", () => {
+    // The built-in legend paginated and its clicks hid series. The Svelte
+    // legend wraps, uses real buttons and pins/highlights instead, so the
+    // ECharts option never draws one. Which items a legend lists, and whether
+    // it shows at all, is now `reportLegendModel` — covered in
+    // tests/unit/reportChartInteraction.test.js.
     expect(buildReportChartOption(chart("line")).legend.show).toBe(false);
     const explicit = chart("line");
     explicit.option.legend = { show: true };
-    expect(buildReportChartOption(explicit).legend.show).toBe(true);
-    expect(buildReportChartOption(pie()).legend.show).toBe(true);
+    expect(buildReportChartOption(explicit).legend.show).toBe(false);
+    expect(buildReportChartOption(pie()).legend.show).toBe(false);
     const mixed = fromExample("bar");
     delete mixed.option.legend;
-    expect(buildReportChartOption(mixed).legend.show).toBe(true);
+    expect(buildReportChartOption(mixed).legend.show).toBe(false);
     expect(buildReportChartOption(mixed).tooltip.trigger).toBe("axis");
   });
 
@@ -206,7 +213,8 @@ describe("bounded ECharts report vocabulary", () => {
       { name: "Project" },
     ]);
     expect(option.series[0].data[1].category).toBe(1);
-    expect(option.legend.show).toBe(true);
+    // The categories still drive the legend, but the Svelte one renders it.
+    expect(option.legend.show).toBe(false);
     expect(reportChartRows(data).rows[1][1]).toBe("Atlas (Project)");
     for (const mutate of [
       (d) => (d.option.series[0].data[0].category = 2),

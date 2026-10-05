@@ -336,6 +336,10 @@ const adapterCommandTable = [
     true,
   ],
   ["listWork", "work.list", (filters) => ({ options: q(filters) })],
+  // One request per page for every ref a page is about to chip, which is what
+  // keeps a table of chips off an N+1. The contract caps a batch at 200.
+  ["resolveRefs", "refs.resolve", (refs) => ({ options: b({ refs }) })],
+  ["getCardPlan", "plan.show", (cardId) => p(pathParams({ card_id: cardId }))],
   ["getWork", "work.get", (ref) => p(pathParams({ card_ref: ref }))],
   ["createWork", "work.create", (payload) => ({ options: b(payload) }), true],
   [

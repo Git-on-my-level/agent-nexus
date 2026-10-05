@@ -88,7 +88,9 @@ export const QA_SCENES = [
     path: "/o/local/w/local",
     workspaceMode: "home-first-run",
     waitFor: async (page) => {
-      await page.waitForSelector("text=Enroll the machine your agents run on");
+      // The Overview no longer lists Inbox items one by one; it links across
+      // with a count, and the item's own title lives in the Inbox.
+      await page.waitForSelector("text=1 item needs you");
       await page.waitForSelector("text=No open initiatives.");
       await page.locator("[data-overview-detail]:not([open])").waitFor();
     },

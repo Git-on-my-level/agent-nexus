@@ -1,5 +1,20 @@
 <script>
-  let { panel } = $props();
+  import RefText from "$lib/components/RefText.svelte";
+  let {
+    panel,
+    resolved = new Map(),
+    organizationSlug = "",
+    workspaceSlug = "",
+    onpreview = null,
+    onpreviewclose = null,
+  } = $props();
+  const refProps = () => ({
+    resolved,
+    organizationSlug,
+    workspaceSlug,
+    onpreview,
+    onpreviewclose,
+  });
   function sparkline(values) {
     const minimum = Math.min(...values);
     const maximum = Math.max(...values);
@@ -22,7 +37,9 @@
     >
     <div>
       <p class="callout-label">{panel.data.label ?? panel.data.tone}</p>
-      <p class="callout-text">{panel.data.text}</p>
+      <p class="callout-text">
+        <RefText text={panel.data.text} {...refProps()} />
+      </p>
     </div>
   </div>
 {:else if panel.type === "metric-strip"}
@@ -31,7 +48,9 @@
       <div class="metric" data-tone={item.tone ?? "neutral"}>
         <p class="metric-label">{item.label}</p>
         <strong class="metric-value">{item.value}</strong>
-        <p class="metric-detail">{item.detail}</p>
+        <p class="metric-detail">
+          <RefText text={item.detail} {...refProps()} />
+        </p>
         {#if item.trend}
           {@const points = sparkline(item.trend)}
           <svg

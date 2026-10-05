@@ -26,19 +26,83 @@ export const REPORT_CHART_LIMITS = Object.freeze({
   minNonzeroMagnitude: 1e-100,
   errors: 20,
 });
+/**
+ * Series colours, per palette and per theme.
+ *
+ * Two rules shape these ramps:
+ *
+ * 1. **Lightness, not hue alone.** Every ramp descends in relative luminance,
+ *    so series stay apart in greyscale, for a colour-blind reader, and in a
+ *    printout. This is the live fix: the old ramps put two series 1.01:1 apart
+ *    — the same lightness in different hues, which is no separation at all.
+ * 2. **Per surface.** Every colour clears 3:1 against the background it is
+ *    drawn on (WCAG 1.4.11, the bar for graphical marks).
+ *
+ * The second rule is groundwork, not a fix for something a reader sees today:
+ * `app.css` currently defines one dark token set and the app has no light
+ * theme, so only the dark ramps are ever drawn. The old single ramp would have
+ * sat at ~1.44:1 on a light surface, which is the bug a light theme would have
+ * shipped with. `reportSeriesColors` picks from the actual background, so the
+ * day a light theme lands the series colours follow it instead of needing this
+ * fixed a second time.
+ *
+ * The four names are contract — `contracts/visualreport/chart.go` validates
+ * them — so the names stay fixed and only the values here change. Each name
+ * owns a distinct set of hue families, which is what keeps the four palettes
+ * telling apart from one another.
+ *
+ * `tests/unit/reportChartPalettes.test.js` re-derives every claim above, so a
+ * future edit that flattens a ramp fails rather than ships.
+ */
 export const REPORT_CHART_PALETTES = Object.freeze({
-  ocean: ["#67e8f9", "#818cf8", "#2dd4bf", "#c4b5fd", "#7dd3fc", "#f0abfc"],
-  forest: ["#6ee7b7", "#a3e635", "#67e8f9", "#fcd34d", "#c4b5fd", "#93c5fd"],
-  sunset: ["#fda4af", "#fdba74", "#fcd34d", "#c4b5fd", "#7dd3fc", "#6ee7b7"],
-  categorical: [
-    "#7dd3fc",
-    "#fda4af",
-    "#6ee7b7",
-    "#fcd34d",
-    "#c4b5fd",
-    "#fdba74",
-  ],
+  ocean: Object.freeze({
+    dark: ["#a5f3fc", "#c7d2fe", "#c4b5fd", "#14b8a6", "#3b82f6", "#0369a1"],
+    light: ["#0891b2", "#0284c7", "#2563eb", "#4f46e5", "#115e59", "#4c1d95"],
+  }),
+  forest: Object.freeze({
+    dark: ["#d9f99d", "#bae6fd", "#fbbf24", "#10b981", "#0d9488", "#4f46e5"],
+    light: ["#d97706", "#059669", "#6366f1", "#0f766e", "#3f6212", "#0c4a6e"],
+  }),
+  sunset: Object.freeze({
+    dark: ["#fed7aa", "#f0abfc", "#f59e0b", "#a78bfa", "#f43f5e", "#be185d"],
+    light: ["#d97706", "#f43f5e", "#db2777", "#7c3aed", "#9a3412", "#701a75"],
+  }),
+  categorical: Object.freeze({
+    dark: ["#d9f99d", "#f5d0fe", "#7dd3fc", "#f59e0b", "#818cf8", "#be123c"],
+    light: ["#65a30d", "#d946ef", "#0284c7", "#b45309", "#be123c", "#3730a3"],
+  }),
 });
+
+/** WCAG relative luminance of a `#rrggbb` colour. */
+export function relativeLuminance(hex) {
+  const value = String(hex ?? "").trim();
+  if (!/^#[0-9a-f]{6}$/i.test(value)) return NaN;
+  const channel = (offset) => {
+    const part = Number.parseInt(value.slice(offset, offset + 2), 16) / 255;
+    return part <= 0.04045 ? part / 12.92 : ((part + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+}
+
+/** WCAG contrast ratio between two `#rrggbb` colours. */
+export function contrastRatio(a, b) {
+  const first = relativeLuminance(a);
+  const second = relativeLuminance(b);
+  if (!Number.isFinite(first) || !Number.isFinite(second)) return NaN;
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+}
+
+/**
+ * Which ramp a surface wants. Derived from the background rather than a theme
+ * flag so a workspace that overrides the theme tokens still gets series
+ * colours that contrast with whatever surface it actually renders on.
+ */
+export function reportSeriesColors(palette, background) {
+  const ramps = REPORT_CHART_PALETTES[palette] ?? REPORT_CHART_PALETTES.ocean;
+  const luminance = relativeLuminance(background);
+  const light = Number.isFinite(luminance) ? luminance > 0.5 : false;
+  return [...(light ? ramps.light : ramps.dark)];
+}
 const CARTESIAN = ["line", "bar", "scatter", "heatmap"];
 // Literal axis label decoration such as "{value}%" or "$ {value}". ECharts
 // interpolates only {value}; braces and markup characters are rejected.
@@ -596,15 +660,9 @@ export function buildReportChartOption(data, appearance = {}) {
     )
       theme[key] = appearance[key];
   }
-  const colors = [...REPORT_CHART_PALETTES[data.palette ?? "ocean"]];
-  const first = input.series[0];
-  // A single-series legend repeats the panel title; show one only when it
-  // distinguishes something, unless the author explicitly asks.
-  const legendShown =
-    input.legend?.show ??
-    (input.series.length > 1 ||
-      first.type === "pie" ||
-      (first.type === "graph" && first.categories !== undefined));
+  const colors = reportSeriesColors(data.palette ?? "ocean", theme.bg);
+  // Legend placement moved out of the canvas; `reportLegendModel` decides
+  // whether one renders and what it lists.
   const axisTooltip = input.series.some(
     (series) =>
       ["line", "bar"].includes(series.type) &&
@@ -647,27 +705,26 @@ export function buildReportChartOption(data, appearance = {}) {
         type: "shadow",
         shadowStyle: { color: "rgba(255, 255, 255, 0.04)" },
       },
-      renderMode: "richText",
+      // `html` lets the formatter return a built element rather than a string.
+      // Series names are agent-authored, so the builder sets `textContent` and
+      // never assembles markup: report strings stay data, never code. The old
+      // `richText` mode could not draw a swatch or a two-column row at all.
+      renderMode: "html",
+      appendToBody: false,
       confine: true,
       backgroundColor: theme.panel,
       borderColor: theme.strong,
       textStyle: { color: theme.fg, fontSize: 12 },
     },
-    legend: {
-      show: legendShown,
-      type: "scroll",
-      bottom: 0,
-      textStyle: { color: theme.muted, fontSize: 11 },
-      pageTextStyle: { color: theme.muted },
-      pageIconColor: "#67e8f9",
-      pageIconInactiveColor: theme.strong,
-      itemWidth: 14,
-      itemHeight: 8,
-    },
+    // The legend is rendered in Svelte, outside the canvas: it has to wrap
+    // rather than paginate, its items have to be real buttons, and clicking
+    // one has to pin and highlight a series instead of hiding it. None of
+    // those are things the built-in legend does.
+    legend: { show: false },
     grid: {
       top: 28,
       right: 44,
-      bottom: legendShown ? 78 : 52,
+      bottom: 52,
       left: 52,
       outerBoundsMode: "same",
       outerBoundsContain: "all",
@@ -815,7 +872,7 @@ export function buildReportChartOption(data, appearance = {}) {
         };
         base.labelLayout = { hideOverlap: true };
         base.top = "14%";
-        base.bottom = legendShown ? "20%" : "10%";
+        base.bottom = "10%";
         base.left = "14%";
         base.right = 128;
       } else if (series.type === "sankey") {
@@ -842,14 +899,14 @@ export function buildReportChartOption(data, appearance = {}) {
         base.left = "3%";
         base.right = 112;
         base.top = "10%";
-        base.bottom = legendShown ? "18%" : "8%";
+        base.bottom = "8%";
       } else if (series.type === "treemap") {
         base.data = series.data.map(treeCopy);
         base.roam = false;
         base.nodeClick = false;
         base.breadcrumb = { show: false };
         base.top = 10;
-        base.bottom = legendShown ? 38 : 4;
+        base.bottom = 4;
         base.left = 0;
         base.right = 0;
         base.label = { color: theme.fg, fontSize: 12, overflow: "truncate" };
