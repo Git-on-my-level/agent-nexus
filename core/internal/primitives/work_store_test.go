@@ -491,7 +491,7 @@ func TestWorkMigrationRelationRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	relation := map[string]any{"kind": "related", "ref": initiative["ref"], "fleet_sync_migration": "db92c565fbc1c2fa88fe2538306f9292c8523aab5eb8210f7af5b245aa036703", "note": "Folded into initiative; archived detail retained, source remains authoritative."}
+	relation := map[string]any{"kind": "related", "ref": initiative["ref"], "adapter_migration": "db92c565fbc1c2fa88fe2538306f9292c8523aab5eb8210f7af5b245aa036703", "note": "Folded into initiative; archived detail retained, source remains authoritative."}
 	_, err = s.PatchWork(ctx, "actor-1", legacy["ref"].(string), 1, map[string]any{"relations": []any{relation}})
 	if err != nil {
 		t.Fatalf("migration relation patch: %T: %v", err, err)

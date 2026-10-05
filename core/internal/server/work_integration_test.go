@@ -80,7 +80,7 @@ func TestWorkHTTPMigrationRelationRoundTrip(t *testing.T) {
 	legacy := created["work"].(map[string]any)
 	board := workPostJSON(t, h.baseURL+"/boards", `{"actor_id":"actor-1","board":{"title":"Initiatives"}}`, http.StatusCreated)["board"].(map[string]any)
 	initiative := workPostJSON(t, h.baseURL+"/work", fmt.Sprintf(`{"actor_id":"actor-1","board_ref":%q,"title":"Reliable execution initiative"}`, board["ref"]), http.StatusCreated)["work"].(map[string]any)
-	workPostJSON(t, h.baseURL+"/work/"+asString(legacy["ref"])+"/observations", `{"actor_id":"actor-1","observation":{"idempotency_key":"fleet-read","reader_id":"fleet-sync/github","reader_revision":"0.1.0","observed_at":"2026-10-01T00:00:00Z","status":"reported","source_revision":"source-fence","facts":{"phase":"blocked"}}}`, http.StatusOK)
+	workPostJSON(t, h.baseURL+"/work/"+asString(legacy["ref"])+"/observations", `{"actor_id":"actor-1","observation":{"idempotency_key":"adapter-read","reader_id":"example-adapter/github","reader_revision":"0.1.0","observed_at":"2026-10-01T00:00:00Z","status":"reported","source_revision":"source-fence","facts":{"phase":"blocked"}}}`, http.StatusOK)
 	legacy = workGetJSON(t, h.baseURL+"/work/"+asString(legacy["ref"]), http.StatusOK)["work"].(map[string]any)
 	_, err := h.workspace.DB().ExecContext(context.Background(), `WITH RECURSIVE numbers(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM numbers WHERE n<1000)
 		INSERT OR IGNORE INTO events(id,handle,type,ts,actor_id,thread_id,refs_json,payload_json)
@@ -89,12 +89,12 @@ func TestWorkHTTPMigrationRelationRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body := fmt.Sprintf(`{"actor_id":"actor-1","if_version":1,"patch":{"relations":[{"kind":"related","ref":%q,"fleet_sync_migration":"db92c565fbc1c2fa88fe2538306f9292c8523aab5eb8210f7af5b245aa036703","note":"Folded into initiative; archived detail retained, source remains authoritative."}]}}`, initiative["ref"])
+	body := fmt.Sprintf(`{"actor_id":"actor-1","if_version":1,"patch":{"relations":[{"kind":"related","ref":%q,"adapter_migration":"db92c565fbc1c2fa88fe2538306f9292c8523aab5eb8210f7af5b245aa036703","note":"Folded into initiative; archived detail retained, source remains authoritative."}]}}`, initiative["ref"])
 	resp := patchJSONExpectStatus(t, h.baseURL+"/work/"+asString(legacy["ref"]), body, http.StatusOK)
 	resp.Body.Close()
 	readback := workGetJSON(t, h.baseURL+"/work/"+asString(legacy["ref"]), http.StatusOK)["work"].(map[string]any)
 	relation := readback["relations"].([]any)[0].(map[string]any)
-	if relation["ref"] != initiative["ref"] || relation["fleet_sync_migration"] != "db92c565fbc1c2fa88fe2538306f9292c8523aab5eb8210f7af5b245aa036703" || relation["note"] != "Folded into initiative; archived detail retained, source remains authoritative." {
+	if relation["ref"] != initiative["ref"] || relation["adapter_migration"] != "db92c565fbc1c2fa88fe2538306f9292c8523aab5eb8210f7af5b245aa036703" || relation["note"] != "Folded into initiative; archived detail retained, source remains authoritative." {
 		t.Fatalf("migration relation did not round trip: %#v", relation)
 	}
 	if readback["decision_revision"] != "source-fence" || readback["phase"] != legacy["phase"] || readback["updated_at"] != legacy["updated_at"] || readback["version"] != float64(2) {
@@ -174,7 +174,7 @@ func TestArchiveCardLatestObservationFence(t *testing.T) {
 	workPostJSON(t, archiveURL, `{"actor_id":"actor-1","if_latest_observation_id":"missing"}`, http.StatusConflict)
 	observe := func(key, at string) {
 		t.Helper()
-		body := fmt.Sprintf(`{"actor_id":"actor-1","observation":{"idempotency_key":%q,"reader_id":"fleet-sync/github","reader_revision":"1","observed_at":%q,"status":"reported","facts":{"phase":"blocked"}}}`, key, at)
+		body := fmt.Sprintf(`{"actor_id":"actor-1","observation":{"idempotency_key":%q,"reader_id":"example-adapter/github","reader_revision":"1","observed_at":%q,"status":"reported","facts":{"phase":"blocked"}}}`, key, at)
 		workPostJSON(t, h.baseURL+"/work/"+ref+"/observations", body, http.StatusOK)
 	}
 	observe("first", "2026-10-01T00:00:00Z")
