@@ -14,7 +14,7 @@ import (
 // both the card's backing thread (including legacy parent_thread_id) and its
 // containing board's backing thread must be readable, regardless of archive.
 func inboxItemAccessible(r *http.Request, opts handlerOptions, threadID string, item map[string]any) bool {
-	if !threadAccessible(r, opts, threadID) {
+	if strings.TrimSpace(threadID) != "" && !inboxSubjectRefAccessible(r, opts, "thread:"+threadID) {
 		return false
 	}
 	refs := append([]string{anyString(item["subject_ref"])}, stringSliceAny(item["related_refs"])...)
@@ -55,7 +55,19 @@ func inboxSubjectRefAccessible(r *http.Request, opts handlerOptions, ref string)
 	}
 	switch kind {
 	case "thread":
-		return threadAccessible(r, opts, id)
+		if !threadAccessible(r, opts, id) {
+			return false
+		}
+		owners, err := opts.primitiveStore.InboxThreadAccessOwners(r.Context(), id)
+		if err != nil {
+			return false
+		}
+		for _, owner := range owners {
+			if !canAccessPMThread(r, opts, map[string]any{"pm_actor_id": owner}) {
+				return false
+			}
+		}
+		return true
 	case "board":
 		board, err := opts.primitiveStore.GetBoard(r.Context(), id)
 		if err != nil {

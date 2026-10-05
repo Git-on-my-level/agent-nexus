@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,24 +26,28 @@ func TestArchivedInboxAsksEnforceSubjectCardAndBoardPrivacy(t *testing.T) {
 			agent := seedMachinePrincipalForLockoutTest(t, ctx, db, "subject-agent", "subject-agent-actor", "subject.agent", "subject-agent-token")
 			token := map[string]string{"owner": owner.AccessToken, "stranger": stranger.AccessToken, "agent": agent.AccessToken}[role]
 			store := env.primitiveStore.(*primitives.Store)
-			items := make([]primitives.DerivedInboxItem, 0, 3)
+			items := make([]primitives.DerivedInboxItem, 0, 8)
 			want := map[string]string{}
 			titles := map[string]string{}
-			for _, privacy := range []string{"board", "card", "public"} {
+			for _, privacy := range []string{"board", "card", "public", "board-thread", "card-thread", "public-thread", "public-source", "board-legacy-thread"} {
 				board, err := store.CreateBoard(ctx, owner.ActorID, map[string]any{"title": privacy + " board"})
 				if err != nil {
 					t.Fatal(err)
 				}
 				boardID := anyString(board["id"])
-				card, err := store.CreateBoardCard(ctx, owner.ActorID, boardID, primitives.AddBoardCardInput{Title: privacy + " card"})
+				cardInput := primitives.AddBoardCardInput{Title: privacy + " card"}
+				if privacy == "public-source" {
+					cardInput.ParentThreadID = seedStreamPrivacyThread(t, store, owner.ActorID, false)
+				}
+				card, err := store.CreateBoardCard(ctx, owner.ActorID, boardID, cardInput)
 				if err != nil {
 					t.Fatal(err)
 				}
 				cardThread := anyString(card.Card["thread_id"])
 				privateThread := ""
-				if privacy == "board" {
+				if strings.HasPrefix(privacy, "board") || privacy == "public-source" {
 					privateThread = anyString(board["thread_id"])
-				} else if privacy == "card" {
+				} else if strings.HasPrefix(privacy, "card") {
 					privateThread = cardThread
 				}
 				if privateThread != "" {
@@ -54,6 +59,20 @@ func TestArchivedInboxAsksEnforceSubjectCardAndBoardPrivacy(t *testing.T) {
 				// request's own thread public too, so its privacy alone cannot help.
 				askThread := seedStreamPrivacyThread(t, store, owner.ActorID, false)
 				ref := "card:" + anyString(card.Card["id"])
+				if privacy == "public-source" {
+					// A modern parent is provenance, not the card's backing thread.
+					askThread = cardInput.ParentThreadID
+					ref = "thread:" + askThread
+				}
+				if privacy == "board-legacy-thread" {
+					if _, err := db.Exec(`UPDATE cards SET thread_id='',parent_thread_id=? WHERE id=?`, cardThread, card.Card["id"]); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if strings.HasSuffix(privacy, "-thread") {
+					askThread = cardThread
+					ref = "thread:" + cardThread
+				}
 				event, err := store.AppendEvent(ctx, owner.ActorID, map[string]any{
 					"ts":   time.Now().UTC().Format(time.RFC3339Nano),
 					"type": "human_attention_requested", "thread_id": askThread,
@@ -84,7 +103,7 @@ func TestArchivedInboxAsksEnforceSubjectCardAndBoardPrivacy(t *testing.T) {
 				if _, err := store.ArchiveBoard(ctx, owner.ActorID, boardID); err != nil {
 					t.Fatal(err)
 				}
-				if privacy == "public" || role == "owner" {
+				if strings.HasPrefix(privacy, "public") || role == "owner" {
 					want[ask.ID] = privacy + " confidential body"
 				}
 			}
@@ -102,7 +121,7 @@ func TestArchivedInboxAsksEnforceSubjectCardAndBoardPrivacy(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					if summary.Count != len(want) || (limit == "" && len(summary.Asks) != len(want)) || (limit != "" && len(summary.Asks) != 0) {
+					if summary.Count != len(want) || (limit == "" && len(summary.Asks) != min(len(want), 5)) || (limit != "" && len(summary.Asks) != 0) {
 						t.Fatalf("summary leaked or lost archived asks: %#v; want %#v", summary, want)
 					}
 					for _, ask := range summary.Asks {
