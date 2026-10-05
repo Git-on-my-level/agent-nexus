@@ -29,6 +29,13 @@ def legacy_item(work):
             'repo': facts.get('repo'), 'legacy_refs': [work['ref']]}
 
 
+def observation_id(work):
+    value = (work.get('latest_observation') or {}).get('id')
+    if not isinstance(value, str) or not value:
+        raise ValueError('source observation has no id; cannot archive safely')
+    return value
+
+
 def source_fence(work):
     # Observation changes can leave the canonical card updated_at unchanged.
     return digest({key: work.get(key) for key in ('source', 'latest_observation', 'head_revision_ref', 'updated_at', 'phase')})
@@ -121,7 +128,8 @@ def apply_migration(client, manifest, workspace, approval):
         readback = client.work_get(row['ref'])
         if relation not in (readback.get('relations') or []) or source_fence(readback) != row['source_fence']:
             raise ValueError(f"{row['ref']}: tombstone readback/source changed; stopping")
-        client.card_archive(row['ref'], board['updated_at'])
+        client.card_archive(row['ref'], board['updated_at'],
+                            observation_id=observation_id(readback), work_version=readback['version'])
         archived.append(row['ref'])
     return {'archived': archived, 'already_archived': done,
             'deferred_unmatched': manifest['counts']['deferred_unmatched'], 'created': 0}

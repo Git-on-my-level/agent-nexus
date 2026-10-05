@@ -4576,6 +4576,10 @@
                 "type": "datetime"
               },
               {
+                "name": "if_latest_observation_id",
+                "type": "string"
+              },
+              {
                 "name": "if_version",
                 "type": "integer"
               }
@@ -20714,6 +20718,10 @@
               {
                 "name": "if_board_updated_at",
                 "type": "datetime"
+              },
+              {
+                "name": "if_latest_observation_id",
+                "type": "string"
               },
               {
                 "name": "if_version",

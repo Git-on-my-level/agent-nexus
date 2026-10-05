@@ -11807,6 +11807,10 @@ components:
           type: integer
           minimum: 0
           description: Optional source work-version fence for atomic archive after a transfer has been verified.
+        if_latest_observation_id:
+          type: string
+          minLength: 1
+          description: Optional atomic fence matching work.latest_observation.id from work get. A different or absent latest successful observation returns 409 conflict, including observations that leave phase and board timestamp unchanged. Checked in the archive transaction; use with if_board_updated_at and if_version to fence canonical and annotation changes too.
 
     SecretMetadata:
       type: object

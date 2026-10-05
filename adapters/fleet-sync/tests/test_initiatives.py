@@ -71,7 +71,10 @@ class Client:
     def board_get(self, ref):
         return {'updated_at': str(self.stamp)}
 
-    def card_archive(self, ref, stamp):
+    def card_archive(self, ref, stamp, *, observation_id, work_version):
+        if (observation_id != self.works[ref]['latest_observation']['id']
+                or work_version != self.works[ref]['version']):
+            raise AnxError('conflict', 'source changed')
         if stamp != str(self.stamp):
             raise AnxError('conflict', 'board changed')
         self.writes.append(('archive', ref))
@@ -84,7 +87,7 @@ class Client:
         work = {'ref': ref, 'title': it['title'], 'phase': it['status'], 'updated_at': 'before',
                 'source': {k: it[k] for k in ('authority', 'connection_id', 'native_id', 'url')},
                 'head_revision_ref': 'revision:old', 'version': 1, 'relations': [], 'latest_observation': {
-                    'reader_id': 'fleet-sync/multica', 'facts': {'project': it['project'], 'labels': it['labels']}}}
+                    'id': f'observation:{n}', 'reader_id': 'fleet-sync/multica', 'facts': {'project': it['project'], 'labels': it['labels']}}}
         self.works[ref] = work
         self.cards[ref] = {'ref': ref, 'title': it['title'], 'summary': 'Original evidence',
                            'head_revision_ref': 'revision:old', 'board_ref': 'board:main'}
@@ -298,6 +301,21 @@ class MigrationTests(unittest.TestCase):
         manifest = inventory(client, mapping(), WS)
         self.assertEqual(manifest['counts']['legacy'], 0)
         self.assertEqual(len(manifest['skipped']), 1)
+
+    def test_new_observation_after_final_readback_prevents_local_migration_archive(self):
+        client = Client()
+        ref = client.add_legacy(1)
+        manifest = inventory(client, mapping(), WS)
+        original = client.card_archive
+
+        def observe_before_archive(ref, stamp, **fences):
+            client.works[ref]['latest_observation']['id'] = 'new-poll-same-phase'
+            return original(ref, stamp, **fences)
+
+        with patch.object(client, 'card_archive', side_effect=observe_before_archive):
+            with self.assertRaises(AnxError):
+                apply_migration(client, manifest, WS, manifest['digest'])
+        self.assertFalse(client.cards[ref].get('archived_at'))
 
     def test_archive_failure_can_resume_after_tombstone(self):
         client = Client()

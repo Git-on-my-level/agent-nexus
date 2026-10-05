@@ -157,3 +157,52 @@ func workGetJSON(t *testing.T, url string, status int) map[string]any {
 	}
 	return out
 }
+
+func TestArchiveCardLatestObservationFence(t *testing.T) {
+	h := newPrimitivesTestServer(t)
+	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+	created := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"actor-1","title":"Legacy detail","source":{"authority":"github","connection_id":"fixture","native_id":"org/repo/issues/observation-fence"}}`, http.StatusCreated)
+	legacy := created["work"].(map[string]any)
+	ref := asString(legacy["ref"])
+	archiveURL := h.baseURL + "/cards/" + ref + "/archive"
+	for _, body := range []string{
+		`{"actor_id":"actor-1","if_latest_observation_id":""}`,
+		`{"actor_id":"actor-1","if_latest_observation_id":"   "}`,
+	} {
+		workPostJSON(t, archiveURL, body, http.StatusBadRequest)
+	}
+	workPostJSON(t, archiveURL, `{"actor_id":"actor-1","if_latest_observation_id":"missing"}`, http.StatusConflict)
+	observe := func(key, at string) {
+		t.Helper()
+		body := fmt.Sprintf(`{"actor_id":"actor-1","observation":{"idempotency_key":%q,"reader_id":"fleet-sync/github","reader_revision":"1","observed_at":%q,"status":"reported","facts":{"phase":"blocked"}}}`, key, at)
+		workPostJSON(t, h.baseURL+"/work/"+ref+"/observations", body, http.StatusOK)
+	}
+	observe("first", "2026-10-01T00:00:00Z")
+	before := workGetJSON(t, h.baseURL+"/work/"+ref, http.StatusOK)["work"].(map[string]any)
+	oldID := before["latest_observation"].(map[string]any)["id"]
+	boardURL := h.baseURL + "/boards/" + asString(before["board_ref"])
+	board := workGetJSON(t, boardURL, http.StatusOK)["board"].(map[string]any)
+	observe("same-phase-new-poll", "2026-10-01T00:01:00Z")
+	after := workGetJSON(t, h.baseURL+"/work/"+ref, http.StatusOK)["work"].(map[string]any)
+	latestID := after["latest_observation"].(map[string]any)["id"]
+	currentBoard := workGetJSON(t, boardURL, http.StatusOK)["board"].(map[string]any)
+	if oldID == latestID || before["version"] != after["version"] || before["phase"] != after["phase"] || board["updated_at"] != currentBoard["updated_at"] {
+		t.Fatalf("fixture must change observation only: before=%#v after=%#v boards=%#v / %#v", before, after, board, currentBoard)
+	}
+	body := fmt.Sprintf(`{"actor_id":"actor-1","if_board_updated_at":%q,"if_version":%v,"if_latest_observation_id":%q}`, board["updated_at"], after["version"], oldID)
+	workPostJSON(t, archiveURL, body, http.StatusConflict)
+	card := workGetJSON(t, h.baseURL+"/cards/"+ref, http.StatusOK)["card"].(map[string]any)
+	if asString(card["archived_at"]) != "" {
+		t.Fatal("stale observation fence archived the card")
+	}
+	boardAfterConflict := workGetJSON(t, boardURL, http.StatusOK)["board"].(map[string]any)
+	if boardAfterConflict["updated_at"] != board["updated_at"] {
+		t.Fatal("failed archive mutated board")
+	}
+	body = fmt.Sprintf(`{"actor_id":"actor-1","if_board_updated_at":%q,"if_version":%v,"if_latest_observation_id":%q}`, board["updated_at"], after["version"], latestID)
+	workPostJSON(t, archiveURL, body, http.StatusOK)
+	card = workGetJSON(t, h.baseURL+"/cards/"+ref, http.StatusOK)["card"].(map[string]any)
+	if asString(card["archived_at"]) == "" {
+		t.Fatal("matching fences did not archive")
+	}
+}

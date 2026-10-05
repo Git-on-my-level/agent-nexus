@@ -306,3 +306,15 @@ fenced examples and counting empty Markdown checkbox lines.
 ## Declared live series
 
 See `../../docs/live-series.md` for adapter declaration, scoped token exchange, bounded queries, caps, retention, panel sources and fallback semantics. The canonical paths and JSON schemas are in `contracts/anx-openapi.yaml`.
+
+### Conditional card archive
+
+`POST /cards/{card_id}/archive` accepts optional `if_latest_observation_id`, a
+nonempty string obtained from `work get` → `latest_observation.id`. Core checks
+it against the card's latest successful observation in the archive transaction
+and on the archive SQL mutation. Missing/different observations return `409
+conflict`; an empty supplied string returns `400 invalid_request`. Omission
+preserves the existing archive behavior. Pair it with `if_board_updated_at` and
+`if_version` to also fence canonical card/board edits and work annotations.
+Successful source polls can change the observation ID without changing phase,
+board timestamp, or work version, so neither existing token replaces this fence.

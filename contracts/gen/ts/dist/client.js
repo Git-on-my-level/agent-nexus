@@ -2886,6 +2886,10 @@ export const commandRegistry = [
                     "type": "datetime"
                 },
                 {
+                    "name": "if_latest_observation_id",
+                    "type": "string"
+                },
+                {
                     "name": "if_version",
                     "type": "integer"
                 }

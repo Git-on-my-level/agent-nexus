@@ -237,8 +237,9 @@ type MoveBoardCardInput struct {
 }
 
 type RemoveBoardCardInput struct {
-	IfBoardUpdatedAt *string
-	IfWorkVersion    *int64
+	IfBoardUpdatedAt      *string
+	IfWorkVersion         *int64
+	IfLatestObservationID *string
 }
 
 type BoardCardMutationResult struct {
@@ -2330,6 +2331,21 @@ func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifi
 			return BoardCardMutationResult{}, ErrConflict
 		}
 	}
+	if input.IfLatestObservationID != nil {
+		if strings.TrimSpace(*input.IfLatestObservationID) == "" {
+			_ = tx.Rollback()
+			return BoardCardMutationResult{}, invalidBoardRequest("if_latest_observation_id must be nonempty")
+		}
+		var latest string
+		err := tx.QueryRowContext(ctx, `SELECT COALESCE(latest_observation_id,'') FROM work_metadata WHERE card_id = ?`, cardRow.CardID).Scan(&latest)
+		if err != nil || latest != *input.IfLatestObservationID {
+			_ = tx.Rollback()
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return BoardCardMutationResult{}, fmt.Errorf("read archive observation fence: %w", err)
+			}
+			return BoardCardMutationResult{}, ErrConflict
+		}
+	}
 	if cardRow.TrashedAt.Valid && strings.TrimSpace(cardRow.TrashedAt.String) != "" {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -2364,6 +2380,12 @@ func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifi
 		archiveQuery += ` AND EXISTS (SELECT 1 FROM work_metadata WHERE card_id = ? AND version = ?)`
 		archiveArgs = append(archiveArgs, cardRow.CardID, *input.IfWorkVersion)
 	}
+	if input.IfLatestObservationID != nil {
+		// Keep the observation fence on the mutation itself. Successful polls
+		// can replace this ID without changing either the board or work version.
+		archiveQuery += ` AND EXISTS (SELECT 1 FROM work_metadata WHERE card_id = ? AND latest_observation_id = ?)`
+		archiveArgs = append(archiveArgs, cardRow.CardID, *input.IfLatestObservationID)
+	}
 	archiveResult, err := tx.ExecContext(ctx, archiveQuery, archiveArgs...)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
@@ -2371,7 +2393,7 @@ func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifi
 		}
 		return BoardCardMutationResult{}, fmt.Errorf("archive board card: %w", err)
 	}
-	if input.IfWorkVersion != nil {
+	if input.IfWorkVersion != nil || input.IfLatestObservationID != nil {
 		rows, rowsErr := archiveResult.RowsAffected()
 		if rowsErr != nil || rows != 1 {
 			if rbErr := tx.Rollback(); rbErr != nil {
