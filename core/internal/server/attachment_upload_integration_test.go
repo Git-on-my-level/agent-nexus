@@ -11,6 +11,7 @@ import (
 )
 
 func TestArtifactAttachmentMultipartUploadAndContentHeaders(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)

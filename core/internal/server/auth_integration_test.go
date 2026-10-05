@@ -64,6 +64,7 @@ type authIntegrationEnv struct {
 }
 
 func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authIntegrationEnv {
+	requireIntegrationTest(t)
 	t.Helper()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
@@ -201,6 +202,7 @@ func authTestThreadUpdatedBy(t *testing.T, serverURL, accessToken string, topic 
 }
 
 func TestFirstPasskeyRegistrationWithBootstrapToken(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{
@@ -280,6 +282,7 @@ func TestFirstPasskeyRegistrationWithBootstrapToken(t *testing.T) {
 }
 
 func TestWorkspaceHumanGrantTokenExchangeAndValidation(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	const workspaceID = "ws_external_grant"
@@ -432,6 +435,7 @@ func TestWorkspaceHumanGrantTokenExchangeAndValidation(t *testing.T) {
 }
 
 func TestWorkspaceHumanGrantMissingExpRejected(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	const workspaceID = "ws_external_grant_missing_exp"
@@ -456,6 +460,7 @@ func TestWorkspaceHumanGrantMissingExpRejected(t *testing.T) {
 }
 
 func TestWorkspaceHumanGrantUnknownKidRefreshFailureReturnsUnavailable(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	const workspaceID = "ws_external_grant_unknown_kid_unavailable"
@@ -496,6 +501,7 @@ func TestWorkspaceHumanGrantUnknownKidRefreshFailureReturnsUnavailable(t *testin
 }
 
 func TestWorkspaceHumanGrantReplayBlockedAfterPostConsumptionFailure(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	const workspaceID = "ws_external_grant_replay_after_failure"
@@ -560,6 +566,7 @@ func TestWorkspaceHumanGrantReplayBlockedAfterPostConsumptionFailure(t *testing.
 }
 
 func TestWorkspaceManagedAgentGrantTokenExchangeAndValidation(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	const workspaceID = "ws_managed_grant"
@@ -756,6 +763,7 @@ func TestWorkspaceManagedAgentGrantTokenExchangeAndValidation(t *testing.T) {
 }
 
 func TestExplicitDevModeKeepsLegacyActorFlowAndAnonymousWorkspaceAccess(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{
@@ -1105,6 +1113,7 @@ type workspaceManagedGrantTokenOptions struct {
 }
 
 func newWorkspaceHumanGrantTestFixture(t *testing.T, workspaceID string, audience string) *workspaceHumanGrantTestFixture {
+	requireIntegrationTest(t)
 	t.Helper()
 
 	primaryPublic, primaryPrivate, err := ed25519.GenerateKey(rand.Reader)
@@ -1540,6 +1549,7 @@ func mustDecodeJSONObject(t *testing.T, raw string) map[string]any {
 }
 
 func TestPasskeyDevBypassDisabledWithoutDedicatedFlag(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{
@@ -1563,6 +1573,7 @@ func TestPasskeyDevBypassDisabledWithoutDedicatedFlag(t *testing.T) {
 }
 
 func TestPasskeyDevBypassCanRunWithoutDevActorMode(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{
@@ -1628,6 +1639,7 @@ func TestPasskeyDevBypassCanRunWithoutDevActorMode(t *testing.T) {
 }
 
 func TestPasskeyDevRegisterLinkedSeedActorAndSoleLogin(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{
@@ -1675,6 +1687,7 @@ func TestPasskeyDevRegisterLinkedSeedActorAndSoleLogin(t *testing.T) {
 }
 
 func TestPasskeyDevLoginRequiresDisambiguation(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{

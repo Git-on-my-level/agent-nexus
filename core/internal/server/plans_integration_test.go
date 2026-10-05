@@ -39,6 +39,7 @@ func planRequest(t *testing.T, method, endpoint string, body any, status int) ma
 }
 
 func TestPlanWriteRollsBackWhenEventCannotBeStored(t *testing.T) {
+	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"One","created_at":"2026-03-04T10:00:00Z"}}`, 201)
 	work := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"actor-1","title":"Atomic plan"}`, 201)["work"].(map[string]any)
@@ -57,6 +58,7 @@ func TestPlanWriteRollsBackWhenEventCannotBeStored(t *testing.T) {
 }
 
 func TestPlanAndBatchRefsRespectPrivateThreads(t *testing.T) {
+	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	ctx := context.Background()
 	store := h.primitiveStore.(*primitives.Store)
@@ -105,6 +107,7 @@ func TestPlanAndBatchRefsRespectPrivateThreads(t *testing.T) {
 }
 
 func TestPlanAPIProjectsCardsWorkReportsAndTimeline(t *testing.T) {
+	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"One","created_at":"2026-03-04T10:00:00Z"}}`, 201)
 	board := workPostJSON(t, h.baseURL+"/boards", `{"actor_id":"actor-1","board":{"title":"Initiatives"}}`, 201)["board"].(map[string]any)
@@ -161,6 +164,7 @@ func TestPlanAPIProjectsCardsWorkReportsAndTimeline(t *testing.T) {
 }
 
 func TestPlanThresholdAndRefLimits(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Setenv("ANX_PLAN_STALLED_AFTER", "24h")
 	if planStalledAfter().Hours() != 24 {
 		t.Fatal("threshold ignored")

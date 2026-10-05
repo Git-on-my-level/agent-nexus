@@ -15,6 +15,7 @@ import (
 )
 
 func TestRefreshDerivedTopicProjectionBasicFlow(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -113,6 +114,7 @@ func TestRefreshDerivedTopicProjectionBasicFlow(t *testing.T) {
 }
 
 func TestEnsureDerivedTopicProjectionRefreshesExpiredTimeSensitiveState(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -172,6 +174,7 @@ func TestEnsureDerivedTopicProjectionRefreshesExpiredTimeSensitiveState(t *testi
 }
 
 func TestDocumentThreadRetargetRefreshesBothDerivedProjections(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)

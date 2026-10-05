@@ -5,6 +5,20 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 repo_root="$(git rev-parse --show-toplevel)"
 cd "${repo_root}"
 
+# Tests run against this checkout. Refuse to certify another branch/tag's tree.
+# Preserve Git's input for pre-commit, and avoid running tests for deletions.
+push_data="$(cat)"
+has_update=false
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [[ -z "${local_ref}" || "${local_sha}" =~ ^0+$ ]] && continue
+  has_update=true
+  if [[ "$(git rev-parse "${local_sha}^{commit}")" != "$(git rev-parse HEAD)" ]]; then
+    echo "Check out ${local_ref} before pushing it so test-fast validates the pushed tree." >&2
+    exit 1
+  fi
+done <<< "${push_data}"
+[[ "${has_update}" == false ]] && exit 0
+
 pre_commit="${repo_root}/.venv/bin/pre-commit"
 if [[ ! -x "${pre_commit}" ]]; then
   echo "Missing ${pre_commit}; run: make setup" >&2
@@ -15,4 +29,4 @@ exec "${pre_commit}" hook-impl \
   --config="${repo_root}/.pre-commit-config.yaml" \
   --hook-type=pre-push \
   --hook-dir "${HERE}" \
-  -- "$@"
+  -- "$@" <<< "${push_data}"

@@ -23,6 +23,7 @@ import (
 )
 
 func TestMetaHandshakeAndGeneratedMetaEndpoints(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newMetaStreamTestHarness(t,
@@ -131,6 +132,7 @@ func TestMetaHandshakeAndGeneratedMetaEndpoints(t *testing.T) {
 }
 
 func TestVersionHeadersAndCLIOutdatedResponse(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newMetaStreamTestHarness(t,
@@ -195,6 +197,7 @@ func TestVersionHeadersAndCLIOutdatedResponse(t *testing.T) {
 }
 
 func TestEventsStreamResumesFromLastEventID(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newMetaStreamTestHarness(t, WithStreamPollInterval(20*time.Millisecond))
@@ -230,6 +233,7 @@ func TestEventsStreamResumesFromLastEventID(t *testing.T) {
 }
 
 func TestEventsStreamSurvivesServerWriteTimeout(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	server, _ := newMetaStreamTestServer(t, func(server *httptest.Server) {
@@ -253,6 +257,7 @@ func TestEventsStreamSurvivesServerWriteTimeout(t *testing.T) {
 }
 
 func TestEventsStreamEmitsDocumentLifecycleEventsForThread(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newMetaStreamTestHarness(t, WithStreamPollInterval(20*time.Millisecond))
@@ -365,6 +370,7 @@ func TestEventsStreamEmitsDocumentLifecycleEventsForThread(t *testing.T) {
 }
 
 func TestInboxStreamSuppressesDuplicateItems(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newMetaStreamTestHarness(t, WithStreamPollInterval(20*time.Millisecond))
@@ -431,6 +437,7 @@ func newMetaStreamTestHarness(t *testing.T, options ...HandlerOption) metaStream
 }
 
 func newMetaStreamTestServer(t *testing.T, configure func(*httptest.Server), options ...HandlerOption) (*httptest.Server, PrimitiveStore) {
+	requireIntegrationTest(t)
 	t.Helper()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())

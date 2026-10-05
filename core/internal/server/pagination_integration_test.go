@@ -12,6 +12,7 @@ import (
 )
 
 func TestActorListPaginationLimitParameter(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -48,6 +49,7 @@ func TestActorListPaginationLimitParameter(t *testing.T) {
 }
 
 func TestActorListPaginationCursorStability(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -108,6 +110,7 @@ func TestActorListPaginationCursorStability(t *testing.T) {
 }
 
 func TestActorListSearchQuery(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -137,6 +140,7 @@ func TestActorListSearchQuery(t *testing.T) {
 }
 
 func TestActorListSearchByID(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -165,6 +169,7 @@ func TestActorListSearchByID(t *testing.T) {
 }
 
 func TestActorListInvalidLimit(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -205,6 +210,7 @@ func TestActorListInvalidLimit(t *testing.T) {
 }
 
 func TestThreadListPaginationLimitParameter(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -241,6 +247,7 @@ func TestThreadListPaginationLimitParameter(t *testing.T) {
 }
 
 func TestThreadListPaginationWithCursor(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -295,6 +302,7 @@ func TestThreadListPaginationWithCursor(t *testing.T) {
 }
 
 func TestThreadListSearchQuery(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -324,6 +332,7 @@ func TestThreadListSearchQuery(t *testing.T) {
 }
 
 func TestDocumentListPaginationLimitParameter(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -361,6 +370,7 @@ func TestDocumentListPaginationLimitParameter(t *testing.T) {
 }
 
 func TestDocumentListSearchQuery(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -391,6 +401,7 @@ func TestDocumentListSearchQuery(t *testing.T) {
 }
 
 func TestBoardListPaginationLimitParameter(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -428,6 +439,7 @@ func TestBoardListPaginationLimitParameter(t *testing.T) {
 }
 
 func TestBoardListSearchQuery(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -462,6 +474,7 @@ func TestBoardListSearchQuery(t *testing.T) {
 }
 
 func TestBackwardCompatibilityWithoutPaginationParams(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -492,6 +505,7 @@ func TestBackwardCompatibilityWithoutPaginationParams(t *testing.T) {
 }
 
 func TestThreadListPaginationCursorStability(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -550,6 +564,7 @@ func TestThreadListPaginationCursorStability(t *testing.T) {
 }
 
 func TestThreadListInvalidLimit(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -591,6 +606,7 @@ func TestThreadListInvalidLimit(t *testing.T) {
 }
 
 func TestDocumentListPaginationCursorStability(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -650,6 +666,7 @@ func TestDocumentListPaginationCursorStability(t *testing.T) {
 }
 
 func TestDocumentListInvalidLimit(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -692,6 +709,7 @@ func TestDocumentListInvalidLimit(t *testing.T) {
 }
 
 func TestBoardListPaginationCursorStability(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -755,6 +773,7 @@ func TestBoardListPaginationCursorStability(t *testing.T) {
 }
 
 func TestBoardListInvalidLimit(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -797,6 +816,7 @@ func TestBoardListInvalidLimit(t *testing.T) {
 }
 
 func TestPaginationInvalidCursor(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)

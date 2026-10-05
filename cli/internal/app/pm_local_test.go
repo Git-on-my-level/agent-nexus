@@ -901,6 +901,9 @@ wait
 }
 
 func TestHandleClaimedTurnKillsGrandchildOnShutdown(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real process lifecycle integration; run without -short")
+	}
 	dir := t.TempDir()
 	pidFile := dir + "/grandchild.pid"
 	script := "/bin/sleep 120 & echo $! > '" + pidFile + "'; wait"
@@ -1373,6 +1376,9 @@ func TestHandleClaimedTurnDirectRunnerMapsStartExitAndDeadline(t *testing.T) {
 }
 
 func TestHandleClaimedTurnDirectRunnerCompletesWhenGrandchildHoldsStdout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real process lifecycle integration; run without -short")
+	}
 	prevDelay := harnessWaitDelay
 	harnessWaitDelay = 400 * time.Millisecond
 	t.Cleanup(func() { harnessWaitDelay = prevDelay })
@@ -1396,6 +1402,9 @@ func TestHandleClaimedTurnDirectRunnerCompletesWhenGrandchildHoldsStdout(t *test
 }
 
 func TestHandleClaimedTurnDirectRunnerNeverExitsMapsDeadline(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real process lifecycle integration; run without -short")
+	}
 	harness, posts := pmTurnHarness(t)
 	harness.cfg.Timeout = 20 * time.Second
 	turn := claimedTurn()

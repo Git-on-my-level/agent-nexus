@@ -24,6 +24,7 @@ func (e *errorOnExistsActorRegistry) Exists(ctx context.Context, actorID string)
 }
 
 func TestActorRegistryExistsQueryErrorReturns500(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{
@@ -67,6 +68,7 @@ func TestActorRegistryExistsQueryErrorReturns500(t *testing.T) {
 }
 
 func TestWorkspaceHumanGrantActorRowAllowsExplicitActorIDOnWrites(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	const workspaceID = "ws_grant_actor_row_board"

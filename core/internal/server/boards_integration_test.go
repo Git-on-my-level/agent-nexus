@@ -34,6 +34,7 @@ func cardRelatedRefsContainThread(card map[string]any, threadID string) bool {
 }
 
 func TestBoardsWorkspaceAndThreadWorkspaceMemberships(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -328,6 +329,7 @@ func TestBoardsWorkspaceAndThreadWorkspaceMemberships(t *testing.T) {
 }
 
 func TestBoardCardWriteEdgeRejectsMixedAliases(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -501,6 +503,7 @@ func TestBoardCardWriteEdgeRejectsMixedAliases(t *testing.T) {
 }
 
 func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -758,6 +761,7 @@ func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
 }
 
 func TestArchiveBoardCardGlobalRoute(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -909,6 +913,7 @@ func createResolutionEvidenceViaHTTP(t *testing.T, baseURL, threadID string) str
 }
 
 func TestBoardCardCreateRejectsInvalidResolutionCombinations(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -1014,6 +1019,7 @@ func TestBoardCardCreateRejectsInvalidResolutionCombinations(t *testing.T) {
 }
 
 func TestCardGlobalTrashListRestoreAndPurge(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -1196,6 +1202,7 @@ func TestCardGlobalTrashListRestoreAndPurge(t *testing.T) {
 }
 
 func TestBoardCardPatchAllowsContractValidNoOpShapes(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -1374,6 +1381,7 @@ func TestBoardCardPatchAllowsContractValidNoOpShapes(t *testing.T) {
 }
 
 func TestBoardCardAddRequestKeyFallbackOnlyReplaysEquivalentState(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -1479,6 +1487,7 @@ func TestBoardCardAddRequestKeyFallbackOnlyReplaysEquivalentState(t *testing.T) 
 }
 
 func TestBoardCardMoveRejectsInvalidPlacementAnchors(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -1590,6 +1599,7 @@ func TestBoardCardMoveRejectsInvalidPlacementAnchors(t *testing.T) {
 }
 
 func TestCardMovePlacementAnchorAcceptsPublicIdentity(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -1690,6 +1700,7 @@ func TestCardMovePlacementAnchorAcceptsPublicIdentity(t *testing.T) {
 }
 
 func TestCardMoveResolutionTransitionsAndEvents(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -1876,6 +1887,7 @@ func TestCardMoveResolutionTransitionsAndEvents(t *testing.T) {
 }
 
 func TestBoardBatchCreateCardsOneConcurrencyToken(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -1946,6 +1958,7 @@ func TestBoardBatchCreateCardsOneConcurrencyToken(t *testing.T) {
 }
 
 func TestBoardBatchCreateCardsMarkdownHygieneIdempotencyReplay(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -2017,6 +2030,7 @@ func createBoardThreadViaHTTP(t *testing.T, h primitivesTestHarness, title strin
 }
 
 func TestPostCardsGlobalAndRefEdgesForwardLookup(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -2097,6 +2111,7 @@ func TestPostCardsGlobalAndRefEdgesForwardLookup(t *testing.T) {
 }
 
 func TestRefEdgesRejectMalformedTypedRefs(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)

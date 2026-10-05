@@ -15,6 +15,7 @@ import (
 )
 
 func TestSeriesHistoricalDefaultStepForHTTPAndReportPanels(t *testing.T) {
+	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	seedSeriesIdentities(t, env)
 	token := declareSeriesHTTP(t, env)
@@ -41,6 +42,7 @@ func TestSeriesHistoricalDefaultStepForHTTPAndReportPanels(t *testing.T) {
 }
 
 func TestFleetHealthReportUsesDeclaredFleetSeriesAndHostInventory(t *testing.T) {
+	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	seedSeriesIdentities(t, env)
 	seriesStore := &series.Store{DB: env.workspace.DB(), Auth: env.authStore}
@@ -114,6 +116,7 @@ func declareSeriesHTTP(t *testing.T, env authIntegrationEnv) string {
 	return out["tokens"].(map[string]any)["access_token"].(string)
 }
 func TestSeriesTokenOnlyPushesDeclaredPointsAndReportMaterialization(t *testing.T) {
+	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	seedSeriesIdentities(t, env)
 	token := declareSeriesHTTP(t, env)
@@ -173,6 +176,7 @@ func (b *blockedPointBody) Read(p []byte) (int, error) {
 }
 func (b *blockedPointBody) Close() error { return nil }
 func TestSeriesRevocationWhileAdmittedPushReadsBody(t *testing.T) {
+	requireIntegrationTest(t)
 	for _, target := range []string{"adapter", "host", "agent"} {
 		t.Run(target, func(t *testing.T) {
 			env := newAuthIntegrationEnv(t, authIntegrationOptions{})
@@ -231,6 +235,7 @@ func (unreadableSeriesBody) Read([]byte) (int, error) { panic("denied request bo
 func (unreadableSeriesBody) Close() error             { return nil }
 
 func TestSeriesCapabilityDeniesUndeclaredResourceBeforeBodyRead(t *testing.T) {
+	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	seedSeriesIdentities(t, env)
 	token := declareSeriesHTTP(t, env)
@@ -246,6 +251,7 @@ func TestSeriesCapabilityDeniesUndeclaredResourceBeforeBodyRead(t *testing.T) {
 }
 
 func TestSeriesConcurrentPushAdmissionLeavesHumanReadsAvailable(t *testing.T) {
+	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	seedSeriesIdentities(t, env)
 	token := declareSeriesHTTP(t, env)
@@ -308,6 +314,7 @@ func TestSeriesConcurrentPushAdmissionLeavesHumanReadsAvailable(t *testing.T) {
 }
 
 func TestSeriesRetryStormRejectedWithoutDatabaseOrBodyRead(t *testing.T) {
+	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	seedSeriesIdentities(t, env)
 	token := declareSeriesHTTP(t, env)

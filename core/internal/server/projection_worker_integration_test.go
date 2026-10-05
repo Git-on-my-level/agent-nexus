@@ -28,6 +28,7 @@ func newManualProjectionTestServer(t *testing.T) manualProjectionHarness {
 }
 
 func newManualProjectionTestServerWithAttachedMaintainer(t *testing.T, attachMaintainer bool) manualProjectionHarness {
+	requireIntegrationTest(t)
 	t.Helper()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
@@ -79,6 +80,7 @@ func newManualProjectionTestServerWithAttachedMaintainer(t *testing.T, attachMai
 }
 
 func TestThreadWorkspaceReadDoesNotMutateDerivedState(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newManualProjectionTestServer(t)
@@ -128,6 +130,7 @@ func TestThreadWorkspaceReadDoesNotMutateDerivedState(t *testing.T) {
 }
 
 func TestInboxReadDoesNotEmitStaleThreadExceptions(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newManualProjectionTestServer(t)
@@ -163,6 +166,7 @@ func TestInboxReadDoesNotEmitStaleThreadExceptions(t *testing.T) {
 }
 
 func TestProjectionMaintainerStepClearsPendingStatus(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newManualProjectionTestServer(t)
@@ -204,6 +208,7 @@ func TestProjectionMaintainerStepClearsPendingStatus(t *testing.T) {
 }
 
 func TestHumanAttentionRequestIndexesInboxBeforeCreateReturns(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newManualProjectionTestServerWithAttachedMaintainer(t, true)
@@ -243,6 +248,7 @@ func TestHumanAttentionRequestIndexesInboxBeforeCreateReturns(t *testing.T) {
 }
 
 func TestDisabledWorkerLeavesProjectionPendingButReadable(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newManualProjectionTestServer(t)

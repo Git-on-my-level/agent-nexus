@@ -10,6 +10,7 @@ import (
 )
 
 func TestAgentAuthAdminFleetLifecycle(t *testing.T) {
+	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken, allowPasskeyDevBypass: true})
 	base := env.server.URL
 	status, p := hostHTTP(t, "POST", base+"/auth/passkey/dev/register", "", map[string]any{"display_name": "Admin", "bootstrap_token": testBootstrapToken})
