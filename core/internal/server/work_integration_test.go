@@ -1,9 +1,11 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -68,6 +70,63 @@ func TestWorkCreateOmittingBoardRefProvisionsDefaultBoard(t *testing.T) {
 	placed := workPostJSON(t, h.baseURL+"/work", fmt.Sprintf(`{"actor_id":"actor-1","board_ref":%q,"title":"On other board"}`, otherRef), http.StatusCreated)
 	if asString(placed["work"].(map[string]any)["board_ref"]) != otherRef {
 		t.Fatalf("explicit board_ref ignored: %#v", placed["work"])
+	}
+}
+
+func TestWorkHTTPMigrationRelationRoundTrip(t *testing.T) {
+	h := newPrimitivesTestServer(t)
+	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+	created := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"actor-1","title":"Legacy detail","source":{"authority":"github","connection_id":"fixture","native_id":"org/repo/issues/7"}}`, http.StatusCreated)
+	legacy := created["work"].(map[string]any)
+	board := workPostJSON(t, h.baseURL+"/boards", `{"actor_id":"actor-1","board":{"title":"Initiatives"}}`, http.StatusCreated)["board"].(map[string]any)
+	initiative := workPostJSON(t, h.baseURL+"/work", fmt.Sprintf(`{"actor_id":"actor-1","board_ref":%q,"title":"Reliable execution initiative"}`, board["ref"]), http.StatusCreated)["work"].(map[string]any)
+	workPostJSON(t, h.baseURL+"/work/"+asString(legacy["ref"])+"/observations", `{"actor_id":"actor-1","observation":{"idempotency_key":"fleet-read","reader_id":"fleet-sync/github","reader_revision":"0.1.0","observed_at":"2026-10-01T00:00:00Z","status":"reported","source_revision":"source-fence","facts":{"phase":"blocked"}}}`, http.StatusOK)
+	legacy = workGetJSON(t, h.baseURL+"/work/"+asString(legacy["ref"]), http.StatusOK)["work"].(map[string]any)
+	_, err := h.workspace.DB().ExecContext(context.Background(), `WITH RECURSIVE numbers(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM numbers WHERE n<1000)
+		INSERT OR IGNORE INTO events(id,handle,type,ts,actor_id,thread_id,refs_json,payload_json)
+		SELECT 'fixture-' || n, CASE WHEN n=1 THEN 'card-updated' ELSE 'card-updated-' || n END,
+		'card_updated','2026-10-01T00:00:00Z','actor-1','','[]','{}' FROM numbers`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf(`{"actor_id":"actor-1","if_version":1,"patch":{"relations":[{"kind":"related","ref":%q,"fleet_sync_migration":"db92c565fbc1c2fa88fe2538306f9292c8523aab5eb8210f7af5b245aa036703","note":"Folded into initiative; archived detail retained, source remains authoritative."}]}}`, initiative["ref"])
+	resp := patchJSONExpectStatus(t, h.baseURL+"/work/"+asString(legacy["ref"]), body, http.StatusOK)
+	resp.Body.Close()
+	readback := workGetJSON(t, h.baseURL+"/work/"+asString(legacy["ref"]), http.StatusOK)["work"].(map[string]any)
+	relation := readback["relations"].([]any)[0].(map[string]any)
+	if relation["ref"] != initiative["ref"] || relation["fleet_sync_migration"] != "db92c565fbc1c2fa88fe2538306f9292c8523aab5eb8210f7af5b245aa036703" || relation["note"] != "Folded into initiative; archived detail retained, source remains authoritative." {
+		t.Fatalf("migration relation did not round trip: %#v", relation)
+	}
+	if readback["decision_revision"] != "source-fence" || readback["phase"] != legacy["phase"] || readback["updated_at"] != legacy["updated_at"] || readback["version"] != float64(2) {
+		t.Fatalf("migration annotation changed the source fence: %#v", readback)
+	}
+	old := workGetJSON(t, h.baseURL+"/events/event:card-updated-1000", http.StatusOK)
+	if old["event"].(map[string]any)["ref"] != "event:card-updated-1000" {
+		t.Fatal("existing event ref changed")
+	}
+	for _, invalid := range []string{
+		`null`, `{}`, `[null]`, `["card:missing"]`,
+		`[{"kind":"related"}]`, `[{"kind":"bogus","ref":"card:missing"}]`,
+		`[{"kind":"related","ref":"card:missing"}]`,
+		`[{"kind":"parent","ref":"topic:missing"}]`,
+		`[{"kind":"related","ref":123}]`,
+	} {
+		t.Run(invalid, func(t *testing.T) {
+			resp := patchJSONExpectStatus(t, h.baseURL+"/work/"+asString(legacy["ref"]), `{"actor_id":"actor-1","if_version":2,"patch":{"relations":`+invalid+`}}`, http.StatusBadRequest)
+			defer resp.Body.Close()
+			var payload map[string]any
+			if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+				t.Fatal(err)
+			}
+			e := payload["error"].(map[string]any)
+			if e["code"] != "invalid_request" || !strings.Contains(asString(e["message"]), "relations") {
+				t.Fatalf("unclear relation error: %#v", e)
+			}
+		})
+	}
+	after := workGetJSON(t, h.baseURL+"/work/"+asString(legacy["ref"]), http.StatusOK)["work"].(map[string]any)
+	if after["version"] != float64(2) || len(after["relations"].([]any)) != 1 {
+		t.Fatal("invalid relation mutated work")
 	}
 }
 

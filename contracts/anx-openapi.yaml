@@ -1870,6 +1870,7 @@ paths:
     patch:
       operationId: workPatch
       summary: Update local commitment annotations
+      description: Relation objects preserve additional metadata fields. Invalid relation shapes, kinds, or workspace refs return 400 invalid_request with field-specific guidance. Unmapped store failures return 500 internal_error with a server-generated X-Request-ID that correlates with a secret-safe diagnostic log.
       tags:
       - work
       x-anx-surface: canonical
@@ -1910,6 +1911,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WorkResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          description: Unmapped store failure; correlate the request ID with server logs.
+          headers:
+            X-Request-ID:
+              description: Server-generated identifier for the diagnostic log entry.
+              schema:
+                type: string
+                format: uuid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /work/{card_ref}/observations:
     get:
       operationId: workObservationsList

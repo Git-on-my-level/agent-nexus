@@ -65,7 +65,7 @@ func handleSetWorkspaceDashboard(w http.ResponseWriter, r *http.Request, opts ha
 		}
 	}
 	if err := store.SetWorkspaceDashboard(r.Context(), actor, id); err != nil {
-		workStoreError(w, err)
+		workStoreError(w, r, err)
 		return
 	}
 	handleGetOverview(w, r, opts)

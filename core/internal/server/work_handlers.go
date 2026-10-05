@@ -2,13 +2,18 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
+	"log"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 
 	"agent-nexus-core/internal/primitives"
+
+	"github.com/google/uuid"
 )
 
 // WorkStore is an optional capability of the canonical primitive store; keeping
@@ -45,7 +50,7 @@ func workRouteAccess(r *http.Request) routeAccessRequirement {
 	}
 	return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: valid}
 }
-func workStoreError(w http.ResponseWriter, err error) {
+func workStoreError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, primitives.ErrNotFound):
 		writeError(w, 404, "not_found", "work not found")
@@ -54,8 +59,37 @@ func workStoreError(w http.ResponseWriter, err error) {
 	case errors.Is(err, primitives.ErrInvalidWorkRequest), errors.Is(err, primitives.ErrInvalidBoardRequest), errors.Is(err, primitives.ErrInvalidCursor):
 		writeError(w, 400, "invalid_request", err.Error())
 	default:
+		logUnmappedWorkError(w, r, err)
 		writeError(w, 500, "internal_error", "work operation failed")
 	}
+}
+
+// Raw store errors can contain submitted values, URLs or credentials. Log
+// diagnostic identity and database codes, never arbitrary error text or request
+// bodies/headers/paths. The generated ID connects the response to the log entry.
+func logUnmappedWorkError(w http.ResponseWriter, r *http.Request, err error) {
+	requestID := uuid.NewString()
+	w.Header().Set("X-Request-ID", requestID)
+	types := []string{}
+	for cause, depth := err, 0; cause != nil && depth < 10; cause, depth = errors.Unwrap(cause), depth+1 {
+		types = append(types, fmt.Sprintf("%T", cause))
+	}
+	code := 0
+	var coded interface{ Code() int }
+	if errors.As(err, &coded) {
+		code = coded.Code()
+	}
+	diagnostic := "unmapped_store_error"
+	switch {
+	case errors.Is(err, primitives.ErrHandleAllocation):
+		diagnostic = "handle_allocation_exhausted"
+	case errors.Is(err, context.Canceled):
+		diagnostic = "request_canceled"
+	case errors.Is(err, context.DeadlineExceeded):
+		diagnostic = "deadline_exceeded"
+	}
+	fingerprint := sha256.Sum256([]byte(err.Error()))
+	log.Printf("anx-core: work operation failed request_id=%s method=%s diagnostic=%s error_types=%s store_code=%d error_fingerprint=%x", requestID, r.Method, diagnostic, strings.Join(types, ","), code, fingerprint[:16])
 }
 func publicWork(w map[string]any) map[string]any {
 	out := publicCardView(w)
@@ -110,7 +144,7 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 		}
 		page, err := store.ListWork(r.Context(), primitives.WorkListFilter{ProjectRef: q.Get("project_ref"), Source: q.Get("source"), Owner: q.Get("owner"), Phase: q.Get("phase"), Freshness: q.Get("freshness"), Query: q.Get("q"), Limit: limit, Cursor: q.Get("cursor")})
 		if err != nil {
-			workStoreError(w, err)
+			workStoreError(w, r, err)
 			return
 		}
 		if !enrichPlans(w, r, opts, page.Work) {
@@ -126,7 +160,7 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 		}); ok {
 			hidden, err := visibility.HiddenSubjectRefs(r.Context())
 			if err != nil {
-				workStoreError(w, err)
+				workStoreError(w, r, err)
 				return
 			}
 			for ref := range hidden {
@@ -161,7 +195,7 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 		}
 		item, err := store.CreateWork(r.Context(), actor, boardID, raw)
 		if err != nil {
-			workStoreError(w, err)
+			workStoreError(w, r, err)
 			return
 		}
 		writeJSON(w, 201, map[string]any{"work": publicWork(item)})
@@ -176,7 +210,7 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 		if r.Method == http.MethodGet {
 			item, err := store.GetWork(r.Context(), id)
 			if err != nil {
-				workStoreError(w, err)
+				workStoreError(w, r, err)
 				return
 			}
 			if !enrichPlans(w, r, opts, []map[string]any{item}) {
@@ -197,7 +231,7 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 		}
 		item, err := store.PatchWork(r.Context(), actor, id, int64(version), patch)
 		if err != nil {
-			workStoreError(w, err)
+			workStoreError(w, r, err)
 			return
 		}
 		writeJSON(w, 200, map[string]any{"work": publicWork(item)})
@@ -212,7 +246,7 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 			}
 			observations, next, err := store.ListWorkObservations(r.Context(), id, limit, r.URL.Query().Get("cursor"))
 			if err != nil {
-				workStoreError(w, err)
+				workStoreError(w, r, err)
 				return
 			}
 			writeJSON(w, 200, map[string]any{"observations": observations, "next_cursor": next})
@@ -225,7 +259,7 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 		}
 		result, err := store.SubmitWorkObservation(r.Context(), actor, id, observation)
 		if err != nil {
-			workStoreError(w, err)
+			workStoreError(w, r, err)
 			return
 		}
 		if item, ok := result["work"].(map[string]any); ok {
@@ -236,7 +270,7 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 		if r.Method == http.MethodGet {
 			item, err := store.GetWork(r.Context(), id)
 			if err != nil {
-				workStoreError(w, err)
+				workStoreError(w, r, err)
 				return
 			}
 			writeJSON(w, 200, map[string]any{"refresh": publicWorkRefresh(item["refresh"].(map[string]any))})
@@ -244,7 +278,7 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 		}
 		refresh, err := store.RequestWorkRefresh(r.Context(), actor, id)
 		if err != nil {
-			workStoreError(w, err)
+			workStoreError(w, r, err)
 			return
 		}
 		writeJSON(w, 202, map[string]any{"refresh": publicWorkRefresh(refresh)})

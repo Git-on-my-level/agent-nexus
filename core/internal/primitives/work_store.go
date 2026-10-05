@@ -1474,7 +1474,10 @@ func (s *Store) validateWorkReferences(ctx context.Context, m map[string]any) er
 			}
 			resolved, err := s.ResolveResourceRef(ctx, ResourceRefInput{Type: typ, Ref: ref})
 			if err != nil {
-				return workLocalInvalid("relations", "relation ref must resolve inside this workspace")
+				if errors.Is(err, ErrNotFound) || errors.Is(err, ErrInvalidResourceRef) {
+					return workLocalInvalid("relations", "relation ref must resolve inside this workspace")
+				}
+				return fmt.Errorf("resolve work relation: %w", err)
 			}
 			relation["ref"] = resolved.CanonicalRef
 		}

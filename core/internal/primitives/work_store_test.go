@@ -464,6 +464,53 @@ func TestWorkReferencesRemainWorkspaceScoped(t *testing.T) {
 	}
 }
 
+func TestWorkMigrationRelationRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ws.Close() })
+	s := primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	board, err := s.CreateBoard(ctx, "actor-1", map[string]any{"title": "Portfolio"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := board["id"].(string)
+	legacy := registerWork(t, s, b)
+	initiative, err := s.CreateWork(ctx, "actor-1", b, map[string]any{"title": "Reliable execution initiative"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Long-running fleet collectors have already emitted thousands of updates.
+	// Fill the allocator's original bounded numeric suffix space efficiently.
+	_, err = ws.DB().ExecContext(ctx, `WITH RECURSIVE numbers(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM numbers WHERE n<1000)
+		INSERT OR IGNORE INTO events(id,handle,type,ts,actor_id,thread_id,refs_json,payload_json)
+		SELECT 'fixture-' || n, CASE WHEN n=1 THEN 'card-updated' ELSE 'card-updated-' || n END,
+		'card_updated','2026-10-01T00:00:00Z','actor-1',?,'[]','{}' FROM numbers`, legacy["thread_id"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	relation := map[string]any{"kind": "related", "ref": initiative["ref"], "fleet_sync_migration": "db92c565fbc1c2fa88fe2538306f9292c8523aab5eb8210f7af5b245aa036703", "note": "Folded into initiative; archived detail retained, source remains authoritative."}
+	_, err = s.PatchWork(ctx, "actor-1", legacy["ref"].(string), 1, map[string]any{"relations": []any{relation}})
+	if err != nil {
+		t.Fatalf("migration relation patch: %T: %v", err, err)
+	}
+	readback, err := s.GetWork(ctx, legacy["ref"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := readback["relations"].([]any)[0].(map[string]any)
+	for key, value := range relation {
+		if got[key] != value {
+			t.Fatalf("relation %s = %v, want %v", key, got[key], value)
+		}
+	}
+	if readback["version"] != int64(2) || readback["phase"] != legacy["phase"] {
+		t.Fatalf("annotation changed source state or failed to advance version: %#v", readback)
+	}
+}
+
 func TestCreateWorkHonorsStableCardID(t *testing.T) {
 	s, b := newWorkTestStore(t)
 	w, err := s.CreateWork(context.Background(), "actor-1", b, map[string]any{"id": "card-anx-github-208", "title": "Public issue", "source": map[string]any{"authority": "github", "connection_id": "github-main", "native_id": "Git-on-my-level/agent-nexus#208"}})
