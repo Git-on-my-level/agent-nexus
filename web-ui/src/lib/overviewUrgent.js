@@ -153,16 +153,54 @@ function normalizeAskRows(items, workspace, { count, truncated } = {}) {
 }
 
 /**
+ * Card refs an ask row already stands for.
+ *
+ * Core's `needs_you` mixes decisions, open asks and blocked work, so a blocked
+ * initiative can arrive as an ask row *and* as a critical initiative — the
+ * same card, twice, three rows apart in a band whose whole claim is that it
+ * says what needs doing once. The ask row wins: it is the thing that can be
+ * finished, and it names the action rather than the state.
+ *
+ * Rows carry an id and an href rather than a ref, so both are read: an id like
+ * `task:card:rollback-wording` and an href like `/tasks/rollback-wording` both
+ * point at `card:rollback-wording`.
+ *
+ * @param {Array<{id?: string, href?: string}>} rows
+ * @returns {Set<string>} card refs, and bare handles for href-only matches
+ */
+export function refsCoveredByAsks(rows = []) {
+  const covered = new Set();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const id = asText(row?.id);
+    const typed = /card:([A-Za-z0-9][A-Za-z0-9._-]*)/.exec(id);
+    if (typed) {
+      covered.add(`card:${typed[1]}`);
+      covered.add(typed[1]);
+    }
+    const href = asText(row?.href);
+    const path = /\/tasks\/([^/?#]+)/.exec(href);
+    if (path) {
+      const handle = decodeURIComponent(path[1]);
+      covered.add(handle);
+      covered.add(handle.startsWith("card:") ? handle : `card:${handle}`);
+    }
+  }
+  return covered;
+}
+
+/**
  * Critical initiatives, worst first, from tiles already built for the grid.
  *
  * The band reuses the tiles rather than re-deriving health: one vocabulary,
  * one sort, and a tile and its band row cannot say different things.
  *
  * @param {object[]} tiles `initiativeTiles` output
+ * @param {Set<string>} [covered] refs an ask row already stands for
  */
-export function criticalInitiatives(tiles = []) {
+export function criticalInitiatives(tiles = [], covered = new Set()) {
   return (Array.isArray(tiles) ? tiles : [])
     .filter((tile) => CRITICAL_STATES.includes(tile?.health?.state))
+    .filter((tile) => !covered.has(asText(tile?.ref)))
     .sort((a, b) => a.rank - b.rank);
 }
 
@@ -194,7 +232,8 @@ export function urgentBandModel({
   const askTruncated =
     ok.some((read) => read.truncated) || askRows.length > askLimit;
 
-  const critical = criticalInitiatives(tiles);
+  // An initiative already named by an ask row is not listed again below it.
+  const critical = criticalInitiatives(tiles, refsCoveredByAsks(askRows));
 
   return {
     asks: {

@@ -66,7 +66,7 @@
         {#if initiatives.count}
           <span data-urgent-initiative-count
             >{initiatives.count}
-            {initiatives.count === 1 ? "initiative" : "initiatives"} need attention</span
+            {initiatives.count === 1 ? "initiative needs" : "initiatives need"} attention</span
           >
         {/if}
       </span>

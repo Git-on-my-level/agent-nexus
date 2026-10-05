@@ -5,6 +5,7 @@ import {
   asksFromSnapshot,
   criticalInitiatives,
   readWorkspaceOpenAsks,
+  refsCoveredByAsks,
   urgentBandModel,
 } from "../../src/lib/overviewUrgent.js";
 
@@ -224,5 +225,80 @@ describe("urgentBandModel", () => {
     const band = urgentBandModel();
     expect(band.empty).toBe(true);
     expect(band.unavailable).toEqual([]);
+  });
+});
+
+describe("refsCoveredByAsks", () => {
+  it("reads a card ref out of a typed row id", () => {
+    expect(refsCoveredByAsks([{ id: "task:card:rollback-wording" }])).toContain(
+      "card:rollback-wording",
+    );
+  });
+
+  it("reads a card ref out of a task href", () => {
+    const covered = refsCoveredByAsks([
+      { id: "inbox:42", href: "/tasks/rollback-wording" },
+    ]);
+    expect(covered).toContain("card:rollback-wording");
+  });
+
+  it("handles an encoded typed href", () => {
+    const covered = refsCoveredByAsks([
+      { id: "x", href: "/tasks/card%3Arollback-wording?mailbox=needs-you" },
+    ]);
+    expect(covered).toContain("card:rollback-wording");
+  });
+
+  it("covers nothing for a row that names no task", () => {
+    expect(
+      refsCoveredByAsks([{ id: "decision:launch", href: "/inbox" }]).size,
+    ).toBe(0);
+    expect(refsCoveredByAsks().size).toBe(0);
+  });
+});
+
+describe("the band says each thing once", () => {
+  const blockedTile = initiativeTiles([
+    row({ ref: "card:rollback-wording", health: { status: "blocked" } }),
+    row({ ref: "card:other", health: { status: "stalled" } }),
+  ]);
+
+  it("drops a critical initiative an ask row already stands for", () => {
+    // Core's `needs_you` mixes decisions with blocked work, so the same card
+    // can arrive as an ask and as a critical initiative. The ask wins: it is
+    // the thing that can be finished.
+    const band = urgentBandModel({
+      asks: [
+        {
+          status: "ok",
+          workspace: here,
+          count: 1,
+          rows: [
+            {
+              id: "task:card:rollback-wording",
+              title: "Approve the rollback wording",
+              href: "/tasks/rollback-wording",
+              workspace: here,
+            },
+          ],
+        },
+      ],
+      tiles: blockedTile,
+    });
+    expect(band.asks.rows).toHaveLength(1);
+    expect(band.initiatives.rows.map((tile) => tile.ref)).toEqual([
+      "card:other",
+    ]);
+  });
+
+  it("still lists a critical initiative nothing is asking about", () => {
+    const band = urgentBandModel({
+      asks: [asksFromSnapshot(snapshot(), here)],
+      tiles: blockedTile,
+    });
+    expect(band.initiatives.rows.map((tile) => tile.ref)).toEqual([
+      "card:rollback-wording",
+      "card:other",
+    ]);
   });
 });
