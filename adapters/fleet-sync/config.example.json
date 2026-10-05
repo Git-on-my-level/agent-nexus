@@ -3,6 +3,9 @@
   "agent": "fleet-sync",
   "operator_name": "Operator",
   "topic": "fleet-operations",
+  "report": {
+    "publish": true
+  },
   "anx_binary": "anx",
   "node_bin": "node",
   "repo_root": "",

@@ -1,6 +1,6 @@
 # fleet-sync
 
-Read-only source ingestion into existing Agent Nexus initiatives and one visual-report dashboard.
+Read-only source ingestion into existing Agent Nexus initiatives and, by default, one visual-report dashboard.
 
 Sources are only listed or viewed. The adapter writes to Agent Nexus (`cards revise`, `docs create` / `docs revise`) and to its own state cache. It does not mutate Multica, GitHub, Hermes, agentctl, fleetctl, Prometheus, remote hosts, inbox items, or initiative workflow state. Inbox and loose-end cards are read with `debug inbox list` and `work list --source nexus`.
 
@@ -15,7 +15,15 @@ python3 adapters/fleet-sync/fleet_sync.py --quiet
 
 `--config` defaults to `~/.config/anx-fleet-sync/config.json`. `--state` defaults to `~/.local/state/anx-fleet-sync/state.json`. Copy `config.example.json` and fill in the operator's own workspace, mapping document, hosts, and paths. Do not commit that file.
 
-`--dry-run` reads the selected sources, prints the planned ANX writes and the report JSON, and writes nothing.
+The optional `report.publish` config key defaults to `true`, preserving the personal/fleet workspace dashboard. Set it to `false` in a product-workspace config to keep source ingestion and initiative updates while skipping report generation, validation, and dashboard document creation or revision. For example, add this to each workspace config such as `~/.config/anx-fleet-sync/omi/config.json` and `~/.config/anx-fleet-sync/anx/config.json`:
+
+```json
+"report": { "publish": false }
+```
+
+Do not add a workspace dashboard pin or default-dashboard setting; fleet-sync only manages its own report document when report publishing is enabled.
+
+`--dry-run` reads the selected sources, prints the planned ANX writes and (when enabled) the report JSON, and writes nothing. With report publication disabled, its `report` and `report_valid` fields are `null`.
 
 `--quiet` prints nothing when the run succeeds. It prints one line per reader that failed, and exits nonzero if any reader failed or the report failed validation. That is the mode an unattended job should use.
 
