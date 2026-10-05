@@ -5,7 +5,7 @@ description: Keep substantive Agent Nexus work visible with explicit task refs, 
 
 # ANX participant
 
-Skill contract: anx.participant.v11. Installation does not prove that a session loaded this version.
+Skill contract: anx.participant.v12. Installation does not prove that a session loaded this version.
 
 Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence.
 
@@ -49,6 +49,10 @@ Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence
 Read `anx plan show card:<slug>` before editing. Use `anx plan set card:<slug> --from-file plan.json` with `{ "steps": [] }` to replace the plan, or add a step with `anx plan step add card:<slug> --step-id build --title "Build" --ref <ref-or-url>`. Stable step ids are agent-chosen slugs; omitting `--step-id` derives one from the title. Branch with `anx plan step add card:<slug> --title "QA" --after build`. Use `step update <card> <step-id>` for fields and `step rm <card> <step-id>` to remove an unreferenced step. Update dependent `--after` lists before removal.
 
 Use `--status` for unlinked steps or as a fallback for a ref ANX cannot yet resolve. Known card/source workflow state takes precedence. Context refs (docs/topics) have lifecycle state only, so use fallback status for those steps. Unknown external URLs are not fetched. Due dates accept YYYY-MM-DD or RFC3339. The server validates cycles, ids and caps; writes use a concurrency token and preserve event history. A conflict means read again and reconcile the plan. Read `progress`, `health`, `critical_path` and `next_steps` from computed state; never overwrite them with a prose claim. Resolve up to 200 chips in one read using `anx refs resolve <ref>...`.
+
+## Contributing to Agent Nexus
+
+When contributing to this repository, read the root `AGENTS.md` and follow its "Before you open a PR" checklist.
 
 ## Live dashboard data
 
