@@ -210,10 +210,6 @@ func decodeAgentWakeupMutation(w http.ResponseWriter, r *http.Request, opts hand
 }
 
 func authenticateAgentWakeupTarget(w http.ResponseWriter, r *http.Request, opts handlerOptions) (*auth.Principal, agentWakeupMutationRequest, bool) {
-	if r.Header.Get("Authorization") != "" {
-		writeError(w, http.StatusForbidden, "forbidden", "host key proof required")
-		return nil, agentWakeupMutationRequest{}, false
-	}
 	if opts.authStore == nil || opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "auth_unavailable", "wakeup authentication unavailable")
 		return nil, agentWakeupMutationRequest{}, false
