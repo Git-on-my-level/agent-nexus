@@ -369,7 +369,7 @@ export function compareNeedsYou(a, b) {
 /**
  * @param {object} input
  * @param {(id: string) => string} [input.agentName] host-derived agent
- *   name ("codex on m5-mbp") for an actor id, or "" for anyone else. It
+ *   name ("codex on workstation-a") for an actor id, or "" for anyone else. It
  *   outranks the requester label core stored with the ask.
  * @param {(id: string) => string} [input.actorName] display name for an
  *   actor id, or "" when the id resolves to no one.

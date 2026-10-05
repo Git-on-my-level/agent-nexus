@@ -51,7 +51,7 @@ days within the exact requested rolling interval; future observations are exclud
 from both aggregates and freshness timestamps. Interior days require no raw scans
 or per-bucket payload joins.
 Admission and indexed freshness reads are batched across labels. Daily rollups are retained forever
-with no expiry, per David's 2026-10-05 decision. Rollup updates and raw deletion
+with no expiry. Rollup updates and raw deletion
 commit as one atomic checkpoint; interrupted or replayed compaction cannot count
 a sample twice. Historical queries use whole UTC
 days and a whole-day step, reporting their reduced resolution. State rollups

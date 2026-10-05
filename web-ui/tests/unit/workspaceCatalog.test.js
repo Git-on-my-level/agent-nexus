@@ -34,15 +34,15 @@ describe("workspaceCatalog", () => {
   it("should preserve public origin metadata from ANX_WORKSPACES entries", () => {
     const env = {
       ANX_WORKSPACES:
-        '[{"organizationSlug":"acme","slug":"ws1","label":"Workspace 1","coreBaseUrl":"http://localhost:8000","publicOrigin":"https://ws1.tailnet.ts.net/anx/ws1"},{"organizationSlug":"acme","slug":"ws2","label":"Workspace 2","coreBaseUrl":"http://localhost:8001","public_origin":"https://ws2.tailnet.ts.net/anx/ws2"}]',
+        '[{"organizationSlug":"acme","slug":"ws1","label":"Workspace 1","coreBaseUrl":"http://localhost:8000","publicOrigin":"https://workspace.example.test/anx/ws1"},{"organizationSlug":"acme","slug":"ws2","label":"Workspace 2","coreBaseUrl":"http://localhost:8001","public_origin":"https://workspace.example.test/anx/ws2"}]',
     };
     const catalog = loadWorkspaceCatalog(env);
 
     expect(catalog.workspaces[0].publicOrigin).toBe(
-      "https://ws1.tailnet.ts.net/anx/ws1",
+      "https://workspace.example.test/anx/ws1",
     );
     expect(catalog.workspaces[1].publicOrigin).toBe(
-      "https://ws2.tailnet.ts.net/anx/ws2",
+      "https://workspace.example.test/anx/ws2",
     );
   });
 

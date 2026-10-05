@@ -11,7 +11,7 @@ import {
  * The workspace agent roster (`GET /agents`), kept current for the shell.
  *
  * One loader per workspace feeds the Agents nav badge, the Agents page and
- * the name registry (derived agents are named "codex on m5-mbp" everywhere).
+ * the name registry (derived agents are named "codex on workstation-a" everywhere).
  * It re-reads when core's roster stream (`GET /stream/agents`) says the
  * roster changed (on connect, after run, presence, host and bridge changes,
  * and after a reconnect), when an ask is filed or answered (workspace

@@ -420,7 +420,7 @@ func TestHostPersonaRunRosterAndBridge(t *testing.T) {
 	}
 	public := base64.StdEncoding.EncodeToString(pub)
 	nonce := base64.RawURLEncoding.EncodeToString(pub[:16])
-	slug := "m5-mbp"
+	slug := "workstation-a"
 	status, p = hostHTTP(t, "POST", url+"/auth/hosts/enrollments/headless", "", map[string]any{
 		"public_key": public, "requested_slug": slug, "os_user": "operator", "hostname": slug,
 		"discovered_adapters": []string{"codex"}, "request_nonce": nonce, "adoptions": []any{},
@@ -499,7 +499,7 @@ func TestHostPersonaRunRosterAndBridge(t *testing.T) {
 			if row["id"] != agent["id"] {
 				continue
 			}
-			if row["handle"] != "reviewer.m5-mbp" || row["display_name"] != "reviewer on m5-mbp" ||
+			if row["handle"] != "reviewer.workstation-a" || row["display_name"] != "reviewer on workstation-a" ||
 				row["name"] != "reviewer" || row["identity_kind"] != "derived" || row["state"] != "working" ||
 				row["bridge_online"] != wantOnline || row["active_run"].(map[string]any)["adapter"] != "codex" {
 				t.Fatalf("persona roster: %#v", row)

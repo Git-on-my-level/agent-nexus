@@ -57,7 +57,7 @@ func TestReportLiveWorkAndArchiveBoundary(t *testing.T) {
 			workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"One","created_at":"2026-03-04T10:00:00Z"}}`, 201)
 			board := workPostJSON(t, h.baseURL+"/boards", `{"actor_id":"actor-1","board":{"title":"Initiatives"}}`, 201)["board"].(map[string]any)
 			boardRef := anyString(board["ref"])
-			cardBody, _ := json.Marshal(map[string]any{"actor_id": "actor-1", "board_ref": boardRef, "title": "Ship the launch", "summary": "Launch on Friday\n- [X] Reviewed\n- [ ] Deliver\nNeeds David: choose the date", "priority": "p1"})
+			cardBody, _ := json.Marshal(map[string]any{"actor_id": "actor-1", "board_ref": boardRef, "title": "Ship the launch", "summary": "Launch on Friday\n- [X] Reviewed\n- [ ] Deliver\nNeeds Alex: choose the date", "priority": "p1"})
 			workPostJSON(t, h.baseURL+"/work", string(cardBody), 201)
 			docRef := createReportFixture(t, h, structured)
 			endpoint := h.baseURL + "/docs/" + docRef + "/report"

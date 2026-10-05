@@ -18,11 +18,11 @@ describe("access route", () => {
   it("uses workspace coreBaseUrl for copied anx CLI --base-url (API origin)", async () => {
     workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
       organizationSlug: "local",
-      workspaceSlug: "scalingforever",
+      workspaceSlug: "ops",
       workspace: {
         coreBaseUrl: "http://127.0.0.1:8002",
-        publicOrigin: "https://stale.example.test/anx/o/local/w/scalingforever",
-        workspaceId: "ws-scalingforever",
+        publicOrigin: "https://stale.example.test/anx/o/local/w/ops",
+        workspaceId: "ws-ops",
       },
       error: null,
     });
@@ -30,16 +30,14 @@ describe("access route", () => {
     const result = await load({
       params: {
         organization: "local",
-        workspace: "scalingforever",
+        workspace: "ops",
       },
-      url: new URL(
-        "https://m2-internal.scalingforever.com/anx/o/local/w/scalingforever/access",
-      ),
+      url: new URL("https://workspace.example.com/anx/o/local/w/ops/access"),
     });
 
     expect(result).toEqual({
       coreBaseUrl: "http://127.0.0.1:8002",
-      workspaceId: "ws-scalingforever",
+      workspaceId: "ws-ops",
       cliBaseUrl: "http://127.0.0.1:8002",
       outOfWorkspaceMode: "local",
     });
@@ -48,11 +46,11 @@ describe("access route", () => {
   it("uses coreBaseUrl over public origin when the request origin is loopback", async () => {
     workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
       organizationSlug: "local",
-      workspaceSlug: "scalingforever",
+      workspaceSlug: "ops",
       workspace: {
         coreBaseUrl: "http://127.0.0.1:8002",
-        publicOrigin: "https://m2-internal.tail7e1eb.ts.net",
-        workspaceId: "ws-scalingforever",
+        publicOrigin: "https://workspace.example.test",
+        workspaceId: "ws-ops",
       },
       error: null,
     });
@@ -60,14 +58,14 @@ describe("access route", () => {
     const result = await load({
       params: {
         organization: "local",
-        workspace: "scalingforever",
+        workspace: "ops",
       },
-      url: new URL("http://127.0.0.1:4173/anx/o/local/w/scalingforever/access"),
+      url: new URL("http://127.0.0.1:4173/anx/o/local/w/ops/access"),
     });
 
     expect(result).toEqual({
       coreBaseUrl: "http://127.0.0.1:8002",
-      workspaceId: "ws-scalingforever",
+      workspaceId: "ws-ops",
       cliBaseUrl: "http://127.0.0.1:8002",
       outOfWorkspaceMode: "local",
     });
@@ -76,11 +74,11 @@ describe("access route", () => {
   it("treats bracketed ipv6 loopback as a local request origin and still prefers coreBaseUrl", async () => {
     workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
       organizationSlug: "local",
-      workspaceSlug: "scalingforever",
+      workspaceSlug: "ops",
       workspace: {
         coreBaseUrl: "http://127.0.0.1:8002",
-        publicOrigin: "https://m2-internal.tail7e1eb.ts.net",
-        workspaceId: "ws-scalingforever",
+        publicOrigin: "https://workspace.example.test",
+        workspaceId: "ws-ops",
       },
       error: null,
     });
@@ -88,14 +86,14 @@ describe("access route", () => {
     const result = await load({
       params: {
         organization: "local",
-        workspace: "scalingforever",
+        workspace: "ops",
       },
-      url: new URL("http://[::1]:4173/anx/o/local/w/scalingforever/access"),
+      url: new URL("http://[::1]:4173/anx/o/local/w/ops/access"),
     });
 
     expect(result).toEqual({
       coreBaseUrl: "http://127.0.0.1:8002",
-      workspaceId: "ws-scalingforever",
+      workspaceId: "ws-ops",
       cliBaseUrl: "http://127.0.0.1:8002",
       outOfWorkspaceMode: "local",
     });
@@ -104,11 +102,11 @@ describe("access route", () => {
   it("falls back to public workspace URL when coreBaseUrl is not configured", async () => {
     workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValue({
       organizationSlug: "local",
-      workspaceSlug: "scalingforever",
+      workspaceSlug: "ops",
       workspace: {
         coreBaseUrl: "",
-        publicOrigin: "https://m2-internal.tail7e1eb.ts.net",
-        workspaceId: "ws-scalingforever",
+        publicOrigin: "https://workspace.example.test",
+        workspaceId: "ws-ops",
       },
       error: null,
     });
@@ -116,16 +114,15 @@ describe("access route", () => {
     const result = await load({
       params: {
         organization: "local",
-        workspace: "scalingforever",
+        workspace: "ops",
       },
-      url: new URL("http://127.0.0.1:4173/anx/o/local/w/scalingforever/access"),
+      url: new URL("http://127.0.0.1:4173/anx/o/local/w/ops/access"),
     });
 
     expect(result).toEqual({
       coreBaseUrl: "",
-      workspaceId: "ws-scalingforever",
-      cliBaseUrl:
-        "https://m2-internal.tail7e1eb.ts.net/anx/o/local/w/scalingforever",
+      workspaceId: "ws-ops",
+      cliBaseUrl: "https://workspace.example.test/anx/o/local/w/ops",
       outOfWorkspaceMode: "local",
     });
   });

@@ -28,7 +28,7 @@ func TestDocumentKnowledgeSearchCommentsAndPut(t *testing.T) {
 		"title":       "Lane docs knowledge runbook",
 		"source":      "https://example.invalid/kb/runbook.md",
 		"tags":        []string{"knowledge", "ops"},
-		"hosts":       []string{"m4-air"},
+		"hosts":       []string{"laptop-a"},
 		"verified_at": "2026-09-08T12:00:00Z",
 	}, "body token alphawhiz lives only in the document body", "text", nil)
 	if err != nil {
@@ -38,7 +38,7 @@ func TestDocumentKnowledgeSearchCommentsAndPut(t *testing.T) {
 		t.Fatalf("source roundtrip: got %q", knowledge["source"])
 	}
 	hosts, _ := knowledge["hosts"].([]string)
-	if !containsString(hosts, "m4-air") {
+	if !containsString(hosts, "laptop-a") {
 		t.Fatalf("expected hosts, got %#v", knowledge["hosts"])
 	}
 	if strings.TrimSpace(anyString(knowledge["verified_at"])) == "" {
@@ -133,7 +133,7 @@ func TestDocumentKnowledgeSearchCommentsAndPut(t *testing.T) {
 		t.Fatalf("expected comment thread, got %#v", comments)
 	}
 
-	hostHits, _, err := store.SearchDocuments(ctx, primitives.DocumentSearchFilter{Query: "alphawhiz", Host: "m4-air"})
+	hostHits, _, err := store.SearchDocuments(ctx, primitives.DocumentSearchFilter{Query: "alphawhiz", Host: "laptop-a"})
 	if err != nil {
 		t.Fatalf("host search: %v", err)
 	}
@@ -198,7 +198,7 @@ func TestDocumentKnowledgeSearchCommentsAndPut(t *testing.T) {
 		"title":       "Lane docs knowledge runbook",
 		"source":      "https://example.invalid/kb/runbook.md",
 		"tags":        []string{"knowledge", "ops"},
-		"hosts":       []string{"m4-air"},
+		"hosts":       []string{"laptop-a"},
 		"verified_at": "2026-09-08T12:00:00Z",
 	}, head, "updated body still has alphawhiz", "text", nil, nil)
 	if err != nil {

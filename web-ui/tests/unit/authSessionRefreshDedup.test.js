@@ -75,8 +75,8 @@ it("refreshes near-expiry access cookies before core rejects them, preserving ot
     ["anx_ui_access_org__personal", token],
     ["anx_ui_access_org__personal_expires", String(Date.now() + 90_000)],
     ["anx_ui_session_org__personal", "personal-refresh"],
-    ["anx_ui_access_org__omi", "omi-access"],
-    ["anx_ui_session_org__omi", "omi-refresh"],
+    ["anx_ui_access_org__omi", "demo-access"],
+    ["anx_ui_session_org__omi", "demo-refresh"],
   ]);
   const fetch = vi.fn(
     async (url) =>
@@ -107,7 +107,7 @@ it("refreshes near-expiry access cookies before core rejects them, preserving ot
     expect(String(fetch.mock.calls[0][0])).toContain("/auth/token");
     expect(String(fetch.mock.calls[1][0])).toContain("/agents/me");
     expect(cookies.get("anx_ui_session_org__personal")).toBe("rotated");
-    expect(cookies.get("anx_ui_session_org__omi")).toBe("omi-refresh");
+    expect(cookies.get("anx_ui_session_org__omi")).toBe("demo-refresh");
   } finally {
     vi.unstubAllGlobals();
     resetWorkspaceAuthRefreshStateForTests();

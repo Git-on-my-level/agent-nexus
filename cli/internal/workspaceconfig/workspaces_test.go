@@ -21,8 +21,8 @@ func TestDirectoryGlobMatchingAndSpecificity(t *testing.T) {
 		{"single star component", filepath.Join(home, "work", "repo", "deep"), map[string]string{"~/work/*": "https://a.example"}, ""},
 		{"recursive middle zero components", filepath.Join(home, "work", "repo"), map[string]string{"~/work/**/repo": "https://a.example"}, "~/work/**/repo"},
 		{"character classes", filepath.Join(home, "work", "repo1"), map[string]string{"~/work/repo[12]": "https://a.example"}, "~/work/repo[12]"},
-		{"longer prefix", filepath.Join(home, "work", "omi", "repo"), map[string]string{"~/work/**": "https://a.example", "~/work/omi/**": "https://b.example"}, "~/work/omi/**"},
-		{"more literal characters", filepath.Join(home, "work", "omi", "repo"), map[string]string{"~/work/*/**": "https://a.example", "~/work/*/repo": "https://b.example"}, "~/work/*/repo"},
+		{"longer prefix", filepath.Join(home, "work", "demo", "repo"), map[string]string{"~/work/**": "https://a.example", "~/work/demo/**": "https://b.example"}, "~/work/demo/**"},
+		{"more literal characters", filepath.Join(home, "work", "demo", "repo"), map[string]string{"~/work/*/**": "https://a.example", "~/work/*/repo": "https://b.example"}, "~/work/*/repo"},
 		{"deterministic tie", filepath.Join(home, "work", "repo"), map[string]string{"~/work/re*o": "https://a.example", "~/work/re?o": "https://b.example"}, "~/work/re*o"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

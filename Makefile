@@ -49,6 +49,7 @@ web-ui-static-ci: ## Same steps as CI job web-ui-static-check (frozen lockfile +
 	pnpm -C $(WEB_UI_DIR) run build
 
 check: ## Run repo, core, cli, and web-ui checks
+	$(MAKE) oss-boundary-check
 	$(MAKE) contract-check
 	$(MAKE) workflow-check
 	$(MAKE) -C $(CORE_DIR) check
@@ -61,6 +62,11 @@ lint: ## Run lint checks for repo, core, and web-ui
 	$(MAKE) workflow-check
 	$(MAKE) -C $(CORE_DIR) lint
 	$(MAKE) -C $(WEB_UI_DIR) lint
+
+.PHONY: oss-boundary-check
+oss-boundary-check: ## Reject private paths/hosts and optional external patterns in tracked text
+	python3 ./scripts/test-oss-boundary.py
+	./scripts/check-oss-boundary.sh
 
 test: ## Run tests in both core and web-ui
 	$(MAKE) -C $(CORE_DIR) test

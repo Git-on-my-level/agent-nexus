@@ -226,7 +226,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
         self: {
           agent_id: "agent-hermes",
           actor_id: "actor-hermes",
-          username: "m4-hermes",
+          username: "worker-a",
           principal_kind: "agent",
           auth_method: "public_key",
         },

@@ -8,14 +8,14 @@ const NOW = "2026-10-04T12:00:00.000Z";
 const report = {
   kind: "anx.visual-report",
   schema_version: 1,
-  title: "Omi dashboard",
+  title: "Demo dashboard",
   summary:
-    "Seven initiatives. Two decisions need David. Launch readiness is reported by the team.",
+    "Seven initiatives. Two decisions need Alex. Launch readiness is reported by the team.",
   generated_at: NOW,
   projects: [
     {
-      id: "omi",
-      title: "Omi",
+      id: "demo",
+      title: "Demo",
       summary: "Launch preparation",
       outcome: "A useful launch with evidence",
     },
@@ -24,7 +24,7 @@ const report = {
   panels: [
     {
       id: "status",
-      project_id: "omi",
+      project_id: "demo",
       type: "explanation",
       title: "Launch readiness",
       author: "claude",
@@ -51,7 +51,7 @@ const active = titles.map((title, index) => ({
   ref: `card:initiative-${index}`,
   handle: `initiative-${index}`,
   title,
-  summary: `A clear outcome for initiative ${index + 1}.\n- [x] Define success\n- [x] Design\n- [x] Review\n- [ ] Implement\n- [ ] Verify\n- [ ] Pilot\n- [ ] Launch\n${index === 0 ? "Needs David: approve the pilot" : ""}`,
+  summary: `A clear outcome for initiative ${index + 1}.\n- [x] Define success\n- [x] Design\n- [x] Review\n- [ ] Implement\n- [ ] Verify\n- [ ] Pilot\n- [ ] Launch\n${index === 0 ? "Needs Alex: approve the pilot" : ""}`,
   phase: "in_progress",
   priority: index < 2 ? "p1" : "p2",
   source: { authority: "nexus" },
@@ -77,10 +77,10 @@ const asks = ["Choose the launch date", "Approve the customer pilot"].map(
 );
 const dashboard = {
   document: {
-    id: "omi-dashboard",
-    handle: "omi-dashboard",
-    ref: "document:omi-dashboard",
-    title: "Dashboard · Omi",
+    id: "demo-dashboard",
+    handle: "demo-dashboard",
+    ref: "document:demo-dashboard",
+    title: "Dashboard · Demo",
     state: "active",
     updated_at: NOW,
   },
@@ -89,14 +89,14 @@ const dashboard = {
 
 async function installOverview(page, { gate = null, failure = false } = {}) {
   await installWorkspaceApi(page, {
-    actors: [{ id: "david", display_name: "David", tags: ["human"] }],
-    principals: [{ actor_id: "david", principal_kind: "human" }],
+    actors: [{ id: "operator", display_name: "Alex", tags: ["human"] }],
+    principals: [{ actor_id: "operator", principal_kind: "human" }],
     boards: [
       {
         board: {
-          id: "omi",
-          handle: "omi",
-          title: "Omi · Initiatives",
+          id: "demo",
+          handle: "demo",
+          title: "Demo · Initiatives",
           state: "active",
         },
       },
@@ -122,7 +122,7 @@ async function installOverview(page, { gate = null, failure = false } = {}) {
         summary: item.summary.split("\n")[0],
         progress: { done: 3, total: 7 },
         needs:
-          item.ref === active[0].ref ? ["Needs David: approve the pilot"] : [],
+          item.ref === active[0].ref ? ["Needs Alex: approve the pilot"] : [],
         href: `/tasks/${item.handle}`,
       })),
     },
@@ -141,7 +141,7 @@ async function installOverview(page, { gate = null, failure = false } = {}) {
       status: "ok",
       pinned_ref: state.pinned,
       has_more: true,
-      reports: [{ ...dashboard.document, segment: "omi-dashboard", report }],
+      reports: [{ ...dashboard.document, segment: "demo-dashboard", report }],
     },
     agents: {
       status: "ok",
@@ -193,7 +193,7 @@ async function installOverview(page, { gate = null, failure = false } = {}) {
       });
     }
     if (path === "/inbox") return route.fulfill({ json: { items: asks } });
-    if (path === "/docs/omi-dashboard")
+    if (path === "/docs/demo-dashboard")
       return route.fulfill({ json: dashboard });
     return route.fallback();
   });
@@ -213,7 +213,7 @@ test("seeded CEO Overview screenshot and section order", async ({ page }) => {
     page.getByRole("link", { name: "Choose the launch date" }),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("heading", { name: "Omi dashboard", exact: true }),
+    page.getByRole("heading", { name: "Demo dashboard", exact: true }),
   ).toBeVisible();
   if (!BEFORE) {
     const inlineReport = page.getByRole("region", {
@@ -290,7 +290,7 @@ test("dashboard can be pinned and unpinned", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "Pinned dashboard" }),
   ).toBeDisabled();
-  expect(state.writes[0].document_ref).toBe("document:omi-dashboard");
+  expect(state.writes[0].document_ref).toBe("document:demo-dashboard");
   await page.getByRole("button", { name: "Use newest report" }).click();
   await expect(
     page.getByRole("button", { name: "Pin as dashboard" }),
@@ -346,7 +346,7 @@ test("unknown bookmarked dashboard falls back without repeated selector reads", 
       .locator("option"),
   ).toHaveCount(2);
   await expect(
-    page.getByRole("heading", { name: "Omi dashboard", exact: true }),
+    page.getByRole("heading", { name: "Demo dashboard", exact: true }),
   ).toBeVisible();
   expect(state.selectorReads).toBe(1);
 });
@@ -378,7 +378,7 @@ test("failed snapshot reports an error", async ({ page }) => {
 
 test("compact dashboard ignores document filter state", async ({ page }) => {
   await installOverview(page);
-  await page.goto(`${OVERVIEW}?reportProject=omi&reportFreshness=stale`);
+  await page.goto(`${OVERVIEW}?reportProject=demo&reportFreshness=stale`);
   await expect(
     page.getByRole("heading", { name: "Launch readiness", exact: true }),
   ).toBeVisible();

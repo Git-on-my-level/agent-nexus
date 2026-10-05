@@ -25,16 +25,16 @@ it("excludes archived work decisions from Watching using the core lifecycle proj
 
 it("keeps human next actors in Needs you and prioritizes asks over routine Watching edits", () => {
   const rows = buildInboxRows({
-    humanIds: new Set(["david"]),
+    humanIds: new Set(["operator"]),
     work: [
       {
         ref: "card:human",
         phase: "ready",
-        next_actor: "actor:david",
+        next_actor: "actor:operator",
         next_action: "Approve pilot",
       },
       { ref: "card:agent", phase: "ready", next_actor: "actor:claude" },
-      { ref: "card:done", phase: "done", next_actor: "actor:david" },
+      { ref: "card:done", phase: "done", next_actor: "actor:operator" },
     ],
     updates: [
       {

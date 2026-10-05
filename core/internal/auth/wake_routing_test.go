@@ -10,12 +10,12 @@ func TestDescribeWakeRoutingMarksFreshHeartbeatOnline(t *testing.T) {
 
 	status := DescribeWakeRouting(
 		AuthPrincipalSummary{
-			ActorID:       "actor-m4-hermes",
-			Username:      "m4-hermes",
+			ActorID:       "actor-worker-a",
+			Username:      "worker-a",
 			PrincipalKind: string(PrincipalKindAgent),
 			Registration: &AgentRegistration{
-				Handle:            "m4-hermes",
-				ActorID:           "actor-m4-hermes",
+				Handle:            "worker-a",
+				ActorID:           "actor-worker-a",
 				Status:            "active",
 				BridgeInstanceID:  "bridge-hermes-1",
 				BridgeCheckedInAt: "2099-03-20T12:00:00Z",
@@ -35,7 +35,7 @@ func TestDescribeWakeRoutingMarksFreshHeartbeatOnline(t *testing.T) {
 	if status.State != WakeRoutingStateOnline {
 		t.Fatalf("expected online state, got %#v", status)
 	}
-	if status.Summary != "Online as @m4-hermes." {
+	if status.Summary != "Online as @worker-a." {
 		t.Fatalf("unexpected online summary: %#v", status)
 	}
 }
@@ -45,12 +45,12 @@ func TestDescribeWakeRoutingTreatsStaleHeartbeatAsOffline(t *testing.T) {
 
 	status := DescribeWakeRouting(
 		AuthPrincipalSummary{
-			ActorID:       "actor-m4-hermes",
-			Username:      "m4-hermes",
+			ActorID:       "actor-worker-a",
+			Username:      "worker-a",
 			PrincipalKind: string(PrincipalKindAgent),
 			Registration: &AgentRegistration{
-				Handle:            "m4-hermes",
-				ActorID:           "actor-m4-hermes",
+				Handle:            "worker-a",
+				ActorID:           "actor-worker-a",
 				Status:            "active",
 				BridgeInstanceID:  "bridge-hermes-1",
 				BridgeCheckedInAt: "2026-03-20T12:00:00Z",

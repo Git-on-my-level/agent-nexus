@@ -113,7 +113,7 @@ describe("classifyWorkspaceProxyPathShape", () => {
 
   it("classifies would-be-valid /ws/a/b/... as unknown_invalid", () => {
     expect(
-      classifyWorkspaceProxyPathShape("/ws/scaling-forever/personal/api"),
+      classifyWorkspaceProxyPathShape("/ws/example-team/personal/api"),
     ).toBe("unknown_invalid");
   });
 });
@@ -192,14 +192,14 @@ describe("hostedWorkspaceProxy (proxyToControlPlaneWorkspace)", () => {
     envState.ANX_CONTROL_BASE_URL = "http://control.example.test";
     globalThis.fetch = vi.fn(async () => new Response("ok", { status: 200 }));
 
-    const pathname = "/ws/scaling-forever/personal/api/x";
+    const pathname = "/ws/example-team/personal/api/x";
     const event = createEvent(pathname, { search: "?q=1&x=y" });
 
     const response = await proxyToControlPlaneWorkspace(event, pathname);
 
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     expect(globalThis.fetch.mock.calls[0][0]).toBe(
-      "http://control.example.test/ws/scaling-forever/personal/api/x?q=1&x=y",
+      "http://control.example.test/ws/example-team/personal/api/x?q=1&x=y",
     );
     const init = globalThis.fetch.mock.calls[0][1];
     expect(init.headers.get("X-ANX-Control-Plane-Authorization")).toBe(

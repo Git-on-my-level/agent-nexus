@@ -94,7 +94,7 @@ describe("actor session / gate logic", () => {
       {
         agent_id: "agent-26",
         actor_id: "actor-hermes",
-        username: "m4-hermes",
+        username: "worker-a",
       },
     ]);
 
@@ -106,8 +106,8 @@ describe("actor session / gate logic", () => {
       ]),
     ).toBe("Hermes Operator");
     // Without an actor record the username is the best label we have.
-    expect(lookupActorDisplayName("actor-hermes", [])).toBe("m4-hermes");
-    expect(lookupActorDisplayName("agent-26", [])).toBe("m4-hermes");
+    expect(lookupActorDisplayName("actor-hermes", [])).toBe("worker-a");
+    expect(lookupActorDisplayName("agent-26", [])).toBe("worker-a");
     expect(
       lookupActorDisplayName("actor-human", [
         { id: "actor-human", display_name: "Ops Lead" },

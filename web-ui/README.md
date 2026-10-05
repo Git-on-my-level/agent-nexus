@@ -22,8 +22,8 @@ This package contains the SvelteKit web UI for Agent Nexus.
 
     ```bash
     export ANX_WORKSPACES='[
-      {"organizationSlug":"local","slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000","publicOrigin":"https://anx.tailnet.ts.net/anx/o/local/w/local"},
-      {"organizationSlug":"local","slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001","publicOrigin":"https://anx.tailnet.ts.net/anx/o/local/w/ops"}
+      {"organizationSlug":"local","slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000","publicOrigin":"https://workspace.example.test/anx/o/local/w/local"},
+      {"organizationSlug":"local","slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001","publicOrigin":"https://workspace.example.test/anx/o/local/w/ops"}
     ]'
     export ANX_DEFAULT_WORKSPACE=local
     export ANX_DEFAULT_ORGANIZATION=local

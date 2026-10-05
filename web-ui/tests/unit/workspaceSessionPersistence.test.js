@@ -43,11 +43,11 @@ describe("workspace session persistence", () => {
           finish = resolve;
         }),
     });
-    select("one", "omi");
-    auth.completeAuthSession({ agent_id: "omi-human" });
+    select("one", "demo");
+    auth.completeAuthSession({ agent_id: "demo-human" });
     finish(response({ agent_id: "personal-human" }));
     await pending;
-    expect(get(auth.authenticatedAgent).agent_id).toBe("omi-human");
+    expect(get(auth.authenticatedAgent).agent_id).toBe("demo-human");
     select("one", "personal");
     expect(get(auth.authenticatedAgent).agent_id).toBe("personal-human");
   });
@@ -70,13 +70,13 @@ describe("workspace session persistence", () => {
     vi.useFakeTimers();
     select("one", "personal");
     auth.completeAuthSession({ agent_id: "personal-human" });
-    select("two", "omi");
-    auth.completeAuthSession({ agent_id: "omi-human" });
+    select("two", "demo");
+    auth.completeAuthSession({ agent_id: "demo-human" });
     const fetch = vi.fn(async (_url, init) => {
       const headers = new Headers(init.headers);
       if (headers.get("x-anx-workspace-slug") === "personal")
         return response(null, 403);
-      return response({ agent_id: "omi-human" });
+      return response({ agent_id: "demo-human" });
     });
     vi.stubGlobal("fetch", fetch);
     stop = auth.startWorkspaceSessionMaintenance();
@@ -88,7 +88,7 @@ describe("workspace session persistence", () => {
       ),
     ).toBe("one");
     expect(get(auth.authSessionReady)).toBe(true);
-    expect(get(auth.authenticatedAgent).agent_id).toBe("omi-human");
+    expect(get(auth.authenticatedAgent).agent_id).toBe("demo-human");
     select("one", "personal");
     expect(get(auth.authenticatedAgent)).toBeNull();
   });

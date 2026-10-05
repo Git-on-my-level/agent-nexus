@@ -81,9 +81,9 @@ import AccessPage from "../../src/routes/o/[organization]/w/[workspace]/access/+
 const PENDING = {
   id: "henr_1",
   user_code: "J6FA-N4XI",
-  requested_slug: "m5-mbp",
-  os_user: "david",
-  hostname: "m5-mbp.local",
+  requested_slug: "workstation-a",
+  os_user: "operator",
+  hostname: "workstation-a.local",
   discovered_adapters: ["claude", "codex"],
   adoption_names: [],
   requesting_ip: "203.0.113.17",
@@ -295,6 +295,6 @@ describe("access page", () => {
         "henr_1",
       );
     });
-    expect(await screen.findByText(/Approved m5-mbp/)).toBeTruthy();
+    expect(await screen.findByText(/Approved workstation-a/)).toBeTruthy();
   });
 });

@@ -498,8 +498,8 @@ func TestWorkTextKeepsPaginationAndReceiptUncertainty(t *testing.T) {
 	if !strings.Contains(got, "last_error=rate_limited: GitHub rate limit reached") {
 		t.Fatalf("get hid refresh error: %s", got)
 	}
-	bindings := formatWorkCommandText("pm bindings list", map[string]any{"items": []any{map[string]any{"id": "binding-1", "actor_id": "actor-david", "origin": map[string]any{"transport": "telegram", "tenant_id": "bot-1", "channel_id": "-100", "external_user_id": "42"}, "can_approve": true, "enabled": true, "revision": float64(1)}}, "has_more": false})
-	if !strings.Contains(bindings, "bindings: 1") || !strings.Contains(bindings, "binding-1  telegram bot-1/-100 user=42 -> actor-david can_approve=true enabled=true revision=1") {
+	bindings := formatWorkCommandText("pm bindings list", map[string]any{"items": []any{map[string]any{"id": "binding-1", "actor_id": "actor-operator", "origin": map[string]any{"transport": "telegram", "tenant_id": "bot-1", "channel_id": "-100", "external_user_id": "42"}, "can_approve": true, "enabled": true, "revision": float64(1)}}, "has_more": false})
+	if !strings.Contains(bindings, "bindings: 1") || !strings.Contains(bindings, "binding-1  telegram bot-1/-100 user=42 -> actor-operator can_approve=true enabled=true revision=1") {
 		t.Fatalf("unexpected bindings list text: %s", bindings)
 	}
 	conversations := formatWorkCommandText("pm conversations list", map[string]any{"items": []any{

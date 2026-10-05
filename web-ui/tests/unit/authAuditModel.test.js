@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { describeAuthAuditEvent } from "../../src/lib/authAuditModel.js";
 
-const names = { "actor-maya": "Maya Chen", "agent-codex": "codex on m5-mbp" };
+const names = {
+  "actor-maya": "Maya Chen",
+  "agent-codex": "codex on workstation-a",
+};
 const options = {
   nameFor: (id) => names[id] ?? "",
-  hostName: (id) => (id === "host-1" ? "m5-mbp" : ""),
+  hostName: (id) => (id === "host-1" ? "workstation-a" : ""),
 };
 
 describe("auth audit sentences", () => {
@@ -22,7 +25,9 @@ describe("auth audit sentences", () => {
         },
         options,
       ),
-    ).toBe("m5-mbp enrolled using a token issued by codex on m5-mbp");
+    ).toBe(
+      "workstation-a enrolled using a token issued by codex on workstation-a",
+    );
     expect(
       describeAuthAuditEvent(
         {
@@ -32,7 +37,7 @@ describe("auth audit sentences", () => {
         },
         options,
       ),
-    ).toBe("m5-mbp enrolled using an enrollment token");
+    ).toBe("workstation-a enrolled using an enrollment token");
   });
   it("uses names and host slugs, never raw ids", () => {
     expect(
@@ -45,7 +50,7 @@ describe("auth audit sentences", () => {
         },
         options,
       ),
-    ).toBe("Maya Chen approved m5-mbp");
+    ).toBe("Maya Chen approved workstation-a");
     expect(
       describeAuthAuditEvent(
         {
@@ -55,7 +60,7 @@ describe("auth audit sentences", () => {
         },
         options,
       ),
-    ).toBe("codex on m5-mbp used anx for the first time");
+    ).toBe("codex on workstation-a used anx for the first time");
     expect(
       describeAuthAuditEvent(
         {
@@ -74,7 +79,7 @@ describe("auth audit sentences", () => {
         },
         options,
       ),
-    ).toBe("Maya Chen revoked m5-mbp and its agents");
+    ).toBe("Maya Chen revoked workstation-a and its agents");
   });
 
   it("falls back to usernames and readable unknown types", () => {

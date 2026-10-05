@@ -38,10 +38,10 @@ Example:
 
 ```bash
 export ANX_WORKSPACES='[
-  {"organizationSlug":"local","slug":"dtrinity","label":"DTrinity","coreBaseUrl":"http://127.0.0.1:8000","publicOrigin":"https://anx.tailnet.ts.net/anx/o/local/w/dtrinity"},
-  {"organizationSlug":"local","slug":"scalingforever","label":"Scaling Forever","coreBaseUrl":"http://127.0.0.1:8001","publicOrigin":"https://anx.tailnet.ts.net/anx/o/local/w/scalingforever"}
+  {"organizationSlug":"local","slug":"demo","label":"Demo","coreBaseUrl":"http://127.0.0.1:8000","publicOrigin":"https://workspace.example.test/anx/o/local/w/demo"},
+  {"organizationSlug":"local","slug":"ops","label":"Operations","coreBaseUrl":"http://127.0.0.1:8001","publicOrigin":"https://workspace.example.test/anx/o/local/w/ops"}
 ]'
-export ANX_DEFAULT_WORKSPACE=dtrinity
+export ANX_DEFAULT_WORKSPACE=demo
 export ANX_DEFAULT_ORGANIZATION=local
 ```
 
@@ -127,7 +127,7 @@ Identity is workspace-scoped.
   - Browser API calls go through the same-origin BFF/proxy surface.
   - Authenticated writes lock to that workspace's principal actor.
 
-Switching from `/dtrinity/...` to `/scalingforever/...` preserves each workspace's
+Switching from `/demo/...` to `/ops/...` preserves each workspace's
 own auth and actor state independently.
 
 ## Local integration
@@ -160,10 +160,10 @@ Two cores:
 
 ```bash
 export ANX_WORKSPACES='[
-  {"slug":"dtrinity","label":"DTrinity","coreBaseUrl":"http://127.0.0.1:8000"},
-  {"slug":"scalingforever","label":"Scaling Forever","coreBaseUrl":"http://127.0.0.1:8001"}
+  {"slug":"demo","label":"Demo","coreBaseUrl":"http://127.0.0.1:8000"},
+  {"slug":"ops","label":"Operations","coreBaseUrl":"http://127.0.0.1:8001"}
 ]'
-export ANX_DEFAULT_WORKSPACE=dtrinity
+export ANX_DEFAULT_WORKSPACE=demo
 ./scripts/dev
 ```
 
@@ -235,10 +235,10 @@ Serve the built UI:
 
 ```bash
 ANX_WORKSPACES='[
-  {"slug":"dtrinity","label":"DTrinity","coreBaseUrl":"http://127.0.0.1:8000"},
-  {"slug":"scalingforever","label":"Scaling Forever","coreBaseUrl":"http://127.0.0.1:8001"}
+  {"slug":"demo","label":"Demo","coreBaseUrl":"http://127.0.0.1:8000"},
+  {"slug":"ops","label":"Operations","coreBaseUrl":"http://127.0.0.1:8001"}
 ]' \
-ANX_DEFAULT_WORKSPACE=dtrinity \
+ANX_DEFAULT_WORKSPACE=demo \
 ./scripts/serve
 ```
 
@@ -247,7 +247,7 @@ build is missing. Run `./scripts/build` first.
 
 `ORIGIN` defaults to `http://${HOST}:${PORT}`. Set it explicitly when serving
 behind TLS or a reverse proxy on a different hostname, e.g.
-`ORIGIN=https://m2-internal.scalingforever.com`.
+`ORIGIN=https://workspace.example.com`.
 
 **Do not use `vite preview` for production-like deployments.** `vite preview` is
 a static preview server that does not execute SvelteKit server hooks or
@@ -261,10 +261,10 @@ Recommended production shape: one UI process, many core processes, path-prefix
 entrypoint at the edge.
 
 Example Caddy config for external URLs like
-`https://m2-internal.scalingforever.com/anx/dtrinity/...`:
+`https://workspace.example.com/anx/demo/...`:
 
 ```caddy
-m2-internal.scalingforever.com {
+workspace.example.com {
   redir /anx /anx/ 301
 
   route /anx/* {
@@ -378,7 +378,7 @@ Example for a Cloudflare Access + Web Analytics deployment:
 ```bash
 ANX_UI_CSP_SCRIPT_SRC_EXTRA="https://static.cloudflareinsights.com 'sha256-<inline-script-hash-from-browser-console>'" \
 ANX_UI_CSP_CONNECT_SRC_EXTRA="https://cloudflareinsights.com" \
-ANX_UI_CSP_MANIFEST_SRC_EXTRA="https://scalingforever.cloudflareaccess.com" \
+ANX_UI_CSP_MANIFEST_SRC_EXTRA="https://example.cloudflareaccess.com" \
 ./scripts/serve
 ```
 

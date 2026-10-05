@@ -11,39 +11,39 @@ describe("principalWakeRouting", () => {
       enrichPrincipalsWithWakeRouting([
         {
           principal_kind: "agent",
-          username: "m4-hermes",
+          username: "worker-a",
           wake_routing: {
             applicable: true,
-            handle: "m4-hermes",
+            handle: "worker-a",
             taggable: true,
             online: true,
             state: "online",
-            summary: "Online as @m4-hermes.",
+            summary: "Online as @worker-a.",
           },
         },
       ]),
     ).resolves.toEqual([
       {
         principal_kind: "agent",
-        username: "m4-hermes",
+        username: "worker-a",
         wake_routing: {
           applicable: true,
-          handle: "m4-hermes",
+          handle: "worker-a",
           taggable: true,
           online: true,
           state: "online",
-          summary: "Online as @m4-hermes.",
+          summary: "Online as @worker-a.",
         },
         wakeRouting: {
           applicable: true,
-          handle: "m4-hermes",
+          handle: "worker-a",
           taggable: true,
           online: true,
           offline: false,
           state: "online",
           badgeLabel: "Online",
           badgeClass: "bg-ok-soft text-ok-text",
-          summary: "Online as @m4-hermes.",
+          summary: "Online as @worker-a.",
         },
       },
     ]);
@@ -54,16 +54,16 @@ describe("principalWakeRouting", () => {
       enrichPrincipalsWithWakeRouting([
         {
           principal_kind: "agent",
-          username: "m4-hermes",
+          username: "worker-a",
         },
       ]),
     ).resolves.toEqual([
       {
         principal_kind: "agent",
-        username: "m4-hermes",
+        username: "worker-a",
         wakeRouting: {
           applicable: true,
-          handle: "m4-hermes",
+          handle: "worker-a",
           taggable: false,
           online: false,
           offline: false,

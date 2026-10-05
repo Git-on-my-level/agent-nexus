@@ -27,14 +27,14 @@ describe("parseWorkspaceRouteSlugs", () => {
   });
 
   it("parses /ws/{org}/{workspace} and nested API subpaths (hosted proxy path shape)", () => {
-    expect(parseWorkspaceRouteSlugs("/ws/scaling-forever/personal")).toEqual({
-      organizationSlug: "scaling-forever",
+    expect(parseWorkspaceRouteSlugs("/ws/example-team/personal")).toEqual({
+      organizationSlug: "example-team",
       workspaceSlug: "personal",
     });
     expect(
-      parseWorkspaceRouteSlugs("/ws/scaling-forever/personal/auth/token", ""),
+      parseWorkspaceRouteSlugs("/ws/example-team/personal/auth/token", ""),
     ).toEqual({
-      organizationSlug: "scaling-forever",
+      organizationSlug: "example-team",
       workspaceSlug: "personal",
     });
   });
@@ -45,12 +45,9 @@ describe("parseWorkspaceRouteSlugs", () => {
     // /stream/events are not necessarily supported through the CP workspace
     // proxy — that is a separate product/contract check.
     expect(
-      parseWorkspaceRouteSlugs(
-        "/ws/scaling-forever/personal/stream/events",
-        "",
-      ),
+      parseWorkspaceRouteSlugs("/ws/example-team/personal/stream/events", ""),
     ).toEqual({
-      organizationSlug: "scaling-forever",
+      organizationSlug: "example-team",
       workspaceSlug: "personal",
     });
   });

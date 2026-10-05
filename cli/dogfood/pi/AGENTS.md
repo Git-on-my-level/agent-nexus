@@ -13,7 +13,7 @@ Use it to exercise the real `anx` experience with a real agent runner against an
 ## Local Invariants
 - Keep scenario validation on the default lane: `--provider zai --model glm-5`, unless the user explicitly asks to test a different lane.
 - Treat provider or model debugging as separate from scenario validation.
-- Respect runner defaults from [README.md](/Users/dazheng/workspace/agent-nexus/cli/dogfood/pi/README.md) and `run.mjs`.
+- Respect runner defaults from [README.md](README.md) and `run.mjs`.
 - The runner default is `--max-seconds 900`; do not lower below `600` for multi-agent validation unless intentionally testing timeout behavior.
 
 ## Why This Matters

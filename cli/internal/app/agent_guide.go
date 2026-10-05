@@ -13,7 +13,7 @@ const agentGuideSkillName = "anx-participant"
 
 const agentGuideSkillDescription = "Participate in Agent Nexus work with source authority, scoped session identity, meaningful updates, and evidence-backed completion."
 
-const agentGuideSkillVersion = "anx.participant.v12"
+const agentGuideSkillVersion = "anx.participant.v13"
 
 type guideSection struct {
 	Title string

@@ -145,7 +145,7 @@ partial feature set does not satisfy these gates.
 
 ## Rulings (2026-09-08)
 
-David's decisions after the first integrated review. These override earlier
+Product decisions after the first integrated review. These override earlier
 sections where they conflict. Nobody uses Agent Nexus yet, so deletions are cheap:
 prefer removing a surface over keeping it "for compatibility".
 
@@ -175,7 +175,7 @@ Integrations and the audit log.
 ### PM stays an external agent, bridged through the existing harnesses
 
 The PM is not an in-process model call. It must run through the agent harnesses
-David already operates (omp, Hermes, Codex, opencode, Claude, Cursor) so it gains
+the operator selects (omp, Hermes, Codex, opencode, Claude, Cursor) so it gains
 their tools (bash, python, ssh, git) and improves as they do. Simplify the bridge
 to one runner: `anx pm serve` claims queued turns, fetches the turn context, runs
 the configured harness through `agentctl` with the `anx` CLI as the PM's tools,
@@ -183,12 +183,12 @@ and completes the turn. No wake-routing or online-handle prerequisite for this
 path. Authorization is enforced by anx-core per requesting principal; the PM
 process runs on a trusted host with that host's credentials.
 
-Dogfood order: `omp` with `glm-5.3` on the M4 Air first, then Hermes once stable.
+Validate the configured harness on an isolated test host before using it for live work.
 
 ### JIT generated adapters stay, and must run on macOS and Linux
 
 Generated readers are kept. They must execute for real on this macOS host now
-and on Linux (Proxmox VMs) later. Linux keeps bubblewrap. macOS gets an equally
+and on Linux later. Linux keeps bubblewrap. macOS gets an equally
 enforced Apple Seatbelt profile (`sandbox-exec`): deny by default, read-only
 reader artifact, scratch only, no network. Generated code transforms data that
 trusted readers fetched; it never holds credentials. A directory or a prompt is
@@ -197,7 +197,7 @@ still not a sandbox. Fail closed on any host without an enforced runner.
 ### Channels
 
 Telegram and Discord ship together; CAR overfit to Telegram last time. Build both
-transports to test-readiness now. David supplies dedicated bot credentials last;
+transports to test-readiness now. The operator supplies dedicated bot credentials last;
 until then, end-to-end proof and dogfood run on web and CLI.
 
 ### Receipts

@@ -313,8 +313,8 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "GET `/docs/search?q=` returning `{ documents, next_cursor? }` with optional `search_rank`.",
 		Composition: "SQLite FTS5 over title, body, summary, source, tags, and comments. Use `--knowledge` for agent-facing docs tagged `knowledge`. `--host` filters knowledge facts that apply to that machine.",
 		Examples: []string{
-			"anx docs search \"runbook\" --knowledge --host m4-air",
-			"anx docs search \"alphawhiz\" --knowledge --host m4-air --limit 20",
+			"anx docs search \"runbook\" --knowledge --host laptop-a",
+			"anx docs search \"alphawhiz\" --knowledge --host laptop-a --limit 20",
 		},
 		Flags: []localHelperFlag{
 			{Name: "<q>", Description: "Search query; also accepted as `--q`."},
@@ -332,7 +332,7 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "PUT `/docs/{document_id}` with `{ document, content, content_type }`. Handle is `--handle`, filename stem, or title slug.",
 		Composition: "Idempotent by handle: missing handles create, existing handles append a revision and update title/source/tags/hosts/verified_at.",
 		Examples: []string{
-			"anx docs put runbook.md --title \"Runbook\" --tags knowledge --source https://example.invalid/runbook.md --hosts m4-air --verified-at 2026-09-08T12:00:00Z",
+			"anx docs put runbook.md --title \"Runbook\" --tags knowledge --source https://example.invalid/runbook.md --hosts laptop-a --verified-at 2026-09-08T12:00:00Z",
 			"anx docs put - --handle kb-shared --title \"Note\" --tags knowledge",
 		},
 		Flags: []localHelperFlag{
@@ -2210,12 +2210,12 @@ func configLocalHelpText(topic string) (string, bool) {
 		"config map": {
 			summary:  "Map an absolute or ~/ directory glob to a workspace. Quote globs. ** matches zero or more path components; longest literal prefix wins, then most literal characters, then lexical order.",
 			usage:    "anx config map <path-glob> <alias|url>",
-			examples: []string{`anx config map "~/work/omi/**" omi`},
+			examples: []string{`anx config map "~/work/demo/**" demo`},
 		},
 		"config unmap": {
 			summary:  "Remove a directory rule by its path glob (idempotent).",
 			usage:    "anx config unmap <path-glob>",
-			examples: []string{`anx config unmap "~/work/omi/**"`},
+			examples: []string{`anx config unmap "~/work/demo/**"`},
 		},
 		"config show": {
 			summary:  "Print effective CLI settings and the source of each field (access tokens are redacted).",

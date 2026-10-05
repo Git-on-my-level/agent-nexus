@@ -310,15 +310,15 @@ describe("hooks proxy retry", () => {
     const response = await handle({
       event: {
         url: new URL(
-          "http://localhost:5173/ws/scaling-forever/personal/auth/token",
+          "http://localhost:5173/ws/example-team/personal/auth/token",
         ),
         request: new Request(
-          "http://localhost:5173/ws/scaling-forever/personal/auth/token",
+          "http://localhost:5173/ws/example-team/personal/auth/token",
           {
             method: "POST",
             headers: {
               "content-type": "application/json",
-              "x-anx-organization-slug": "scaling-forever",
+              "x-anx-organization-slug": "example-team",
               "x-anx-workspace-slug": "personal",
             },
             body: JSON.stringify({
@@ -334,7 +334,7 @@ describe("hooks proxy retry", () => {
     expect(resolve).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe(
-      "http://control.example.test/ws/scaling-forever/personal/auth/token",
+      "http://control.example.test/ws/example-team/personal/auth/token",
     );
     expect(bodyText(fetchMock.mock.calls[0][1]?.body)).toContain(
       "workspace_human_grant",
@@ -670,7 +670,7 @@ describe("hooks proxy retry", () => {
     envState.ANX_UI_CSP_CONNECT_SRC_EXTRA = "https://cloudflareinsights.com";
     envState.ANX_UI_CSP_IMG_SRC_EXTRA = "https://images.example.test";
     envState.ANX_UI_CSP_MANIFEST_SRC_EXTRA =
-      "https://scalingforever.cloudflareaccess.com";
+      "https://example.cloudflareaccess.com";
 
     const response = await handle({
       event: {
@@ -704,7 +704,7 @@ describe("hooks proxy retry", () => {
       "img-src 'self' blob: data: https://images.example.test",
     );
     expect(csp).toContain(
-      "manifest-src 'self' https://scalingforever.cloudflareaccess.com",
+      "manifest-src 'self' https://example.cloudflareaccess.com",
     );
     expect(response.headers.get("X-ANX-UI-Version")).toBe(CURRENT_VERSION);
   });
