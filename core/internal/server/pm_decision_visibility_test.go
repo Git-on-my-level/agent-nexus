@@ -12,10 +12,8 @@ import (
 	"agent-nexus-core/internal/primitives"
 )
 
-// PM decisions are workspace-readable while their resolution evidence can sit
-// inside a private PM conversation. Live summaries must follow the requester's
-// resource visibility on every readback, and the durable record must never
-// carry the summary at all (read-time protection covers already-stored rows).
+// PM decisions inherit privacy from their evidence. Accessible live summaries
+// follow the shared policy without persisting summaries into durable records.
 func TestPMDecisionRefSummariesRespectRequesterVisibility(t *testing.T) {
 	env := newPMStoreTestEnv(t)
 	ctx := context.Background()
@@ -97,7 +95,7 @@ func TestPMDecisionRefSummariesRespectRequesterVisibility(t *testing.T) {
 		r.Header.Set("Authorization", "Bearer "+token)
 		rt.ServeHTTP(rr, r)
 		if rr.Code != 200 {
-			t.Fatalf("%s %s: %d %s", method, path, rr.Code, rr.Body)
+			t.Fatalf("%s %s token=%s: %d %s", method, path, token, rr.Code, rr.Body)
 		}
 		return rr
 	}
@@ -137,38 +135,23 @@ func TestPMDecisionRefSummariesRespectRequesterVisibility(t *testing.T) {
 	expect(t, ownerGot, privateArtifactRef, "PM wake", true)
 	expect(t, ownerGot, publicArtifactRef, "Accepted report", true)
 
-	// Another actor in the same workspace loses exactly the summaries behind
-	// the private conversation; refs and existence stay truthful.
-	strangerGot := summaryByRef(t, call("GET", "/pm/decisions/"+decision.ID, stranger.AccessToken).Body.Bytes(), 3)
-	expect(t, strangerGot, privateEventRef, "", true)
-	expect(t, strangerGot, privateArtifactRef, "", true)
-	expect(t, strangerGot, publicArtifactRef, "Accepted report", true)
-
-	// List behaves like get.
+	// A decision containing private evidence hides refs and existence too.
+	assertHidden := func(id string) {
+		rr := httptest.NewRecorder()
+		r := httptest.NewRequest("GET", "/pm/decisions/"+id, nil)
+		r.Header.Set("Authorization", "Bearer "+stranger.AccessToken)
+		rt.ServeHTTP(rr, r)
+		if rr.Code != 404 {
+			t.Fatalf("private decision: %d %s", rr.Code, rr.Body)
+		}
+	}
+	assertHidden(decision.ID)
 	list := call("GET", "/pm/decisions", stranger.AccessToken)
-	var page struct {
-		Items []json.RawMessage `json:"items"`
-	}
-	if err := json.Unmarshal(list.Body.Bytes(), &page); err != nil {
-		t.Fatal(err)
-	}
-	var listed []byte
-	for _, item := range page.Items {
-		var probe struct {
-			ID string `json:"id"`
-		}
-		if err := json.Unmarshal(item, &probe); err != nil {
-			t.Fatal(err)
-		}
-		if probe.ID == decision.ID {
-			listed = item
+	for _, secret := range []string{decision.ID, privateEventRef, privateArtifactRef} {
+		if bytes.Contains(list.Body.Bytes(), []byte(secret)) {
+			t.Fatalf("private evidence in list: %s", list.Body)
 		}
 	}
-	if listed == nil {
-		t.Fatal("stranger lost the workspace-visible decision")
-	}
-	expect(t, summaryByRef(t, listed, 3), privateEventRef, "", true)
-	expect(t, summaryByRef(t, listed, 3), publicArtifactRef, "Accepted report", true)
 
 	// The selected PM agent keeps its conversation access.
 	agentGot := summaryByRef(t, call("GET", "/pm/decisions/"+decision.ID, agent.AccessToken).Body.Bytes(), 3)
@@ -182,6 +165,11 @@ func TestPMDecisionRefSummariesRespectRequesterVisibility(t *testing.T) {
 	}
 	if handle := asString(live["handle"]); handle != "" {
 		input.RequestKey = "dvis-handle"
+		publicWork, e := store.CreateWork(ctx, owner.ActorID, asString(board["id"]), map[string]any{"title": "Public evidence work"})
+		if e != nil {
+			t.Fatal(e)
+		}
+		input.WorkRef = asString(publicWork["ref"])
 		input.Payload.ResolutionRefs = []string{"artifact:" + handle}
 		handleDecision, err := rt.Service.ProposeDecision(ctx, p, input)
 		if err != nil {
@@ -196,9 +184,7 @@ func TestPMDecisionRefSummariesRespectRequesterVisibility(t *testing.T) {
 	if _, err := store.TrashEvent(ctx, owner.ActorID, anyString(privateEvent["id"]), "cleanup"); err != nil {
 		t.Fatal(err)
 	}
-	afterTrash := summaryByRef(t, call("GET", "/pm/decisions/"+decision.ID, stranger.AccessToken).Body.Bytes(), 3)
-	expect(t, afterTrash, privateEventRef, "", false)
-	expect(t, afterTrash, publicArtifactRef, "Accepted report", true)
+	assertHidden(decision.ID)
 	ownerAfterTrash := summaryByRef(t, call("GET", "/pm/decisions/"+decision.ID, owner.AccessToken).Body.Bytes(), 3)
 	expect(t, ownerAfterTrash, privateEventRef, "", false)
 
@@ -219,7 +205,7 @@ func TestPMDecisionRefSummariesRespectRequesterVisibility(t *testing.T) {
 		// equivalent decision whose artifact lacks a direct thread_id column
 		// match by checking the owner still sees the summary through a fresh
 		// proposal (resolution re-reads live state, exercising the handle
-		// resolution path inside pmBackingThread).
+		// shared resource resolution path).
 		input.RequestKey = "dvis-publicized"
 		input.Payload.ResolutionRefs = []string{"artifact:" + anyString(privateArtifact["id"])}
 		publicizedDecision, err := rt.Service.ProposeDecision(ctx, p, input)
@@ -228,13 +214,10 @@ func TestPMDecisionRefSummariesRespectRequesterVisibility(t *testing.T) {
 		}
 		ownerPublicized := summaryByRef(t, call("GET", "/pm/decisions/"+publicizedDecision.ID, owner.AccessToken).Body.Bytes(), 1)
 		expect(t, ownerPublicized, "artifact:"+anyString(privateArtifact["id"]), "PM wake", true)
-		strangerPublicized := summaryByRef(t, call("GET", "/pm/decisions/"+publicizedDecision.ID, stranger.AccessToken).Body.Bytes(), 1)
-		expect(t, strangerPublicized, "artifact:"+anyString(privateArtifact["id"]), "", true)
+		assertHidden(publicizedDecision.ID)
 	}
 
-	// Purged backing thread: native privacy treats missing threads as shared
-	// (events keep the PM-shaped fallback), so summaries must not vanish for
-	// the owner when the conversation is gone.
+	// Purging retains privacy of surviving evidence.
 	if _, err := store.TrashThread(ctx, owner.ActorID, threadID, "removing conversation"); err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +229,5 @@ func TestPMDecisionRefSummariesRespectRequesterVisibility(t *testing.T) {
 	expect(t, afterPurge, publicArtifactRef, "Accepted report", true)
 	// PM-shaped events keep owner-only visibility even without their thread.
 	expect(t, afterPurge, privateEventRef, "", false)
-	strangerAfterPurge := summaryByRef(t, call("GET", "/pm/decisions/"+decision.ID, stranger.AccessToken).Body.Bytes(), 3)
-	expect(t, strangerAfterPurge, privateArtifactRef, "PM wake", true)
-	expect(t, strangerAfterPurge, privateEventRef, "", false)
+	assertHidden(decision.ID)
 }

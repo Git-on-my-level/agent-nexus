@@ -37,7 +37,7 @@ func (s *Service) QueueTurnDeliveries(ctx context.Context, turnID string) ([]Del
 		}
 		deliveries = append(deliveries, Delivery{ID: stableID("delivery", t.ID, fmt.Sprint(i)), WorkspaceID: c.WorkspaceID, ActorID: c.ActorID, Origin: *c.Origin, Text: text, Status: Pending, Revision: 1})
 	}
-	tx, err := s.store.db.BeginTx(ctx, nil)
+	tx, err := s.store.database().BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +87,7 @@ func (s *Service) DeliverPending(ctx context.Context, sender Sender, limit int) 
 	if limit < 1 || limit > 50 {
 		return nil, ErrInvalid
 	}
-	rows, err := s.store.db.QueryContext(ctx, `SELECT t.id FROM pm_records t JOIN pm_records c ON c.kind='conversation' AND c.id=t.parent_id
+	rows, err := s.store.database().QueryContext(ctx, `SELECT t.id FROM pm_records t JOIN pm_records c ON c.kind='conversation' AND c.id=t.parent_id
  WHERE t.kind='turn' AND t.workspace_id=? AND json_extract(t.body,'$.status')='delivered'
  AND json_extract(c.body,'$.origin') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pm_records d WHERE d.kind='delivery' AND d.parent_id=t.id)
  ORDER BY t.rowid LIMIT ?`, s.cfg.WorkspaceID, limit)
@@ -113,7 +113,7 @@ func (s *Service) DeliverPending(ctx context.Context, sender Sender, limit int) 
 			return nil, err
 		}
 	}
-	rows, err = s.store.db.QueryContext(ctx, `SELECT d.id FROM pm_records d WHERE d.kind='delivery' AND d.workspace_id=?
+	rows, err = s.store.database().QueryContext(ctx, `SELECT d.id FROM pm_records d WHERE d.kind='delivery' AND d.workspace_id=?
  AND json_extract(d.body,'$.status')='pending_delivery'
  AND (json_extract(d.body,'$.next_retry_at') IS NULL OR json_extract(d.body,'$.next_retry_at') <= ?)
  AND NOT EXISTS(SELECT 1 FROM pm_records prior WHERE prior.kind='delivery' AND prior.parent_id=d.parent_id
@@ -141,7 +141,7 @@ func (s *Service) DeliverPending(ctx context.Context, sender Sender, limit int) 
 		// A preceding fragment can become unknown during this drain. Recheck it
 		// before every network call, not only when selecting the batch.
 		var blocked int
-		err = s.store.db.QueryRowContext(ctx, `SELECT count(*) FROM pm_records d JOIN pm_records prior ON prior.kind='delivery' AND prior.parent_id=d.parent_id AND prior.rowid<d.rowid WHERE d.kind='delivery' AND d.id=? AND json_extract(prior.body,'$.status')!='delivered'`, id).Scan(&blocked)
+		err = s.store.database().QueryRowContext(ctx, `SELECT count(*) FROM pm_records d JOIN pm_records prior ON prior.kind='delivery' AND prior.parent_id=d.parent_id AND prior.rowid<d.rowid WHERE d.kind='delivery' AND d.id=? AND json_extract(prior.body,'$.status')!='delivered'`, id).Scan(&blocked)
 		if err != nil {
 			return out, err
 		}

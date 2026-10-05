@@ -57,7 +57,7 @@ func recordPage[T any](ctx context.Context, s *Service, p Principal, kind string
 		// Go stores UTC RFC3339Nano. Removing Z preserves exact fractional-second
 		// ordering (including whole seconds) without SQLite's millisecond rounding.
 		// Legacy actions had no creation timestamp; use their decision's timestamp.
-		rows, err := s.store.db.QueryContext(ctx, `WITH records AS (
+		rows, err := s.store.database().QueryContext(ctx, `WITH records AS (
  SELECT r.rowid AS record_rowid, r.body,
  rtrim(COALESCE(json_extract(r.body,'$.created_at'),
    (SELECT json_extract(d.body,'$.created_at') FROM pm_records d
@@ -175,7 +175,7 @@ func (s *Service) ConversationHistory(ctx context.Context, p Principal, id strin
 			return out, ErrInvalid
 		}
 	}
-	rows, err := s.store.db.QueryContext(ctx, `SELECT rowid,body FROM pm_records WHERE kind='turn' AND workspace_id=? AND actor_id=? AND parent_id=? AND rowid<? ORDER BY rowid DESC LIMIT ?`, p.WorkspaceID, p.ActorID, id, before, limit+1)
+	rows, err := s.store.database().QueryContext(ctx, `SELECT rowid,body FROM pm_records WHERE kind='turn' AND workspace_id=? AND actor_id=? AND parent_id=? AND rowid<? ORDER BY rowid DESC LIMIT ?`, p.WorkspaceID, p.ActorID, id, before, limit+1)
 	if err != nil {
 		return out, err
 	}

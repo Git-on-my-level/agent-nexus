@@ -253,6 +253,7 @@ func (s *Store) rebuildDocumentFTS(ctx context.Context, documentID string) error
 }
 
 func allocateDocumentHandleTx(ctx context.Context, tx queryRower, requested, desired, fallbackSeed string) (string, error) {
+	ctx = CanonicalMaintenanceContext(ctx) // Handle namespace includes private and purged identities.
 	requested = strings.TrimSpace(requested)
 	if requested == "" {
 		return uniqueHandleTx(ctx, tx, "document", desired, fallbackSeed)
@@ -269,7 +270,11 @@ func allocateDocumentHandleTx(ctx context.Context, tx queryRower, requested, des
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM resource_handle_aliases WHERE resource_type = ? AND alias_handle = ?`, "document", candidate).Scan(&aliasN); err != nil {
 		return "", err
 	}
-	if n > 0 || aliasN > 0 {
+	var retired int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM resource_access_tombstones WHERE kind='document' AND ref=? COLLATE NOCASE`, candidate).Scan(&retired); err != nil {
+		return "", err
+	}
+	if n > 0 || aliasN > 0 || retired > 0 {
 		return "", ErrConflict
 	}
 	return candidate, nil

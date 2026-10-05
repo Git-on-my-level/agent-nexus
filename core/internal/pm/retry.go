@@ -102,7 +102,7 @@ func (s *Service) RetryFailedDelivery(ctx context.Context, p Principal, id strin
 	approval := deliveryRetry{DeliveryID: id, ActorID: p.ActorID, ReviewedRevision: revision, NonDeliveryEvidence: d.Receipt, CreatedAt: time.Now().UTC()}
 	d.Status = Pending
 	d.Revision++
-	tx, err := s.store.db.BeginTx(ctx, nil)
+	tx, err := s.store.database().BeginTx(ctx, nil)
 	if err != nil {
 		return Delivery{}, err
 	}

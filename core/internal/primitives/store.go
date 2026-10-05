@@ -23,6 +23,7 @@ import (
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/commandcenter"
 	"agent-nexus-core/internal/handles"
+	"agent-nexus-core/internal/resourceaccess"
 	"agent-nexus-core/internal/schema"
 )
 
@@ -171,7 +172,7 @@ type EventCursor struct {
 }
 
 type Store struct {
-	db       *sql.DB
+	db       *accessDB
 	blob     blob.Backend
 	blobRoot string
 	dbPath   string
@@ -203,7 +204,11 @@ type ThreadMutationResult struct {
 }
 
 func NewStore(db *sql.DB, blobBackend blob.Backend, blobRoot string, options ...Option) *Store {
-	store := &Store{db: db, blob: blobBackend, blobRoot: blobRoot}
+	var scopedDB *accessDB
+	if db != nil {
+		scopedDB = resourceaccess.NewDB(db)
+	}
+	store := &Store{db: scopedDB, blob: blobBackend, blobRoot: blobRoot}
 	for _, option := range options {
 		option(store)
 	}
@@ -1610,6 +1615,10 @@ func (s *Store) PurgeTrashedArtifact(ctx context.Context, artifactID string) err
 		return fmt.Errorf("select trashed artifact: %w", err)
 	}
 
+	if err := preservePurgedAccess(ctx, tx, "artifact", artifactID); err != nil {
+		return err
+	}
+
 	if _, err := tx.ExecContext(ctx, `DELETE FROM artifacts WHERE id = ?`, artifactID); err != nil {
 		return fmt.Errorf("delete artifact: %w", err)
 	}
@@ -1618,7 +1627,7 @@ func (s *Store) PurgeTrashedArtifact(ctx context.Context, artifactID string) err
 	var shouldDeleteBlob bool
 	if contentHash != "" {
 		var cnt int
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM artifacts WHERE content_hash = ?`, contentHash).Scan(&cnt); err != nil {
+		if err := tx.QueryRowContext(CanonicalMaintenanceContext(ctx), `SELECT COUNT(*) FROM artifacts WHERE content_hash = ?`, contentHash).Scan(&cnt); err != nil {
 			return fmt.Errorf("count artifact blob references: %w", err)
 		}
 		if cnt == 0 {
@@ -2107,6 +2116,10 @@ func (s *Store) PurgeThread(ctx context.Context, threadID string) error {
 	}
 	if err != nil {
 		return fmt.Errorf("select trashed thread: %w", err)
+	}
+
+	if err := preservePurgedAccess(ctx, tx, "thread", threadID); err != nil {
+		return err
 	}
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM derived_topic_views WHERE thread_id = ?`, threadID); err != nil {

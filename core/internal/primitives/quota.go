@@ -116,7 +116,47 @@ type WorkspaceUsageV1 struct {
 	LastActiveAt  *string `json:"last_active_at,omitempty"`
 }
 
-func (s *Store) checkWorkspaceWriteQuota(ctx context.Context, uploadBytes int64, delta quotaWriteDelta, blobPlan blobLedgerWritePlan) error {
+func (s *Store) checkWorkspaceWriteQuota(ctx context.Context, uploadBytes int64, delta quotaWriteDelta, blobPlan blobLedgerWritePlan) (result error) {
+	// Enforce global limits, but report only the requesting reader's totals.
+	// The rejection itself is an operational quota signal, not a record count.
+	if _, scoped := accessScopeFrom(ctx); scoped {
+		defer func() {
+			violation, ok := result.(*QuotaViolation)
+			if !ok || violation.Code != "workspace_quota_exceeded" {
+				return
+			}
+			visible, err := s.currentWorkspaceUsage(ctx, violation.Metric == "storage_bytes")
+			if err != nil {
+				result = err
+				return
+			}
+			growth := violation.Projected - violation.Current
+			switch violation.Metric {
+			case "artifact_count":
+				violation.Current = visible.artifacts
+			case "document_count":
+				violation.Current = visible.documents
+			case "revision_count":
+				violation.Current = visible.revisions
+			case "storage_bytes":
+				violation.Current = visible.storageBytes()
+				// Display deduplication only against visible artifacts. Canonical
+				// dedup growth would reveal private-only content-hash existence.
+				growth = delta.dbBytes
+				if blobPlan.contentHash != "" {
+					var known bool
+					if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artifacts WHERE content_hash=?)`, blobPlan.contentHash).Scan(&known); err != nil {
+						result = err
+						return
+					}
+					if !known {
+						growth += uploadBytes
+					}
+				}
+			}
+			violation.Projected = violation.Current + growth
+		}()
+	}
 	if s == nil || !s.quota.enabled() {
 		return nil
 	}
@@ -131,7 +171,7 @@ func (s *Store) checkWorkspaceWriteQuota(ctx context.Context, uploadBytes int64,
 		}
 	}
 
-	usage, err := s.currentWorkspaceUsage(ctx, s.quota.MaxBlobBytes > 0)
+	usage, err := s.currentWorkspaceUsage(CanonicalMaintenanceContext(ctx), s.quota.MaxBlobBytes > 0)
 	if err != nil {
 		return err
 	}
@@ -302,7 +342,7 @@ func (s *Store) GetWorkspaceUsageV1Summary(ctx context.Context) (WorkspaceUsageV
 	}, nil
 }
 
-func countTableRows(ctx context.Context, db *sql.DB, table string) (int64, error) {
+func countTableRows(ctx context.Context, db *accessDB, table string) (int64, error) {
 	var count int64
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count %s rows: %w", table, err)
@@ -310,7 +350,7 @@ func countTableRows(ctx context.Context, db *sql.DB, table string) (int64, error
 	return count, nil
 }
 
-func countActiveAgents(ctx context.Context, db *sql.DB) (int64, error) {
+func countActiveAgents(ctx context.Context, db *accessDB) (int64, error) {
 	var count int64
 	if err := db.QueryRowContext(
 		ctx,
@@ -323,7 +363,7 @@ func countActiveAgents(ctx context.Context, db *sql.DB) (int64, error) {
 	return count, nil
 }
 
-func sumArtifactBytes(ctx context.Context, db *sql.DB) (int64, error) {
+func sumArtifactBytes(ctx context.Context, db *accessDB) (int64, error) {
 	var bytes int64
 	if err := db.QueryRowContext(
 		ctx,
@@ -336,7 +376,7 @@ func sumArtifactBytes(ctx context.Context, db *sql.DB) (int64, error) {
 	return bytes, nil
 }
 
-func loadLastWorkspaceActivityAt(ctx context.Context, db *sql.DB) (*string, error) {
+func loadLastWorkspaceActivityAt(ctx context.Context, db *accessDB) (*string, error) {
 	var lastActive sql.NullString
 	if err := db.QueryRowContext(
 		ctx,

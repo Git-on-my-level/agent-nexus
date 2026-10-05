@@ -680,6 +680,10 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			if !enforceRouteAccess(w, r, opts, requirement) {
 				return
 			}
+			attachResourceAccessScope(r, opts)
+			if !authorizeResourceSelectors(w, r) {
+				return
+			}
 			if !enforceWorkspaceWriteAccess(w, opts, requirement) {
 				return
 			}
@@ -691,6 +695,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			}
 			if limit := requestBodyLimitForRequest(r.URL.Path, r.Method, requirement, opts.requestBodyLimits); limit > 0 {
 				r.Body = http.MaxBytesReader(w, r.Body, limit)
+			}
+			if !authorizeResourceBody(w, r) {
+				return
 			}
 			// Unsupported routes are rejected by their handlers. Do not create a
 			// provisional run before that rejection (or bypass read-only policy).
@@ -711,6 +718,10 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		stream.Mount(mux, sub, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			requirement := enrichRouteMutationPolicy(r, classify(r))
 			if !enforceRouteAccess(w, r, opts, requirement) {
+				return
+			}
+			attachResourceAccessScope(r, opts)
+			if !authorizeResourceSelectors(w, r) {
 				return
 			}
 			if !enforceWorkspaceWriteAccess(w, opts, requirement) {

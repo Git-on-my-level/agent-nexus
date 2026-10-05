@@ -125,8 +125,20 @@ func seedStreamPrivacyThread(t *testing.T, store *primitives.Store, owner string
 	t.Helper()
 	data := map[string]any{"title": "Stream privacy test"}
 	if private {
-		data["pm_actor_id"] = owner
-		data["pm_conversation_id"] = "stream-private-conversation"
+		// Exercise inherited privacy: the card thread itself deliberately stays public.
+		ctx := context.Background()
+		board, err := store.CreateBoard(ctx, owner, map[string]any{"title": "Private stream board"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		card, err := store.CreateBoardCard(ctx, owner, anyString(board["id"]), primitives.AddBoardCardInput{Title: "Private stream card", ColumnKey: "ready"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = store.PatchThread(ctx, owner, anyString(board["thread_id"]), map[string]any{"pm_actor_id": owner}, nil); err != nil {
+			t.Fatal(err)
+		}
+		return anyString(card.Card["thread_id"])
 	}
 	created, err := store.CreateThread(context.Background(), owner, data)
 	if err != nil {

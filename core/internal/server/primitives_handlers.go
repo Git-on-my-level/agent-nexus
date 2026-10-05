@@ -563,6 +563,10 @@ func handleCreateArtifactAttachment(w http.ResponseWriter, r *http.Request, opts
 		}
 	}
 
+	if !authorizeResourceValues(w, r, artifact) {
+		return
+	}
+
 	actorID, ok := resolveWriteActorID(w, r, opts, r.FormValue("actor_id"))
 	if !ok {
 		return

@@ -236,12 +236,10 @@ func TestEventsStreamSurvivesServerWriteTimeout(t *testing.T) {
 	requireIntegrationTest(t)
 	t.Parallel()
 
-	server, _ := newMetaStreamTestServer(t, func(server *httptest.Server) {
+	server, store := newMetaStreamTestServer(t, func(server *httptest.Server) {
 		server.Config.WriteTimeout = 150 * time.Millisecond
 		server.Config.IdleTimeout = time.Second
 	}, WithStreamPollInterval(20*time.Millisecond))
-
-	postJSONExpectStatus(t, server.URL+"/actors", `{"actor":{"id":"actor-timeout","display_name":"Actor Timeout","created_at":"2026-03-05T10:00:00Z"}}`, http.StatusCreated).Body.Close()
 
 	resp := openSSEStream(t, server.URL+"/stream/events?thread_id=thread-timeout-1", "")
 	reader, stop := startSSEReader(resp.Body)
@@ -249,7 +247,13 @@ func TestEventsStreamSurvivesServerWriteTimeout(t *testing.T) {
 
 	time.Sleep(250 * time.Millisecond)
 
-	eventID := appendEventForTest(t, server.URL, "actor-timeout", "thread-timeout-1", "event after timeout window")
+	// Seed through the store: the deliberately tiny HTTP write deadline tests
+	// the long-lived stream, not the latency of an unrelated POST under load.
+	created, err := store.AppendEvent(context.Background(), "actor-timeout", map[string]any{"type": "message_posted", "thread_id": "thread-timeout-1", "refs": []string{}, "payload": map[string]any{"text": "event after timeout window"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	eventID := anyString(created["id"])
 	event := awaitSSEEvent(t, reader, 2*time.Second)
 	if event.ID != eventID {
 		t.Fatalf("expected stream to survive write timeout window and deliver %q, got %q", eventID, event.ID)

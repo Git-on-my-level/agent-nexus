@@ -970,6 +970,35 @@ var migrations = []migration{
 		_, err = tx.ExecContext(ctx, `CREATE INDEX idx_events_overview_answers ON events(type,ts,id)`)
 		return err
 	}},
+	{Version: 54, Statements: []string{
+		`CREATE TABLE resource_access_tombstones(kind TEXT NOT NULL,id TEXT NOT NULL,ref TEXT NOT NULL,owner TEXT NOT NULL,PRIMARY KEY(kind,id,ref,owner));`,
+	}, AfterApply: func(ctx context.Context, tx *sql.Tx) error {
+		// Some legacy migration tests intentionally have only a partial schema.
+		for table, statement := range map[string]string{
+			"ref_edges":           `CREATE INDEX idx_ref_edges_access_target ON ref_edges(target_type,target_id COLLATE NOCASE,edge_type)`,
+			"cards":               `CREATE INDEX idx_cards_access_thread ON cards(thread_id)`,
+			"derived_inbox_items": `CREATE INDEX idx_inbox_access_card ON derived_inbox_items(source_card_id)`,
+			"work_metadata":       `CREATE INDEX idx_work_access_project ON work_metadata(json_extract(metadata_json,'$.project_ref') COLLATE NOCASE)`,
+		} {
+			exists, err := sqliteTableExists(ctx, tx, table)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				continue
+			}
+			if _, err = tx.ExecContext(ctx, statement); err != nil {
+				return err
+			}
+		}
+		if exists, err := sqliteTableExists(ctx, tx, "derived_inbox_items"); err != nil {
+			return err
+		} else if exists {
+			_, err = tx.ExecContext(ctx, `CREATE INDEX idx_inbox_access_event ON derived_inbox_items(source_event_id)`)
+			return err
+		}
+		return nil
+	}},
 }
 
 func applyMigration49SeriesTokenScope(ctx context.Context, tx *sql.Tx) error {

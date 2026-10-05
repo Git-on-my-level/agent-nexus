@@ -54,6 +54,9 @@ func threadAccessible(r *http.Request, opts handlerOptions, threadID string) boo
 	thread, err := opts.primitiveStore.GetThread(r.Context(), threadID)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
+			if store, ok := opts.primitiveStore.(*primitives.Store); ok {
+				return store.CheckResourceValues(r.Context(), []string{threadID}) == nil
+			}
 			return true
 		}
 		return false
@@ -68,7 +71,7 @@ func requireAccessibleThreadFilter(w http.ResponseWriter, r *http.Request, opts 
 	}
 	thread, err := opts.primitiveStore.GetThread(r.Context(), threadID)
 	if err != nil {
-		if errors.Is(err, primitives.ErrNotFound) {
+		if errors.Is(err, primitives.ErrNotFound) && threadAccessible(r, opts, threadID) {
 			return true
 		}
 		denyPMNotFound(w, resource)

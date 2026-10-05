@@ -128,6 +128,13 @@ func (s *Store) loadBlobUsageTotals(ctx context.Context) (blob.Usage, error) {
 	}
 
 	var usage blob.Usage
+	if _, scoped := accessScopeFrom(ctx); scoped {
+		// Reader totals count each visible content hash once; quota enforcement
+		// and ledger maintenance explicitly use canonical scope instead.
+		err := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(size_bytes),0),COUNT(*) FROM blob_usage_ledger l WHERE EXISTS (SELECT 1 FROM artifacts a WHERE a.content_hash=l.content_hash)`).Scan(&usage.Bytes, &usage.Objects)
+		return usage, err
+	}
+
 	err := s.db.QueryRowContext(
 		ctx,
 		`SELECT blob_bytes, blob_objects FROM blob_usage_totals WHERE id = ?`,
@@ -143,7 +150,7 @@ func (s *Store) loadBlobUsageTotals(ctx context.Context) (blob.Usage, error) {
 	return usage, nil
 }
 
-func (s *Store) applyBlobLedgerWritePlanTx(ctx context.Context, tx *sql.Tx, plan blobLedgerWritePlan) error {
+func (s *Store) applyBlobLedgerWritePlanTx(ctx context.Context, tx *accessTx, plan blobLedgerWritePlan) error {
 	if !plan.needsLedgerInsert() {
 		return nil
 	}
@@ -188,7 +195,7 @@ func (s *Store) applyBlobLedgerWritePlanTx(ctx context.Context, tx *sql.Tx, plan
 	return nil
 }
 
-func (s *Store) removeBlobLedgerEntryTx(ctx context.Context, tx *sql.Tx, contentHash string) error {
+func (s *Store) removeBlobLedgerEntryTx(ctx context.Context, tx *accessTx, contentHash string) error {
 	contentHash = strings.TrimSpace(contentHash)
 	if contentHash == "" {
 		return nil
@@ -244,10 +251,29 @@ func (s *Store) RebuildBlobUsageLedger(ctx context.Context) (BlobUsageLedgerRebu
 	if s.blob == nil {
 		return BlobUsageLedgerRebuildResult{}, fmt.Errorf("blob backend is not configured")
 	}
-	return s.rebuildBlobUsageLedger(ctx)
+	result, err := s.rebuildBlobUsageLedger(ctx)
+	if err != nil {
+		return result, err
+	}
+	if _, scoped := accessScopeFrom(ctx); scoped {
+		hashes, e := s.listCanonicalBlobHashes(ctx)
+		if e != nil {
+			return BlobUsageLedgerRebuildResult{}, e
+		}
+		usage, e := s.loadBlobUsageTotals(ctx)
+		if e != nil {
+			return BlobUsageLedgerRebuildResult{}, e
+		}
+		result.CanonicalHashes = int64(len(hashes))
+		result.BlobBytes = usage.Bytes
+		result.BlobObjects = usage.Objects
+		result.MissingBlobObjects = result.CanonicalHashes - usage.Objects
+	}
+	return result, nil
 }
 
 func (s *Store) rebuildBlobUsageLedger(ctx context.Context) (BlobUsageLedgerRebuildResult, error) {
+	ctx = CanonicalMaintenanceContext(ctx)
 	hashes, err := s.listCanonicalBlobHashes(ctx)
 	if err != nil {
 		return BlobUsageLedgerRebuildResult{}, err

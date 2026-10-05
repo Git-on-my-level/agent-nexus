@@ -1,0 +1,801 @@
+[
+  {
+    "method": "GET",
+    "path": "/actors",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/actors",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "GET",
+    "path": "/adapters",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/adapters",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "DELETE",
+    "path": "/adapters/{name}",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/adapters/{name}/revoke",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/adapters/{name}/token",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/agent-inbox/answers/read",
+    "policy": "reference-write"
+  },
+  { "method": "GET", "path": "/agent-inbox/asks", "policy": "collection" },
+  { "method": "GET", "path": "/agent-notifications", "policy": "collection" },
+  {
+    "method": "POST",
+    "path": "/agent-notifications/dismiss",
+    "policy": "reference-write"
+  },
+  {
+    "method": "POST",
+    "path": "/agent-notifications/read",
+    "policy": "reference-write"
+  },
+  {
+    "method": "POST",
+    "path": "/agent-wakeups/claim",
+    "policy": "reference-write"
+  },
+  {
+    "method": "POST",
+    "path": "/agent-wakeups/complete",
+    "policy": "reference-write"
+  },
+  {
+    "method": "POST",
+    "path": "/agent-wakeups/fail",
+    "policy": "reference-write"
+  },
+  { "method": "GET", "path": "/agents", "policy": "collection" },
+  { "method": "GET", "path": "/agents/me", "policy": "collection" },
+  {
+    "method": "PATCH",
+    "path": "/agents/me/presence",
+    "policy": "reference-write"
+  },
+  { "method": "GET", "path": "/agents/{agent_id}", "policy": "collection" },
+  { "method": "GET", "path": "/artifacts", "policy": "collection" },
+  { "method": "POST", "path": "/artifacts", "policy": "reference-write" },
+  {
+    "method": "POST",
+    "path": "/artifacts/attachments",
+    "policy": "reference-write"
+  },
+  { "method": "GET", "path": "/artifacts/{artifact_id}", "policy": "record" },
+  {
+    "method": "POST",
+    "path": "/artifacts/{artifact_id}/archive",
+    "policy": "record"
+  },
+  {
+    "method": "GET",
+    "path": "/artifacts/{artifact_id}/content",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/artifacts/{artifact_id}/purge",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/artifacts/{artifact_id}/restore",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/artifacts/{artifact_id}/trash",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/artifacts/{artifact_id}/unarchive",
+    "policy": "record"
+  },
+  {
+    "method": "GET",
+    "path": "/auth/admins",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/auth/admins/{principal_id}/grant",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/auth/admins/{principal_id}/revoke",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "GET",
+    "path": "/auth/audit",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "GET",
+    "path": "/auth/bootstrap/status",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "GET",
+    "path": "/auth/hosts/enrollment-tokens",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/auth/hosts/enrollment-tokens",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/auth/hosts/enrollment-tokens/{token_id}/revoke",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/auth/hosts/enrollments",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/auth/hosts/enrollments/headless",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "GET",
+    "path": "/auth/hosts/enrollments/pending",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "GET",
+    "path": "/auth/hosts/enrollments/{enrollment_id}",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/auth/hosts/enrollments/{enrollment_id}/approve",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/auth/hosts/enrollments/{enrollment_id}/complete",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/auth/hosts/enrollments/{enrollment_id}/deny",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "GET",
+    "path": "/auth/invites",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/auth/invites",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/auth/invites/{invite_id}/revoke",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/auth/passkey/dev/login",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/auth/passkey/dev/register",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/auth/passkey/login/options",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/auth/passkey/login/verify",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/auth/passkey/register/options",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/auth/passkey/register/verify",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "GET",
+    "path": "/auth/principals",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/auth/principals/{principal_id}/revoke",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/auth/token",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  { "method": "GET", "path": "/boards", "policy": "collection" },
+  { "method": "POST", "path": "/boards", "policy": "reference-write" },
+  { "method": "GET", "path": "/boards/{board_id}", "policy": "record" },
+  { "method": "PATCH", "path": "/boards/{board_id}", "policy": "record" },
+  {
+    "method": "POST",
+    "path": "/boards/{board_id}/archive",
+    "policy": "record"
+  },
+  { "method": "GET", "path": "/boards/{board_id}/cards", "policy": "record" },
+  { "method": "POST", "path": "/boards/{board_id}/cards", "policy": "record" },
+  {
+    "method": "POST",
+    "path": "/boards/{board_id}/cards/batch",
+    "policy": "record"
+  },
+  {
+    "method": "GET",
+    "path": "/boards/{board_id}/cards/{card_id}",
+    "policy": "record"
+  },
+  { "method": "POST", "path": "/boards/{board_id}/purge", "policy": "record" },
+  {
+    "method": "POST",
+    "path": "/boards/{board_id}/restore",
+    "policy": "record"
+  },
+  { "method": "POST", "path": "/boards/{board_id}/trash", "policy": "record" },
+  {
+    "method": "POST",
+    "path": "/boards/{board_id}/unarchive",
+    "policy": "record"
+  },
+  {
+    "method": "GET",
+    "path": "/boards/{board_id}/workspace",
+    "policy": "record"
+  },
+  { "method": "GET", "path": "/cards", "policy": "collection" },
+  { "method": "POST", "path": "/cards", "policy": "reference-write" },
+  { "method": "GET", "path": "/cards/{card_id}", "policy": "record" },
+  { "method": "PATCH", "path": "/cards/{card_id}", "policy": "record" },
+  { "method": "POST", "path": "/cards/{card_id}/archive", "policy": "record" },
+  { "method": "POST", "path": "/cards/{card_id}/move", "policy": "record" },
+  { "method": "GET", "path": "/cards/{card_id}/plan", "policy": "record" },
+  { "method": "PUT", "path": "/cards/{card_id}/plan", "policy": "record" },
+  { "method": "POST", "path": "/cards/{card_id}/purge", "policy": "record" },
+  { "method": "POST", "path": "/cards/{card_id}/restore", "policy": "record" },
+  { "method": "GET", "path": "/cards/{card_id}/revisions", "policy": "record" },
+  {
+    "method": "POST",
+    "path": "/cards/{card_id}/revisions",
+    "policy": "record"
+  },
+  {
+    "method": "GET",
+    "path": "/cards/{card_id}/revisions/{revision_id}",
+    "policy": "record"
+  },
+  { "method": "GET", "path": "/cards/{card_id}/timeline", "policy": "record" },
+  { "method": "POST", "path": "/cards/{card_id}/trash", "policy": "record" },
+  {
+    "method": "POST",
+    "path": "/derived/rebuild",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  { "method": "GET", "path": "/docs", "policy": "collection" },
+  { "method": "POST", "path": "/docs", "policy": "reference-write" },
+  { "method": "GET", "path": "/docs/search", "policy": "collection" },
+  { "method": "GET", "path": "/docs/{document_id}", "policy": "record" },
+  { "method": "PATCH", "path": "/docs/{document_id}", "policy": "record" },
+  { "method": "PUT", "path": "/docs/{document_id}", "policy": "record" },
+  {
+    "method": "POST",
+    "path": "/docs/{document_id}/archive",
+    "policy": "record"
+  },
+  {
+    "method": "GET",
+    "path": "/docs/{document_id}/comments",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/docs/{document_id}/comments",
+    "policy": "record"
+  },
+  {
+    "method": "DELETE",
+    "path": "/docs/{document_id}/comments/{comment_id}",
+    "policy": "record"
+  },
+  {
+    "method": "PATCH",
+    "path": "/docs/{document_id}/comments/{comment_id}",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/docs/{document_id}/comments/{comment_id}/replies",
+    "policy": "record"
+  },
+  { "method": "POST", "path": "/docs/{document_id}/purge", "policy": "record" },
+  { "method": "GET", "path": "/docs/{document_id}/report", "policy": "record" },
+  {
+    "method": "POST",
+    "path": "/docs/{document_id}/restore",
+    "policy": "record"
+  },
+  {
+    "method": "GET",
+    "path": "/docs/{document_id}/revisions",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/docs/{document_id}/revisions",
+    "policy": "record"
+  },
+  {
+    "method": "GET",
+    "path": "/docs/{document_id}/revisions/{revision_id}",
+    "policy": "record"
+  },
+  { "method": "POST", "path": "/docs/{document_id}/trash", "policy": "record" },
+  {
+    "method": "POST",
+    "path": "/docs/{document_id}/unarchive",
+    "policy": "record"
+  },
+  { "method": "GET", "path": "/events", "policy": "collection" },
+  { "method": "POST", "path": "/events", "policy": "reference-write" },
+  { "method": "GET", "path": "/events/{event_id}", "policy": "record" },
+  {
+    "method": "POST",
+    "path": "/events/{event_id}/archive",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/events/{event_id}/restore",
+    "policy": "record"
+  },
+  { "method": "POST", "path": "/events/{event_id}/trash", "policy": "record" },
+  {
+    "method": "POST",
+    "path": "/events/{event_id}/unarchive",
+    "policy": "record"
+  },
+  {
+    "method": "GET",
+    "path": "/health",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  { "method": "POST", "path": "/home/read", "policy": "reference-write" },
+  { "method": "GET", "path": "/home/unread", "policy": "collection" },
+  {
+    "method": "GET",
+    "path": "/hosts",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "DELETE",
+    "path": "/hosts/{host_id}",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "GET",
+    "path": "/hosts/{host_id}",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "PATCH",
+    "path": "/hosts/{host_id}",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/hosts/{host_id}/bridge/check-in",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  { "method": "GET", "path": "/inbox", "policy": "collection" },
+  { "method": "GET", "path": "/inbox/{inbox_id}", "policy": "record" },
+  { "method": "POST", "path": "/inbox/{inbox_id}/respond", "policy": "record" },
+  {
+    "method": "GET",
+    "path": "/livez",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "GET",
+    "path": "/meta/commands",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "GET",
+    "path": "/meta/commands/{command_id}",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "GET",
+    "path": "/meta/concepts",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "GET",
+    "path": "/meta/concepts/{concept_name}",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "GET",
+    "path": "/meta/handshake",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/ops/blob-usage/rebuild",
+    "policy": "collection"
+  },
+  { "method": "GET", "path": "/ops/health", "policy": "collection" },
+  { "method": "GET", "path": "/ops/usage-summary", "policy": "collection" },
+  { "method": "GET", "path": "/overview", "policy": "collection" },
+  { "method": "GET", "path": "/overview/changes", "policy": "collection" },
+  { "method": "GET", "path": "/pm/actions", "policy": "collection" },
+  { "method": "GET", "path": "/pm/actions/{action_id}", "policy": "record" },
+  {
+    "method": "POST",
+    "path": "/pm/actions/{action_id}/acknowledge",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/pm/actions/{action_id}/reconcile",
+    "policy": "record"
+  },
+  { "method": "GET", "path": "/pm/bindings", "policy": "collection" },
+  {
+    "method": "POST",
+    "path": "/pm/bindings",
+    "policy": "independent",
+    "reason": "Channel-to-actor binding contains no canonical resource refs; PM tests enforce actor and channel authorization."
+  },
+  { "method": "GET", "path": "/pm/context", "policy": "collection" },
+  { "method": "GET", "path": "/pm/conversations", "policy": "collection" },
+  {
+    "method": "POST",
+    "path": "/pm/conversations",
+    "policy": "reference-write"
+  },
+  {
+    "method": "GET",
+    "path": "/pm/conversations/{conversation_id}",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/pm/conversations/{conversation_id}/messages",
+    "policy": "record"
+  },
+  { "method": "GET", "path": "/pm/decisions", "policy": "collection" },
+  { "method": "POST", "path": "/pm/decisions", "policy": "reference-write" },
+  {
+    "method": "GET",
+    "path": "/pm/decisions/{decision_id}",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/pm/decisions/{decision_id}/answer",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/pm/decisions/{decision_id}/dispatch",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/pm/ingress/discord",
+    "policy": "independent",
+    "reason": "Externally signed channel ingress; signature/transport authorization precedes any workspace operation (PM ingress tests)."
+  },
+  {
+    "method": "POST",
+    "path": "/pm/ingress/telegram",
+    "policy": "independent",
+    "reason": "Externally signed channel ingress; signature/transport authorization precedes any workspace operation (PM ingress tests)."
+  },
+  { "method": "POST", "path": "/pm/turns/claim", "policy": "reference-write" },
+  { "method": "GET", "path": "/pm/turns/{turn_id}", "policy": "record" },
+  {
+    "method": "POST",
+    "path": "/pm/turns/{turn_id}/complete",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/pm/turns/{turn_id}/context",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/pm/turns/{turn_id}/decisions",
+    "policy": "record"
+  },
+  { "method": "POST", "path": "/pm/turns/{turn_id}/fail", "policy": "record" },
+  {
+    "method": "POST",
+    "path": "/pm/turns/{turn_id}/heartbeat",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/pm/turns/{turn_id}/release",
+    "policy": "record"
+  },
+  {
+    "method": "GET",
+    "path": "/readyz",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  { "method": "GET", "path": "/ref-edges", "policy": "collection" },
+  { "method": "POST", "path": "/refs/resolve", "policy": "reference-write" },
+  { "method": "POST", "path": "/reports/preview", "policy": "reference-write" },
+  { "method": "GET", "path": "/runs", "policy": "collection" },
+  { "method": "POST", "path": "/runs", "policy": "reference-write" },
+  { "method": "GET", "path": "/runs/{run_id}", "policy": "record" },
+  {
+    "method": "GET",
+    "path": "/secrets",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/secrets",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/secrets/reveal-batch",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "DELETE",
+    "path": "/secrets/{secret_id}",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "PUT",
+    "path": "/secrets/{secret_id}",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/secrets/{secret_id}/reveal",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "GET",
+    "path": "/series",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "GET",
+    "path": "/series/{name}",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/series/{name}/points",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "GET",
+    "path": "/series/{name}/query",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
+    "method": "POST",
+    "path": "/sessions",
+    "policy": "independent",
+    "reason": "Session registration/get returns agent-owned provider/session metadata; card participation is covered under /work/{card_ref}/participants."
+  },
+  {
+    "method": "GET",
+    "path": "/sessions/{session_id}",
+    "policy": "independent",
+    "reason": "Session registration/get returns agent-owned provider/session metadata; card participation is covered under /work/{card_ref}/participants."
+  },
+  {
+    "method": "GET",
+    "path": "/stream/agent-notification-receipts",
+    "policy": "stream"
+  },
+  { "method": "GET", "path": "/stream/agents", "policy": "stream" },
+  { "method": "GET", "path": "/stream/events", "policy": "stream" },
+  { "method": "GET", "path": "/stream/inbox", "policy": "stream" },
+  { "method": "GET", "path": "/threads", "policy": "collection" },
+  { "method": "GET", "path": "/threads/{thread_id}", "policy": "record" },
+  {
+    "method": "GET",
+    "path": "/threads/{thread_id}/context",
+    "policy": "record"
+  },
+  {
+    "method": "GET",
+    "path": "/threads/{thread_id}/timeline",
+    "policy": "record"
+  },
+  {
+    "method": "GET",
+    "path": "/threads/{thread_id}/workspace",
+    "policy": "record"
+  },
+  { "method": "GET", "path": "/topics", "policy": "collection" },
+  { "method": "POST", "path": "/topics", "policy": "reference-write" },
+  { "method": "GET", "path": "/topics/{topic_id}", "policy": "record" },
+  { "method": "PATCH", "path": "/topics/{topic_id}", "policy": "record" },
+  {
+    "method": "POST",
+    "path": "/topics/{topic_id}/archive",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/topics/{topic_id}/restore",
+    "policy": "record"
+  },
+  {
+    "method": "GET",
+    "path": "/topics/{topic_id}/timeline",
+    "policy": "record"
+  },
+  { "method": "POST", "path": "/topics/{topic_id}/trash", "policy": "record" },
+  {
+    "method": "POST",
+    "path": "/topics/{topic_id}/unarchive",
+    "policy": "record"
+  },
+  {
+    "method": "GET",
+    "path": "/topics/{topic_id}/workspace",
+    "policy": "record"
+  },
+  { "method": "GET", "path": "/v1/usage/summary", "policy": "collection" },
+  {
+    "method": "GET",
+    "path": "/version",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  { "method": "GET", "path": "/work", "policy": "collection" },
+  { "method": "POST", "path": "/work", "policy": "reference-write" },
+  {
+    "method": "GET",
+    "path": "/work/capabilities",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  { "method": "GET", "path": "/work/{card_ref}", "policy": "record" },
+  { "method": "PATCH", "path": "/work/{card_ref}", "policy": "record" },
+  {
+    "method": "GET",
+    "path": "/work/{card_ref}/observations",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/work/{card_ref}/observations",
+    "policy": "record"
+  },
+  {
+    "method": "GET",
+    "path": "/work/{card_ref}/participants",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/work/{card_ref}/participants",
+    "policy": "record"
+  },
+  { "method": "GET", "path": "/work/{card_ref}/refresh", "policy": "record" },
+  { "method": "POST", "path": "/work/{card_ref}/refresh", "policy": "record" },
+  {
+    "method": "PUT",
+    "path": "/workspace/dashboard",
+    "policy": "reference-write"
+  },
+  {
+    "method": "GET",
+    "path": "/workspace/dashboard/reports",
+    "policy": "collection"
+  }
+]

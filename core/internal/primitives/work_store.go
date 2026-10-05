@@ -73,7 +73,7 @@ type WorkPage struct {
 	NextCursor string           `json:"next_cursor"`
 }
 
-func insertWorkMetadata(ctx context.Context, tx *sql.Tx, cardID, actorID string, m map[string]any) error {
+func insertWorkMetadata(ctx context.Context, tx *accessTx, cardID, actorID string, m map[string]any) error {
 	source := workMap(m["source"])
 	_, err := tx.ExecContext(ctx, `INSERT INTO work_metadata(card_id,authority,connection_id,native_id,metadata_json,updated_at,updated_by) VALUES(?,?,?,?,?,?,?)`, cardID, workString(source["authority"]), workString(source["connection_id"]), workString(source["native_id"]), workJSON(m), time.Now().UTC().Format(time.RFC3339Nano), actorID)
 	if err != nil {
@@ -1224,7 +1224,7 @@ func (s *Store) RequestWorkRefresh(ctx context.Context, actor, identifier string
 // cancelled and unknown follow creation and land in backlog unless that board
 // actually has the named column. done carries the observation's evidence
 // through the same completion gate as MoveBoardCard.
-func (s *Store) moveExternalWorkForObservation(ctx context.Context, tx *sql.Tx, actor string, card map[string]any, cardID string, facts map[string]any, evidence any) error {
+func (s *Store) moveExternalWorkForObservation(ctx context.Context, tx *accessTx, actor string, card map[string]any, cardID string, facts map[string]any, evidence any) error {
 	phase := workString(facts["phase"])
 	if phase == "" {
 		return nil
@@ -1369,7 +1369,7 @@ func observationEvidenceItems(evidence any) []map[string]any {
 // observationCompletionRefs reuses live artifact or event refs from the
 // observation. URL-only source evidence is recorded as a workspace event so
 // the board done gate still has a resolution ref.
-func observationCompletionRefs(ctx context.Context, tx *sql.Tx, actor string, card map[string]any, evidence any) ([]string, error) {
+func observationCompletionRefs(ctx context.Context, tx *accessTx, actor string, card map[string]any, evidence any) ([]string, error) {
 	items := observationEvidenceItems(evidence)
 	var typed []string
 	for _, item := range items {

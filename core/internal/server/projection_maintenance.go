@@ -154,6 +154,7 @@ func (m *ProjectionMaintainer) Step(ctx context.Context, now time.Time) error {
 }
 
 func (m *ProjectionMaintainer) RunFullRebuild(ctx context.Context, now time.Time, actorID string) error {
+	ctx = primitives.CanonicalMaintenanceContext(ctx)
 	if m == nil || m.opts.primitiveStore == nil {
 		return nil
 	}

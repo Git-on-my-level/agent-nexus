@@ -32,7 +32,7 @@ type HumanAttentionAnswerWakeBatch struct {
 	Refs             []string
 }
 
-func queueHumanAttentionAnswerWakeBatchTx(ctx context.Context, tx *sql.Tx, sourceEventID string, event map[string]any, notify map[string]any) error {
+func queueHumanAttentionAnswerWakeBatchTx(ctx context.Context, tx *accessTx, sourceEventID string, event map[string]any, notify map[string]any) error {
 	if notify["requested"] != true {
 		return nil
 	}
@@ -251,7 +251,7 @@ func (s *Store) deliverHumanAttentionAnswerWakeBatch(ctx context.Context, batch 
 	return true, nil
 }
 
-func claimHumanAttentionAnswerWakeBatchTx(ctx context.Context, tx *sql.Tx, batch HumanAttentionAnswerWakeBatch, wakeup AgentWakeup) (bool, error) {
+func claimHumanAttentionAnswerWakeBatchTx(ctx context.Context, tx eventExec, batch HumanAttentionAnswerWakeBatch, wakeup AgentWakeup) (bool, error) {
 	result, err := tx.ExecContext(ctx, `DELETE FROM human_attention_answer_wake_batches
 		WHERE target_actor_id=? AND batch_id=? AND trigger_event_id=?`, batch.TargetActorID, batch.BatchID, batch.TriggerEventID)
 	if err != nil {

@@ -14,7 +14,7 @@ func (s *Service) NewDecisions(ctx context.Context, p Principal, since, now time
 	if err := s.authorize(ctx, p, "pm.read", ""); err != nil {
 		return nil, false, err
 	}
-	rows, err := s.store.db.QueryContext(ctx, `SELECT body FROM pm_records WHERE kind='decision' AND workspace_id=?
+	rows, err := s.store.database().QueryContext(ctx, `SELECT body FROM pm_records WHERE kind='decision' AND workspace_id=?
  AND julianday(json_extract(body,'$.created_at'))>=julianday(?) AND julianday(json_extract(body,'$.created_at'))<=julianday(?)
  ORDER BY rowid DESC LIMIT 201`, p.WorkspaceID, since.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 	if err != nil {

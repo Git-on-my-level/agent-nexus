@@ -126,6 +126,11 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		if p.WorkspaceID != cfg.PM.WorkspaceID {
 			return pm.ErrForbidden
 		}
+		if ref != "" {
+			if err := store.CheckResourceValues(ctx, []string{ref}); err != nil {
+				return pm.ErrNotFound
+			}
+		}
 		actual, err := principalLookup.findForAuthorization(ctx, p.ActorID)
 		if err != nil {
 			return err
@@ -332,6 +337,10 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 	authenticated := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		if _, ok := authenticatePrincipalFromHeader(w, r, handlerOptions{authStore: authStore}, true); !ok {
+			return
+		}
+		attachResourceAccessScope(r, handlerOptions{primitiveStore: store, pmRuntime: &PMRuntime{cfg: cfg}})
+		if !authorizeResourceSelectors(w, r) {
 			return
 		}
 		handler.ServeHTTP(w, r)

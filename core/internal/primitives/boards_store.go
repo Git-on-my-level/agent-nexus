@@ -366,7 +366,7 @@ func (s *Store) prepareCardRevisionInsert(ctx context.Context, actorID, cardID s
 	}, stagedContent, nil
 }
 
-func (s *Store) insertCardRevisionTx(ctx context.Context, tx *sql.Tx, actorID, cardID, threadID string, revision cardRevisionInsert) error {
+func (s *Store) insertCardRevisionTx(ctx context.Context, tx *accessTx, actorID, cardID, threadID string, revision cardRevisionInsert) error {
 	artifactHandle, err := uniqueHandleTx(ctx, tx, "artifact", "card-revision", "artifact-"+revision.ArtifactID)
 	if err != nil {
 		return fmt.Errorf("allocate card artifact handle: %w", err)
@@ -528,7 +528,7 @@ func prepareBoardCardInsert(input AddBoardCardInput) (boardCardInsertPrep, error
 	}, nil
 }
 
-func (s *Store) execBoardCardInsert(ctx context.Context, tx *sql.Tx, boardRow boardRow, actorID, boardID string, prep boardCardInsertPrep) (boardRow, boardCardRow, blob.StagedWrite, error) {
+func (s *Store) execBoardCardInsert(ctx context.Context, tx *accessTx, boardRow boardRow, actorID, boardID string, prep boardCardInsertPrep) (boardRow, boardCardRow, blob.StagedWrite, error) {
 	if prep.ColumnKey == "done" {
 		if err := validateResolutionRefs(ctx, tx, prep.ResolutionRefs); err != nil {
 			return boardRow, boardCardRow{}, nil, err
@@ -1095,6 +1095,10 @@ func (s *Store) PurgeBoard(ctx context.Context, boardID string) error {
 	}
 	if err != nil {
 		return fmt.Errorf("select trashed board: %w", err)
+	}
+
+	if err := preservePurgedAccess(ctx, tx, "board", boardID); err != nil {
+		return err
 	}
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM ref_edges WHERE source_type = ? AND source_id = ?`, "board", boardID); err != nil {
@@ -2579,6 +2583,10 @@ func (s *Store) PurgeArchivedBoardCard(ctx context.Context, boardID, identifier 
 		return err
 	}
 
+	if err := preservePurgedAccess(ctx, tx, "card", cardID); err != nil {
+		return err
+	}
+
 	revisionRows, err := tx.QueryContext(ctx,
 		`SELECT cr.revision_id, cr.artifact_id, a.content_hash
 		   FROM card_revisions cr
@@ -2665,7 +2673,7 @@ func (s *Store) PurgeArchivedBoardCard(ctx context.Context, boardID, identifier 
 			continue
 		}
 		var cnt int
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM artifacts WHERE content_hash = ?`, contentHash).Scan(&cnt); err != nil {
+		if err := tx.QueryRowContext(CanonicalMaintenanceContext(ctx), `SELECT COUNT(*) FROM artifacts WHERE content_hash = ?`, contentHash).Scan(&cnt); err != nil {
 			return fmt.Errorf("count card blob references: %w", err)
 		}
 		if cnt == 0 {
@@ -3412,7 +3420,7 @@ func (s *Store) loadOrderedBoardCards(ctx context.Context, q queryRower, boardID
 	return out, nil
 }
 
-func (s *Store) allocateBoardCardRank(ctx context.Context, tx *sql.Tx, boardID, columnKey, beforeCardID, afterCardID, excludeCardID string) (string, error) {
+func (s *Store) allocateBoardCardRank(ctx context.Context, tx *accessTx, boardID, columnKey, beforeCardID, afterCardID, excludeCardID string) (string, error) {
 	cards, err := s.loadOrderedBoardCards(ctx, tx, boardID, columnKey)
 	if err != nil {
 		return "", err
@@ -3537,7 +3545,7 @@ func allocateBoardRankBetween(prevRank, nextRank string) (string, bool) {
 	}
 }
 
-func rebalanceBoardColumnRanks(ctx context.Context, tx *sql.Tx, boardID, columnKey, excludeCardID string) error {
+func rebalanceBoardColumnRanks(ctx context.Context, tx *accessTx, boardID, columnKey, excludeCardID string) error {
 	rows, err := loadBoardCardsForColumn(ctx, tx, boardID, columnKey)
 	if err != nil {
 		return err
@@ -3612,7 +3620,7 @@ func loadBoardCardsForColumn(ctx context.Context, db interface {
 	return out, nil
 }
 
-func validateBoardAnchors(ctx context.Context, tx *sql.Tx, boardID, targetColumn, beforeCardID, afterCardID, movingCardID string) error {
+func validateBoardAnchors(ctx context.Context, tx *accessTx, boardID, targetColumn, beforeCardID, afterCardID, movingCardID string) error {
 	anchorCardID := beforeCardID
 	if anchorCardID == "" {
 		anchorCardID = afterCardID
@@ -3641,7 +3649,7 @@ func ensureBoardUpdatedAtMatches(board boardRow, ifUpdatedAt *string) error {
 	return ensureUpdatedAtMatches(board.UpdatedAt, ifUpdatedAt)
 }
 
-func touchBoardRow(ctx context.Context, tx *sql.Tx, board boardRow, actorID string) (boardRow, error) {
+func touchBoardRow(ctx context.Context, tx *accessTx, board boardRow, actorID string) (boardRow, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := tx.ExecContext(
 		ctx,
@@ -4075,7 +4083,7 @@ func mergeBoardArchiveTrashFields(m map[string]any, r boardRow) {
 	}
 }
 
-func ensureBoardBackingThreadTx(ctx context.Context, tx *sql.Tx, actorID, boardID, threadID, title, updatedAt string) error {
+func ensureBoardBackingThreadTx(ctx context.Context, tx *accessTx, actorID, boardID, threadID, title, updatedAt string) error {
 	boardID = strings.TrimSpace(boardID)
 	threadID = strings.TrimSpace(threadID)
 	title = strings.TrimSpace(title)
@@ -4160,7 +4168,7 @@ func ensureBoardBackingThreadTx(ctx context.Context, tx *sql.Tx, actorID, boardI
 	return replaceRefEdges(ctx, tx, "thread", threadID, typedRefEdgeTargets(refEdgeTypeRef, []string{subjectRef}))
 }
 
-func ensureCardBackingThreadTx(ctx context.Context, tx *sql.Tx, actorID, cardID, threadID, title, updatedAt string) error {
+func ensureCardBackingThreadTx(ctx context.Context, tx *accessTx, actorID, cardID, threadID, title, updatedAt string) error {
 	cardID = strings.TrimSpace(cardID)
 	threadID = strings.TrimSpace(threadID)
 	title = strings.TrimSpace(title)
@@ -4271,7 +4279,7 @@ func buildBoardBackingThreadBody(boardID, threadID, title string) map[string]any
 	}
 }
 
-func upsertBoardCardRefEdge(ctx context.Context, tx *sql.Tx, boardID, cardID, columnKey, rank string) error {
+func upsertBoardCardRefEdge(ctx context.Context, tx *accessTx, boardID, cardID, columnKey, rank string) error {
 	boardID = strings.TrimSpace(boardID)
 	cardID = strings.TrimSpace(cardID)
 	if boardID == "" || cardID == "" {

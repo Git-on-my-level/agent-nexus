@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"agent-nexus-core/internal/resourceaccess"
 	"github.com/google/uuid"
 )
 
@@ -185,14 +186,14 @@ func ptr(v sql.NullString) *string {
 const runColumns = "id,handle,launcher,external_id,host_id,agent_id,adapter,model,state,liveness,result_collected,labels_json,card_ref,repository,branch,started_at,ended_at,last_observed_at"
 
 func (s *Store) GetRun(ctx context.Context, id string) (Run, error) {
-	r, e := readRun(s.DB.QueryRowContext(ctx, "SELECT "+runColumns+" FROM runs WHERE id=? OR handle=?", id, strings.TrimPrefix(id, "run:")))
+	r, e := readRun(resourceaccess.NewDB(s.DB).QueryRowContext(ctx, "SELECT "+runColumns+" FROM runs WHERE id=? OR handle=?", id, strings.TrimPrefix(id, "run:")))
 	if errors.Is(e, sql.ErrNoRows) {
 		return r, ErrNotFound
 	}
 	return r, e
 }
 func (s *Store) RunByExternal(ctx context.Context, launcher, host, external string) (Run, error) {
-	r, e := readRun(s.DB.QueryRowContext(ctx, "SELECT "+runColumns+" FROM runs WHERE launcher=? AND host_id=? AND external_id=?", launcher, host, external))
+	r, e := readRun(resourceaccess.NewDB(s.DB).QueryRowContext(ctx, "SELECT "+runColumns+" FROM runs WHERE launcher=? AND host_id=? AND external_id=?", launcher, host, external))
 	if errors.Is(e, sql.ErrNoRows) {
 		return r, ErrNotFound
 	}
@@ -202,7 +203,7 @@ func (s *Store) UpsertRun(ctx context.Context, in Run) (Run, bool, bool, error) 
 	if e := ValidateRun(&in); e != nil {
 		return Run{}, false, false, e
 	}
-	tx, e := s.DB.BeginTx(ctx, nil)
+	tx, e := resourceaccess.NewDB(s.DB).BeginTx(ctx, nil)
 	if e != nil {
 		return Run{}, false, false, e
 	}
@@ -362,7 +363,7 @@ func (s *Store) ListRuns(ctx context.Context, f Filter) ([]Run, string, error) {
 	}
 	q += " ORDER BY julianday(COALESCE(started_at,last_observed_at)) DESC,id DESC LIMIT ?"
 	args = append(args, f.Limit+1)
-	rows, e := s.DB.QueryContext(ctx, q, args...)
+	rows, e := resourceaccess.NewDB(s.DB).QueryContext(ctx, q, args...)
 	if e != nil {
 		return nil, "", e
 	}
@@ -392,7 +393,7 @@ func (s *Store) ListRuns(ctx context.Context, f Filter) ([]Run, string, error) {
 	return out, next, nil
 }
 func (s *Store) PatchPresence(ctx context.Context, agentID string, p PresencePatch, now time.Time) (Presence, error) {
-	tx, e := s.DB.BeginTx(ctx, nil)
+	tx, e := resourceaccess.NewDB(s.DB).BeginTx(ctx, nil)
 	if e != nil {
 		return Presence{}, e
 	}
@@ -433,7 +434,7 @@ func (s *Store) PatchPresence(ctx context.Context, agentID string, p PresencePat
 func (s *Store) Presence(ctx context.Context, agentID string) (Presence, error) {
 	var p Presence
 	var card, note sql.NullString
-	e := s.DB.QueryRowContext(ctx, "SELECT current_card_ref,note,observed_at FROM agent_presence WHERE agent_id=?", agentID).Scan(&card, &note, &p.ObservedAt)
+	e := resourceaccess.NewDB(s.DB).QueryRowContext(ctx, "SELECT current_card_ref,note,observed_at FROM agent_presence WHERE agent_id=?", agentID).Scan(&card, &note, &p.ObservedAt)
 	if errors.Is(e, sql.ErrNoRows) {
 		return p, ErrNotFound
 	}

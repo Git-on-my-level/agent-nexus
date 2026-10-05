@@ -2,7 +2,6 @@ package primitives
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -93,7 +92,7 @@ func (s *Store) prepareArtifactWrite(ctx context.Context, actorID string, artifa
 	}, nil
 }
 
-func (s *Store) insertPreparedArtifactTx(ctx context.Context, tx *sql.Tx, prepared *preparedArtifactWrite) error {
+func (s *Store) insertPreparedArtifactTx(ctx context.Context, tx *accessTx, prepared *preparedArtifactWrite) error {
 	handle, err := uniqueHandleTx(ctx, tx, "artifact", firstNonEmpty(anyStringValue(prepared.metadata["title"]), anyStringValue(prepared.metadata["summary"]), prepared.kind), "artifact-"+prepared.artifactID)
 	if err != nil {
 		return fmt.Errorf("allocate artifact handle: %w", err)

@@ -1842,6 +1842,10 @@ func (s *Store) PurgeDocument(ctx context.Context, documentID string) error {
 		return fmt.Errorf("select trashed document: %w", err)
 	}
 
+	if err := preservePurgedAccess(ctx, tx, "document", documentID); err != nil {
+		return err
+	}
+
 	type ownedRevisionArtifact struct {
 		revisionID  string
 		artifactID  string
@@ -1922,7 +1926,7 @@ func (s *Store) PurgeDocument(ctx context.Context, documentID string) error {
 	blobsToDelete := make([]string, 0, len(hashes))
 	for contentHash := range hashes {
 		var cnt int
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM artifacts WHERE content_hash = ?`, contentHash).Scan(&cnt); err != nil {
+		if err := tx.QueryRowContext(CanonicalMaintenanceContext(ctx), `SELECT COUNT(*) FROM artifacts WHERE content_hash = ?`, contentHash).Scan(&cnt); err != nil {
 			return fmt.Errorf("count remaining artifact blob references: %w", err)
 		}
 		if cnt == 0 {
@@ -2363,7 +2367,7 @@ func normalizeDocumentBackingThreadID(documentID, threadID string) string {
 	return strings.TrimSpace(documentID)
 }
 
-func ensureDocumentBackingThreadTx(ctx context.Context, tx *sql.Tx, actorID, documentID, threadID, title, updatedAt string) (string, error) {
+func ensureDocumentBackingThreadTx(ctx context.Context, tx *accessTx, actorID, documentID, threadID, title, updatedAt string) (string, error) {
 	threadID = normalizeDocumentBackingThreadID(documentID, threadID)
 	if threadID == "" {
 		return "", invalidDocumentRequest("document.thread_id is required")
@@ -2457,7 +2461,7 @@ func ensureDocumentBackingThreadTx(ctx context.Context, tx *sql.Tx, actorID, doc
 	return threadID, nil
 }
 
-func clearDocumentBackingThreadSubjectTx(ctx context.Context, tx *sql.Tx, actorID, threadID, documentID, updatedAt string) error {
+func clearDocumentBackingThreadSubjectTx(ctx context.Context, tx *accessTx, actorID, threadID, documentID, updatedAt string) error {
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
 		return nil
