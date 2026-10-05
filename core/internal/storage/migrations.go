@@ -1000,6 +1000,49 @@ var migrations = []migration{
 	// Earlier PR previews already recorded 55. Reconcile them as well: new
 	// ownership sources and repaired indexes must not depend on a fresh install.
 	{Version: 56, AfterApply: installResourceAccess},
+	{Version: 57, AfterApply: installCompleteResourceAccess},
+}
+
+func installCompleteResourceAccess(ctx context.Context, tx *sql.Tx) error {
+	// Aggregates can outlive raw points. Retain reference provenance per label
+	// stream so compaction cannot turn a formerly private contributor public.
+	if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS resource_access_series_refs(series TEXT NOT NULL,labels TEXT NOT NULL,target_ref TEXT NOT NULL COLLATE NOCASE,PRIMARY KEY(series,labels,target_ref))`); err != nil {
+		return err
+	}
+	for table, state := range map[string]string{"series_points": "state", "series_daily": "last_state", "series_live_daily": "last_state"} {
+		if exists, err := sqliteTableExists(ctx, tx, table); err != nil {
+			return err
+		} else if !exists {
+			continue
+		}
+		insert := func(prefix, from string) string {
+			return `INSERT INTO resource_access_series_refs SELECT ` + prefix + `series,` + prefix + `labels,j.value FROM ` + from + `json_each(anx_resource_refs(json_array(` + prefix + `labels,` + prefix + state + `))) j WHERE j.value<>'' ON CONFLICT DO NOTHING;`
+		}
+		for _, statement := range []string{insert("r.", table+" r, "), `CREATE TRIGGER IF NOT EXISTS access_` + table + `_insert AFTER INSERT ON ` + table + ` BEGIN ` + insert("NEW.", "") + ` END`, `CREATE TRIGGER IF NOT EXISTS access_` + table + `_update AFTER UPDATE ON ` + table + ` BEGIN ` + insert("NEW.", "") + ` END`} {
+			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				return err
+			}
+		}
+	}
+	if exists, err := sqliteTableExists(ctx, tx, "artifacts"); err != nil {
+		return err
+	} else if exists {
+		var n int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('artifacts') WHERE name='content_refs_json'`).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			if _, err := tx.ExecContext(ctx, `ALTER TABLE artifacts ADD COLUMN content_refs_json TEXT`); err != nil {
+				return err
+			}
+		}
+	}
+	// Rebuild rather than union with the old index: work metadata previously
+	// shared the card source kind, which would collide with canonical card fields.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM resource_access_edges`); err != nil {
+		return err
+	}
+	return installResourceAccess(ctx, tx)
 }
 
 func installResourceAccess(ctx context.Context, tx *sql.Tx) error {
@@ -1028,6 +1071,8 @@ func installResourceAccess(ctx context.Context, tx *sql.Tx) error {
 		"derived_inbox_items": `CREATE INDEX IF NOT EXISTS idx_inbox_access_card ON derived_inbox_items(source_card_id)`,
 		"work_metadata":       `CREATE INDEX IF NOT EXISTS idx_work_access_project ON work_metadata(` + resourceaccess.ReferenceSQL("json_extract(metadata_json,'$.project_ref')") + ` COLLATE NOCASE)`,
 		"agent_wakeups":       `CREATE INDEX IF NOT EXISTS idx_wakeups_access_trigger_event ON agent_wakeups(trigger_event_id)`,
+		"card_revisions":      `CREATE INDEX IF NOT EXISTS idx_card_revisions_access_artifact ON card_revisions(artifact_id)`,
+		"document_revisions":  `CREATE INDEX IF NOT EXISTS idx_document_revisions_access_artifact ON document_revisions(artifact_id)`,
 	} {
 		exists, err := sqliteTableExists(ctx, tx, table)
 		if err != nil {
@@ -1054,47 +1099,50 @@ func installResourceAccess(ctx context.Context, tx *sql.Tx) error {
 // These ownership edges are separate from navigational ref_edges: replacing a
 // record's top-level refs must never discard payload-derived authorization.
 func installResourceAccessEdges(ctx context.Context, tx *sql.Tx) error {
-	for _, source := range []struct {
-		table, kind, id string
-		columns         []string
-	}{
-		{"events", "event", "id", []string{"refs_json", "payload_json"}},
-		{"agent_wakeups", "wakeup", "wakeup_id", []string{"refs_json"}},
-		{"card_plans", "plan", "card_id", []string{"body_json"}},
-		// Work metadata is part of the card projection, including search. Its
-		// references therefore constrain the whole work item before projection.
-		{"work_metadata", "card", "card_id", []string{"metadata_json"}},
-		{"runs", "run", "id", []string{"card_ref"}},
-	} {
-		exists, err := sqliteTableExists(ctx, tx, source.table)
+	for _, source := range resourceaccess.OwnershipSources {
+		exists, err := sqliteTableExists(ctx, tx, source.Table)
 		if err != nil {
 			return err
 		}
 		if !exists {
 			continue
 		}
+		// Legacy partial schemas and the earlier migrations may lack later fields.
+		var columns []string
+		for _, column := range source.Columns {
+			var n int
+			if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info(?) WHERE name=?`, source.Table, column).Scan(&n); err != nil {
+				return err
+			}
+			if n != 0 {
+				columns = append(columns, column)
+			}
+		}
+		if len(columns) == 0 {
+			continue
+		}
 		insert := func(prefix, from string) string {
 			var parts []string
-			for _, column := range source.columns {
+			for _, column := range columns {
 				value := prefix + column
-				if column == "card_ref" {
-					value = "json_quote(" + value + ")"
-				}
-				parts = append(parts, `SELECT '`+source.kind+`',`+prefix+source.id+`,`+resourceaccess.ReferenceSQL("j.atom")+` FROM `+from+`json_tree(CASE WHEN json_valid(`+value+`) THEN `+value+` ELSE '{}' END) j WHERE j.type='text' AND trim(j.atom)<>''`)
+				parts = append(parts, `SELECT '`+source.Kind+`',`+prefix+source.ID+`,j.value FROM `+from+`json_each(anx_resource_refs(`+value+`)) j WHERE j.value<>''`)
 			}
 			// An outer UPSERT can override a trigger's legacy OR IGNORE policy.
 			// An explicit conflict target remains safe for duplicate JSON atoms.
 			return `INSERT INTO resource_access_edges(source_kind,source_id,target_ref) ` + strings.Join(parts, ` UNION `) + ` ON CONFLICT(source_kind,source_id,target_ref) DO NOTHING;`
 		}
-		clear := `DELETE FROM resource_access_edges WHERE source_kind='` + source.kind + `' AND source_id=OLD.` + source.id + `;`
+		clear := `DELETE FROM resource_access_edges WHERE source_kind='` + source.Kind + `' AND source_id=OLD.` + source.ID + `;`
 		for _, statement := range []string{
-			insert("r.", source.table+" r, "),
-			`CREATE TRIGGER IF NOT EXISTS access_` + source.table + `_insert AFTER INSERT ON ` + source.table + ` BEGIN ` + insert("NEW.", "") + ` END`,
-			`CREATE TRIGGER IF NOT EXISTS access_` + source.table + `_update AFTER UPDATE OF ` + strings.Join(append([]string{source.id}, source.columns...), ",") + ` ON ` + source.table + ` BEGIN ` + clear + insert("NEW.", "") + ` END`,
-			`CREATE TRIGGER IF NOT EXISTS access_` + source.table + `_delete AFTER DELETE ON ` + source.table + ` BEGIN ` + clear + ` END`,
+			`DROP TRIGGER IF EXISTS access_` + source.Table + `_insert`,
+			`DROP TRIGGER IF EXISTS access_` + source.Table + `_update`,
+			`DROP TRIGGER IF EXISTS access_` + source.Table + `_delete`,
+			insert("r.", source.Table+" r, "),
+			`CREATE TRIGGER IF NOT EXISTS access_` + source.Table + `_insert AFTER INSERT ON ` + source.Table + ` BEGIN ` + insert("NEW.", "") + ` END`,
+			`CREATE TRIGGER IF NOT EXISTS access_` + source.Table + `_update AFTER UPDATE OF ` + strings.Join(append([]string{source.ID}, columns...), ",") + ` ON ` + source.Table + ` BEGIN ` + clear + insert("NEW.", "") + ` END`,
+			`CREATE TRIGGER IF NOT EXISTS access_` + source.Table + `_delete AFTER DELETE ON ` + source.Table + ` BEGIN ` + clear + ` END`,
 		} {
 			if _, err := tx.ExecContext(ctx, statement); err != nil {
-				return fmt.Errorf("index %s authorization: %w", source.table, err)
+				return fmt.Errorf("index %s authorization: %w", source.Table, err)
 			}
 		}
 	}

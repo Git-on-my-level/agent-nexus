@@ -8,7 +8,7 @@ import (
 	"database/sql/driver"
 	"sync/atomic"
 
-	"modernc.org/sqlite"
+	_ "modernc.org/sqlite"
 )
 
 type Counter struct{ queries atomic.Int64 }
@@ -20,14 +20,21 @@ func (c *Counter) Reset()       { c.queries.Store(0) }
 // QueryRowContext alike. Each test gets its own counter and connection pool.
 func Open(dsn string) (*sql.DB, *Counter) {
 	counter := &Counter{}
-	db := sql.OpenDB(&connector{dsn: dsn, underlying: &sqlite.Driver{}, counter: counter})
+	// Use the registered driver, including production scalar functions.
+	registered, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		panic(err)
+	}
+	underlying := registered.Driver()
+	registered.Close()
+	db := sql.OpenDB(&connector{dsn: dsn, underlying: underlying, counter: counter})
 	db.SetMaxOpenConns(1)
 	return db, counter
 }
 
 type connector struct {
 	dsn        string
-	underlying *sqlite.Driver
+	underlying driver.Driver
 	counter    *Counter
 }
 

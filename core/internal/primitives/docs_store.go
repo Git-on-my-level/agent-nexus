@@ -1,6 +1,7 @@
 package primitives
 
 import (
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"database/sql"
 	"encoding/base64"
@@ -590,8 +591,8 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json, content_refs_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		artifactID,
 		artifactHandle,
 		"doc",
@@ -602,6 +603,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		contentHash,
 		string(refsJSON),
 		string(artifactMetadataJSON),
+		resourceaccess.ReferenceAtomsJSON(string(encodedContent)),
 	); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -1207,8 +1209,8 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json, content_refs_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		artifactID,
 		artifactHandle,
 		"doc",
@@ -1219,6 +1221,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		contentHash,
 		string(refsJSON),
 		string(artifactMetadataJSON),
+		resourceaccess.ReferenceAtomsJSON(string(encodedContent)),
 	); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)

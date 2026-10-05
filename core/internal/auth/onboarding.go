@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"database/sql"
 	"errors"
@@ -93,7 +94,7 @@ func (s *Store) bootstrapRegistrationAvailable(ctx context.Context) (bool, error
 	}
 
 	var consumedAt sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT consumed_at FROM auth_bootstrap_state WHERE id = 1`).Scan(&consumedAt)
+	err := resourceaccess.NewDB(s.db).QueryRowContext(ctx, `SELECT consumed_at FROM auth_bootstrap_state WHERE id = 1`).Scan(&consumedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return true, nil
@@ -182,7 +183,7 @@ func (s *Store) CreateInvite(ctx context.Context, createdBy Principal, input Cre
 	}
 	token := "oinv_" + tokenBody
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return Invite{}, "", fmt.Errorf("begin create invite transaction: %w", err)
 	}
@@ -266,7 +267,7 @@ func (s *Store) ListInvites(ctx context.Context) ([]Invite, error) {
 		return nil, fmt.Errorf("auth store database is not initialized")
 	}
 
-	rows, err := s.db.QueryContext(
+	rows, err := resourceaccess.NewDB(s.db).QueryContext(
 		ctx,
 		`SELECT
 			id,
@@ -324,7 +325,7 @@ func (s *Store) RevokeInvite(ctx context.Context, inviteID string, revokedBy Pri
 	now := time.Now().UTC()
 	nowText := now.Format(time.RFC3339Nano)
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return Invite{}, fmt.Errorf("begin revoke invite transaction: %w", err)
 	}
@@ -407,7 +408,7 @@ func (s *Store) RevokeInvite(ctx context.Context, inviteID string, revokedBy Pri
 }
 
 func (s *Store) getInviteByID(ctx context.Context, inviteID string) (Invite, error) {
-	return getInviteByIDWithQuerier(ctx, s.db, inviteID)
+	return getInviteByIDWithQuerier(ctx, resourceaccess.NewDB(s.db), inviteID)
 }
 
 type inviteQueryer interface {
@@ -458,7 +459,7 @@ func (s *Store) resolveInviteClaim(ctx context.Context, inviteToken string, prin
 		consumedAt sql.NullString
 		revokedAt  sql.NullString
 	)
-	err := s.db.QueryRowContext(
+	err := resourceaccess.NewDB(s.db).QueryRowContext(
 		ctx,
 		`SELECT id, kind, expires_at, consumed_at, revoked_at
 		 FROM auth_invites
@@ -498,7 +499,7 @@ func (s *Store) resolveInviteClaim(ctx context.Context, inviteToken string, prin
 	}, nil
 }
 
-func (s *Store) consumeOnboardingClaimTx(ctx context.Context, tx *sql.Tx, claim OnboardingClaim, agentID string, actorID string, now time.Time) error {
+func (s *Store) consumeOnboardingClaimTx(ctx context.Context, tx Transaction, claim OnboardingClaim, agentID string, actorID string, now time.Time) error {
 	if claim.PrincipalKind != PrincipalKindHuman {
 		return ErrInvalidToken
 	}

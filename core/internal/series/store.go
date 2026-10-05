@@ -4,6 +4,7 @@ package series
 
 import (
 	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/resourceaccess"
 	"agent-nexus-core/internal/storage"
 	"context"
 	"database/sql"
@@ -109,7 +110,7 @@ func (s Store) Declare(ctx context.Context, d Declaration, actor auth.Principal)
 		}
 		seen[def.Name] = true
 	}
-	tx, err := s.DB.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.DB).BeginTx(ctx, nil)
 	if err != nil {
 		return Adapter{}, err
 	}
@@ -166,7 +167,7 @@ func (s Store) Declare(ctx context.Context, d Declaration, actor auth.Principal)
 	return out, tx.Commit()
 }
 func (s Store) Remove(ctx context.Context, name string, deleteData bool, actor auth.Principal) error {
-	tx, err := s.DB.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.DB).BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -188,7 +189,7 @@ func (s Store) Remove(ctx context.Context, name string, deleteData bool, actor a
 		event = "adapter_deleted"
 		// Workspace SQLite deliberately does not enable foreign-key cascades.
 		// Delete dependents explicitly before allowing a series name to be reused.
-		for _, table := range []string{"series_points", "series_live_daily", "series_daily", "series_labels"} {
+		for _, table := range []string{"series_points", "series_live_daily", "series_daily", "series_labels", "resource_access_series_refs"} {
 			if _, err = tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE series IN (SELECT name FROM series_definitions WHERE adapter=?)`, name); err != nil {
 				return err
 			}
@@ -209,7 +210,7 @@ func (s Store) Remove(ctx context.Context, name string, deleteData bool, actor a
 	return tx.Commit()
 }
 func (s Store) Adapters(ctx context.Context) ([]Adapter, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT d.name,d.description,d.agent_id,d.host_id,h.slug,d.expected_interval,d.created_at,d.revoked_at FROM series_adapters d JOIN hosts h ON h.id=d.host_id WHERE d.deleted_at IS NULL ORDER BY d.name LIMIT 1000`)
+	rows, err := resourceaccess.NewDB(s.DB).QueryContext(ctx, `SELECT d.name,d.description,d.agent_id,d.host_id,h.slug,d.expected_interval,d.created_at,d.revoked_at FROM series_adapters d JOIN hosts h ON h.id=d.host_id WHERE d.deleted_at IS NULL ORDER BY d.name LIMIT 1000`)
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +230,7 @@ func (s Store) Adapters(ctx context.Context) ([]Adapter, error) {
 	}
 	rows.Close()
 	for i := range out {
-		defs, err := s.DB.QueryContext(ctx, `SELECT name,kind,unit FROM series_definitions WHERE adapter=? ORDER BY name`, out[i].Name)
+		defs, err := resourceaccess.NewDB(s.DB).QueryContext(ctx, `SELECT name,kind,unit FROM series_definitions WHERE adapter=? ORDER BY name`, out[i].Name)
 		if err != nil {
 			return nil, err
 		}
@@ -253,7 +254,7 @@ func (s Store) Adapters(ctx context.Context) ([]Adapter, error) {
 
 // Compaction is transactional with reads/writes so a point exists either in raw
 // storage or a daily rollup, never twice. Aggregate state preserves last by ts.
-func compact(ctx context.Context, tx *sql.Tx, now time.Time) error {
+func compact(ctx context.Context, tx seriesTransaction, now time.Time) error {
 	cutoff := now.Add(-Retention).UnixNano()
 	_, err := tx.ExecContext(ctx, `WITH old AS (SELECT * FROM series_points WHERE ts<?)
  INSERT INTO series_daily(series,labels,day,n,total,low,high,last_ts,last_value,last_state)
@@ -301,7 +302,7 @@ func (s Store) Push(ctx context.Context, name string, p Point, actor auth.Princi
 	if ts.Before(now.Add(-Retention)) || ts.After(now.Add(5*time.Minute)) {
 		return fmt.Errorf("%w: timestamp must be within 90 days and no more than 5 minutes ahead", ErrInvalid)
 	}
-	tx, err := s.DB.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.DB).BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -376,7 +377,7 @@ func (s Store) Push(ctx context.Context, name string, p Point, actor auth.Princi
 	return tx.Commit()
 }
 
-func requestBudget(ctx context.Context, tx *sql.Tx, adapter string, now time.Time) error {
+func requestBudget(ctx context.Context, tx seriesTransaction, adapter string, now time.Time) error {
 	minute := now.Unix() / 60
 	for _, scope := range []struct {
 		name string
@@ -398,7 +399,7 @@ func requestBudget(ctx context.Context, tx *sql.Tx, adapter string, now time.Tim
 
 // Compact applies retention without needing an active collector or reader.
 func (s Store) Compact(ctx context.Context, now time.Time) error {
-	tx, err := s.DB.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.DB).BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -407,4 +408,12 @@ func (s Store) Compact(ctx context.Context, now time.Time) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+// Both canonical maintenance tests and scoped request transactions implement
+// this narrow interface; business callers retain the scoped transaction.
+type seriesTransaction interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }

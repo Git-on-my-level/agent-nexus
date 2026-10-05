@@ -10,6 +10,70 @@ import (
 	"testing"
 )
 
+func TestResourceAccessMigrationReconcilesPrivacy56(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	ws, err := storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	private, err := s.CreateWork(ctx, "owner", "", map[string]any{"title": "private"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.PatchThread(ctx, "owner", private["thread_id"].(string), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	public, err := s.CreateWork(ctx, "owner", "", map[string]any{"title": "public"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifact, err := s.CreateArtifact(ctx, "owner", map[string]any{"kind": "note", "refs": []string{}}, map[string]any{"ref": private["ref"], "title": "legacy blob secret"}, "structured")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Version 56 had no blob manifest and indexed neither observations nor most
+	// canonical text fields. Remove the new triggers before reconstructing it.
+	for _, source := range resourceaccess.OwnershipSources {
+		for _, op := range []string{"insert", "update", "delete"} {
+			if _, err = ws.DB().Exec(`DROP TRIGGER access_` + source.Table + `_` + op); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	for _, sql := range []string{
+		`ALTER TABLE artifacts DROP COLUMN content_refs_json`,
+		`DELETE FROM resource_access_edges`,
+		`DELETE FROM schema_migrations WHERE version>=57`,
+	} {
+		if _, err = ws.DB().Exec(sql); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err = ws.DB().Exec(`INSERT INTO work_observations(id,card_id,idempotency_key,digest,observed_at,received_at,status,body_json) VALUES('old-observation',?,'old','digest','now','now','reported',json_object('evidence',json_array(json_object('ref',?,'title','old secret'))))`, public["id"], private["ref"]); err != nil {
+		t.Fatal(err)
+	}
+	if err = ws.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ws, err = storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s = primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	for _, actor := range []string{"stranger", "owner"} {
+		scope := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: actor})
+		for kind, id := range map[string]string{"card": public["id"].(string), "artifact": artifact["id"].(string)} {
+			if got := s.CanAccessResource(scope, kind, id); got != (actor == "owner") {
+				t.Errorf("upgraded %s access for %s=%v", kind, actor, got)
+			}
+		}
+	}
+	assertAccessIndexesUsed(t, ws.DB())
+}
+
 func TestResourceAccessMigrationReconcilesPrivacy54(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
@@ -68,7 +132,7 @@ func TestResourceAccessMigrationReconcilesPrivacy55(t *testing.T) {
 		`DROP INDEX idx_wakeups_access_trigger_event`,
 		`DROP INDEX idx_work_access_project`,
 		`CREATE INDEX idx_work_access_project ON work_metadata(json_extract(metadata_json,'$.project_ref'))`,
-		`DELETE FROM schema_migrations WHERE version=56`,
+		`DELETE FROM schema_migrations WHERE version>=56`,
 	} {
 		if _, err = ws.DB().Exec(statement); err != nil {
 			t.Fatal(err)
@@ -124,7 +188,8 @@ func TestResourceAccessMigrationBackfillsAndMaintainsPayloadEdges(t *testing.T) 
 				t.Fatal(err)
 			}
 			// Reconstruct the selected pre-privacy schema while retaining canonical rows.
-			for _, table := range []string{"events", "agent_wakeups", "card_plans", "work_metadata", "runs"} {
+			for _, source := range resourceaccess.OwnershipSources {
+				table := source.Table
 				for _, op := range []string{"insert", "update", "delete"} {
 					if _, err = ws.DB().Exec(`DROP TRIGGER access_` + table + `_` + op); err != nil {
 						t.Fatal(err)

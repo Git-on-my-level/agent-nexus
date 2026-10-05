@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -244,7 +245,7 @@ func (s *Store) verifyAdoptions(ctx context.Context, q interface {
 	}
 	return nil
 }
-func expireHostEnrollmentsTx(ctx context.Context, tx *sql.Tx) error {
+func expireHostEnrollmentsTx(ctx context.Context, tx Transaction) error {
 	_, err := tx.ExecContext(ctx, `UPDATE host_enrollments SET status='expired' WHERE status IN ('pending','approved') AND expires_at<=?`, hostNow())
 	if err != nil {
 		return err
@@ -269,7 +270,7 @@ func (s *Store) StartHostEnrollment(ctx context.Context, in HostEnrollmentInput,
 	if _, err := validateEnrollment(in); err != nil {
 		return EnrollmentStart{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return EnrollmentStart{}, err
 	}
@@ -342,7 +343,7 @@ const enrollmentSelect = `SELECT id,user_code,requested_slug,os_user,hostname,di
 
 func (s *Store) PollHostEnrollment(ctx context.Context, id, poll string) (HostEnrollment, error) {
 	var hash string
-	err := s.db.QueryRowContext(ctx, `SELECT poll_token_hash FROM host_enrollments WHERE id=?`, id).Scan(&hash)
+	err := resourceaccess.NewDB(s.db).QueryRowContext(ctx, `SELECT poll_token_hash FROM host_enrollments WHERE id=?`, id).Scan(&hash)
 	if errors.Is(err, sql.ErrNoRows) {
 		return HostEnrollment{}, ErrHostNotFound
 	}
@@ -352,7 +353,7 @@ func (s *Store) PollHostEnrollment(ctx context.Context, id, poll string) (HostEn
 	if poll == "" || hash != tokenHash(poll) {
 		return HostEnrollment{}, ErrInvalidToken
 	}
-	e, err := readEnrollment(s.db.QueryRowContext(ctx, enrollmentSelect, id), false)
+	e, err := readEnrollment(resourceaccess.NewDB(s.db).QueryRowContext(ctx, enrollmentSelect, id), false)
 	if err != nil {
 		return e, err
 	}
@@ -366,7 +367,7 @@ func expired(raw string) bool {
 	return e != nil || !time.Now().UTC().Before(t)
 }
 func (s *Store) PendingHostEnrollments(ctx context.Context) ([]HostEnrollment, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM host_enrollments WHERE status IN ('pending','approved') AND expires_at>? ORDER BY created_at`, hostNow())
+	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT id FROM host_enrollments WHERE status IN ('pending','approved') AND expires_at>? ORDER BY created_at`, hostNow())
 	if err != nil {
 		return nil, err
 	}
@@ -381,7 +382,7 @@ func (s *Store) PendingHostEnrollments(ctx context.Context) ([]HostEnrollment, e
 	}
 	out := []HostEnrollment{}
 	for _, id := range ids {
-		e, err := readEnrollment(s.db.QueryRowContext(ctx, enrollmentSelect, id), true)
+		e, err := readEnrollment(resourceaccess.NewDB(s.db).QueryRowContext(ctx, enrollmentSelect, id), true)
 		if err != nil {
 			return nil, err
 		}
@@ -401,10 +402,10 @@ func (s *Store) PendingHostEnrollmentsPage(ctx context.Context, limit int) ([]Ho
 	}
 	now := hostNow()
 	var total int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM host_enrollments WHERE status IN ('pending','approved') AND expires_at>?`, now).Scan(&total); err != nil {
+	if err := resourceaccess.NewDB(s.db).QueryRowContext(ctx, `SELECT COUNT(*) FROM host_enrollments WHERE status IN ('pending','approved') AND expires_at>?`, now).Scan(&total); err != nil {
 		return nil, 0, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM host_enrollments WHERE status IN ('pending','approved') AND expires_at>? ORDER BY created_at,id LIMIT ?`, now, limit)
+	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT id FROM host_enrollments WHERE status IN ('pending','approved') AND expires_at>? ORDER BY created_at,id LIMIT ?`, now, limit)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -424,7 +425,7 @@ func (s *Store) PendingHostEnrollmentsPage(ctx context.Context, limit int) ([]Ho
 	}
 	out := make([]HostEnrollment, 0, len(ids))
 	for _, id := range ids {
-		enrollment, err := readEnrollment(s.db.QueryRowContext(ctx, enrollmentSelect, id), true)
+		enrollment, err := readEnrollment(resourceaccess.NewDB(s.db).QueryRowContext(ctx, enrollmentSelect, id), true)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -434,7 +435,7 @@ func (s *Store) PendingHostEnrollmentsPage(ctx context.Context, limit int) ([]Ho
 }
 
 func (s *Store) DecideHostEnrollment(ctx context.Context, id string, approve bool, admin Principal) (HostEnrollment, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return HostEnrollment{}, err
 	}
@@ -492,7 +493,7 @@ func (s *Store) createHostEnrollmentTokenAt(ctx context.Context, label string, e
 		return HostEnrollmentToken{}, "", err
 	}
 	t := HostEnrollmentToken{ID: "htok_" + uuid.NewString(), Label: label, CreatedAt: now.Format(time.RFC3339Nano), ExpiresAt: expiry.UTC().Format(time.RFC3339Nano)}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return HostEnrollmentToken{}, "", err
 	}
@@ -510,7 +511,7 @@ func (s *Store) createHostEnrollmentTokenAt(ctx context.Context, label string, e
 	return t, secret, tx.Commit()
 }
 func (s *Store) ListHostEnrollmentTokens(ctx context.Context) ([]HostEnrollmentToken, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,label,created_at,expires_at,consumed_at,revoked_at FROM host_enrollment_tokens ORDER BY created_at DESC`)
+	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT id,label,created_at,expires_at,consumed_at,revoked_at FROM host_enrollment_tokens ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -533,7 +534,7 @@ func (s *Store) ListHostEnrollmentTokens(ctx context.Context) ([]HostEnrollmentT
 	return out, rows.Err()
 }
 func (s *Store) RevokeHostEnrollmentToken(ctx context.Context, id string, admin Principal) (HostEnrollmentToken, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return HostEnrollmentToken{}, err
 	}
@@ -567,7 +568,7 @@ func (s *Store) RevokeHostEnrollmentToken(ctx context.Context, id string, admin 
 	return HostEnrollmentToken{}, ErrHostNotFound
 }
 func (s *Store) CompleteHostEnrollment(ctx context.Context, id, poll, signature string) (Host, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return Host{}, err
 	}
@@ -626,7 +627,7 @@ func (s *Store) CompleteHeadlessHostEnrollment(ctx context.Context, in HostEnrol
 	if !hostSignature(key, "anx-host-headless-enroll|"+in.RequestNonce+"|"+in.RequestedSlug+"|"+in.PublicKey, in.Signature) {
 		return Host{}, ErrKeyMismatch
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return Host{}, err
 	}
@@ -656,7 +657,7 @@ func (s *Store) CompleteHeadlessHostEnrollment(ctx context.Context, in HostEnrol
 	}
 	return s.GetHost(ctx, h.ID)
 }
-func (s *Store) createHostTx(ctx context.Context, tx *sql.Tx, in HostEnrollmentInput, except string, frozenProofs bool) (Host, error) {
+func (s *Store) createHostTx(ctx context.Context, tx Transaction, in HostEnrollmentInput, except string, frozenProofs bool) (Host, error) {
 	if err := s.slugAvailable(ctx, tx, in.RequestedSlug, except); err != nil {
 		return Host{}, err
 	}
@@ -725,7 +726,7 @@ func (s *Store) createHostTx(ctx context.Context, tx *sql.Tx, in HostEnrollmentI
 	}
 	return Host{ID: id, KeyID: keyID}, nil
 }
-func revokeChildSessions(ctx context.Context, tx *sql.Tx, id, now string) error {
+func revokeChildSessions(ctx context.Context, tx Transaction, id, now string) error {
 	for _, table := range []string{"auth_access_tokens", "auth_refresh_sessions"} {
 		_, err := tx.ExecContext(ctx, `UPDATE `+table+` SET revoked_at=? WHERE agent_id=? AND revoked_at IS NULL`, now, id)
 		if err != nil {
@@ -738,7 +739,7 @@ func (s *Store) GetHost(ctx context.Context, id string) (Host, error) {
 	var h Host
 	var adapters string
 	var revoked, bridgeExpiry sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT h.id,h.slug,h.display_name,h.os_user,h.hostname,h.discovered_adapters_json,h.created_at,h.revoked_at,h.bridge_expires_at,COALESCE((SELECT id FROM host_keys WHERE host_id=h.id ORDER BY created_at DESC LIMIT 1),'') FROM hosts h WHERE h.id=? OR h.slug=?`, id, id).Scan(&h.ID, &h.Slug, &h.DisplayName, &h.OSUser, &h.Hostname, &adapters, &h.CreatedAt, &revoked, &bridgeExpiry, &h.KeyID)
+	err := resourceaccess.NewDB(s.db).QueryRowContext(ctx, `SELECT h.id,h.slug,h.display_name,h.os_user,h.hostname,h.discovered_adapters_json,h.created_at,h.revoked_at,h.bridge_expires_at,COALESCE((SELECT id FROM host_keys WHERE host_id=h.id ORDER BY created_at DESC LIMIT 1),'') FROM hosts h WHERE h.id=? OR h.slug=?`, id, id).Scan(&h.ID, &h.Slug, &h.DisplayName, &h.OSUser, &h.Hostname, &adapters, &h.CreatedAt, &revoked, &bridgeExpiry, &h.KeyID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return h, ErrHostNotFound
 	}
@@ -756,7 +757,7 @@ func (s *Store) GetHost(ctx context.Context, id string) (Host, error) {
 	}
 	h.ExcludedNames = []string{}
 	h.Agents = []HostAgent{}
-	rows, err := s.db.QueryContext(ctx, `SELECT name FROM host_exclusions WHERE host_id=? ORDER BY name`, h.ID)
+	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT name FROM host_exclusions WHERE host_id=? ORDER BY name`, h.ID)
 	if err != nil {
 		return h, err
 	}
@@ -769,7 +770,7 @@ func (s *Store) GetHost(ctx context.Context, id string) (Host, error) {
 		h.ExcludedNames = append(h.ExcludedNames, n)
 	}
 	rows.Close()
-	rows, err = s.db.QueryContext(ctx, `SELECT ha.name,ha.identity_kind,a.id,a.actor_id,a.username,a.revoked_at FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? ORDER BY ha.name`, h.ID)
+	rows, err = resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT ha.name,ha.identity_kind,a.id,a.actor_id,a.username,a.revoked_at FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? ORDER BY ha.name`, h.ID)
 	if err != nil {
 		return h, err
 	}
@@ -794,7 +795,7 @@ func (s *Store) GetHost(ctx context.Context, id string) (Host, error) {
 	return h, rows.Err()
 }
 func (s *Store) ListHosts(ctx context.Context) ([]Host, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM hosts ORDER BY created_at DESC`)
+	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT id FROM hosts ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -833,10 +834,10 @@ func (s *Store) ListHostInventory(ctx context.Context, hostLimit, agentLimit int
 		agentLimit = maxHostInventoryAgents
 	}
 	var total, active int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(CASE WHEN revoked_at IS NULL THEN 1 ELSE 0 END),0) FROM hosts`).Scan(&total, &active); err != nil {
+	if err := resourceaccess.NewDB(s.db).QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(CASE WHEN revoked_at IS NULL THEN 1 ELSE 0 END),0) FROM hosts`).Scan(&total, &active); err != nil {
 		return nil, 0, 0, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM hosts ORDER BY created_at DESC,id LIMIT ?`, hostLimit)
+	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT id FROM hosts ORDER BY created_at DESC,id LIMIT ?`, hostLimit)
 	if err != nil {
 		return nil, 0, 0, err
 	}
@@ -870,7 +871,7 @@ func (s *Store) readHostInventoryEntry(ctx context.Context, id string, agentLimi
 	h := &entry.Host
 	var adapters string
 	var revoked, bridgeExpiry sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT h.id,h.slug,h.display_name,h.os_user,h.hostname,h.discovered_adapters_json,h.created_at,h.revoked_at,h.bridge_expires_at FROM hosts h WHERE h.id=?`, id).Scan(&h.ID, &h.Slug, &h.DisplayName, &h.OSUser, &h.Hostname, &adapters, &h.CreatedAt, &revoked, &bridgeExpiry)
+	err := resourceaccess.NewDB(s.db).QueryRowContext(ctx, `SELECT h.id,h.slug,h.display_name,h.os_user,h.hostname,h.discovered_adapters_json,h.created_at,h.revoked_at,h.bridge_expires_at FROM hosts h WHERE h.id=?`, id).Scan(&h.ID, &h.Slug, &h.DisplayName, &h.OSUser, &h.Hostname, &adapters, &h.CreatedAt, &revoked, &bridgeExpiry)
 	if err != nil {
 		return entry, err
 	}
@@ -887,10 +888,10 @@ func (s *Store) readHostInventoryEntry(ctx context.Context, id string, agentLimi
 	}
 	h.ExcludedNames = []string{}
 	h.Agents = []HostAgent{}
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM host_agents WHERE host_id=?`, h.ID).Scan(&entry.AgentCount); err != nil {
+	if err := resourceaccess.NewDB(s.db).QueryRowContext(ctx, `SELECT COUNT(*) FROM host_agents WHERE host_id=?`, h.ID).Scan(&entry.AgentCount); err != nil {
 		return entry, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT ha.name,ha.identity_kind,a.id,a.actor_id,a.username,a.revoked_at FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? ORDER BY ha.name LIMIT ?`, h.ID, agentLimit)
+	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT ha.name,ha.identity_kind,a.id,a.actor_id,a.username,a.revoked_at FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? ORDER BY ha.name LIMIT ?`, h.ID, agentLimit)
 	if err != nil {
 		return entry, err
 	}
@@ -920,7 +921,7 @@ func (s *Store) VerifyHostProof(ctx context.Context, id, keyID, signedAt, signat
 	if err != nil || time.Since(t) > s.hostProofSkew() || time.Until(t) > s.hostProofSkew() {
 		return ErrKeyMismatch
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -974,7 +975,7 @@ func (s *Store) PatchHost(ctx context.Context, id string, display *string, exclu
 			seen[n] = true
 		}
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return h, err
 	}
@@ -1045,7 +1046,7 @@ func (s *Store) RevokeHost(ctx context.Context, id string, admin Principal) (Hos
 			return h, ErrHostSelfRevoke
 		}
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return h, err
 	}
@@ -1093,7 +1094,7 @@ func (s *Store) IssueHostAgentToken(ctx context.Context, hostID, keyID, name, si
 	if err != nil || time.Since(t) > s.hostProofSkew() || time.Until(t) > s.hostProofSkew() {
 		return HostAgent{}, TokenBundle{}, ErrKeyMismatch
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return HostAgent{}, TokenBundle{}, err
 	}
@@ -1220,12 +1221,12 @@ func (s *Store) CheckInHostBridge(ctx context.Context, id, instance, checked, ex
 }
 func (s *Store) IsDerivedAgent(ctx context.Context, id string) (bool, error) {
 	var count int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM host_agents WHERE agent_id=?`, id).Scan(&count)
+	err := resourceaccess.NewDB(s.db).QueryRowContext(ctx, `SELECT COUNT(*) FROM host_agents WHERE agent_id=?`, id).Scan(&count)
 	return count > 0, err
 }
 func (s *Store) AgentHost(ctx context.Context, id string) (string, error) {
 	var host string
-	err := s.db.QueryRowContext(ctx, `SELECT host_id FROM host_agents WHERE agent_id=?`, id).Scan(&host)
+	err := resourceaccess.NewDB(s.db).QueryRowContext(ctx, `SELECT host_id FROM host_agents WHERE agent_id=?`, id).Scan(&host)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", ErrHostNotFound
 	}
@@ -1234,7 +1235,7 @@ func (s *Store) AgentHost(ctx context.Context, id string) (string, error) {
 
 func (s *Store) HostOwnsActor(ctx context.Context, hostID, actorID string) (bool, error) {
 	var count int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM host_agents ha JOIN agents a ON a.id=ha.agent_id JOIN hosts h ON h.id=ha.host_id WHERE h.id=? AND h.revoked_at IS NULL AND a.revoked_at IS NULL AND a.actor_id=?`, hostID, actorID).Scan(&count)
+	err := resourceaccess.NewDB(s.db).QueryRowContext(ctx, `SELECT COUNT(*) FROM host_agents ha JOIN agents a ON a.id=ha.agent_id JOIN hosts h ON h.id=ha.host_id WHERE h.id=? AND h.revoked_at IS NULL AND a.revoked_at IS NULL AND a.actor_id=?`, hostID, actorID).Scan(&count)
 	return count == 1, err
 }
 

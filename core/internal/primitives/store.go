@@ -212,6 +212,9 @@ func NewStore(db *sql.DB, blobBackend blob.Backend, blobRoot string, options ...
 	for _, option := range options {
 		option(store)
 	}
+	if err := store.BackfillArtifactAccess(context.Background()); err != nil {
+		log.Printf("artifact authorization backfill incomplete; unindexed content remains inaccessible: %v", err)
+	}
 	return store
 }
 
@@ -451,8 +454,8 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json, content_refs_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		metadata["id"],
 		artifactHandle,
 		kind,
@@ -463,6 +466,7 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 		contentHash,
 		string(refsJSON),
 		string(metadataJSON),
+		resourceaccess.ReferenceAtomsJSON(string(encodedContent)),
 	); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -592,8 +596,8 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json, content_refs_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		metadata["id"],
 		artifactHandle,
 		kind,
@@ -604,6 +608,7 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 		contentHash,
 		string(artifactRefsJSON),
 		string(artifactMetadataJSON),
+		resourceaccess.ReferenceAtomsJSON(string(encodedContent)),
 	); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)

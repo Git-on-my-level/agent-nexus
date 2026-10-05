@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"database/sql"
 	"fmt"
@@ -21,12 +22,12 @@ type SecretMetadata struct {
 }
 
 type Store struct {
-	db        *sql.DB
+	db        *resourceaccess.DB
 	encryptor *Encryptor
 }
 
 func NewStore(db *sql.DB, encryptor *Encryptor) *Store {
-	return &Store{db: db, encryptor: encryptor}
+	return &Store{db: resourceaccess.NewDB(db), encryptor: encryptor}
 }
 
 func (s *Store) HasEncryptor() bool {

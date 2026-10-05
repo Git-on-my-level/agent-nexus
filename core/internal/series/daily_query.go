@@ -10,7 +10,7 @@ import (
 
 // At most 100 label rows, with two primary-key seeks per row. Clamp freshness to
 // now as well: ingestion permits a little future skew, which is not visible yet.
-func lastPoints(ctx context.Context, tx *sql.Tx, name string, labels []string, end int64) (map[string]sql.NullInt64, error) {
+func lastPoints(ctx context.Context, tx seriesTransaction, name string, labels []string, end int64) (map[string]sql.NullInt64, error) {
 	encoded, err := json.Marshal(labels)
 	if err != nil {
 		return nil, err
@@ -73,7 +73,7 @@ SELECT e.labels,e.day,e.n,e.total,e.low,e.high,e.last_ts,p.value,p.state
  FROM series_daily WHERE series=? AND labels IN (SELECT value FROM json_each(?)) AND day>=? AND day<?
  ORDER BY labels,day`
 
-func dailyPoints(ctx context.Context, tx *sql.Tx, name string, labels []string, since, end, step int64, maxBucket int, kind, agg string) (map[string][]Observation, error) {
+func dailyPoints(ctx context.Context, tx seriesTransaction, name string, labels []string, since, end, step int64, maxBucket int, kind, agg string) (map[string][]Observation, error) {
 	encoded, err := json.Marshal(labels)
 	if err != nil {
 		return nil, err

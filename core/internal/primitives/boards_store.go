@@ -1,6 +1,7 @@
 package primitives
 
 import (
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -373,8 +374,8 @@ func (s *Store) insertCardRevisionTx(ctx context.Context, tx *accessTx, actorID,
 	}
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
-		 VALUES (?, ?, 'card', ?, ?, ?, 'structured', ?, ?, ?)`,
+		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json, content_refs_json)
+		 VALUES (?, ?, 'card', ?, ?, ?, 'structured', ?, ?, ?, ?)`,
 		revision.ArtifactID,
 		artifactHandle,
 		nullableString(threadID),
@@ -383,6 +384,7 @@ func (s *Store) insertCardRevisionTx(ctx context.Context, tx *accessTx, actorID,
 		revision.ContentHash,
 		revision.RefsJSON,
 		revision.MetadataJSON,
+		resourceaccess.ReferenceAtomsJSON(string(revision.EncodedContent)),
 	); err != nil {
 		return fmt.Errorf("insert card artifact: %w", err)
 	}

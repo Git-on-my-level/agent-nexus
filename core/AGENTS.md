@@ -94,14 +94,21 @@ inherit their board, and evidence inherits every referenced private resource.
 The selected PM agent and the private owner retain access; unrelated humans,
 agents, and anonymous development readers do not.
 
-Canonical event payloads (including nested refs), notification triggers/refs,
-plans, work metadata, and runs participate in inherited ownership. Work metadata
-constrains the whole card before projection or search. Migration 55 backfills
+Canonical text/JSON, event payloads, notification triggers, plans, work metadata,
+observations/evidence and runs participate in inherited ownership. Metadata and
+observations constrain the whole card before projection or search. Migration 55 backfills
 `resource_access_edges`; database triggers maintain that index atomically with
 canonical JSON/scalar writes, including imports. Migration 56 reconciles earlier
 55 previews with metadata edges and the normalized project/wakeup indexes.
-Use `resourceaccess.ReferenceSQL`
-for SQL reference matching so aliases and Unicode whitespace match the parser.
+Migration 57 reconciles every ref-bearing storage source and blob manifest.
+`resourceaccess.OwnershipSources` drives atomic triggers; `ReferenceAtoms` scans
+nested JSON values/keys and typed refs in text with shared normalization.
+Use the registered SQLite driver so `anx_resource_refs` is available to imports.
+Blob writers publish `content_refs_json` atomically with metadata; startup scans
+older content through its configured backend. Unindexed/unavailable old blobs
+remain inaccessible until indexed. Document search inherits private comments
+and revision content before MATCH/rank/limit. Series rollups retain reference
+provenance after compaction; full adapter data deletion removes that provenance.
 Event content and navigational `ref_edges` also commit in a single transaction.
 Filtering a linked plan suppresses its stored refs and titles, not merely live
 reference previews. Never serialize a shared maintenance error to a reader.
@@ -115,6 +122,18 @@ the database handle checks those arguments (including encoded JSON) within the
 write transaction. Never use raw connections, contextless queries, `main.` table
 qualification, SELECTs through Exec, or literal resource IDs to bypass the scope.
 A new resource table must join the policy's ownership graph and scoped relations.
+Ancillary actor/auth/host/series/secrets readers and transactional response
+loaders must retain scoped handles too. Durable authentication/grant invariants
+may read canonical authority without returning profile or business content.
+
+`internal/storage/testdata/resource_access_storage.json` classifies every live
+column (including PM/investigation schemas, generated columns and views) and
+fingerprints persistence writers plus transitive helper callers in internal/cmd.
+New fields and changed writers require an explicit storage privacy review.
+`ANX_UPDATE_ACCESS_INVENTORY=1 go test ./internal/storage -run
+TestResourceAccessStorageInventory` refreshes fingerprints and marks new fields
+UNCLASSIFIED; classify them deliberately and retain executable ownership/filter
+bindings. The field-driven regression must cover every indexed source/column.
 
 Keep authorization separate from lifecycle filtering. Missing records may retain
 legacy semantics, but a known inaccessible record must never be treated as

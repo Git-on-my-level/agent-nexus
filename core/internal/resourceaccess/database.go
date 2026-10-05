@@ -85,6 +85,12 @@ func (t *Tx) QueryContext(ctx context.Context, q string, args ...any) (*sql.Rows
 func (t *Tx) QueryRowContext(ctx context.Context, q string, args ...any) *sql.Row {
 	return t.raw.QueryRowContext(ctx, ReadQuery(ctx, q), args...)
 }
+
+// PrepareReadContext binds visibility at preparation for request-local repeated
+// reads. Never share the statement across principals or use it for mutations.
+func (t *Tx) PrepareReadContext(ctx context.Context, q string) (*sql.Stmt, error) {
+	return t.raw.PrepareContext(ctx, ReadQuery(ctx, q))
+}
 func (t *Tx) ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error) {
 	if p, ok := PolicyFrom(ctx); ok {
 		if err := p.Check(ctx, t.raw, args); err != nil {

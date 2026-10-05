@@ -1,6 +1,7 @@
 package actors
 
 import (
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"database/sql"
 	"encoding/base64"
@@ -38,11 +39,11 @@ type ActorListFilter struct {
 }
 
 type Store struct {
-	db *sql.DB
+	db *resourceaccess.DB
 }
 
 func NewStore(db *sql.DB) *Store {
-	return &Store{db: db}
+	return &Store{db: resourceaccess.NewDB(db)}
 }
 
 func (s *Store) Register(ctx context.Context, actor Actor) (Actor, error) {

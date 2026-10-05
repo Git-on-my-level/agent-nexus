@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -174,7 +175,7 @@ func BuildAssertionMessage(agentID string, keyID string, signedAt string) string
 	return "anx-auth-token|" + strings.TrimSpace(agentID) + "|" + strings.TrimSpace(keyID) + "|" + strings.TrimSpace(signedAt)
 }
 
-func (s *Store) ensureExistingActorReadyForAgentLinkTx(ctx context.Context, tx *sql.Tx, actorID string) error {
+func (s *Store) ensureExistingActorReadyForAgentLinkTx(ctx context.Context, tx Transaction, actorID string) error {
 	actorID = strings.TrimSpace(actorID)
 	if actorID == "" {
 		return fmt.Errorf("%w: existing actor not found", ErrInvalidRequest)
@@ -232,7 +233,7 @@ func (s *Store) IssueTokenFromAssertion(ctx context.Context, input AssertionInpu
 		return TokenBundle{}, ErrKeyMismatch
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return TokenBundle{}, fmt.Errorf("begin assertion token transaction: %w", err)
 	}
@@ -329,7 +330,7 @@ func (s *Store) IssueTokenFromAssertion(ctx context.Context, input AssertionInpu
 	return tokens, nil
 }
 
-func (s *Store) recordAssertionUseTx(ctx context.Context, tx *sql.Tx, message string, signature string, now time.Time) error {
+func (s *Store) recordAssertionUseTx(ctx context.Context, tx Transaction, message string, signature string, now time.Time) error {
 	if _, err := tx.ExecContext(
 		ctx,
 		`DELETE FROM auth_used_assertions WHERE used_at < ?`,
@@ -365,7 +366,7 @@ func (s *Store) IssueTokenFromRefresh(ctx context.Context, refreshToken string) 
 		return TokenBundle{}, ErrInvalidToken
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return TokenBundle{}, fmt.Errorf("begin refresh token transaction: %w", err)
 	}
@@ -515,7 +516,7 @@ func (s *Store) AuthenticateAccessToken(ctx context.Context, accessToken string)
 		seriesAdapter string
 		accessTokenID string
 	)
-	err := s.db.QueryRowContext(
+	err := resourceaccess.NewDB(s.db).QueryRowContext(
 		ctx,
 		fmt.Sprintf(`SELECT a.id, a.username, a.actor_id, %s, %s,
 		        COALESCE(json_extract(a.metadata_json, '$.auth_admin'), 0),
@@ -577,7 +578,7 @@ func (s *Store) GetAgent(ctx context.Context, agentID string) (Agent, error) {
 		revokedRaw         sql.NullString
 		metadataJSON       string
 	)
-	err := s.db.QueryRowContext(
+	err := resourceaccess.NewDB(s.db).QueryRowContext(
 		ctx,
 		fmt.Sprintf(`SELECT id, username, actor_id, %s, %s, created_at, updated_at, revoked_at, metadata_json
 		 FROM agents
@@ -613,7 +614,7 @@ func (s *Store) GetPrincipalSummary(ctx context.Context, agentID string) (AuthPr
 		return AuthPrincipalSummary{}, ErrAgentNotFound
 	}
 
-	return s.getPrincipalSummaryQueryRow(ctx, s.db.QueryRowContext, agentID)
+	return s.getPrincipalSummaryQueryRow(ctx, resourceaccess.NewDB(s.db).QueryRowContext, agentID)
 }
 
 func (s *Store) RevokeAgent(ctx context.Context, agentID string, input RevokeAgentInput) (RevokeAgentResult, error) {
@@ -643,7 +644,7 @@ func (s *Store) RevokeAgent(ctx context.Context, agentID string, input RevokeAge
 
 	now := time.Now().UTC()
 	nowText := now.Format(time.RFC3339Nano)
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return RevokeAgentResult{}, fmt.Errorf("begin revoke agent transaction: %w", err)
 	}
@@ -808,7 +809,9 @@ func (s *Store) RevokeAgent(ctx context.Context, agentID string, input RevokeAge
 	return result, nil
 }
 
-func (s *Store) countActiveHumanPrincipalsTx(ctx context.Context, tx *sql.Tx) (int, error) {
+func (s *Store) countActiveHumanPrincipalsTx(ctx context.Context, tx Transaction) (int, error) {
+	// Global last-human invariant must count even profiles hidden by resource scope.
+	ctx = resourceaccess.WithoutPolicy(ctx)
 	var count int
 	if err := tx.QueryRowContext(
 		ctx,
@@ -827,7 +830,7 @@ func (s *Store) CountActiveHumanPrincipals(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("auth store database is not initialized")
 	}
 	var count int
-	if err := s.db.QueryRowContext(
+	if err := resourceaccess.NewDB(s.db).QueryRowContext(
 		ctx,
 		fmt.Sprintf(`SELECT COUNT(1)
 		 FROM agents a
@@ -839,7 +842,7 @@ func (s *Store) CountActiveHumanPrincipals(ctx context.Context) (int, error) {
 	return count, nil
 }
 
-func (s *Store) getPrincipalSummaryTx(ctx context.Context, tx *sql.Tx, agentID string) (AuthPrincipalSummary, error) {
+func (s *Store) getPrincipalSummaryTx(ctx context.Context, tx Transaction, agentID string) (AuthPrincipalSummary, error) {
 	return s.getPrincipalSummaryQueryRow(ctx, tx.QueryRowContext, agentID)
 }
 
@@ -909,7 +912,7 @@ func (a Agent) AuthMethodOrDefault() string {
 	return AuthMethodPublicKey
 }
 
-func (s *Store) issueTokenBundleTx(ctx context.Context, tx *sql.Tx, agentID string, now time.Time) (TokenBundle, string, error) {
+func (s *Store) issueTokenBundleTx(ctx context.Context, tx Transaction, agentID string, now time.Time) (TokenBundle, string, error) {
 	refreshToken, err := generateOpaqueToken(32)
 	if err != nil {
 		return TokenBundle{}, "", fmt.Errorf("generate refresh token: %w", err)

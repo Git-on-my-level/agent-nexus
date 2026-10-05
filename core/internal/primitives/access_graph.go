@@ -36,16 +36,26 @@ func ownershipClosure(name, roots string, owner bool) string {
 		{"event", "wakeup", "agent_wakeups", "trigger_event_id", "wakeup_id"},
 		{"card", "plan", "card_plans", "card_id", "card_id"},
 		{"card", "participant", "work_participants", "card_id", "id"},
+		{"work_metadata", "card", "work_metadata", "card_id", "card_id"},
+		{"work_observation", "card", "work_observations", "id", "card_id"},
+		{"card", "work_observation", "work_observations", "card_id", "id"},
+		{"artifact", "document_revision", "document_revisions", "artifact_id", "revision_id"},
+		{"artifact", "card_revision", "card_revisions", "artifact_id", "revision_id"},
+		{"document_revision", "document", "document_revisions", "revision_id", "document_id"},
+		{"card_revision", "card", "card_revisions", "revision_id", "card_id"},
 	} {
 		edge(e[0], e[1], e[2], e[3], e[4])
 	}
+	// Document full-text materialization includes comment text. A private
+	// contributor must constrain the document before MATCH/rank/limit are applied.
+	terms = append(terms, "SELECT 'document',r.id"+carry+" FROM "+name+" d JOIN main.events e ON d.kind='event' AND e.id=d.id JOIN main.documents r ON r.thread_id=e.thread_id WHERE e.type='message_posted' AND COALESCE(e.thread_id,'')<>''")
 	refs := func(join, ref string) {
 		terms = append(terms, "SELECT e.source_type,e.source_id"+carry+" FROM "+name+" d "+join+" JOIN main.ref_edges e ON e.target_type=d.kind AND e.target_id="+ref+" COLLATE NOCASE AND e.edge_type='ref'")
 		terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d "+join+" JOIN main.resource_access_edges e ON e.target_ref=(d.kind||':'||"+ref+") COLLATE NOCASE")
 	}
 	refs("", "d.id")
 	refs("JOIN main.runs r ON d.kind='run' AND r.id=d.id", "r.handle")
-	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_edges e ON e.target_ref=d.id COLLATE NOCASE")
+	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_edges e ON e.target_ref=d.id COLLATE NOCASE WHERE d.kind<>'plan'")
 	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.work_metadata m ON d.kind='card' AND m.card_id=d.id JOIN main.resource_access_edges e ON e.target_ref=json_extract(m.metadata_json,'$.source.url') COLLATE NOCASE WHERE m.authority<>'nexus'")
 	for _, kind := range []string{"thread", "board", "card", "topic", "document", "event", "artifact"} {
 		refs("JOIN main."+resourceTables[kind]+" r ON d.kind='"+kind+"' AND r.id=d.id", "r.handle")
