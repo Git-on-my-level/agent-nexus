@@ -38,6 +38,7 @@
     "live-asks": "Needs an answer",
     "live-work-mix": "Open work",
     "live-activity": "Recent activity",
+    "live-fleet-health": "Fleet health",
     chart: "Visualization",
     "metric-strip": "Measures",
     metric: "Measure",
@@ -117,7 +118,7 @@
     {#if panel.source}
       <SeriesReportPanel {panel} {freshness} />
     {:else if isLivePanel(panel)}
-      <LiveReportPanel {panel} />
+      <LiveReportPanel {panel} {...refProps()} />
     {:else if freshness === "unavailable"}
       <div class="report-unavailable">
         <span class="text-title text-fg-muted" aria-hidden="true">∅</span>

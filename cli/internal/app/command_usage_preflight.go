@@ -257,11 +257,22 @@ func preflightKnownCommandShape(args []string) error {
 			}
 		}
 	case "report":
-		if len(args) > 1 && reportSubcommandSpec.normalize(args[1]) == "render" {
+		if len(args) <= 1 {
+			return preflightSubcommand(args[1:], reportSubcommandSpec)
+		}
+		switch reportSubcommandSpec.normalize(args[1]) {
+		case "render":
 			_, err := parseWorkCommand(args)
 			return err
+		case "init":
+			_, err := parseReportInitArgs(args[2:])
+			return err
+		case "preview":
+			_, err := parseReportPreviewArgs(args[2:])
+			return err
+		default:
+			return preflightSubcommand(args[1:], reportSubcommandSpec)
 		}
-		return preflightSubcommand(args[1:], reportSubcommandSpec)
 	case "events":
 		return preflightSubcommand(args[1:], eventsSubcommandSpec)
 	case "inbox":

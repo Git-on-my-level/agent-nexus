@@ -147,6 +147,11 @@ func TestPlanAPIProjectsCardsWorkReportsAndTimeline(t *testing.T) {
 	if item["progress"].(map[string]any)["total"] != float64(2) || item["health"] != "blocked" || item["needs"].([]any)[0] != "Ship" {
 		t.Fatal(item)
 	}
+	planSteps := item["plan"].(map[string]any)["steps"].([]any)
+	stateSteps := item["plan_state"].(map[string]any)["steps"].([]any)
+	if planSteps[1].(map[string]any)["title"] != "Ship" || stateSteps[1].(map[string]any)["id"] != "ship" || stateSteps[1].(map[string]any)["status"] != "blocked" {
+		t.Fatalf("report did not preserve the authored plan and computed state contracts: %#v", item)
+	}
 	// The plan event is visible in the existing card lifecycle timeline.
 	timeline := workGetJSON(t, h.baseURL+"/cards/"+ref+"/timeline", 200)
 	raw, _ := json.Marshal(timeline)

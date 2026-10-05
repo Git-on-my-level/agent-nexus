@@ -13,7 +13,7 @@ const agentGuideSkillName = "anx-participant"
 
 const agentGuideSkillDescription = "Participate in Agent Nexus work with source authority, scoped session identity, meaningful updates, and evidence-backed completion."
 
-const agentGuideSkillVersion = "anx.participant.v9"
+const agentGuideSkillVersion = "anx.participant.v10"
 
 type guideSection struct {
 	Title string
@@ -45,7 +45,7 @@ func agentGuideSections() []guideSection {
 			"- A card represents a human-level initiative or outcome that may span many executor tasks and outlive them. Keep issue, PR and run detail in its source; link that detail as evidence. Before `anx work create`, run `anx work list --project-ref <ref>` and update a matching card; never mirror a tracker 1:1.",
 			"- Fleet ingestion: edit the workspace ANX mapping document (fleet-sync mapping_doc), pin a source identity or add an ordered project/label/repo/title rule to an existing initiative, and preview with fleet-sync --plan. Unmatched items share one Unsorted panel; promotion is deliberate. See adapters/fleet-sync/README.md. Linked evidence complements initiative plan steps; do not turn each source item into a card or milestone.",
 			"- Keep one plan per initiative card. Add steps rather than writing progress prose; link steps to real refs. Never pick a view: the graph determines it. Read `anx plan show card:<slug>` for computed progress and health. Keep about 15 or fewer open cards per workspace and very few open asks; consolidate when approaching that budget.",
-			"- For a human-facing dashboard, read `anx report schema`, then run `anx report publish <file> --topic <topic-ref> [--title <title>] [--doc <doc-ref>]`; it validates the report, writes a text document, and verifies the saved revision. `--doc` is an exact ref; use `--replace` only when intentionally replacing a non-report document.",
+			"- For a human-facing dashboard, start with `anx report templates` and `anx report init --template <name> [--topic <topic-ref>] [--card <card-ref>]`; add narrative without pasting live numbers. Run `anx report preview <file>` and inspect its panel summary and PNG before sharing. Publish with `anx report publish <file> --topic <topic-ref> [--title <title>] [--doc <doc-ref>]`; it validates the report, writes a text document, and verifies the saved revision. `--doc` is an exact ref; use `--replace` only when intentionally replacing a non-report document.",
 			"- Ask only for a decision that belongs to the human (direction, money, risk or an irreversible choice). Recommend one answer, give at most 2–3 alternatives, and batch related decisions into one ask. Do not also block the card or set its `next_actor` to the human for that same question; that duplicates the Inbox item. Keep `next_actor` on the agent and advance after the answer with its response event as evidence, for example `anx work done <card> --evidence event:<response_event_id>`.",
 			"- Write for a busy executive: lead with the outcome and what needs them, then add detail. Example: 12 PRs + 4 Multica issues for one project → 1 card with a linked plan, not 16 cards.",
 		}},

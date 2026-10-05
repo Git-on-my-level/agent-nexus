@@ -5,6 +5,7 @@ export const LIVE_REPORT_TYPES = Object.freeze([
   "live-asks",
   "live-work-mix",
   "live-activity",
+  "live-fleet-health",
 ]);
 export const isLivePanel = (panel) =>
   !!panel?.source || LIVE_REPORT_TYPES.includes(panel?.type);
@@ -13,10 +14,23 @@ export const isLivePanel = (panel) =>
 export function validateLiveQuery(type, data) {
   const errors = [];
   const fields = {
-    "live-initiatives": ["board_refs", "project_ref", "limit", "sort"],
-    "live-work-mix": ["board_refs", "project_ref", "group_by"],
-    "live-asks": ["limit", "include_answered", "answered_within_hours"],
+    "live-initiatives": [
+      "board_refs",
+      "project_ref",
+      "card_ref",
+      "limit",
+      "sort",
+    ],
+    "live-work-mix": ["board_refs", "project_ref", "card_ref", "group_by"],
+    "live-asks": [
+      "limit",
+      "include_answered",
+      "answered_only",
+      "answered_within_hours",
+      "card_ref",
+    ],
     "live-activity": ["limit"],
+    "live-fleet-health": [],
   }[type];
   if (!fields || !data || typeof data !== "object" || Array.isArray(data))
     return ["must be a live query object"];
@@ -41,6 +55,12 @@ export function validateLiveQuery(type, data) {
   )
     errors.push("project_ref must be a topic ref");
   if (
+    data.card_ref !== undefined &&
+    (typeof data.card_ref !== "string" ||
+      !/^card:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(data.card_ref))
+  )
+    errors.push("card_ref must be a card ref");
+  if (
     data.limit !== undefined &&
     (!Number.isInteger(data.limit) || data.limit < 1 || data.limit > 100)
   )
@@ -60,6 +80,11 @@ export function validateLiveQuery(type, data) {
     typeof data.include_answered !== "boolean"
   )
     errors.push("include_answered must be a boolean");
+  if (
+    data.answered_only !== undefined &&
+    typeof data.answered_only !== "boolean"
+  )
+    errors.push("answered_only must be a boolean");
   if (
     data.answered_within_hours !== undefined &&
     (!Number.isInteger(data.answered_within_hours) ||

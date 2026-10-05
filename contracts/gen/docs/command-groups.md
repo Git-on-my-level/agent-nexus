@@ -291,8 +291,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `report`
 
-- Commands: `1`
+- Commands: `2`
 - Command IDs:
+  - `report.preview` (`report preview`)
   - `report.render` (`report render`)
 
 ## `runs`

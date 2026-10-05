@@ -570,6 +570,7 @@ func (s *Store) ListAllWork(ctx context.Context) ([]map[string]any, error) {
 // are resolved IDs, not authored SQL or handles. Each scope needs only one read.
 type ReportWorkFilter struct {
 	BoardIDs      []string
+	CardID        string
 	ProjectRef    string
 	Limit         int
 	IncludeClosed bool
@@ -606,6 +607,10 @@ func reportWorkQuery(filter ReportWorkFilter) (string, []any) {
 		for _, id := range filter.BoardIDs {
 			args = append(args, id)
 		}
+	}
+	if filter.CardID != "" {
+		where += ` AND c.id=?`
+		args = append(args, filter.CardID)
 	}
 	// Match GetWork's source-authority rule, including the latest observation.
 	from += ` LEFT JOIN work_observations o ON o.id=m.latest_observation_id

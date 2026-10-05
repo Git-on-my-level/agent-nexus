@@ -1,22 +1,37 @@
 <script>
-  import LiveInitiatives from "./LiveInitiatives.svelte";
+  import LiveInitiativeDetails from "./LiveInitiativeDetails.svelte";
   import { inboxItemMailboxId } from "$lib/inboxUtils.js";
   import { formatLiveAge } from "$lib/liveReports.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
-  import { page } from "$app/stores";
+  let {
+    panel,
+    resolved = new Map(),
+    organizationSlug = "",
+    workspaceSlug = "",
+    onpreview = null,
+    onpreviewclose = null,
+  } = $props();
+  let canNavigate = $derived(Boolean(organizationSlug && workspaceSlug));
   let workspaceHref = $derived(
-    bindWorkspaceHref($page.params.organization, $page.params.workspace),
+    canNavigate ? bindWorkspaceHref(organizationSlug, workspaceSlug) : null,
   );
-  let { panel } = $props();
   let live = $derived(panel.live);
   let items = $derived(live?.data?.items ?? []);
   let buckets = $derived(live?.data?.buckets ?? []);
+  let fleetHosts = $derived(live?.data?.hosts ?? []);
+  let fleetEnrollments = $derived(live?.data?.enrollments ?? []);
+  let fleetSeries = $derived(live?.data?.series ?? []);
   let maxCount = $derived(Math.max(1, ...buckets.map((item) => item.count)));
   const date = (value) => {
     const at = new Date(value);
     return Number.isFinite(at.getTime())
       ? at.toISOString().slice(0, 16).replace("T", " ") + " UTC"
       : "Unknown";
+  };
+  const fleetValue = (latest) => {
+    if (latest?.state !== undefined) return latest.state;
+    if (latest?.value !== undefined) return String(latest.value);
+    return "No recent reading";
   };
 </script>
 
@@ -28,19 +43,25 @@
       {live.message || "Live data unavailable. Check your access or try again."}
     </p>
   {:else if panel.type === "live-initiatives"}
-    {#if items.length}<LiveInitiatives {items} />{:else}<p class="muted">
-        No open initiatives in this view.
-      </p>{/if}
+    {#if items.length}
+      <LiveInitiativeDetails
+        {items}
+        {resolved}
+        {organizationSlug}
+        {workspaceSlug}
+        {onpreview}
+        {onpreviewclose}
+      />{:else}<p class="muted">No open initiatives in this view.</p>{/if}
   {:else if panel.type === "live-asks"}
     {#if items.length}
       <ul class="rows">
         {#each items as item (item.id)}
           <li>
-            <a
-              href={workspaceHref(
-                `/inbox?${new URLSearchParams({ mailbox: item.status === "answered" ? "handled" : "needs-you", item: inboxItemMailboxId(item) })}`,
-              )}>{item.title}</a
-            >
+            {#if canNavigate}<a
+                href={workspaceHref(
+                  `/inbox?${new URLSearchParams({ mailbox: item.status === "answered" ? "handled" : "needs-you", item: inboxItemMailboxId(item) })}`,
+                )}>{item.title}</a
+              >{:else}<strong>{item.title}</strong>{/if}
             <p class="muted">
               {item.status === "answered" ? "Answered" : "Needs an answer"} · {formatLiveAge(
                 item.age_seconds,
@@ -80,6 +101,82 @@
         {/each}
       </ol>
     {:else}<p class="muted">No recent activity in this view.</p>{/if}
+  {:else if panel.type === "live-fleet-health"}
+    <div class="fleet-summary">
+      <strong>{live.data.active_host_count ?? 0} active hosts</strong>
+      <span class="muted">{live.data.host_count ?? 0} enrolled</span>
+    </div>
+    {#if fleetHosts.length}
+      <ul class="rows">
+        {#each fleetHosts as host}
+          <li>
+            <strong>{host.display_name || host.slug}</strong>
+            <p class="muted">
+              {host.hostname || host.slug} · {host.agent_count} agents
+              {host.revoked_at ? " · Revoked" : ""}
+            </p>
+            {#if host.discovered_adapters?.length}
+              <p class="muted">
+                Adapters: {host.discovered_adapters.join(", ")}
+              </p>
+            {/if}
+          </li>
+        {/each}
+      </ul>
+    {:else}
+      <p class="muted">No hosts have been enrolled.</p>
+    {/if}
+    {#if live.data.enrollment_available}
+      <h4>Enrollment requests ({live.data.enrollment_count ?? 0})</h4>
+      {#if fleetEnrollments.length}
+        <ul class="rows">
+          {#each fleetEnrollments as enrollment}
+            <li>
+              <strong>{enrollment.requested_slug}</strong>
+              <p class="muted">
+                {enrollment.status} · expires {date(enrollment.expires_at)}
+              </p>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    {:else if live.data.enrollment_message}
+      <p class="muted">{live.data.enrollment_message}</p>
+    {/if}
+    <h4>Fleet series</h4>
+    {#if fleetSeries.length}
+      <ul class="rows">
+        {#each fleetSeries as metric}
+          <li>
+            <strong>{metric.name}</strong>
+            <p class="muted">
+              {metric.status} · {metric.adapter} on {metric.host} · last push {date(
+                metric.last_push,
+              )}
+            </p>
+            {#each metric.streams ?? [] as stream}
+              <p>
+                {Object.entries(stream.labels ?? {})
+                  .map(([key, value]) => key + "=" + value)
+                  .join(" · ")}
+                {fleetValue(stream.latest)}
+                {metric.unit}
+                <span class="muted"
+                  >· {date(
+                    stream.latest?.observed_at || stream.last_observed_at,
+                  )}</span
+                >
+              </p>
+            {/each}
+            {#if metric.message}<p class="muted">{metric.message}</p>{/if}
+          </li>
+        {/each}
+      </ul>
+    {:else}
+      <p class="muted">
+        {live.data.series_message || "No fleet.* series are available."}
+      </p>
+    {/if}
   {/if}
   {#if live?.truncated}<p class="partial">
       Partial view. More records may exist beyond this panel’s limit.
@@ -136,6 +233,17 @@
     display: grid;
     gap: 12px;
     margin-top: 16px;
+  }
+  .fleet-summary {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    margin-bottom: 14px;
+  }
+  h4 {
+    margin: 18px 0 8px;
+    font-size: 12px;
+    font-weight: 600;
   }
   .mix li {
     display: grid;

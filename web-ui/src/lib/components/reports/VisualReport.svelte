@@ -16,7 +16,13 @@
   import ReportLayout from "./ReportLayout.svelte";
   import { layoutPanelIds } from "./reportLayout.js";
 
-  let { report, documentId = "", revisionRef = "", compact = false } = $props();
+  let {
+    report,
+    documentId = "",
+    revisionRef = "",
+    compact = false,
+    previewObservations = null,
+  } = $props();
   let liveObservations = $state(new Map());
   let hasLive = $derived(report.panels.some(isLivePanel));
   let observedPanels = $derived(
@@ -131,6 +137,12 @@
     const livePanels = report.panels.filter(isLivePanel);
     liveObservations = new Map();
     if (!livePanels.length) return;
+    if (Array.isArray(previewObservations)) {
+      liveObservations = new Map(
+        previewObservations.map((panel) => [panel.id, panel]),
+      );
+      return;
+    }
     let disposed = false;
     let inFlight = false;
     async function refresh() {

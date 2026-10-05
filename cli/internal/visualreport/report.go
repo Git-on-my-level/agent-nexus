@@ -11,7 +11,14 @@ const (
 )
 
 type Result = shared.Result
+type Query = shared.Query
 
 func Validate(content []byte) Result { return shared.Validate(content) }
 
 func PanelTypes() []string { return shared.PanelTypes() }
+
+func IsLive(kind string) bool { return shared.IsLive(kind) }
+
+func ParseQuery(kind string, content []byte) (Query, error) {
+	return shared.ParseQuery(kind, content)
+}

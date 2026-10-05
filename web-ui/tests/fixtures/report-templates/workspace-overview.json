@@ -1,0 +1,181 @@
+{
+  "observations": [
+    {
+      "data": {
+        "items": [
+          {
+            "board_ref": "board:work",
+            "needs": [],
+            "phase": "in_progress",
+            "priority": "p1",
+            "progress": {
+              "done": 2,
+              "total": 3
+            },
+            "ref": "card:launch",
+            "summary": "Ready to ship",
+            "title": "Launch",
+            "updated_at": "2026-10-05T00:00:00Z"
+          }
+        ]
+      },
+      "id": "initiatives",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "live-initiatives"
+    },
+    {
+      "data": {
+        "buckets": [
+          {
+            "count": 1,
+            "key": "in_progress",
+            "label": "In progress"
+          }
+        ],
+        "group_by": "phase",
+        "total": 1
+      },
+      "id": "work-mix",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "live-work-mix"
+    },
+    {
+      "data": {
+        "option": {
+          "series": [
+            {
+              "data": [
+                [
+                  1791158400000,
+                  3
+                ]
+              ],
+              "name": "github-prs initiative=launch status=merged",
+              "type": "line"
+            }
+          ],
+          "xAxis": {
+            "type": "time"
+          },
+          "yAxis": {
+            "name": "PRs",
+            "type": "value"
+          }
+        }
+      },
+      "id": "throughput",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "provenance": {
+        "adapter": "github",
+        "host": "collector",
+        "last_push": "2026-10-05T00:00:00Z",
+        "resolution": "raw"
+      },
+      "status": "ok",
+      "truncated": false,
+      "type": "chart"
+    },
+    {
+      "data": {
+        "items": [
+          {
+            "summary": "Launch checklist updated",
+            "ts": "2026-10-05T00:00:00Z"
+          }
+        ]
+      },
+      "id": "movement",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "live-activity"
+    }
+  ],
+  "report": {
+    "generated_at": "2026-10-05T00:00:00Z",
+    "kind": "anx.visual-report",
+    "panels": [
+      {
+        "author": "Agent Nexus template",
+        "data": {
+          "limit": 8,
+          "project_ref": "topic:launch",
+          "sort": "priority"
+        },
+        "freshness": "unknown",
+        "id": "initiatives",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source_ids": [],
+        "title": "Initiatives",
+        "type": "live-initiatives"
+      },
+      {
+        "author": "Agent Nexus template",
+        "data": {
+          "group_by": "phase",
+          "project_ref": "topic:launch"
+        },
+        "freshness": "unknown",
+        "id": "work-mix",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source_ids": [],
+        "title": "Work by phase",
+        "type": "live-work-mix"
+      },
+      {
+        "author": "Agent Nexus template",
+        "data": {},
+        "freshness": "unknown",
+        "id": "throughput",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source": {
+          "agg": "sum",
+          "labels": {
+            "status": "merged"
+          },
+          "range": "84d",
+          "series": "github-prs"
+        },
+        "source_ids": [],
+        "title": "Merged PR throughput",
+        "type": "chart"
+      },
+      {
+        "author": "Agent Nexus template",
+        "data": {
+          "limit": 8
+        },
+        "freshness": "unknown",
+        "id": "movement",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source_ids": [],
+        "title": "Recent movement",
+        "type": "live-activity"
+      }
+    ],
+    "projects": [
+      {
+        "id": "workspace",
+        "outcome": "See current source data",
+        "summary": "Live workspace sources with authored narrative added by the report owner.",
+        "title": "Workspace"
+      }
+    ],
+    "schema_version": 1,
+    "sources": [],
+    "summary": "Current initiatives and movement from live workspace queries.",
+    "title": "Workspace overview"
+  }
+}

@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `207`
+- Commands: `208`
 
 ## `actors.create`
 
@@ -2048,6 +2048,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns the current principal-scoped read projection.
 - Agent notes: Read-only POST. CLI accepts positional refs or --from-file containing {refs:[...]}. Preserve unknown refs, order and duplicates; maximum 200.
+
+## `report.preview`
+
+- CLI path: `report preview`
+- HTTP: `POST /reports/preview`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `json-body`
+- Why: Preview an unsaved report with current live workspace data.
+- Concepts: `docs`, `cards`, `evidence`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `unavailable`
+- Output: Returns `{ observed_at, panels }`; no document or revision is created.
+- Agent notes: Read-only and principal-scoped. Accepts the same bounded version 1 report shape as a saved document and materializes its live queries without writing a document. Each panel reports status, observation time, data and truncation.
 
 ## `report.render`
 

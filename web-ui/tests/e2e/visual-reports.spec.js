@@ -833,6 +833,29 @@ function liveObservation() {
               progress: { done: 3, total: 7 },
               priority: "p1",
               phase: "in_progress",
+              health: "stalled",
+              plan: {
+                steps: [
+                  {
+                    id: "review",
+                    title: "Finish review",
+                    ref: "card:review",
+                    after: [],
+                  },
+                ],
+              },
+              plan_state: {
+                shape: "chain",
+                steps: [
+                  {
+                    id: "review",
+                    status: "active",
+                    resolvable: true,
+                  },
+                ],
+                next_steps: ["review"],
+              },
+              assignee_refs: ["actor:agent-reviewer"],
               needs: ["Needs David: choose the launch date"],
             },
             {
@@ -954,6 +977,14 @@ for (const viewport of [
     ).toBeVisible();
     await expect(report).toContainText("3/7");
     await expect(report).toContainText("Needs David: choose the launch date");
+    await expect(report.getByText("stalled", { exact: true })).toBeVisible();
+    const initiative = report.locator('[data-report-initiative="card:launch"]');
+    const initiativePlan = initiative.locator("[data-initiative-plan]");
+    await expect(
+      initiativePlan.getByRole("link", { name: "Finish review" }),
+    ).toHaveAttribute("href", /tasks\/card%3Areview$/i);
+    await expect(initiativePlan.getByText("View plan steps")).toBeVisible();
+    await expect(report).toContainText("On it: actor:agent-reviewer");
     await expect(report).toContainText("2h old");
     await expect(
       report.getByRole("link", { name: "Which launch theme?" }),
@@ -981,6 +1012,27 @@ for (const viewport of [
     expectReadOnly(state);
   });
 }
+
+test("live initiative reports keep unresolvable linked work non-navigable", async ({
+  page,
+}) => {
+  const state = await installLiveDashboard(page);
+  state.live.panels[0].data.items[0].plan_state.steps[0].resolvable = false;
+  await page.goto(DOC_PATH);
+  const report = reportRegion(page);
+  const initiativePlan = report
+    .locator('[data-report-initiative="card:launch"]')
+    .locator("[data-initiative-plan]");
+  const hiddenRef = initiativePlan.locator(
+    '.anx-ref-chip[data-anx-ref="card:review"]',
+  );
+  await expect(hiddenRef).toHaveAttribute("role", "note");
+  await expect(hiddenRef).toContainText("not found");
+  await expect(
+    initiativePlan.getByRole("link", { name: "Finish review" }),
+  ).toHaveCount(0);
+  expectReadOnly(state);
+});
 
 test("Current filter retains RFC3339Nano live panels", async ({ page }) => {
   await installLiveDashboard(page);

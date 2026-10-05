@@ -217,6 +217,7 @@ export declare class AnxClient {
     pmTurnsRelease(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     refEdgesList(options?: RequestOptions): Promise<InvokeResult>;
     refsResolve(options?: RequestOptions): Promise<InvokeResult>;
+    reportPreview(options?: RequestOptions): Promise<InvokeResult>;
     reportRender(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     runsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     runsList(options?: RequestOptions): Promise<InvokeResult>;

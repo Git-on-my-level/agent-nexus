@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"agent-nexus-cli/internal/visualreport"
 )
 
 const minimalVisualReport = `{"kind":"anx.visual-report","schema_version":1,"title":"Release report","summary":"One bounded finding.","generated_at":"2026-10-03T06:38:37Z","projects":[{"id":"project-a","title":"Project A","summary":"Evidence is incomplete.","outcome":"Qualification unknown"}],"sources":[],"panels":[{"id":"finding","project_id":"project-a","type":"explanation","title":"Evidence needed","author":"unknown","provenance":"reported","observed_at":null,"freshness":"unavailable","source_ids":[],"data":{"text":"No observation is available."}}]}`
@@ -22,10 +24,10 @@ func TestReportSchemaAndValidateAreLocalCommands(t *testing.T) {
 		t.Fatalf("unexpected schema kind %q", got)
 	}
 	panelTypes, panelTypesOK := asStringList(result["panel_types"])
-	if !panelTypesOK || len(panelTypes) != 16 || asMap(result["example"]) == nil {
+	if !panelTypesOK || len(panelTypes) != 17 || asMap(result["example"]) == nil {
 		t.Fatalf("schema omitted panel types or minimal example: %#v", result)
 	}
-	for _, liveType := range []string{"live-initiatives", "live-asks", "live-work-mix", "live-activity", "metric", "table"} {
+	for _, liveType := range []string{"live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "metric", "table"} {
 		if !containsString(panelTypes, liveType) {
 			t.Errorf("schema omitted shared panel type %q: %#v", liveType, panelTypes)
 		}
@@ -40,6 +42,35 @@ func TestReportSchemaAndValidateAreLocalCommands(t *testing.T) {
 	details := asMap(asMap(invalid["error"])["details"])
 	if len(asSlice(details["errors"])) == 0 {
 		t.Fatalf("invalid report should return bounded diagnostics: %#v", invalid)
+	}
+}
+
+func TestReportTemplatesAndInitAreLocalAndProduceValidReports(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	templates := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "report", "templates"}))
+	items := asSlice(asMap(templates["result"])["templates"])
+	if len(items) != 6 {
+		t.Fatalf("templates=%#v", items)
+	}
+
+	initialized := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "report", "init", "--template", "initiative", "--card", "card:launch", "--topic", "topic:release"}))
+	result := asMap(initialized["result"])
+	report := asMap(result["report"])
+	if result["template"] != "initiative" {
+		t.Fatalf("result=%#v", result)
+	}
+	encoded, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	validated := visualreport.Validate(encoded)
+	if !validated.Valid {
+		t.Fatalf("generated report is invalid: %v", validated.Errors)
+	}
+	panels := asSlice(report["panels"])
+	if len(panels) != 2 || asMap(asMap(panels[0])["data"])["card_ref"] != "card:launch" || asMap(asMap(panels[1])["data"])["answered_only"] != true {
+		t.Fatalf("initiative report lost card-scoped live panels: %#v", panels)
 	}
 }
 

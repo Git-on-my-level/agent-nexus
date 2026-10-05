@@ -34,6 +34,8 @@
     workspaceSlug = "",
     /** Reference time, injectable so the today marker is testable. */
     now = Date.now(),
+    /** Expand the full checklist in report and document previews. */
+    stepsExpanded = false,
     onpreview = null,
     onpreviewclose = null,
   } = $props();
@@ -233,7 +235,7 @@
       The step list: the tech tree's screen-reader fallback, and the only place
       the dependencies drawn as edges are written out as words.
     -->
-    <details class="plan-steps">
+    <details class="plan-steps" open={stepsExpanded}>
       <summary>View plan steps <span>({layout.nodes.length})</span></summary>
       <ol>
         {#each layout.nodes as node (node.id)}
