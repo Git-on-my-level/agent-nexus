@@ -211,12 +211,12 @@ describe("workspace auth callback route", () => {
 
   it("authorizes hosted workspace proxy token exchange with the control-plane session", async () => {
     workspaceResolverMocks.resolveWorkspaceInRoute.mockResolvedValueOnce({
-      organizationSlug: "scaling-forever",
+      organizationSlug: "example-team",
       workspaceSlug: "personal",
       workspace: {
         slug: "personal",
         label: "Personal",
-        coreBaseUrl: "http://localhost:5173/ws/scaling-forever/personal",
+        coreBaseUrl: "http://localhost:5173/ws/example-team/personal",
         workspaceId: "ws_123",
       },
       error: null,
@@ -257,16 +257,16 @@ describe("workspace auth callback route", () => {
 
     await expect(POST(event)).rejects.toMatchObject({
       status: 303,
-      location: "/o/scaling-forever/w/personal",
+      location: "/o/example-team/w/personal",
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe(
-      "http://control.example.test/ws/scaling-forever/personal/auth/token",
+      "http://control.example.test/ws/example-team/personal/auth/token",
     );
     expect(fetchMock.mock.calls[0][1]?.headers).toMatchObject({
       "X-ANX-Control-Plane-Authorization": "Bearer dev-token",
-      "x-anx-organization-slug": "scaling-forever",
+      "x-anx-organization-slug": "example-team",
       "x-anx-workspace-slug": "personal",
     });
   });

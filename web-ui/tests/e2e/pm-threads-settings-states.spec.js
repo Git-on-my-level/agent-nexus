@@ -164,23 +164,23 @@ const PRINCIPALS = [
   {
     agent_id: "agent-hermes",
     actor_id: "actor-hermes",
-    username: "m4-hermes",
+    username: "worker-a",
     principal_kind: "agent",
     auth_method: "public_key",
     revoked: false,
     registration: {
-      handle: "m4-hermes",
+      handle: "worker-a",
       actor_id: "actor-hermes",
       status: "active",
       workspace_bindings: [{ workspace_id: "local", enabled: true }],
     },
     wake_routing: {
       applicable: true,
-      handle: "m4-hermes",
+      handle: "worker-a",
       taggable: true,
       online: true,
       state: "online",
-      summary: "Online as @m4-hermes.",
+      summary: "Online as @worker-a.",
     },
   },
   {
@@ -598,7 +598,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
         principals: PRINCIPALS,
         actors: [
           { id: "actor-operator", display_name: "Operator", tags: ["human"] },
-          { id: "actor-hermes", display_name: "m4-hermes" },
+          { id: "actor-hermes", display_name: "worker-a" },
         ],
         topic: {
           id: THREAD_ID,

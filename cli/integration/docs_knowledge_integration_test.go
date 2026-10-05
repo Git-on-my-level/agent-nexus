@@ -115,7 +115,7 @@ func TestDocsIngestIdempotentByRelativePath(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "lessons"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	nowBody := "# Omi now\n\nSynthetic ingest token nowwhiz-" + token + "\n"
+	nowBody := "# Demo now\n\nSynthetic ingest token nowwhiz-" + token + "\n"
 	noteBody := "# Lesson note\n\nSynthetic ingest token lessonwhiz-" + token + "\n"
 	if err := os.WriteFile(filepath.Join(root, "NOW.md"), []byte(nowBody), 0o644); err != nil {
 		t.Fatal(err)

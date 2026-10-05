@@ -61,7 +61,7 @@ describe("classifyWorkUrl", () => {
 
   it("recognises a Multica issue on any host", () => {
     expect(
-      classifyWorkUrl("https://multica-01.tail76ea03.ts.net/issue/sca-604"),
+      classifyWorkUrl("https://workspace.example.test/issue/sca-604"),
     ).toMatchObject({ kind: "issue", source: "multica", label: "SCA-604" });
   });
 

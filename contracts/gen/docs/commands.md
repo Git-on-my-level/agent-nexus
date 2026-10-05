@@ -1059,7 +1059,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Output: Returns `{ document, revision }`.
 - Agent notes: Path `{document_id}` is the public handle (or `document:<handle>`). If that handle exists, a new revision is appended and metadata (`title`, `source`, `tags`, `hosts`, `verified_at`) is updated. If it does not exist, the document is created with that handle. Visibility/lifecycle is unchanged. CLI `anx docs put -` reads the body from stdin.
 - Examples:
-  - Publish from stdin: `anx docs put - --handle kb-shared --title "Note" --tags knowledge --source https://example.invalid/note.md --hosts m4-air --verified-at 2026-09-08T12:00:00Z`
+  - Publish from stdin: `anx docs put - --handle kb-shared --title "Note" --tags knowledge --source https://example.invalid/note.md --hosts laptop-a --verified-at 2026-09-08T12:00:00Z`
 
 ## `docs.restore`
 

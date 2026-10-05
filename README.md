@@ -96,6 +96,7 @@ See `runbooks/release.md` for version-pinning and custom install directory optio
 ## Useful Targets
 
 - `make check`: run repo, core, cli, and web-ui checks
+- `make oss-boundary-check`: check generic paths/hosts and optional private patterns; see [configuration](runbooks/oss-boundary.md)
 - `make workflow-check`: lint GitHub Actions workflows with the pinned repo-local `actionlint`
 - `make contract-check`: regenerate contracts and validate the working tree (no Git drift step)
 - `make contract-check-committed`: same, plus assert generated outputs match Git (CI behavior)

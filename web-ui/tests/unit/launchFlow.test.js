@@ -42,13 +42,13 @@ describe("launchFlow helpers", () => {
   it("builds sign-in path with launch continuation params", () => {
     expect(
       buildSignInPath({
-        organizationSlug: "David Zhang",
+        organizationSlug: "Alex Morgan",
         workspaceSlug: "Acme Prod",
         workspaceId: "ws_123",
         returnPath: "/topics",
       }),
     ).toBe(
-      "/?organization=david-zhang&workspace=acme-prod&workspace_id=ws_123&return_path=%2Ftopics",
+      "/?organization=alex-morgan&workspace=acme-prod&workspace_id=ws_123&return_path=%2Ftopics",
     );
 
     expect(

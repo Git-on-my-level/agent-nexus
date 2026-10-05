@@ -31,7 +31,7 @@ func requireIsolationRunner(t *testing.T, runner isolatedExecutor) isolatedExecu
 }
 
 // isolationWorkDir is the compile/stage root for real sandbox tests. This
-// host's TMPDIR is /Volumes/scratch/tmp, which the Seatbelt profile denies
+// host's TMPDIR is /custom/tmp, which the Seatbelt profile denies
 // for content reads. Under full-suite load, path aliasing of that volume
 // made sandbox-exec fail even after the runner copied the artifact.
 func isolationWorkDir(t *testing.T) string {

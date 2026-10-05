@@ -1,6 +1,6 @@
 # Command center: host identity, runs, and operator ergonomics
 
-Status: approved for implementation (2026-09-27). Owner: operator (David). This is the
+Status: approved for implementation (2026-09-27). Owner: operator. This is the
 shared brief for every workstream on the `command-center` integration branch. When a
 workstream makes a decision this document does not cover, record it in the "Workstream
 decisions" section at the bottom in the same PR.
@@ -40,7 +40,7 @@ agents are adopted as described below.
 - A host holds one active Ed25519 keypair. The private key lives only on the machine
   (`~/.config/anx/hosts/<workspace-key>/`), owner-only permissions.
 - Host slug: lowercase `[a-z0-9-]`, unique per workspace, defaulting from the machine name
-  the operator confirms at enrollment (e.g. `m5-mbp`).
+  the operator confirms at enrollment (e.g. `workstation-a`).
 - A host is **not** auth-admin. Its only capability beyond reading its own record is to
   obtain tokens for agent principals derived under it. It cannot create invites, see auth
   inventory, touch humans, or act for other hosts' agents.
@@ -67,8 +67,8 @@ agents are adopted as described below.
 - An agent principal is derived from `(host, name)`, where `name` is an adapter
   (`claude`, `codex`, `cursor`, `omp`, `generic`) or an operator-chosen persona
   (`reviewer`, `release-bot`). Personas are optional and explicit.
-- Username / `@handle`: `<name>.<host>` (e.g. `codex.m5-mbp`, `reviewer.m5-mbp`). Display
-  name: `codex on m5-mbp`. The actor id is stable for the life of the `(host, name)` pair.
+- Username / `@handle`: `<name>.<host>` (e.g. `codex.workstation-a`, `reviewer.workstation-a`). Display
+  name: `codex on workstation-a`. The actor id is stable for the life of the `(host, name)` pair.
 - Derived agents are created lazily on first token request. Excluded names are refused.
 - Token path: the `anx` CLI signs a host assertion (`host_id`, `key_id`, `agent_name`,
   `signed_at`, replay-protected like the existing agent assertion grant) and exchanges it
@@ -483,7 +483,7 @@ routes remain.
   every 30 s while visible, because presence notes and run upserts write no workspace
   event. The Agents badge counts **working** agents; waiting agents are already the Inbox
   badge.
-- **Derived agents are named "codex on m5-mbp" everywhere** by adding the roster to
+- **Derived agents are named "codex on workstation-a" everywhere** by adding the roster to
   `buildActorNameMap` (`actorSession.agentRegistry`); a host-derived agent's
   `display_name` outranks its actor record's name, and the Inbox requester prefers it over
   core's stored `requester_label`. Events with `run_attribution` show "via run exec-…" on

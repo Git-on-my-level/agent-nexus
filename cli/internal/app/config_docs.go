@@ -13,7 +13,7 @@ func cliEnvironmentVariables() []cliEnvironmentVariable {
 	return []cliEnvironmentVariable{
 		{Name: "ANX_AS", Overrides: "derived agent name", Summary: "Select an adapter or persona for this process.", Example: "ANX_AS=reviewer"},
 		{Name: "ANX_BASE_URL", Overrides: "core API base URL", Summary: "Select the enrolled workspace core.", Example: "ANX_BASE_URL=https://anx.example.com"},
-		{Name: "ANX_CONFIG_DIR", Overrides: "local host config root", Summary: "Absolute directory containing workspace preferences, enrolled hosts and callback logs.", Example: "ANX_CONFIG_DIR=/Users/me/.config/anx"},
+		{Name: "ANX_CONFIG_DIR", Overrides: "local host config root", Summary: "Absolute directory containing workspace preferences, enrolled hosts and callback logs.", Example: "ANX_CONFIG_DIR=/opt/example/anx-config"},
 		{Name: "ANX_TIMEOUT", Overrides: "request timeout", Summary: "Set request timeout as a Go duration.", Example: "ANX_TIMEOUT=30s"},
 		{Name: "ANX_UPDATE_POLICY", Overrides: "automatic CLI release policy", Summary: "Override saved update policy with auto, notify, or off.", Example: "ANX_UPDATE_POLICY=off"},
 		{Name: "ANX_JSON", Overrides: "JSON output mode", Summary: "Emit JSON envelopes.", Example: "ANX_JSON=true"},

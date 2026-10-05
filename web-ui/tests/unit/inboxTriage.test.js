@@ -95,14 +95,14 @@ describe("update digests", () => {
         event("human_attention_requested", "claude", { kind: "ask" }),
         event("human_attention_responded"),
         event("card_moved", "claude", { column_key: "blocked" }),
-        event("card_moved", "david", { column_key: "done" }),
+        event("card_moved", "operator", { column_key: "done" }),
       ],
       { actorName: (id) => id, maxActors: 1 },
     );
     expect(digest).toContain("asked");
     expect(digest).toContain("answered an ask");
     expect(digest).toContain("to blocked");
-    expect(digest).toContain("david moved");
+    expect(digest).toContain("operator moved");
     expect(digest).toContain("to done");
     expect(digest.indexOf("answered an ask")).toBeLessThan(
       digest.indexOf("updated"),
@@ -118,7 +118,9 @@ describe("update digests", () => {
     expect(updateDigest(events, { actorName, selfId: "actor-maya" })).toBe(
       "You updated 2 tasks",
     );
-    expect(shortActorName("codex on m5-mbp")).toBe("codex on m5-mbp");
+    expect(shortActorName("codex on workstation-a")).toBe(
+      "codex on workstation-a",
+    );
   });
 
   it("falls back to a count when no events came with the group", () => {
@@ -338,8 +340,8 @@ it("collapses repeated agent edits into distinct cards on the subject", () => {
     updateDigest(events, {
       actorName: () => "claude",
       isAgent: () => true,
-      groupRef: "board:omi",
-      titleFor: () => "Omi · Initiatives",
+      groupRef: "board:demo",
+      titleFor: () => "Demo · Initiatives",
     }),
-  ).toBe("claude reorganized Omi · Initiatives: 2 cards");
+  ).toBe("claude reorganized Demo · Initiatives: 2 cards");
 });

@@ -856,7 +856,7 @@ function liveObservation() {
                 next_steps: ["review"],
               },
               assignee_refs: ["actor:agent-reviewer"],
-              needs: ["Needs David: choose the launch date"],
+              needs: ["Needs Alex: choose the launch date"],
             },
             {
               ref: "card:onboarding",
@@ -911,7 +911,7 @@ function liveObservation() {
           items: [
             {
               ref: "event:decision",
-              summary: "David answered: lead with executive visibility.",
+              summary: "Alex answered: lead with executive visibility.",
               ts: OBSERVED_AT,
               count: 1,
             },
@@ -976,7 +976,7 @@ for (const viewport of [
       report.getByRole("link", { name: "Launch readiness" }),
     ).toBeVisible();
     await expect(report).toContainText("3/7");
-    await expect(report).toContainText("Needs David: choose the launch date");
+    await expect(report).toContainText("Needs Alex: choose the launch date");
     await expect(report.getByText("stalled", { exact: true })).toBeVisible();
     const initiative = report.locator('[data-report-initiative="card:launch"]');
     const initiativePlan = initiative.locator("[data-initiative-plan]");

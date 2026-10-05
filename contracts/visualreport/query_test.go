@@ -43,7 +43,7 @@ func TestFleetHealthQueryIsEmptyAndLive(t *testing.T) {
 }
 
 func TestChecklistSummary(t *testing.T) {
-	first, progress, needs := Summary("# Shipping the launch\n\n- [x] Reviewed\n  - [X] Nested\n- [ ] Deliver\nNeeds David: pick the date\n```markdown\n- [x] Example\n```\nNeeds operator: approve")
+	first, progress, needs := Summary("# Shipping the launch\n\n- [x] Reviewed\n  - [X] Nested\n- [ ] Deliver\nNeeds Alex: pick the date\n```markdown\n- [x] Example\n```\nNeeds operator: approve")
 	if first != "Shipping the launch" || progress.Done != 2 || progress.Total != 3 || len(needs) != 2 {
 		t.Fatalf("%q %#v %#v", first, progress, needs)
 	}

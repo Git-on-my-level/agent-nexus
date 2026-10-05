@@ -43,7 +43,7 @@ var configSubcommandSpec = subcommandSpec{
 		"anx config show",
 		"anx config workspaces",
 		"anx config use personal",
-		`anx config map "~/work/omi/**" omi`,
+		`anx config map "~/work/demo/**" demo`,
 	},
 }
 

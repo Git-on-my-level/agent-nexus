@@ -22,10 +22,10 @@ function agent(name, state, overrides = {}) {
     id: `agent-${name}`,
     actor_id: `actor-${name}`,
     host_id: "host-1",
-    host_slug: "m5-mbp",
+    host_slug: "workstation-a",
     name,
-    handle: `${name}.m5-mbp`,
-    display_name: `${name} on m5-mbp`,
+    handle: `${name}.workstation-a`,
+    display_name: `${name} on workstation-a`,
     identity_kind: "derived",
     state,
     bridge_online: false,
@@ -183,7 +183,9 @@ describe("agent roster model", () => {
   });
 
   it("links agents by handle and runs by launcher id", () => {
-    expect(agentPath(agent("codex", "idle"))).toBe("/agents/codex.m5-mbp");
+    expect(agentPath(agent("codex", "idle"))).toBe(
+      "/agents/codex.workstation-a",
+    );
     expect(runLabel({ id: "uuid", external_id: "exec-42" })).toBe("exec-42");
     expect(runDuration({ started_at: ago(71), ended_at: null }, NOW)).toBe(
       "1h 11m",

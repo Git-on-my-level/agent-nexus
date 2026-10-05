@@ -87,10 +87,10 @@ Run `anx config workspaces` when unsure. It lists enrolled workspaces and aliase
 ```bash
 anx config workspaces
 anx config use personal
-anx config map "~/workspace/omi/**" omi
+anx config map "~/workspace/demo/**" demo
 anx config show
 anx --workspace personal orient
-anx config unmap "~/workspace/omi/**"
+anx config unmap "~/workspace/demo/**"
 ```
 
 Preferences live in `~/.config/anx/workspaces.json`, alongside the JSON host records, or under `ANX_CONFIG_DIR` / `--config-dir`. No repository metadata is read or written. `config use` and `config map` accept aliases or absolute HTTP(S) base URLs; saved choices use URLs so alias changes cannot reroute them. Discovered aliases are persisted by enrollment and preference writes; reads remain read-only. Collisions receive stable numeric suffixes without rebinding existing aliases.
@@ -104,8 +104,8 @@ An example file:
 ```json
 {
   "default": "https://anx.example.com/ws/personal/main",
-  "aliases": {"personal": "https://anx.example.com/ws/personal/main", "omi": "https://anx.example.com/ws/omi/main"},
-  "directory_rules": {"/Users/me/workspace/omi/**": "https://anx.example.com/ws/omi/main"}
+  "aliases": {"personal": "https://anx.example.com/ws/personal/main", "demo": "https://anx.example.com/ws/demo/main"},
+  "directory_rules": {"/opt/example/workspace/demo/**": "https://anx.example.com/ws/demo/main"}
 }
 ```
 

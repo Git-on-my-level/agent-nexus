@@ -36,10 +36,10 @@ function agentSummary(name, state, overrides = {}) {
     ref: `actor:actor-${name}`,
     actor_id: `actor-${name}`,
     host_id: HOST_ID,
-    host_slug: "m5-mbp",
+    host_slug: "workstation-a",
     name,
-    handle: `${name}.m5-mbp`,
-    display_name: `${name} on m5-mbp`,
+    handle: `${name}.workstation-a`,
+    display_name: `${name} on workstation-a`,
     identity_kind: "derived",
     state,
     bridge_online: state === "working",
@@ -67,11 +67,11 @@ function host(overrides = {}) {
   return {
     id: HOST_ID,
     ref: `host:${HOST_ID}`,
-    handle: "m5-mbp",
-    slug: "m5-mbp",
-    display_name: "m5-mbp",
-    os_user: "david",
-    hostname: "m5-mbp.local",
+    handle: "workstation-a",
+    slug: "workstation-a",
+    display_name: "workstation-a",
+    os_user: "operator",
+    hostname: "workstation-a.local",
     discovered_adapters: ["claude", "codex", "cursor"],
     key_id: "hkey_6ecc6649-91e8-46cf-9e5b-57f1cbf8ffd4",
     excluded_names: [],
@@ -476,11 +476,11 @@ for (const viewport of AUDIT_VIEWPORTS) {
       api.hold.principals.resolve();
       api.hold = {};
       const main = page.getByRole("main");
-      await expect(main.locator('[data-host="m5-mbp"]')).toBeVisible();
+      await expect(main.locator('[data-host="workstation-a"]')).toBeVisible();
       // Agents appear under their host with the roster's state, humans by
       // name, the legacy agent on its own; ids stay behind copy buttons.
       await expect(
-        main.locator('[data-host-agent="codex.m5-mbp"]'),
+        main.locator('[data-host-agent="codex.workstation-a"]'),
       ).toContainText("Working");
       await expect(main.getByText("riley@example.com")).toBeVisible();
       await expect(main.getByText("Standalone agents")).toBeVisible();
@@ -488,7 +488,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
         0,
       );
       await expect(
-        main.getByText(/m5-mbp approved|approved m5-mbp/),
+        main.getByText(/workstation-a approved|approved workstation-a/),
       ).toBeVisible();
       await expectCleanLayout(page, "populated", bothEnds);
 
@@ -521,7 +521,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
           {
             ...PENDING[0],
             id: "henr_2",
-            requested_slug: "m5-mbp-2",
+            requested_slug: "workstation-a-2",
             user_code: "OJQR-P6XT",
           },
         ],
@@ -568,9 +568,9 @@ for (const viewport of AUDIT_VIEWPORTS) {
     test("host exclusions and revoke", async ({ page }) => {
       const api = await installAccessApi(page, { pending: [] });
       await page.goto(ACCESS_PATH);
-      const card = page.locator('[data-host="m5-mbp"]');
+      const card = page.locator('[data-host="workstation-a"]');
       await card.getByRole("button", { name: "Edit" }).click();
-      const input = card.getByLabel("Name to exclude on m5-mbp");
+      const input = card.getByLabel("Name to exclude on workstation-a");
       await input.fill("Cursor!");
       await expect(card.getByText(/Use lowercase letters/)).toBeVisible();
       await expectCleanLayout(page, "invalid exclusion");
@@ -583,7 +583,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expectCleanLayout(page, "exclusion saved");
 
       await card
-        .getByRole("button", { name: "Allow cursor on m5-mbp again" })
+        .getByRole("button", { name: "Allow cursor on workstation-a again" })
         .click();
       await expect(card.locator('[data-host-exclusion="cursor"]')).toHaveCount(
         0,
@@ -595,12 +595,16 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(revoke).toContainText("all 3 of its agents");
       const submit = revoke.getByRole("button", { name: "Revoke host" });
       await expect(submit).toBeDisabled();
-      await revoke.getByLabel("Type m5-mbp to confirm").fill("m5-mb");
+      await revoke
+        .getByLabel("Type workstation-a to confirm")
+        .fill("workstation");
       await expect(submit).toBeDisabled();
       await expectCleanLayout(page, "revoke confirmation", bothEnds);
 
       api.fail.revokeHost = { message: "revoke refused by policy" };
-      await revoke.getByLabel("Type m5-mbp to confirm").fill("m5-mbp");
+      await revoke
+        .getByLabel("Type workstation-a to confirm")
+        .fill("workstation-a");
       await submit.click();
       await expect(revoke.getByText("revoke refused by policy")).toBeVisible();
       await expectCleanLayout(page, "revoke failed");

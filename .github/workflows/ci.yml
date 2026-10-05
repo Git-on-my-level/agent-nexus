@@ -17,6 +17,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  oss-boundary-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Check OSS identifiers
+        env:
+          OSS_BOUNDARY_EXTRA_PATTERNS: ${{ (github.event_name == 'push' || github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.OSS_BOUNDARY_DENYLIST || '' }}
+        run: make oss-boundary-check
+
   changes:
     runs-on: ubuntu-latest
     outputs:
@@ -398,6 +410,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     needs:
+      - oss-boundary-check
       - changes
       - workflow-checks
       - contracts-check

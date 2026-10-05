@@ -28,7 +28,7 @@ func agentDomainSurfaces() []domainSurface {
 			Domain:       "docs",
 			ThreadBacked: true,
 			Commands: []domainSurfaceCommand{
-				{Path: "docs search", Target: "<q>", Examples: []string{"anx docs search \"runbook\" --knowledge --host m4-air"}, ForbidHelp: []string{}},
+				{Path: "docs search", Target: "<q>", Examples: []string{"anx docs search \"runbook\" --knowledge --host laptop-a"}, ForbidHelp: []string{}},
 				{Path: "docs put", Target: "<path>", Examples: []string{"anx docs put - --handle kb-shared --title \"Note\" --tags knowledge"}, ForbidHelp: []string{}},
 				{Path: "docs ingest", Target: "<path>", Examples: []string{"anx docs ingest ./kb --source https://example.invalid/kb"}, ForbidHelp: []string{}},
 				{Path: "docs get", Target: "<ref>", Examples: []string{"anx docs get kb-shared --format md"}, ForbidHelp: []string{}},

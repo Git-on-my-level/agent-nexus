@@ -430,27 +430,18 @@ CSS, HTML attributes controlling behavior, or remote fetching. Only the six fixe
 renderers handle validated data. Safe URL validation does not establish that a
 destination is trustworthy; it only restricts the link protocol and credentials.
 
-## Public fixture provenance
+## Illustrative fixture provenance
 
-The example was observed through public GitHub metadata at
-`2026-10-03T06:38:37Z`. It contains no private operational data.
+The bundled example is a fictional release and qualification report. Its
+releases, runtime dependency, URLs under `example.test`, dates, and chart values
+are illustrative. Every authored panel declares `provenance: illustrative`;
+these values are not operational observations or a compatibility baseline for
+Agent Nexus.
 
-- [ANX v0.12.0](https://github.com/Git-on-my-level/agent-nexus/releases/tag/v0.12.0):
-  stable release, published `2026-10-02T17:11:49Z`; six platform archives plus
-  `checksums.txt` listed
-- [agentctl v0.12.0](https://github.com/Git-on-my-level/agentctl/releases/tag/v0.12.0):
-  stable release, published `2026-10-02T16:17:10Z`; the ANX release notes identify
-  this as the tested optional identity and skill-pack baseline
-- [agentctl v0.13.0](https://github.com/Git-on-my-level/agentctl/releases/tag/v0.13.0):
-  newer stable release, published `2026-10-02T17:42:18Z`; its existence does not
-  change the ANX v0.12.0 tested baseline
-- [ANX PR #233](https://github.com/Git-on-my-level/agent-nexus/pull/233): merged
-  `2026-10-02T17:04:33Z`, release preparation and acceptance ledger
-
-Publication and metadata were checked; artifact bytes, deployment state, and
-native runtime behavior were not independently tested for this fixture. Its
-outcome is therefore **Released; operational qualification pending**. The separate
-`reporting-example` project contains plainly labeled synthetic chart values.
+The outcome **Released; operational qualification pending** demonstrates that a
+published release does not verify a deployment. Unknown and unavailable evidence
+remain explicit. The separate `reporting-example` project demonstrates chart
+values without suggesting a healthy fleet or completed qualification.
 
 ## Verification
 

@@ -13,7 +13,7 @@ Create one host config (keep it owner writable):
 [host]
 base_url = "http://127.0.0.1:8093"
 id = "<host id returned by enrollment>"
-slug = "m5-mbp"
+slug = "workstation-a"
 
 [agents.codex]
 command = ["codex", "exec", "-"]

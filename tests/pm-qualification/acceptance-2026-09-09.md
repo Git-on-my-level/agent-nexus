@@ -1,14 +1,16 @@
 # Independent qualification report — cycle 2 (2026-09-09)
 
+Historical QA evidence. Contributor names, local paths and private source URLs were redacted during OSS hygiene; test outcomes and defects are preserved. Consult current runbooks for setup instructions.
+
 # Qual acceptance — cycle 2, slice 3
 
 - Lane: qualification (read-mostly). This lane never reports DONE.
 - Branch: `feat/unified-work-pm-qual`
-- Worktree: `/Volumes/scratch/worktrees/agent-nexus-lane-qual`
+- Worktree: `/worktrees/agent-nexus-lane-qual`
 - Integration base / HEAD: `941f3ba5` (already matched `origin/feat/unified-work-pm`; UI slice 2 is in this SHA)
 - UTC: 2026-09-09
 
-David can stop after the table + defects. Commands and exit codes follow.
+The operator can stop after the table + defects. Commands and exit codes follow.
 
 ## Slice-2 contradictions vs this base
 
@@ -45,12 +47,12 @@ Verdicts: `verified live` / `verified synthetic` / `not implemented` / `contradi
 | Generated code never holds credentials; transform over trusted snapshot | `verified live` | `core/dev/github-transform.c` via `make serve` + `observation.serve.json`. Live card `card:card-anx-github-208-jit` `reader=generated-c-transform`, title="Ship first-class OpenClaw bridge integration", native=closed, freshness=fresh |
 | Linux bubblewrap | `verified synthetic` / **no Linux host** | `make -C core check` prints GOOS=linux arm64+amd64 build. No bwrap run |
 | Telegram and Discord to test-readiness with fakes | `verified synthetic` | `tests/channels` + `TestChannelE2E*` exit 0. Live bots **not implemented** |
-| E2E on web + CLI until David supplies bots | `verified live` | Playwright `/pm` + `anx --agent maya pm ask --wait` |
+| E2E on web + CLI until the operator supplies bots | `verified live` | Playwright `/pm` + `anx --agent maya pm ask --wait` |
 | Record keeps many machine states; UI shows four; rest behind disclosure | **partial** | Four primary badges exist (`receiptSignal`). Record has **11** states, not 14. Hedging sentence still in DecisionPanel (not shown on awaiting_answer) |
 | Order 1: web+CLI e2e omp answer naming a seeded task | `verified live` | Web 3.1m + CLI 222s. Named `card:prepare-vertical-slice-capture-candidate-build` |
 | Order 2: JIT macOS canary + negatives | `verified live` | Handwritten rev `7ee6386c…`; generated C rev `5aa741aa…`; serve dogfood rev `1754e047…` |
 | Order 3: Inbox/Tasks/Docs; legacy out of nav | `verified live` | Remaining product nits: hedging sentence, 11≠14 |
-| Telegram/Discord test-readiness | `verified synthetic`; live bots `not implemented` | Needs David credentials |
+| Telegram/Discord test-readiness | `verified synthetic`; live bots `not implemented` | Needs the operator's credentials |
 | Independent qualification | **in progress** (this lane) | |
 
 ## Defects (severity)
@@ -64,7 +66,7 @@ Verdicts: `verified live` / `verified synthetic` / `not implemented` / `contradi
 
 No silent source mutation. No unsandboxed generated-code fallback. No successful `/pm` call without a principal.
 
-## What still needs David
+## What still needs the operator
 
 1. **Dedicated Telegram + Discord bot credentials** — transports are test-ready on fakes; live bots are not implemented.
 2. **A Linux host** — bubblewrap is compile-checked (`GOOS=linux` arm64+amd64) but has not been executed.
@@ -89,15 +91,15 @@ No silent source mutation. No unsandboxed generated-code fallback. No successful
 | Docs two-profile | **0** on retry | First attempt raced contract gen. Retry 3.25s PASS. Synthetic two CLI profiles |
 | live Playwright (`live_source_drag` + `live_web_pm`) | **0** | 3.2m after harness fix. Drag first-run flake then pass |
 | `anx --agent maya pm ask --wait` | **0** | 222s. `pm_497fdcde…` / `pm_ff1a8ff2…` status **delivered**. Named the seeded blocked card + GitHub drag decision |
-| `anx docs ingest` omi-kb on :8340 | **0** on the 0-change rerun | See defects. 489 markdown files. Source prefix `https://git-01.tail76ea03.ts.net/hermes/omi-knowledge/blob/main`. Tree not written |
+| `anx docs ingest` sample-kb on :8340 | **0** on the 0-change rerun | See defects. 489 markdown files. Source prefix `https://git.example.test/team/sample-knowledge/blob/main`. Tree not written |
 
-Playwright on this host must use `PLAYWRIGHT_BROWSERS_PATH=$HOME/Library/Caches/ms-playwright`. `GOCACHE=/Volumes/scratch/tmp/qual-go-cache` and `env -u GOROOT`.
+Playwright on this host must use `PLAYWRIGHT_BROWSERS_PATH=$HOME/Library/Caches/ms-playwright`. `GOCACHE=/tmp/qual-go-cache` and `env -u GOROOT`.
 
 ## Live stack (this slice)
 
 ```
 ANX_DEV_BLOB_BACKEND=filesystem CORE_PORT=8300 WEB_UI_PORT=8301 ANX_CORE_WAIT_TIMEOUT_MS=120000 \
-  env -u GOROOT GOCACHE=/Volumes/scratch/tmp/qual-go-cache make serve
+  env -u GOROOT GOCACHE=/tmp/qual-go-cache make serve
 # dogfood JIT revision 1754e0479e0289d9b751a0ac7110c356b65fa2dcbbaac568d03f491fa1c035cd already active
 # reader=generated-c-transform on card:card-anx-github-208-jit (live GET)
 # core 127.0.0.1:8300, Vite 8301, seed 156 events
@@ -109,7 +111,7 @@ HOME=.tmp/anx-dev-profile-homes/pm ./cli/anx --agent pm pm serve \
 
 Maya via `POST /auth/dev/session`. Reply named `card:prepare-vertical-slice-capture-candidate-build`. Inbox Needs you: 4 decision rows.
 
-Spare ingest core: `PORT=8340 WORKSPACE_ROOT=/Volumes/scratch/tmp/qual-docs-ingest-ws make -C core serve` with `ANX_BOOTSTRAP_TOKEN=qual-docs-ingest-bs`.
+Spare ingest core: `PORT=8340 WORKSPACE_ROOT=/tmp/qual-docs-ingest-ws make -C core serve` with `ANX_BOOTSTRAP_TOKEN=qual-docs-ingest-bs`.
 
 ## Stubbed / not verified
 

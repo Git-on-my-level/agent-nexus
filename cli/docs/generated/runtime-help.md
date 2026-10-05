@@ -707,7 +707,7 @@ Usage:
   anx config map <path-glob> <alias|url>
 
 Examples:
-  anx config map "~/work/omi/**" omi
+  anx config map "~/work/demo/**" demo
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -728,7 +728,7 @@ Usage:
   anx config unmap <path-glob>
 
 Examples:
-  anx config unmap "~/work/omi/**"
+  anx config unmap "~/work/demo/**"
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -6484,8 +6484,8 @@ Local Help: docs search
 - Composition: SQLite FTS5 over title, body, summary, source, tags, and comments. Use `--knowledge` for agent-facing docs tagged `knowledge`. `--host` filters knowledge facts that apply to that machine.
 - JSON body: GET `/docs/search?q=` returning `{ documents, next_cursor? }` with optional `search_rank`.
 - Examples:
-  - `anx docs search "runbook" --knowledge --host m4-air`
-  - `anx docs search "alphawhiz" --knowledge --host m4-air --limit 20`
+  - `anx docs search "runbook" --knowledge --host laptop-a`
+  - `anx docs search "alphawhiz" --knowledge --host laptop-a --limit 20`
 
 Flags:
   <q>                          Search query; also accepted as `--q`.
@@ -6532,7 +6532,7 @@ Local Help: docs put
 - Composition: Idempotent by handle: missing handles create, existing handles append a revision and update title/source/tags/hosts/verified_at.
 - JSON body: PUT `/docs/{document_id}` with `{ document, content, content_type }`. Handle is `--handle`, filename stem, or title slug.
 - Examples:
-  - `anx docs put runbook.md --title "Runbook" --tags knowledge --source https://example.invalid/runbook.md --hosts m4-air --verified-at 2026-09-08T12:00:00Z`
+  - `anx docs put runbook.md --title "Runbook" --tags knowledge --source https://example.invalid/runbook.md --hosts laptop-a --verified-at 2026-09-08T12:00:00Z`
   - `anx docs put - --handle kb-shared --title "Note" --tags knowledge`
 
 Flags:
@@ -6562,7 +6562,7 @@ Generated Help: docs put
 - Agent notes: Path `{document_id}` is the public handle (or `document:<handle>`). If that handle exists, a new revision is appended and metadata (`title`, `source`, `tags`, `hosts`, `verified_at`) is updated. If it does not exist, the document is created with that handle. Visibility/lifecycle is unchanged. CLI `anx docs put -` reads the body from stdin.
 - Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
 - Examples:
-  - Publish from stdin: `anx docs put - --handle kb-shared --title "Note" --tags knowledge --source https://example.invalid/note.md --hosts m4-air --verified-at 2026-09-08T12:00:00Z`
+  - Publish from stdin: `anx docs put - --handle kb-shared --title "Note" --tags knowledge --source https://example.invalid/note.md --hosts laptop-a --verified-at 2026-09-08T12:00:00Z`
 
 Inputs:
   Required:

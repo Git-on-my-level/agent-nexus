@@ -87,24 +87,24 @@ func TestWebAuthnConfigBuildForRequestAllowsConfiguredAllowedOrigin(t *testing.T
 	t.Parallel()
 
 	req := httptest.NewRequest("POST", "http://127.0.0.1:8000/auth/passkey/register/options", nil)
-	req.Header.Set("Origin", "https://m2-internal.scalingforever.com")
+	req.Header.Set("Origin", "https://workspace.example.test")
 
 	webAuthn, err := (WebAuthnConfig{
 		RPDisplayName: "Agent Nexus",
-		RPID:          "scalingforever.com",
+		RPID:          "example.test",
 		RPOrigin:      "https://ignored.example.test",
 		AllowedOrigins: []string{
-			"https://host.tail76ea03.ts.net",
-			"https://m2-internal.scalingforever.com",
+			"https://host.example.test",
+			"https://workspace.example.test",
 		},
 	}).buildForRequest(req)
 	if err != nil {
 		t.Fatalf("build WebAuthn config: %v", err)
 	}
-	if got := webAuthn.Config.RPID; got != "scalingforever.com" {
+	if got := webAuthn.Config.RPID; got != "example.test" {
 		t.Fatalf("expected configured RP ID, got %q", got)
 	}
-	if got := webAuthn.Config.RPOrigins; len(got) != 1 || got[0] != "https://m2-internal.scalingforever.com" {
+	if got := webAuthn.Config.RPOrigins; len(got) != 1 || got[0] != "https://workspace.example.test" {
 		t.Fatalf("unexpected RP origins: %#v", got)
 	}
 }
@@ -117,7 +117,7 @@ func TestWebAuthnConfigBuildForRequestRejectsOriginOutsideAllowedOrigins(t *test
 
 	_, err := (WebAuthnConfig{
 		RPDisplayName:  "Agent Nexus",
-		AllowedOrigins: []string{"https://m2-internal.scalingforever.com"},
+		AllowedOrigins: []string{"https://workspace.example.test"},
 	}).buildForRequest(req)
 	if err == nil {
 		t.Fatal("expected allowlist mismatch error")
@@ -138,10 +138,10 @@ func TestValidateRPIDAgainstHost(t *testing.T) {
 	}{
 		{name: "exact localhost", rpID: "localhost", host: "localhost"},
 		{name: "exact ip", rpID: "127.0.0.1", host: "127.0.0.1"},
-		{name: "domain suffix", rpID: "example.com", host: "app.example.com"},
+		{name: "domain suffix", rpID: "example.test", host: "app.example.test"},
 		{name: "localhost mismatch", rpID: "127.0.0.1", host: "localhost", wantErr: true},
 		{name: "ip mismatch", rpID: "127.0.0.1", host: "10.0.0.10", wantErr: true},
-		{name: "unrelated domain", rpID: "example.com", host: "example.org", wantErr: true},
+		{name: "unrelated domain", rpID: "example.test", host: "example.org", wantErr: true},
 	}
 
 	for _, tc := range cases {

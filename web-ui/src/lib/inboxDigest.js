@@ -44,7 +44,7 @@ function afterColon(summary) {
 
 /**
  * First name of a person-shaped label ("Leo Park" → "Leo"). Anything that
- * does not look like a person's name (a handle, "codex on m5-mbp") is kept
+ * does not look like a person's name (a handle, "codex on workstation-a") is kept
  * whole, because a truncated handle identifies nobody.
  */
 export function shortActorName(label) {

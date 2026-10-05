@@ -244,6 +244,7 @@ describe("visual report document parser", () => {
       report.panels[0].source_ids = ["anx-release", "anx-release"];
     });
     invalidAfter((report) => {
+      panelOf(report, "artifact-preview").provenance = "verified";
       panelOf(report, "artifact-preview").source_ids = [];
     });
   });
@@ -606,7 +607,7 @@ describe("visual report freshness and project filtering", () => {
     expect(visualReportExample.panels[0].freshness).toBe("current");
   });
 
-  it("keeps public release claims separate from qualification and synthetic metrics", () => {
+  it("labels fictional release data and keeps qualification separate from synthetic metrics", () => {
     expect(visualReportExample.projects[0].outcome).toBe(
       "Released; operational qualification pending",
     );
@@ -622,10 +623,10 @@ describe("visual report freshness and project filtering", () => {
     expect(
       visualReportExample.sources.every(
         (source) =>
-          source.url.startsWith("https://github.com/Git-on-my-level/") &&
+          source.url.startsWith("https://example.test/releases/") &&
           source.observed_at === VISUAL_REPORT_EXAMPLE_OBSERVED_AT,
       ),
     ).toBe(true);
-    expect(visualReportExampleContent).toContain("agentctl v0.13.0");
+    expect(visualReportExampleContent).toContain("example-runtime v0.13.0");
   });
 });

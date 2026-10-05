@@ -19,7 +19,7 @@ describe("documentVisibility", () => {
     expect(
       isLegacyAgentRegistrationDocument({
         id: "doc-1",
-        labels: ["agent-registration", "handle:m4-hermes"],
+        labels: ["agent-registration", "handle:worker-a"],
       }),
     ).toBe(true);
   });
