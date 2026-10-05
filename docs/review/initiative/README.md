@@ -27,3 +27,9 @@ requirement on that basis.
 
 To recapture: `cd web-ui && PLAYWRIGHT_PORT=4291 pnpm exec playwright test
 tests/e2e/initiative-views.spec.js --project=default`.
+
+Superseded by SCA-629 for everything below the plan: the Overview's single
+"N items need you" link is now an urgent band, tiles are sorted by attention
+and carry compact badges, and plan nodes are named by their step title. See
+`docs/review/sca-629/` for the current captures. These stay as the evidence
+for the #264-backed behaviour they were taken for.

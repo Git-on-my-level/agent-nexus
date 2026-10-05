@@ -99,6 +99,8 @@
   let activationError = $state("");
   let activationPending = $state(false);
   const hydration = { attemptPath: "", sequence: 0 };
+  /** Which workspace the dev fixture personas have been read for. */
+  const devPersonaLoad = { attempted: "" };
   let workspacePickerOpen = $state(false);
   let commandPaletteOpen = $state(false);
   let accountMenuOpen = $state(false);
@@ -421,6 +423,20 @@
     // Bootstrap already loaded them for this workspace; a second read on
     // every ready flip only adds to the auth chatter on first paint.
     if (devFixturePersonas.length > 0) return;
+    /*
+     * ...and when the read comes back empty — no `.dev/local-identities.json`,
+     * or a 404 under a mount prefix — `devFixturePersonas` is assigned a fresh
+     * `[]` whose identity differs from the last one, so this effect's own
+     * dependency changes and it runs again. That is a request loop: the dev
+     * loop guard counts 26 reads of `/auth/dev/identities` in two seconds on
+     * every first paint, and the auth chatter delays the page behind it.
+     *
+     * One attempt per workspace, tracked outside the reactive graph the way
+     * `hydration.attemptPath` is, so recording the attempt cannot itself
+     * schedule another one.
+     */
+    if (devPersonaLoad.attempted === activeWorkspaceSlug) return;
+    devPersonaLoad.attempted = activeWorkspaceSlug;
     void loadDevFixturePersonas();
   });
 
