@@ -197,6 +197,8 @@
   }
   .tile {
     display: grid;
+    /* An implicit column sizes to its widest child's max-content. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 7px;
     align-content: start;
     height: 100%;
@@ -258,6 +260,8 @@
   }
   .tile-viz {
     display: grid;
+    /* An implicit column sizes to its widest child's max-content. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 5px;
   }
   .tile-bar {

@@ -35,9 +35,24 @@
   let showWorkspace = $derived((asks.workspaces ?? 0) > 1);
   let initiatives = $derived(band?.initiatives ?? { rows: [], count: 0 });
   let unavailable = $derived(band?.unavailable ?? []);
-  let empty = $derived(
-    asks.count === 0 && initiatives.count === 0 && !unavailable.length,
+  /**
+   * Workspaces this browser has no session for. Hosted writes a session per
+   * workspace, so a reader who has not opened one simply is not covered — a
+   * fact about scope, not a failure, and not a reason for the band to look
+   * broken when nothing is waiting.
+   */
+  let notCovered = $derived(band?.notCovered ?? []);
+  let coverageNames = $derived(
+    [
+      ...notCovered.map((entry) => entry.label || entry.slug),
+      ...unavailable.map(
+        (entry) => entry.workspace?.label || entry.workspace?.slug,
+      ),
+    ].filter(Boolean),
   );
+  // Coverage is a footnote, never the band's state: "nothing is waiting" with
+  // a quiet note beneath it still reads as nothing waiting.
+  let empty = $derived(asks.count === 0 && initiatives.count === 0);
 </script>
 
 <section
@@ -113,17 +128,31 @@
     {/if}
   {/if}
 
-  {#if unavailable.length}
-    <!-- A workspace the reader has lost access to is a gap in the band, not a
-         reason to blank it: say which, and that the count is short. -->
-    <p class="urgent__note urgent__note--warn" role="status">
-      {unavailable.length}
-      {unavailable.length === 1 ? "workspace" : "workspaces"} could not be read, so
-      this may be short: {unavailable
-        .map(
-          (entry) => entry.workspace?.label || entry.workspace?.slug || "one",
-        )
-        .join(", ")}.
+  {#if coverageNames.length}
+    <!--
+      What this band did and did not look at. It used to shout "2 workspaces
+      could not be read" in warning amber, which read as an outage when the
+      truth was only that the reader has not opened those workspaces in this
+      browser. A footnote in muted text, with the names on hover, says the
+      same thing without claiming something is wrong.
+    -->
+    <p
+      class="urgent__note urgent__coverage"
+      data-urgent-coverage={coverageNames.length}
+      title={`Not included: ${coverageNames.join(", ")}`}
+    >
+      {#if unavailable.length}
+        Open in {coverageNames.length === 1
+          ? "one workspace"
+          : "each workspace"}
+        to include {coverageNames.length === 1 ? "it" : "them"} — {coverageNames.join(
+          ", ",
+        )} could not be read from here.
+      {:else}
+        Covers the workspaces you have open. Not included: {coverageNames.join(
+          ", ",
+        )}.
+      {/if}
     </p>
   {/if}
 </section>
@@ -226,7 +255,13 @@
   p.urgent__note {
     padding: 6px 12px;
   }
-  .urgent__note--warn {
-    color: var(--warn-text);
+  .urgent__coverage {
+    color: var(--fg-subtle, var(--fg-muted));
+    font-size: 11px;
+    cursor: help;
+  }
+  /* An empty band with a coverage footnote is still one quiet line of chrome. */
+  .urgent--empty .urgent__coverage {
+    padding-top: 0;
   }
 </style>

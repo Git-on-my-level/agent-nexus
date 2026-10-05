@@ -261,7 +261,19 @@ export function getWorkspaceBySlug(
   return catalog.workspaceByComposite.get(key) ?? null;
 }
 
-export function toPublicWorkspaceCatalog(catalog) {
+/**
+ * @param {object} catalog
+ * @param {{ hasSession?: (organizationSlug: string, workspaceSlug: string) => boolean }} [options]
+ *   `hasSession` answers "can this browser read that workspace right now".
+ *   Hosted gives every workspace its own session cookie, written only once the
+ *   viewer has actually opened it, so a reader signed in to one workspace
+ *   cannot read another — a cross-workspace read there is a 401, not an
+ *   outage. The catalog says so up front so the client can ask only the
+ *   workspaces it can answer for, rather than firing requests it knows will
+ *   fail and reporting the failures as breakage. It is a cookie read: no
+ *   network, no writes, nothing that makes a layout preload non-read-only.
+ */
+export function toPublicWorkspaceCatalog(catalog, { hasSession } = {}) {
   if (!catalog.defaultWorkspace) {
     return {
       defaultWorkspace: null,
@@ -269,6 +281,10 @@ export function toPublicWorkspaceCatalog(catalog) {
       devActorMode: catalog.devActorMode ?? false,
     };
   }
+  const readable = (workspace) =>
+    typeof hasSession === "function"
+      ? hasSession(workspace.organizationSlug, workspace.slug) === true
+      : true;
   return {
     defaultWorkspace: {
       organizationSlug: catalog.defaultWorkspace.organizationSlug,
@@ -279,6 +295,7 @@ export function toPublicWorkspaceCatalog(catalog) {
       slug: workspace.slug,
       label: workspace.label,
       description: workspace.description,
+      hasSession: readable(workspace),
     })),
     devActorMode: catalog.devActorMode ?? false,
   };

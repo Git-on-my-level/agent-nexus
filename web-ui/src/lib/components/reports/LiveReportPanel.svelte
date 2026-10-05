@@ -233,6 +233,8 @@
   }
   .rows {
     display: grid;
+    /* An implicit column sizes to its widest child's max-content. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
   }
   .rows li {
@@ -253,6 +255,8 @@
   }
   .mix {
     display: grid;
+    /* An implicit column sizes to its widest child's max-content. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
     margin-top: 16px;
   }

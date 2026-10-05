@@ -28,26 +28,35 @@ import { getExpectedCommandRegistryDigest } from "../../src/lib/commandRegistryD
 export async function expectNoClippedContent(page, label) {
   const offenders = await page.evaluate(() => {
     const out = [];
+    /** Does this box tell the reader there is more text than it shows? */
+    const truncates = (style) =>
+      style.textOverflow === "ellipsis" ||
+      style.getPropertyValue("-webkit-line-clamp") !== "none";
+
     /**
-     * How this element's overflow is cut off. A scrollable box can be brought
-     * into view; a `truncate` / `line-clamp` box ends in an ellipsis, so the
-     * reader can see there is more. Anything else just loses the text.
+     * Can the reader get to this text?
+     *
+     * Two ways they can. A `truncate` / `line-clamp` box ends in an ellipsis,
+     * so they can see there is more — and the box that truncates may be the
+     * element itself, not an ancestor. And **any** horizontal scroller above
+     * it can be scrolled, even when a nearer ancestor clips: a plan node is
+     * `overflow: hidden` and sits inside the plan's own `overflow-x: auto`
+     * box, so a node off the right edge is one scroll away, not lost. Stopping
+     * at the first non-visible ancestor missed that and called a working
+     * scroller a clip.
      */
-    const clipper = (el) => {
+    const reachable = (el) => {
+      if (truncates(getComputedStyle(el))) return true;
       for (let node = el.parentElement; node; node = node.parentElement) {
         const style = getComputedStyle(node);
-        if (style.overflowX === "visible") continue;
-        return {
-          node,
-          scrollable:
-            /(auto|scroll)/.test(style.overflowX) &&
-            node.scrollWidth > node.clientWidth + 1,
-          signposted:
-            style.textOverflow === "ellipsis" ||
-            style.getPropertyValue("-webkit-line-clamp") !== "none",
-        };
+        if (
+          /(auto|scroll)/.test(style.overflowX) &&
+          node.scrollWidth > node.clientWidth + 1
+        )
+          return true;
+        if (style.overflowX !== "visible" && truncates(style)) return true;
       }
-      return null;
+      return false;
     };
     for (const el of document.body.querySelectorAll("*")) {
       const own = Array.from(el.childNodes)
@@ -64,8 +73,7 @@ export async function expectNoClippedContent(page, label) {
       if (style.visibility !== "visible" || style.position === "fixed")
         continue;
       if (parseFloat(style.opacity || "1") < 0.1) continue;
-      const clip = clipper(el);
-      if (clip?.scrollable || clip?.signposted) continue;
+      if (reachable(el)) continue;
       out.push(
         `<${el.tagName.toLowerCase()}.${String(el.className).split(/\s+/).slice(0, 3).join(".")}> "${own.slice(0, 40)}" right=${Math.round(rect.right)} vw=${innerWidth}`,
       );

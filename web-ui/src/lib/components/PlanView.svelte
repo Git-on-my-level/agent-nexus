@@ -66,6 +66,12 @@
   let geometry = $derived(
     planTreeGeometry(layout, { availableWidth: frameWidth }),
   );
+  /**
+   * Wider than the room it has. `planTreeGeometry` shrinks to a legible floor
+   * first, so this is only true once shrinking has run out — the one case the
+   * diagram is allowed to scroll sideways.
+   */
+  let scrollable = $derived(frameWidth > 0 && geometry.width > frameWidth + 1);
   /** Timeline and lane order follow the layers, which is dependency order. */
   let chainOrder = $derived(
     layout.layers
@@ -156,15 +162,25 @@
 {:else}
   <div class="plan" data-plan-shape={shape}>
     {#if shape === "dag"}
-      <!-- Horizontal scroll only when the fit ran out of room; the region
-           takes focus so it can be scrolled from the keyboard. -->
+      <!--
+        Horizontal scroll only when the fit ran out of room, and when it does,
+        the box says so. A diagram that runs past the right edge with no
+        scrollbar in sight reads as broken rather than as scrollable — which is
+        exactly how it read embedded in a dashboard column. The fade marks the
+        edge, the hint names the gesture, and the region takes focus so the
+        keyboard can scroll it too.
+      -->
       <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
       <div
         class="plan-tree-scroll"
+        class:plan-tree-scroll--scrollable={scrollable}
+        data-plan-scrollable={scrollable ? "true" : "false"}
         bind:clientWidth={frameWidth}
         tabindex="0"
         role="region"
-        aria-label="Plan diagram"
+        aria-label={scrollable
+          ? "Plan diagram — scrolls sideways"
+          : "Plan diagram"}
       >
         <div
           class="plan-tree"
@@ -223,6 +239,12 @@
           {/each}
         </div>
       </div>
+      {#if scrollable}
+        <p class="plan-scroll-hint" data-plan-scroll-hint>
+          <span aria-hidden="true">↔</span>
+          Scroll to see the rest of the plan
+        </p>
+      {/if}
     {:else if shape === "lanes"}
       <div class="plan-lanes">
         {#each layout.lanes as lane, index (lane.join("+"))}
@@ -322,8 +344,34 @@
     font-size: 12px;
   }
   .plan-tree-scroll {
+    position: relative;
     overflow-x: auto;
     padding-bottom: 4px;
+  }
+  /*
+   * The edge fade: it ends where the content continues, so the diagram looks
+   * cut off on purpose rather than by accident. `background-attachment: local`
+   * on the gradient would be tidier, but it does not survive the absolutely
+   * positioned node layer, so this is a sticky overlay instead.
+   */
+  .plan-tree-scroll--scrollable::after {
+    content: "";
+    position: sticky;
+    float: right;
+    top: 0;
+    right: 0;
+    width: 28px;
+    height: 100%;
+    pointer-events: none;
+    background: linear-gradient(to right, transparent, var(--panel));
+  }
+  .plan-scroll-hint {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+    color: var(--fg-subtle, var(--fg-muted));
+    font-size: 10px;
   }
   .plan-tree-scroll:focus-visible {
     outline: 2px solid var(--accent-solid);
@@ -445,10 +493,16 @@
 
   .plan-lanes {
     display: grid;
+
+    /* An implicit column sizes to its widest child's max-content. */
+
+    grid-template-columns: minmax(0, 1fr);
     gap: 10px;
   }
   .plan-track {
     display: grid;
+    /* An implicit column sizes to its widest child's max-content. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
     margin: 0;
     padding: 0;
@@ -522,6 +576,8 @@
   }
   .plan-steps ol {
     display: grid;
+    /* An implicit column sizes to its widest child's max-content. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 6px;
     margin: 0 0 8px;
     padding-left: 18px;
