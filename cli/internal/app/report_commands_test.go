@@ -554,24 +554,38 @@ func TestDocsReviseValidatesVisualReportBeforeWrite(t *testing.T) {
 	}
 }
 
-func TestVisualReportWriteRecognizesKindVariants(t *testing.T) {
+func TestVisualReportWriteMatchesReader(t *testing.T) {
 	t.Parallel()
+	oversized := minimalVisualReport[:len(minimalVisualReport)-1] + strings.Repeat(" ", visualreport.MaxBytes) + "}"
 	for _, body := range []string{
+		minimalVisualReport,
+		`{"kind":"anx.visual-report","schema_version":1}`,
+		oversized,
 		`{"kind":"ANX.VISUAL-REPORT","schema_version":1}`,
 		`{"kind":" anx.visual-report ","schema_version":1}`,
-		"---\nkind: anx.visual-report\n---\n{\"kind\":\"anx.visual-report\",\"schema_version\":1}\n",
+		"---\nkind: anx.visual-report\n---\n" + minimalVisualReport + "\n",
+		"---\nkind: note\n---\n{\"kind\":\"anx.visual-report\",\"schema_version\":1}\n",
+		"plain notes",
+		`{"kind":"anx.visual-report",`,
+		`{"kind":"ANX.VISUAL-REPORT",`,
 	} {
+		reader := visualreport.Validate([]byte(body))
 		err := visualReportContentError(body)
+		recognizedInvalid := reader.Recognized && !reader.Valid
+		if !recognizedInvalid {
+			if err != nil {
+				t.Fatalf("reader ignored %q but write refused: %v", body, err)
+			}
+			continue
+		}
 		typed := errnorm.Normalize(err)
 		if typed == nil || typed.Code != "invalid_visual_report" {
-			t.Fatalf("body %s err=%v", body, err)
+			t.Fatalf("body %s err=%v reader=%#v", body, err, reader)
 		}
-	}
-	if err := visualReportContentError("plain notes"); err != nil {
-		t.Fatalf("plain notes: %v", err)
-	}
-	if err := visualReportContentError("---\nkind: note\n---\nhello\n"); err != nil {
-		t.Fatalf("other front matter: %v", err)
+		got := stringList(asMap(typed.Details)["errors"])
+		if strings.Join(got, "\n") != strings.Join(reader.Errors, "\n") {
+			t.Fatalf("body %s errors=%v reader=%#v", body, got, reader)
+		}
 	}
 }
 

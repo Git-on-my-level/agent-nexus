@@ -15,8 +15,6 @@ type Query = shared.Query
 
 func Validate(content []byte) Result { return shared.Validate(content) }
 
-func Canonicalize(content []byte) []byte { return shared.Canonicalize(content) }
-
 func PanelTypes() []string { return shared.PanelTypes() }
 
 func IsLive(kind string) bool { return shared.IsLive(kind) }

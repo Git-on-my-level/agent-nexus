@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math"
 	"net/url"
 	"os/exec"
@@ -216,7 +215,7 @@ func (a *App) runSeriesCommand(ctx context.Context, args []string, cfg config.Re
 			method = "POST"
 			var raw []byte
 			if p.bodyFile == "-" {
-				raw, err = io.ReadAll(io.LimitReader(a.Stdin, 128*1024+1))
+				raw, err = a.readStdinBytes(128*1024 + 1)
 			} else {
 				raw, err = a.ReadFile(p.bodyFile)
 			}

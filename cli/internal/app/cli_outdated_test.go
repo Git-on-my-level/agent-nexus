@@ -246,6 +246,42 @@ func TestAPICallCLIOutdatedUpdatesAndRetriesOnce(t *testing.T) {
 	}
 }
 
+func TestSecretCreateFromStdinDoesNotReplayEmpty(t *testing.T) {
+	managedUpdateFixture(t)
+	hits := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		hits++
+		w.WriteHeader(http.StatusUpgradeRequired)
+		_, _ = w.Write([]byte(`{"error":{"code":"cli_outdated","message":"CLI version is below the minimum compatible version"},"upgrade":{"min_cli_version":"v9.0.0","recommended_cli_version":"v9.1.0"}}`))
+	}))
+	t.Cleanup(server.Close)
+
+	updates := 0
+	oldUpdate := runVerifiedSelfUpdate
+	runVerifiedSelfUpdate = func(*App, context.Context, config.Resolved, string) (*commandResult, error) {
+		updates++
+		return &commandResult{Data: map[string]any{"updated": true}}, nil
+	}
+	t.Cleanup(func() { runVerifiedSelfUpdate = oldUpdate })
+	execs := 0
+	oldExec := execUpdatedCommand
+	execUpdatedCommand = func(string, []string, []string) (int, error) {
+		execs++
+		return 0, nil
+	}
+	t.Cleanup(func() { execUpdatedCommand = oldExec })
+
+	home := t.TempDir()
+	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"`+server.URL+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	raw := runCLIForTest(t, home, map[string]string{"ANX_UPDATE_POLICY": "auto"}, strings.NewReader("super-secret\n"), []string{
+		"--json", "--base-url", server.URL, "secret", "create", "--from-stdin", "OPENAI_API_KEY",
+	})
+	if updates != 0 || execs != 0 || hits != 1 || !strings.Contains(raw, "anx update --version v9.1.0") || strings.Contains(raw, "secret value must not be empty") {
+		t.Fatalf("updates=%d execs=%d hits=%d stdout=%s", updates, execs, hits, raw)
+	}
+}
+
 func TestReadStdinBodyMarksConsumed(t *testing.T) {
 	app := New()
 	app.Stdin = strings.NewReader("important document body")

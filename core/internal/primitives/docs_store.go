@@ -2727,7 +2727,9 @@ func (e *VisualReportValidationError) Error() string {
 func (e *VisualReportValidationError) Unwrap() error { return ErrInvalidDocumentRequest }
 
 func rejectInvalidVisualReport(content []byte) error {
-	result := visualreport.Validate(visualreport.Canonicalize(content))
+	// Validate the bytes that will be stored. This is the same recognizer
+	// GET /docs/{id}/report and `anx report validate` use, including the size limit.
+	result := visualreport.Validate(content)
 	if !result.Recognized || result.Valid {
 		return nil
 	}

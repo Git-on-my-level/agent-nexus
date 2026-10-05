@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"agent-nexus-visualreport"
+
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/storage"
@@ -15,8 +17,23 @@ const validVisualReport = `{"kind":"anx.visual-report","schema_version":1,"title
 
 const invalidVisualReport = `{"kind":"anx.visual-report","schema_version":1}`
 
-func TestDocumentWriteRejectsInvalidVisualReport(t *testing.T) {
+func TestDocumentWriteMatchesReportReader(t *testing.T) {
 	t.Parallel()
+
+	oversized := validVisualReport[:len(validVisualReport)-1] + strings.Repeat(" ", visualreport.MaxBytes) + "}"
+	corpus := []string{
+		validVisualReport,
+		invalidVisualReport,
+		oversized,
+		`{"kind":"ANX.VISUAL-REPORT","schema_version":1,"title":"Demo","summary":"x","generated_at":"2026-10-04T12:00:00Z","projects":[],"sources":[],"panels":[]}`,
+		`{"kind":" anx.visual-report ","schema_version":1}`,
+		"---\nkind: anx.visual-report\n---\n" + validVisualReport + "\n",
+		"---\nkind: note\n---\n{\"kind\":\"anx.visual-report\",\"schema_version\":1}\n",
+		"plain notes",
+		`{"kind":"anx.visual-report",`,
+		`{"kind":"ANX.VISUAL-REPORT",`,
+		`{"kind":" anx.visual-report ",`,
+	}
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
 	if err != nil {
@@ -26,40 +43,63 @@ func TestDocumentWriteRejectsInvalidVisualReport(t *testing.T) {
 	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
 	ctx := context.Background()
 
-	for _, body := range []string{
-		invalidVisualReport,
-		`{"kind":"ANX.VISUAL-REPORT","schema_version":1}`,
-		`{"kind":" anx.visual-report ","schema_version":1}`,
-		"---\nkind: anx.visual-report\n---\n{\"kind\":\"anx.visual-report\",\"schema_version\":1}\n",
-	} {
-		_, _, err = store.CreateDocument(ctx, "actor-1", map[string]any{"title": "Broken"}, body, "text", nil)
-		var reportErr *primitives.VisualReportValidationError
-		if !errors.As(err, &reportErr) || len(reportErr.Errors) == 0 || !strings.Contains(err.Error(), "visual report validation failed") {
-			t.Fatalf("create %s: %v", body, err)
+	for _, body := range corpus {
+		reader := visualreport.Validate([]byte(body))
+		_, readErr := visualreport.Parse(body)
+		if reader.Valid != (readErr == nil) {
+			t.Fatalf("reader split on %q: valid=%v parse=%v", body, reader.Valid, readErr)
+		}
+		doc, rev, writeErr := store.CreateDocument(ctx, "actor-1", map[string]any{"title": "Report"}, body, "text", nil)
+		if reader.Recognized && !reader.Valid {
+			var reportErr *primitives.VisualReportValidationError
+			if !errors.As(writeErr, &reportErr) || strings.Join(reportErr.Errors, "\n") != strings.Join(reader.Errors, "\n") {
+				t.Fatalf("write %q: got %v, reader %#v", body, writeErr, reader)
+			}
+			continue
+		}
+		if writeErr != nil {
+			t.Fatalf("reader ignored %q but write refused: %v", body, writeErr)
+		}
+		_, head, err := store.GetDocument(ctx, anyString(doc["id"]))
+		if err != nil {
+			t.Fatalf("get %q: %v", body, err)
+		}
+		stored, _ := head["content"].(string)
+		if stored != body {
+			t.Fatalf("stored bytes differ for %q", body)
+		}
+		storedReader := visualreport.Validate([]byte(stored))
+		_, storedReadErr := visualreport.Parse(stored)
+		if storedReader.Recognized != reader.Recognized || storedReader.Valid != reader.Valid || (storedReadErr == nil) != reader.Valid {
+			t.Fatalf("stored read diverged for %q: before=%#v after=%#v parse=%v", body, reader, storedReader, storedReadErr)
+		}
+		if rev == nil {
+			t.Fatal("missing revision")
 		}
 	}
-	if _, _, err = store.CreateDocument(ctx, "actor-1", map[string]any{"title": "Notes"}, "---\nkind: note\n---\nhello\n", "text", nil); err != nil {
-		t.Fatalf("non-report front matter was refused: %v", err)
-	}
-	doc, rev, err := store.CreateDocument(ctx, "actor-1", map[string]any{"title": "Notes"}, "plain notes", "text", nil)
+
+	doc, rev, err := store.CreateDocument(ctx, "actor-1", map[string]any{"title": "Live"}, validVisualReport, "text", nil)
 	if err != nil {
-		t.Fatalf("create notes: %v", err)
+		t.Fatalf("seed valid report: %v", err)
 	}
 	documentID := anyString(doc["id"])
 	revisionID := anyString(rev["revision_id"])
-	_, _, err = store.UpdateDocument(ctx, "actor-1", documentID, nil, revisionID, invalidVisualReport, "text", nil, nil)
+	_, _, err = store.UpdateDocument(ctx, "actor-1", documentID, nil, revisionID, oversized, "text", nil, nil)
 	var reportErr *primitives.VisualReportValidationError
-	if !errors.As(err, &reportErr) || len(reportErr.Errors) == 0 || !strings.Contains(err.Error(), "visual report validation failed") {
-		t.Fatalf("revise invalid report: %v", err)
+	if !errors.As(err, &reportErr) || !strings.Contains(strings.Join(reportErr.Errors, " "), "128 KiB") {
+		t.Fatalf("oversized revision: %v", err)
 	}
 	_, head, err := store.GetDocument(ctx, documentID)
 	if err != nil {
-		t.Fatalf("get document: %v", err)
+		t.Fatalf("get pinned report: %v", err)
 	}
-	if anyString(head["content"]) != "plain notes" {
-		t.Fatalf("invalid revision was stored: %#v", head["content"])
+	if anyString(head["content"]) != validVisualReport {
+		t.Fatal("oversized revision replaced the working report")
 	}
-	if _, updated, err := store.UpdateDocument(ctx, "actor-1", documentID, nil, revisionID, validVisualReport, "text", nil, nil); err != nil || anyString(updated["content"]) != validVisualReport {
-		t.Fatalf("revise valid report: %v content=%#v", err, updated["content"])
+	if _, err := visualreport.Parse(anyString(head["content"])); err != nil {
+		t.Fatalf("working report no longer reads: %v", err)
+	}
+	if _, updated, err := store.UpdateDocument(ctx, "actor-1", documentID, nil, revisionID, invalidVisualReport, "text", nil, nil); err == nil || updated != nil {
+		t.Fatalf("invalid revision stored: %v", err)
 	}
 }

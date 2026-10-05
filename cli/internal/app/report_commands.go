@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"regexp"
 	"sort"
@@ -172,7 +171,7 @@ func (a *App) reportInput(path string) ([]byte, error) {
 		if a.Stdin == nil {
 			return nil, errnorm.Usage("invalid_request", "stdin is not available")
 		}
-		content, err := io.ReadAll(io.LimitReader(a.Stdin, visualreport.MaxBytes+1))
+		content, err := a.readStdinBytes(visualreport.MaxBytes + 1)
 		if err != nil {
 			return nil, errnorm.Wrap(errnorm.KindLocal, "input_read_failed", "failed to read visual report from stdin", err)
 		}
@@ -233,7 +232,7 @@ func visualReportContentError(content any) error {
 	if !ok {
 		return nil
 	}
-	result := visualreport.Validate(visualreport.Canonicalize(bytes))
+	result := visualreport.Validate(bytes)
 	if !result.Recognized || result.Valid {
 		return nil
 	}
