@@ -7,6 +7,7 @@ import {
   workspaceCompositeKey,
 } from "$lib/workspacePaths";
 import { normalizeBaseUrl } from "$lib/config";
+import { getAuthSessionCookieName } from "$lib/server/authSession";
 import { resolveWorkspaceEnv } from "$lib/compat/workspaceCompat";
 
 /** Shown in parse errors; keep in sync with web-ui README / runbook examples. */
@@ -299,4 +300,33 @@ export function toPublicWorkspaceCatalog(catalog, { hasSession } = {}) {
     })),
     devActorMode: catalog.devActorMode ?? false,
   };
+}
+
+/**
+ * The `hasSession` probe for a shell, or `undefined` when the question does
+ * not arise.
+ *
+ * Both layout loads publish the catalog and the deeper one wins, so they have
+ * to agree — a root load that answers the question and a workspace load that
+ * does not is the same as not answering it at all.
+ *
+ * Reads the cookie by name rather than going through
+ * `readWorkspaceRefreshToken`, which first runs a legacy-cookie migration that
+ * writes and deletes cookies. A layout preload must stay read-only, and
+ * iterating a whole catalog through a route-shaped migration would also graft
+ * a legacy cookie onto whichever organization happened to come first.
+ *
+ * @param {{ cookies: { get(name: string): string | undefined } }} event
+ * @param {{ mode?: string }} capabilities
+ */
+export function workspaceSessionProbe(event, capabilities) {
+  // Only hosted scopes a session per workspace. A self-hosted shell talks to
+  // one core with one identity, so every workspace in its catalog is readable.
+  if (capabilities?.mode !== "hosted") return undefined;
+  return (organizationSlug, workspaceSlug) =>
+    Boolean(
+      event?.cookies?.get(
+        getAuthSessionCookieName(organizationSlug, workspaceSlug),
+      ),
+    );
 }

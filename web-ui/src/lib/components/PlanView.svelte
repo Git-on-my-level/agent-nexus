@@ -166,9 +166,10 @@
         Horizontal scroll only when the fit ran out of room, and when it does,
         the box says so. A diagram that runs past the right edge with no
         scrollbar in sight reads as broken rather than as scrollable — which is
-        exactly how it read embedded in a dashboard column. The fade marks the
-        edge, the hint names the gesture, and the region takes focus so the
-        keyboard can scroll it too.
+        exactly how it read embedded in a dashboard column. The hint names the
+        gesture, and the region takes focus so the keyboard can scroll it too.
+        Said in words rather than with an edge gradient: the gradient would
+        have to overlay the scroller, and the last node once you reached it.
       -->
       <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
       <div
@@ -344,26 +345,8 @@
     font-size: 12px;
   }
   .plan-tree-scroll {
-    position: relative;
     overflow-x: auto;
     padding-bottom: 4px;
-  }
-  /*
-   * The edge fade: it ends where the content continues, so the diagram looks
-   * cut off on purpose rather than by accident. `background-attachment: local`
-   * on the gradient would be tidier, but it does not survive the absolutely
-   * positioned node layer, so this is a sticky overlay instead.
-   */
-  .plan-tree-scroll--scrollable::after {
-    content: "";
-    position: sticky;
-    float: right;
-    top: 0;
-    right: 0;
-    width: 28px;
-    height: 100%;
-    pointer-events: none;
-    background: linear-gradient(to right, transparent, var(--panel));
   }
   .plan-scroll-hint {
     display: flex;

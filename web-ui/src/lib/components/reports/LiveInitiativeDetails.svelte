@@ -64,10 +64,11 @@
         {#if item.summary}
           <!-- Authored markdown, like every other body in the product. A
                report panel printing `**Goal:**` was the one surface still
-               showing its source. Clamped to two lines: a dashboard panel is
-               a glance, and the initiative page has the whole body. -->
+               showing its source. Block rendering, not inline: a summary with
+               a list in it should render the list rather than run its dashes
+               together. Clamped to two lines — a dashboard panel is a glance,
+               and the initiative page has the whole body. -->
           <MarkdownRenderer
-            inline
             source={item.summary}
             class="summary"
             {resolved}

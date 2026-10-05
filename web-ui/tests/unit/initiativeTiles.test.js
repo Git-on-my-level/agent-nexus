@@ -149,7 +149,7 @@ describe("initiativeTileModel", () => {
     expect(model({ health: { status: "blocked" } }).group).toBe("attention");
   });
 
-  it("names the shape so a reader knows what the mini-viz is", () => {
+  it("names the shape, since the tile draws a bar rather than the graph", () => {
     expect(model({ plan_state: planState() }).shapeLabel).toBe("Timeline");
     expect(model({ plan_state: planState({ shape: "dag" }) }).shapeLabel).toBe(
       "Tech tree",

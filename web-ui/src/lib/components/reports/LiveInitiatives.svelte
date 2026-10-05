@@ -81,7 +81,6 @@
         <span class="tile-viz" data-tile-shape={tile.shape}>
           <span
             class="tile-bar"
-            data-viz-kind={tile.viz.kind}
             style:--tile-segments={tile.segments.length}
             role="img"
             aria-label={`${tile.title} checklist: ${tile.progress?.done ?? 0} of ${tile.progress?.total ?? 0} steps done`}

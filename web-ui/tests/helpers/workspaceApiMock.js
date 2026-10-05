@@ -30,34 +30,47 @@ export async function expectNoClippedContent(page, label) {
     const out = [];
     /** Does this box tell the reader there is more text than it shows? */
     const truncates = (style) =>
-      style.textOverflow === "ellipsis" ||
-      style.getPropertyValue("-webkit-line-clamp") !== "none";
+      (style.textOverflow === "ellipsis" ||
+        style.getPropertyValue("-webkit-line-clamp") !== "none") &&
+      style.overflowX !== "visible";
 
     /**
      * Can the reader get to this text?
      *
-     * Two ways they can. A `truncate` / `line-clamp` box ends in an ellipsis,
-     * so they can see there is more — and the box that truncates may be the
-     * element itself, not an ancestor. And **any** horizontal scroller above
-     * it can be scrolled, even when a nearer ancestor clips: a plan node is
-     * `overflow: hidden` and sits inside the plan's own `overflow-x: auto`
-     * box, so a node off the right edge is one scroll away, not lost. Stopping
-     * at the first non-visible ancestor missed that and called a working
-     * scroller a clip.
+     * Walk out from the element. A box that truncates with an ellipsis or a
+     * line clamp says there is more — and the box that does it may be the
+     * element itself, not an ancestor. A horizontal scroller can be scrolled.
+     * But a box that clips this element's own rect and neither truncates nor
+     * scrolls has eaten the text, and no scroller further out can give it
+     * back: scrolling the plan brings a node into view, it does not reveal
+     * what the node's own `overflow: hidden` cut off.
+     *
+     * Stopping at the first non-visible ancestor (what this did before) called
+     * a working scroller a clip: a plan node is `overflow: hidden` and sits
+     * inside the plan's own `overflow-x: auto` box, so a node off the right
+     * edge is one scroll away, not lost.
      */
     const reachable = (el) => {
       if (truncates(getComputedStyle(el))) return true;
+      const rect = el.getBoundingClientRect();
       for (let node = el.parentElement; node; node = node.parentElement) {
         const style = getComputedStyle(node);
+        if (style.overflowX === "visible") continue;
+        if (truncates(style)) return true;
+        const box = node.getBoundingClientRect();
+        const cutsThisElement =
+          rect.right > box.right + 1 || rect.left < box.left - 1;
         if (
           /(auto|scroll)/.test(style.overflowX) &&
           node.scrollWidth > node.clientWidth + 1
         )
           return true;
-        if (style.overflowX !== "visible" && truncates(style)) return true;
+        // Clipped here, by a box that cannot be scrolled: the text is gone.
+        if (cutsThisElement) return false;
       }
       return false;
     };
+
     for (const el of document.body.querySelectorAll("*")) {
       const own = Array.from(el.childNodes)
         .filter((node) => node.nodeType === 3)
