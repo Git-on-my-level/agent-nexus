@@ -12,6 +12,7 @@ from readers.hermes import scrub
 
 OPEN_PHASES = ("backlog", "ready", "in_progress", "blocked", "review")
 _ID = re.compile(r"[^A-Za-z0-9._:-]+")
+REPORT_BUDGET = 96 * 1024
 
 
 def build_report(reads: list[dict], *, generated_at: str, now: datetime, hosts: list[dict],
@@ -122,7 +123,7 @@ def build_report(reads: list[dict], *, generated_at: str, now: datetime, hosts: 
             ],
         },
     }
-    return _fit(report)
+    return report
 
 
 def changed_besides_generated_at(previous: str, current: dict) -> bool:
@@ -142,13 +143,39 @@ def canonical(value) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
-def _fit(report: dict) -> dict:
+def report_text(report: dict) -> str:
+    """The exact UTF-8 content validated and persisted as the dashboard."""
+    return json.dumps(report, ensure_ascii=False, indent=2) + "\n"
+
+
+def fit_report(report: dict) -> dict:
+    """Budget the complete dashboard, after routing panels have been added.
+
+    Keep overview counts and routing summaries; shorten detail tables first.
+    A size-limited table says how many of its original rows remain visible.
+    """
     tables = [panel for panel in report["panels"] if panel["type"] == "evidence-table"]
-    while len(json.dumps(report).encode()) > 120_000 and any(panel["data"]["rows"] for panel in tables):
-        table = max(tables, key=lambda panel: len(panel["data"]["rows"]))
-        if not table["data"]["rows"]:
-            break
-        table["data"]["rows"].pop()
+    originals = {p['id']: (p['title'], len(p['data']['rows'])) for p in tables}
+    protected = {'fleet-unsorted', 'fleet-elsewhere'}
+    while len(report_text(report).encode('utf-8')) > REPORT_BUDGET:
+        candidates = [p for p in tables if p['id'] not in protected and p['data']['rows']]
+        if candidates:
+            table = max(candidates, key=lambda p: len(report_text(p)))
+            rows = table['data']['rows']
+            del rows[len(rows) // 2:]
+            title, count = originals[table['id']]
+            table['title'] = f'{title[:120]} (showing {len(rows)} of {count} rows; size limit)'
+            table['source_ids'] = sorted({sid for row in rows for sid in row['source_ids']})
+        else:
+            charts = [p for p in report['panels'] if p['type'] == 'chart']
+            if not charts:
+                raise ValueError('dashboard summaries exceed the 96 KiB report budget')
+            panel = max(charts, key=lambda p: len(report_text(p)))
+            panel['type'] = 'callout'
+            panel['data'] = {'tone': 'info', 'label': 'Detail omitted',
+                             'text': 'Chart omitted to keep the dashboard within its size budget. Aggregate counts remain in the overview.'}
+        used = {sid for p in report['panels'] for sid in p['source_ids']}
+        report['sources'] = [s for s in report['sources'] if s['id'] in used]
     return report
 
 

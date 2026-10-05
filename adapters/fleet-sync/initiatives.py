@@ -13,6 +13,8 @@ from project import plan_reads
 BEGIN = '<!-- fleet-sync:evidence:v1 -->'
 END = '<!-- /fleet-sync:evidence -->'
 MATCH_FIELDS = {'authority', 'connection_id', 'project', 'labels', 'repo', 'title_pattern'}
+UNSORTED_CLUSTERS = 5
+UNSORTED_SAMPLES = 10
 
 
 def canonical(value):
@@ -45,10 +47,17 @@ def validate_mapping(mapping, workspace):
         for row in rows:
             if not isinstance(row, dict):
                 raise ValueError(f'{kind} entry must be an object')
-            allowed = {'id', 'initiative', 'match'} if kind == 'rules' else {'authority', 'connection_id', 'native_id', 'initiative'}
+            destinations = set(row) & {'initiative', 'elsewhere'}
+            if len(destinations) != 1:
+                raise ValueError('entry requires exactly one of initiative or elsewhere')
+            destination = next(iter(destinations))
+            allowed = ({'id', 'match'} if kind == 'rules' else {'authority', 'connection_id', 'native_id'}) | destinations
             if set(row) != allowed:
                 raise ValueError(f'{kind} entry requires exactly {sorted(allowed)}')
-            if not isinstance(row['initiative'], str) or not re.fullmatch(r'card:[A-Za-z0-9._-]+', row['initiative']):
+            if destination == 'elsewhere':
+                if not isinstance(row[destination], str) or not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,62}', row[destination]):
+                    raise ValueError('elsewhere must be a workspace label (1-63 lowercase letters, digits, underscores or hyphens)')
+            elif not isinstance(row[destination], str) or not re.fullmatch(r'card:[A-Za-z0-9._-]+', row[destination]):
                 raise ValueError('initiative must be a workspace-local card:<handle>')
             if kind == 'pins':
                 if any(not isinstance(row[k], str) or not row[k] for k in ('authority', 'connection_id', 'native_id')):
@@ -81,7 +90,7 @@ def validate_mapping(mapping, workspace):
 def route(item, mapping):
     for pin in mapping.get('pins', []):
         if identity(pin) == identity(item):
-            return pin['initiative'], 'pin'
+            return _destination(pin, 'pin')
     for rule in mapping.get('rules', []):
         matched = True
         for field, value in rule['match'].items():
@@ -92,8 +101,15 @@ def route(item, mapping):
             else:
                 matched &= item.get(field) == value
         if matched:
-            return rule['initiative'], 'rule:' + rule['id']
+            return _destination(rule, 'rule:' + rule['id'])
     return None, 'unmatched'
+
+
+def _destination(row, reason):
+    # No local target means migration also defers these cards without archiving.
+    if 'elsewhere' in row:
+        return None, 'elsewhere:' + row['elsewhere']
+    return row['initiative'], reason
 
 
 def source_items(reads, config, now):
@@ -189,11 +205,13 @@ def plan_ingestion(items, mapping, client):
             raise ValueError('conflicting duplicate source identity')
         unique[key] = item
     items = sorted(unique.values(), key=identity)
-    groups, unsorted = defaultdict(list), []
+    groups, elsewhere, unsorted = defaultdict(list), defaultdict(list), []
     for item in items:
         target, reason = route(item, mapping)
         entry = {**item, 'mapping': reason}
-        if target:
+        if reason.startswith('elsewhere:'):
+            elsewhere[reason.removeprefix('elsewhere:')].append(entry)
+        elif target:
             groups[target].append(entry)
         else:
             unsorted.append(entry)
@@ -210,8 +228,9 @@ def plan_ingestion(items, mapping, client):
                         'items': entries, 'body': revision_body(card, summary)})
     proposals = cluster_proposals(unsorted, mapping.get('proposal_threshold', 5))
     return {'initiatives': changes, 'unsorted': unsorted, 'proposals': proposals,
+            'elsewhere': dict(sorted(elsewhere.items())),
             'counts': {'items': len(items), 'mapped': sum(len(v) for v in groups.values()),
-                       'unsorted': len(unsorted), 'new_cards': 0}}
+                       'unsorted': len(unsorted), 'elsewhere': sum(map(len, elsewhere.values())), 'new_cards': 0}}
 
 
 def cluster_proposals(items, threshold):
@@ -269,17 +288,35 @@ def apply_ingestion(client, plan):
 
 
 def add_unsorted_panel(report, plan, reads):
-    from report import _table, _ref
+    from report import _table, _ref, fit_report
     items = plan['unsorted']
-    rows = [{'cells': [i['title'], i['authority'], i['status'], i.get('url') or i['native_id']], 'source_ids': []} for i in items]
-    proposals = plan['proposals']
-    rows = [{'cells': ['Suggestion: ' + p['cluster'][2] + (f" (+{len(p['clusters']) - 1} overlapping groups)" if len(p['clusters']) > 1 else ''), str(p['count']) + ' items', 'review mapping', 'Create or select an initiative deliberately'], 'source_ids': []} for p in proposals] + rows
+    proposals = sorted(plan['proposals'], key=lambda p: (-p['count'], p['cluster']))
+
+    def short(value):
+        text = ' '.join(str(value or '').split())
+        return text if len(text) <= 160 else text[:159] + '…'
+
+    shown_proposals, shown_items = proposals[:UNSORTED_CLUSTERS], items[:UNSORTED_SAMPLES]
+    rows = [{'cells': ['Suggestion: ' + short(p['cluster'][2]), str(p['count']) + ' items',
+                       'review mapping', f"{len(p['clusters'])} grouping dimensions"], 'source_ids': []}
+            for p in shown_proposals]
+    rows += [{'cells': [short(i['title']), short(i['authority']), short(i['status']), short(i['native_id'])],
+              'source_ids': []} for i in shown_items]
+    rows.append({'cells': [f'{len(items)} Unsorted items; {len(proposals)} suggestions',
+                           f'Showing {len(shown_proposals)} suggestions / {len(shown_items)} samples',
+                           'Full list: --plan', 'No cards created'], 'source_ids': []})
     incomplete = any(not r.get('ok') or not r.get('complete') for r in reads)
-    if len(rows) > 200:
-        omitted = len(rows) - 199
-        rows = rows[:199] + [{'cells': [f'{omitted} further items / suggestions', '', 'not shown', 'Review the complete ingestion preview to map remaining groups'], 'source_ids': []}]
-    panel = _table('fleet-unsorted', f"Unsorted ({len(items)}{'+' if incomplete else ''})", ['Item / suggestion', 'Source / count', 'Status', 'Source link'], rows, [], 'stale' if incomplete else 'current', report['generated_at'])
+    freshness = 'stale' if incomplete else 'current'
+    panel = _table('fleet-unsorted', f"Unsorted ({len(items)}{'+' if incomplete else ''})",
+                   ['Item / suggestion', 'Source / count', 'Status', 'Source identity / detail'],
+                   rows, [], freshness, report['generated_at'])
     report['panels'].append(panel)
     report['layout']['items'][0]['children'].append(_ref(panel['id']))
-    # Schema caps tables at 200 rows. Always show the full count and explicitly
-    # label omitted rows. The complete list and proposals remain in --plan.
+    if plan.get('elsewhere'):
+        rows = [{'cells': [f"{len(entries)}{'+' if incomplete else ''} items belong to {destination}"], 'source_ids': []}
+                for destination, entries in sorted(plan['elsewhere'].items())]
+        panel = _table('fleet-elsewhere', 'Owned by other workspaces', ['Destination workspace'],
+                       rows, [], freshness, report['generated_at'])
+        report['panels'].append(panel)
+        report['layout']['items'][0]['children'].append(_ref(panel['id']))
+    fit_report(report)

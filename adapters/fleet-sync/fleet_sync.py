@@ -22,7 +22,7 @@ from readers.multica import read_multica
 from readers.nexus import read_nexus
 from readers.prometheus import read_prometheus
 from readers.run import Budget, BudgetRunner, HostExec, Runner
-from report import build_report, changed_besides_generated_at, headline_snapshot, record_history
+from report import build_report, changed_besides_generated_at, headline_snapshot, record_history, report_text
 
 READERS = {
     "multica": read_multica,
@@ -83,7 +83,11 @@ def main(argv: list[str] | None = None) -> int:
         reads, generated_at=generated_at, now=now, hosts=config.get("hosts") or [], history=shown_history,
         operator=operator_name(config),
     )
-    add_unsorted_panel(report, plans, reads)
+    try:
+        add_unsorted_panel(report, plans, reads)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     node_bin = node_binary(config)
     validator = validator_script(config)
     valid, diagnostics = validate_report(report, node_bin, validator)
@@ -163,7 +167,7 @@ def publish(client: AnxClient, config: dict, state: dict, report: dict, node_bin
     ref = state.get("dashboard_ref") or find_dashboard(client.docs_list())
     with tempfile.TemporaryDirectory() as directory:
         path = str(Path(directory) / "fleet-dashboard.json")
-        Path(path).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        Path(path).write_text(report_text(report), encoding="utf-8")
         revised = False
         if not ref:
             created = client.docs_create(_topic(config), DASHBOARD_TITLE, path)
@@ -252,8 +256,8 @@ def validator_script(config: dict | None = None) -> Path:
 
 
 def validate_report(report: dict, node_bin: str = "node", validator: Path | None = None) -> tuple[bool, list[str]]:
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
-        json.dump(report, handle)
+    with tempfile.NamedTemporaryFile("w", suffix=".json", encoding="utf-8", delete=False) as handle:
+        handle.write(report_text(report))
         path = handle.name
     try:
         return validate_text(Path(path).read_text(encoding="utf-8"), path, node_bin=node_bin, validator=validator)
