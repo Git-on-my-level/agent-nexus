@@ -11,6 +11,9 @@ SOURCE = Path(__file__).resolve().parents[1]
 
 class ReleasePreflightTest(unittest.TestCase):
     def setUp(self):
+        self.initialize_fixture("v0.0.1")
+
+    def initialize_fixture(self, initial_version):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
@@ -30,8 +33,17 @@ class ReleasePreflightTest(unittest.TestCase):
         shutil.copy2(SOURCE / "release-patch.sh", scripts)
         for hook in ("pre-commit", "pre-push"):
             shutil.copy2(SOURCE / "git-hooks" / hook, scripts / "git-hooks")
-        self.executable(scripts / "set-version.sh", 'echo bump >> "$CALLS"\nexit 71')
+        self.executable(scripts / "set-version.sh", '''\
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ "${1:-}" == "--check" ]]; then
+    [[ "$(cat "${repo_root}/VERSION")" == "$2" ]]
+    exit $?
+fi
+echo bump >> "$CALLS"
+exit 71
+''')
         (self.repo / ".gitignore").write_text(".venv/\n")
+        (self.repo / "VERSION").write_text(f"{initial_version}\n")
         self.git("add", ".")
         self.git("commit", "-m", "fixture")
         self.git("tag", "v0.0.1")
@@ -40,7 +52,28 @@ class ReleasePreflightTest(unittest.TestCase):
         self.git("remote", "add", "origin", str(self.repo))
         self.git("fetch", "origin", "main")
         self.git("config", "core.hooksPath", "scripts/git-hooks")
-        self.executable(self.bin / "gh", 'echo gh >> "$CALLS"')
+        self.executable(self.bin / "gh", '''\
+printf '%s\\n' "$*" >> "$CALLS"
+case "$1" in
+    auth) exit 0 ;;
+    run)
+        case "$2" in
+            list)
+                case "$*" in
+                    *"Release CLI"*) echo 303 ;;
+                    *"System Smokes"*) echo 202 ;;
+                    *"CI"*) echo 101 ;;
+                    *) exit 2 ;;
+                esac
+                ;;
+            watch) exit 0 ;;
+            *) exit 2 ;;
+        esac
+        ;;
+    release) exit 0 ;;
+    *) exit 2 ;;
+esac
+''')
         self.executable(self.bin / "make", 'echo make >> "$CALLS"\nif [ "${DIRTY_CHECK:-}" = 1 ]; then touch check-output.log; fi')
 
     def executable(self, path, body):
@@ -59,6 +92,12 @@ class ReleasePreflightTest(unittest.TestCase):
 
     def tooling(self, body="exit 0"):
         self.executable(self.repo / ".venv/bin/pre-commit", body)
+
+    def use_prepared_release_main(self):
+        self.doCleanups()
+        self.initialize_fixture("v0.0.2")
+        self.tooling()
+        return self.git("rev-parse", "HEAD").decode().strip()
 
     def assert_early_failure(self, message):
         result = self.run_release()
@@ -101,12 +140,52 @@ class ReleasePreflightTest(unittest.TestCase):
         result = self.run_release("--dry-run")
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("next version: v0.0.2", result.stdout)
+        self.assertIn("release path: create prepare release commit", result.stdout)
+        self.assertFalse(self.calls.exists())
+
+    def test_dry_run_reports_resume_path_for_prepared_version(self):
+        self.use_prepared_release_main()
+        result = self.run_release("--dry-run")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("release path: resume prepared release (skip prepare commit)", result.stdout)
+        self.assertFalse(self.calls.exists())
+
+    def test_prepared_release_resumes_gates_and_tags_current_main(self):
+        prepared_sha = self.use_prepared_release_main()
+
+        result = self.run_release()
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn(f"resuming prepared release v0.0.2 on {prepared_sha}", result.stdout)
+        self.assertIn("v0.0.2", self.git("tag", "--list").decode().splitlines())
+        self.assertEqual(self.git("rev-parse", "v0.0.2^{}").decode().strip(), prepared_sha)
+        calls = self.calls.read_text()
+        self.assertNotIn("make", calls)
+        self.assertNotIn("bump", calls)
+        self.assertIn("CI", calls)
+        self.assertIn(prepared_sha, calls)
+        self.assertIn("System Smokes", calls)
+        self.assertIn("run watch 101 --exit-status", calls)
+        self.assertIn("run watch 202 --exit-status", calls)
+        self.assertIn("run watch 303 --exit-status", calls)
+        self.assertIn("release view v0.0.2", calls)
+
+    def test_existing_tag_is_refused_with_clear_message(self):
+        result = self.run_release("--version", "v0.0.1", "--dry-run")
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("tag v0.0.1 already exists", result.stdout)
         self.assertFalse(self.calls.exists())
 
     def test_linked_worktree_checks_its_own_tooling(self):
         self.tooling()
         linked = self.root / "linked"
-        self.git("worktree", "add", "-b", "release-test", str(linked))
+        worktree = subprocess.run(
+            ["git", "worktree", "add", "-b", "release-test", str(linked)],
+            cwd=self.repo, env=self.env, text=True, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT)
+        if worktree.returncode and "outside the managed roots" in worktree.stdout:
+            self.skipTest("host Git policy restricts linked worktree destinations")
+        self.assertEqual(worktree.returncode, 0, worktree.stdout)
         self.repo = linked
         self.assert_early_failure("release hook tooling is missing")
 

@@ -14,7 +14,7 @@ Options:
   --version <version>  Override the computed next patch version.
   --skip-checks        Skip local release checks.
   --no-wait            Do not wait for GitHub main/release workflows to finish.
-  --dry-run            Print the planned version and release base, then exit.
+  --dry-run            Print the planned version, release base, and release path, then exit.
   -h, --help           Show this help text.
 EOF
 }
@@ -206,52 +206,68 @@ if git rev-parse -q --verify "refs/tags/${TARGET_VERSION}" >/dev/null 2>&1; then
   die "tag ${TARGET_VERSION} already exists"
 fi
 
+RESUME_PREPARED_RELEASE=0
+if "${SCRIPT_DIR}/set-version.sh" --check "${TARGET_VERSION}" >/dev/null 2>&1; then
+  RESUME_PREPARED_RELEASE=1
+fi
+
 if [[ "${DRY_RUN}" == "1" ]]; then
+  if [[ "${RESUME_PREPARED_RELEASE}" == "1" ]]; then
+    RELEASE_PATH="resume prepared release (skip prepare commit)"
+  else
+    RELEASE_PATH="create prepare release commit"
+  fi
   cat <<EOF
 release base: ${ORIGIN_MAIN_SHA}
 next version: ${TARGET_VERSION}
+release path: ${RELEASE_PATH}
 skip checks: ${SKIP_CHECKS}
 wait for release: ${WAIT_FOR_RELEASE}
 EOF
   exit 0
 fi
 
-TMP_RELEASE_DIR="${REPO_ROOT}/.tmp/release-artifacts-test"
-cleanup() {
-  rm -rf "${TMP_RELEASE_DIR}"
-}
-trap cleanup EXIT
+if [[ "${RESUME_PREPARED_RELEASE}" == "1" ]]; then
+  RELEASE_SHA="${ORIGIN_MAIN_SHA}"
+  echo "resuming prepared release ${TARGET_VERSION} on ${RELEASE_SHA}"
+else
+  TMP_RELEASE_DIR="${REPO_ROOT}/.tmp/release-artifacts-test"
+  cleanup() {
+    rm -rf "${TMP_RELEASE_DIR}"
+  }
+  trap cleanup EXIT
 
-if [[ "${SKIP_CHECKS}" != "1" ]]; then
-  make check
-  make e2e-smoke
-  make hosted-smoke
-  make hosted-ops-test
+  if [[ "${SKIP_CHECKS}" != "1" ]]; then
+    make check
+    make e2e-smoke
+    make hosted-smoke
+    make hosted-ops-test
+  fi
+
+  # Checks may regenerate tracked files or create untracked output. Fail before
+  # mixing those changes with the version bump, leaving them available to inspect.
+  ensure_clean_worktree
+  "${SCRIPT_DIR}/set-version.sh" "${TARGET_VERSION}"
+  VERSION_FILES=()
+  while IFS= read -r path; do
+    [[ -n "${path}" ]] || continue
+    VERSION_FILES+=("${path}")
+  done < <("${SCRIPT_DIR}/version-managed-files.sh")
+  "${SCRIPT_DIR}/check-version-managed-files.sh" --worktree
+  git add -- "${VERSION_FILES[@]}"
+  "${SCRIPT_DIR}/check-version-managed-files.sh" --staged
+
+  if [[ "${SKIP_CHECKS}" != "1" ]]; then
+    make cli-check
+  fi
+
+  "${SCRIPT_DIR}/build-cli-release-artifacts.sh" "${TARGET_VERSION}" ".tmp/release-artifacts-test"
+  git commit -m "Prepare release ${TARGET_VERSION}"
+  git push origin HEAD:main
+  RELEASE_SHA="$(git rev-parse HEAD)"
 fi
-
-# Checks may regenerate tracked files or create untracked output. Fail before
-# mixing those changes with the version bump, leaving them available to inspect.
-ensure_clean_worktree
-"${SCRIPT_DIR}/set-version.sh" "${TARGET_VERSION}"
-VERSION_FILES=()
-while IFS= read -r path; do
-  [[ -n "${path}" ]] || continue
-  VERSION_FILES+=("${path}")
-done < <("${SCRIPT_DIR}/version-managed-files.sh")
-"${SCRIPT_DIR}/check-version-managed-files.sh" --worktree
-git add -- "${VERSION_FILES[@]}"
-"${SCRIPT_DIR}/check-version-managed-files.sh" --staged
-
-if [[ "${SKIP_CHECKS}" != "1" ]]; then
-  make cli-check
-fi
-
-"${SCRIPT_DIR}/build-cli-release-artifacts.sh" "${TARGET_VERSION}" ".tmp/release-artifacts-test"
-git commit -m "Prepare release ${TARGET_VERSION}"
-git push origin HEAD:main
 
 if [[ "${WAIT_FOR_RELEASE}" == "1" ]]; then
-  RELEASE_SHA="$(git rev-parse HEAD)"
   wait_for_main_workflow "CI" "${RELEASE_SHA}"
   wait_for_main_workflow "System Smokes" "${RELEASE_SHA}"
 else
@@ -262,7 +278,7 @@ git tag -a "${TARGET_VERSION}" -m "Release ${TARGET_VERSION}"
 git push origin "${TARGET_VERSION}"
 
 if [[ "${WAIT_FOR_RELEASE}" == "1" ]]; then
-  wait_for_release "${TARGET_VERSION}" "$(git rev-parse HEAD)"
+  wait_for_release "${TARGET_VERSION}" "${RELEASE_SHA}"
 else
   echo "tag ${TARGET_VERSION} pushed; release workflow should now be running"
 fi
