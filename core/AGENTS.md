@@ -111,7 +111,9 @@ Blob writers publish `content_refs_json` atomically with metadata; startup scans
 older content through its configured backend. Unindexed/unavailable old blobs
 remain inaccessible until indexed. Document search inherits private comments
 and revision content before MATCH/rank/limit. Series rollups retain reference
-provenance after compaction; full adapter data deletion removes that provenance.
+provenance after compaction; full adapter data deletion removes that provenance. Ambiguous preview57 ledger
+atoms are conservatively retained because compacted historical states cannot be
+reconstructed; never remove them speculatively.
 Event content and navigational `ref_edges` also commit in a single transaction.
 Filtering a linked plan suppresses its stored refs and titles, not merely live
 reference previews. Never serialize a shared maintenance error to a reader.
@@ -119,7 +121,9 @@ reference previews. Never serialize a shared maintenance error to a reader.
 All canonical, PM and command-center database access must use
 `internal/resourceaccess` handles with the request context. Scoped SELECTs use
 canonical ownership CTEs before limits, cursors, aggregates and joins. Transaction
-loaders use the same policy. Mutations resolve handles to canonical IDs, load
+loaders use the same policy. Emit only relation shadows named by the SQL, while
+keeping the complete canonical ownership graph. A mutation can skip the graph
+only after proving its denied-root set empty in that same transaction snapshot. Mutations resolve handles to canonical IDs, load
 existing targets/destinations, and bind resource identities as SQL arguments;
 the database handle checks those arguments (including encoded JSON) within the
 write transaction. Never use raw connections, contextless queries, `main.` table

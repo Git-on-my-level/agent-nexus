@@ -15,7 +15,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -540,10 +539,6 @@ func (p *moveCorePair) createTopicFixture(t *testing.T, suffix string) moveTopic
 // directly so two live cores exercise how moves read and normalize old data.
 func seedMoveDocumentRefAliases(t *testing.T, h *liveCoreHarness, documentID string, documentRefs, revisionRefs []string) {
 	t.Helper()
-	sqlite, err := exec.LookPath("sqlite3")
-	if err != nil {
-		t.Fatalf("sqlite3 is required to seed legacy move refs: %v", err)
-	}
 	documentRefsJSON, err := json.Marshal(documentRefs)
 	if err != nil {
 		t.Fatal(err)
@@ -555,17 +550,13 @@ func seedMoveDocumentRefAliases(t *testing.T, h *liveCoreHarness, documentID str
 	quotedDocumentRefs, quotedRevisionRefs, quotedID := moveIntegrationSQLQuote(string(documentRefsJSON)), moveIntegrationSQLQuote(string(revisionRefsJSON)), moveIntegrationSQLQuote(documentID)
 	statement := fmt.Sprintf(`UPDATE documents SET refs_json=%s WHERE id=%s;
 UPDATE document_revisions SET refs_json=%s WHERE document_id=%s AND revision_id=(SELECT head_revision_id FROM documents WHERE id=%s);`, quotedDocumentRefs, quotedID, quotedRevisionRefs, quotedID, quotedID)
-	if output, err := exec.Command(sqlite, filepath.Join(h.workspace, "state.sqlite"), statement).CombinedOutput(); err != nil {
+	if output, err := runLegacySQLFixture(t, h, statement); err != nil {
 		t.Fatalf("seed legacy document refs: %v: %s", err, output)
 	}
 }
 
 func seedMoveTopicDocumentAliases(t *testing.T, h *liveCoreHarness, topicID, documentID, documentHandle, suffix string) {
 	t.Helper()
-	sqlite, err := exec.LookPath("sqlite3")
-	if err != nil {
-		t.Fatalf("sqlite3 is required to seed legacy move refs: %v", err)
-	}
 	createdAt := moveIntegrationSQLQuote("2026-10-05T00:00:00Z")
 	var statements []string
 	for _, item := range []struct {
@@ -578,7 +569,7 @@ func seedMoveTopicDocumentAliases(t *testing.T, h *liveCoreHarness, topicID, doc
 		))
 	}
 	statement := strings.Join(statements, "\n")
-	if output, err := exec.Command(sqlite, filepath.Join(h.workspace, "state.sqlite"), statement).CombinedOutput(); err != nil {
+	if output, err := runLegacySQLFixture(t, h, statement); err != nil {
 		t.Fatalf("seed legacy topic doc aliases: %v: %s", err, output)
 	}
 }

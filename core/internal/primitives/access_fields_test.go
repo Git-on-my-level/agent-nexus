@@ -3,12 +3,46 @@ package primitives
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
 	"agent-nexus-core/internal/resourceaccess"
 	"agent-nexus-core/internal/storage"
 )
+
+func TestResourceAccessScopeRechecksRootsAndQuotedRelations(t *testing.T) {
+	ctx := context.Background()
+	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	card, err := s.CreateWork(ctx, "owner", "", map[string]any{"title": "public"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := WithAccessScope(ctx, AccessScope{ActorID: "stranger"})
+	if err = s.CheckResourceValues(scope, map[string]any{"ref": card["ref"]}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.PatchThread(ctx, "owner", anyStringValue(card["thread_id"]), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.CheckResourceValues(scope, map[string]any{"ref": card["ref"]}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("empty-root decision was cached: %v", err)
+	}
+	for _, table := range []string{`"CARDS"`, "`cards`", `[cards]`} {
+		var count int
+		if err = resourceaccess.NewDB(ws.DB()).QueryRowContext(scope, `SELECT COUNT(*) FROM `+table+` WHERE id=?`, card["id"]).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 0 {
+			t.Fatalf("quoted relation bypass: %s", table)
+		}
+	}
+}
 
 func TestResourceAccessEveryOwnershipField(t *testing.T) {
 	ctx := context.Background()

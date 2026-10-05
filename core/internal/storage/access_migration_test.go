@@ -350,6 +350,13 @@ func TestResourceAccessMigrationReconcilesPrivacy57(t *testing.T) {
 	if _, err = ws.DB().Exec(`DELETE FROM schema_migrations WHERE version>=58`); err != nil {
 		t.Fatal(err)
 	}
+	// Preview57 did not distinguish serialized label containers from historical
+	// state strings. Retain ambiguous provenance after raw-point compaction:
+	// discarding it could disclose a real prior private reference.
+	if _, err = ws.DB().Exec(`INSERT INTO resource_access_series_refs VALUES('legacy','{}','{}'),('legacy','{}','card:private-history')`); err != nil {
+		t.Fatal(err)
+	}
+
 	if err = ws.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -358,6 +365,11 @@ func TestResourceAccessMigrationReconcilesPrivacy57(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ws.Close()
+	var retained int
+	if err = ws.DB().QueryRow(`SELECT COUNT(*) FROM resource_access_series_refs WHERE series='legacy'`).Scan(&retained); err != nil || retained != 2 {
+		t.Fatalf("ambiguous historical ownership lost: %d %v", retained, err)
+	}
+
 	s = primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
 	scope := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "stranger"})
 	if !s.CanAccessResource(scope, "card", public["id"].(string)) {

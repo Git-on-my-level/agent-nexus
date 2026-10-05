@@ -3,6 +3,7 @@ package primitives
 import (
 	"context"
 	"encoding/json"
+	"regexp"
 	"strings"
 
 	"agent-nexus-core/internal/resourceaccess"
@@ -31,9 +32,27 @@ func accessScopeFrom(ctx context.Context) (AccessScope, bool) {
 type accessDB = resourceaccess.DB
 type accessTx = resourceaccess.Tx
 
-func accessCTEs(scope AccessScope) string {
-	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
-	graph := ownershipClosure("_anx_denied", "SELECT 'thread',id FROM main.threads WHERE COALESCE(json_extract(body_json,'$.pm_actor_id'),'')<>'' AND json_extract(body_json,'$.pm_actor_id')<>"+quote(scope.ActorID)+" AND NOT ("+quote(scope.ActorID)+"<>'' AND "+quote(scope.ActorID)+"="+quote(scope.PMActorID)+") UNION SELECT kind,id FROM main.resource_access_tombstones WHERE owner<>"+quote(scope.ActorID)+" AND NOT ("+quote(scope.ActorID)+"<>'' AND "+quote(scope.ActorID)+"="+quote(scope.PMActorID)+")"+" UNION SELECT 'artifact',id FROM main.artifacts WHERE content_refs_json IS NULL", false)
+func deniedRootSQL(scope AccessScope) string {
+	unknown := "SELECT 'artifact',id FROM main.artifacts WHERE content_refs_json IS NULL"
+	if scope.ActorID != "" && scope.ActorID == scope.PMActorID {
+		return unknown
+	}
+	actor := "'" + strings.ReplaceAll(scope.ActorID, "'", "''") + "'"
+	return "SELECT 'thread',id FROM main.threads WHERE COALESCE(json_extract(body_json,'$.pm_actor_id'),'')<>'' AND json_extract(body_json,'$.pm_actor_id')<>" + actor + " UNION SELECT kind,id FROM main.resource_access_tombstones WHERE owner<>" + actor + " UNION " + unknown
+}
+
+var sqlIdentifiers = regexp.MustCompile(`[A-Za-z_][A-Za-z_0-9]*`)
+
+// Include relation shadows actually named by this SQL statement. Matching all
+// tokens (including quoted identifiers and literals) may include extra shadows,
+// but never omits a named relation. Ownership recursion still uses canonical
+// main tables and is evaluated within every statement's snapshot.
+func accessCTEs(scope AccessScope, query string) string {
+	needed := map[string]bool{}
+	for _, token := range sqlIdentifiers.FindAllString(query, -1) {
+		needed[strings.ToLower(token)] = true
+	}
+	graph := ownershipClosure("_anx_denied", deniedRootSQL(scope), false)
 	graph += ", " + ownershipRefs("_anx_resource_refs", "_anx_denied") + ", _anx_denied_refs(ref) AS (SELECT CASE WHEN kind='card' AND (ref LIKE 'http://%' OR ref LIKE 'https://%') THEN ref ELSE kind||':'||ref END FROM _anx_resource_refs UNION SELECT 'doc:'||ref FROM _anx_resource_refs WHERE kind='document')"
 
 	denied := func(kind, id string) string {
@@ -43,6 +62,9 @@ func accessCTEs(scope AccessScope) string {
 		return "NOT EXISTS (SELECT 1 FROM json_each(" + resourceaccess.ReferenceSQLAtoms(column, strings.HasSuffix(column, "_json") || column == "_row.body" || column == "_row.labels") + ") j WHERE j.value COLLATE NOCASE IN (SELECT ref FROM _anx_denied_refs) OR j.value COLLATE NOCASE IN (SELECT id FROM _anx_denied WHERE kind<>'plan'))"
 	}
 	add := func(table, where string) {
+		if !needed[table] {
+			return
+		}
 		graph += ", " + table + " AS (SELECT * FROM main." + table + " AS _row WHERE " + where + ")"
 	}
 	for _, kind := range []string{"thread", "board", "card", "topic", "document", "event", "artifact"} {
@@ -68,7 +90,9 @@ func accessCTEs(scope AccessScope) string {
 	add("runs", denied("run", "_row.id"))
 	add("agent_presence", cleanJSON("_row.note")+" AND NOT EXISTS (SELECT 1 FROM _anx_denied_refs WHERE ref="+resourceaccess.ReferenceSQL("_row.current_card_ref")+" COLLATE NOCASE)")
 	add("agent_progress_notes", cleanJSON("_row.text")+" AND NOT EXISTS (SELECT 1 FROM _anx_denied_refs WHERE ref="+resourceaccess.ReferenceSQL("_row.card_ref")+" COLLATE NOCASE)")
-	graph += ", _anx_private_pm(id) AS (SELECT id FROM main.pm_records AS _row WHERE NOT (" + cleanJSON("_row.body") + `) UNION SELECT r.id FROM main.pm_records r JOIN json_tree(r.body) j JOIN _anx_private_pm p ON j.atom=p.id), pm_records AS (SELECT rowid,* FROM main.pm_records WHERE id NOT IN (SELECT id FROM _anx_private_pm))`
+	if needed["pm_records"] {
+		graph += ", _anx_private_pm(id) AS (SELECT id FROM main.pm_records AS _row WHERE NOT (" + cleanJSON("_row.body") + `) UNION SELECT r.id FROM main.pm_records r JOIN json_tree(r.body) j JOIN _anx_private_pm p ON j.atom=p.id), pm_records AS (SELECT rowid,* FROM main.pm_records WHERE id NOT IN (SELECT id FROM _anx_private_pm))`
+	}
 	add("derived_inbox_items", denied("thread", "_row.thread_id")+" AND "+denied("card", "_row.source_card_id")+" AND "+denied("event", "_row.source_event_id")+" AND "+cleanJSON("_row.data_json"))
 	add("workspace_dashboard", denied("document", "_row.document_id"))
 	add("idempotency_replays", cleanJSON("_row.response_json"))
@@ -81,9 +105,11 @@ func accessCTEs(scope AccessScope) string {
 	}
 	// A rollup must not expose a private contributor through counts or last
 	// values. Remove the whole label stream before admission, buckets or limits.
-	graph += ", _anx_private_series(series,labels) AS (SELECT series,labels FROM main.resource_access_series_refs WHERE target_ref COLLATE NOCASE IN (SELECT ref FROM _anx_denied_refs) OR target_ref COLLATE NOCASE IN (SELECT id FROM _anx_denied WHERE kind<>'plan'))"
-	for _, table := range []string{"series_labels", "series_points", "series_daily", "series_live_daily"} {
-		add(table, cleanJSON("_row.labels")+" AND NOT EXISTS (SELECT 1 FROM _anx_private_series p WHERE p.series=_row.series AND p.labels=_row.labels)")
+	if needed["series_labels"] || needed["series_points"] || needed["series_daily"] || needed["series_live_daily"] {
+		graph += ", _anx_private_series(series,labels) AS (SELECT series,labels FROM main.resource_access_series_refs WHERE target_ref COLLATE NOCASE IN (SELECT ref FROM _anx_denied_refs) OR target_ref COLLATE NOCASE IN (SELECT id FROM _anx_denied WHERE kind<>'plan'))"
+		for _, table := range []string{"series_labels", "series_points", "series_daily", "series_live_daily"} {
+			add(table, cleanJSON("_row.labels")+" AND NOT EXISTS (SELECT 1 FROM _anx_private_series p WHERE p.series=_row.series AND p.labels=_row.labels)")
+		}
 	}
 	return graph
 }
@@ -99,7 +125,7 @@ func scopeRead(ctx context.Context, query string) string {
 	}
 	q := strings.ReplaceAll(strings.TrimSpace(query), " INDEXED BY idx_work_metadata_project", "")
 	upper := strings.ToUpper(q)
-	prefix := "WITH RECURSIVE " + accessCTEs(scope)
+	prefix := "WITH RECURSIVE " + accessCTEs(scope, q)
 	if fields := strings.Fields(upper); len(fields) > 0 {
 		switch fields[0] {
 		case "WITH":
@@ -132,6 +158,16 @@ func requireAccessibleValues(ctx context.Context, q queryRower, values any) erro
 	if !ok {
 		return nil
 	}
+	// This check uses the mutation's own transaction snapshot. Without denied
+	// roots there can be no denied descendants; skip constructing the expensive
+	// closure, never cache this answer across statements or requests.
+	var hasDeniedRoot bool
+	if err := q.QueryRowContext(ctx, "SELECT EXISTS ("+deniedRootSQL(scope)+")").Scan(&hasDeniedRoot); err != nil {
+		return err
+	}
+	if !hasDeniedRoot {
+		return nil
+	}
 	// SQL JSON columns arrive as encoded strings/bytes. Decode before walking,
 	// otherwise json_tree would see just an opaque string (or base64 bytes).
 	if args, ok := values.([]any); ok {
@@ -157,7 +193,7 @@ func requireAccessibleValues(ctx context.Context, q queryRower, values any) erro
 		return err
 	}
 	var denied bool
-	query := `WITH RECURSIVE ` + accessCTEs(scope) + ` SELECT EXISTS (
+	query := `WITH RECURSIVE ` + accessCTEs(scope, "") + ` SELECT EXISTS (
  SELECT 1 FROM json_each(anx_resource_json_refs(?)) j WHERE (
  j.value COLLATE NOCASE IN (SELECT id FROM _anx_denied WHERE kind<>'plan') OR
  j.value COLLATE NOCASE IN (SELECT ref FROM _anx_denied_refs)))`

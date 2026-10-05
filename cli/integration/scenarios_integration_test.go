@@ -913,3 +913,31 @@ func integrationHasEdge(edges []any, from string, to string, relation string) bo
 func runToken() string {
 	return time.Now().UTC().Format("20060102T150405.000000000")
 }
+
+// Legacy SQL fixtures must use core's registered SQLite reference functions.
+var fixtureBuildOnce sync.Once
+var fixtureBinary string
+var fixtureBuildError error
+
+func runLegacySQLFixture(t *testing.T, h *liveCoreHarness, statement string) ([]byte, error) {
+	t.Helper()
+	fixtureBuildOnce.Do(func() {
+		dir, err := os.MkdirTemp("", "anx-sql-fixture-bin-*")
+		if err != nil {
+			fixtureBuildError = err
+			return
+		}
+		fixtureBinary = filepath.Join(dir, "fixture")
+		cmd := exec.Command("go", "build", "-tags=integration", "-o", fixtureBinary, "./cmd/test-sql-fixture")
+		cmd.Dir = filepath.Join(repoRoot(t), "core")
+		if output, err := cmd.CombinedOutput(); err != nil {
+			fixtureBuildError = fmt.Errorf("build SQL fixture: %w: %s", err, output)
+		}
+	})
+	if fixtureBuildError != nil {
+		return nil, fixtureBuildError
+	}
+	cmd := exec.Command(fixtureBinary, filepath.Join(h.workspace, "state.sqlite"))
+	cmd.Stdin = strings.NewReader(statement)
+	return cmd.CombinedOutput()
+}
