@@ -30,7 +30,6 @@ func findAskInboxID(t *testing.T, h *liveCoreHarness, askID string) string {
 // This exercises the compiled CLI against core. Until S5 lands, the fixture
 // marks a legacy profile as derived so the presence endpoint accepts it.
 func TestDailyLoopAgainstCore(t *testing.T) {
-	t.Setenv("ANX_INTEGRATION_PORT", "8092")
 	h := newPasskeyLiveCoreHarness(t)
 	h.enrollHost(t, "worker")
 	h.registerHumanPasskey(t, "operator", "S6 Operator", h.createHumanInviteToken(t))
