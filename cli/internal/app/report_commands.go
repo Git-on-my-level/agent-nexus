@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -180,11 +179,7 @@ func (a *App) reportInput(path string) ([]byte, error) {
 	if path == "" {
 		return nil, errnorm.Usage("invalid_args", "report file is required")
 	}
-	readFile := a.ReadFile
-	if readFile == nil {
-		readFile = os.ReadFile
-	}
-	content, err := readFile(path)
+	content, err := a.readInputFile(path)
 	if err != nil {
 		return nil, errnorm.Wrap(errnorm.KindLocal, "input_read_failed", "failed to read visual report file", err)
 	}

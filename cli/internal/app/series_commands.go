@@ -217,7 +217,7 @@ func (a *App) runSeriesCommand(ctx context.Context, args []string, cfg config.Re
 			if p.bodyFile == "-" {
 				raw, err = a.readStdinBytes(128*1024 + 1)
 			} else {
-				raw, err = a.ReadFile(p.bodyFile)
+				raw, err = a.readInputFile(p.bodyFile)
 			}
 			if err != nil {
 				return name, nil, err

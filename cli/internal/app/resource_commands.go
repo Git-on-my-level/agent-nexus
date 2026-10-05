@@ -17,7 +17,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -4758,11 +4757,7 @@ func (a *App) readRawFile(path string) ([]byte, error) {
 		}
 		return content, nil
 	}
-	readFile := a.ReadFile
-	if readFile == nil {
-		readFile = os.ReadFile
-	}
-	content, err := readFile(path)
+	content, err := a.readInputFile(path)
 	if err != nil {
 		return nil, errnorm.Wrap(errnorm.KindLocal, "file_read_failed", fmt.Sprintf("failed to read file %s", path), err)
 	}
@@ -4782,11 +4777,7 @@ func (a *App) readBodyInput(fromFile string) ([]byte, error) {
 			}
 			return content, nil
 		}
-		readFile := a.ReadFile
-		if readFile == nil {
-			readFile = os.ReadFile
-		}
-		content, err := readFile(fromFile)
+		content, err := a.readInputFile(fromFile)
 		if err != nil {
 			return nil, errnorm.Wrap(errnorm.KindLocal, "file_read_failed", fmt.Sprintf("failed to read file %s", fromFile), err)
 		}

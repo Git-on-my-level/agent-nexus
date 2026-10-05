@@ -177,6 +177,7 @@ func (a *App) runIngestInner(ctx context.Context, args []string, cfg config.Reso
 	var raw []byte
 	var err error
 	if len(args) == 1 {
+		a.markNonReplayableInput(args[0])
 		var file *os.File
 		file, err = os.Open(args[0])
 		if err != nil {

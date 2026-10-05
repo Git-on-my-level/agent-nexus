@@ -16,7 +16,8 @@ ANX_UPDATE_POLICY=off anx work start card:example
 
 The default is `auto`. A managed install that receives `cli_outdated` on HTTP 426
 runs this same verified update immediately, then retries the original command
-once. A command that already read stdin, or that already wrote output, prints
+once. A command that already read stdin, or that read a non-regular input such as
+`/dev/stdin` or a FIFO, or that already wrote output, prints
 `anx update --version <recommended>` instead of retrying. A `cli_outdated` body
 on any other HTTP status does not update or retry. Policy `notify` or `off`,
 and unmanaged installs, print the same command instead of replacing the binary.
