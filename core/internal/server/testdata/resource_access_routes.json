@@ -153,6 +153,31 @@
   },
   {
     "method": "GET",
+    "path": "/auth/access-requests",
+    "policy": "collection"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/access-requests",
+    "policy": "reference-write"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/access-requests/{request_id}/approve",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/access-requests/{request_id}/deny",
+    "policy": "record"
+  },
+  {
+    "method": "GET",
+    "path": "/auth/access/summary",
+    "policy": "collection"
+  },
+  {
+    "method": "GET",
     "path": "/auth/admins",
     "policy": "independent",
     "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
@@ -643,6 +668,11 @@
   {
     "method": "GET",
     "path": "/inbox",
+    "policy": "collection"
+  },
+  {
+    "method": "GET",
+    "path": "/inbox/summary",
     "policy": "collection"
   },
   {

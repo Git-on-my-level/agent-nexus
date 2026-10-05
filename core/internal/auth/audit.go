@@ -310,6 +310,10 @@ func (s *Store) ListAuditEvents(ctx context.Context, filter AuthAuditListFilter)
 }
 
 func (s *Store) recordAuthAuditEventTx(ctx context.Context, tx *sql.Tx, input AuthAuditEventInput) error {
+	return recordAuthAuditEventTx(ctx, tx, input)
+}
+
+func recordAuthAuditEventTx(ctx context.Context, tx Transaction, input AuthAuditEventInput) error {
 	if tx == nil {
 		return fmt.Errorf("auth audit transaction is required")
 	}

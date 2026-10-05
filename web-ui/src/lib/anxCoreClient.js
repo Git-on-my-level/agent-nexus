@@ -537,6 +537,17 @@ const adapterCommandTable = [
     (principalId) => p(pathParams({ principal_id: principalId })),
   ],
   ["listAuthAudit", "auth.audit.list", (filters) => ({ options: q(filters) })],
+  ["listAccessRequests", "auth.access-requests.list"],
+  [
+    "approveAccessRequest",
+    "auth.access-requests.approve",
+    (requestId) => pb(pathParams({ request_id: requestId }), {}),
+  ],
+  [
+    "denyAccessRequest",
+    "auth.access-requests.deny",
+    (requestId) => pb(pathParams({ request_id: requestId }), {}),
+  ],
   ["listSecrets", "secrets.list"],
   ["createSecret", "secrets.create", (payload) => ({ options: b(payload) })],
   [

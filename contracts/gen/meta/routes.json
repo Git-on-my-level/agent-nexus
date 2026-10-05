@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 214,
+  "route_count": 220,
   "routes": [
     {
       "method": "GET",
@@ -146,6 +146,31 @@
       "method": "POST",
       "path": "/artifacts/{artifact_id}/unarchive",
       "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/access-requests",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/access-requests",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/access-requests/{request_id}/approve",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/access-requests/{request_id}/deny",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/access/summary",
+      "access_class": "authenticated_principal_surface"
     },
     {
       "method": "GET",
@@ -610,6 +635,11 @@
     {
       "method": "GET",
       "path": "/inbox",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/inbox/summary",
       "access_class": "workspace_business_surface"
     },
     {

@@ -14,6 +14,9 @@ import (
 // Exemptions are reviewed service boundaries, never free-form rationale alone.
 // Host roster reads and derived rebuilds deliberately are not in these families.
 func independentPrivacyRoute(p privacyRoutePolicy) bool {
+	if strings.HasPrefix(p.Path, "/auth/access") {
+		return false
+	}
 	root := strings.Split(strings.TrimPrefix(p.Path, "/"), "/")[0]
 	switch root {
 	case "auth", "meta", "series", "secrets", "adapters", "actors", "sessions":

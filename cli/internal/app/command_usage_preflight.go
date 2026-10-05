@@ -27,6 +27,14 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 		}
 		return name, err
 	}
+	if len(args) >= 2 && args[0] == "auth" && args[1] == "access-requests" {
+		name, _, _, _, err := parseAccessRequestCommand(args[2:])
+		return name, err
+	}
+	if len(args) >= 2 && args[0] == "inbox" && args[1] == "summary" {
+		_, err := parseInboxSummary(args[2:])
+		return "inbox summary", err
+	}
 	if args[0] == "series" || args[0] == "adapters" {
 		p, err := parseSeriesCommand(args)
 		return p.group + " " + p.verb, err
@@ -185,6 +193,8 @@ func preflightKnownCommandShape(args []string) error {
 				return preflightSubcommand(args[2:], authBootstrapSubcommandSpec)
 			case "principals":
 				return preflightSubcommand(args[2:], authPrincipalsSubcommandSpec)
+			case "access-requests":
+				return preflightSubcommand(args[2:], accessRequestsSubcommandSpec)
 			case "admins":
 				return preflightSubcommand(args[2:], authAdminsSubcommandSpec)
 			case "audit":
@@ -734,6 +744,7 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		"events explain": {
 			"type": valueFlag,
 		},
+		"inbox summary": {"limit": {kind: preflightFlagString}},
 		"inbox list": {
 			"thread-id": valueFlag,
 			"type":      valueFlag,

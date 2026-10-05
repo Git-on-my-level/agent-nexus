@@ -49,7 +49,7 @@ var configSubcommandSpec = subcommandSpec{
 
 var authSubcommandSpec = subcommandSpec{
 	command: "auth",
-	valid:   []string{"whoami", "invites", "bootstrap", "principals", "audit", "admins"},
+	valid:   []string{"whoami", "invites", "bootstrap", "principals", "audit", "admins", "access-requests"},
 	examples: []string{
 		"anx auth whoami",
 		"anx auth invites list",
@@ -259,7 +259,7 @@ var eventsSubcommandSpec = subcommandSpec{
 
 var inboxSubcommandSpec = subcommandSpec{
 	command: "inbox",
-	valid:   []string{"list", "get", "respond", "read", "stream", "tail"},
+	valid:   []string{"list", "get", "summary", "respond", "read", "stream", "tail"},
 	examples: []string{
 		"anx inbox list --status answered",
 		"anx inbox list --unread",

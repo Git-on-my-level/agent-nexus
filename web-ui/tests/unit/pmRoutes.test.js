@@ -67,6 +67,8 @@ vi.mock("$app/stores", () => ({ page: { subscribe: state.subscribe } }));
 vi.mock("$lib/coreClient", () => ({ coreClient: client }));
 vi.mock("$lib/authSession", () => ({
   initializeAuthSession: vi.fn().mockResolvedValue({ actor_id: "human" }),
+  // The Inbox pane asks whether the reader may decide an access request.
+  isHumanWorkspacePrincipal: () => true,
   authenticatedAgent: {
     subscribe: (fn) => {
       fn({ actor_id: "human" });

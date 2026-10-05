@@ -32,17 +32,29 @@ func TestInboxStreamAppliesListVisibilityOnEveryPoll(t *testing.T) {
 			}
 			privateItem := streamPrivacyInboxItem(private, "private-ask", "private body")
 			publicItem := streamPrivacyInboxItem(public, "public-ask", "public body")
-			hiddenItem := streamPrivacyInboxItem(public, "hidden-subject-ask", "hidden subject body")
+			archivedAsk := streamPrivacyInboxItem(public, "archived-subject-ask", "archived subject body")
+			archivedAsk.Data["subject_ref"] = "thread:" + hidden
+			archivedAsk.Data["related_refs"] = []any{"thread:" + hidden}
+			hiddenItem := streamPrivacyInboxItem(public, "hidden-subject-notification", "hidden subject body")
+			hiddenItem.Category = "agent_wake"
+			hiddenItem.Data["kind"] = "agent_wake"
 			hiddenItem.Data["subject_ref"] = "thread:" + hidden
 			hiddenItem.Data["related_refs"] = []any{"thread:" + hidden}
+			publicNotification := streamPrivacyInboxItem(public, "public-notification", "public notification body")
+			publicNotification.Category = "agent_wake"
+			publicNotification.Data["kind"] = "agent_wake"
 			seedStreamPrivacyInbox(t, store, private, privateItem)
-			seedStreamPrivacyInbox(t, store, public, publicItem, hiddenItem)
+			seedStreamPrivacyInbox(t, store, public, publicItem, archivedAsk, publicNotification, hiddenItem)
 
 			// An unknown resume cursor must not bypass snapshot authorization.
 			resp := openAuthenticatedPrivacyStream(t, env.server.URL+"/stream/inbox", token, "unknown-cursor")
 			reader, stop := startSSEReader(resp.Body)
 			defer stop()
-			want := map[string]string{"public-ask": "public body"}
+			want := map[string]string{
+				"public-ask":           "public body",
+				"archived-subject-ask": "archived subject body",
+				"public-notification":  "public notification body",
+			}
 			if role == "owner" {
 				want["private-ask"] = "private body"
 			}
@@ -53,9 +65,16 @@ func TestInboxStreamAppliesListVisibilityOnEveryPoll(t *testing.T) {
 			// filtered, while a public update proves the stream is still polling.
 			privateItem.Data["body"] = "updated private body"
 			publicItem.Data["body"] = "updated public body"
+			archivedAsk.Data["body"] = "updated archived subject body"
+			publicNotification.Data["body"] = "updated public notification body"
+			hiddenItem.Data["body"] = "updated hidden subject body"
 			seedStreamPrivacyInbox(t, store, private, privateItem, streamPrivacyInboxItem(private, "new-private-ask", "new private body"))
-			seedStreamPrivacyInbox(t, store, public, publicItem, hiddenItem)
-			want = map[string]string{"public-ask": "updated public body"}
+			seedStreamPrivacyInbox(t, store, public, publicItem, archivedAsk, publicNotification, hiddenItem)
+			want = map[string]string{
+				"public-ask":           "updated public body",
+				"archived-subject-ask": "updated archived subject body",
+				"public-notification":  "updated public notification body",
+			}
 			if role == "owner" {
 				want["private-ask"] = "updated private body"
 				want["new-private-ask"] = "new private body"
@@ -63,17 +82,29 @@ func TestInboxStreamAppliesListVisibilityOnEveryPoll(t *testing.T) {
 			assertPrivacyInboxEvents(t, reader, want)
 			assertPrivacyInboxList(t, env.server.URL, token, want)
 
-			// Visibility can change without reconnecting. An archived subject's
-			// changed payload must disappear while a new visible item arrives.
+			// Open asks survive archive, but ordinary notifications disappear.
+			// Privacy still applies to archived asks on every poll.
 			if _, err := store.ArchiveThread(ctx, owner.ActorID, public); err != nil {
 				t.Fatal(err)
 			}
-			publicItem.Data["body"] = "hidden after archive"
-			seedStreamPrivacyInbox(t, store, public, publicItem, hiddenItem)
+			if _, err := store.ArchiveThread(ctx, owner.ActorID, private); err != nil {
+				t.Fatal(err)
+			}
+			publicItem.Data["body"] = "open ask after archive"
+			privateItem.Data["body"] = "private ask after archive"
+			publicNotification.Data["body"] = "hidden notification after archive"
+			seedStreamPrivacyInbox(t, store, private, privateItem, streamPrivacyInboxItem(private, "new-private-ask", "new private body"))
+			seedStreamPrivacyInbox(t, store, public, publicItem, archivedAsk, publicNotification, hiddenItem)
 			visible := seedStreamPrivacyThread(t, store, owner.ActorID, false)
 			seedStreamPrivacyInbox(t, store, visible, streamPrivacyInboxItem(visible, "visible-after-archive", "still visible"))
-			assertPrivacyInboxEvents(t, reader, map[string]string{"visible-after-archive": "still visible"})
-			delete(want, "public-ask")
+			updates := map[string]string{"public-ask": "open ask after archive", "visible-after-archive": "still visible"}
+			if role == "owner" {
+				updates["private-ask"] = "private ask after archive"
+				want["private-ask"] = "private ask after archive"
+			}
+			assertPrivacyInboxEvents(t, reader, updates)
+			delete(want, "public-notification")
+			want["public-ask"] = "open ask after archive"
 			want["visible-after-archive"] = "still visible"
 			assertPrivacyInboxList(t, env.server.URL, token, want)
 		})
@@ -182,7 +213,7 @@ func openAuthenticatedPrivacyStream(t *testing.T, url, token, cursor string) *ht
 	return resp
 }
 
-func assertPrivacyInboxEvents(t *testing.T, reader <-chan sseEvent, want map[string]string) {
+func assertPrivacyInboxEvents(t *testing.T, reader <-chan sseEvent, want map[string]string, titles ...map[string]string) {
 	t.Helper()
 	seen := map[string]bool{}
 	for range want {
@@ -193,7 +224,11 @@ func assertPrivacyInboxEvents(t *testing.T, reader <-chan sseEvent, want map[str
 		if event.Event != "inbox_item" || !ok || seen[id] || anyString(item["body"]) != body {
 			t.Fatalf("unexpected inbox event: %#v; expected %#v", event, want)
 		}
-		if anyString(item["title"]) != id+" title" || anyString(item["subject_ref"]) == "" || len(stringSliceAny(item["related_refs"])) == 0 {
+		title := id + " title"
+		if len(titles) > 0 {
+			title = titles[0][id]
+		}
+		if anyString(item["title"]) != title || anyString(item["subject_ref"]) == "" || len(stringSliceAny(item["related_refs"])) == 0 {
 			t.Fatalf("authorized inbox payload lost fields: %#v", item)
 		}
 		seen[id] = true

@@ -143,7 +143,8 @@ def static_checks(changed, all_files=False):
     format_files = [p for p in existing if Path(p).suffix in
                     {".md", ".yaml", ".yml", ".json", ".js", ".mjs", ".cjs", ".css", ".svelte", ".ts"}
                     and not p.startswith(("contracts/", "cli/internal/registry/",
-                                          "cli/docs/generated/", "web-ui/src/lib/generated/"))]
+                                          "cli/docs/generated/", "web-ui/src/lib/generated/"))
+                and p != "mcp/docs/tool-coverage.md"]  # Verified byte-for-byte by check-tool-policy below.
     if format_files:
         run("pnpm", "-C", "web-ui", "exec", "prettier", "--check",
             *["../" + p for p in format_files])

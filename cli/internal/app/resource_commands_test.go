@@ -696,7 +696,7 @@ func TestInboxUnknownSubcommandGuidance(t *testing.T) {
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
 	message := anyStringValue(errObj["message"])
-	if !strings.Contains(message, "valid subcommands: list, get, respond, read, stream, tail") {
+	if !strings.Contains(message, "valid subcommands: list, get, summary, respond, read, stream, tail") {
 		t.Fatalf("expected valid-subcommands guidance, got %q", message)
 	}
 	if !strings.Contains(message, "`anx inbox get --id <id-or-alias>`") || !strings.Contains(message, "`anx inbox respond --inbox-item-id <id-or-alias> --response-text <text>`") {

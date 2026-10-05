@@ -40,7 +40,7 @@ func authorizeResourceSelectors(w http.ResponseWriter, r *http.Request) bool {
 	values := []string{}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	switch r.URL.Path {
-	case "/artifacts/attachments", "/docs/search", "/work/capabilities":
+	case "/artifacts/attachments", "/docs/search", "/work/capabilities", "/inbox/summary":
 		parts = nil // Exact service operations have no path resource parameter.
 	}
 	// Only resource positions have selector meaning. Arbitrary query values or

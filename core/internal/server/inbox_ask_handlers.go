@@ -19,6 +19,7 @@ import (
 )
 
 type humanAttentionResponseStore interface {
+	HumanAttentionResponseRequest(context.Context, string) (map[string]any, error)
 	HumanAttentionResponseReplay(context.Context, string, string, string) (map[string]any, error)
 	HumanAttentionResponseClaimed(context.Context, string) (bool, error)
 	AppendHumanAttentionResponse(context.Context, string, string, string, string, string, map[string]any, map[string]any) (map[string]any, bool, error)
@@ -108,10 +109,13 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 	}
 	digest := sha256.Sum256(hashInput)
 	requestHash := hex.EncodeToString(digest[:])
+	if !authorizeInboxResponseAccess(w, r, opts, responseStore, effectiveItemID) {
+		return
+	}
 	if req.IdempotencyKey != "" {
 		replay, replayErr := responseStore.HumanAttentionResponseReplay(r.Context(), actorID, req.IdempotencyKey, requestHash)
 		if replayErr == nil {
-			writeJSON(w, http.StatusCreated, replay)
+			writeAuthorizedInboxResponseReplay(w, r, opts, replay)
 			return
 		}
 		if errors.Is(replayErr, primitives.ErrHumanAttentionIdempotencyConflict) {
@@ -133,7 +137,7 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 			if req.IdempotencyKey != "" {
 				replay, replayErr := responseStore.HumanAttentionResponseReplay(r.Context(), actorID, req.IdempotencyKey, requestHash)
 				if replayErr == nil {
-					writeJSON(w, http.StatusCreated, replay)
+					writeAuthorizedInboxResponseReplay(w, r, opts, replay)
 					return
 				}
 				if errors.Is(replayErr, primitives.ErrHumanAttentionIdempotencyConflict) {
@@ -152,7 +156,7 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 			if req.IdempotencyKey != "" {
 				replay, replayErr := responseStore.HumanAttentionResponseReplay(r.Context(), actorID, req.IdempotencyKey, requestHash)
 				if replayErr == nil {
-					writeJSON(w, http.StatusCreated, replay)
+					writeAuthorizedInboxResponseReplay(w, r, opts, replay)
 					return
 				}
 				if errors.Is(replayErr, primitives.ErrHumanAttentionIdempotencyConflict) {
@@ -176,6 +180,10 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 
 	itemPayload := cloneWorkspaceMap(item.Data)
 	applyInboxContractShape(itemPayload, inboxContractHintFromDerived(item))
+	if !inboxItemAccessible(r, opts, item.ThreadID, itemPayload) {
+		denyPMNotFound(w, "inbox item")
+		return
+	}
 	kind := canonicalHumanAttentionKind(anyString(itemPayload["kind"]))
 	if kind == "" {
 		writeError(w, http.StatusBadRequest, "invalid_request", "inbox item is not a human attention item")
@@ -203,6 +211,14 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 	subjectRef := strings.TrimSpace(anyString(itemPayload["subject_ref"]))
 	relatedRefs, _ := extractStringSlice(itemPayload["related_refs"])
 	relatedRefs = append(relatedRefs, normalizeStringSlice(req.RelatedRefs)...)
+	// Added response evidence will also be disclosed by an idempotent replay.
+	// Check the same merged refs before the initial response can commit.
+	responseAccess := cloneWorkspaceMap(itemPayload)
+	responseAccess["related_refs"] = relatedRefs
+	if !inboxItemAccessible(r, opts, threadID, responseAccess) {
+		denyPMNotFound(w, "inbox item")
+		return
+	}
 	requesterActorID := strings.TrimSpace(anyString(itemPayload["requester_actor_id"]))
 	requesterAgentID := strings.TrimSpace(anyString(itemPayload["requester_agent_id"]))
 	requesterLabel := strings.TrimSpace(anyString(itemPayload["requester_label"]))
@@ -285,6 +301,14 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 	}
 	storedResponse, replayed, err := responseStore.AppendHumanAttentionResponse(r.Context(), actorID, sourceEventID, inboxItemID, req.IdempotencyKey, requestHash, responseEvent, initialNotify)
 	if err != nil {
+		if errors.Is(err, primitives.ErrInvalidAccessDecision) || errors.Is(err, auth.ErrInvalidRequest) || errors.Is(err, auth.ErrAgentNotFound) {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		if errors.Is(err, auth.ErrHumanRequired) {
+			writeError(w, http.StatusForbidden, "human_required", "only active humans can decide access requests")
+			return
+		}
 		if errors.Is(err, primitives.ErrHumanAttentionAlreadyResponded) {
 			writeError(w, http.StatusConflict, "conflict", "human attention request already has a response")
 			return
@@ -297,7 +321,7 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 		return
 	}
 	if replayed {
-		writeJSON(w, http.StatusCreated, storedResponse)
+		writeAuthorizedInboxResponseReplay(w, r, opts, storedResponse)
 		return
 	}
 	responseStored := storedResponse["event"].(map[string]any)
@@ -342,6 +366,52 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 		log.Printf("save human attention response replay: %v", err)
 	}
 	writeJSON(w, http.StatusCreated, response)
+}
+
+// Authorization precedes replay and claim lookups so an inaccessible request
+// also looks absent when it has already been answered or the key conflicts.
+func authorizeInboxResponseAccess(w http.ResponseWriter, r *http.Request, opts handlerOptions, store humanAttentionResponseStore, id string) bool {
+	item, err := resolveInboxItemByVariants(r.Context(), opts.primitiveStore, id)
+	if err == nil {
+		if inboxItemAccessible(r, opts, item.ThreadID, payloadFromDerivedInboxItem(item)) {
+			return true
+		}
+	} else if errors.Is(err, primitives.ErrNotFound) {
+		request, requestErr := store.HumanAttentionResponseRequest(r.Context(), id)
+		if requestErr == nil {
+			requestPayload, ok := request["payload"].(map[string]any)
+			if !ok {
+				denyPMNotFound(w, "inbox item")
+				return false
+			}
+			payload := cloneWorkspaceMap(requestPayload)
+			payload["related_refs"] = append(stringSliceAny(payload["related_refs"]), stringSliceAny(request["refs"])...)
+			if inboxItemAccessible(r, opts, eventThreadID(request), payload) {
+				return true
+			}
+		} else if !errors.Is(requestErr, primitives.ErrNotFound) {
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to authorize inbox item")
+			return false
+		}
+	} else {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to authorize inbox item")
+		return false
+	}
+	denyPMNotFound(w, "inbox item")
+	return false
+}
+
+// A successful response removes the open projection. Replays therefore use
+// the persisted response's original subject/refs, with current authorization,
+// rather than trusting either the replay key or a now-missing open Inbox row.
+func writeAuthorizedInboxResponseReplay(w http.ResponseWriter, r *http.Request, opts handlerOptions, replay map[string]any) {
+	event, _ := replay["event"].(map[string]any)
+	payload, _ := event["payload"].(map[string]any)
+	if event == nil || payload == nil || !inboxItemAccessible(r, opts, eventThreadID(event), payload) {
+		denyPMNotFound(w, "inbox item")
+		return
+	}
+	writeJSON(w, http.StatusCreated, replay)
 }
 
 func resolveInboxItemByVariants(ctx context.Context, store PrimitiveStore, inboxItemID string) (primitives.DerivedInboxItem, error) {

@@ -10,7 +10,7 @@ import (
 )
 
 func TestResourceAccessSelectorsIgnoreNonSelectors(t *testing.T) {
-	for _, path := range []string{"/health?probe=card:private", "/health?thread_id=private", "/docs/search?q=card:private", "/work/capabilities?probe=card:private", "/artifacts/attachments?probe=card:private"} {
+	for _, path := range []string{"/inbox/summary", "/health?probe=card:private", "/health?thread_id=private", "/docs/search?q=card:private", "/work/capabilities?probe=card:private", "/artifacts/attachments?probe=card:private"} {
 		r := httptest.NewRequest("GET", path, nil)
 		check := func(_ context.Context, values any) error {
 			raw, _ := json.Marshal(values)

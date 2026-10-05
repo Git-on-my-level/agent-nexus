@@ -971,40 +971,62 @@ var migrations = []migration{
 		_, err = tx.ExecContext(ctx, `CREATE INDEX idx_events_overview_answers ON events(type,ts,id)`)
 		return err
 	}},
-	{Version: 54, Statements: []string{
-		`CREATE TABLE resource_access_tombstones(kind TEXT NOT NULL,id TEXT NOT NULL,ref TEXT NOT NULL,owner TEXT NOT NULL,PRIMARY KEY(kind,id,ref,owner));`,
-		`CREATE TABLE resource_access_edges(source_kind TEXT NOT NULL,source_id TEXT NOT NULL,target_ref TEXT NOT NULL COLLATE NOCASE,PRIMARY KEY(source_kind,source_id,target_ref));`,
-		`CREATE INDEX idx_resource_access_edges_target ON resource_access_edges(target_ref,source_kind,source_id);`,
-	}, AfterApply: func(ctx context.Context, tx *sql.Tx) error {
-		if err := installResourceAccessEdges(ctx, tx); err != nil {
+	{Version: 54, AfterApply: installResourceAccess},
+	// Main and the privacy branch both used 54. Version 55 reconciles either
+	// deployed schema without changing existing data or migration records.
+	{Version: 55, Statements: []string{
+		`CREATE TABLE IF NOT EXISTS access_requests (
+            id TEXT PRIMARY KEY, principal_id TEXT NOT NULL REFERENCES agents(id),
+            actor_id TEXT NOT NULL, username TEXT NOT NULL, grant_name TEXT NOT NULL,
+            reason TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+            created_at TEXT NOT NULL, decided_at TEXT NOT NULL DEFAULT '', decided_by TEXT NOT NULL DEFAULT '',
+            request_event_id TEXT NOT NULL UNIQUE REFERENCES events(id), inbox_item_id TEXT NOT NULL UNIQUE,
+            UNIQUE(principal_id,grant_name), CHECK(status IN ('pending','approved','denied'))
+        );`,
+		`CREATE INDEX IF NOT EXISTS access_requests_pending ON access_requests(status,created_at,id);`,
+		`CREATE INDEX IF NOT EXISTS host_enrollments_pending_expiry ON host_enrollments(status,expires_at);`,
+	}, AfterApply: installResourceAccess},
+}
+
+func installResourceAccess(ctx context.Context, tx *sql.Tx) error {
+	for _, statement := range []string{
+		`CREATE TABLE IF NOT EXISTS resource_access_tombstones(kind TEXT NOT NULL,id TEXT NOT NULL,ref TEXT NOT NULL,owner TEXT NOT NULL,PRIMARY KEY(kind,id,ref,owner));`,
+		`CREATE TABLE IF NOT EXISTS resource_access_edges(source_kind TEXT NOT NULL,source_id TEXT NOT NULL,target_ref TEXT NOT NULL COLLATE NOCASE,PRIMARY KEY(source_kind,source_id,target_ref));`,
+		`CREATE INDEX IF NOT EXISTS idx_resource_access_edges_target ON resource_access_edges(target_ref,source_kind,source_id);`,
+	} {
+		if _, err := tx.ExecContext(ctx, statement); err != nil {
 			return err
 		}
-		// Some legacy migration tests intentionally have only a partial schema.
-		for table, statement := range map[string]string{
-			"ref_edges":           `CREATE INDEX idx_ref_edges_access_target ON ref_edges(target_type,target_id COLLATE NOCASE,edge_type)`,
-			"cards":               `CREATE INDEX idx_cards_access_thread ON cards(thread_id)`,
-			"derived_inbox_items": `CREATE INDEX idx_inbox_access_card ON derived_inbox_items(source_card_id)`,
-			"work_metadata":       `CREATE INDEX idx_work_access_project ON work_metadata(` + resourceaccess.ReferenceSQL("json_extract(metadata_json,'$.project_ref')") + ` COLLATE NOCASE)`,
-		} {
-			exists, err := sqliteTableExists(ctx, tx, table)
-			if err != nil {
-				return err
-			}
-			if !exists {
-				continue
-			}
-			if _, err = tx.ExecContext(ctx, statement); err != nil {
-				return err
-			}
-		}
-		if exists, err := sqliteTableExists(ctx, tx, "derived_inbox_items"); err != nil {
-			return err
-		} else if exists {
-			_, err = tx.ExecContext(ctx, `CREATE INDEX idx_inbox_access_event ON derived_inbox_items(source_event_id)`)
+	}
+
+	if err := installResourceAccessEdges(ctx, tx); err != nil {
+		return err
+	}
+	// Some legacy migration tests intentionally have only a partial schema.
+	for table, statement := range map[string]string{
+		"ref_edges":           `CREATE INDEX IF NOT EXISTS idx_ref_edges_access_target ON ref_edges(target_type,target_id COLLATE NOCASE,edge_type)`,
+		"cards":               `CREATE INDEX IF NOT EXISTS idx_cards_access_thread ON cards(thread_id)`,
+		"derived_inbox_items": `CREATE INDEX IF NOT EXISTS idx_inbox_access_card ON derived_inbox_items(source_card_id)`,
+		"work_metadata":       `CREATE INDEX IF NOT EXISTS idx_work_access_project ON work_metadata(` + resourceaccess.ReferenceSQL("json_extract(metadata_json,'$.project_ref')") + ` COLLATE NOCASE)`,
+	} {
+		exists, err := sqliteTableExists(ctx, tx, table)
+		if err != nil {
 			return err
 		}
-		return nil
-	}},
+		if !exists {
+			continue
+		}
+		if _, err = tx.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	if exists, err := sqliteTableExists(ctx, tx, "derived_inbox_items"); err != nil {
+		return err
+	} else if exists {
+		_, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_inbox_access_event ON derived_inbox_items(source_event_id)`)
+		return err
+	}
+	return nil
 }
 
 // Index canonical JSON references in the same statement as their records. This
@@ -1044,9 +1066,9 @@ func installResourceAccessEdges(ctx context.Context, tx *sql.Tx) error {
 		clear := `DELETE FROM resource_access_edges WHERE source_kind='` + source.kind + `' AND source_id=OLD.` + source.id + `;`
 		for _, statement := range []string{
 			insert("r.", source.table+" r, "),
-			`CREATE TRIGGER access_` + source.table + `_insert AFTER INSERT ON ` + source.table + ` BEGIN ` + insert("NEW.", "") + ` END`,
-			`CREATE TRIGGER access_` + source.table + `_update AFTER UPDATE OF ` + strings.Join(append([]string{source.id}, source.columns...), ",") + ` ON ` + source.table + ` BEGIN ` + clear + insert("NEW.", "") + ` END`,
-			`CREATE TRIGGER access_` + source.table + `_delete AFTER DELETE ON ` + source.table + ` BEGIN ` + clear + ` END`,
+			`CREATE TRIGGER IF NOT EXISTS access_` + source.table + `_insert AFTER INSERT ON ` + source.table + ` BEGIN ` + insert("NEW.", "") + ` END`,
+			`CREATE TRIGGER IF NOT EXISTS access_` + source.table + `_update AFTER UPDATE OF ` + strings.Join(append([]string{source.id}, source.columns...), ",") + ` ON ` + source.table + ` BEGIN ` + clear + insert("NEW.", "") + ` END`,
+			`CREATE TRIGGER IF NOT EXISTS access_` + source.table + `_delete AFTER DELETE ON ` + source.table + ` BEGIN ` + clear + ` END`,
 		} {
 			if _, err := tx.ExecContext(ctx, statement); err != nil {
 				return fmt.Errorf("index %s authorization: %w", source.table, err)

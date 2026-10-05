@@ -148,6 +148,21 @@ commands:
   "artifacts.unarchive":
     classification: exposed_write
     reason: "ordinary reversible artifact lifecycle write"
+  "auth.access-requests.approve":
+    classification: unsupported_interactive
+    reason: "human-only privileged grant approval requires human judgment"
+  "auth.access-requests.deny":
+    classification: unsupported_interactive
+    reason: "human-only privileged grant denial requires human judgment"
+  "auth.access-requests.list":
+    classification: unsupported_interactive
+    reason: "human-only pending access inventory"
+  "auth.access-requests.request":
+    classification: exposed_write
+    reason: "self-scoped privileged grant request; approval remains human-only"
+  "auth.access-requests.summary":
+    classification: unsupported_interactive
+    reason: "human-only pending access inventory count"
   "auth.admins.grant":
     classification: gated_admin
     reason: "delegating auth-admin requires a human principal"
@@ -424,6 +439,9 @@ commands:
   "inbox.stream":
     classification: unsupported_streaming
     reason: "SSE stream needs a bounded read adapter before MCP exposure"
+  "inbox.summary":
+    classification: exposed_read
+    reason: "bounded workspace-local open ask summary"
   "meta.commands.get":
     classification: exposed_read
     reason: "command metadata read"

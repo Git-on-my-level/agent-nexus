@@ -413,6 +413,11 @@ func SupportsIdempotencyKey(id, method string) bool {
 	if method == "GET" || method == "HEAD" {
 		return false
 	}
+	// Access requests are naturally idempotent per principal/grant, and the
+	// HTTP body accepts only grant and reason, never an injected request_key.
+	if id == "auth.access-requests.request" {
+		return false
+	}
 	if strings.HasPrefix(id, "work.") || strings.HasPrefix(id, "pm.") {
 		switch id {
 		case "work.observations.submit", "pm.conversations.create", "pm.conversations.messages.create", "pm.decisions.create", "pm.turns.decisions.create":

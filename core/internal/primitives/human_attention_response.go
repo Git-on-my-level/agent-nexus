@@ -12,6 +12,21 @@ import (
 var ErrHumanAttentionAlreadyResponded = errors.New("human_attention_already_responded")
 var ErrHumanAttentionIdempotencyConflict = errors.New("human_attention_idempotency_conflict")
 
+// HumanAttentionResponseRequest preserves authorization of an answered Inbox
+// item after its open projection has been removed. The claim is authoritative
+// for the original request; callers must apply current resource access to it.
+func (s *Store) HumanAttentionResponseRequest(ctx context.Context, inboxItemID string) (map[string]any, error) {
+	var requestEventID string
+	err := s.db.QueryRowContext(ctx, `SELECT request_event_id FROM human_attention_response_claims WHERE inbox_item_id=?`, inboxItemID).Scan(&requestEventID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return s.GetEvent(ctx, requestEventID)
+}
+
 func (s *Store) HumanAttentionResponseClaimed(ctx context.Context, inboxItemID string) (bool, error) {
 	var count int
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM human_attention_response_claims WHERE inbox_item_id=?`, inboxItemID).Scan(&count)
@@ -109,6 +124,10 @@ func (s *Store) AppendHumanAttentionResponse(ctx context.Context, actorID, sourc
 			}
 		}
 		return nil, false, ErrHumanAttentionAlreadyResponded
+	}
+	payload, _ := event["payload"].(map[string]any)
+	if err := s.applyAccessDecisionTx(ctx, tx, sourceEventID, actorID, anyStringValue(payload["outcome"]), anyStringValue(prepared.Body["ts"])); err != nil {
+		return nil, false, err
 	}
 	publicNotify := cloneMap(initialNotify)
 	delete(publicNotify, "quiet_window_ns")

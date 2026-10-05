@@ -184,7 +184,10 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 		t.Fatal(err)
 	}
 	env.server.Config.Handler = NewHandler("0.2.2", WithAuthStore(env.authStore), WithActorRegistry(env.registry), WithPrimitiveStore(store), WithSchemaContract(contract), WithRunStore(commandcenter.NewStore(db, commandcenter.SQLIdentities{DB: db})), WithPMRuntime(runtime))
-	replacements := strings.NewReplacer("{host_id}", rosterAgent.Host.ID, "{run_id}", "matrix-private-run", "{agent_id}", agent.AgentID, "{conversation_id}", conversation.ID, "{decision_id}", "matrix-private-decision", "{action_id}", "matrix-private-action", "{turn_id}", "matrix-private-turn", "{document_id}", anyString(document["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{comment_id}", anyString(event["id"]), "{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{artifact_id}", anyString(artifact["id"]), "{event_id}", anyString(event["id"]), "{inbox_id}", askID, "{revision_id}", anyString(card.Card["head_revision_id"]))
+	if _, err = db.ExecContext(ctx, `INSERT INTO access_requests(id,principal_id,actor_id,username,grant_name,reason,created_at,request_event_id,inbox_item_id) VALUES('matrix-private-access',?,?,?,'auth-admin','Confidential access reason','now',?,'matrix-access-inbox')`, agent.AgentID, agent.ActorID, "matrix.agent", event["id"]); err != nil {
+		t.Fatal(err)
+	}
+	replacements := strings.NewReplacer("{request_id}", "matrix-private-access", "{host_id}", rosterAgent.Host.ID, "{run_id}", "matrix-private-run", "{agent_id}", agent.AgentID, "{conversation_id}", conversation.ID, "{decision_id}", "matrix-private-decision", "{action_id}", "matrix-private-action", "{turn_id}", "matrix-private-turn", "{document_id}", anyString(document["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{comment_id}", anyString(event["id"]), "{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{artifact_id}", anyString(artifact["id"]), "{event_id}", anyString(event["id"]), "{inbox_id}", askID, "{revision_id}", anyString(card.Card["head_revision_id"]))
 	hidden := []string{boardID, cardID, threadID, boardThread, anyString(event["id"]), anyString(artifact["id"]), askID, conversation.ID, "matrix-private-decision", "matrix-private-action", "matrix-private-turn", "matrix-private-run", "Confidential"}
 	snapshot := func() string {
 		var v string
@@ -280,10 +283,10 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 							t.Errorf("exempt route failed: %d %s", resp.StatusCode, out)
 						}
 					} else if p.Policy == "collection" || p.Policy == "maintenance" {
-						if resp.StatusCode != 200 && !(resp.StatusCode == 403 && (strings.HasPrefix(p.Path, "/agent-") || p.Path == "/agents/me" || p.Path == "/pm/bindings" || p.Path == "/hosts/{host_id}")) {
+						if resp.StatusCode != 200 && !(resp.StatusCode == 403 && (strings.HasPrefix(p.Path, "/agent-") || p.Path == "/agents/me" || p.Path == "/pm/bindings" || p.Path == "/hosts/{host_id}" || strings.HasPrefix(p.Path, "/auth/access"))) {
 							t.Errorf("collection status %d: %s", resp.StatusCode, out)
 						}
-					} else if resp.StatusCode != 404 && resp.StatusCode != 403 {
+					} else if resp.StatusCode != 404 && resp.StatusCode != 403 && !(resp.StatusCode == 401 && strings.HasPrefix(p.Path, "/agent-wakeups/")) {
 						t.Errorf("private resource status %d: %s", resp.StatusCode, out)
 					}
 					if p.Path == "/stream/events" && !bytes.Contains(out, []byte("Visible stream control")) {
@@ -336,6 +339,8 @@ func privacyWritePayload(t *testing.T, path, actor, board, card, thread, doc, ev
 	t.Helper()
 	refs := []string{"card:" + card}
 	switch path {
+	case "/auth/access-requests":
+		return map[string]any{"grant": "auth-admin", "reason": "card:" + card}
 	case "/boards":
 		return map[string]any{"actor_id": actor, "board": map[string]any{"title": "attempt", "refs": refs}}
 	case "/cards":

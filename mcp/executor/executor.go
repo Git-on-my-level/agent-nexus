@@ -309,8 +309,15 @@ func validateQuery(tool catalog.Tool, args map[string]any, maxListLimit int, out
 			if err != nil {
 				return errors.New("query.limit must be an integer")
 			}
-			if limit < 1 || limit > maxListLimit {
-				return fmt.Errorf("query.limit must be between 1 and %d", maxListLimit)
+			minLimit, maxLimit := 1, maxListLimit
+			if tool.Metadata.CommandID == "inbox.summary" {
+				minLimit = 0
+				if maxLimit > 50 {
+					maxLimit = 50
+				}
+			}
+			if limit < minLimit || limit > maxLimit {
+				return fmt.Errorf("query.limit must be between %d and %d", minLimit, maxLimit)
 			}
 			out.Query[key] = limit
 			continue
