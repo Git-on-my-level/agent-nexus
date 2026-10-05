@@ -767,11 +767,10 @@
             >
               Final response
             </div>
-            <p
-              class="mt-1 whitespace-pre-wrap text-meta text-fg [overflow-wrap:anywhere]"
-            >
-              {item.response_text ?? ""}
-            </p>
+            <MarkdownRenderer
+              source={item.response_text ?? ""}
+              class="mt-1 text-meta text-fg [overflow-wrap:anywhere]"
+            />
           </div>
           <div class="flex flex-wrap gap-2 pt-1">
             {#if completedTimelineHref()}

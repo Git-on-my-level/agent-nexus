@@ -1,4 +1,5 @@
 <script>
+  import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import { proposalVoidReason } from "$lib/inboxMailbox.js";
   import ReceiptSignal from "./ReceiptSignal.svelte";
@@ -237,11 +238,10 @@
       {/if}
       {#if proposal}
         <p class="ui-label mt-4">{proposer}</p>
-        <p
-          class="whitespace-pre-wrap break-words text-meta leading-relaxed text-fg"
-        >
-          {proposal}
-        </p>
+        <MarkdownRenderer
+          source={proposal}
+          class="text-meta leading-relaxed text-fg [overflow-wrap:anywhere]"
+        />
       {:else if fields.length}
         <p class="ui-label mt-4">{proposer}</p>
         <dl class="space-y-1 text-meta">
@@ -377,9 +377,14 @@
             ? "Declined"
             : "Approved"}
         </h3>
-        <p class="mt-2 whitespace-pre-wrap break-words text-meta text-fg-muted">
-          {selected.answer || "No note recorded"}
-        </p>
+        {#if selected.answer}
+          <MarkdownRenderer
+            source={selected.answer}
+            class="mt-2 text-meta text-fg-muted [overflow-wrap:anywhere]"
+          />
+        {:else}
+          <p class="mt-2 text-meta text-fg-muted">No note recorded</p>
+        {/if}
         {#if selected.answered_by}
           <p class="mt-2 text-micro text-fg-subtle [overflow-wrap:anywhere]">
             By {actorLabel(selected.answered_by)}

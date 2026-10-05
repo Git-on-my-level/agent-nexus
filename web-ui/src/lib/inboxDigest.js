@@ -1,3 +1,5 @@
+import { markdownExcerpt } from "$lib/markdown.js";
+
 /**
  * Operator-language digests for Watching update rows.
  *
@@ -25,6 +27,14 @@ const ASK_VERBS = {
 
 function text(value) {
   return String(value ?? "").trim();
+}
+
+/**
+ * A message body as one line of prose. Comments are authored markdown, so the
+ * raw source leaks syntax into a digest row (`**Blocked:** waiting…`).
+ */
+function prose(value) {
+  return markdownExcerpt(text(value), { limit: 240 });
 }
 
 function refsOf(event) {
@@ -145,7 +155,7 @@ export function describeUpdateEvent(event, { titleFor = () => "" } = {}) {
       plural: "left {n} comments",
       objectRef: "",
       objectTitle: "",
-      excerpt: text(payload.text),
+      excerpt: prose(payload.text),
     };
   }
   if (type.startsWith("document_")) {

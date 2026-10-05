@@ -2,6 +2,7 @@
   import { topicDetailStore } from "$lib/topicDetailStore";
   import Button from "$lib/components/Button.svelte";
   import { formatShortcut } from "$lib/keyboardHints.js";
+  import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import ProvenanceBadge from "$lib/components/ProvenanceBadge.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import { buildTopicPatch } from "$lib/topicPatch";
@@ -135,11 +136,10 @@
             <div class="px-4 py-3">
               <p class="text-micro text-fg-muted">Description</p>
               <!-- Summaries quote ids and URLs that have no break opportunity. -->
-              <p
-                class="mt-0.5 whitespace-pre-wrap text-meta text-fg [overflow-wrap:anywhere]"
-              >
-                {summary}
-              </p>
+              <MarkdownRenderer
+                source={summary}
+                class="mt-0.5 text-meta text-fg [overflow-wrap:anywhere]"
+              />
             </div>
           {/if}
         {/if}
