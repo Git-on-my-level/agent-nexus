@@ -139,8 +139,9 @@ test("headless report preview writes a PNG from injected live observations", asy
   expect(png.length).toBeGreaterThan(500);
 });
 
-test("sandbox launch failure returns a machine-readable text fallback", async (fixtures, testInfo) => {
-  void fixtures;
+// The Playwright test API requires fixture destructuring, even when none are needed.
+// eslint-disable-next-line no-empty-pattern
+test("sandbox launch failure returns a machine-readable text fallback", async ({}, testInfo) => {
   const reportPath = testInfo.outputPath("fallback-report.json");
   const observationsPath = testInfo.outputPath("fallback-observations.json");
   const outputPath = testInfo.outputPath("fallback.png");
