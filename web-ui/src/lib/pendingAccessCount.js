@@ -238,6 +238,17 @@ export function startPendingAccessCount(workspace, options = {}) {
   };
 }
 
+/**
+ * Forget the number entirely.
+ *
+ * A count read by one principal must not survive into another's session: it
+ * was computed from an inventory the next reader may not be allowed to see,
+ * and nothing would ever refresh it once polling stops.
+ */
+export function clearPendingAccessCount() {
+  pendingAccessCount.set({ workspace: "", count: null, forbidden: false });
+}
+
 /** Test hook. */
 export function resetPendingAccessCount() {
   controller?.stop();

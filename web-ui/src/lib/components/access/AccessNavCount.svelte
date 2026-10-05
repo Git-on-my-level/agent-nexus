@@ -1,5 +1,6 @@
 <script>
   import {
+    clearPendingAccessCount,
     pendingAccessCount,
     pendingAccessLabel,
     startPendingAccessCount,
@@ -12,6 +13,11 @@
    * waiting has no badge, not a grey "0". Neither does a reader who may not
    * decide access — they could never act on it.
    *
+   * `enabled` gates the rendering, not just the polling. It goes false when
+   * the session stops being a person's, and the number behind it was read
+   * from an inventory that reader may no longer see; left on screen it would
+   * never be refreshed or corrected, so it is cleared rather than frozen.
+   *
    * On the trigger the number is decorative: the button carries an explicit
    * `aria-label`, which suppresses any name a descendant would contribute, so
    * the layout folds the count into that label instead (`pendingAccessLabel`).
@@ -19,12 +25,15 @@
   let { workspace = "", enabled = false, variant = "sidebar" } = $props();
 
   $effect(() => {
-    if (!enabled || !workspace) return;
+    if (!enabled || !workspace) {
+      clearPendingAccessCount();
+      return;
+    }
     return startPendingAccessCount(workspace);
   });
 
   let snapshot = $derived(
-    $pendingAccessCount.workspace === workspace
+    enabled && $pendingAccessCount.workspace === workspace
       ? $pendingAccessCount
       : { count: null, forbidden: false },
   );

@@ -254,7 +254,8 @@
       hasHumanAuthSession,
   );
   let pendingAccess = $derived(
-    $pendingAccessCount.workspace === activeWorkspaceSlug &&
+    accessBadgeEnabled &&
+      $pendingAccessCount.workspace === activeWorkspaceSlug &&
       !$pendingAccessCount.forbidden
       ? ($pendingAccessCount.count ?? 0)
       : 0,

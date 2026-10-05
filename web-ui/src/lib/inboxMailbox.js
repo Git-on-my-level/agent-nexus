@@ -1,3 +1,4 @@
+import { accessRequestFromInboxItem } from "$lib/accessGrant.js";
 import { isHumanNextActor } from "./humanActors.js";
 import { updateDigest } from "./inboxDigest.js";
 import {
@@ -562,6 +563,9 @@ export function buildInboxRows({
             .map((value) => String(value ?? "").trim())
             .filter(Boolean)
         : [],
+      // Set only on an agent's request for a grant. The respond panel offers
+      // the two decisions core accepts on those, and nothing else.
+      access: accessRequestFromInboxItem(item),
       item,
     });
   }

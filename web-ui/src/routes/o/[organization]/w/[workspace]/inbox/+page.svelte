@@ -1361,6 +1361,7 @@
                 {#if needsResponse}
                   <InboxRespondPanel
                     kind={selected.category}
+                    access={selected.access}
                     proposals={selected.responseProposals}
                     bind:draft={reply}
                     {chosen}
@@ -1372,7 +1373,9 @@
                           ? text
                           : "",
                       })}
-                    onAcknowledge={() => acknowledgeInbox(selected)}
+                    onAcknowledge={selected.access
+                      ? null
+                      : () => acknowledgeInbox(selected)}
                   >
                     {#snippet after()}
                       <a

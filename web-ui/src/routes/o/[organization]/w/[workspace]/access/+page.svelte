@@ -13,6 +13,7 @@
   import { describeAuthAuditEvent } from "$lib/authAuditModel.js";
   import { authenticatedAgent } from "$lib/authSession";
   import { coreClient } from "$lib/coreClient";
+  import { createDecisionEpoch } from "$lib/decisionEpoch.js";
   import { isAdministrationRefusal } from "$lib/coreAuthErrors.js";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
   import {
@@ -276,10 +277,8 @@
     );
   }
 
-  // A read that started before a decision carries pre-decision rows. Applying
-  // it afterwards puts the row the reader just decided back on the page, with
-  // its controls live, under a notice saying it is done.
-  let decideEpoch = 0;
+  // Reads that overlap a decision carry pre-decision rows; see decisionEpoch.
+  const decisions = createDecisionEpoch();
 
   /**
    * Both lists in the "Waiting for you" section, from one reader.
@@ -290,12 +289,12 @@
    * failed, rather than reporting an empty section it cannot vouch for.
    */
   async function loadPending() {
-    const epoch = decideEpoch;
+    const epoch = decisions.current();
     const [pendingResult, requestsResult] = await Promise.allSettled([
       coreClient.listPendingHostEnrollments(),
       coreClient.listAccessRequests(),
     ]);
-    if (epoch !== decideEpoch) return;
+    if (decisions.isStale(epoch)) return;
     let changed = false;
     if (pendingResult.status === "fulfilled") {
       const next = pendingResult.value?.enrollments ?? [];
@@ -321,40 +320,42 @@
   async function decideAccessRequest(request, action) {
     requestBusy = { ...requestBusy, [request.id]: action };
     requestErrors = { ...requestErrors, [request.id]: "" };
-    decideEpoch += 1;
-    try {
-      if (action === "approve") {
-        await coreClient.approveAccessRequest(request.id);
-      } else {
-        await coreClient.denyAccessRequest(request.id);
-      }
-      accessRequests = accessRequests.filter(
-        (entry) => entry.id !== request.id,
-      );
-      publishPending();
-      enrollmentNotice =
-        action === "approve"
-          ? `${requestName(request)} can now administer access, and is listed under Administrators.`
-          : `Denied ${requestName(request)}. Its access is unchanged.`;
-    } catch (error) {
-      requestErrors = {
-        ...requestErrors,
-        [request.id]: message(
-          error,
+    await decisions.during(async () => {
+      try {
+        if (action === "approve") {
+          await coreClient.approveAccessRequest(request.id);
+        } else {
+          await coreClient.denyAccessRequest(request.id);
+        }
+        accessRequests = accessRequests.filter(
+          (entry) => entry.id !== request.id,
+        );
+        publishPending();
+        enrollmentNotice =
           action === "approve"
-            ? "The request was not approved."
-            : "The request was not denied.",
-        ),
-      };
-    } finally {
-      requestBusy = Object.fromEntries(
-        Object.entries(requestBusy).filter(([id]) => id !== request.id),
-      );
-      // Re-read either way. A decision that reported failure may still have
-      // landed (core grants and projects in separate steps), and a reader
-      // must not be told the grant failed while the agent holds it.
-      await Promise.all([loadPeople(), loadPending()]);
-    }
+            ? `${requestName(request)} can now administer access, and is listed under Administrators.`
+            : `Denied ${requestName(request)}. Its access is unchanged.`;
+      } catch (error) {
+        requestErrors = {
+          ...requestErrors,
+          [request.id]: message(
+            error,
+            action === "approve"
+              ? "The request was not approved."
+              : "The request was not denied.",
+          ),
+        };
+      } finally {
+        requestBusy = Object.fromEntries(
+          Object.entries(requestBusy).filter(([id]) => id !== request.id),
+        );
+      }
+    });
+    // Re-read either way, after the epoch has settled so this read is kept.
+    // A decision that reported failure may still have landed (core grants and
+    // projects in separate steps), and a reader must not be told the grant
+    // failed while the agent holds it.
+    await Promise.all([loadPeople(), loadPending()]);
   }
 
   function requestName(request) {
@@ -369,37 +370,38 @@
   async function decideEnrollment(enrollment, action) {
     enrollmentBusy = { ...enrollmentBusy, [enrollment.id]: action };
     enrollmentErrors = { ...enrollmentErrors, [enrollment.id]: "" };
-    decideEpoch += 1;
-    try {
-      if (action === "approve") {
-        await coreClient.approveHostEnrollment(enrollment.id);
-      } else {
-        await coreClient.denyHostEnrollment(enrollment.id);
-      }
-      pending = pending.filter((entry) => entry.id !== enrollment.id);
-      publishPending();
-      enrollmentNotice =
-        action === "approve"
-          ? `Approved ${enrollment.requested_slug}. It appears under Hosts once the machine finishes enrolling.`
-          : `Denied ${enrollment.requested_slug}.`;
-    } catch (error) {
-      enrollmentErrors = {
-        ...enrollmentErrors,
-        [enrollment.id]: message(
-          error,
+    await decisions.during(async () => {
+      try {
+        if (action === "approve") {
+          await coreClient.approveHostEnrollment(enrollment.id);
+        } else {
+          await coreClient.denyHostEnrollment(enrollment.id);
+        }
+        pending = pending.filter((entry) => entry.id !== enrollment.id);
+        publishPending();
+        enrollmentNotice =
           action === "approve"
-            ? "The request was not approved."
-            : "The request was not denied.",
-        ),
-      };
-    } finally {
-      enrollmentBusy = Object.fromEntries(
-        Object.entries(enrollmentBusy).filter(([id]) => id !== enrollment.id),
-      );
-      // Re-read either way: a decision that reported failure may still have
-      // landed, and the next poll would otherwise be the first to say so.
-      await Promise.all([loadHosts(), loadPeople(), loadPending()]);
-    }
+            ? `Approved ${enrollment.requested_slug}. It appears under Hosts once the machine finishes enrolling.`
+            : `Denied ${enrollment.requested_slug}.`;
+      } catch (error) {
+        enrollmentErrors = {
+          ...enrollmentErrors,
+          [enrollment.id]: message(
+            error,
+            action === "approve"
+              ? "The request was not approved."
+              : "The request was not denied.",
+          ),
+        };
+      } finally {
+        enrollmentBusy = Object.fromEntries(
+          Object.entries(enrollmentBusy).filter(([id]) => id !== enrollment.id),
+        );
+      }
+    });
+    // Re-read either way, after the epoch has settled so this read is kept: a
+    // decision that reported failure may still have landed.
+    await Promise.all([loadHosts(), loadPeople(), loadPending()]);
   }
 
   async function saveExclusions(host, names) {

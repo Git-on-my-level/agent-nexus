@@ -1,6 +1,7 @@
 <script>
   import { tick } from "svelte";
 
+  import { describeGrantAuthority } from "$lib/accessGrant.js";
   import Button from "$lib/components/Button.svelte";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
   import { formatWait } from "$lib/inboxMailbox.js";
@@ -103,20 +104,9 @@
       tabindex="-1"
       bind:this={confirmEl}
     >
+      <!-- Same words as the Inbox review of the same request. -->
       <p class="min-w-0 flex-1 text-micro text-fg-muted">
-        {#if isAuthAdmin}
-          {who} will be able to decide host enrollments, manage enrollment tokens,
-          revoke other hosts, and read inventory and audit. Principal and human invitation
-          revocation still require a person.
-          {#if hostSlug}
-            Granting this agent trusts every process that can read the shared
-            key on {hostSlug} and request this agent name.
-          {/if}
-          This grant is audited.
-        {:else}
-          {who} will be granted {grant || "this authority"}. This grant is
-          audited.
-        {/if}
+        {describeGrantAuthority({ who, grant, hostSlug })}
       </p>
       <div class="flex shrink-0 gap-2">
         <Button

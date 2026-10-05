@@ -11,7 +11,11 @@
     principalRegistry,
     selectedActorId,
   } from "$lib/actorSession";
-  import { authenticatedAgent, logoutAuthSession } from "$lib/authSession";
+  import {
+    authenticatedAgent,
+    isHumanWorkspacePrincipal,
+    logoutAuthSession,
+  } from "$lib/authSession";
   import {
     hostedSession,
     loadHostedSession,
@@ -141,7 +145,10 @@
             </svg>
             <span class="flex-1">{item.label}</span>
             {#if item.count === "access-pending"}
-              <AccessNavCount workspace={workspaceSlug} enabled />
+              <AccessNavCount
+                workspace={workspaceSlug}
+                enabled={isHumanWorkspacePrincipal($authenticatedAgent)}
+              />
             {/if}
             {#if item.hint}
               <span class="hidden text-micro text-fg-muted sm:inline"
