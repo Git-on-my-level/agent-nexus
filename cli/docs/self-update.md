@@ -14,7 +14,15 @@ anx update policy off
 ANX_UPDATE_POLICY=off anx work start card:example
 ```
 
-The default is `auto`. The first successful coordination write per UTC day starts
+The default is `auto`. A managed install that receives `cli_outdated` on HTTP 426
+runs this same verified update immediately, then retries the original command
+once. A command that already read stdin, or that read a non-regular input such as
+`/dev/stdin` or a FIFO, or that already wrote output, prints
+`anx update --version <recommended>` instead of retrying. A `cli_outdated` body
+on any other HTTP status does not update or retry. Policy `notify` or `off`,
+and unmanaged installs, print the same command instead of replacing the binary.
+Separately,
+the first successful coordination write per UTC day starts
 a detached worker with a two-minute deadline. The foreground command never waits
 for release networking, verification, replacement, or skill synchronization. A
 per-install atomic daily claim prevents simultaneous commands and separate
@@ -140,17 +148,17 @@ Compared the installed `agentctl help update`, `bootstrap`, `doctor`, `recent`,
 `schema`, `run`, and `update status` contracts with ANX's runtime help catalog,
 output contract, registry, mutation parsers, doctor, and managed skill code.
 
-| Surface | agentctl contract | ANX finding | Change / disposition |
-| --- | --- | --- | --- |
-| Release policy | auto/notify/off, daily invocation worker, managed installs, observed vs receipt, rollback | Only manual checksum updater | Implemented in this PR; old installs need one installer rerun |
-| Help catalog / side effects | Machine-readable topics and `side_effect_class` | Generated API and local helper help already classify effects; JSON root help contained only prose | Add offline topic catalog and topic side-effect class to JSON help; retain text projection |
-| JSON next actions | Runnable argv, mutation class, preconditions | Envelope v2 already has typed argv/mutates/class and bounded result-state actions | Add concrete update/status/skills actions; generic action preconditions need a shared output-contract decision |
-| Structured error repairs | Stable code, retryability, exit code, typed repair actions | `deriveErrorActions` and `anx_cli_recovery` already cover auth, usage, concurrency, timeout, outdated clients | Add update and skills-failure repairs; broad repair completeness is a separate audit |
-| Idempotency / request keys | Caller-preallocated execution identity; retry the same identity | Server-backed request keys exist on batch/card/domain writes, sessions use sequence; not every write has a replay key | Do not invent CLI-only deduplication; universal write idempotency requires core/contracts design |
-| Recent / history discovery | Host-local paginated journal, state/liveness filters, no prompt/result reads | ANX has `runs list`, session/work queries, document/card history, domain messages, event timeline; no local invocation journal | Different authority/scope; discuss a composed recent-work read before adding local command history |
-| Doctor depth | Bootstrap/config/journal/supervisor and live adapter capability probes | ANX already checks workspace, enrollment/key permissions, identity, core readiness, CLI/core handshake and skill state | Add offline updater health; adapter execution probes belong to agentctl/bridge rather than core CLI |
-| Schema discovery | Normative schema files via `schema list` | Embedded generated metadata, body schemas in command help, `debug meta commands`, report schema | Existing API-input discovery; generic envelope-schema export/versioning needs agreement |
-| Skills / bootstrap | Detect harnesses, ownership-aware refresh/adopt, instruction pointers | ANX already has harness detection, digest ownership, sync/status/adopt, PM preferences and daily skill refresh | Run new binary's sync after update; global instruction-pointer management is a separate policy decision |
+| Surface                     | agentctl contract                                                                         | ANX finding                                                                                                                    | Change / disposition                                                                                           |
+| --------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Release policy              | auto/notify/off, daily invocation worker, managed installs, observed vs receipt, rollback | Only manual checksum updater                                                                                                   | Implemented in this PR; old installs need one installer rerun                                                  |
+| Help catalog / side effects | Machine-readable topics and `side_effect_class`                                           | Generated API and local helper help already classify effects; JSON root help contained only prose                              | Add offline topic catalog and topic side-effect class to JSON help; retain text projection                     |
+| JSON next actions           | Runnable argv, mutation class, preconditions                                              | Envelope v2 already has typed argv/mutates/class and bounded result-state actions                                              | Add concrete update/status/skills actions; generic action preconditions need a shared output-contract decision |
+| Structured error repairs    | Stable code, retryability, exit code, typed repair actions                                | `deriveErrorActions` and `anx_cli_recovery` already cover auth, usage, concurrency, timeout, outdated clients                  | Add update and skills-failure repairs; broad repair completeness is a separate audit                           |
+| Idempotency / request keys  | Caller-preallocated execution identity; retry the same identity                           | Server-backed request keys exist on batch/card/domain writes, sessions use sequence; not every write has a replay key          | Do not invent CLI-only deduplication; universal write idempotency requires core/contracts design               |
+| Recent / history discovery  | Host-local paginated journal, state/liveness filters, no prompt/result reads              | ANX has `runs list`, session/work queries, document/card history, domain messages, event timeline; no local invocation journal | Different authority/scope; discuss a composed recent-work read before adding local command history             |
+| Doctor depth                | Bootstrap/config/journal/supervisor and live adapter capability probes                    | ANX already checks workspace, enrollment/key permissions, identity, core readiness, CLI/core handshake and skill state         | Add offline updater health; adapter execution probes belong to agentctl/bridge rather than core CLI            |
+| Schema discovery            | Normative schema files via `schema list`                                                  | Embedded generated metadata, body schemas in command help, `debug meta commands`, report schema                                | Existing API-input discovery; generic envelope-schema export/versioning needs agreement                        |
+| Skills / bootstrap          | Detect harnesses, ownership-aware refresh/adopt, instruction pointers                     | ANX already has harness detection, digest ownership, sync/status/adopt, PM preferences and daily skill refresh                 | Run new binary's sync after update; global instruction-pointer management is a separate policy decision        |
 
 ## Decisions to record for the release
 

@@ -52,8 +52,7 @@ func accessCTEs(scope AccessScope, query string) string {
 	for _, token := range sqlIdentifiers.FindAllString(query, -1) {
 		needed[strings.ToLower(token)] = true
 	}
-	graph := ownershipClosure("_anx_denied", deniedRootSQL(scope), false)
-	graph += ", " + ownershipRefs("_anx_resource_refs", "_anx_denied") + ", _anx_denied_refs(ref) AS (SELECT CASE WHEN kind='card' AND (ref LIKE 'http://%' OR ref LIKE 'https://%') THEN ref ELSE kind||':'||ref END FROM _anx_resource_refs UNION SELECT 'doc:'||ref FROM _anx_resource_refs WHERE kind='document')"
+	graph := ""
 
 	denied := func(kind, id string) string {
 		return "NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind='" + kind + "' AND id=" + id + ")"
@@ -111,7 +110,18 @@ func accessCTEs(scope AccessScope, query string) string {
 			add(table, cleanJSON("_row.labels")+" AND NOT EXISTS (SELECT 1 FROM _anx_private_series p WHERE p.series=_row.series AND p.labels=_row.labels)")
 		}
 	}
-	return graph
+	// An unused ownership graph does not filter any row, but SQLite still has
+	// to parse it. Keep graph-only callers and explicit internal dependencies.
+	needsGraph := graph != "" || query == ""
+	for name := range needed {
+		needsGraph = needsGraph || strings.HasPrefix(name, "_anx_")
+	}
+	if !needsGraph {
+		return ""
+	}
+	return ownershipClosure("_anx_denied", deniedRootSQL(scope), false) +
+		", " + ownershipRefs("_anx_resource_refs", "_anx_denied") +
+		", _anx_denied_refs(ref) AS (SELECT CASE WHEN kind='card' AND (ref LIKE 'http://%' OR ref LIKE 'https://%') THEN ref ELSE kind||':'||ref END FROM _anx_resource_refs UNION SELECT 'doc:'||ref FROM _anx_resource_refs WHERE kind='document')" + graph
 }
 
 // Apply relation visibility before limits, aggregates and cursors. SQLite
@@ -125,16 +135,23 @@ func scopeRead(ctx context.Context, query string) string {
 	}
 	q := strings.ReplaceAll(strings.TrimSpace(query), " INDEXED BY idx_work_metadata_project", "")
 	upper := strings.ToUpper(q)
-	prefix := "WITH RECURSIVE " + accessCTEs(scope, q)
+	graph := accessCTEs(scope, q)
+	prefix := "WITH RECURSIVE " + graph
 	if fields := strings.Fields(upper); len(fields) > 0 {
 		switch fields[0] {
 		case "WITH":
+			if graph == "" {
+				return q
+			}
 			rest := strings.TrimSpace(q[len("WITH"):])
 			if strings.HasPrefix(strings.ToUpper(rest), "RECURSIVE") {
 				rest = strings.TrimSpace(rest[len("RECURSIVE"):])
 			}
 			return prefix + ", " + rest
 		case "SELECT":
+			if graph == "" {
+				return q
+			}
 			return prefix + " " + q
 		}
 	}

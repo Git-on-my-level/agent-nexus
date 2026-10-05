@@ -171,19 +171,23 @@ func appendRunsIngestError(configDir string, runErr error) error {
 }
 
 func (a *App) runIngestInner(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
-	var input io.Reader = a.Stdin
 	if len(args) > 1 {
 		return nil, errnorm.Usage("invalid_args", "expected one callback file path or stdin")
 	}
+	var raw []byte
+	var err error
 	if len(args) == 1 {
-		file, err := os.Open(args[0])
+		a.markNonReplayableInput(args[0])
+		var file *os.File
+		file, err = os.Open(args[0])
 		if err != nil {
 			return nil, err
 		}
 		defer file.Close()
-		input = file
+		raw, err = io.ReadAll(io.LimitReader(file, (2<<20)+1))
+	} else {
+		raw, err = a.readStdinBytes((2 << 20) + 1)
 	}
-	raw, err := io.ReadAll(io.LimitReader(input, (2<<20)+1))
 	if err != nil {
 		return nil, err
 	}

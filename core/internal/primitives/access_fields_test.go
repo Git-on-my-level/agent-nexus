@@ -42,6 +42,16 @@ func TestResourceAccessScopeRechecksRootsAndQuotedRelations(t *testing.T) {
 			t.Fatalf("quoted relation bypass: %s", table)
 		}
 	}
+	for _, query := range []string{`SELECT 1`, `WITH value(n) AS (SELECT 1) SELECT n FROM value`, `SELECT EXISTS(SELECT 1 FROM _anx_denied)`} {
+		var value int
+		if err = s.db.QueryRowContext(scope, query).Scan(&value); err != nil || value != 1 {
+			t.Fatalf("independent/internal query %q: value=%d err=%v", query, value, err)
+		}
+	}
+	var version int
+	if err = s.db.QueryRowContext(scope, `PRAGMA user_version`).Scan(&version); err == nil {
+		t.Fatal("unclassified query form bypassed scoped-read validation")
+	}
 }
 
 func TestResourceAccessEveryOwnershipField(t *testing.T) {

@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"agent-nexus-cli/internal/errnorm"
@@ -49,9 +48,9 @@ func splitHumanAttentionMarkdown(content string) (yamlSource string, body string
 	return strings.Join(yamlLines, "\n"), body, nil
 }
 
-func loadHumanAttentionFromMarkdownFile(path string, expectedKind string) (humanAttentionFileFrontmatter, string, []any, error) {
+func (a *App) loadHumanAttentionFromMarkdownFile(path string, expectedKind string) (humanAttentionFileFrontmatter, string, []any, error) {
 	var empty humanAttentionFileFrontmatter
-	data, err := os.ReadFile(path)
+	data, err := a.readInputFile(path)
 	if err != nil {
 		return empty, "", nil, err
 	}

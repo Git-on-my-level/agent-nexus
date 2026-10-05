@@ -153,11 +153,13 @@ func (a *App) writeStreamEvent(commandName string, commandID string, event strea
 		if err := output.WriteEnvelopeJSON(a.Stdout, envelope); err != nil {
 			return errnorm.Wrap(errnorm.KindLocal, "stdout_write_failed", "failed to write stream envelope", err)
 		}
+		a.outputStarted = true
 		return nil
 	}
 	if err := output.WriteEnvelopeText(a.Stdout, output.Envelope{OK: true, Command: commandName, Result: frame}); err != nil {
 		return errnorm.Wrap(errnorm.KindLocal, "stdout_write_failed", "failed to write stream event", err)
 	}
+	a.outputStarted = true
 	return nil
 }
 

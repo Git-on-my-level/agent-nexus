@@ -142,7 +142,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	)
 
 	if strings.TrimSpace(fromFileFlag.value) != "" {
-		fm, mdBody, proposals, err := loadHumanAttentionFromMarkdownFile(strings.TrimSpace(fromFileFlag.value), kind)
+		fm, mdBody, proposals, err := a.loadHumanAttentionFromMarkdownFile(strings.TrimSpace(fromFileFlag.value), kind)
 		if err != nil {
 			return nil, err
 		}

@@ -532,6 +532,7 @@ func (a *App) invokeArtifactAttachmentCreate(ctx context.Context, cfg config.Res
 		return nil, errnorm.Usage("invalid_request", "--refs must be a JSON array of typed ref strings (e.g. [\"topic:launch\"])")
 	}
 	cleanPath := filepath.Clean(strings.TrimSpace(filePath))
+	a.markNonReplayableInput(cleanPath)
 	file, err := os.Open(cleanPath)
 	if err != nil {
 		return nil, errnorm.Wrap(errnorm.KindLocal, "attachment_file_open_failed", fmt.Sprintf("failed to open %s", cleanPath), err)

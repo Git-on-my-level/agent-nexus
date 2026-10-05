@@ -16,6 +16,7 @@ import (
 
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/buildinfo"
 	"agent-nexus-core/internal/commandcenter"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
@@ -631,8 +632,8 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	opts := handlerOptions{
 		coreVersion:                   strings.TrimSpace(schemaVersion),
 		apiVersion:                    "v0",
-		minCLIVersion:                 "0.1.0",
-		recommendedCLIVersion:         "0.1.0",
+		minCLIVersion:                 buildinfo.MinCompatibleCLI,
+		recommendedCLIVersion:         buildinfo.MinCompatibleCLI,
 		coreInstanceID:                "core-local",
 		streamPollInterval:            time.Second,
 		answerWakeFlushWhenNoOpenAsks: true,
@@ -649,7 +650,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		opts.apiVersion = "v0"
 	}
 	if opts.minCLIVersion == "" {
-		opts.minCLIVersion = "0.1.0"
+		opts.minCLIVersion = buildinfo.MinCompatibleCLI
 	}
 	if opts.recommendedCLIVersion == "" {
 		opts.recommendedCLIVersion = opts.minCLIVersion
@@ -2752,14 +2753,8 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 
 		setVersionHeaders(w, opts, schemaVersion)
-		if shouldEnforceCLIVersion(r.URL.Path) {
-			if clientVersion := strings.TrimSpace(r.Header.Get("X-ANX-CLI-Version")); clientVersion != "" {
-				outdated, compareErr := isCLIVersionOutdated(clientVersion, opts.minCLIVersion)
-				if compareErr == nil && outdated {
-					writeCLIOutdated(w, opts)
-					return
-				}
-			}
+		if enforceCLIVersion(w, r, opts) {
+			return
 		}
 		mux.ServeHTTP(w, r)
 	})
@@ -2911,6 +2906,35 @@ func writeCLIOutdated(w http.ResponseWriter, opts handlerOptions) {
 		},
 	}
 	writeJSON(w, http.StatusUpgradeRequired, payload)
+}
+
+func enforceCLIVersion(w http.ResponseWriter, r *http.Request, opts handlerOptions) bool {
+	if r == nil || !shouldEnforceCLIVersion(r.URL.Path) {
+		return false
+	}
+	clientVersion := clientCLIVersion(r)
+	if clientVersion == "" {
+		return false
+	}
+	outdated, compareErr := isCLIVersionOutdated(clientVersion, opts.minCLIVersion)
+	if compareErr != nil || !outdated {
+		return false
+	}
+	writeCLIOutdated(w, opts)
+	return true
+}
+
+// clientCLIVersion reads the current header and the pre-rename X-OAR-CLI-Version
+// header. Clients older than the ANX rename never send X-ANX-CLI-Version, so
+// ignoring the legacy header lets them skip the compatibility floor.
+func clientCLIVersion(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if version := strings.TrimSpace(r.Header.Get("X-ANX-CLI-Version")); version != "" {
+		return version
+	}
+	return strings.TrimSpace(r.Header.Get("X-OAR-CLI-Version"))
 }
 
 func shouldEnforceCLIVersion(path string) bool {
