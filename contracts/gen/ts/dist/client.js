@@ -7284,7 +7284,7 @@ export const commandRegistry = [
         "operation_id": "getInboxSummary",
         "summary": "Count open asks and return the top asks visible to the caller",
         "why": "Cheap workspace-local human attention read for UI fan-out across existing workspace sessions.",
-        "input_mode": "none",
+        "input_mode": "query",
         "streaming": {
             "mode": "none"
         },

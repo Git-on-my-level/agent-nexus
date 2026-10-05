@@ -7380,7 +7380,7 @@ paths:
       x-anx-command-id: inbox.summary
       x-anx-cli-path: inbox summary
       x-anx-why: Cheap workspace-local human attention read for UI fan-out across existing workspace sessions.
-      x-anx-input-mode: none
+      x-anx-input-mode: query
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ open_ask_count, asks, generated_at }`; shared human asks visible to the caller, not agent answer notifications."
       x-anx-error-codes: [auth_required, invalid_request, invalid_token]

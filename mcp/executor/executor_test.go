@@ -16,6 +16,39 @@ import (
 	"github.com/Git-on-my-level/agent-nexus/mcp/protocol"
 )
 
+func TestAccessAndSummaryRejectUnsupportedArgumentsBeforeHTTP(t *testing.T) {
+	cat := generatedTestCatalog(t, catalog.DefaultAllowedClassifications())
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("invalid arguments reached the workspace")
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	exec := NewWorkspaceExecutor(server.URL, Options{})
+	for _, tt := range []struct {
+		name string
+		id   string
+		args map[string]any
+	}{
+		{"unsupported retry key", "auth.access-requests.request", map[string]any{
+			"body": map[string]any{"grant": "auth-admin", "reason": "Maintain authentication"}, "idempotency_key": "retry-1",
+		}},
+		{"negative limit", "inbox.summary", map[string]any{"query": map[string]any{"limit": -1}}},
+		{"above maximum", "inbox.summary", map[string]any{"query": map[string]any{"limit": 51}}},
+		{"fractional limit", "inbox.summary", map[string]any{"query": map[string]any{"limit": 0.5}}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			tool, ok := cat.Lookup(catalog.ToolName(tt.id))
+			if !ok {
+				t.Fatalf("missing tool %s", tt.id)
+			}
+			_, err := exec.CallTool(context.Background(), protocol.ToolCallRequest{Tool: tool, Arguments: tt.args})
+			if err == nil || !strings.Contains(err.Error(), "idempotency_key") && !strings.Contains(err.Error(), "query.limit") {
+				t.Fatalf("expected argument validation error, got %v", err)
+			}
+		})
+	}
+}
+
 func TestWorkspaceExecutorExecutesReadWithBoundedDefaultLimit(t *testing.T) {
 	var gotAuth string
 	var gotLimit string
@@ -166,6 +199,14 @@ func TestWorkspaceExecutorRepresentativeCommandGroups(t *testing.T) {
 			wantPath:   "/artifacts/artifact-1",
 		},
 		{
+			name:          "self scoped access request",
+			commandID:     "auth.access-requests.request",
+			arguments:     map[string]any{"body": map[string]any{"grant": "auth-admin", "reason": "Maintain workspace authentication"}},
+			wantMethod:    http.MethodPost,
+			wantPath:      "/auth/access-requests",
+			wantBodyField: map[string]any{"grant": "auth-admin", "reason": "Maintain workspace authentication"},
+		},
+		{
 			name:          "cards write",
 			commandID:     "cards.create",
 			arguments:     map[string]any{"body": map[string]any{"board_id": "board-1", "card": map[string]any{"title": "Do it"}}},
@@ -217,6 +258,37 @@ func TestWorkspaceExecutorRepresentativeCommandGroups(t *testing.T) {
 			arguments:  map[string]any{"path": map[string]any{"command_id": "cards.get"}},
 			wantMethod: http.MethodGet,
 			wantPath:   "/meta/commands/cards.get",
+		},
+		{
+			name:       "bounded inbox summary",
+			commandID:  "inbox.summary",
+			arguments:  map[string]any{"query": map[string]any{"limit": 3}},
+			wantMethod: http.MethodGet,
+			wantPath:   "/inbox/summary",
+			wantQuery:  map[string]string{"limit": "3"},
+		},
+		{
+			name:       "inbox summary server default",
+			commandID:  "inbox.summary",
+			wantMethod: http.MethodGet,
+			wantPath:   "/inbox/summary",
+			wantQuery:  map[string]string{"limit": ""},
+		},
+		{
+			name:       "inbox summary count only",
+			commandID:  "inbox.summary",
+			arguments:  map[string]any{"query": map[string]any{"limit": 0}},
+			wantMethod: http.MethodGet,
+			wantPath:   "/inbox/summary",
+			wantQuery:  map[string]string{"limit": "0"},
+		},
+		{
+			name:       "inbox summary maximum",
+			commandID:  "inbox.summary",
+			arguments:  map[string]any{"query": map[string]any{"limit": 50}},
+			wantMethod: http.MethodGet,
+			wantPath:   "/inbox/summary",
+			wantQuery:  map[string]string{"limit": "50"},
 		},
 		{
 			name:       "topics timeline",

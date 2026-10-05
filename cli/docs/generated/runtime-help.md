@@ -3152,7 +3152,7 @@ Generated Help: inbox summary
 - HTTP: `GET /inbox/summary`
 - Side effect class: `read_only`
 - Stability: `beta`
-- Input mode: `none`
+- Input mode: `query`
 - Why: Cheap workspace-local human attention read for UI fan-out across existing workspace sessions.
 - Output: Returns `{ open_ask_count, asks, generated_at }`; shared human asks visible to the caller, not agent answer notifications.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`

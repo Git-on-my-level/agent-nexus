@@ -1590,7 +1590,7 @@ var CommandRegistry = []CommandSpec{
 		Group:     "inbox",
 		Method:    "GET",
 		Path:      "/inbox/summary",
-		InputMode: "none",
+		InputMode: "query",
 		Stability: "beta",
 		Concepts:  []string{"inbox"},
 		Adjacent:  []string{"inbox.get", "inbox.list", "inbox.respond", "inbox.stream"},

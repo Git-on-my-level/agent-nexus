@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 208
+- Command count: 214
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -15,7 +15,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | agent | 6 |
 | agents | 4 |
 | artifacts | 10 |
-| auth | 17 |
+| auth | 22 |
 | boards | 13 |
 | cards | 13 |
 | derived | 1 |
@@ -23,7 +23,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | events | 8 |
 | home | 2 |
 | host | 15 |
-| inbox | 4 |
+| inbox | 5 |
 | meta | 9 |
 | ops | 3 |
 | overview | 2 |
@@ -46,12 +46,12 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 79 |
-| exposed_write | 66 |
+| exposed_read | 80 |
+| exposed_write | 67 |
 | gated_admin | 28 |
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 9 |
-| unsupported_interactive | 5 |
+| unsupported_interactive | 9 |
 | unsupported_other | 2 |
 | unsupported_shell_shaped | 2 |
 | unsupported_streaming | 4 |
@@ -60,11 +60,11 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 145 | exposed_read + exposed_write + adapted |
+| standalone default | 147 | exposed_read + exposed_write + adapted |
 | hosted default | 65 | explicit read-only private-app allowlist |
 | gated | 41 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
-| unsupported | 22 | not represented as direct MCP tools in v1 |
+| unsupported | 26 | not represented as direct MCP tools in v1 |
 
 ## Command Inventory
 
@@ -98,6 +98,11 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | artifacts.restore | artifacts | POST | /artifacts/{artifact_id}/restore | exposed_write | ordinary reversible artifact lifecycle write |
 | artifacts.trash | artifacts | POST | /artifacts/{artifact_id}/trash | exposed_write | ordinary reversible artifact lifecycle write |
 | artifacts.unarchive | artifacts | POST | /artifacts/{artifact_id}/unarchive | exposed_write | ordinary reversible artifact lifecycle write |
+| auth.access-requests.approve | auth | POST | /auth/access-requests/{request_id}/approve | unsupported_interactive | human-only privileged grant approval requires human judgment |
+| auth.access-requests.deny | auth | POST | /auth/access-requests/{request_id}/deny | unsupported_interactive | human-only privileged grant denial requires human judgment |
+| auth.access-requests.list | auth | GET | /auth/access-requests | unsupported_interactive | human-only pending access inventory |
+| auth.access-requests.request | auth | POST | /auth/access-requests | exposed_write | self-scoped privileged grant request; approval remains human-only |
+| auth.access-requests.summary | auth | GET | /auth/access/summary | unsupported_interactive | human-only pending access inventory count |
 | auth.admins.grant | auth | POST | /auth/admins/{principal_id}/grant | gated_admin | delegating auth-admin requires a human principal |
 | auth.admins.list | auth | GET | /auth/admins | gated_admin | explicit agent grant inventory is administrative |
 | auth.admins.revoke | auth | POST | /auth/admins/{principal_id}/revoke | gated_admin | withdrawing auth-admin requires a human principal |
@@ -190,6 +195,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | inbox.list | inbox | GET | /inbox | exposed_read | bounded inbox inventory read |
 | inbox.respond | inbox | POST | /inbox/{inbox_id}/respond | unsupported_interactive | human-only response submission requires human judgment |
 | inbox.stream | inbox | GET | /stream/inbox | unsupported_streaming | SSE stream needs a bounded read adapter before MCP exposure |
+| inbox.summary | inbox | GET | /inbox/summary | exposed_read | bounded workspace-local open ask summary |
 | meta.commands.get | meta | GET | /meta/commands/{command_id} | exposed_read | command metadata read |
 | meta.commands.list | meta | GET | /meta/commands | exposed_read | command metadata inventory read |
 | meta.concepts.get | meta | GET | /meta/concepts/{concept_name} | exposed_read | concept metadata read |

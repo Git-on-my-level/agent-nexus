@@ -1590,7 +1590,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - HTTP: `GET /inbox/summary`
 - Stability: `beta`
 - Surface: `projection`
-- Input mode: `none`
+- Input mode: `query`
 - Why: Cheap workspace-local human attention read for UI fan-out across existing workspace sessions.
 - Concepts: `inbox`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
