@@ -782,7 +782,9 @@ func allocatePort(t *testing.T) int {
 func waitForHealthy(t *testing.T, baseURL string, logPath string) {
 	t.Helper()
 	client := &http.Client{Timeout: 500 * time.Millisecond}
-	deadline := time.Now().Add(10 * time.Second)
+	// Fresh workspaces run all migrations before readiness. Allow bounded startup
+	// headroom when concurrent builds or CI workers delay the new process.
+	deadline := time.Now().Add(60 * time.Second)
 	healthURL := baseURL + "/readyz"
 	for time.Now().Before(deadline) {
 		resp, err := client.Get(healthURL)
