@@ -61,15 +61,16 @@ That flow:
 - fetches `origin/main` and tags
 - computes the next patch version from the latest tag on `origin/main`
 - verifies the checkout is clean and exactly matches `origin/main`
-- runs `make check`, `make e2e-smoke`, and local release artifact validation
-- updates version metadata, commits the release prep, pushes `main`, tags the release, and waits for the `Release CLI` workflow to publish it
+- resumes from the current `main` commit when all version-managed files already match the target and its tag is absent; otherwise it runs the local checks and creates the release prep commit
+- waits for the `CI` and `System Smokes` workflows on the release commit, tags it, and waits for the `Release CLI` workflow to publish it
 
 Keep release logs outside the checkout (or in an already ignored directory).
 The script checks cleanliness again after checks and before changing versions,
 so generated changes can be inspected separately. It does not automatically
 discard version edits after later failures or undo published commits/tags.
-`--dry-run` does not require commit hook tooling. Offline preflight regression
-tests run with `python3 scripts/tests/test_release_preflight.py`.
+`--dry-run` does not require commit hook tooling and reports whether it would
+create a release prep commit or resume one already on `main`. Offline preflight
+regression tests run with `python3 scripts/tests/test_release_preflight.py`.
 
 Useful variants:
 
