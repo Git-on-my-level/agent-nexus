@@ -1,6 +1,8 @@
 name: CI
 
 on:
+  merge_group:
+    types: [checks_requested]
   pull_request:
   push:
     branches:
@@ -8,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
@@ -44,6 +47,10 @@ jobs:
             node_shared:
               - '.github/actions/setup-node-pnpm/**'
               - '.github/workflows/ci.yml'
+              - '.github/actions/setup-playwright/**'
+              - '.github/e2e-timings.json'
+              - 'scripts/ci-e2e.mjs'
+              - 'scripts/tests/ci-automation.test.mjs'
               - 'package.json'
               - 'pnpm-workspace.yaml'
               - 'pnpm-lock.yaml'
@@ -78,13 +85,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: changes
-    if: needs.changes.outputs.automation == 'true'
+    if: needs.changes.outputs.automation == 'true' || needs.changes.outputs.node_shared == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
       - name: Setup Node And pnpm
         uses: ./.github/actions/setup-node-pnpm
+
+      - name: Test CI gate and shard coverage
+        run: node --test scripts/tests/ci-automation.test.mjs
 
       - name: Check GitHub automation formatting
         run: pnpm -C web-ui exec prettier --check "../.github/**/*.{yml,yaml}"
@@ -208,7 +218,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5]
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
@@ -222,14 +232,25 @@ jobs:
       - name: Setup Node And pnpm
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Install Playwright Chromium and system dependencies
-        run: pnpm -C web-ui exec playwright install --with-deps chromium
+      - name: Setup Playwright Chromium
+        uses: ./.github/actions/setup-playwright
 
       - name: Allow sandboxed Chromium on Ubuntu runners
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
-      - name: Run full browser suite (shard ${{ matrix.shard }}/4)
-        run: pnpm -C web-ui exec playwright test --shard=${{ matrix.shard }}/4 --retries=0 --trace=retain-on-failure --output=test-results/e2e
+      - name: Run full browser suite (balanced shard ${{ matrix.shard }}/5)
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/e2e-report.json
+        run: node scripts/ci-e2e.mjs ${{ matrix.shard }}/5
+
+      - name: Upload browser timings
+        if: always()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: web-ui-e2e-timings-${{ matrix.shard }}
+          path: web-ui/test-results/e2e-report.json
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Upload browser failure artifacts
         if: failure()
@@ -261,8 +282,8 @@ jobs:
       - name: Setup Node And pnpm
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Install Playwright Chromium
-        run: pnpm -C web-ui exec playwright install chromium
+      - name: Setup Playwright Chromium
+        uses: ./.github/actions/setup-playwright
 
       - name: Render visual report examples and browser checks
         run: pnpm -C web-ui exec playwright test tests/e2e/visual-reports.spec.js --project=default --retries=0 --max-failures=1 --output=test-results/visual-reports
@@ -345,7 +366,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     needs: changes
-    if: github.event_name == 'pull_request' && needs.changes.outputs.auth_e2e_smoke == 'true'
+    if: (github.event_name == 'pull_request' || github.event_name == 'merge_group') && needs.changes.outputs.auth_e2e_smoke == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
@@ -371,3 +392,28 @@ jobs:
           name: auth-e2e-smoke-artifacts
           path: .tmp/e2e-smoke/**
           if-no-files-found: ignore
+
+  ci-ok:
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    needs:
+      - changes
+      - workflow-checks
+      - contracts-check
+      - core-checks
+      - mcp-checks
+      - cli-checks
+      - web-ui-static-check
+      - web-ui-e2e-check
+      - web-ui-visual-check
+      - cross-platform-build
+      - platform-constraints
+      - auth-e2e-smoke
+    steps:
+      - name: Require successful or intentionally skipped jobs
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS_JSON" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS_JSON" | jq -e '.changes.result == "success" and all(.[]; .result == "success" or .result == "skipped")'

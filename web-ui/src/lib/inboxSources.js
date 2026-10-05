@@ -7,9 +7,14 @@ import { coreClient } from "$lib/coreClient";
 export async function listAllPages(fetchPage, key, maxPages = 8) {
   const collected = [];
   const archived = new Set();
+  const requestedCursors = new Set();
   let cursor;
   let more = false;
   for (let page = 0; page < maxPages; page += 1) {
+    // A stalled/cyclic cursor cannot reveal another page. Keep what was
+    // fetched and report a partial result instead of repeating the requests.
+    if (requestedCursors.has(cursor)) break;
+    requestedCursors.add(cursor);
     const result = await fetchPage(cursor);
     collected.push(...(Array.isArray(result?.[key]) ? result[key] : []));
     for (const ref of result?.archived_refs || []) archived.add(ref);
