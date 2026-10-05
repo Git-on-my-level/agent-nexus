@@ -162,6 +162,8 @@ test("sandbox launch failure returns a machine-readable text fallback", async ({
       outputPath,
     ])}, {
       launchBrowser: async (options) => {
+        if (options.channel !== "chromium" || options.headless !== true)
+          throw new Error("preview launch did not use Chromium's new headless mode");
         if (options.chromiumSandbox !== true)
           throw new Error("preview launch did not require Chromium sandboxing");
         throw new Error("Chromium sandboxing failed!");
