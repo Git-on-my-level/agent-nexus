@@ -13,7 +13,8 @@ from pathlib import Path
 
 from anx_client import AnxClient, AnxError
 from project import ADAPTER_VERSION, operator_name
-from initiatives import validate_mapping, source_items, plan_ingestion, apply_ingestion, add_unsorted_panel
+from initiatives import (DuplicateSourceIdentityConflict, validate_mapping, source_items,
+                         plan_ingestion, apply_ingestion, add_unsorted_panel)
 from readers.agentctl import read_agentctl
 from readers.fleetctl import read_fleetctl
 from readers.github import read_github
@@ -57,6 +58,7 @@ def main(argv: list[str] | None = None) -> int:
     now = datetime.now(timezone.utc).replace(microsecond=0)
     runner = BudgetRunner(Runner(), Budget())
     client = AnxClient(config.get("anx_binary") or "anx", config["base_url"], config["agent"], runner=runner)
+    reads = []
     try:
         if args.mapping_file:
             if not args.dry_run:
@@ -70,6 +72,22 @@ def main(argv: list[str] | None = None) -> int:
         validate_mapping(mapping, config["base_url"])
         reads = collect(config, selected, now, runner)
         plans = plan_ingestion(source_items(reads, config, now), mapping, client)
+    except DuplicateSourceIdentityConflict as exc:
+        message = str(exc)
+        if args.dry_run:
+            summary = {"dry_run": True, "planned_writes": None,
+                       "readers": [_reader_summary(read) for read in reads],
+                       "warnings": [], "errors": [message]}
+        else:
+            summary = {"created": 0, "revised": 0, "skipped": 0,
+                       "readers": [_reader_summary(read) for read in reads],
+                       "warnings": [], "errors": [message]}
+        if args.quiet:
+            print(message, file=sys.stderr)
+        else:
+            json.dump(summary, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        return 1
     except (AnxError, ValueError, OSError) as exc:
         print(str(exc), file=sys.stderr)
         return 1

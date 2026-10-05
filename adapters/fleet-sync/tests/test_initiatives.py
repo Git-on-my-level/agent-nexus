@@ -203,18 +203,78 @@ class RoutingTests(unittest.TestCase):
 
 
     def test_source_reader_metadata_reaches_routing(self):
-        reads = [{'name': 'multica', 'ok': True, 'complete': True, 'items': [
+        reads = [{'name': 'multica', 'ok': True, 'complete': True,
+            'observed_at': '2026-10-05T00:00:00Z', 'items': [
             {'native_id': 'source-1', 'identifier': 'SCA-1', 'title': 'A milestone',
-             'status': 'done', 'project': 'p', 'labels': ['release'], 'url': 'https://source.test/1'}]}]
+             'status': 'done', 'project': 'p', 'labels': ['release'], 'url': 'https://source.test/1',
+             'updated_at': '2026-10-04T12:00:00Z'}]}]
         rows = source_items(reads, {'multica': {'connection_id': 'local'}}, NOW)
         self.assertEqual(rows[0]['project'], 'p')
         self.assertEqual(rows[0]['labels'], ['release'])
         self.assertEqual(rows[0]['status'], 'done')
+        self.assertEqual(rows[0]['updated_at'], '2026-10-04T12:00:00Z')
+        self.assertEqual(rows[0]['_observed_at'], reads[0]['observed_at'])
         self.assertEqual(route(rows[0], mapping())[0], 'card:initiative')
 
-    def test_conflicting_duplicate_and_malformed_block_fail_closed(self):
-        with self.assertRaises(ValueError):
-            plan_ingestion([item(), item(status='done')], mapping(), Client())
+    def test_volatile_duplicate_uses_newest_timestamp_and_reports_warning(self):
+        older = item(status='in_progress', title='Issue 1', labels=['old'], url='https://source.test/old',
+                     updated_at='2026-10-04T11:00:00Z', _observed_at='2026-10-04T12:00:00Z', _reader='github')
+        newer = item(status='done', title='Issue 1 updated', labels=['new'], url='https://source.test/new',
+                     updated_at='2026-10-05T00:00:00Z', _observed_at='2026-10-04T10:00:00Z', _reader='multica')
+        client = Client()
+        plan = plan_ingestion([older, newer], mapping(), client)
+        planned = plan['initiatives'][0]['items'][0]
+        self.assertEqual(planned['status'], 'done')
+        self.assertEqual(planned['title'], 'Issue 1 updated')
+        self.assertNotIn('_reader', planned)
+        warning = plan['warnings'][0]
+        self.assertEqual(warning['identity'], ['multica', 'local', '1'])
+        self.assertEqual(warning['selected_reader'], 'multica')
+        self.assertEqual(warning['selected_timestamp'], '2026-10-05T00:00:00Z')
+        self.assertEqual(warning['volatile_fields'], ['labels', 'status', 'title', 'updated_at', 'url'])
+        self.assertIn('updated_at', warning['differing_fields'])
+        self.assertEqual(apply_ingestion(client, plan)['warnings'], [warning])
+        self.assertEqual(plan_ingestion([newer, older], mapping(), Client())['warnings'], [warning])
+
+    def test_reader_priority_is_a_stable_timestamp_tiebreak(self):
+        common = {'updated_at': '2026-10-05T00:00:00Z', '_observed_at': '2026-10-05T00:01:00Z'}
+        github = item(status='in_progress', _reader='github', **common)
+        multica = item(status='done', _reader='multica', **common)
+        for candidates in ([github, multica], [multica, github]):
+            plan = plan_ingestion(candidates, mapping(), Client())
+            self.assertEqual(plan['initiatives'][0]['items'][0]['status'], 'done')
+            self.assertEqual(plan['warnings'][0]['selected_reader'], 'multica')
+
+    def test_observation_time_breaks_ties_when_updated_at_is_missing(self):
+        earlier = item(status='in_progress', _reader='github', _observed_at='2026-10-04T23:59:00Z')
+        later = item(status='done', _reader='github', _observed_at='2026-10-05T00:00:00Z')
+        plan = plan_ingestion([earlier, later], mapping(), Client())
+        self.assertEqual(plan['initiatives'][0]['items'][0]['status'], 'done')
+        self.assertEqual(plan['warnings'][0]['selected_timestamp'], '2026-10-05T00:00:00Z')
+
+    def test_routing_conflict_names_item_identity_and_differing_fields(self):
+        client = Client()
+        with self.assertRaisesRegex(ValueError, r"Issue 1.*identity=\[\"multica\",\"local\",\"1\"\].*project"):
+            plan_ingestion([item(), item(project='other')], mapping(), client)
+        self.assertEqual(client.writes, [])
+
+    def test_duplicate_rows_keep_their_own_timestamps_and_metadata(self):
+        read = {'name': 'multica', 'ok': True, 'complete': True,
+                'observed_at': '2026-10-05T00:00:00Z', 'items': [
+            {'native_id': '1', 'title': 'Older title', 'status': 'todo', 'project': 'p', 'labels': [],
+             'url': 'https://source.test/1', 'updated_at': '2026-10-04T00:00:00Z'},
+            {'native_id': '1', 'title': 'Newer title', 'status': 'in_progress', 'project': 'p', 'labels': [],
+             'url': 'https://source.test/1', 'updated_at': '2026-10-05T00:00:00Z'},
+        ]}
+        rows = source_items([read], {'multica': {'connection_id': 'local'}}, NOW)
+        self.assertEqual([row['updated_at'] for row in rows], [
+            '2026-10-04T00:00:00Z', '2026-10-05T00:00:00Z'])
+        self.assertEqual([row['title'] for row in rows], ['Older title', 'Newer title'])
+        plan = plan_ingestion(rows, mapping(), Client())
+        self.assertEqual(plan['initiatives'][0]['items'][0]['title'], 'Newer title')
+        self.assertEqual(plan['warnings'][0]['selected_timestamp'], '2026-10-05T00:00:00Z')
+
+    def test_malformed_block_still_fails_closed(self):
         client = Client()
         client.cards['card:initiative']['summary'] = '<!-- fleet-sync:evidence:v1 -->broken'
         with self.assertRaises(ValueError):
