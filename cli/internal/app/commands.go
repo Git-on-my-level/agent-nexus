@@ -61,7 +61,7 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 	if len(args) >= 2 && isHelpToken(args[len(args)-1]) {
 		topic := strings.Join(args[:len(args)-1], " ")
 		if text, ok := helpTopicText(topic); ok {
-			return "help", &commandResult{Text: text, Data: map[string]any{"help_text": text}}, nil
+			return "help", &commandResult{Text: text, Data: helpEnvelopeResult(topic, text)}, nil
 		}
 	}
 	if args[0] == "orient" {
@@ -107,7 +107,11 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 		return "doctor", result, err
 	case "update":
 		result, err := a.runUpdate(ctx, args[1:], cfg)
-		return "update", result, err
+		name := "update"
+		if len(args) > 1 && (args[1] == "status" || args[1] == "now" || args[1] == "policy") {
+			name += " " + args[1]
+		}
+		return name, result, err
 	case "bridge":
 		result, name, err := a.runBridgeCommand(ctx, args[1:], cfg)
 		return name, result, err
@@ -205,16 +209,16 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 		if len(args) > 1 {
 			if len(args) == 2 && args[1] == "--all" {
 				text := a.rootUsageTextAll()
-				return "help", &commandResult{Text: text, Data: map[string]any{"help_text": text}}, nil
+				return "help", &commandResult{Text: text, Data: helpEnvelopeResult("", text)}, nil
 			}
 			topic := strings.Join(args[1:], " ")
 			if text, ok := helpTopicText(topic); ok {
-				return "help", &commandResult{Text: text, Data: map[string]any{"help_text": text}}, nil
+				return "help", &commandResult{Text: text, Data: helpEnvelopeResult(topic, text)}, nil
 			}
 			return "help", nil, errnorm.Usage("unknown_command", fmt.Sprintf("unknown help topic %q", topic))
 		}
 		text := a.rootUsageText()
-		return "help", &commandResult{Text: text, Data: map[string]any{"help_text": text}}, nil
+		return "help", &commandResult{Text: text, Data: helpEnvelopeResult("", text)}, nil
 	default:
 		return args[0], nil, errnorm.Usage("unknown_command", fmt.Sprintf("unknown command %q", args[0]))
 	}

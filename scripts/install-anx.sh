@@ -33,10 +33,14 @@ resolve_version() {
     fatal "curl is required to resolve the latest version"
   fi
   if ! tag=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1); then
-    fatal "Could not determine latest release. Set VERSION explicitly."
+    tag=""
   fi
   if [ -z "$tag" ]; then
-    fatal "Could not determine latest release. Set VERSION explicitly."
+    redirect=$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest") || fatal "Could not determine latest release. Set VERSION explicitly."
+    case "$redirect" in
+      "https://github.com/${REPO}/releases/tag/"*) tag="${redirect##*/}" ;;
+      *) fatal "Latest release redirect did not resolve a same-origin tag" ;;
+    esac
   fi
   echo "$tag"
 }
@@ -48,6 +52,7 @@ main() {
   ARCH="$(detect_arch)"
   VERSION="$(resolve_version)"
 
+  [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][A-Za-z0-9.-]+)?$ ]] || fatal "Invalid release tag: ${VERSION}"
   info "Version:  ${VERSION}"
   info "OS/Arch:  ${OS}/${ARCH}"
   info "Install:  ${INSTALL_DIR}/anx"
@@ -69,7 +74,7 @@ main() {
     || fatal "Checksum download failed"
 
   info "Verifying checksum..."
-  EXPECTED=$(grep "${ARCHIVE}" "${TMPDIR_DL}/checksums.txt" | awk '{print $1}')
+  EXPECTED=$(awk -v archive="$ARCHIVE" '$2 == archive {print $1}' "${TMPDIR_DL}/checksums.txt")
   if [ -z "$EXPECTED" ]; then
     fatal "Archive ${ARCHIVE} not found in checksums.txt"
   fi
@@ -89,8 +94,24 @@ main() {
   mkdir -p "$INSTALL_DIR"
   info "Extracting..."
   tar -xzf "${TMPDIR_DL}/${ARCHIVE}" -C "${TMPDIR_DL}"
-  mv "${TMPDIR_DL}/anx" "${INSTALL_DIR}/anx"
-  chmod +x "${INSTALL_DIR}/anx"
+  # Stage on the destination filesystem so replacement is an atomic rename.
+  # Honor the updater's per-install lock rather than racing its receipt.
+  INSTALL_LOCK="${INSTALL_DIR}/anx.anx-update.lock"
+  (set -o noclobber; : > "$INSTALL_LOCK") 2>/dev/null || fatal "An update is active; retry later."
+  trap 'rm -rf "$TMPDIR_DL"; rm -f "$INSTALL_LOCK"' EXIT
+  INSTALL_STAGE=$(mktemp -d "${INSTALL_DIR}/.anx-install-XXXXXX")
+  trap 'rm -rf "$TMPDIR_DL" "$INSTALL_STAGE"; rm -f "$INSTALL_LOCK"' EXIT
+  cp "${TMPDIR_DL}/anx" "${INSTALL_STAGE}/anx"
+  chmod +x "${INSTALL_STAGE}/anx"
+  if command -v sha256sum >/dev/null 2>&1; then
+    BINARY_SHA=$(sha256sum "${INSTALL_STAGE}/anx" | awk '{print $1}')
+  else
+    BINARY_SHA=$(shasum -a 256 "${INSTALL_STAGE}/anx" | awk '{print $1}')
+  fi
+  printf '{"managed_by":"anx","version":"%s","sha256":"%s","installed_at":"%s"}\n' "$VERSION" "$BINARY_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${INSTALL_STAGE}/receipt.json"
+  mv "${INSTALL_STAGE}/anx" "${INSTALL_DIR}/anx"
+  mv "${INSTALL_STAGE}/receipt.json" "${INSTALL_DIR}/anx.anx-install.json"
+  "${INSTALL_DIR}/anx" skills sync || info "Managed skill sync needs attention; run anx skills status."
 
   printf '\nanx %s installed to %s/anx\n' "$VERSION" "$INSTALL_DIR"
 

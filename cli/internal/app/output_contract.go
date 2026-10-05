@@ -94,6 +94,9 @@ func commandSideEffectClass(command string) string {
 		return "remote_coordination_write"
 	}
 	if parts[0] == "update" {
+		if command == "update status" || strings.Contains(command, "--check") {
+			return "read_only"
+		}
 		return "local_operational_write"
 	}
 	if parts[0] == "bridge" && len(parts) > 1 {
@@ -153,6 +156,15 @@ func deriveNextActions(command string, argv []string, value any) []output.NextAc
 		return []output.NextAction{}
 	}
 	var actions []output.NextAction
+	if strings.HasPrefix(command, "update") {
+		if command != "update status" {
+			actions = append(actions, action("Inspect update status", "anx", "update", "status"))
+		}
+		actions = append(actions, action("Inspect managed skills", "anx", "skills", "status"))
+		if command == "update status" && asBool(root["managed"]) {
+			actions = append(actions, action("Check and update CLI", "anx", "update", "now"))
+		}
+	}
 	if command == "host enroll --plan" {
 		actions = append(actions, action("Enroll host", "anx", "host", "enroll"))
 	}
@@ -464,6 +476,12 @@ func deriveErrorActions(command string, err *errnorm.Error) []output.NextAction 
 			}
 		}
 		return []output.NextAction{action("Orient after rejection", "anx", "orient")}
+	case "invalid_update_policy", "invalid_update_version", "invalid_update_args", "invalid_update_flags":
+		return []output.NextAction{action("Inspect update contract", "anx", "help", "update")}
+	case "unmanaged_install", "update_binary_changed", "update_locked", "update_probe_failed", "checksum_mismatch", "update_rollback_failed", "update_rollback_record_failed":
+		return []output.NextAction{action("Inspect update status", "anx", "update", "status"), action("Inspect update contract", "anx", "help", "update")}
+	case "update_skills_failed":
+		return []output.NextAction{action("Inspect skills", "anx", "skills", "status"), action("Sync managed skills", "anx", "skills", "sync")}
 	case "cli_outdated":
 		if details, ok := err.Details.(map[string]any); ok {
 			if version := strings.TrimSpace(anyString(details["recommended_cli_version"])); version != "" {

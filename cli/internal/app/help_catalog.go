@@ -24,9 +24,10 @@ type runtimeHelpCatalog struct {
 }
 
 type runtimeHelpDocTopic struct {
-	Path    string
-	Kind    string
-	Summary string
+	Path            string
+	Kind            string
+	Summary         string
+	SideEffectClass string `json:"side_effect_class"`
 }
 
 var (
@@ -130,6 +131,7 @@ func runtimeHelpDocTopics() []runtimeHelpDocTopic {
 			return
 		}
 		topic.Path = path
+		topic.SideEffectClass = commandSideEffectClass(path)
 		if idx, exists := indexByPath[path]; exists {
 			topics[idx] = topic
 			return
@@ -320,4 +322,13 @@ func renderRuntimeHelpDocTopicMarkdown(topic runtimeHelpDocTopic) (string, error
 	b.WriteString(strings.TrimSpace(helpText))
 	b.WriteString("\n```")
 	return b.String(), nil
+}
+
+// Help retains its prose contract and adds a machine-readable offline catalog.
+func helpEnvelopeResult(topic, text string) map[string]any {
+	data := map[string]any{"help_text": text, "topic": topic, "side_effect_class": commandSideEffectClass(topic)}
+	if topic == "" {
+		data["topics"] = runtimeHelpDocTopics()
+	}
+	return data
 }

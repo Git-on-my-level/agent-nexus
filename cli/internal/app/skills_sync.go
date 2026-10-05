@@ -835,7 +835,7 @@ func (a *App) maybeScheduleSkillsRefresh(command string, result *commandResult, 
 	if strings.HasPrefix(command, "skills") || result == nil {
 		return
 	}
-	updated := command == "update" && asBool(asMap(result.Data)["updated"])
+	updated := strings.HasPrefix(command, "update") && asBool(asMap(result.Data)["updated"])
 	if commandSideEffectClass(command) == "read_only" && !updated {
 		return
 	}

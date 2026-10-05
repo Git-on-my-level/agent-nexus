@@ -29,6 +29,7 @@ type App struct {
 	now                func() time.Time
 	pmTurns            *pmTurnMemory
 	runtimeIdentity    func() (*runtimeIdentityReport, error)
+	startUpdateWorker  func(executable, configDir string) error
 	startSkillsRefresh func(executable, configDir, home string) error
 	skillLookPath      func(string) (string, error)
 }
@@ -86,6 +87,7 @@ func New() *App {
 		hasOMPAncestor:     ompAncestor,
 		pmTurns:            newPMTurnMemory(),
 		startSkillsRefresh: startDetachedSkillsRefresh,
+		startUpdateWorker:  startDetachedUpdateWorker,
 		skillLookPath:      exec.LookPath,
 	}
 	app.StdinIsTTY = func() bool {
@@ -122,7 +124,7 @@ func (a *App) Run(args []string) int {
 
 	if helpRequested || len(remaining) == 0 {
 		text := a.rootUsageText()
-		a.renderEnvelope(a.Stdout, jsonMode, output.Envelope{OK: true, Command: "help", Result: map[string]any{"help_text": text}})
+		a.renderEnvelope(a.Stdout, jsonMode, output.Envelope{OK: true, Command: "help", Result: helpEnvelopeResult("", text)})
 		return 0
 	}
 
@@ -133,7 +135,7 @@ func (a *App) Run(args []string) int {
 		if !ok {
 			return a.renderError(resolveMachineCommandIdentity("help"), jsonMode, errnorm.Usage("unknown_command", "unknown help topic "+topic))
 		}
-		a.renderEnvelope(a.Stdout, jsonMode, output.Envelope{OK: true, Command: "help", Result: map[string]any{"help_text": text}})
+		a.renderEnvelope(a.Stdout, jsonMode, output.Envelope{OK: true, Command: "help", Result: helpEnvelopeResult(topic, text)})
 		return 0
 	}
 
@@ -198,7 +200,12 @@ func (a *App) Run(args []string) int {
 		return a.renderError(identity, resolved.JSON, runErr)
 	}
 	if !isGoTestBinary() {
-		a.maybeScheduleSkillsRefresh(identity.Command, result, resolved.ConfigDir)
+		if !strings.HasPrefix(identity.Command, "update") {
+			a.maybeScheduleSkillsRefresh(identity.Command, result, resolved.ConfigDir)
+		}
+		if result != nil {
+			result.Warnings = append(result.Warnings, a.maybeScheduleUpdate(identity.Command, normalizedArgs, resolved)...)
+		}
 	}
 
 	if result != nil && result.RawWritten {
@@ -253,6 +260,14 @@ func (a *App) renderEnvelope(w io.Writer, jsonMode bool, envelope output.Envelop
 	if jsonMode {
 		err = output.WriteEnvelopeJSON(w, envelope)
 	} else {
+		// Keep help's existing text projection compact as JSON gains metadata.
+		if envelope.Command == "help" {
+			if data, ok := envelope.Result.(map[string]any); ok {
+				if text, ok := data["help_text"]; ok {
+					envelope.Result = map[string]any{"help_text": text}
+				}
+			}
+		}
 		err = output.WriteEnvelopeText(w, envelope)
 	}
 	if err != nil {

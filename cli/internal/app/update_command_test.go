@@ -5,6 +5,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
@@ -21,10 +22,13 @@ import (
 func TestRunUpdateCheckDoesNotCallHandshake(t *testing.T) {
 	restoreVersion := httpclient.CLIVersion
 	restoreBaseURL := updateReleaseBaseURL
+	restoreAPIURL := updateReleaseAPIURL
+	updateReleaseAPIURL = ""
 	httpclient.CLIVersion = "v0.0.1"
 	t.Cleanup(func() {
 		httpclient.CLIVersion = restoreVersion
 		updateReleaseBaseURL = restoreBaseURL
+		updateReleaseAPIURL = restoreAPIURL
 	})
 
 	handshakeCalled := false
@@ -39,6 +43,8 @@ func TestRunUpdateCheckDoesNotCallHandshake(t *testing.T) {
 	var releaseServer *httptest.Server
 	releaseServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/releases/tag/v0.0.3":
+			w.WriteHeader(http.StatusOK)
 		case "/releases/latest":
 			http.Redirect(w, r, releaseServer.URL+"/releases/tag/v0.0.3", http.StatusFound)
 		default:
@@ -72,15 +78,20 @@ func TestRunUpdateCheckDoesNotCallHandshake(t *testing.T) {
 func TestRunUpdateCheckFallsBackToLatestRelease(t *testing.T) {
 	restoreVersion := httpclient.CLIVersion
 	restoreBaseURL := updateReleaseBaseURL
+	restoreAPIURL := updateReleaseAPIURL
+	updateReleaseAPIURL = ""
 	httpclient.CLIVersion = "v0.0.1"
 	t.Cleanup(func() {
 		httpclient.CLIVersion = restoreVersion
 		updateReleaseBaseURL = restoreBaseURL
+		updateReleaseAPIURL = restoreAPIURL
 	})
 
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/releases/tag/v0.0.3":
+			w.WriteHeader(http.StatusOK)
 		case "/releases/latest":
 			http.Redirect(w, r, server.URL+"/releases/tag/v0.0.3", http.StatusFound)
 		default:
@@ -106,11 +117,14 @@ func TestRunUpdateCheckFallsBackToLatestRelease(t *testing.T) {
 func TestRunUpdateReplacesBinaryFromRequestedVersion(t *testing.T) {
 	restoreVersion := httpclient.CLIVersion
 	restoreBaseURL := updateReleaseBaseURL
+	restoreAPIURL := updateReleaseAPIURL
+	updateReleaseAPIURL = ""
 	restoreExecPath := updateExecutablePath
 	httpclient.CLIVersion = "v0.0.1"
 	t.Cleanup(func() {
 		httpclient.CLIVersion = restoreVersion
 		updateReleaseBaseURL = restoreBaseURL
+		updateReleaseAPIURL = restoreAPIURL
 		updateExecutablePath = restoreExecPath
 	})
 
@@ -143,6 +157,14 @@ func TestRunUpdateReplacesBinaryFromRequestedVersion(t *testing.T) {
 	}
 	updateExecutablePath = func() (string, error) { return execPath, nil }
 
+	digest, _ := binaryDigest(execPath)
+	if err := writeUpdateJSON(installRecordPath(execPath), updateInstallRecord{ManagedBy: "anx", Version: "v0.0.1", SHA256: digest}); err != nil {
+		t.Fatal(err)
+	}
+	oldProbe, oldSync := updateProbeBinary, updateSyncSkills
+	updateProbeBinary = func(context.Context, string, string) error { return nil }
+	updateSyncSkills = func(context.Context, string, string) error { return nil }
+	t.Cleanup(func() { updateProbeBinary = oldProbe; updateSyncSkills = oldSync })
 	home := t.TempDir()
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "update", "--version", version})
 	payload := assertEnvelopeOK(t, raw)
