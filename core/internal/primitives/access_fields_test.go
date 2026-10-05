@@ -24,6 +24,19 @@ func TestResourceAccessScopeRechecksRootsAndQuotedRelations(t *testing.T) {
 		t.Fatal(err)
 	}
 	scope := WithAccessScope(ctx, AccessScope{ActorID: "stranger"})
+	// Reuse one principal and query across ownership changes. Materialization
+	// must remain statement-local, including when access is granted again.
+	checkVisible := func(want int) {
+		t.Helper()
+		var count int
+		if err := s.db.QueryRowContext(scope, `SELECT COUNT(*) FROM cards WHERE id=?`, card["id"]).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != want {
+			t.Fatalf("visibility after ownership change: got %d want %d", count, want)
+		}
+	}
+	checkVisible(1)
 	if err = s.CheckResourceValues(scope, map[string]any{"ref": card["ref"]}); err != nil {
 		t.Fatal(err)
 	}
@@ -33,6 +46,7 @@ func TestResourceAccessScopeRechecksRootsAndQuotedRelations(t *testing.T) {
 	if err = s.CheckResourceValues(scope, map[string]any{"ref": card["ref"]}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("empty-root decision was cached: %v", err)
 	}
+	checkVisible(0)
 	for _, table := range []string{`"CARDS"`, "`cards`", `[cards]`} {
 		var count int
 		if err = resourceaccess.NewDB(ws.DB()).QueryRowContext(scope, `SELECT COUNT(*) FROM `+table+` WHERE id=?`, card["id"]).Scan(&count); err != nil {
@@ -48,6 +62,10 @@ func TestResourceAccessScopeRechecksRootsAndQuotedRelations(t *testing.T) {
 			t.Fatalf("independent/internal query %q: value=%d err=%v", query, value, err)
 		}
 	}
+	if _, err = s.PatchThread(ctx, "owner", anyStringValue(card["thread_id"]), map[string]any{"pm_actor_id": "stranger"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	checkVisible(1)
 	var version int
 	if err = s.db.QueryRowContext(scope, `PRAGMA user_version`).Scan(&version); err == nil {
 		t.Fatal("unclassified query form bypassed scoped-read validation")

@@ -121,7 +121,7 @@ func accessCTEs(scope AccessScope, query string) string {
 	}
 	return ownershipClosure("_anx_denied", deniedRootSQL(scope), false) +
 		", " + ownershipRefs("_anx_resource_refs", "_anx_denied") +
-		", _anx_denied_refs(ref) AS (SELECT CASE WHEN kind='card' AND (ref LIKE 'http://%' OR ref LIKE 'https://%') THEN ref ELSE kind||':'||ref END FROM _anx_resource_refs UNION SELECT 'doc:'||ref FROM _anx_resource_refs WHERE kind='document')" + graph
+		", _anx_denied_refs(ref) AS MATERIALIZED (SELECT CASE WHEN kind='card' AND (ref LIKE 'http://%' OR ref LIKE 'https://%') THEN ref ELSE kind||':'||ref END FROM _anx_resource_refs UNION SELECT 'doc:'||ref FROM _anx_resource_refs WHERE kind='document')" + graph
 }
 
 // Apply relation visibility before limits, aggregates and cursors. SQLite

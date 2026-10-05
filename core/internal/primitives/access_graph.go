@@ -7,7 +7,8 @@ import (
 
 // Each recursive term probes indexed children of the current resource. Avoid a
 // materialized union of every workspace record: unrelated public history must
-// not increase authorization cost.
+// not increase authorization cost. Fence shared authorization sets within each
+// statement so SQLite does not repeatedly flatten their recursive consumers.
 func ownershipClosure(name, roots string, owner bool) string {
 	columns, carry := "kind,id", ""
 	if owner {
@@ -79,7 +80,7 @@ func ownershipClosure(name, roots string, owner bool) string {
 	} {
 		terms = append(terms, "SELECT 'card',m.card_id"+carry+" FROM "+name+" d JOIN main."+alias.table+" r ON "+alias.condition+" JOIN main.work_metadata m ON d.kind='topic' AND "+resourceaccess.ReferenceSQL("json_extract(m.metadata_json,'$.project_ref')")+"=('topic:'||r."+alias.column+") COLLATE NOCASE")
 	}
-	return name + "(" + columns + ") AS (" + strings.Join(terms, " UNION ") + ")"
+	return name + "(" + columns + ") AS MATERIALIZED (" + strings.Join(terms, " UNION ") + ")"
 }
 
 // Resolve only the denied identities, including virtual revision handles and
@@ -95,7 +96,7 @@ func ownershipRefs(name, relation string) string {
 	}
 	terms = append(terms, "SELECT d.kind,d.id,r.alias_handle FROM "+relation+" d JOIN main.resource_handle_aliases r ON r.resource_type=d.kind AND r.resource_id=d.id WHERE COALESCE(r.alias_handle,'')<>''", "SELECT d.kind,d.id,r.ref FROM "+relation+" d JOIN main.resource_access_tombstones r ON r.kind=d.kind AND r.id=d.id")
 	terms = append(terms, "SELECT d.kind,d.id,json_extract(m.metadata_json,'$.source.url') FROM "+relation+" d JOIN main.work_metadata m ON d.kind='card' AND m.card_id=d.id WHERE m.authority<>'nexus' AND COALESCE(json_extract(m.metadata_json,'$.source.url'),'')<>''")
-	return name + "(kind,id,ref) AS (" + strings.Join(terms, " UNION ") + ")"
+	return name + "(kind,id,ref) AS MATERIALIZED (" + strings.Join(terms, " UNION ") + ")"
 }
 
 func privateOwnershipGraph() string {
