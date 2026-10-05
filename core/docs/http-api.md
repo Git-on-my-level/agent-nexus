@@ -345,7 +345,8 @@ Existing `POST /inbox/{inbox_id}/respond` accepts `approved` (grant) or `rejecte
 (deny) for these items. Other outcomes return 400 without a response or mutation.
 Agents cannot withdraw an access-backed review; only humans decide it.
 
-Open human attention requests survive linked subject archive; thread privacy still
-applies. `GET /inbox/summary` uses the same visibility rules as `/inbox`, counts
-open asks, and returns up to `limit` asks (default 5, range 0–50), with priority
+Open human attention requests survive linked subject archive; request thread,
+subject-card thread and containing-board thread privacy still apply to list, item,
+stream snapshots and updates, and summary reads. `GET /inbox/summary` uses the
+same visibility rules as `/inbox`, counts open asks, and returns up to `limit` asks (default 5, range 0–50), with priority
 and oldest-first ordering. Access reviews are counted by the Access summary.

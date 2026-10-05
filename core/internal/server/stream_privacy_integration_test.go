@@ -201,7 +201,7 @@ func openAuthenticatedPrivacyStream(t *testing.T, url, token, cursor string) *ht
 	return resp
 }
 
-func assertPrivacyInboxEvents(t *testing.T, reader <-chan sseEvent, want map[string]string) {
+func assertPrivacyInboxEvents(t *testing.T, reader <-chan sseEvent, want map[string]string, titles ...map[string]string) {
 	t.Helper()
 	seen := map[string]bool{}
 	for range want {
@@ -212,7 +212,11 @@ func assertPrivacyInboxEvents(t *testing.T, reader <-chan sseEvent, want map[str
 		if event.Event != "inbox_item" || !ok || seen[id] || anyString(item["body"]) != body {
 			t.Fatalf("unexpected inbox event: %#v; expected %#v", event, want)
 		}
-		if anyString(item["title"]) != id+" title" || anyString(item["subject_ref"]) == "" || len(stringSliceAny(item["related_refs"])) == 0 {
+		title := id + " title"
+		if len(titles) > 0 {
+			title = titles[0][id]
+		}
+		if anyString(item["title"]) != title || anyString(item["subject_ref"]) == "" || len(stringSliceAny(item["related_refs"])) == 0 {
 			t.Fatalf("authorized inbox payload lost fields: %#v", item)
 		}
 		seen[id] = true

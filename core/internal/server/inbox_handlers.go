@@ -343,7 +343,7 @@ func loadVisibleInboxItems(r *http.Request, opts handlerOptions, notifications b
 		for _, item := range payloadItems {
 			// Requests have their own response/withdrawal lifecycle. Archiving
 			// linked context must not silently withdraw a pending decision.
-			// Thread privacy has already been enforced above.
+			// Subject-card, containing-board and thread privacy are enforced above.
 			if canonicalHumanAttentionKind(anyString(item["kind"])) != "" {
 				visible = append(visible, item)
 				continue
@@ -413,11 +413,13 @@ func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		writeError(w, http.StatusNotFound, "not_found", "inbox item not found")
 		return
 	}
-	if !requireAccessibleThreadID(w, r, opts, item.ThreadID, "inbox item") {
+	payload := payloadFromDerivedInboxItem(item)
+	if !inboxItemAccessible(r, opts, item.ThreadID, payload) {
+		denyPMNotFound(w, "inbox item")
 		return
 	}
 
-	payload := enrichHumanAttentionNotificationStatus(r.Context(), opts, payloadFromDerivedInboxItem(item))
+	enrichHumanAttentionNotificationStatus(r.Context(), opts, payload)
 	enrichAccessRequestInboxItem(r.Context(), opts, payload)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"item":                 payload,

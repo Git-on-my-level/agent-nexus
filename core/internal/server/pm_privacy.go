@@ -252,12 +252,12 @@ func filterAccessibleArtifacts(r *http.Request, opts handlerOptions, artifacts [
 
 func filterAccessibleInboxItems(r *http.Request, opts handlerOptions, items []map[string]any, projected []primitives.DerivedInboxItem) []map[string]any {
 	if len(items) != len(projected) {
-		return items
+		return nil
 	}
 	out := make([]map[string]any, 0, len(items))
 	for i, item := range items {
 		threadID := strings.TrimSpace(projected[i].ThreadID)
-		if threadID == "" || threadAccessible(r, opts, threadID) {
+		if inboxItemAccessible(r, opts, threadID, item) {
 			out = append(out, item)
 		}
 	}
