@@ -978,9 +978,12 @@ for (const viewport of [
     await expect(report).toContainText("3/7");
     await expect(report).toContainText("Needs David: choose the launch date");
     await expect(report.getByText("stalled", { exact: true })).toBeVisible();
+    const initiative = report.locator('[data-report-initiative="card:launch"]');
+    const initiativePlan = initiative.locator("[data-initiative-plan]");
     await expect(
-      report.getByRole("link", { name: "Finish review" }),
-    ).toHaveAttribute("href", /tasks\/review$/);
+      initiativePlan.getByRole("link", { name: "Finish review" }),
+    ).toHaveAttribute("href", /tasks\/card%3Areview$/i);
+    await expect(initiativePlan.getByText("View plan steps")).toBeVisible();
     await expect(report).toContainText("On it: actor:agent-reviewer");
     await expect(report).toContainText("2h old");
     await expect(

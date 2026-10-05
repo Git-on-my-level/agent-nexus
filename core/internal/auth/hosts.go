@@ -36,6 +36,8 @@ const (
 	maxEnrollmentAdoptions            = 16
 	maxPendingEnrollmentsPerSource    = 4
 	maxPendingEnrollmentsPerWorkspace = 64
+	maxHostInventoryPage              = 100
+	maxHostInventoryAgents            = 50
 	enrollmentRetention               = time.Hour
 )
 
@@ -131,6 +133,13 @@ type HostAgent struct {
 	OpenAsksCount    int     `json:"open_asks_count"`
 	LastSignalAt     *string `json:"last_signal_at"`
 	RevokedAt        *string `json:"revoked_at"`
+}
+
+// HostInventoryEntry is a bounded host roster row. AgentCount is the total
+// number of associated agents; Host.Agents contains only the requested page.
+type HostInventoryEntry struct {
+	Host       Host
+	AgentCount int
 }
 type AdoptionProof struct {
 	AgentID   string `json:"agent_id"`
@@ -380,6 +389,50 @@ func (s *Store) PendingHostEnrollments(ctx context.Context) ([]HostEnrollment, e
 	}
 	return out, nil
 }
+
+// PendingHostEnrollmentsPage returns a bounded page and a separately counted
+// total. It reads full enrollment details only for rows in the page.
+func (s *Store) PendingHostEnrollmentsPage(ctx context.Context, limit int) ([]HostEnrollment, int, error) {
+	if limit < 1 {
+		return nil, 0, ErrInvalidRequest
+	}
+	if limit > maxHostInventoryPage {
+		limit = maxHostInventoryPage
+	}
+	now := hostNow()
+	var total int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM host_enrollments WHERE status IN ('pending','approved') AND expires_at>?`, now).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM host_enrollments WHERE status IN ('pending','approved') AND expires_at>? ORDER BY created_at,id LIMIT ?`, now, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, 0, err
+		}
+		ids = append(ids, id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, 0, err
+	}
+	out := make([]HostEnrollment, 0, len(ids))
+	for _, id := range ids {
+		enrollment, err := readEnrollment(s.db.QueryRowContext(ctx, enrollmentSelect, id), true)
+		if err != nil {
+			return nil, 0, err
+		}
+		out = append(out, enrollment)
+	}
+	return out, total, nil
+}
+
 func (s *Store) DecideHostEnrollment(ctx context.Context, id string, approve bool, admin Principal) (HostEnrollment, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -765,6 +818,103 @@ func (s *Store) ListHosts(ctx context.Context) ([]Host, error) {
 	}
 	return out, nil
 }
+
+// ListHostInventory returns bounded host and per-host agent rows plus exact
+// totals. Inventory reports do not need exclusions or credentials, so those
+// collections are not hydrated here.
+func (s *Store) ListHostInventory(ctx context.Context, hostLimit, agentLimit int) ([]HostInventoryEntry, int, int, error) {
+	if hostLimit < 1 || agentLimit < 1 {
+		return nil, 0, 0, ErrInvalidRequest
+	}
+	if hostLimit > maxHostInventoryPage {
+		hostLimit = maxHostInventoryPage
+	}
+	if agentLimit > maxHostInventoryAgents {
+		agentLimit = maxHostInventoryAgents
+	}
+	var total, active int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(CASE WHEN revoked_at IS NULL THEN 1 ELSE 0 END),0) FROM hosts`).Scan(&total, &active); err != nil {
+		return nil, 0, 0, err
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM hosts ORDER BY created_at DESC,id LIMIT ?`, hostLimit)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, 0, 0, err
+		}
+		ids = append(ids, id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	entries := make([]HostInventoryEntry, 0, len(ids))
+	for _, id := range ids {
+		entry, err := s.readHostInventoryEntry(ctx, id, agentLimit)
+		if err != nil {
+			return nil, 0, 0, err
+		}
+		entries = append(entries, entry)
+	}
+	return entries, total, active, nil
+}
+
+func (s *Store) readHostInventoryEntry(ctx context.Context, id string, agentLimit int) (HostInventoryEntry, error) {
+	var entry HostInventoryEntry
+	h := &entry.Host
+	var adapters string
+	var revoked, bridgeExpiry sql.NullString
+	err := s.db.QueryRowContext(ctx, `SELECT h.id,h.slug,h.display_name,h.os_user,h.hostname,h.discovered_adapters_json,h.created_at,h.revoked_at,h.bridge_expires_at FROM hosts h WHERE h.id=?`, id).Scan(&h.ID, &h.Slug, &h.DisplayName, &h.OSUser, &h.Hostname, &adapters, &h.CreatedAt, &revoked, &bridgeExpiry)
+	if err != nil {
+		return entry, err
+	}
+	h.Ref = "host:" + h.ID
+	h.Handle = h.Slug
+	if revoked.Valid {
+		h.RevokedAt = &revoked.String
+	}
+	if err := json.Unmarshal([]byte(adapters), &h.DiscoveredAdapters); err != nil {
+		return entry, err
+	}
+	if h.DiscoveredAdapters == nil {
+		h.DiscoveredAdapters = []string{}
+	}
+	h.ExcludedNames = []string{}
+	h.Agents = []HostAgent{}
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM host_agents WHERE host_id=?`, h.ID).Scan(&entry.AgentCount); err != nil {
+		return entry, err
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT ha.name,ha.identity_kind,a.id,a.actor_id,a.username,a.revoked_at FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? ORDER BY ha.name LIMIT ?`, h.ID, agentLimit)
+	if err != nil {
+		return entry, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var agent HostAgent
+		var agentRevoked sql.NullString
+		if err := rows.Scan(&agent.Name, &agent.IdentityKind, &agent.ID, &agent.ActorID, &agent.Handle, &agentRevoked); err != nil {
+			return entry, err
+		}
+		agent.Ref = "actor:" + agent.ActorID
+		agent.HostID = &h.ID
+		agent.HostSlug = &h.Slug
+		agent.DisplayName = agent.Name + " on " + h.Slug
+		agent.State = "stale"
+		agent.BridgeOnline = bridgeExpiry.Valid && !expired(bridgeExpiry.String) && h.RevokedAt == nil
+		if agentRevoked.Valid {
+			agent.RevokedAt = &agentRevoked.String
+		}
+		h.Agents = append(h.Agents, agent)
+	}
+	return entry, rows.Err()
+}
+
 func (s *Store) VerifyHostProof(ctx context.Context, id, keyID, signedAt, signature, kind string, body []byte) error {
 	t, err := time.Parse(time.RFC3339, signedAt)
 	if err != nil || time.Since(t) > s.hostProofSkew() || time.Until(t) > s.hostProofSkew() {

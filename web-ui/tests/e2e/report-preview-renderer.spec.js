@@ -126,6 +126,8 @@ test("headless report preview writes a PNG from injected live observations", asy
       observationsPath,
       "--output",
       outputPath,
+      "--expect-text",
+      "Release checklist moved forward",
     ],
     { cwd: webRoot, timeout: 100_000 },
   );

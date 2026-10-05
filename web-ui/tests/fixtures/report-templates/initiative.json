@@ -5,11 +5,49 @@
         "items": [
           {
             "board_ref": "board:work",
-            "needs": [],
+            "needs": ["Approve the launch window"],
+            "assignee_refs": ["actor:agent-reviewer"],
             "phase": "in_progress",
             "priority": "p1",
+            "plan": {
+              "steps": [
+                {
+                  "id": "prepare",
+                  "title": "Prepare release notes",
+                  "after": [],
+                  "status": "done"
+                },
+                {
+                  "id": "review",
+                  "title": "Finish review",
+                  "ref": "card:review",
+                  "after": ["prepare"],
+                  "status": "active"
+                },
+                {
+                  "id": "ship",
+                  "title": "Ship launch",
+                  "ref": "card:ship",
+                  "after": ["review"],
+                  "status": "not_started"
+                }
+              ]
+            },
+            "plan_state": {
+              "steps": [
+                { "id": "prepare", "status": "done", "resolvable": true },
+                { "id": "review", "status": "active", "resolvable": true },
+                { "id": "ship", "status": "not_started", "resolvable": true }
+              ],
+              "progress": { "done": 1, "total": 3 },
+              "critical_path": ["prepare", "review", "ship"],
+              "next_steps": ["review"],
+              "shape": "chain",
+              "health": "on_track",
+              "last_movement_at": "2026-10-05T00:00:00Z"
+            },
             "progress": {
-              "done": 2,
+              "done": 1,
               "total": 3
             },
             "ref": "card:launch",

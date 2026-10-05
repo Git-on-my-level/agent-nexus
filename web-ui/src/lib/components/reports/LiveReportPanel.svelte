@@ -3,14 +3,18 @@
   import { inboxItemMailboxId } from "$lib/inboxUtils.js";
   import { formatLiveAge } from "$lib/liveReports.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
-  import { page } from "$app/stores";
+  let {
+    panel,
+    resolved = new Map(),
+    organizationSlug = "",
+    workspaceSlug = "",
+    onpreview = null,
+    onpreviewclose = null,
+  } = $props();
+  let canNavigate = $derived(Boolean(organizationSlug && workspaceSlug));
   let workspaceHref = $derived(
-    bindWorkspaceHref($page.params.organization, $page.params.workspace),
+    canNavigate ? bindWorkspaceHref(organizationSlug, workspaceSlug) : null,
   );
-  let canNavigate = $derived(
-    Boolean($page.params.organization && $page.params.workspace),
-  );
-  let { panel } = $props();
   let live = $derived(panel.live);
   let items = $derived(live?.data?.items ?? []);
   let buckets = $derived(live?.data?.buckets ?? []);
@@ -39,9 +43,15 @@
       {live.message || "Live data unavailable. Check your access or try again."}
     </p>
   {:else if panel.type === "live-initiatives"}
-    {#if items.length}<LiveInitiatives {items} />{:else}<p class="muted">
-        No open initiatives in this view.
-      </p>{/if}
+    {#if items.length}
+      <LiveInitiatives
+        {items}
+        {resolved}
+        {organizationSlug}
+        {workspaceSlug}
+        {onpreview}
+        {onpreviewclose}
+      />{:else}<p class="muted">No open initiatives in this view.</p>{/if}
   {:else if panel.type === "live-asks"}
     {#if items.length}
       <ul class="rows">

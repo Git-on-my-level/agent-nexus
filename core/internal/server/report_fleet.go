@@ -19,14 +19,14 @@ func (reader *reportReader) fleetHealth() (map[string]any, bool, error) {
 	if reader.opts.authStore == nil {
 		return nil, false, fmt.Errorf("host inventory unavailable")
 	}
-	hosts, err := reader.opts.authStore.ListHosts(reader.r.Context())
+	hosts, hostCount, activeHostCount, err := reader.opts.authStore.ListHostInventory(reader.r.Context(), maxReportFleetHosts, maxReportFleetHostAgents)
 	if err != nil {
 		return nil, false, err
 	}
 	data := map[string]any{
 		"hosts":                []map[string]any{},
-		"host_count":           len(hosts),
-		"active_host_count":    0,
+		"host_count":           hostCount,
+		"active_host_count":    activeHostCount,
 		"enrollments":          []map[string]any{},
 		"enrollment_count":     0,
 		"enrollment_available": false,
@@ -34,35 +34,24 @@ func (reader *reportReader) fleetHealth() (map[string]any, bool, error) {
 		"series":               []map[string]any{},
 		"series_message":       "",
 	}
-	activeHostCount := 0
-	for _, host := range hosts {
-		if host.RevokedAt == nil {
-			activeHostCount++
-		}
-	}
-	data["active_host_count"] = activeHostCount
-	truncated := false
-	if len(hosts) > maxReportFleetHosts {
-		hosts = hosts[:maxReportFleetHosts]
-		truncated = true
-	}
+	truncated := hostCount > len(hosts)
 	hostRows := make([]map[string]any, 0, len(hosts))
-	for _, host := range hosts {
-		agents := make([]map[string]any, 0, min(len(host.Agents), maxReportFleetHostAgents))
+	for _, entry := range hosts {
+		host := entry.Host
+		agents := make([]map[string]any, 0, len(host.Agents))
 		for _, agent := range host.Agents {
-			if len(agents) == maxReportFleetHostAgents {
-				truncated = true
-				break
-			}
 			agents = append(agents, map[string]any{
 				"name": agent.Name, "handle": agent.Handle,
 				"bridge_online": agent.BridgeOnline, "revoked_at": agent.RevokedAt,
 			})
 		}
+		if entry.AgentCount > len(agents) {
+			truncated = true
+		}
 		hostRows = append(hostRows, map[string]any{
 			"ref": host.Ref, "slug": host.Slug, "display_name": host.DisplayName,
 			"hostname": host.Hostname, "discovered_adapters": host.DiscoveredAdapters,
-			"agent_count": len(host.Agents), "agents": agents,
+			"agent_count": entry.AgentCount, "agents": agents,
 			"created_at": host.CreatedAt, "revoked_at": host.RevokedAt,
 		})
 	}
@@ -71,14 +60,13 @@ func (reader *reportReader) fleetHealth() (map[string]any, bool, error) {
 	if principal, ok := cachedAuthenticatedPrincipal(reader.r); ok && isAuthAdminPrincipal(principal) {
 		data["enrollment_available"] = true
 		data["enrollment_message"] = ""
-		enrollments, err := reader.opts.authStore.PendingHostEnrollments(reader.r.Context())
+		enrollments, enrollmentCount, err := reader.opts.authStore.PendingHostEnrollmentsPage(reader.r.Context(), maxReportFleetEnrollments)
 		if err != nil {
 			data["enrollment_available"] = false
 			data["enrollment_message"] = "Pending enrollment inventory is unavailable."
 		} else {
-			data["enrollment_count"] = len(enrollments)
-			if len(enrollments) > maxReportFleetEnrollments {
-				enrollments = enrollments[:maxReportFleetEnrollments]
+			data["enrollment_count"] = enrollmentCount
+			if enrollmentCount > len(enrollments) {
 				truncated = true
 			}
 			rows := make([]map[string]any, 0, len(enrollments))

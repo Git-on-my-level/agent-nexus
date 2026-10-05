@@ -11,8 +11,13 @@ function args(argv) {
   for (let index = 0; index < argv.length; index += 1) {
     const key = argv[index];
     if (!key.startsWith("--") || !argv[index + 1])
-      throw new Error("usage: preview-visual-report.mjs --report <file> --observations <file> --output <png>");
-    result[key.slice(2)] = argv[++index];
+      throw new Error(
+        "usage: preview-visual-report.mjs --report <file> --observations <file> --output <png> [--expect-text <text>]",
+      );
+    const name = key.slice(2);
+    const value = argv[++index];
+    if (name === "expect-text") result[name] = [...(result[name] ?? []), value];
+    else result[name] = value;
   }
   for (const key of ["report", "observations", "output"])
     if (!result[key]) throw new Error(`missing --${key}`);
@@ -26,7 +31,9 @@ async function freePort() {
     server.listen(0, "127.0.0.1", resolve);
   });
   const port = server.address().port;
-  await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  await new Promise((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve())),
+  );
   return port;
 }
 
@@ -35,7 +42,9 @@ async function waitUntilReady(child, url) {
   let lastError;
   while (Date.now() < deadline) {
     if (child.exitCode !== null)
-      throw new Error(`web renderer exited early with status ${child.exitCode}`);
+      throw new Error(
+        `web renderer exited early with status ${child.exitCode}`,
+      );
     try {
       const response = await fetch(url);
       if (response.ok) return;
@@ -45,7 +54,9 @@ async function waitUntilReady(child, url) {
     }
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
-  throw new Error(`web renderer did not become ready: ${lastError?.message ?? "timeout"}`);
+  throw new Error(
+    `web renderer did not become ready: ${lastError?.message ?? "timeout"}`,
+  );
 }
 
 async function stop(child) {
@@ -62,14 +73,29 @@ async function main() {
   const input = args(process.argv.slice(2));
   JSON.parse(await readFile(input.report, "utf8"));
   const observations = JSON.parse(await readFile(input.observations, "utf8"));
-  if (!Array.isArray(observations)) throw new Error("observations must be an array");
+  if (!Array.isArray(observations))
+    throw new Error("observations must be an array");
+  const expectedTexts = (input["expect-text"] ?? [])
+    .map((value) => value.trim())
+    .filter(Boolean);
   const output = path.resolve(input.output);
   await mkdir(path.dirname(output), { recursive: true });
-  const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const webRoot = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+  );
   const port = await freePort();
   const server = spawn(
     process.execPath,
-    [path.join(webRoot, "node_modules", "vite", "bin", "vite.js"), "dev", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
+    [
+      path.join(webRoot, "node_modules", "vite", "bin", "vite.js"),
+      "dev",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(port),
+      "--strictPort",
+    ],
     {
       cwd: webRoot,
       env: {
@@ -88,10 +114,38 @@ async function main() {
       chromiumSandbox: true,
     });
     try {
-      const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, colorScheme: "light" });
+      const page = await browser.newPage({
+        viewport: { width: 1440, height: 1000 },
+        colorScheme: "light",
+      });
+      const pageErrors = [];
+      page.on("pageerror", (error) => pageErrors.push(error.message));
       await page.goto(url, { waitUntil: "networkidle", timeout: 30_000 });
+      if (pageErrors.length)
+        throw new Error(`report preview page error: ${pageErrors.join("; ")}`);
       const reportSurface = page.locator('[aria-label="Visual report"]');
       await reportSurface.waitFor({ state: "visible", timeout: 15_000 });
+      await page.waitForFunction(
+        () => {
+          const surface = document.querySelector(
+            '[aria-label="Visual report"]',
+          );
+          return surface && !surface.innerText.includes("Reading workspace…");
+        },
+        null,
+        { timeout: 15_000 },
+      );
+      const renderedText = await reportSurface.innerText();
+      if (pageErrors.length)
+        throw new Error(`report preview page error: ${pageErrors.join("; ")}`);
+      if (renderedText.includes("Reading workspace…"))
+        throw new Error("report preview retained a loading placeholder");
+      for (const expectedText of expectedTexts) {
+        if (!renderedText.includes(expectedText))
+          throw new Error(
+            `report preview did not render fixture content: ${expectedText}`,
+          );
+      }
       await reportSurface.screenshot({ path: output, animations: "disabled" });
     } finally {
       await browser.close();

@@ -23,6 +23,20 @@ const templateNames = [
   "incident-review",
   "fleet-health",
 ];
+const fixtureText = {
+  "workspace-overview": ["Launch", "Launch checklist updated"],
+  initiative: [
+    "Launch",
+    "Finish review",
+    "Ship launch",
+    "actor:agent-reviewer",
+    "Approve the launch window",
+  ],
+  "weekly-review": ["Launch checklist updated", "Launch"],
+  "release-readiness": ["Launch", "Choose the release date"],
+  "incident-review": ["Launch checklist updated", "Choose the release date"],
+  "fleet-health": ["Collector"],
+};
 
 test("browser renders all six report templates against live fixtures", async ({
   request,
@@ -51,6 +65,7 @@ test("browser renders all six report templates against live fixtures", async ({
         observationsPath,
         "--output",
         outputPath,
+        ...fixtureText[name].flatMap((text) => ["--expect-text", text]),
       ],
       { cwd: webRoot, timeout: 100_000 },
     );
