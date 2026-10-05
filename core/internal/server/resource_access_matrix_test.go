@@ -59,6 +59,9 @@ func loadPrivacyRouteMatrix(t *testing.T) []privacyRoutePolicy {
 			t.Errorf("unimplemented privacy policy %q: %s", p.Policy, key)
 		}
 		covered[key] = p
+		if p.Policy == "independent" && !independentPrivacyRoute(p) {
+			t.Errorf("resource route cannot be exempt: %s", key)
+		}
 	}
 	for _, r := range inventory.Routes {
 		key := r.Method + " " + r.Path
@@ -75,7 +78,13 @@ func loadPrivacyRouteMatrix(t *testing.T) []privacyRoutePolicy {
 	}
 	return policies
 }
-func TestResourceAccessRouteInventory(t *testing.T) { loadPrivacyRouteMatrix(t) }
+func TestResourceAccessRouteInventory(t *testing.T) {
+	policies := loadPrivacyRouteMatrix(t)
+	if err := validatePrivacyMounts(policies, privacyMountedRoutes()); err != nil {
+		t.Fatal(err)
+	}
+	checkResourceAccessRegistration(t)
+}
 
 func TestResourceAccessRouteMatrix(t *testing.T) {
 	requireIntegrationTest(t)

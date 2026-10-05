@@ -53,10 +53,15 @@ func validatePrivacyMounts(policies []privacyRoutePolicy, mounted map[string]rou
 	return nil
 }
 
-func TestResourceAccessMountedInventory(t *testing.T) {
-	policies := loadPrivacyRouteMatrix(t)
+func privacyMountedRoutes() map[string]routeAccessClassifier {
 	mounted := map[string]routeAccessClassifier{}
 	NewHandler("", func(o *handlerOptions) { o.routeObserver = func(p string, c routeAccessClassifier) { mounted[p] = c } })
+	return mounted
+}
+
+func TestResourceAccessMountedInventory(t *testing.T) {
+	policies := loadPrivacyRouteMatrix(t)
+	mounted := privacyMountedRoutes()
 	if err := validatePrivacyMounts(policies, mounted); err != nil {
 		t.Fatal(err)
 	}
@@ -78,6 +83,11 @@ func TestResourceAccessMountedInventory(t *testing.T) {
 }
 
 func TestResourceAccessRegistrationCannotBypassObserver(t *testing.T) {
+	checkResourceAccessRegistration(t)
+}
+
+func checkResourceAccessRegistration(t *testing.T) {
+	t.Helper()
 	// All real mux registrations must pass the observed registration functions.
 	// This also catches direct mux.Handle/HandleFunc additions omitted from them.
 	f, err := parser.ParseFile(token.NewFileSet(), "handler.go", nil, 0)
