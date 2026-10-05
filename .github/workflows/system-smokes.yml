@@ -1,6 +1,8 @@
 name: System Smokes
 
 on:
+  merge_group:
+    types: [checks_requested]
   push:
     branches:
       - main
@@ -111,7 +113,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: changes
-    if: github.event_name == 'workflow_dispatch' && inputs.run_e2e_smoke
+    if: github.event_name == 'merge_group' || (github.event_name == 'workflow_dispatch' && inputs.run_e2e_smoke)
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
