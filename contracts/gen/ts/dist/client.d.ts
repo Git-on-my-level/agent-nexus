@@ -83,6 +83,11 @@ export declare class AnxClient {
     artifactsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     artifactsTrash(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     artifactsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    authAccessRequestsApprove(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    authAccessRequestsDeny(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    authAccessRequestsList(options?: RequestOptions): Promise<InvokeResult>;
+    authAccessRequestsRequest(options?: RequestOptions): Promise<InvokeResult>;
+    authAccessRequestsSummary(options?: RequestOptions): Promise<InvokeResult>;
     authAdminsGrant(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     authAdminsList(options?: RequestOptions): Promise<InvokeResult>;
     authAdminsRevoke(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

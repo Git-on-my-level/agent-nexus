@@ -84,8 +84,13 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `auth`
 
-- Commands: `17`
+- Commands: `22`
 - Command IDs:
+  - `auth.access-requests.approve` (`auth access-requests approve`)
+  - `auth.access-requests.deny` (`auth access-requests deny`)
+  - `auth.access-requests.list` (`auth access-requests list`)
+  - `auth.access-requests.request` (`auth access-requests request`)
+  - `auth.access-requests.summary` (`auth access-requests summary`)
   - `auth.admins.grant` (`auth admins grant`)
   - `auth.admins.list` (`auth admins list`)
   - `auth.admins.revoke` (`auth admins revoke`)

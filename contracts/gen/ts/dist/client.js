@@ -1214,6 +1214,302 @@ export const commandRegistry = [
         "ts_method": "artifactsUnarchive"
     },
     {
+        "command_id": "auth.access-requests.approve",
+        "cli_path": "auth access-requests approve",
+        "group": "auth",
+        "method": "POST",
+        "path": "/auth/access-requests/{request_id}/approve",
+        "operation_id": "approveAccessRequest",
+        "summary": "Approve an access request",
+        "description": "Human only. Atomically grants auth-admin using the existing grant semantics and records an approved Inbox response. Same decision retries are idempotent; opposite decisions conflict. Revoked requesters cannot be approved.",
+        "why": "Request and review explicit workspace authority.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `AccessRequestResponse`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "human_required",
+            "invalid_request",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "auth"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Agents request their own grant. Humans alone decide requests and read the Access queue.",
+        "path_params": [
+            "request_id"
+        ],
+        "adjacent_commands": [
+            "auth.access-requests.deny",
+            "auth.access-requests.list",
+            "auth.access-requests.request",
+            "auth.access-requests.summary",
+            "auth.admins.grant",
+            "auth.admins.list",
+            "auth.admins.revoke",
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.dev.login",
+            "auth.passkey.dev.register",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+        ],
+        "go_method": "AuthAccessRequestsApprove",
+        "ts_method": "authAccessRequestsApprove"
+    },
+    {
+        "command_id": "auth.access-requests.deny",
+        "cli_path": "auth access-requests deny",
+        "group": "auth",
+        "method": "POST",
+        "path": "/auth/access-requests/{request_id}/deny",
+        "operation_id": "denyAccessRequest",
+        "summary": "Deny an access request",
+        "description": "Human only. Records a denied request and rejected Inbox response without granting authority. Same decision retries are idempotent; opposite decisions conflict.",
+        "why": "Request and review explicit workspace authority.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `AccessRequestResponse`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "human_required",
+            "invalid_request",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "auth"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Agents request their own grant. Humans alone decide requests and read the Access queue.",
+        "path_params": [
+            "request_id"
+        ],
+        "adjacent_commands": [
+            "auth.access-requests.approve",
+            "auth.access-requests.list",
+            "auth.access-requests.request",
+            "auth.access-requests.summary",
+            "auth.admins.grant",
+            "auth.admins.list",
+            "auth.admins.revoke",
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.dev.login",
+            "auth.passkey.dev.register",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+        ],
+        "go_method": "AuthAccessRequestsDeny",
+        "ts_method": "authAccessRequestsDeny"
+    },
+    {
+        "command_id": "auth.access-requests.list",
+        "cli_path": "auth access-requests list",
+        "group": "auth",
+        "method": "GET",
+        "path": "/auth/access-requests",
+        "operation_id": "listAccessRequests",
+        "summary": "List pending access requests",
+        "description": "Human only. Lists pending requests in creation order, including requester identity, grant, reason and Inbox correlation.",
+        "why": "Request and review explicit workspace authority.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `AccessRequestsResponse`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "human_required",
+            "invalid_request",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "auth"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Agents request their own grant. Humans alone decide requests and read the Access queue.",
+        "adjacent_commands": [
+            "auth.access-requests.approve",
+            "auth.access-requests.deny",
+            "auth.access-requests.request",
+            "auth.access-requests.summary",
+            "auth.admins.grant",
+            "auth.admins.list",
+            "auth.admins.revoke",
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.dev.login",
+            "auth.passkey.dev.register",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+        ],
+        "go_method": "AuthAccessRequestsList",
+        "ts_method": "authAccessRequestsList"
+    },
+    {
+        "command_id": "auth.access-requests.request",
+        "cli_path": "auth access-requests request",
+        "group": "auth",
+        "method": "POST",
+        "path": "/auth/access-requests",
+        "operation_id": "createAccessRequest",
+        "summary": "Request a named grant",
+        "description": "Agent only. Requests auth-admin for the authenticated principal, with a nonempty reason. Idempotent per principal and grant for the lifetime of the request; retries return the original request without changing its reason or decision. Creates a review Inbox item.",
+        "why": "Request and review explicit workspace authority.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `AccessRequestResponse`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "human_required",
+            "invalid_request",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "auth"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Agents request their own grant. Humans alone decide requests and read the Access queue.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "grant",
+                    "type": "string",
+                    "enum_values": [
+                        "auth-admin"
+                    ]
+                },
+                {
+                    "name": "reason",
+                    "type": "string"
+                }
+            ]
+        },
+        "adjacent_commands": [
+            "auth.access-requests.approve",
+            "auth.access-requests.deny",
+            "auth.access-requests.list",
+            "auth.access-requests.summary",
+            "auth.admins.grant",
+            "auth.admins.list",
+            "auth.admins.revoke",
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.dev.login",
+            "auth.passkey.dev.register",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+        ],
+        "go_method": "AuthAccessRequestsRequest",
+        "ts_method": "authAccessRequestsRequest"
+    },
+    {
+        "command_id": "auth.access-requests.summary",
+        "cli_path": "auth access-requests summary",
+        "group": "auth",
+        "method": "GET",
+        "path": "/auth/access/summary",
+        "operation_id": "getAccessSummary",
+        "summary": "Count pending access actions",
+        "description": "Human only. Cheap pending count covering pending access requests and unexpired pending or approved host enrollments awaiting completion.",
+        "why": "Request and review explicit workspace authority.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `AccessSummary`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "human_required",
+            "invalid_request",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "auth"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Agents request their own grant. Humans alone decide requests and read the Access queue.",
+        "adjacent_commands": [
+            "auth.access-requests.approve",
+            "auth.access-requests.deny",
+            "auth.access-requests.list",
+            "auth.access-requests.request",
+            "auth.admins.grant",
+            "auth.admins.list",
+            "auth.admins.revoke",
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.dev.login",
+            "auth.passkey.dev.register",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+        ],
+        "go_method": "AuthAccessRequestsSummary",
+        "ts_method": "authAccessRequestsSummary"
+    },
+    {
         "command_id": "auth.admins.grant",
         "cli_path": "auth admins grant",
         "group": "auth",
@@ -1245,6 +1541,11 @@ export const commandRegistry = [
             "principal_id"
         ],
         "adjacent_commands": [
+            "auth.access-requests.approve",
+            "auth.access-requests.deny",
+            "auth.access-requests.list",
+            "auth.access-requests.request",
+            "auth.access-requests.summary",
             "auth.admins.list",
             "auth.admins.revoke",
             "auth.audit.list",
@@ -1292,6 +1593,11 @@ export const commandRegistry = [
         "surface": "utility",
         "agent_notes": "Only a human can change a grant. No default grant is assigned to agents or hosts.",
         "adjacent_commands": [
+            "auth.access-requests.approve",
+            "auth.access-requests.deny",
+            "auth.access-requests.list",
+            "auth.access-requests.request",
+            "auth.access-requests.summary",
             "auth.admins.grant",
             "auth.admins.revoke",
             "auth.audit.list",
@@ -1344,6 +1650,11 @@ export const commandRegistry = [
             "principal_id"
         ],
         "adjacent_commands": [
+            "auth.access-requests.approve",
+            "auth.access-requests.deny",
+            "auth.access-requests.list",
+            "auth.access-requests.request",
+            "auth.access-requests.summary",
             "auth.admins.grant",
             "auth.admins.list",
             "auth.audit.list",
@@ -1389,6 +1700,11 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
+            "auth.access-requests.approve",
+            "auth.access-requests.deny",
+            "auth.access-requests.list",
+            "auth.access-requests.request",
+            "auth.access-requests.summary",
             "auth.admins.grant",
             "auth.admins.list",
             "auth.admins.revoke",
@@ -1429,6 +1745,11 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
+            "auth.access-requests.approve",
+            "auth.access-requests.deny",
+            "auth.access-requests.list",
+            "auth.access-requests.request",
+            "auth.access-requests.summary",
             "auth.admins.grant",
             "auth.admins.list",
             "auth.admins.revoke",
@@ -1493,6 +1814,11 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
+            "auth.access-requests.approve",
+            "auth.access-requests.deny",
+            "auth.access-requests.list",
+            "auth.access-requests.request",
+            "auth.access-requests.summary",
             "auth.admins.grant",
             "auth.admins.list",
             "auth.admins.revoke",
@@ -1537,6 +1863,11 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
+            "auth.access-requests.approve",
+            "auth.access-requests.deny",
+            "auth.access-requests.list",
+            "auth.access-requests.request",
+            "auth.access-requests.summary",
             "auth.admins.grant",
             "auth.admins.list",
             "auth.admins.revoke",
@@ -1588,6 +1919,11 @@ export const commandRegistry = [
             "invite_id"
         ],
         "adjacent_commands": [
+            "auth.access-requests.approve",
+            "auth.access-requests.deny",
+            "auth.access-requests.list",
+            "auth.access-requests.request",
+            "auth.access-requests.summary",
             "auth.admins.grant",
             "auth.admins.list",
             "auth.admins.revoke",
@@ -1634,6 +1970,11 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
+            "auth.access-requests.approve",
+            "auth.access-requests.deny",
+            "auth.access-requests.list",
+            "auth.access-requests.request",
+            "auth.access-requests.summary",
             "auth.admins.grant",
             "auth.admins.list",
             "auth.admins.revoke",
@@ -1680,6 +2021,11 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
+            "auth.access-requests.approve",
+            "auth.access-requests.deny",
+            "auth.access-requests.list",
+            "auth.access-requests.request",
+            "auth.access-requests.summary",
             "auth.admins.grant",
             "auth.admins.list",
             "auth.admins.revoke",
@@ -1725,6 +2071,11 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
+            "auth.access-requests.approve",
+            "auth.access-requests.deny",
+            "auth.access-requests.list",
+            "auth.access-requests.request",
+            "auth.access-requests.summary",
             "auth.admins.grant",
             "auth.admins.list",
             "auth.admins.revoke",
@@ -1771,6 +2122,11 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
+            "auth.access-requests.approve",
+            "auth.access-requests.deny",
+            "auth.access-requests.list",
+            "auth.access-requests.request",
+            "auth.access-requests.summary",
             "auth.admins.grant",
             "auth.admins.list",
             "auth.admins.revoke",
@@ -1816,6 +2172,11 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
+            "auth.access-requests.approve",
+            "auth.access-requests.deny",
+            "auth.access-requests.list",
+            "auth.access-requests.request",
+            "auth.access-requests.summary",
             "auth.admins.grant",
             "auth.admins.list",
             "auth.admins.revoke",
@@ -1862,6 +2223,11 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
+            "auth.access-requests.approve",
+            "auth.access-requests.deny",
+            "auth.access-requests.list",
+            "auth.access-requests.request",
+            "auth.access-requests.summary",
             "auth.admins.grant",
             "auth.admins.list",
             "auth.admins.revoke",
@@ -1907,6 +2273,11 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
+            "auth.access-requests.approve",
+            "auth.access-requests.deny",
+            "auth.access-requests.list",
+            "auth.access-requests.request",
+            "auth.access-requests.summary",
             "auth.admins.grant",
             "auth.admins.list",
             "auth.admins.revoke",
@@ -1959,6 +2330,11 @@ export const commandRegistry = [
             "principal_id"
         ],
         "adjacent_commands": [
+            "auth.access-requests.approve",
+            "auth.access-requests.deny",
+            "auth.access-requests.list",
+            "auth.access-requests.request",
+            "auth.access-requests.summary",
             "auth.admins.grant",
             "auth.admins.list",
             "auth.admins.revoke",
@@ -2058,6 +2434,11 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
+            "auth.access-requests.approve",
+            "auth.access-requests.deny",
+            "auth.access-requests.list",
+            "auth.access-requests.request",
+            "auth.access-requests.summary",
             "auth.admins.grant",
             "auth.admins.list",
             "auth.admins.revoke",
@@ -6748,6 +7129,7 @@ export const commandRegistry = [
         "path": "/inbox/{inbox_id}/respond",
         "operation_id": "respondInboxItem",
         "summary": "Respond to human attention inbox item",
+        "description": "For a server-linked access request, approved atomically grants the persisted requested grant and rejected denies it. Other outcomes return 400 invalid_request without mutation. Ordinary attention event metadata never authorizes a grant.",
         "why": "A human principal records one response per request, closes the human attention item, and optionally notifies the selected requester/replacement agent.",
         "input_mode": "json-body",
         "streaming": {
@@ -12062,6 +12444,21 @@ export class AnxClient {
     }
     artifactsUnarchive(pathParams, options = {}) {
         return this.invoke("artifacts.unarchive", pathParams, options);
+    }
+    authAccessRequestsApprove(pathParams, options = {}) {
+        return this.invoke("auth.access-requests.approve", pathParams, options);
+    }
+    authAccessRequestsDeny(pathParams, options = {}) {
+        return this.invoke("auth.access-requests.deny", pathParams, options);
+    }
+    authAccessRequestsList(options = {}) {
+        return this.invoke("auth.access-requests.list", {}, options);
+    }
+    authAccessRequestsRequest(options = {}) {
+        return this.invoke("auth.access-requests.request", {}, options);
+    }
+    authAccessRequestsSummary(options = {}) {
+        return this.invoke("auth.access-requests.summary", {}, options);
     }
     authAdminsGrant(pathParams, options = {}) {
         return this.invoke("auth.admins.grant", pathParams, options);

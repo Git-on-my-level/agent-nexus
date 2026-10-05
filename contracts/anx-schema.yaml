@@ -1140,3 +1140,15 @@ overview_changes:
     - Asks answered use canonical human_attention_responded events in (since, generated_at]; new decisions use permission-filtered PM records created in that interval.
     - Items expose only current readable refs and generic answer or decision labels, never private conversation text. Ref visibility is rechecked before publication.
     - Results are capped at 100; truncated covers candidate or output limits and bounded snapshots. Repeated digest reads do not change the baseline.
+
+access_requests:
+  grants: [auth-admin]
+  statuses: [pending, approved, denied]
+  semantics:
+    - Agents request grants only for their authenticated principal with a reason.
+    - Requests are durable and idempotent per principal and grant; retries preserve the original reason and terminal decision.
+    - Only active humans approve or deny. Approval performs the existing auth-admin grant in the same transaction as the decision and Inbox response.
+    - Each request creates a review Inbox item. Its access_request_id, requested_grant and requester_principal_id correlate the structured request.
+    - The existing Inbox respond flow accepts approved or rejected for access requests; answered and acknowledged return 400 invalid_request without any response event or mutation.
+    - Pending counts include requests and unexpired host enrollments awaiting completion (pending or approved).
+    - Inbox correlation is server-owned in the persisted access-request row. Generic attention-event payload fields never authorize grants or choose their target.

@@ -1481,7 +1481,7 @@ Generated Help: auth invites list
 - Output: Returns `{ invites }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `auth`
-- Adjacent commands: `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth access-requests approve`, `auth access-requests deny`, `auth access-requests list`, `auth access-requests request`, `auth access-requests summary`, `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 
 Global flags:
@@ -1507,7 +1507,7 @@ Generated Help: auth invites create
 - Output: Returns `{ invite, token }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `human_required`
 - Concepts: `auth`
-- Adjacent commands: `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth access-requests approve`, `auth access-requests deny`, `auth access-requests list`, `auth access-requests request`, `auth access-requests summary`, `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 Inputs:
   Required:
@@ -1539,7 +1539,7 @@ Generated Help: auth invites revoke
 - Output: Returns `{ invite }`.
 - Error codes: `human_required`, `auth_required`, `invalid_request`, `not_found`, `invalid_token`
 - Concepts: `auth`
-- Adjacent commands: `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth access-requests approve`, `auth access-requests deny`, `auth access-requests list`, `auth access-requests request`, `auth access-requests summary`, `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 Inputs:
   Required:
@@ -1567,7 +1567,7 @@ Generated Help: auth bootstrap status
 - Why: Report whether first-human passkey bootstrap registration is still available; hosts cannot bootstrap.
 - Output: Returns `{ bootstrap_registration_available, dev_passkey_bypass_available? }`, where the dev bypass field reflects the effective local-only passkey bypass capability.
 - Concepts: `auth`
-- Adjacent commands: `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth access-requests approve`, `auth access-requests deny`, `auth access-requests list`, `auth access-requests request`, `auth access-requests summary`, `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 
 Global flags:
@@ -1593,7 +1593,7 @@ Generated Help: auth principals list
 - Output: Returns principal list JSON.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `auth`
-- Adjacent commands: `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth access-requests approve`, `auth access-requests deny`, `auth access-requests list`, `auth access-requests request`, `auth access-requests summary`, `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals revoke`, `auth token`
 
 
 Global flags:
@@ -1619,7 +1619,7 @@ Generated Help: auth principals revoke
 - Output: Returns result JSON.
 - Error codes: `human_required`, `auth_required`, `invalid_request`, `not_found`, `invalid_token`, `conflict`
 - Concepts: `auth`
-- Adjacent commands: `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth token`
+- Adjacent commands: `auth access-requests approve`, `auth access-requests deny`, `auth access-requests list`, `auth access-requests request`, `auth access-requests summary`, `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth token`
 
 Inputs:
   Required:
@@ -1648,7 +1648,7 @@ Generated Help: auth audit list
 - Output: Returns audit list JSON.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `auth`, `audit`
-- Adjacent commands: `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth access-requests approve`, `auth access-requests deny`, `auth access-requests list`, `auth access-requests request`, `auth access-requests summary`, `auth admins grant`, `auth admins list`, `auth admins revoke`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 
 Global flags:
@@ -8218,7 +8218,7 @@ Generated Help: auth admins list
 - Error codes: `auth_required`, `invalid_token`, `auth_admin_required`
 - Concepts: `auth`
 - Agent notes: Only a human can change a grant. No default grant is assigned to agents or hosts.
-- Adjacent commands: `auth admins grant`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth access-requests approve`, `auth access-requests deny`, `auth access-requests list`, `auth access-requests request`, `auth access-requests summary`, `auth admins grant`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 Local Help: auth admins list
 
@@ -8254,7 +8254,7 @@ Generated Help: auth admins grant
 - Error codes: `auth_required`, `invalid_token`, `human_required`, `invalid_request`, `not_found`
 - Concepts: `auth`
 - Agent notes: Only a human can change a grant. No default grant is assigned to agents or hosts.
-- Adjacent commands: `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth access-requests approve`, `auth access-requests deny`, `auth access-requests list`, `auth access-requests request`, `auth access-requests summary`, `auth admins list`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 Inputs:
   Required:
@@ -8294,7 +8294,7 @@ Generated Help: auth admins revoke
 - Error codes: `auth_required`, `invalid_token`, `human_required`, `invalid_request`, `not_found`
 - Concepts: `auth`
 - Agent notes: Only a human can change a grant. No default grant is assigned to agents or hosts.
-- Adjacent commands: `auth admins grant`, `auth admins list`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth access-requests approve`, `auth access-requests deny`, `auth access-requests list`, `auth access-requests request`, `auth access-requests summary`, `auth admins grant`, `auth admins list`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 Inputs:
   Required:
