@@ -9,6 +9,16 @@
 - `anx-schema.yaml`: canonical domain/schema contract currently consumed by core validation.
 - `gen/`: generated artifacts committed to source control.
 
+`gen/meta/routes.json` is a versioned machine-readable inventory of every
+OpenAPI operation and intentional exception: HTTP method, path template, and
+the core router's outer access class. `make route-inventory` generates it from
+the contract and the actual mounted route classifiers; `make contract-gen`
+also regenerates it. Core CI runs `make route-inventory-check` to catch router
+access changes even when the contract is unchanged. These classes describe
+core authentication buckets, not downstream authorization rules. Handlers may
+apply stricter permissions. `handler_defined` means the outer classifier
+defers to the handler; consumers must classify these routes explicitly.
+
 ## Generation
 
 Generate all contract-derived artifacts from repo root:

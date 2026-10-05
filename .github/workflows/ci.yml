@@ -128,6 +128,9 @@ jobs:
       - name: Run core check
         run: make -C core check-ci
 
+      - name: Verify route inventory matches the router
+        run: make route-inventory-check
+
   mcp-checks:
     runs-on: ubuntu-latest
     timeout-minutes: 10

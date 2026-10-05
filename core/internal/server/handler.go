@@ -169,6 +169,7 @@ type PrimitiveStore interface {
 type HandlerOption func(*handlerOptions)
 
 type handlerOptions struct {
+	routeObserver                  func(string, routeAccessClassifier)
 	observationRuntime             *ObservationRuntime
 	pmRuntime                      *PMRuntime
 	pmHandler                      http.Handler
@@ -671,6 +672,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 
 	mux := http.NewServeMux()
 	registerRoute := func(pattern string, classify routeAccessClassifier, handler http.HandlerFunc) {
+		if opts.routeObserver != nil {
+			opts.routeObserver(pattern, classify)
+		}
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
 			requirement := enrichRouteMutationPolicy(r, classify(r))
 			if !enforceRouteAccess(w, r, opts, requirement) {
@@ -701,6 +705,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		})
 	}
 	registerStreamRoute := func(sub string, classify routeAccessClassifier, handler http.HandlerFunc) {
+		if opts.routeObserver != nil {
+			opts.routeObserver(stream.Prefix+sub, classify)
+		}
 		stream.Mount(mux, sub, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			requirement := enrichRouteMutationPolicy(r, classify(r))
 			if !enforceRouteAccess(w, r, opts, requirement) {
