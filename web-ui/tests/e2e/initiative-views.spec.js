@@ -168,9 +168,9 @@ test("initiative page leads with the plan, and the card body follows", async ({
     );
   expect(order).toEqual(["plan", "body"]);
 
-  await mkdir("../docs/review/initiative", { recursive: true });
+  await mkdir(".screenshots/review", { recursive: true });
   await page.screenshot({
-    path: "../docs/review/initiative/initiative-desktop.png",
+    path: ".screenshots/review/initiative-desktop.png",
     animations: "disabled",
   });
   await page.screenshot({
@@ -248,9 +248,9 @@ test("the plan reads at phone width", async ({ page }, testInfo) => {
   );
   expect(documentOverflows).toBe(false);
 
-  await mkdir("../docs/review/initiative", { recursive: true });
+  await mkdir(".screenshots/review", { recursive: true });
   await page.screenshot({
-    path: "../docs/review/initiative/initiative-phone.png",
+    path: ".screenshots/review/initiative-phone.png",
     animations: "disabled",
   });
   await page.screenshot({
@@ -543,9 +543,9 @@ for (const viewport of [
 
     // The whole page, so the digest strip and the single Inbox line are in
     // frame alongside the tiles.
-    await mkdir("../docs/review/initiative", { recursive: true });
+    await mkdir(".screenshots/review", { recursive: true });
     await page.screenshot({
-      path: `../docs/review/initiative/overview-${viewport.label}.png`,
+      path: `.screenshots/review/overview-${viewport.label}.png`,
       animations: "disabled",
     });
     await page.screenshot({

@@ -1,23 +1,31 @@
-Before and after for SCA-629: the CEO Overview, the collapsible layout, the
-shared markdown renderer, compact badges and readable plans.
+How to capture the Overview and the initiative page for a review.
 
-Both columns run the **same fixture** — one workspace, five initiatives (one
-blocked, one stale, one on track, one done, one with no plan), a five-step
-branching plan, and a card body written in ordinary markdown with a task list,
-a table, an ANX ref, a GitHub pull request and a `<details>` aside. `before` is
-that fixture against `d998dfd6` (main before this change); `after` is the same
-fixture against this branch. The fixture carries both `plan_health` and the
-older `health {status}`, so the before images are missing nothing for want of a
-field.
+No images here: review binaries do not ship in this repo. Run the capture, look
+at the PNGs, and attach them wherever the review lives.
 
-| | before | after |
-| --- | --- | --- |
-| Overview, 1440px | `before-overview-desktop.png` | `after-overview-desktop.png` |
-| Overview, 390px | `before-overview-390.png` | `after-overview-390.png` |
-| Initiative page, 1440px | `before-initiative-desktop.png` | `after-initiative-desktop.png` |
-| Initiative page, 390px | `before-initiative-390.png` | `after-initiative-390.png` |
+`web-ui/tests/e2e/review-captures.spec.js` drives both pages at 1440 and 390
+from one seeded workspace — five initiatives (one blocked, one stale, one on
+track, one done, one with no plan), a five-step branching plan, and a card body
+written in ordinary markdown with a task list, a table, an ANX ref, a GitHub
+pull request and a `<details>` aside. The fixture carries both `plan_health`
+and the older `health {status}`, so a capture of an older revision is missing
+nothing for want of a field.
 
-What the pairs are evidence of:
+From `web-ui`:
+
+```
+REVIEW_CAPTURES=after PLAYWRIGHT_PORT=4291 pnpm exec playwright test \
+  tests/e2e/review-captures.spec.js --project=default --workers=1
+```
+
+Output lands in `web-ui/.screenshots/review/`, which is gitignored. The spec
+skips itself when `REVIEW_CAPTURES` is unset, so it costs a normal run nothing.
+
+For a before column, add a worktree at the base commit, copy the spec into it,
+and run the same command with `REVIEW_CAPTURES=before`. `REVIEW_CAPTURES` only
+changes the filename; the fixture is identical, which is the point.
+
+What the pairs are evidence of, for SCA-629:
 
 - **Overview.** Before: a "Needs you" header with a count and no items, the
   dashboard above the work, tiles in projection order with `**Goal:**` showing
@@ -37,17 +45,6 @@ What the pairs are evidence of:
   is the one thing that does, deliberately. After, the left nav is the bottom
   tab bar and the right rail stacks with its content still readable.
 
-These are dark because the product is dark-only: `web-ui/src/app.css` defines a
-single token set, with no `data-theme` and no `prefers-color-scheme` block.
-
-To recapture, from `web-ui`:
-
-```
-REVIEW_CAPTURES=after PLAYWRIGHT_PORT=4291 pnpm exec playwright test \
-  tests/e2e/review-captures.spec.js --project=default --workers=1
-```
-
-For the before column, add a worktree at the base commit, copy
-`tests/e2e/review-captures.spec.js` into it, and run the same command with
-`REVIEW_CAPTURES=before`. The spec skips itself when `REVIEW_CAPTURES` is
-unset, so it costs a normal run nothing.
+Captures are dark because the product is dark-only: `web-ui/src/app.css`
+defines a single token set, with no `data-theme` and no `prefers-color-scheme`
+block.

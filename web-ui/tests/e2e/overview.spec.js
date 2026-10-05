@@ -293,9 +293,9 @@ test("seeded CEO Overview screenshot and section order", async ({ page }) => {
       page.getByText("Archived backlog 1", { exact: true }),
     ).toHaveCount(0);
   }
-  await mkdir("../docs/review/overview", { recursive: true });
+  await mkdir(".screenshots/review", { recursive: true });
   await page.screenshot({
-    path: `../docs/review/overview/${BEFORE ? "before" : "after"}.png`,
+    path: `.screenshots/review/${BEFORE ? "before" : "after"}.png`,
     fullPage: true,
   });
 });

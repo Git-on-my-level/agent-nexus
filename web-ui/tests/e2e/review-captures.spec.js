@@ -23,10 +23,16 @@ import { installWorkspaceApi } from "../helpers/workspaceApiMock.js";
  *
  *   REVIEW_CAPTURES=after PLAYWRIGHT_PORT=4291 pnpm exec playwright test \
  *     tests/e2e/review-captures.spec.js --project=default --workers=1
+ *
+ * Output lands in `web-ui/.screenshots/review/`, which is gitignored.
  */
 
 const LABEL = process.env.REVIEW_CAPTURES || "";
-const OUT = "../docs/review/sca-629";
+/**
+ * Gitignored. Review binaries do not ship in this repo: a reviewer runs the
+ * capture, looks at the PNGs, and attaches them wherever the review lives.
+ */
+const OUT = ".screenshots/review";
 const WORKSPACE = "/o/local/w/local";
 const CARD_REF = "card:release-b";
 const NOW = "2026-10-05T12:00:00Z";
