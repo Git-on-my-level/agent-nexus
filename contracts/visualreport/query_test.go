@@ -30,6 +30,18 @@ func TestLiveQueryConformance(t *testing.T) {
 	}
 }
 
+func TestFleetHealthQueryIsEmptyAndLive(t *testing.T) {
+	if !IsLive("live-fleet-health") {
+		t.Fatal("fleet health panel is not recognized as a live query")
+	}
+	if _, err := ParseQuery("live-fleet-health", []byte("{}")); err != nil {
+		t.Fatalf("empty fleet health query rejected: %v", err)
+	}
+	if _, err := ParseQuery("live-fleet-health", []byte("{\"card_ref\":\"card:launch\"}")); err == nil {
+		t.Fatal("fleet health query accepted an unsupported field")
+	}
+}
+
 func TestChecklistSummary(t *testing.T) {
 	first, progress, needs := Summary("# Shipping the launch\n\n- [x] Reviewed\n  - [X] Nested\n- [ ] Deliver\nNeeds David: pick the date\n```markdown\n- [x] Example\n```\nNeeds operator: approve")
 	if first != "Shipping the launch" || progress.Done != 2 || progress.Total != 3 || len(needs) != 2 {

@@ -1,0 +1,120 @@
+{
+  "observations": [
+    {
+      "data": {
+        "items": [
+          {
+            "board_ref": "board:work",
+            "needs": [],
+            "phase": "in_progress",
+            "priority": "p1",
+            "progress": {
+              "done": 2,
+              "total": 3
+            },
+            "ref": "card:launch",
+            "summary": "Ready to ship",
+            "title": "Launch",
+            "updated_at": "2026-10-05T00:00:00Z"
+          }
+        ]
+      },
+      "id": "checklist",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "live-initiatives"
+    },
+    {
+      "data": {
+        "items": [
+          {
+            "age_seconds": 60,
+            "created_at": "2026-10-05T00:00:00Z",
+            "id": "completed:answer",
+            "responded_at": "2026-10-05T00:00:00Z",
+            "response_text": "Friday",
+            "status": "answered",
+            "title": "Choose the release date"
+          }
+        ]
+      },
+      "id": "blockers",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "live-asks"
+    },
+    {
+      "data": null,
+      "id": "release-notes",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "callout"
+    }
+  ],
+  "report": {
+    "generated_at": "2026-10-05T00:00:00Z",
+    "kind": "anx.visual-report",
+    "panels": [
+      {
+        "author": "Agent Nexus template",
+        "data": {
+          "limit": 12,
+          "project_ref": "topic:launch",
+          "sort": "priority"
+        },
+        "freshness": "unknown",
+        "id": "checklist",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source_ids": [],
+        "title": "Release checklist",
+        "type": "live-initiatives"
+      },
+      {
+        "author": "Agent Nexus template",
+        "data": {
+          "limit": 10
+        },
+        "freshness": "unknown",
+        "id": "blockers",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source_ids": [],
+        "title": "Open blockers and decisions",
+        "type": "live-asks"
+      },
+      {
+        "author": "Agent Nexus template",
+        "data": {
+          "text": "Add the release outcome, evidence boundaries, and remaining human decisions.",
+          "tone": "info"
+        },
+        "freshness": "unknown",
+        "id": "release-notes",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source_ids": [],
+        "title": "Release narrative",
+        "type": "callout"
+      }
+    ],
+    "projects": [
+      {
+        "id": "workspace",
+        "outcome": "See current source data",
+        "summary": "Live workspace sources with authored narrative added by the report owner.",
+        "title": "Workspace"
+      }
+    ],
+    "schema_version": 1,
+    "sources": [],
+    "summary": "Current checklist progress and unresolved release blockers.",
+    "title": "Release readiness"
+  }
+}

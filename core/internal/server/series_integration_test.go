@@ -40,6 +40,52 @@ func TestSeriesHistoricalDefaultStepForHTTPAndReportPanels(t *testing.T) {
 	hostStatus(t, status, 200, out) // Fractional raw bucket defaults round up too.
 }
 
+func TestFleetHealthReportUsesDeclaredFleetSeriesAndHostInventory(t *testing.T) {
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	seedSeriesIdentities(t, env)
+	seriesStore := &series.Store{DB: env.workspace.DB(), Auth: env.authStore}
+	reader := reportReader{r: httptest.NewRequest("GET", "/report", nil), opts: handlerOptions{authStore: env.authStore, seriesStore: seriesStore}, now: time.Now().UTC()}
+	data, _, err := reader.materialize(reports.Panel{Type: "live-fleet-health"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(data["series_message"].(string), "No fleet.* series") || data["host_count"] != 1 {
+		t.Fatalf("missing-series fallback or host inventory: %#v", data)
+	}
+
+	declaration := map[string]any{
+		"name": "fleet-monitor", "description": "Fleet measurements", "agent_id": "series-owner",
+		"expected_interval": "1m", "series": []map[string]string{
+			{"name": "fleet.cpu", "kind": "gauge", "unit": "%"},
+			{"name": "fleet.health", "kind": "state", "unit": "status"},
+		},
+	}
+	status, out := hostHTTP(t, "POST", env.server.URL+"/adapters", "admin-token", declaration)
+	hostStatus(t, status, 200, out)
+	status, out = hostHTTP(t, "POST", env.server.URL+"/adapters/fleet-monitor/token", "owner-token", nil)
+	hostStatus(t, status, 200, out)
+	token := out["tokens"].(map[string]any)["access_token"].(string)
+	now := time.Now().UTC()
+	status, out = hostHTTP(t, "POST", env.server.URL+"/series/fleet.cpu/points", token, map[string]any{"value": 62.5, "labels": map[string]string{"host": "series-host"}, "ts": now.Format(time.RFC3339Nano)})
+	hostStatus(t, status, 200, out)
+	status, out = hostHTTP(t, "POST", env.server.URL+"/series/fleet.health/points", token, map[string]any{"state": "healthy", "labels": map[string]string{"host": "series-host"}, "ts": now.Format(time.RFC3339Nano)})
+	hostStatus(t, status, 200, out)
+	reader.now = now.Add(time.Second)
+	data, _, err = reader.materialize(reports.Panel{Type: "live-fleet-health"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := data["series"].([]map[string]any)
+	if len(rows) != 2 || rows[0]["name"] != "fleet.cpu" || rows[1]["name"] != "fleet.health" {
+		t.Fatalf("fleet.* sources were not selected: %#v", rows)
+	}
+	latestCPU := rows[0]["streams"].([]map[string]any)[0]["latest"].(map[string]any)
+	latestHealth := rows[1]["streams"].([]map[string]any)[0]["latest"].(map[string]any)
+	if latestCPU["value"] != 62.5 || latestHealth["state"] != "healthy" {
+		t.Fatalf("fleet readings missing: cpu=%#v health=%#v", latestCPU, latestHealth)
+	}
+}
+
 func seedSeriesIdentities(t *testing.T, env authIntegrationEnv) {
 	t.Helper()
 	ctx := context.Background()

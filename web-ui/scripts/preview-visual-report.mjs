@@ -83,7 +83,10 @@ async function main() {
   try {
     const url = `http://127.0.0.1:${port}/internal/report-preview`;
     await waitUntilReady(server, url);
-    const browser = await chromium.launch({ headless: true });
+    const browser = await chromium.launch({
+      headless: true,
+      chromiumSandbox: true,
+    });
     try {
       const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, colorScheme: "light" });
       await page.goto(url, { waitUntil: "networkidle", timeout: 30_000 });

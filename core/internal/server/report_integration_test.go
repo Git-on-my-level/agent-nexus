@@ -156,6 +156,7 @@ func TestReportAskAgeAnswersAndPrivateEvents(t *testing.T) {
 	card := workPostJSON(t, h.baseURL+"/work", fmt.Sprintf(`{"actor_id":"actor-1","board_ref":%q,"title":"Launch readiness"}`, boardRef), 201)["work"].(map[string]any)
 	cardRef := anyString(card["ref"])
 	event := createHumanAttentionEvent(t, h.baseURL, thread, "ask", "Pick the date", cardRef, nil, map[string]any{"body": "Friday?"})
+	createHumanAttentionEvent(t, h.baseURL, thread, "ask", "Open question", cardRef, nil, map[string]any{"body": "Still open"})
 	item, _ := deriveHumanAttentionInboxItem(event)
 	reader := reportReader{r: httptest.NewRequest("GET", "/", nil), opts: handlerOptions{primitiveStore: h.primitiveStore}, now: time.Now().Add(time.Hour), visibility: map[string]bool{}}
 	data, _, err := reader.asks(reports.Query{Limit: 10})
@@ -163,24 +164,26 @@ func TestReportAskAgeAnswersAndPrivateEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 	items := data["items"].([]map[string]any)
-	if len(items) != 1 || items[0]["age_seconds"].(int64) < 3590 {
+	if len(items) != 2 || items[0]["age_seconds"].(int64) < 3590 {
 		t.Fatalf("%#v", items)
 	}
 	response := map[string]any{"id": "response", "type": "human_attention_responded", "thread_id": thread, "refs": []string{"inbox:" + item.ID}, "ts": time.Now().UTC().Format(time.RFC3339Nano), "payload": map[string]any{"response_text": "Friday", "inbox_item_id": item.ID}}
 	reader.events = append([]map[string]any{response}, reader.events...)
 	data, _, _ = reader.asks(reports.Query{Limit: 10})
-	if len(data["items"].([]map[string]any)) != 0 {
-		t.Fatal("answered ask still open")
+	openItems := data["items"].([]map[string]any)
+	if len(openItems) != 1 || openItems[0]["status"] != "open" {
+		t.Fatalf("answered ask remained open or unrelated open ask disappeared: %#v", openItems)
 	}
 	data, _, _ = reader.asks(reports.Query{Limit: 10, IncludeAnswered: true, AnsweredWithinHours: 168})
-	if len(data["items"].([]map[string]any)) != 1 || data["items"].([]map[string]any)[0]["id"] != "completed:response" {
-		t.Fatal("recent answer missing or cannot link to the completed inbox row")
+	allItems := data["items"].([]map[string]any)
+	if len(allItems) != 2 || allItems[0]["status"] != "open" || allItems[1]["id"] != "completed:response" {
+		t.Fatalf("recent answer or open ask missing: %#v", allItems)
 	}
-	data, _, err = reader.asks(reports.Query{Limit: 10, IncludeAnswered: true, AnsweredOnly: true, AnsweredWithinHours: 168, CardRef: cardRef})
+	data, _, err = reader.asks(reports.Query{Limit: 10, AnsweredOnly: true, AnsweredWithinHours: 168, CardRef: cardRef})
 	if err != nil || len(data["items"].([]map[string]any)) != 1 {
-		t.Fatalf("answered initiative decision missing: %#v %v", data, err)
+		t.Fatalf("answered-only query included open asks or omitted the answer: %#v %v", data, err)
 	}
-	data, _, err = reader.asks(reports.Query{Limit: 10, IncludeAnswered: true, AnsweredOnly: true, AnsweredWithinHours: 168, CardRef: "card:other"})
+	data, _, err = reader.asks(reports.Query{Limit: 10, AnsweredOnly: true, AnsweredWithinHours: 168, CardRef: "card:other"})
 	if err != nil || len(data["items"].([]map[string]any)) != 0 {
 		t.Fatalf("decision history leaked across card scope: %#v %v", data, err)
 	}

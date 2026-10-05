@@ -211,6 +211,19 @@ func (reader *reportReader) scopedWork(q reports.Query) ([]map[string]any, error
 		project = anyString(topic["ref"])
 	}
 	filter.ProjectRef = project
+	if q.CardRef != "" {
+		resolved, err := reader.opts.primitiveStore.ResolveResourceRef(reader.r.Context(), primitives.ResourceRefInput{Type: "card", Ref: q.CardRef})
+		if err != nil {
+			return nil, err
+		}
+		if reader.visibility == nil {
+			reader.visibility = map[string]bool{}
+		}
+		if !reader.activeRef(q.CardRef) {
+			return nil, fmt.Errorf("card unavailable")
+		}
+		filter.CardID = resolved.ID
+	}
 	reader.loadWork(filter)
 	if reader.workErr != nil {
 		return nil, reader.workErr
@@ -333,6 +346,8 @@ func (reader *reportReader) materialize(panel reports.Panel) (map[string]any, bo
 		return reader.asks(q)
 	case "live-activity":
 		return reader.activity(q)
+	case "live-fleet-health":
+		return reader.fleetHealth()
 	}
 	return nil, false, fmt.Errorf("unknown panel type")
 }
@@ -481,10 +496,13 @@ func (reader *reportReader) asks(q reports.Query) (map[string]any, bool, error) 
 			continue
 		}
 		response := answered[request.ID]
+		if q.AnsweredOnly && response == nil {
+			continue
+		}
 		status := "open"
 		if response != nil {
 			at, _ := time.Parse(time.RFC3339Nano, anyString(response["ts"]))
-			if !q.IncludeAnswered || at.Before(reader.now.Add(-time.Duration(q.AnsweredWithinHours)*time.Hour)) {
+			if (!q.IncludeAnswered && !q.AnsweredOnly) || at.Before(reader.now.Add(-time.Duration(q.AnsweredWithinHours)*time.Hour)) {
 				continue
 			}
 			status = "answered"

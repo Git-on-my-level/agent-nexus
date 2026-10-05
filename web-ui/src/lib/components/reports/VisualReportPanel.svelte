@@ -38,6 +38,7 @@
     "live-asks": "Needs an answer",
     "live-work-mix": "Open work",
     "live-activity": "Recent activity",
+    "live-fleet-health": "Fleet health",
     chart: "Visualization",
     "metric-strip": "Measures",
     metric: "Measure",

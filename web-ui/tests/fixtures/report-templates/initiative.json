@@ -1,0 +1,101 @@
+{
+  "observations": [
+    {
+      "data": {
+        "items": [
+          {
+            "board_ref": "board:work",
+            "needs": [],
+            "phase": "in_progress",
+            "priority": "p1",
+            "progress": {
+              "done": 2,
+              "total": 3
+            },
+            "ref": "card:launch",
+            "summary": "Ready to ship",
+            "title": "Launch",
+            "updated_at": "2026-10-05T00:00:00Z"
+          }
+        ]
+      },
+      "id": "plan",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "live-initiatives"
+    },
+    {
+      "data": {
+        "items": [
+          {
+            "age_seconds": 60,
+            "created_at": "2026-10-05T00:00:00Z",
+            "id": "completed:answer",
+            "responded_at": "2026-10-05T00:00:00Z",
+            "response_text": "Friday",
+            "status": "answered",
+            "title": "Choose the release date"
+          }
+        ]
+      },
+      "id": "decisions",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "live-asks"
+    }
+  ],
+  "report": {
+    "generated_at": "2026-10-05T00:00:00Z",
+    "kind": "anx.visual-report",
+    "panels": [
+      {
+        "author": "Agent Nexus template",
+        "data": {
+          "card_ref": "card:launch",
+          "limit": 1,
+          "project_ref": "topic:launch",
+          "sort": "updated"
+        },
+        "freshness": "unknown",
+        "id": "plan",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source_ids": [],
+        "title": "Plan and linked work",
+        "type": "live-initiatives"
+      },
+      {
+        "author": "Agent Nexus template",
+        "data": {
+          "answered_only": true,
+          "answered_within_hours": 720,
+          "card_ref": "card:launch",
+          "limit": 20
+        },
+        "freshness": "unknown",
+        "id": "decisions",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source_ids": [],
+        "title": "Decision history",
+        "type": "live-asks"
+      }
+    ],
+    "projects": [
+      {
+        "id": "workspace",
+        "outcome": "See current source data",
+        "summary": "Live workspace sources with authored narrative added by the report owner.",
+        "title": "Workspace"
+      }
+    ],
+    "schema_version": 1,
+    "sources": [],
+    "summary": "A live view of the selected initiative and its decision history.",
+    "title": "Initiative review — launch"
+  }
+}

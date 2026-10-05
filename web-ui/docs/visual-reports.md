@@ -94,9 +94,10 @@ query to an actual workspace project (a topic).
 | Type               | Query fields                                                                      | Default                                                                                |
 | ------------------ | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | `live-initiatives` | `board_refs`, `project_ref`, `card_ref`, `limit`, `sort`                          | All active boards; 10 rows; priority then newest update                                |
-| `live-asks`        | `limit`, `include_answered`, `answered_only`, `answered_within_hours`, `card_ref` | 10 oldest open asks, reviews and escalations; no answers                               |
+| `live-asks`        | `limit`, `include_answered`, `answered_only`, `answered_within_hours`, `card_ref` | 10 oldest open asks; recent answers are optional, and `answered_only` returns answers only |
 | `live-work-mix`    | `board_refs`, `project_ref`, `card_ref`, `group_by`                               | Open work by phase; `group_by: "board"` also supported                                 |
 | `live-activity`    | `limit`                                                                           | 10 newest meaningful events, with same-actor board edits collapsed within five minutes |
+| `live-fleet-health` | none                                                                               | Declared `fleet.*` series and native host inventory; enrollment requests require human or auth-admin access |
 
 Limits are 1–100 displayed rows, at most 16 unique `board:<handle>` refs, and
 1–720 hours for recent answers (168 by default). Sort is `priority`, `updated`,

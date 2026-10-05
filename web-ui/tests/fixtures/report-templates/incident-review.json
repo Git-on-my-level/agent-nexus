@@ -1,0 +1,107 @@
+{
+  "observations": [
+    {
+      "data": {
+        "items": [
+          {
+            "summary": "Launch checklist updated",
+            "ts": "2026-10-05T00:00:00Z"
+          }
+        ]
+      },
+      "id": "movement",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "live-activity"
+    },
+    {
+      "data": null,
+      "id": "timeline",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "milestone-timeline"
+    },
+    {
+      "data": {
+        "items": [
+          {
+            "age_seconds": 60,
+            "created_at": "2026-10-05T00:00:00Z",
+            "id": "completed:answer",
+            "responded_at": "2026-10-05T00:00:00Z",
+            "response_text": "Friday",
+            "status": "answered",
+            "title": "Choose the release date"
+          }
+        ]
+      },
+      "id": "actions",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "live-asks"
+    }
+  ],
+  "report": {
+    "generated_at": "2026-10-05T00:00:00Z",
+    "kind": "anx.visual-report",
+    "panels": [
+      {
+        "author": "Agent Nexus template",
+        "data": {
+          "limit": 20
+        },
+        "freshness": "unknown",
+        "id": "movement",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source_ids": [],
+        "title": "Recent incident movement",
+        "type": "live-activity"
+      },
+      {
+        "author": "Agent Nexus template",
+        "data": {
+          "items": []
+        },
+        "freshness": "unknown",
+        "id": "timeline",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source_ids": [],
+        "title": "Incident timeline",
+        "type": "milestone-timeline"
+      },
+      {
+        "author": "Agent Nexus template",
+        "data": {
+          "limit": 12
+        },
+        "freshness": "unknown",
+        "id": "actions",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source_ids": [],
+        "title": "Action items",
+        "type": "live-asks"
+      }
+    ],
+    "projects": [
+      {
+        "id": "workspace",
+        "outcome": "See current source data",
+        "summary": "Live workspace sources with authored narrative added by the report owner.",
+        "title": "Workspace"
+      }
+    ],
+    "schema_version": 1,
+    "sources": [],
+    "summary": "An evidence-led timeline with live movement and action asks.",
+    "title": "Incident review"
+  }
+}

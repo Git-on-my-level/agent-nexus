@@ -220,5 +220,7 @@
  {"name":"answered only requires a supported query", "type":"live-activity", "data":{"answered_only":true}, "valid":false},
  {"name":"integral decimal limit", "type":"live-initiatives", "data":{"limit":10.0}, "valid":true},
  {"name":"integral exponent limit", "type":"live-activity", "data":{"limit":1e1}, "valid":true},
- {"name":"integral decimal answer window", "type":"live-asks", "data":{"answered_within_hours":168.0}, "valid":true}
+ {"name":"integral decimal answer window", "type":"live-asks", "data":{"answered_within_hours":168.0}, "valid":true},
+ {"name":"empty fleet health query", "type":"live-fleet-health", "data":{}, "valid":true},
+ {"name":"fleet health query rejects workspace scope", "type":"live-fleet-health", "data":{"project_ref":"topic:launch"}, "valid":false}
 ]

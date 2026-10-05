@@ -47,7 +47,7 @@ var cardRef = regexp.MustCompile(`^card:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 func IsLive(kind string) bool {
 	switch kind {
-	case "live-initiatives", "live-asks", "live-work-mix", "live-activity":
+	case "live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health":
 		return true
 	}
 	return false
@@ -120,6 +120,8 @@ func ParseQuery(kind string, raw []byte) (Query, error) {
 		allowed = map[string]bool{"board_refs": true, "project_ref": true, "card_ref": true, "group_by": true}
 	case "live-activity":
 		allowed = map[string]bool{"limit": true}
+	case "live-fleet-health":
+		allowed = map[string]bool{}
 	default:
 		return q, fmt.Errorf("unsupported live type")
 	}

@@ -210,6 +210,8 @@ func reportPanelSummary(kind string, panel, data, observation map[string]any) (s
 			what = "Open work grouped by " + firstNonEmpty(reportStringValue(data["group_by"]), "phase")
 		} else if kind == "live-activity" {
 			what = "Recent workspace movement"
+		} else if kind == "live-fleet-health" {
+			what = "Live fleet series, enrolled hosts and authorized enrollment requests"
 		}
 		query, _ := json.Marshal(data)
 		return what, kind + " " + string(query), reportObservationFreshness(observation, "Live query was not materialized.")

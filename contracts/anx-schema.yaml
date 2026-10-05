@@ -1031,7 +1031,7 @@ session_participation:
 # Additive presentation format carried in existing document revisions.
 visual_report_live_panels:
   schema_version: 1
-  types: [live-initiatives, live-asks, live-work-mix, live-activity]
+  types: [live-initiatives, live-asks, live-work-mix, live-activity, live-fleet-health]
   query_schema: anx-openapi.yaml#/components/schemas/LiveReportQuery
   materialized_schema: anx-openapi.yaml#/components/schemas/LiveReportResponse
   rules:
@@ -1042,6 +1042,7 @@ visual_report_live_panels:
     - Checklist parsing counts Markdown dash checkboxes outside fenced code, including uppercase X.
     - Asks include ask, review and escalate requests, with optional answers from the last 168 hours by default.
     - Initiatives and asks may filter to one visible card with card_ref; answered_only on live-asks returns only answered asks and includes recent answers.
+    - Fleet health reads declared fleet.* series with provenance and the native host inventory; pending enrollment details are visible only to humans and auth admins. If no fleet.* series is declared, the panel says so and still shows host inventory.
     - Activity includes new asks, authorized PM decision proposals, answers, phase changes and completion; card edit bursts for the same actor and board within five minutes collapse.
     - Bounded or limited results declare truncated; source read failures are unavailable, never empty success.
 

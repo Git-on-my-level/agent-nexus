@@ -76,13 +76,11 @@ var reportTemplates = []reportTemplate{
 		},
 	},
 	{
-		name: "fleet-health", purpose: "Recent fleet movement and an authored operational summary.",
-		title: "Fleet health", summary: "A live activity view with space for an evidence-backed fleet assessment.",
+		name: "fleet-health", purpose: "Live fleet series, enrolled hosts, and authorized enrollment requests.",
+		title: "Fleet health", summary: "Current fleet series and native host inventory, with authorized enrollment status.",
 		build: func(_ string, _ string) []map[string]any {
 			return []map[string]any{
-				liveReportPanel("initiatives", "live-initiatives", "Initiative plan health", map[string]any{"limit": 8, "sort": "priority"}),
-				liveReportPanel("movement", "live-activity", "Recent fleet movement", map[string]any{"limit": 12}),
-				staticReportPanel("assessment", "callout", "Fleet assessment", map[string]any{"tone": "info", "text": "Add the operational context and evidence boundary for this fleet review."}),
+				liveReportPanel("fleet", "live-fleet-health", "Fleet series and host inventory", map[string]any{}),
 			}
 		},
 	},

@@ -51,5 +51,17 @@ export const seriesDashboardExample = {
       series: "builds",
       range: "1h",
     }),
+    {
+      id: "fleet",
+      type: "live-fleet-health",
+      title: "Fleet health",
+      project_id: "workspace",
+      author: "Collector",
+      provenance: "reported",
+      observed_at: null,
+      freshness: "unavailable",
+      source_ids: [],
+      data: {},
+    },
   ],
 };

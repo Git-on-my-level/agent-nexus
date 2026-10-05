@@ -7887,7 +7887,7 @@ components:
       required: [id, type, status, observed_at, truncated, data]
       properties:
         id: {type: string}
-        type: {type: string, enum: [live-initiatives, live-asks, live-work-mix, live-activity, chart, metric, metric-strip, table, metric-chart, evidence-table]}
+        type: {type: string, enum: [live-initiatives, live-asks, live-work-mix, live-activity, live-fleet-health, chart, metric, metric-strip, table, metric-chart, evidence-table]}
         status: {type: string, enum: [ok, stale, unavailable]}
         observed_at: {type: string, format: date-time, nullable: true}
         truncated: {type: boolean}
@@ -7925,7 +7925,8 @@ components:
         allow board_refs, project_ref, card_ref, limit, sort; work mix allows
         board_refs, project_ref, card_ref, group_by; asks allow card_ref, limit,
         include_answered, answered_only, answered_within_hours; activity allows
-        limit. card_ref filters initiative rows and asks to one visible card.
+        limit. live-fleet-health accepts an empty query and reads declared fleet.*
+        series plus native host and authorized enrollment inventory. card_ref filters initiative rows and asks to one visible card.
         answered_only returns answered asks only and implies include_answered.
         No other field is allowed for that panel type.
       properties:

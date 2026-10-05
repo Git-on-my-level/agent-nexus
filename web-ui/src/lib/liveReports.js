@@ -5,6 +5,7 @@ export const LIVE_REPORT_TYPES = Object.freeze([
   "live-asks",
   "live-work-mix",
   "live-activity",
+  "live-fleet-health",
 ]);
 export const isLivePanel = (panel) =>
   !!panel?.source || LIVE_REPORT_TYPES.includes(panel?.type);
@@ -29,6 +30,7 @@ export function validateLiveQuery(type, data) {
       "card_ref",
     ],
     "live-activity": ["limit"],
+    "live-fleet-health": [],
   }[type];
   if (!fields || !data || typeof data !== "object" || Array.isArray(data))
     return ["must be a live query object"];

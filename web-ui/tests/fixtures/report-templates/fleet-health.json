@@ -1,0 +1,85 @@
+{
+  "observations": [
+    {
+      "data": {
+        "active_host_count": 1,
+        "enrollment_available": true,
+        "enrollment_count": 0,
+        "enrollment_message": "",
+        "enrollments": [],
+        "host_count": 1,
+        "hosts": [
+          {
+            "agent_count": 1,
+            "agents": [],
+            "discovered_adapters": [
+              "fleet-monitor"
+            ],
+            "display_name": "Collector",
+            "hostname": "collector-01",
+            "ref": "host:collector",
+            "slug": "collector"
+          }
+        ],
+        "series": [
+          {
+            "adapter": "fleet-monitor",
+            "host": "collector",
+            "kind": "state",
+            "last_push": "2026-10-05T00:00:00Z",
+            "name": "fleet.health",
+            "status": "ok",
+            "streams": [
+              {
+                "labels": {
+                  "host": "collector-01"
+                },
+                "last_observed_at": "2026-10-05T00:00:00Z",
+                "latest": {
+                  "observed_at": "2026-10-05T00:00:00Z",
+                  "state": "healthy"
+                }
+              }
+            ],
+            "unit": "status"
+          }
+        ]
+      },
+      "id": "fleet",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "status": "ok",
+      "truncated": false,
+      "type": "live-fleet-health"
+    }
+  ],
+  "report": {
+    "generated_at": "2026-10-05T00:00:00Z",
+    "kind": "anx.visual-report",
+    "panels": [
+      {
+        "author": "Agent Nexus template",
+        "data": {},
+        "freshness": "unknown",
+        "id": "fleet",
+        "observed_at": null,
+        "project_id": "workspace",
+        "provenance": "reported",
+        "source_ids": [],
+        "title": "Fleet series and host inventory",
+        "type": "live-fleet-health"
+      }
+    ],
+    "projects": [
+      {
+        "id": "workspace",
+        "outcome": "See current source data",
+        "summary": "Live workspace sources with authored narrative added by the report owner.",
+        "title": "Workspace"
+      }
+    ],
+    "schema_version": 1,
+    "sources": [],
+    "summary": "Current fleet series and native host inventory, with authorized enrollment status.",
+    "title": "Fleet health"
+  }
+}
