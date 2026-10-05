@@ -95,7 +95,7 @@ The selected PM agent and the private owner retain access; unrelated humans,
 agents, and anonymous development readers do not.
 
 Canonical event payloads (including nested refs), notification triggers/refs,
-plans, and runs participate in inherited ownership. Migration 54 backfills
+plans, and runs participate in inherited ownership. Migration 55 backfills
 `resource_access_edges`; database triggers maintain that index atomically with
 canonical JSON/scalar writes, including imports. Use `resourceaccess.ReferenceSQL`
 for SQL reference matching so aliases and Unicode whitespace match the parser.

@@ -53,7 +53,7 @@ func TestResourceAccessMigrationBackfillsAndMaintainsPayloadEdges(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
-			// Reconstruct v53. Keep rows written before the ownership index existed.
+			// Reconstruct the selected pre-privacy schema while retaining canonical rows.
 			for _, table := range []string{"events", "agent_wakeups", "card_plans", "runs"} {
 				for _, op := range []string{"insert", "update", "delete"} {
 					if _, err = ws.DB().Exec(`DROP TRIGGER access_` + table + `_` + op); err != nil {
@@ -72,6 +72,13 @@ func TestResourceAccessMigrationBackfillsAndMaintainsPayloadEdges(t *testing.T) 
 			e, err := s.AppendEvent(ctx, "owner", map[string]any{"type": "message_posted", "refs": []string{}, "payload": map[string]any{"subject_ref": card["ref"]}})
 			if err != nil {
 				t.Fatal(err)
+			}
+			if history == "v53" {
+				for _, stmt := range []string{`DROP TABLE access_requests`, `DROP INDEX host_enrollments_pending_expiry`} {
+					if _, err := ws.DB().Exec(stmt); err != nil {
+						t.Fatal(err)
+					}
+				}
 			}
 			for _, stmt := range []string{`DROP TABLE resource_access_edges`, `DROP TABLE resource_access_tombstones`, `DROP INDEX idx_ref_edges_access_target`, `DROP INDEX idx_cards_access_thread`, `DROP INDEX idx_inbox_access_card`, `DROP INDEX idx_work_access_project`, `DROP INDEX idx_inbox_access_event`, `DELETE FROM schema_migrations WHERE version>=54`} {
 				if history == "main-v54" && stmt == `DELETE FROM schema_migrations WHERE version>=54` {
