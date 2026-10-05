@@ -58,6 +58,7 @@ func accessCTEs(scope AccessScope) string {
 	add("card_plans", denied("plan", "_row.card_id"))
 	add("agent_wakeups", denied("wakeup", "_row.wakeup_id"))
 	add("access_requests", denied("event", "_row.request_event_id"))
+	add("human_attention_response_claims", denied("event", "_row.request_event_id")+" AND "+denied("event", "_row.response_event_id")+" AND "+cleanJSON("_row.response_json"))
 	for _, table := range []string{"topic_projection_refresh_status", "derived_topic_dirty_queue", "home_topic_read_cursors"} {
 		add(table, denied("thread", "_row.thread_id"))
 	}
