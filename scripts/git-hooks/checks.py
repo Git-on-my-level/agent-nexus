@@ -59,6 +59,7 @@ def run(*argv, cwd=ROOT, extra_env=None):
     # Setup owns downloads. Hooks must fail with missing dependencies, not fetch them.
     env = {**os.environ, "GOPROXY": "off", "GOSUMDB": "off", "GOTOOLCHAIN": "local",
            **(extra_env or {})}
+    env["GOFLAGS"] = (env.get("GOFLAGS", "") + " -mod=readonly").strip()
     subprocess.run([str(arg) for arg in argv], cwd=cwd, env=env, check=True)
 
 
@@ -118,7 +119,10 @@ def static_checks(changed, all_files=False):
         # Git-ignore rules do not hide Go sources from the compiler. Hidden,
         # underscore, vendor and testdata directories are excluded by go ./....
         go_untracked = paths(git("ls-files", "--others", "-z", "--", "core", "cli", "mcp", "contracts"))
-        untracked |= {p for p in go_untracked if Path(p).suffix == ".go"
+        untracked |= {p for p in go_untracked if
+                      (Path(p).suffix == ".go" or Path(p).name in {"go.mod", "go.sum"}
+                       or p in {"contracts/anx-openapi.yaml", "contracts/anx-schema.yaml",
+                                "contracts/non-openapi-endpoints.yaml"})
                       and not any(part.startswith((".", "_")) or part in {"vendor", "testdata"}
                                   for part in Path(p).parts)}
         inputs = sorted(p for p in untracked if
