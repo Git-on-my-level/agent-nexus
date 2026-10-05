@@ -427,9 +427,17 @@ test("evidence links remain inert and are never loaded as remote content", async
   await expect(
     region.getByRole("link", { name: source.label }),
   ).toHaveAttribute("href", source.url);
-  await expect(panelRegion(report, explanation)).toContainText(
-    explanation.data.text,
+  // Report prose goes through the shared markdown renderer, which sanitizes:
+  // a remote image is dropped outright rather than rendered or echoed back as
+  // markup, and its `onerror` never reaches the DOM.
+  const explanationBody = panelRegion(report, explanation).locator(
+    ".report-explanation",
   );
+  await expect(explanationBody).toBeAttached();
+  const explanationHtml = await explanationBody.innerHTML();
+  expect(explanationHtml).not.toContain("onerror");
+  expect(explanationHtml).not.toContain(source.url);
+  // An artifact excerpt is raw source by design, shown literally, never run.
   await expect(panelRegion(report, artifact)).toContainText(
     artifact.data.excerpt,
   );
