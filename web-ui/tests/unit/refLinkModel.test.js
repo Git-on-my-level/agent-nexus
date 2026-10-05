@@ -268,6 +268,32 @@ describe("RefLink model", () => {
     });
   });
 
+  it("routes a public message handle to its stored message anchor", () => {
+    const id = "aebb0220-dbfd-4fe8-bd67-eb6b317ffa43";
+    const { eventRoutesById } = buildPrimitiveRefRoutes({
+      events: [
+        {
+          id,
+          handle: "message-posted-golden",
+          type: "message_posted",
+          thread_id: "thread-1",
+        },
+      ],
+    });
+    for (const ref of [`event:${id}`, "event:message-posted-golden"]) {
+      expect(
+        resolveRefLink(ref, {
+          organizationSlug: "acme",
+          workspaceSlug: "proj",
+          eventRoutesById,
+        }),
+      ).toMatchObject({
+        routed: true,
+        href: `/o/acme/w/proj/threads/thread-1?tab=messages#message-${id}`,
+      });
+    }
+  });
+
   it("can humanize labels and keep raw ids as secondary labels", () => {
     const artifactRef = resolveRefLink("artifact:artifact-1", {
       humanize: true,

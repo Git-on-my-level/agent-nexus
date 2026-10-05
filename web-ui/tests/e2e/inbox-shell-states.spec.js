@@ -1118,7 +1118,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expectCleanLayout(page, "workspace home redirecting");
       api.hold.inboxOpen.resolve();
       api.hold = {};
-      await expect(page).toHaveURL(/\/inbox/);
+      await expect(page).toHaveURL(/\/overview$/);
 
       // A terminal account-status revocation paints a full-screen overlay.
       api.sessionStatus = 401;

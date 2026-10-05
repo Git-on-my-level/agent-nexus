@@ -195,6 +195,45 @@ jobs:
       - name: Build standalone UI and enforce commercial source/output boundary
         run: pnpm -C web-ui run build
 
+  # Run every browser spec, including the base-path project. Keep this separate
+  # from visual QA so a selected-spec command cannot silently drop route coverage.
+  web-ui-e2e-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: changes
+    if: needs.changes.outputs.web_ui == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.node_shared == 'true' || needs.changes.outputs.go_shared == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+
+      - name: Setup Node And pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Install Playwright Chromium and system dependencies
+        run: pnpm -C web-ui exec playwright install --with-deps chromium
+
+      - name: Run full browser suite (shard ${{ matrix.shard }}/4)
+        run: pnpm -C web-ui exec playwright test --shard=${{ matrix.shard }}/4 --retries=0 --trace=retain-on-failure --output=test-results/e2e
+
+      - name: Upload browser failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: web-ui-e2e-shard-${{ matrix.shard }}
+          path: web-ui/test-results/e2e/**
+          if-no-files-found: ignore
+          retention-days: 7
+
   # Browser-based visual QA against committed baselines (after static checks).
   web-ui-visual-check:
     runs-on: ubuntu-latest
