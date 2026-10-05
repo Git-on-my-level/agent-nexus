@@ -160,7 +160,10 @@ func writeUpdateJSON(path string, value any) error {
 	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	if err := os.Rename(tmp, path); err != nil {
+		return err
+	}
+	return syncUpdateDirectory(filepath.Dir(path))
 }
 func (a *App) updateDirectory(cfg config.Resolved) (string, error) {
 	home := ""
@@ -220,28 +223,72 @@ func (a *App) runUpdateStatus(cfg config.Resolved) (*commandResult, error) {
 		return nil, err
 	}
 	path, record, digest, reason := inspectUpdateInstall()
+	tx, txErr := readUpdateTransaction(path)
+	var transaction any
+	if txErr == nil {
+		transaction = tx
+		if tx.Phase == "prepared" {
+			state.Rollback = "pending"
+			state.BackupPath = tx.BackupPath
+			state.FailureStage = "transaction_pending"
+		}
+	}
+	if txErr != nil && !errors.Is(txErr, os.ErrNotExist) {
+		state.FailureStage = "transaction_invalid"
+	}
 	return &commandResult{Data: map[string]any{
 		"policy": policy, "policy_source": source, "managed": reason == "", "skip_reason": reason, "install_path": path,
 		"observed_binary":  map[string]any{"version": httpclient.CLIVersion, "sha256": digest, "bookkeeping_matches": record.SHA256 == digest && digest != "" && normalizeReleaseTag(record.Version) == normalizeReleaseTag(httpclient.CLIVersion)},
-		"installer_record": record, "state": state, "state_path": filepath.Join(dir, "state.json"),
+		"installer_record": record, "transaction": transaction, "state": state, "state_path": filepath.Join(dir, "state.json"),
 	}}, nil
 }
 
 // This is deliberately bounded to classified work writes. Local maintenance,
 // reads, streaming waits, dry runs and help cannot trigger binary maintenance.
-func updateInvocationEligible(command string, args []string) bool {
+func updateInvocationEligible(command string, args []string, results ...*commandResult) bool {
+	for _, result := range results {
+		if result != nil {
+			body := asMap(result.Data)
+			if asBool(body["dry_run"]) || anyString(body["status"]) == "dry_run" {
+				return false
+			}
+		}
+	}
+	for _, verb := range strings.Fields(command) {
+		if verb == "doctor" || verb == "status" {
+			return false
+		}
+	}
 	if commandSideEffectClass(command) != "remote_coordination_write" {
 		return false
 	}
+	// Use the same bool parser as trackedBool; account for all spellings and
+	// repeated flags. Results above override this conservative argv fallback.
+	preview := map[string]bool{}
 	for _, arg := range args {
-		if arg == "--dry-run" || arg == "--dry-run=true" || arg == "--plan" || arg == "--plan=true" {
+		name, value, inline, option := parseLongOptionToken(arg)
+		if !option || name != "dry-run" && name != "plan" {
+			continue
+		}
+		if !inline {
+			preview[name] = true
+			continue
+		}
+		parsed, err := strconvParseBool(value)
+		if err != nil {
+			return false
+		}
+		preview[name] = parsed
+	}
+	for _, value := range preview {
+		if value {
 			return false
 		}
 	}
 	return true
 }
-func (a *App) maybeScheduleUpdate(command string, args []string, cfg config.Resolved) []output.Warning {
-	if !updateInvocationEligible(command, args) {
+func (a *App) maybeScheduleUpdate(command string, args []string, cfg config.Resolved, results ...*commandResult) []output.Warning {
+	if !updateInvocationEligible(command, args, results...) {
 		return nil
 	}
 	dir, err := a.updateDirectory(cfg)
@@ -355,7 +402,7 @@ var updateSyncSkills = func(ctx context.Context, path, configDir string) error {
 		return fmt.Errorf("skills sync failed")
 	}
 	for _, skill := range envelope.Result.Skills {
-		if skill.State == "conflict" || skill.State == "outdated" {
+		if skill.State == "conflict" || skill.State == "outdated" || skill.State == "drifted" {
 			return fmt.Errorf("managed skills need attention; run anx skills status")
 		}
 	}
@@ -383,27 +430,36 @@ func (a *App) performManagedUpdate(ctx context.Context, cfg config.Resolved, o u
 		return a.runUpdateStatus(cfg)
 	}
 	path, record, _, reason := inspectUpdateInstall()
-	if reason != "" {
+	if _, journalErr := os.Stat(updateTransactionPath(path)); reason != "" && errors.Is(journalErr, os.ErrNotExist) {
 		return nil, errnorm.WithDetails(errnorm.Local("unmanaged_install", "self-update requires a matching ANX installer receipt; rerun the release installer"), map[string]any{"skip_reason": reason})
 	}
 	if os.MkdirAll(dir, 0700) != nil {
 		return nil, errnorm.Local("update_write_failed", "cannot create update state directory")
 	}
-	// Lock beside the executable serializes all workspaces/config directories.
-	lockPath := path + ".anx-update.lock"
-	lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	lock, err := lockUpdateInstall(path)
 	if err != nil {
-		// A killed short-lived worker must not disable updates permanently.
-		if info, e := os.Stat(lockPath); e == nil && time.Since(info.ModTime()) > 10*time.Minute {
-			_ = os.Remove(lockPath)
-			lock, err = os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		return nil, err
+	}
+	defer lock.Close()
+	outcome, backup, recoveryErr := recoverUpdateTransaction(path)
+	if outcome != "not_needed" || recoveryErr != nil {
+		state := updateState{CheckedOn: a.clockNow().UTC().Format("2006-01-02"), FailureStage: "crash_recovery", Rollback: outcome, BackupPath: backup}
+		if recoveryErr != nil {
+			state.FailureCode = "update_recovery_failed"
 		}
+		if err := writeUpdateJSON(filepath.Join(dir, "state.json"), state); err != nil {
+			return nil, err
+		}
+		if recoveryErr != nil {
+			return nil, errnorm.Wrap(errnorm.KindLocal, "update_recovery_failed", "interrupted transaction needs recovery", recoveryErr)
+		}
+		return a.runUpdateStatus(cfg)
 	}
-	if err != nil {
-		return nil, errnorm.Local("update_locked", "another update is active; inspect anx update status")
+	// Reinspect after taking the process lock.
+	path, record, _, reason = inspectUpdateInstall()
+	if reason != "" {
+		return nil, errnorm.Local("unmanaged_install", "installation changed before lock acquisition")
 	}
-	_ = lock.Close()
-	defer os.Remove(lockPath)
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	state := updateState{CheckedOn: a.clockNow().UTC().Format("2006-01-02"), Rollback: "not_needed"}
@@ -470,80 +526,4 @@ func (a *App) performManagedUpdate(ctx context.Context, cfg config.Resolved, o u
 	result := renderUpdatePlan(plan, true)
 	appendUpdateBridgeReminderText(&result.Text)
 	return result, nil
-}
-
-// The original stays at its path until the candidate is verified. Keep a
-// separate backup through post-replace verification and receipt commit.
-func replaceManagedExecutable(ctx context.Context, path string, binary []byte, mode os.FileMode, version string, oldRecord updateInstallRecord) (string, string, error) {
-	old, err := os.ReadFile(path)
-	if err != nil {
-		return "not_needed", "", err
-	}
-	originalSum := sha256.Sum256(old)
-	if hex.EncodeToString(originalSum[:]) != oldRecord.SHA256 {
-		return "not_needed", "", errnorm.Local("unmanaged_install", "binary changed before replacement")
-	}
-	if info, err := os.Stat(path); err == nil {
-		mode = info.Mode().Perm()
-	}
-	if mode == 0 {
-		mode = 0755
-	}
-	tmp, err := os.MkdirTemp(filepath.Dir(path), ".anx-update-")
-	if err != nil {
-		return "not_needed", "", err
-	}
-	defer os.RemoveAll(tmp)
-	candidate := filepath.Join(tmp, filepath.Base(path))
-	if err := updateWriteFile(candidate, binary, mode); err != nil {
-		return "not_needed", "", err
-	}
-	if err := updateChmod(candidate, mode); err != nil {
-		return "not_needed", "", err
-	}
-	if err := updateProbeBinary(ctx, candidate, version); err != nil {
-		return "not_needed", "", errnorm.Wrap(errnorm.KindLocal, "update_probe_failed", "release binary failed verification", err)
-	}
-	backupFile, err := os.CreateTemp(filepath.Dir(path), ".anx-rollback-")
-	if err != nil {
-		return "not_needed", "", err
-	}
-	backup := backupFile.Name()
-	if _, err = backupFile.Write(old); err == nil {
-		err = backupFile.Chmod(mode)
-	}
-	if err == nil {
-		err = backupFile.Sync()
-	}
-	closeErr := backupFile.Close()
-	if err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		_ = os.Remove(backup)
-		return "not_needed", "", err
-	}
-	rollback := func(cause error) (string, string, error) {
-		if err := updateRename(backup, path); err != nil {
-			return "failed", backup, errnorm.Wrap(errnorm.KindLocal, "update_rollback_failed", "rollback failed; original binary retained at backup path", err)
-		}
-		if err := writeUpdateJSON(installRecordPath(path), oldRecord); err != nil {
-			return "failed", "", errnorm.Wrap(errnorm.KindLocal, "update_rollback_record_failed", "binary restored but installer receipt could not be restored", err)
-		}
-		return "succeeded", "", cause
-	}
-	if err := updateRename(candidate, path); err != nil {
-		_ = os.Remove(backup)
-		return "not_needed", "", errnorm.Wrap(errnorm.KindLocal, "update_replace_failed", "atomic binary replacement failed", err)
-	}
-	if err := updateProbeBinary(ctx, path, version); err != nil {
-		return rollback(errnorm.Wrap(errnorm.KindLocal, "update_probe_failed", "installed binary failed verification", err))
-	}
-	sum := sha256.Sum256(binary)
-	record := updateInstallRecord{ManagedBy: "anx", Version: version, SHA256: hex.EncodeToString(sum[:]), InstalledAt: time.Now().UTC().Format(time.RFC3339)}
-	if err := writeUpdateJSON(installRecordPath(path), record); err != nil {
-		return rollback(err)
-	}
-	_ = os.Remove(backup)
-	return "not_needed", "", nil
 }

@@ -20,6 +20,8 @@ for release networking, verification, replacement, or skill synchronization. A
 per-install atomic daily claim prevents simultaneous commands and separate
 workspace config directories from launching duplicate checks. Reads (`orient`,
 help, inbox list, await, doctor, status), local maintenance, and dry runs are exempt.
+The gate uses the parsed command result, including every accepted true spelling
+of `--dry-run`; `bridge doctor` is also exempt.
 
 `notify` runs the same release discovery without installing. A known newer release
 produces one warning per UTC day on eligible writes. An initial check can finish
@@ -34,18 +36,80 @@ SHA-256. Source/dev builds, binaries changed outside the installer, and known
 package manager paths are skipped with an explicit status reason. Older releases
 have no receipt: rerun the release installer once to enroll them. Do not manufacture
 receipts or automatically adopt a path merely because its name is `anx`.
-The release installer supports macOS and Linux; Windows self-replacement remains
+The release installer requires Python 3.8 or newer and supports macOS and Linux;
+Windows self-replacement remains
 unsupported and is reported in status.
 
-The worker uses the GitHub release API, falling back on 403/429 to the public
-same-origin latest-release redirect. It downloads the archive for this OS/arch,
+The worker uses the canonical repository's GitHub release API without redirects,
+falling back on 403/429 to its public same-origin latest-release redirect.
+Every download requires HTTPS. Asset redirects may retain the exact repository
+asset path or reach `release-assets.githubusercontent.com`,
+`objects.githubusercontent.com`, or `github-releases.githubusercontent.com` on
+the HTTPS port. Other origins, repository paths, credentials, and HTTP downgrades
+are rejected. The installer applies the same restrictions.
+
+It downloads the archive for this OS/arch,
 checks its checksum, verifies the candidate executable reports the release version,
 and atomically renames it over the original. A backup remains until post-replace
 verification and receipt commit succeed. On failure it restores the original; if
 restoration fails, status records the retained backup path. The new executable
 runs `skills sync`, preserving edits, unmanaged copies, and agentctl-owned skills.
-A skills failure leaves the verified new CLI installed and reports `skills_sync`
+A drifted (edited), conflicted, or outdated skill requires attention and is not
+reported as synchronized. A skills failure leaves the verified new CLI installed
+and reports `skills_sync`
 with runnable repairs; it does not downgrade a healthy binary.
+
+Both installer and updater acquire a kernel process lock on the same permanent
+`anx.anx-update.lock` inode. They never reclaim by age or unlink that inode;
+process death releases ownership. Installer skill synchronization runs after
+releasing this lock and has a 60-second deadline. Candidates must execute and
+report the expected version before replacement and again afterward. An execution
+or verification failure preserves/restores the original binary and receipt and
+returns failure.
+
+A durable `anx.anx-transaction.json` journal records the old receipt, binary
+digest, backup path, and new receipt before replacement. Candidate and backup
+contents, the journal, receipts, and destination-directory renames are synchronized
+to disk. Under the process lock, a later update or installer invocation recovers
+an interrupted prepared transaction by restoring the old binary and receipt;
+an interrupted committed transaction finishes receipt and backup cleanup.
+Recovery is idempotent, including interruption during rollback. Offline status
+shows a pending transaction and backup even before the normal update state is
+written. Failed recovery retains evidence for repair. Filesystem/hardware support
+for synchronization remains the boundary of power-loss durability.
+
+Archive handling caps compressed downloads and total expanded data at 128 MiB,
+including ignored entries, and permits at most 1,024 entries. Go extraction
+checks cancellation throughout decompression. Neither implementation extracts
+archive paths to disk: only the root binary is selected, and traversal, links,
+special files, and duplicate binaries are rejected.
+
+## Release provenance and proposed verification
+
+The release workflow generates GitHub build-provenance attestations for every
+tar/zip release archive and `checksums.txt` before publication. Its job is limited
+to version tags in `Git-on-my-level/agent-nexus`, with OIDC and attestation write
+permissions scoped to that job. The attestation action is pinned to a commit;
+the signed provenance identifies this repository and
+`.github/workflows/release-cli.yml`. A rerun refuses existing assets with different
+bytes, so it cannot attest one build while leaving a different build published.
+See [GitHub's attestation documentation](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations)
+and the [attestation action](https://github.com/actions/attest).
+
+Updater attestation verification is deliberately deferred for a separate decision.
+The proposed gate verifies both downloaded archive and checksum-manifest digests,
+requires GitHub build-provenance statements from the exact repository and signer
+workflow, and binds their source tag/commit to the selected release. An initial
+implementation could use `gh attestation verify <file> --repo
+Git-on-my-level/agent-nexus --signer-workflow
+Git-on-my-level/agent-nexus/.github/workflows/release-cli.yml`; an embedded Go
+verifier would avoid making `gh` another updater dependency. Signature trust,
+certificate workflow identity, and predicate source ref must all be checked,
+not just the existence of an attestation. Missing, mismatched, or unverifiable
+provenance should fail closed before candidate execution. We need to choose the
+verifier and an explicit policy for older unattested releases before enforcing
+this gate. Current updates verify checksums and executable behavior; they do not
+yet enforce attestations.
 
 CLI/core compatibility remains the existing handshake-based doctor check (minimum
 and recommended CLI versions). `orient` does not currently learn a core version;

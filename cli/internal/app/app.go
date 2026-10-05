@@ -204,7 +204,7 @@ func (a *App) Run(args []string) int {
 			a.maybeScheduleSkillsRefresh(identity.Command, result, resolved.ConfigDir)
 		}
 		if result != nil {
-			result.Warnings = append(result.Warnings, a.maybeScheduleUpdate(identity.Command, normalizedArgs, resolved)...)
+			result.Warnings = append(result.Warnings, a.maybeScheduleUpdate(identity.Command, normalizedArgs, resolved, result)...)
 		}
 	}
 

@@ -169,7 +169,7 @@ func TestReleaseAPIRateLimitFallbackAndRedirectOrigin(t *testing.T) {
 	t.Cleanup(func() { updateReleaseAPIURL = oldAPI; updateReleaseBaseURL = oldBase })
 	for _, code := range []int{403, 429} {
 		var server *httptest.Server
-		server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server = newUpdateTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
 			case "/api":
 				w.WriteHeader(code)
@@ -187,9 +187,9 @@ func TestReleaseAPIRateLimitFallbackAndRedirectOrigin(t *testing.T) {
 			t.Fatalf("code=%d tag=%s err=%v", code, tag, err)
 		}
 	}
-	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Error("cross-origin redirect followed") }))
+	target := newUpdateTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Error("cross-origin redirect followed") }))
 	defer target.Close()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newUpdateTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, target.URL+"/releases/tag/v0.12.11", 302)
 	}))
 	defer server.Close()
@@ -205,7 +205,7 @@ func TestManagedUpdateChecksumFailurePreservesBinary(t *testing.T) {
 	oldBase := updateReleaseBaseURL
 	t.Cleanup(func() { updateReleaseBaseURL = oldBase })
 	archive, _ := updateArchiveName("v0.12.11")
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newUpdateTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "checksums.txt") {
 			_, _ = w.Write([]byte(strings.Repeat("0", 64) + "  " + archive))
 		} else {
@@ -307,7 +307,7 @@ func TestScheduledOffPerformsNoReleaseCheck(t *testing.T) {
 	}
 	oldBase := updateReleaseBaseURL
 	t.Cleanup(func() { updateReleaseBaseURL = oldBase })
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Error("off contacted release server") }))
+	server := newUpdateTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Error("off contacted release server") }))
 	defer server.Close()
 	updateReleaseBaseURL = server.URL
 	if _, err := a.runUpdate(context.Background(), []string{"now", "--scheduled"}, cfg); err != nil {
@@ -325,7 +325,7 @@ func TestScheduledNotifyChecksButDoesNotDownloadOrReplace(t *testing.T) {
 	}
 	oldAPI, oldBase := updateReleaseAPIURL, updateReleaseBaseURL
 	t.Cleanup(func() { updateReleaseAPIURL = oldAPI; updateReleaseBaseURL = oldBase })
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newUpdateTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api" {
 			t.Error("notify downloaded a release archive")
 		}
@@ -359,7 +359,7 @@ func TestManagedUpdateSkillsFailureKeepsVerifiedRelease(t *testing.T) {
 	updateSyncSkills = func(context.Context, string, string) error { return errors.New("skill conflict") }
 	archive, _ := updateArchiveName("v0.12.11")
 	content := buildReleaseArchiveForTest(t, archive, []byte("updated"))
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newUpdateTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "checksums.txt") {
 			_, _ = w.Write([]byte(sha256HexForTest(content) + "  " + archive))
 		} else {

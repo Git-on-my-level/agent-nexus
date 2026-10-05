@@ -41,7 +41,7 @@ func TestRunUpdateCheckDoesNotCallHandshake(t *testing.T) {
 	defer coreServer.Close()
 
 	var releaseServer *httptest.Server
-	releaseServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	releaseServer = newUpdateTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/releases/tag/v0.0.3":
 			w.WriteHeader(http.StatusOK)
@@ -88,7 +88,7 @@ func TestRunUpdateCheckFallsBackToLatestRelease(t *testing.T) {
 	})
 
 	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server = newUpdateTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/releases/tag/v0.0.3":
 			w.WriteHeader(http.StatusOK)
@@ -136,7 +136,7 @@ func TestRunUpdateReplacesBinaryFromRequestedVersion(t *testing.T) {
 	archiveBytes := buildReleaseArchiveForTest(t, archiveName, []byte("new-binary-bytes"))
 	checksum := sha256HexForTest(archiveBytes)
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newUpdateTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/releases/download/" + version + "/" + archiveName:
 			_, _ = w.Write(archiveBytes)
@@ -258,4 +258,13 @@ func executableNameForTest() string {
 func sha256HexForTest(body []byte) string {
 	sum := sha256.Sum256(body)
 	return hex.EncodeToString(sum[:])
+}
+
+func newUpdateTLSServer(t *testing.T, handler http.Handler) *httptest.Server {
+	t.Helper()
+	server := httptest.NewTLSServer(handler)
+	old := updateHTTPTransport
+	updateHTTPTransport = server.Client().Transport
+	t.Cleanup(func() { updateHTTPTransport = old })
+	return server
 }

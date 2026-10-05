@@ -1,10 +1,6 @@
 package app
 
 import (
-	"archive/tar"
-	"archive/zip"
-	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -12,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -147,8 +142,11 @@ func renderUpdatePlan(plan updatePlan, updated bool) *commandResult {
 }
 
 func resolveLatestReleaseTag(ctx context.Context, timeout time.Duration) (string, error) {
-	client := &http.Client{Timeout: timeout}
+	client, err := updateHTTPClient(timeout, "api", updateReleaseAPIURL)
 	if updateReleaseAPIURL != "" {
+		if err != nil {
+			return "", err
+		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, updateReleaseAPIURL, nil)
 		if err != nil {
 			return "", err
@@ -166,7 +164,7 @@ func resolveLatestReleaseTag(ctx context.Context, timeout time.Duration) (string
 			if err != nil {
 				return "", err
 			}
-			if _, err := parseSemanticVersion(release.Tag); err != nil {
+			if err := validateReleaseTag(release.Tag); err != nil {
 				return "", err
 			}
 			return normalizeReleaseTag(release.Tag), nil
@@ -177,18 +175,12 @@ func resolveLatestReleaseTag(ctx context.Context, timeout time.Duration) (string
 			return "", fmt.Errorf("release API returned status %d", status)
 		}
 	}
-	// Only same-origin redirects are accepted as release discovery evidence.
-	origin, err := url.Parse(strings.TrimRight(updateReleaseBaseURL, "/") + "/latest")
+	entry := strings.TrimRight(updateReleaseBaseURL, "/") + "/latest"
+	client, err = updateHTTPClient(timeout, "latest", entry)
 	if err != nil {
 		return "", err
 	}
-	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		if len(via) >= 5 || req.URL.Scheme != origin.Scheme || req.URL.Host != origin.Host {
-			return fmt.Errorf("unsafe latest-release redirect")
-		}
-		return nil
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, origin.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, entry, nil)
 	if err != nil {
 		return "", err
 	}
@@ -201,12 +193,13 @@ func resolveLatestReleaseTag(ctx context.Context, timeout time.Duration) (string
 		return "", fmt.Errorf("latest release page returned status %d", resp.StatusCode)
 	}
 	// The final path must be a release tag on the same origin.
-	prefix := strings.TrimSuffix(origin.Path, "latest") + "tag/"
+	base, _ := http.NewRequest(http.MethodGet, entry, nil)
+	prefix := strings.TrimSuffix(base.URL.Path, "latest") + "tag/"
 	if !strings.HasPrefix(resp.Request.URL.Path, prefix) {
 		return "", fmt.Errorf("latest release redirect did not resolve a tag")
 	}
 	tag := pathBase(resp.Request.URL.Path)
-	if _, err := parseSemanticVersion(tag); err != nil {
+	if err := validateReleaseTag(tag); err != nil {
 		return "", err
 	}
 	return normalizeReleaseTag(tag), nil
@@ -218,6 +211,9 @@ func updateArchiveName(version string) (string, error) {
 	version = normalizeReleaseTag(version)
 	if version == "" {
 		return "", errnorm.Local("version_required", "release version is required to resolve the update archive name")
+	}
+	if err := validateReleaseTag(version); err != nil {
+		return "", err
 	}
 	switch goos {
 	case "linux", "darwin", "windows":
@@ -237,24 +233,31 @@ func updateArchiveName(version string) (string, error) {
 }
 
 func downloadUpdateBinary(ctx context.Context, timeout time.Duration, version string, archiveName string) ([]byte, os.FileMode, error) {
-	client := &http.Client{Timeout: timeout}
 	baseURL := strings.TrimRight(updateReleaseBaseURL, "/") + "/download/" + normalizeReleaseTag(version)
 
-	archiveBytes, err := fetchBytes(ctx, client, baseURL+"/"+archiveName)
+	archiveBytes, err := fetchReleaseBytes(ctx, timeout, baseURL+"/"+archiveName)
 	if err != nil {
 		return nil, 0, errnorm.Wrap(errnorm.KindNetwork, "download_failed", "failed to download CLI release archive", err)
 	}
-	checksumBytes, err := fetchBytes(ctx, client, baseURL+"/checksums.txt")
+	checksumBytes, err := fetchReleaseBytes(ctx, timeout, baseURL+"/checksums.txt")
 	if err != nil {
 		return nil, 0, errnorm.Wrap(errnorm.KindNetwork, "download_failed", "failed to download CLI checksum manifest", err)
 	}
 	if err := verifyReleaseChecksum(archiveName, archiveBytes, checksumBytes); err != nil {
 		return nil, 0, err
 	}
-	return extractReleaseBinary(archiveName, archiveBytes)
+	binary, mode, err := extractReleaseBinaryContext(ctx, archiveName, archiveBytes)
+	if err != nil {
+		return nil, 0, errnorm.Wrap(errnorm.KindLocal, "archive_invalid", "release extraction failed", err)
+	}
+	return binary, mode, nil
 }
 
-func fetchBytes(ctx context.Context, client *http.Client, rawURL string) ([]byte, error) {
+func fetchReleaseBytes(ctx context.Context, timeout time.Duration, rawURL string) ([]byte, error) {
+	client, err := updateHTTPClient(timeout, "asset", rawURL)
+	if err != nil {
+		return nil, err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, err
@@ -312,75 +315,6 @@ func verifyReleaseChecksum(archiveName string, archiveBytes []byte, checksumByte
 	return nil
 }
 
-func extractReleaseBinary(archiveName string, archiveBytes []byte) ([]byte, os.FileMode, error) {
-	if strings.HasSuffix(archiveName, ".zip") {
-		return extractZIPBinary(archiveBytes)
-	}
-	return extractTarGZBinary(archiveBytes)
-}
-
-func extractZIPBinary(archiveBytes []byte) ([]byte, os.FileMode, error) {
-	reader, err := zip.NewReader(bytes.NewReader(archiveBytes), int64(len(archiveBytes)))
-	if err != nil {
-		return nil, 0, errnorm.Wrap(errnorm.KindLocal, "archive_invalid", "failed to read CLI zip archive", err)
-	}
-	for _, file := range reader.File {
-		if pathBase(file.Name) != "anx.exe" {
-			continue
-		}
-		rc, err := file.Open()
-		if err != nil {
-			return nil, 0, errnorm.Wrap(errnorm.KindLocal, "archive_invalid", "failed to open CLI binary inside zip archive", err)
-		}
-		defer rc.Close()
-		body, err := readReleaseBytes(rc)
-		if err != nil {
-			return nil, 0, errnorm.Wrap(errnorm.KindLocal, "archive_invalid", "failed to read CLI binary inside zip archive", err)
-		}
-		mode := file.Mode()
-		if mode == 0 {
-			mode = 0o755
-		}
-		return body, mode, nil
-	}
-	return nil, 0, errnorm.Local("archive_invalid", "CLI zip archive did not contain anx.exe")
-}
-
-func extractTarGZBinary(archiveBytes []byte) ([]byte, os.FileMode, error) {
-	gzReader, err := gzip.NewReader(bytes.NewReader(archiveBytes))
-	if err != nil {
-		return nil, 0, errnorm.Wrap(errnorm.KindLocal, "archive_invalid", "failed to open CLI tar.gz archive", err)
-	}
-	defer gzReader.Close()
-
-	tarReader := tar.NewReader(gzReader)
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, 0, errnorm.Wrap(errnorm.KindLocal, "archive_invalid", "failed to read CLI tar archive", err)
-		}
-		if header.Typeflag != tar.TypeReg {
-			continue
-		}
-		if pathBase(header.Name) != "anx" {
-			continue
-		}
-		body, err := readReleaseBytes(tarReader)
-		if err != nil {
-			return nil, 0, errnorm.Wrap(errnorm.KindLocal, "archive_invalid", "failed to read CLI binary inside tar archive", err)
-		}
-		mode := os.FileMode(header.Mode)
-		if mode == 0 {
-			mode = 0o755
-		}
-		return body, mode, nil
-	}
-	return nil, 0, errnorm.Local("archive_invalid", "CLI tar.gz archive did not contain anx")
-}
-
 func compareSemanticVersions(left string, right string) (int, error) {
 	leftParts, err := parseSemanticVersion(left)
 	if err != nil {
@@ -436,6 +370,20 @@ func normalizeReleaseTag(raw string) string {
 		return "v" + strings.TrimPrefix(raw[1:], "v")
 	}
 	return "v" + raw
+}
+
+func validateReleaseTag(tag string) error {
+	if len(tag) == 0 || len(tag) > 128 {
+		return fmt.Errorf("invalid release tag")
+	}
+	for _, ch := range tag {
+		if ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' || strings.ContainsRune(".+-", ch) {
+			continue
+		}
+		return fmt.Errorf("invalid release tag")
+	}
+	_, err := parseSemanticVersion(tag)
+	return err
 }
 
 func displayValue(raw string) string {
