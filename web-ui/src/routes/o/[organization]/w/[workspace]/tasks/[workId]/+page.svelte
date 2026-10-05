@@ -545,8 +545,20 @@
           <section>
             <h2 class="ui-label">Done when</h2>
             <ul class="list-disc space-y-1 break-words pl-5 text-meta text-fg">
+              <!-- Criteria are authored text: a `card:` in one is the same
+                   chip it is anywhere else, and `\`On tr…\`` is a code span,
+                   not three backticks. -->
               {#each work.definition_of_done as criterion}<li>
-                  {criterion}
+                  <MarkdownRenderer
+                    inline
+                    source={criterion}
+                    resolved={planRefs}
+                    organizationSlug={$page.params.organization}
+                    workspaceSlug={$page.params.workspace}
+                    onpreview={(model, anchor) =>
+                      refPreview?.open(model, anchor)}
+                    onpreviewclose={() => refPreview?.requestClose()}
+                  />
                 </li>{/each}
             </ul>
           </section>
@@ -558,8 +570,8 @@
               <!-- The step core computed, named by the plan's own title rather
                    than by its raw id. -->
               <p class="text-meta text-fg" data-next-step>
-                {nextStep.title}{#if nextStep.extra}<span class="text-fg-muted">
-                    +{nextStep.extra} more</span
+                {nextStep.title}{#if nextStep.extra}<span class="text-fg-muted"
+                    >{" "}+{nextStep.extra} more</span
                   >{/if}
                 {#if nextStep.ref}
                   <span class="ml-1 align-middle">

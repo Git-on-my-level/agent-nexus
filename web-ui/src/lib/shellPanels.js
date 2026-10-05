@@ -27,15 +27,24 @@ export const SHELL_PANELS = Object.freeze({
 /**
  * Widths below which a panel is collapsed regardless of the preference.
  *
- * The nav is 14.5rem (232px) and the shell hides it entirely below 1024px, so
- * the window it can be shown-but-cramped in starts there: at 1024–1151 the
- * nav plus a readable content column do not both fit, which is the width
- * David's audit covers. A page rail is 18rem and sits beside content from
- * `xl` (1280px) up; below that it stacks, which is not a collapse.
+ * These are the widths the panel has no room at, not widths someone guessed
+ * looked cramped:
+ *
+ * - **nav, 1024px** — `lg`, where the shell swaps the sidebar for the bottom
+ *   tab bar. Below it the sidebar is not on screen at all, so "collapsed" is
+ *   simply true, and the toggle says so rather than pretending to act. At
+ *   1024 itself the sidebar is 232px of a 1024px window and the remaining
+ *   792px is a comfortable content column, so the viewer's choice rules from
+ *   there up.
+ * - **rail, none** — below `xl` a page's 18rem rail stacks under the content
+ *   rather than sitting beside it, and stacked is not collapsed: the Source
+ *   block and the Inbox link are still worth reading on a phone. Collapsing it
+ *   there would hide content to save width the rail is no longer taking. So
+ *   the rail follows the viewer's choice at every width.
  */
 export const PANEL_AUTO_COLLAPSE_BELOW = Object.freeze({
-  nav: 1152,
-  rail: 1280,
+  nav: 1024,
+  rail: 0,
 });
 
 const asText = (value) => String(value ?? "").trim();

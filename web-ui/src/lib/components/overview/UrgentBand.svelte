@@ -27,6 +27,12 @@
   } = $props();
 
   let asks = $derived(band?.asks ?? { rows: [], count: 0 });
+  /**
+   * Which workspace a row came from, but only when that is news. On a
+   * self-hosted single-workspace deployment every row says "Local", which is
+   * a column of noise rather than a fact.
+   */
+  let showWorkspace = $derived((asks.workspaces ?? 0) > 1);
   let initiatives = $derived(band?.initiatives ?? { rows: [], count: 0 });
   let unavailable = $derived(band?.unavailable ?? []);
   let empty = $derived(
@@ -75,7 +81,7 @@
             <span class="urgent__row-title">{row.title}</span>
           </a>
           <span class="urgent__row-meta">
-            {#if row.workspace?.label}
+            {#if showWorkspace && row.workspace?.label}
               <span class="urgent__chip" data-urgent-workspace
                 >{row.workspace.label}</span
               >

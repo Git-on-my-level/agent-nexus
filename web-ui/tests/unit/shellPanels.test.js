@@ -80,7 +80,7 @@ describe("readPanelPreference / writePanelPreference", () => {
 });
 
 describe("panelCollapsed", () => {
-  const wide = PANEL_AUTO_COLLAPSE_BELOW.nav + 200;
+  const wide = PANEL_AUTO_COLLAPSE_BELOW.nav + 400;
   const narrow = PANEL_AUTO_COLLAPSE_BELOW.nav - 1;
 
   it("follows the viewer's choice on a wide window", () => {
@@ -146,36 +146,58 @@ describe("panelCollapsed", () => {
     ).toBe(false);
   });
 
-  it("collapses the rail below the width it sits beside content at", () => {
+  it("never auto-collapses the rail: stacked is not collapsed", () => {
+    // Below `xl` the rail sits under the content rather than beside it, so
+    // collapsing it there would hide the Source block and the Inbox link to
+    // save width the rail is no longer taking.
+    expect(PANEL_AUTO_COLLAPSE_BELOW.rail).toBe(0);
+    for (const viewportWidth of [390, 768, 1024, 1600]) {
+      expect(
+        panelCollapsed({
+          panel: SHELL_PANELS.RAIL,
+          preference: false,
+          viewportWidth,
+        }),
+      ).toBe(false);
+    }
+    // The viewer's choice still applies at every width.
     expect(
       panelCollapsed({
         panel: SHELL_PANELS.RAIL,
-        preference: false,
-        viewportWidth: PANEL_AUTO_COLLAPSE_BELOW.rail - 1,
+        preference: true,
+        viewportWidth: 390,
       }),
     ).toBe(true);
-    expect(
-      panelCollapsed({
-        panel: SHELL_PANELS.RAIL,
-        preference: false,
-        viewportWidth: PANEL_AUTO_COLLAPSE_BELOW.rail,
-      }),
-    ).toBe(false);
   });
 
-  it("audits the widths David named: 390 and 768 collapse both panels, 1024 collapses the nav", () => {
-    for (const panel of [SHELL_PANELS.NAV, SHELL_PANELS.RAIL]) {
-      for (const viewportWidth of [390, 768]) {
-        expect(
-          panelCollapsed({ panel, preference: false, viewportWidth }),
-        ).toBe(true);
-      }
+  it("audits the widths David named: 390 and 768 collapse the nav", () => {
+    for (const viewportWidth of [390, 768]) {
+      expect(
+        panelCollapsed({
+          panel: SHELL_PANELS.NAV,
+          preference: false,
+          viewportWidth,
+        }),
+      ).toBe(true);
     }
+  });
+
+  it("leaves the nav expanded at 1024, where the sidebar first has room", () => {
+    // `lg` is where the shell swaps the bottom tab bar for the sidebar. The
+    // sidebar is 232px of it and the rest is a comfortable column, so the
+    // viewer's choice rules from here up rather than being overridden.
     expect(
       panelCollapsed({
         panel: SHELL_PANELS.NAV,
         preference: false,
         viewportWidth: 1024,
+      }),
+    ).toBe(false);
+    expect(
+      panelCollapsed({
+        panel: SHELL_PANELS.NAV,
+        preference: false,
+        viewportWidth: 1023,
       }),
     ).toBe(true);
   });

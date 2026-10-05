@@ -15,8 +15,11 @@ const WORKSPACE = "/o/local/w/local";
 const TASKS = `${WORKSPACE}/tasks`;
 
 const WIDE = { width: 1600, height: 900 };
-/** Below `PANEL_AUTO_COLLAPSE_BELOW.nav`. */
-const NARROW_DESKTOP = { width: 1100, height: 900 };
+/**
+ * Below `PANEL_AUTO_COLLAPSE_BELOW.nav`: the shell has swapped the sidebar for
+ * the bottom tab bar, so the nav is collapsed whatever the viewer chose.
+ */
+const NARROW = { width: 768, height: 1024 };
 
 async function open(page, path = TASKS, viewport = WIDE) {
   await installWorkspaceApi(page, {});
@@ -111,7 +114,7 @@ test("a narrow window collapses the nav without overwriting the preference", asy
   await expect(nav).toHaveAttribute("data-shell-nav", "expanded");
 
   // Narrow: collapsed, and the toggle says why rather than doing nothing.
-  await page.setViewportSize(NARROW_DESKTOP);
+  await page.setViewportSize(NARROW);
   await expect(nav).toHaveAttribute("data-shell-nav", "collapsed");
   const toggle = nav.locator("[data-panel-toggle='left']");
   await expect(toggle).toBeDisabled();
@@ -185,23 +188,29 @@ test("the task page's right rail collapses and is remembered", async ({
   );
 });
 
-test("the rail stacks rather than collapsing on a narrow window", async ({
+test("at 1024 the sidebar has room, and the page does not scroll sideways", async ({
   page,
 }) => {
   test.setTimeout(90_000);
   await installWorkspaceApi(page, {});
-  // Below `xl`, where the rail sits under the content instead of beside it.
+  // `lg`: the width the sidebar first appears at, and one of the three
+  // David's audit names. It is shown, not auto-collapsed — 232px of nav
+  // leaves a comfortable column — and the toggle is the viewer's to use.
   await page.setViewportSize({ width: 1024, height: 900 });
   await page.goto(`${WORKSPACE}/tasks`);
-  await expect(page.locator("[data-shell-nav]")).toBeVisible({
-    timeout: 60_000,
-  });
-  // The nav is auto-collapsed at this width; the page still does not scroll
-  // sideways, which is the invariant David's audit is about.
-  await expect(page.locator("[data-shell-nav]")).toHaveAttribute(
-    "data-shell-nav",
-    "collapsed",
-  );
+  const nav = page.locator("[data-shell-nav]");
+  await expect(nav).toBeVisible({ timeout: 60_000 });
+  await expect(nav).toHaveAttribute("data-shell-nav", "expanded");
+  await expect(nav.locator("[data-panel-toggle='left']")).toBeEnabled();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth + 1,
+    ),
+  ).toBe(false);
+
+  // And collapsing it there is still the invariant David's audit is about.
+  await nav.getByRole("button", { name: "Hide menu" }).click();
+  await expect(nav).toHaveAttribute("data-shell-nav", "collapsed");
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth > window.innerWidth + 1,

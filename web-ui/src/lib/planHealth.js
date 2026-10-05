@@ -238,6 +238,16 @@ export function humanizeStepId(id) {
 }
 
 /**
+ * A phase as it reads inside a sentence. `in_progress` is already "in
+ * progress", so "this task is in in progress" is what naive interpolation
+ * gets you.
+ */
+function phaseWords(phase) {
+  const words = asText(phase).replaceAll("_", " ");
+  return /^(in |on |at )/.test(words) ? words : `in ${words}`;
+}
+
+/**
  * Does the card's own status disagree with what the plan says?
  *
  * A card parked in `done` whose plan still has open steps, or a card in
@@ -265,10 +275,10 @@ export function planStatusMismatch(phase, health, progress) {
     return "This task is marked blocked, but its plan reads on track.";
   }
   if (cardPhase !== "blocked" && state === "blocked") {
-    return `This task is in ${cardPhase.replaceAll("_", " ")}, but its plan is blocked.`;
+    return `This task is ${phaseWords(cardPhase)}, but its plan is blocked.`;
   }
   if (cardPhase !== "done" && state === "done") {
-    return `Every step in the plan is done, but this task is still in ${cardPhase.replaceAll("_", " ")}.`;
+    return `Every step in the plan is done, but this task is still ${phaseWords(cardPhase)}.`;
   }
   return "";
 }
