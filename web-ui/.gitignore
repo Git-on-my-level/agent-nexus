@@ -20,3 +20,7 @@ pnpm-debug.log*
 .qa-baseline/
 # QA visual runner (`scripts/qa-visual.mjs`) screenshot output
 output/
+
+# Vite writes this beside the config while loading an ESM config file; it is
+# transient, so it must never ride along in a `git add -A`.
+vite.config.js.timestamp-*

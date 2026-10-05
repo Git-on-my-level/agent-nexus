@@ -33,6 +33,7 @@
   import CopyButton from "$lib/components/CopyButton.svelte";
   import AuthAdminGrants from "$lib/components/access/AuthAdminGrants.svelte";
   import HostCard from "$lib/components/access/HostCard.svelte";
+  import AccessRequestRow from "$lib/components/access/AccessRequestRow.svelte";
   import HostEnrollmentRequest from "$lib/components/access/HostEnrollmentRequest.svelte";
   import HostEnrollmentTokens from "$lib/components/access/HostEnrollmentTokens.svelte";
 
@@ -65,6 +66,7 @@
   let sections = $state({
     hosts: { status: "idle", error: "", forbidden: false },
     pending: { status: "idle", error: "", forbidden: false },
+    requests: { status: "idle", error: "", forbidden: false },
     tokens: { status: "idle", error: "", forbidden: false },
     admins: { status: "idle", error: "", forbidden: false },
     principals: { status: "idle", error: "", forbidden: false },
@@ -74,6 +76,7 @@
 
   let hosts = $state([]);
   let pending = $state([]);
+  let accessRequests = $state([]);
   let tokens = $state([]);
   let admins = $state([]);
   let principals = $state([]);
@@ -86,9 +89,14 @@
 
   let enrollOpen = $state(false);
   let showRevokedHosts = $state(false);
-  let enrollmentBusy = $state({ id: "", action: "" });
+  /** Busy action per enrollment id, so one decision cannot re-enable another. */
+  let enrollmentBusy = $state({});
   let enrollmentErrors = $state({});
   let enrollmentNotice = $state("");
+
+  /** Busy action per request id: two decisions can be in flight at once. */
+  let requestBusy = $state({});
+  let requestErrors = $state({});
 
   let creatingInvite = $state(false);
   let inviteError = $state("");
@@ -111,6 +119,15 @@
   let hostAgentIds = $derived(
     new Set(hosts.flatMap((host) => (host.agents ?? []).map((a) => a.id))),
   );
+  // Which host's shared key can request a given agent. A grant confirmation
+  // may only name a host when the roster actually says there is one.
+  let hostSlugByAgentId = $derived(
+    new Map(
+      hosts.flatMap((host) =>
+        (host.agents ?? []).map((agent) => [agent.id, host.slug]),
+      ),
+    ),
+  );
 
   let humans = $derived(
     principals.filter((principal) => principal.principal_kind === "human"),
@@ -130,9 +147,9 @@
   // `listPrincipals` returns one page, newest first, and host-derived agents
   // can fill it; core's active-human count is the number that is true.
   let adminCount = $derived(activeHumanPrincipalCount + admins.length);
-  // What the shell badge counts: requests the reader can still decide.
+  // What the shell badge counts, by core's own rule (`AccessSummary`).
   let pendingDecisionCount = $derived(
-    countPendingAccessItems({ enrollments: pending }),
+    countPendingAccessItems({ enrollments: pending, accessRequests }, now),
   );
   let pendingInvites = $derived(
     invites.filter((invite) => !invite.revoked_at && !invite.consumed_at),
@@ -200,27 +217,24 @@
   function publishPending(forbidden = false) {
     if (!workspaceSlug) return;
     if (forbidden) publishPendingAccessForbidden(workspaceSlug);
-    else publishPendingAccessSources(workspaceSlug, { enrollments: pending });
+    else
+      publishPendingAccessSources(workspaceSlug, {
+        enrollments: pending,
+        accessRequests,
+      });
   }
 
+  // Hosts and tokens only. The two lists above them have their own reader,
+  // which polls; loading them here as well fetched each of them twice on
+  // every roster event.
   async function loadHosts() {
-    const [hostsResult, pendingResult, tokensResult] = await Promise.allSettled(
-      [
-        coreClient.listHosts(),
-        coreClient.listPendingHostEnrollments(),
-        coreClient.listHostEnrollmentTokens(),
-      ],
-    );
+    const [hostsResult, tokensResult] = await Promise.allSettled([
+      coreClient.listHosts(),
+      coreClient.listHostEnrollmentTokens(),
+    ]);
     settle("hosts", hostsResult, (value) => {
       hosts = value?.hosts ?? [];
     });
-    settle("pending", pendingResult, (value) => {
-      pending = value?.enrollments ?? [];
-    });
-    publishPending(
-      pendingResult.status === "rejected" &&
-        isAdministrationRefusal(pendingResult.reason),
-    );
     settle("tokens", tokensResult, (value) => {
       tokens = value?.enrollment_tokens ?? [];
     });
@@ -251,39 +265,111 @@
   }
 
   async function loadAll() {
-    await Promise.all([loadHosts(), loadPeople()]);
+    await Promise.all([loadHosts(), loadPending(), loadPeople()]);
     loaded = true;
   }
 
-  // An enrolling machine polls every few seconds; so does this list, so the
-  // request shows up while the operator is looking at the page.
-  async function pollPending() {
-    try {
-      const result = await coreClient.listPendingHostEnrollments();
-      const next = result?.enrollments ?? [];
-      const changed =
-        next.length !== pending.length ||
-        next.some((entry, index) => entry.id !== pending[index]?.id);
+  function sameIds(next, current) {
+    return (
+      next.length === current.length &&
+      next.every((entry, index) => entry.id === current[index]?.id)
+    );
+  }
+
+  // A read that started before a decision carries pre-decision rows. Applying
+  // it afterwards puts the row the reader just decided back on the page, with
+  // its controls live, under a notice saying it is done.
+  let decideEpoch = 0;
+
+  /**
+   * Both lists in the "Waiting for you" section, from one reader.
+   *
+   * An enrolling machine polls every few seconds, so this does too; an agent
+   * can ask for a grant at any moment, so that list refreshes on the same
+   * tick. A read that fails keeps the rows it already has and says the read
+   * failed, rather than reporting an empty section it cannot vouch for.
+   */
+  async function loadPending() {
+    const epoch = decideEpoch;
+    const [pendingResult, requestsResult] = await Promise.allSettled([
+      coreClient.listPendingHostEnrollments(),
+      coreClient.listAccessRequests(),
+    ]);
+    if (epoch !== decideEpoch) return;
+    let changed = false;
+    if (pendingResult.status === "fulfilled") {
+      const next = pendingResult.value?.enrollments ?? [];
+      changed = !sameIds(next, pending);
       pending = next;
-      sections.pending = { status: "ready", error: "", forbidden: false };
-      publishPending();
-      if (changed) {
-        void loadHosts();
-        void refreshAgentRoster();
-      }
-    } catch (error) {
-      if (isAdministrationRefusal(error)) {
-        sections.pending = { status: "ready", error: "", forbidden: true };
-        publishPending(true);
-        return;
-      }
-      // The section keeps its last state; the next poll tries again.
+    }
+    settle("pending", pendingResult, () => {});
+    if (requestsResult.status === "fulfilled") {
+      accessRequests = requestsResult.value?.requests ?? [];
+    }
+    settle("requests", requestsResult, () => {});
+    publishPending(
+      [sections.pending, sections.requests].every(
+        (section) => section.forbidden,
+      ),
+    );
+    if (changed) {
+      void loadHosts();
+      void refreshAgentRoster();
     }
   }
 
+  async function decideAccessRequest(request, action) {
+    requestBusy = { ...requestBusy, [request.id]: action };
+    requestErrors = { ...requestErrors, [request.id]: "" };
+    decideEpoch += 1;
+    try {
+      if (action === "approve") {
+        await coreClient.approveAccessRequest(request.id);
+      } else {
+        await coreClient.denyAccessRequest(request.id);
+      }
+      accessRequests = accessRequests.filter(
+        (entry) => entry.id !== request.id,
+      );
+      publishPending();
+      enrollmentNotice =
+        action === "approve"
+          ? `${requestName(request)} can now administer access, and is listed under Administrators.`
+          : `Denied ${requestName(request)}. Its access is unchanged.`;
+    } catch (error) {
+      requestErrors = {
+        ...requestErrors,
+        [request.id]: message(
+          error,
+          action === "approve"
+            ? "The request was not approved."
+            : "The request was not denied.",
+        ),
+      };
+    } finally {
+      requestBusy = Object.fromEntries(
+        Object.entries(requestBusy).filter(([id]) => id !== request.id),
+      );
+      // Re-read either way. A decision that reported failure may still have
+      // landed (core grants and projects in separate steps), and a reader
+      // must not be told the grant failed while the agent holds it.
+      await Promise.all([loadPeople(), loadPending()]);
+    }
+  }
+
+  function requestName(request) {
+    return (
+      nameFor(request?.actor_id) ||
+      nameFor(request?.principal_id) ||
+      request?.username ||
+      "An agent"
+    );
+  }
+
   async function decideEnrollment(enrollment, action) {
-    enrollmentBusy = { id: enrollment.id, action };
+    enrollmentBusy = { ...enrollmentBusy, [enrollment.id]: action };
     enrollmentErrors = { ...enrollmentErrors, [enrollment.id]: "" };
+    decideEpoch += 1;
     try {
       if (action === "approve") {
         await coreClient.approveHostEnrollment(enrollment.id);
@@ -296,7 +382,6 @@
         action === "approve"
           ? `Approved ${enrollment.requested_slug}. It appears under Hosts once the machine finishes enrolling.`
           : `Denied ${enrollment.requested_slug}.`;
-      await Promise.all([loadHosts(), loadPeople()]);
     } catch (error) {
       enrollmentErrors = {
         ...enrollmentErrors,
@@ -308,7 +393,12 @@
         ),
       };
     } finally {
-      enrollmentBusy = { id: "", action: "" };
+      enrollmentBusy = Object.fromEntries(
+        Object.entries(enrollmentBusy).filter(([id]) => id !== enrollment.id),
+      );
+      // Re-read either way: a decision that reported failure may still have
+      // landed, and the next poll would otherwise be the first to say so.
+      await Promise.all([loadHosts(), loadPeople(), loadPending()]);
     }
   }
 
@@ -474,7 +564,7 @@
     });
     const poll = setInterval(() => {
       now = Date.now();
-      if (!document.hidden) void pollPending();
+      if (!document.hidden) void loadPending();
     }, PENDING_POLL_MS);
     return () => {
       // First: a throw in either teardown below must not strand the claim and
@@ -581,7 +671,7 @@
       <!-- Everything waiting on a decision, above everything that is already
          settled. `#host-requests` is the anchor the CLI's verification URL
          and the agent pages link to, so it stays on this section. -->
-      {#if pending.length}
+      {#if pending.length || accessRequests.length}
         <section
           id="host-requests"
           class="scroll-mt-20"
@@ -594,8 +684,9 @@
           >
             <span class="h-2 w-2 rounded-full bg-warn" aria-hidden="true"
             ></span>
-            <!-- An approved ceremony is waiting on the machine, not on the
-               reader, so it does not claim to need a decision. -->
+            <!-- An approved ceremony is waiting on its machine, not on the
+                 reader, so a section holding only those does not claim to
+                 need a decision and the badge stays dark. -->
             {pendingDecisionCount
               ? "Waiting for you"
               : "Enrollment in progress"}
@@ -609,13 +700,25 @@
             class="divide-y divide-line-subtle overflow-hidden rounded-md border bg-bg-soft"
             style="border-color: color-mix(in srgb, var(--warn) 40%, var(--line))"
           >
+            <!-- Agents asking for authority come first: a person decides
+                 those, and an enrolling machine is still polling. -->
+            {#each accessRequests as request (request.id)}
+              <AccessRequestRow
+                {request}
+                {now}
+                name={requestName(request)}
+                hostSlug={hostSlugByAgentId.get(request.principal_id) ?? ""}
+                busy={requestBusy[request.id] ?? ""}
+                error={requestErrors[request.id] ?? ""}
+                onapprove={(entry) => decideAccessRequest(entry, "approve")}
+                ondeny={(entry) => decideAccessRequest(entry, "deny")}
+              />
+            {/each}
             {#each pending as enrollment (enrollment.id)}
               <HostEnrollmentRequest
                 {enrollment}
                 {now}
-                busy={enrollmentBusy.id === enrollment.id
-                  ? enrollmentBusy.action
-                  : ""}
+                busy={enrollmentBusy[enrollment.id] ?? ""}
                 error={enrollmentErrors[enrollment.id] ?? ""}
                 onapprove={(entry) => decideEnrollment(entry, "approve")}
                 ondeny={(entry) => decideEnrollment(entry, "deny")}
@@ -627,11 +730,30 @@
         <p class="text-meta text-fg-muted" data-pending-access-forbidden>
           Only workspace administrators can see access requests.
         </p>
-      {:else if sections.pending.status === "error"}
+      {/if}
+      <!-- Deciding a grant is human-only, so an agent administrator can read
+           enrollments and not requests. Saying "ask for administration" there
+           would be advice that cannot work. -->
+      {#if sections.requests.forbidden && !sections.pending.forbidden}
+        <p class="mt-2 text-micro text-fg-muted" data-access-requests-forbidden>
+          Agents asking for a grant are shown to people only.
+        </p>
+      {/if}
+      <!-- A read that failed says so. An empty section that quietly dropped
+           one of its two sources would read as "nothing is waiting". -->
+      {#if sections.pending.status === "error"}
         <p
           class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
         >
           Pending host requests did not load: {sections.pending.error}
+        </p>
+      {/if}
+      {#if sections.requests.status === "error"}
+        <p
+          class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
+          data-access-requests-error
+        >
+          Access requests did not load: {sections.requests.error}
         </p>
       {/if}
 

@@ -7,16 +7,22 @@ import { isAdministrationRefusal } from "$lib/coreAuthErrors.js";
  * How many access requests are waiting for a decision: the number behind the
  * Access badge in the shell.
  *
- * Today that is pending host enrollments (`anx host enroll` ceremonies still
- * awaiting approval). Structured access requests join the same number when
- * that primitive lands; `countPendingAccessItems` and `fetchPendingSources`
- * are the two places to extend.
+ * Two things land here: agents asking for a grant (`GET /auth/access-requests`)
+ * and machines asking to enroll (`anx host enroll`). The badge and the Access
+ * page count the same way, so the number on the menu and the number on the
+ * page cannot disagree.
  *
- * Reading the pending list needs administration authority. A principal
- * without it is refused, which is not an error worth showing: the badge
- * simply never appears, and the poll stops rather than retrying forever. An
- * expired session is not a refusal (see `isAdministrationRefusal`) and must
- * not hide the badge for the rest of the session, so it keeps polling.
+ * It counts what the reader can still decide. Core's `GET /auth/access/summary`
+ * is the cheaper read, but its `pending_count` also includes an approved
+ * enrollment waiting on its machine — a row whose approve control is disabled
+ * and whose only end is the machine finishing or the ceremony expiring. A
+ * badge for that nags about something nobody can clear, so this counts from
+ * the two lists instead and pays one extra request per poll.
+ *
+ * Deciding access is human-only (`/auth/access-requests`), so the shell only
+ * runs this for a person. A refusal still hides the badge rather than showing
+ * an error, and an expired session is not a refusal (see
+ * `isAdministrationRefusal`), so a 401 keeps polling.
  *
  * While the Access page is open it publishes the list it already polls, so
  * the badge and the page never disagree and the shell stops fetching.
@@ -44,27 +50,52 @@ export function pendingAccessLabel(count) {
     : `${value} access requests waiting`;
 }
 
-/** An enrollment the reader can still approve or deny. */
-function decidable(entry) {
+function list(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+/**
+ * An enrollment still waiting on the reader: pending, and not expired.
+ *
+ * An approved ceremony is waiting on its machine — `HostEnrollmentRequest`
+ * disables its approve control and labels it "Approved, awaiting completion" —
+ * so it is not a decision. An enrollment whose expiry cannot be read is not
+ * counted either: the UI cannot show it as live without knowing that it is.
+ */
+export function pendingEnrollment(entry, now = Date.now()) {
+  if (String(entry?.status ?? "pending") !== "pending") return false;
+  const expiresAt = Date.parse(entry?.expires_at ?? "");
+  return Number.isFinite(expiresAt) ? expiresAt > now : false;
+}
+
+/** A request an agent made that nobody has decided yet. */
+function pendingRequest(entry) {
   return String(entry?.status ?? "pending") === "pending";
 }
 
 /**
- * The badge number for a set of pending sources. Approved ceremonies waiting
- * on the machine to finish are not a decision, so they are not counted.
+ * The badge number for a set of pending sources.
  *
- * @param {{ enrollments?: object[] }} sources
+ * @param {{ enrollments?: object[], accessRequests?: object[] }} sources
+ * @param {number} [now]
  */
-export function countPendingAccessItems(sources = {}) {
-  const enrollments = Array.isArray(sources.enrollments)
-    ? sources.enrollments
-    : [];
-  return enrollments.filter(decidable).length;
+export function countPendingAccessItems(sources = {}, now = Date.now()) {
+  return (
+    list(sources.accessRequests).filter(pendingRequest).length +
+    list(sources.enrollments).filter((entry) => pendingEnrollment(entry, now))
+      .length
+  );
 }
 
 async function fetchPendingSources() {
-  const enrollments = await coreClient.listPendingHostEnrollments();
-  return { enrollments: enrollments?.enrollments ?? [] };
+  const [requests, enrollments] = await Promise.all([
+    coreClient.listAccessRequests(),
+    coreClient.listPendingHostEnrollments(),
+  ]);
+  return {
+    accessRequests: requests?.requests ?? [],
+    enrollments: enrollments?.enrollments ?? [],
+  };
 }
 
 let pageClaims = 0;
@@ -95,12 +126,16 @@ export function claimPendingAccessCount() {
 
 /**
  * @param {string} workspace
- * @param {{ enrollments?: object[] }} sources
+ * @param {{ enrollments?: object[], accessRequests?: object[] }} sources
  */
 export function publishPendingAccessSources(workspace, sources) {
+  publishPendingAccessTotal(workspace, countPendingAccessItems(sources));
+}
+
+function publishPendingAccessTotal(workspace, count) {
   pendingAccessCount.set({
     workspace: String(workspace ?? ""),
-    count: countPendingAccessItems(sources),
+    count: Math.max(0, Number(count) || 0),
     forbidden: false,
   });
 }
@@ -172,6 +207,10 @@ export function startPendingAccessCount(workspace, options = {}) {
       workspace: key,
       users: 1,
       refresh: () => {
+        // Clear the refusal latch: the reader may have signed in as someone
+        // else since, and a latched controller would otherwise leave whatever
+        // number the Access page last published frozen for the session.
+        forbidden = false;
         clearTimeout(timer);
         void run();
       },

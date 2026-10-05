@@ -215,6 +215,20 @@ test("badges pending access on the account trigger and the Access item", async (
     body: JSON.stringify(body),
   });
   const state = {
+    requests: [
+      {
+        id: "areq_1",
+        principal_id: "agent-fleet",
+        actor_id: "actor-fleet",
+        username: "fleet.build-runner",
+        grant: "auth-admin",
+        reason: "approve enrollments while you are asleep",
+        status: "pending",
+        created_at: new Date(Date.now() - 90_000).toISOString(),
+        request_event_ref: "event:evt_1",
+        inbox_item_id: "inbox_1",
+      },
+    ],
     pending: [
       {
         id: "henr_1",
@@ -260,6 +274,9 @@ test("badges pending access on the account trigger and the Access item", async (
   await page.route("**/auth/hosts/enrollments/pending", (route) =>
     route.fulfill(json({ enrollments: state.pending })),
   );
+  await page.route("**/auth/access-requests", (route) =>
+    route.fulfill(json({ requests: state.requests })),
+  );
   await page.route("**/auth/admins", (route) =>
     route.fulfill(json({ admins: [] })),
   );
@@ -297,32 +314,42 @@ test("badges pending access on the account trigger and the Access item", async (
 
   await page.goto("/o/local/w/local/access");
 
-  // One number, on the trigger that hides the Access item.
+  // One number covering both kinds, on the trigger that hides Access. The
+  // approved enrollment waits on its machine, so it is not in it.
   const trigger = page.locator("[data-access-trigger-count]");
-  await expect(trigger).toHaveText("1");
-  await expect(trigger).toHaveAttribute("title", "1 access request waiting");
+  await expect(trigger).toHaveText("2");
+  await expect(trigger).toHaveAttribute("title", "2 access requests waiting");
   // The trigger's own aria-label suppresses descendant names, so the number
   // has to be in the label or it reaches no screen reader at all.
   await expect(
     page.getByRole("button", {
-      name: "Account menu, 1 access request waiting",
+      name: "Account menu, 2 access requests waiting",
     }),
   ).toBeVisible();
-  // The page agrees with the badge: two rows, one decision.
-  await expect(page.locator("[data-pending-access-count]")).toHaveText("1");
+  // The page cannot disagree with the badge.
+  await expect(page.locator("[data-pending-access-count]")).toHaveText("2");
   await expect(page.locator("[data-host-enrollment]")).toHaveCount(2);
+  await expect(page.locator("[data-access-request]")).toHaveCount(1);
+  await expect(page.getByText(/asks to administer access/)).toBeVisible();
 
   // And on the Access item itself, once the menu is open.
   await page.getByRole("button", { name: /^Account menu/ }).click();
-  await expect(page.locator("[data-access-nav-count]")).toHaveText("1");
+  await expect(page.locator("[data-access-nav-count]")).toHaveText("2");
 
-  // Deciding the last request clears the badge rather than showing a zero.
+  // Deciding everything clears the badge rather than showing a zero.
   await page.keyboard.press("Escape");
+  await page.route("**/auth/access-requests/areq_1/deny", (route) =>
+    route.fulfill(json({ request: { id: "areq_1", status: "denied" } })),
+  );
   await page.route("**/auth/hosts/enrollments/henr_1/deny", (route) =>
     route.fulfill(json({ enrollment: { id: "henr_1", status: "denied" } })),
   );
+  state.requests = [];
   state.pending = [];
-  await page.getByRole("button", { name: "Deny", exact: true }).click();
+  await page
+    .locator('[data-access-request="areq_1"]')
+    .getByRole("button", { name: "Deny", exact: true })
+    .click();
   await expect(page.locator("[data-access-trigger-count]")).toHaveCount(0);
   await expect(page.locator("[data-pending-access]")).toHaveCount(0);
   await expect(

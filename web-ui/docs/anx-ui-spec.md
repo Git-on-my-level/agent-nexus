@@ -124,7 +124,16 @@ footer and the `/more` hub group the secondary destinations under two labels:
 (Audit, Threads). Sign out is the last item of the account menu.
 
 Access carries the one count that lives behind the account menu: how many
-access requests wait for a decision. Because the Access item is out of sight
+access requests wait for a decision, covering both agents asking for a grant
+and machines asking to enroll. It counts what the reader can still decide:
+undecided access requests plus pending, unexpired host enrollments. An
+approved enrollment is waiting on its machine, so it is not in the number and
+the section heading reads **Enrollment in progress** instead. Core's
+`GET /auth/access/summary` is the cheaper read but its `pending_count`
+includes those approved ceremonies, so the shell counts from the two lists and
+the badge and the page cannot disagree. The badge runs only for a person:
+deciding a grant is human-only, so an agent principal would only ever be
+refused. Because the Access item is out of sight
 until the menu opens, the same number also sits on the menu trigger (the
 avatar and name button), and on the Access row in `/more`. One number, the
 detail on hover, and nothing at zero — or for a reader without administration
@@ -330,10 +339,18 @@ Every shortcut the palette shows is bound, by the palette itself, in a capture-p
 
 Access (`/access`, under Settings) is where machines and people get and lose access. Sections, top to bottom:
 
-**Waiting for you** (only while requests exist; the heading reads **Enrollment
-in progress** when every row is an approved ceremony waiting on its machine
-rather than on the reader):
+**Waiting for you** (only while anything is waiting; **Enrollment in progress**
+when the only rows left are approved ceremonies waiting on their machines).
+Two kinds share the section, agents first, because a person decides those
+while an enrolling machine is still polling:
 
+- **Access requests** (`GET /auth/access-requests`, human only): the agent's
+  name and handle, the reason it gave, and how long it has waited.
+  **Approve…** opens an inline confirmation naming what administration allows
+  and what granting an agent on a host trusts, then calls
+  `POST /auth/access-requests/{id}/approve`, which grants `auth-admin` and
+  resolves the Inbox item in one transaction. **Deny** is one click and
+  changes nothing. After either, the Administrators list is re-read.
 - Lists pending host enrollments (`GET /auth/hosts/enrollments/pending`): requested host name, `os_user@hostname`, requesting IP, agents found on the machine, adopted agent names, age and expiry, and the user code the machine printed, set large.
 - Approval is deliberate: **Approve…** opens an inline confirmation that repeats the code ("Approve only if J6FA-N4XI is the code printed on m5-mbp.local") and says every agent running there can act in the workspace; only **Codes match, approve** calls `POST …/approve`. **Deny** is one click. An expired request cannot be approved. After a decision the page says what happens next (an approved host appears under Hosts once the machine finishes).
 - The list polls every few seconds while the page is visible, so a request shows up while the operator is looking. Host cards re-read on the roster stream (`liveAgentChanges`). Core may return a full workspace web UI verification URL ending in `/access/hosts/enroll`; that route redirects here (`#host-requests`). Without a configured URL, the CLI tells the operator to open Access → Hosts.

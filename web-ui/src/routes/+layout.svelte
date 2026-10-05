@@ -245,6 +245,14 @@
   // explicit aria-label on a button suppresses any name its children would
   // contribute, so the number has to be part of the label itself or a screen
   // reader never hears it.
+  // Deciding access is human-only in core, so an agent principal would only
+  // ever get 403 here. Do not ask.
+  let accessBadgeEnabled = $derived(
+    identityReady &&
+      !workspaceBootstrapPending &&
+      !shouldRedirectToLogin &&
+      hasHumanAuthSession,
+  );
   let pendingAccess = $derived(
     $pendingAccessCount.workspace === activeWorkspaceSlug &&
       !$pendingAccessCount.forbidden
@@ -1189,9 +1197,7 @@
                         {#if item.count === "access-pending"}
                           <AccessNavCount
                             workspace={activeWorkspaceSlug}
-                            enabled={identityReady &&
-                              !workspaceBootstrapPending &&
-                              !shouldRedirectToLogin}
+                            enabled={accessBadgeEnabled}
                           />
                         {/if}
                       </a>
@@ -1329,9 +1335,7 @@
                    be visible while the menu is shut. -->
               <AccessNavCount
                 workspace={activeWorkspaceSlug}
-                enabled={identityReady &&
-                  !workspaceBootstrapPending &&
-                  !shouldRedirectToLogin}
+                enabled={accessBadgeEnabled}
                 variant="trigger"
               />
               <svg

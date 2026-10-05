@@ -1,8 +1,11 @@
 import { commandRegistry } from "../../../contracts/gen/ts/dist/client.js";
 
+// Command ids may contain hyphens (`auth.access-requests.list`). Without `-`
+// here the guardrail silently skips those bindings instead of checking them,
+// which is the one case where a typo reaches runtime.
 const ADAPTER_ENTRY_COMMAND_ID =
-  /\[\s*(?:\n\s*)?"[^"]+"\s*,\s*(?:\n\s*)?"([a-z][a-z0-9_.]+)"/g;
-const INVOKE_COMMAND_ID = /invokeCommand\(\s*"([a-z][a-z0-9_.]+)"/g;
+  /\[\s*(?:\n\s*)?"[^"]+"\s*,\s*(?:\n\s*)?"([a-z][a-z0-9_.-]+)"/g;
+const INVOKE_COMMAND_ID = /invokeCommand\(\s*"([a-z][a-z0-9_.-]+)"/g;
 
 /**
  * Collect command ids wired in anxCoreClient.js (adapter table + invokeCommand calls).
