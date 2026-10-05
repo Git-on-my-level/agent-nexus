@@ -245,3 +245,74 @@ func TestAPICallCLIOutdatedUpdatesAndRetriesOnce(t *testing.T) {
 		t.Fatalf("code=%d updates=%d execs=%d hits=%d", code, updates, execs, docsHits)
 	}
 }
+
+func TestReadStdinBodyMarksConsumed(t *testing.T) {
+	app := New()
+	app.Stdin = strings.NewReader("important document body")
+	app.StdinIsTTY = func() bool { return false }
+	data, err := app.readStdinBody()
+	if err != nil || string(data) != "important document body" || !app.stdinConsumed {
+		t.Fatalf("data=%q err=%v consumed=%v", data, err, app.stdinConsumed)
+	}
+}
+
+func TestCLIOutdatedSkipsUnsafeReplay(t *testing.T) {
+	body := []byte(`{"error":{"code":"cli_outdated","message":"CLI version is below the minimum compatible version"},"upgrade":{"recommended_cli_version":"v9.1.0"}}`)
+	cases := []struct {
+		name   string
+		status int
+		local  bool
+		stdin  bool
+		output bool
+		update bool
+	}{
+		{name: "http 426", status: 426, update: true},
+		{name: "http 500", status: 500},
+		{name: "stdin already read", status: 426, stdin: true},
+		{name: "output already started", status: 426, output: true},
+		{name: "local doctor", local: true, update: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			app, cfg, _ := managedUpdateFixture(t)
+			app.Getenv = func(key string) string {
+				if key == "ANX_UPDATE_POLICY" {
+					return "auto"
+				}
+				return ""
+			}
+			app.stdinConsumed = tc.stdin
+			app.outputStarted = tc.output
+			updates := 0
+			oldUpdate := runVerifiedSelfUpdate
+			runVerifiedSelfUpdate = func(*App, context.Context, config.Resolved, string) (*commandResult, error) {
+				updates++
+				return &commandResult{Data: map[string]any{"updated": true}}, nil
+			}
+			t.Cleanup(func() { runVerifiedSelfUpdate = oldUpdate })
+			execs := 0
+			oldExec := execUpdatedCommand
+			execUpdatedCommand = func(string, []string, []string) (int, error) {
+				execs++
+				return 0, nil
+			}
+			t.Cleanup(func() { execUpdatedCommand = oldExec })
+			var runErr error
+			if tc.local {
+				runErr = errnorm.Local("cli_outdated", "CLI is below minimum")
+			} else {
+				runErr = errnorm.FromHTTPFailure(tc.status, body)
+			}
+			_, nextErr, retried := app.recoverCLIOutdated(context.Background(), []string{"work", "list"}, cfg, "work list", runErr)
+			if tc.update {
+				if !retried || updates != 1 || execs != 1 {
+					t.Fatalf("retried=%v updates=%d execs=%d err=%v", retried, updates, execs, nextErr)
+				}
+				return
+			}
+			if retried || updates != 0 || execs != 0 || nextErr == nil || !strings.Contains(nextErr.Error(), "anx update --version v9.1.0") {
+				t.Fatalf("retried=%v updates=%d execs=%d err=%v", retried, updates, execs, nextErr)
+			}
+		})
+	}
+}

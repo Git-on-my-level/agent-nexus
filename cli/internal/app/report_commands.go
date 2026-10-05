@@ -233,7 +233,7 @@ func visualReportContentError(content any) error {
 	if !ok {
 		return nil
 	}
-	result := visualreport.Validate(bytes)
+	result := visualreport.Validate(visualreport.Canonicalize(bytes))
 	if !result.Recognized || result.Valid {
 		return nil
 	}

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/visualreport"
 )
 
@@ -550,6 +551,27 @@ func TestDocsReviseValidatesVisualReportBeforeWrite(t *testing.T) {
 	proposed := asMap(asMap(validProposal["result"])["body"])
 	if anyString(proposed["content"]) != minimalVisualReport {
 		t.Fatalf("proposal content=%#v", proposed["content"])
+	}
+}
+
+func TestVisualReportWriteRecognizesKindVariants(t *testing.T) {
+	t.Parallel()
+	for _, body := range []string{
+		`{"kind":"ANX.VISUAL-REPORT","schema_version":1}`,
+		`{"kind":" anx.visual-report ","schema_version":1}`,
+		"---\nkind: anx.visual-report\n---\n{\"kind\":\"anx.visual-report\",\"schema_version\":1}\n",
+	} {
+		err := visualReportContentError(body)
+		typed := errnorm.Normalize(err)
+		if typed == nil || typed.Code != "invalid_visual_report" {
+			t.Fatalf("body %s err=%v", body, err)
+		}
+	}
+	if err := visualReportContentError("plain notes"); err != nil {
+		t.Fatalf("plain notes: %v", err)
+	}
+	if err := visualReportContentError("---\nkind: note\n---\nhello\n"); err != nil {
+		t.Fatalf("other front matter: %v", err)
 	}
 }
 

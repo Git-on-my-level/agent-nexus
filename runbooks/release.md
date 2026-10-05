@@ -117,7 +117,9 @@ The workflow fails if the pushed tag does not match the committed [`VERSION`](..
 
 ### CLI compatibility floor
 
-`min_cli_version` is the wire-compatibility floor in [`core/internal/buildinfo/compatibility.go`](../core/internal/buildinfo/compatibility.go) (`MinCompatibleCLI`). Ordinary releases must not change it, and [`scripts/set-version.sh`](../scripts/set-version.sh) does not. `recommended_cli_version` tracks this core release (`VERSION`).
+`min_cli_version` is the wire-compatibility floor in [`core/internal/buildinfo/compatibility.go`](../core/internal/buildinfo/compatibility.go) (`MinCompatibleCLI`, currently `v0.11.0`). Ordinary releases must not change it, and [`scripts/set-version.sh`](../scripts/set-version.sh) does not. `recommended_cli_version` tracks this core release (`VERSION`).
+
+`v0.11.0` is the oldest CLI that works against current core. `v0.10.25` still calls `POST /auth/agents/register`, which that release removed. Clients from before the ANX rename send `X-OAR-CLI-Version`; the gate treats that header the same as `X-ANX-CLI-Version`.
 
 Raise `MinCompatibleCLI` only when a release breaks CLI/core wire compatibility, in the same release that requires the newer CLI, and record the break in this runbook. Operators can override a deployment with `ANX_MIN_CLI_VERSION` or `--min-cli-version` without changing the recommended version (`ANX_RECOMMENDED_CLI_VERSION`, `--recommended-cli-version`).
 

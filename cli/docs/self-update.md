@@ -14,10 +14,13 @@ anx update policy off
 ANX_UPDATE_POLICY=off anx work start card:example
 ```
 
-The default is `auto`. A managed install that receives `cli_outdated` (HTTP 426)
+The default is `auto`. A managed install that receives `cli_outdated` on HTTP 426
 runs this same verified update immediately, then retries the original command
-once. Policy `notify` or `off`, and unmanaged installs, print
-`anx update --version <recommended>` instead of replacing the binary. Separately,
+once. A command that already read stdin, or that already wrote output, prints
+`anx update --version <recommended>` instead of retrying. A `cli_outdated` body
+on any other HTTP status does not update or retry. Policy `notify` or `off`,
+and unmanaged installs, print the same command instead of replacing the binary.
+Separately,
 the first successful coordination write per UTC day starts
 a detached worker with a two-minute deadline. The foreground command never waits
 for release networking, verification, replacement, or skill synchronization. A

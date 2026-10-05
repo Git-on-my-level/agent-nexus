@@ -2727,7 +2727,7 @@ func (e *VisualReportValidationError) Error() string {
 func (e *VisualReportValidationError) Unwrap() error { return ErrInvalidDocumentRequest }
 
 func rejectInvalidVisualReport(content []byte) error {
-	result := visualreport.Validate(content)
+	result := visualreport.Validate(visualreport.Canonicalize(content))
 	if !result.Recognized || result.Valid {
 		return nil
 	}

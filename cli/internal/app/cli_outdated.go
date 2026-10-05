@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -96,6 +97,9 @@ func (a *App) recoverCLIOutdated(ctx context.Context, args []string, cfg config.
 		return 0, nil, false
 	}
 	annotated := annotateCLIOutdatedCommand(typed)
+	if !cliOutdatedRecoveryAllowed(typed) || a.stdinConsumed || a.outputStarted {
+		return 0, annotated, false
+	}
 	if strings.TrimSpace(a.Getenv(cliOutdatedRetryEnv)) == "1" {
 		return 0, annotated, false
 	}
@@ -138,6 +142,33 @@ func (a *App) recoverCLIOutdated(ctx context.Context, args []string, cfg config.
 		return 0, errnorm.Wrap(errnorm.KindLocal, "update_retry_failed", "CLI updated but the original command could not be retried; run it again", execErr), false
 	}
 	return code, nil, true
+}
+
+// cliOutdatedRecoveryAllowed updates only for a local doctor failure or an
+// HTTP 426. A non-426 response can carry cli_outdated after the server has
+// already applied a side effect, so it must not be replayed.
+func cliOutdatedRecoveryAllowed(typed *errnorm.Error) bool {
+	if typed == nil {
+		return false
+	}
+	if typed.Kind == errnorm.KindLocal {
+		return true
+	}
+	return cliOutdatedHTTPStatus(typed) == http.StatusUpgradeRequired
+}
+
+func cliOutdatedHTTPStatus(typed *errnorm.Error) int {
+	details, _ := typed.Details.(map[string]any)
+	switch status := details["status"].(type) {
+	case int:
+		return status
+	case int64:
+		return int(status)
+	case float64:
+		return int(status)
+	default:
+		return 0
+	}
 }
 
 func cliOutdatedRetryEnvList() []string {

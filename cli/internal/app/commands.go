@@ -402,6 +402,7 @@ func (a *App) readStdinBody() ([]byte, error) {
 
 	select {
 	case res := <-ch:
+		a.stdinConsumed = true
 		if res.err != nil {
 			return nil, res.err
 		}

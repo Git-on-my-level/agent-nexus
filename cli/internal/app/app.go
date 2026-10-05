@@ -32,6 +32,8 @@ type App struct {
 	startUpdateWorker  func(executable, configDir string) error
 	startSkillsRefresh func(executable, configDir, home string) error
 	skillLookPath      func(string) (string, error)
+	stdinConsumed      bool
+	outputStarted      bool
 }
 
 func (a *App) clockNow() time.Time {
