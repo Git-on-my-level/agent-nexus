@@ -32,6 +32,10 @@ export function reportRefStrings(panels = []) {
         push(data.text);
         push(data.label);
         break;
+      // Both spellings: the renderer chips either, so collection has to ask for
+      // either. A ref only ever written in a `table` was rendering "not found"
+      // because it was never requested.
+      case "table":
       case "evidence-table":
         for (const row of Array.isArray(data.rows) ? data.rows : []) {
           for (const cell of Array.isArray(row?.cells) ? row.cells : []) {

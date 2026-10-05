@@ -268,3 +268,47 @@ describe("Since you last looked reads core's digest", () => {
     ).toBeNull();
   });
 });
+
+describe("the digest's decision items", () => {
+  it("renders the contract's decision kind", () => {
+    // The contract enum is `decision_created`. An earlier guess at
+    // `decision_recorded` filtered every decision out silently, so a
+    // decision-only digest rendered no strip at all.
+    const strip = sinceYouLastLookedStrip({
+      since: "2026-10-04T12:00:00Z",
+      generated_at: "2026-10-04T14:00:00Z",
+      items: [
+        {
+          kind: "decision_created",
+          ref: "decision:launch",
+          title: "New decision for Launch",
+          ts: "2026-10-04T13:00:00Z",
+        },
+      ],
+      truncated: false,
+    });
+    expect(strip).not.toBeNull();
+    expect(strip.items[0].kind).toBe("decision_created");
+    expect(strip.summary).toBe("1 new decision");
+  });
+
+  it("matches the kinds the OpenAPI enum declares", () => {
+    // Guards the mismatch class rather than the one instance of it.
+    const enumerated = [
+      "step_completed",
+      "initiative_stalled",
+      "initiative_blocked",
+      "ask_answered",
+      "decision_created",
+    ];
+    for (const kind of enumerated) {
+      const strip = sinceYouLastLookedStrip({
+        since: "2026-10-04T12:00:00Z",
+        generated_at: "2026-10-04T14:00:00Z",
+        items: [{ kind, ref: "card:a", title: "A" }],
+        truncated: false,
+      });
+      expect(strip, `${kind} should render`).not.toBeNull();
+    }
+  });
+});

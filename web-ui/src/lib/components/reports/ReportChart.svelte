@@ -41,17 +41,43 @@
    * has been hovered.
    */
   let hoveredSeriesIndex = $state(null);
-  /** Guards the re-show below from re-entering its own mouseover handler. */
-  let refreshingTip = false;
 
-  function tooltipFormatter(params) {
-    const points = Array.isArray(params) ? params : [params];
+  /**
+   * The points ECharts last formatted, kept so the tooltip can be rebuilt when
+   * the hovered series changes.
+   */
+  let lastPoints = null;
+
+  function buildTooltip(points) {
     const model = reportTooltipModel({
       points,
       hoveredSeriesIndex,
       previous: previousPointValues(data?.option?.series, points[0]?.dataIndex),
     });
-    return buildTooltipElement(model, appearance) ?? "";
+    return buildTooltipElement(model, appearance);
+  }
+
+  function tooltipFormatter(params) {
+    lastPoints = Array.isArray(params) ? params : [params];
+    return buildTooltip(lastPoints) ?? "";
+  }
+
+  /**
+   * Rewrite the tooltip that is already on screen.
+   *
+   * ECharts formats an axis tooltip before the hover event that says which
+   * series the pointer entered, so the visible content is always one series
+   * behind — and asking ECharts to show the tip again does not help, because
+   * the axis position has not changed and it reuses what it already rendered.
+   * Replacing the content in place is the only thing that actually corrects
+   * what the reader sees.
+   */
+  function refreshVisibleTooltip() {
+    if (!lastPoints || !host) return;
+    const live = host.querySelector(".report-tooltip");
+    if (!live) return;
+    const rebuilt = buildTooltip(lastPoints);
+    if (rebuilt) live.replaceChildren(...rebuilt.childNodes);
   }
 
   /**
@@ -142,30 +168,11 @@
           : null;
         if (next === hoveredSeriesIndex) return;
         hoveredSeriesIndex = next;
-        // ECharts has already built the tooltip by the time this fires, so the
-        // content on screen was formatted against the *previous* hovered
-        // series and would stay wrong for as long as the pointer rested here.
-        // Re-showing the tip runs the formatter again with the series actually
-        // under the cursor. The guard stops that re-show from recursing.
-        if (
-          !refreshingTip &&
-          next !== null &&
-          Number.isInteger(event?.dataIndex)
-        ) {
-          refreshingTip = true;
-          try {
-            instance.dispatchAction({
-              type: "showTip",
-              seriesIndex: next,
-              dataIndex: event.dataIndex,
-            });
-          } finally {
-            refreshingTip = false;
-          }
-        }
+        refreshVisibleTooltip();
       });
       instance.on("globalout", () => {
         hoveredSeriesIndex = null;
+        lastPoints = null;
       });
       if (typeof ResizeObserver !== "undefined") {
         observer = new ResizeObserver(resize);

@@ -22,13 +22,16 @@ const KINDS = Object.freeze({
   initiative_stalled: { label: "stalled", tone: "warn" },
   initiative_blocked: { label: "blocked", tone: "danger" },
   ask_answered: { label: "answered", tone: "ok" },
-  decision_recorded: { label: "decided", tone: "ok" },
+  // The contract enum is `decision_created`; an earlier guess at
+  // `decision_recorded` silently dropped every decision the digest reported.
+  decision_created: { label: "new decision", tone: "warn" },
 });
 
 /** Order the strip reads in: what needs attention first, then what progressed. */
 const ORDER = [
   "initiative_blocked",
   "initiative_stalled",
+  "decision_created",
   "ask_answered",
   "step_completed",
 ];
@@ -100,8 +103,10 @@ function summarize(counts) {
   if (counts.ask_answered) {
     parts.push(plural(counts.ask_answered, "ask answered", "asks answered"));
   }
-  if (counts.decision_recorded) {
-    parts.push(plural(counts.decision_recorded, "decision", "decisions"));
+  if (counts.decision_created) {
+    parts.push(
+      plural(counts.decision_created, "new decision", "new decisions"),
+    );
   }
   return parts.join(" · ");
 }

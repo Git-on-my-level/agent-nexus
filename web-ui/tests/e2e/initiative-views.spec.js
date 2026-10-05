@@ -1,3 +1,5 @@
+import { mkdir } from "node:fs/promises";
+
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
@@ -163,6 +165,11 @@ test("initiative page leads with the plan, and the card body follows", async ({
     );
   expect(order).toEqual(["plan", "body"]);
 
+  await mkdir("../docs/review/initiative", { recursive: true });
+  await page.screenshot({
+    path: "../docs/review/initiative/initiative-desktop.png",
+    animations: "disabled",
+  });
   await page.screenshot({
     path: testInfo.outputPath("initiative-desktop.png"),
     animations: "disabled",
@@ -238,6 +245,11 @@ test("the plan reads at phone width", async ({ page }, testInfo) => {
   );
   expect(documentOverflows).toBe(false);
 
+  await mkdir("../docs/review/initiative", { recursive: true });
+  await page.screenshot({
+    path: "../docs/review/initiative/initiative-phone.png",
+    animations: "disabled",
+  });
   await page.screenshot({
     path: testInfo.outputPath("initiative-phone.png"),
     animations: "disabled",
@@ -496,6 +508,11 @@ for (const viewport of [
 
     // The whole page, so the digest strip and the single Inbox line are in
     // frame alongside the tiles.
+    await mkdir("../docs/review/initiative", { recursive: true });
+    await page.screenshot({
+      path: `../docs/review/initiative/overview-${viewport.label}.png`,
+      animations: "disabled",
+    });
     await page.screenshot({
       path: testInfo.outputPath(`overview-${viewport.label}.png`),
       animations: "disabled",
@@ -519,4 +536,49 @@ test("Overview tiles have no accessibility violations", async ({ page }) => {
     .withTags(["wcag2a", "wcag2aa"])
     .analyze();
   expect(results.violations).toEqual([]);
+});
+
+/**
+ * The preview's keyboard path, against the real chip — the unit tests use a
+ * stand-in anchor, which does not carry the chip's own focus handler and so
+ * cannot show either of these failures.
+ */
+test("the preview is reachable by Tab and Escape does not reopen it", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await installInitiativePage(page);
+  await page.goto(CARD_PATH);
+  await expect(page.locator("[data-initiative-plan]")).toBeVisible({
+    timeout: 60_000,
+  });
+
+  const chip = page.locator(".plan-node a[data-anx-ref='card:contracts']");
+  const card = page.locator(".anx-ref-preview");
+
+  await chip.focus();
+  await expect(card).toBeVisible();
+
+  // Tab steps into the card's own controls, not past them to the next page
+  // control. The card is appended at the end of the document, so document
+  // order alone would never get a reader here.
+  await page.keyboard.press("Tab");
+  await expect(card).toBeVisible();
+  const inCard = await card.evaluate((node) =>
+    node.contains(document.activeElement),
+  );
+  expect(inCard).toBe(true);
+
+  // Walk to Copy ref and dismiss from there.
+  const copy = card.locator("button", { hasText: "Copy ref" });
+  await copy.focus();
+  await expect(copy).toBeFocused();
+  await page.keyboard.press("Escape");
+
+  // Escape restores focus to the chip, and that focus must not reopen the
+  // dialog the reader just dismissed.
+  await expect(card).toBeHidden();
+  await expect(chip).toBeFocused();
+  await page.waitForTimeout(250);
+  await expect(card).toBeHidden();
 });

@@ -8,3 +8,8 @@ verifies archive filtering and dashboard pin/fallback against SQLite.
 
 To recapture after: `cd web-ui && PLAYWRIGHT_CHANNEL=chrome pnpm exec playwright
 test tests/e2e/overview.spec.js --project=default --workers=1`.
+
+These two images predate the initiative plan work: they show the Overview as of
+#245, with checklist bars and no plan state. Current captures covering the
+#264-backed behaviour — plan health, shape-specific tile graphics and the
+"Since you last looked" digest — are in `docs/review/initiative/`.

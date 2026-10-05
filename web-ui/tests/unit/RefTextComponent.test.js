@@ -73,6 +73,24 @@ describe("RefText", () => {
 });
 
 describe("reportRefStrings", () => {
+  it("collects both table spellings, since the renderer chips both", () => {
+    // A ref written only in a `table` was rendering "not found" because
+    // collection asked for `evidence-table` alone.
+    for (const type of ["table", "evidence-table"]) {
+      expect(
+        reportRefStrings([
+          {
+            type,
+            data: {
+              columns: ["Ref"],
+              rows: [{ cells: ["card:initiative-plans"], source_ids: [] }],
+            },
+          },
+        ]),
+      ).toContain("card:initiative-plans");
+    }
+  });
+
   it("collects table cells, so a cell's refs resolve with the page", () => {
     const strings = reportRefStrings([
       {

@@ -24,7 +24,11 @@
   import PlanView from "$lib/components/PlanView.svelte";
   import EvidenceHandoff from "$lib/components/participation/EvidenceHandoff.svelte";
   import TaskParticipation from "$lib/components/participation/TaskParticipation.svelte";
-  import { collectPageRefs, indexResolvedRefs } from "$lib/refResolve.js";
+  import {
+    collectPageRefs,
+    indexResolvedRefs,
+    resolveRefsInBatches,
+  } from "$lib/refResolve.js";
   import ReceiptSignal from "$lib/components/pm/ReceiptSignal.svelte";
   import {
     decisionPayload,
@@ -108,8 +112,10 @@
     });
     if (!refs.length) return;
     try {
-      const resolved = await coreClient.resolveRefs(refs);
-      if (ticket === requestId) planRefs = indexResolvedRefs(resolved, refs);
+      const resolved = await resolveRefsInBatches(refs, (batch) =>
+        coreClient.resolveRefs(batch),
+      );
+      if (ticket === requestId) planRefs = resolved;
     } catch {
       // Chips fall back to "not found" rather than the plan failing to render.
       if (ticket === requestId) planRefs = indexResolvedRefs({}, refs);

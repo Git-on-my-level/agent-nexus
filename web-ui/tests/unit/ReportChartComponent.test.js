@@ -369,8 +369,8 @@ describe("ReportChart legend and tooltip", () => {
     ).toContain("Opened");
   });
 
-  it("re-leads the tooltip with the series the pointer moved onto", async () => {
-    mount();
+  it("rewrites the tooltip already on screen when the pointer moves series", async () => {
+    const { container } = mount();
     await waitFor(() => expect(instance.setOption).toHaveBeenCalledOnce());
     const { formatter } = instance.setOption.mock.calls[0][0].tooltip;
     const points = [
@@ -393,33 +393,40 @@ describe("ReportChart legend and tooltip", () => {
     ];
 
     handlers.mouseover({ seriesIndex: 0, dataIndex: 1 });
+    const rendered = formatter(points);
     expect(
-      formatter(points).querySelector(".report-tooltip__lead").textContent,
+      rendered.querySelector(".report-tooltip__lead").textContent,
     ).toContain("Opened");
 
-    // ECharts formats the tooltip *before* the hover event reaches us, so
-    // moving onto another series must re-show the tip; without that the content
-    // on screen keeps naming the series the pointer already left.
-    instance.dispatchAction.mockClear();
+    // ECharts puts the formatted element in its own container and will not
+    // format again for the same axis position, so the fix rewrites what is
+    // already on screen. Stand that element up where the component looks.
+    container.querySelector(".chart-surface").append(rendered);
+
     handlers.mouseover({ seriesIndex: 1, dataIndex: 1 });
-    expect(instance.dispatchAction).toHaveBeenCalledWith({
-      type: "showTip",
-      seriesIndex: 1,
-      dataIndex: 1,
-    });
     expect(
-      formatter(points).querySelector(".report-tooltip__lead").textContent,
+      rendered.querySelector(".report-tooltip__lead").textContent,
     ).toContain("Closed");
   });
 
-  it("does not re-show the tip when the hovered series has not changed", async () => {
-    mount();
+  it("leaves the tooltip alone when the hovered series has not changed", async () => {
+    const { container } = mount();
     await waitFor(() => expect(instance.setOption).toHaveBeenCalledOnce());
+    const { formatter } = instance.setOption.mock.calls[0][0].tooltip;
     handlers.mouseover({ seriesIndex: 1, dataIndex: 1 });
-    instance.dispatchAction.mockClear();
+    const rendered = formatter([
+      {
+        seriesIndex: 1,
+        seriesName: "Closed",
+        value: 3,
+        color: "#222222",
+        axisValueLabel: "Tue",
+        dataIndex: 1,
+      },
+    ]);
+    container.querySelector(".chart-surface").append(rendered);
+    const before = rendered.innerHTML;
     handlers.mouseover({ seriesIndex: 1, dataIndex: 1 });
-    expect(instance.dispatchAction).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: "showTip" }),
-    );
+    expect(rendered.innerHTML).toBe(before);
   });
 });

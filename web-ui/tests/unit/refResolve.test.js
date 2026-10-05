@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  MAX_BATCH_REFS,
+  resolveRefsInBatches,
   safeRefDestination,
   CHIP_REF_PREFIXES,
   classifyWorkUrl,
@@ -478,5 +480,64 @@ describe("safeRefDestination", () => {
     // A board has no derivable destination, so the chip simply does not link
     // rather than becoming an executable anchor.
     expect(refChipModel("board:a", unsafe("board:a"), context).href).toBe("");
+  });
+});
+
+describe("resolveRefsInBatches", () => {
+  const row = (ref) => ({ ref, title: ref, resolvable: true });
+
+  it("keeps a single request within the contract's maximum", async () => {
+    const calls = [];
+    const refs = Array.from({ length: 10 }, (_, index) => `card:${index}`);
+    await resolveRefsInBatches(refs, async (batch) => {
+      calls.push(batch.length);
+      return { items: batch.map(row) };
+    });
+    expect(calls).toEqual([10]);
+  });
+
+  it("splits a report that names more refs than one request accepts", async () => {
+    // /refs/resolve caps a request at 200 refs, and one oversized request is
+    // rejected whole — which used to mark every chip on the page missing.
+    const refs = Array.from({ length: 450 }, (_, index) => `card:${index}`);
+    const calls = [];
+    const resolved = await resolveRefsInBatches(refs, async (batch) => {
+      calls.push(batch.length);
+      return { items: batch.map(row) };
+    });
+    expect(calls).toEqual([MAX_BATCH_REFS, MAX_BATCH_REFS, 50]);
+    expect(resolved.size).toBe(450);
+    expect(resolved.get("card:449")).toMatchObject({ resolvable: true });
+  });
+
+  it("keeps the other batches when one fails", async () => {
+    const refs = Array.from({ length: 300 }, (_, index) => `card:${index}`);
+    const resolved = await resolveRefsInBatches(refs, async (batch) => {
+      if (batch.includes("card:0")) throw new Error("rejected");
+      return { items: batch.map(row) };
+    });
+    // The failed batch's refs survive as "not found" rather than vanishing.
+    expect(resolved.get("card:0")).toEqual({
+      ref: "card:0",
+      resolvable: false,
+    });
+    expect(resolved.get("card:250")).toMatchObject({ resolvable: true });
+  });
+
+  it("dedupes before counting against the cap", async () => {
+    const calls = [];
+    await resolveRefsInBatches(
+      ["card:a", "card:a", "card:b"],
+      async (batch) => {
+        calls.push(batch);
+        return { items: batch.map(row) };
+      },
+    );
+    expect(calls).toEqual([["card:a", "card:b"]]);
+  });
+
+  it("makes no request for an empty page", async () => {
+    const resolve = async () => ({ items: [] });
+    expect((await resolveRefsInBatches([], resolve)).size).toBe(0);
   });
 });

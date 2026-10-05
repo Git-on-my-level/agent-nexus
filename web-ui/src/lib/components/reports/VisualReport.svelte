@@ -7,7 +7,11 @@
   import { getPanelFreshness } from "$lib/visualReports.js";
   import VisualReportPanel from "./VisualReportPanel.svelte";
   import AnxRefPreview from "$lib/components/AnxRefPreview.svelte";
-  import { collectPageRefs, indexResolvedRefs } from "$lib/refResolve.js";
+  import {
+    collectPageRefs,
+    indexResolvedRefs,
+    resolveRefsInBatches,
+  } from "$lib/refResolve.js";
   import { reportRefStrings } from "./reportRefs.js";
   import ReportLayout from "./ReportLayout.svelte";
   import { layoutPanelIds } from "./reportLayout.js";
@@ -36,10 +40,11 @@
       return;
     }
     let cancelled = false;
-    void coreClient
-      .resolveRefs(refs)
+    // Batched: a report may name more refs than one request accepts, and an
+    // oversized request is rejected whole.
+    void resolveRefsInBatches(refs, (batch) => coreClient.resolveRefs(batch))
       .then((result) => {
-        if (!cancelled) resolvedRefs = indexResolvedRefs(result, refs);
+        if (!cancelled) resolvedRefs = result;
       })
       .catch(() => {
         // Unresolved refs still render, as "not found" chips.

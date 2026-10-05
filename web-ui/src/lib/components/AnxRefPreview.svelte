@@ -44,11 +44,26 @@
     }
   }
 
+  /**
+   * Escape closes the dialog and puts focus back on the chip — which fires the
+   * chip's own focus handler and would reopen what the reader just dismissed.
+   * This window lets that one focus event pass without reopening.
+   */
+  let dismissedAt = 0;
+  const REOPEN_GUARD_MS = 400;
+
   export function open(nextModel, nextAnchor) {
+    if (Date.now() - dismissedAt < REOPEN_GUARD_MS) return;
     cancelClose();
     model = nextModel;
     anchor = nextAnchor;
     registerContextMenu(ID, close);
+  }
+
+  /** Controls inside the card, in the order a reader tabs through them. */
+  function focusables() {
+    if (!card) return [];
+    return [...card.querySelectorAll("a[href], button:not([disabled])")];
   }
 
   /** Leave it open long enough to travel to it. */
@@ -60,14 +75,16 @@
     }, delay);
   }
 
-  export function close() {
+  export function close({ dismissed = false } = {}) {
     cancelClose();
-    const returnFocus = card?.contains(document.activeElement) ? anchor : null;
+    const returnFocus =
+      dismissed || card?.contains(document.activeElement) ? anchor : null;
+    if (dismissed) dismissedAt = Date.now();
     model = null;
     anchor = null;
     clearContextMenu(ID);
-    // Escape from inside the card puts the reader back on the chip they came
-    // from, rather than dropping focus to the top of the document.
+    // Dismissing puts the reader back on the chip they came from, rather than
+    // dropping focus to the top of the document.
     returnFocus?.focus?.();
   }
 
@@ -100,9 +117,38 @@
   onMount(() => {
     const onScrollOrResize = () => (model ? close() : undefined);
     const onKeydown = (event) => {
-      if (model && event.key === "Escape") {
+      if (!model) return;
+      if (event.key === "Escape") {
         event.stopPropagation();
-        close();
+        close({ dismissed: true });
+        return;
+      }
+      // The card is appended at the end of the document, so it is nowhere near
+      // the chip in tab order and its Open / Copy ref controls would never be
+      // reached. Tab from the chip steps into the card instead.
+      if (
+        event.key === "Tab" &&
+        !event.shiftKey &&
+        document.activeElement === anchor
+      ) {
+        const [first] = focusables();
+        if (first) {
+          event.preventDefault();
+          event.stopPropagation();
+          first.focus();
+        }
+        return;
+      }
+      // Shift+Tab off the front of the card goes back to the chip it belongs
+      // to, which is where the reader came from.
+      if (
+        event.key === "Tab" &&
+        event.shiftKey &&
+        document.activeElement === focusables()[0]
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        close({ dismissed: true });
       }
     };
     window.addEventListener("scroll", onScrollOrResize, true);

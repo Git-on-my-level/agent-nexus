@@ -427,3 +427,44 @@ function refHref({ raw, prefix, value, hit, external, context, resolvable }) {
   }
   return "";
 }
+
+/**
+ * Resolve any number of refs within the contract's per-request maximum.
+ *
+ * `/refs/resolve` takes at most 200 refs, and a valid report can name more. One
+ * oversized request is rejected whole, which turned every chip on the page into
+ * "not found"; batching keeps a long report working and keeps one slow or
+ * failing batch from taking the others down with it.
+ *
+ * @param {string[]} refs
+ * @param {(batch: string[]) => Promise<object>} resolve the client call
+ * @param {{size?: number}} [options]
+ * @returns {Promise<Map<string, object>>}
+ */
+export async function resolveRefsInBatches(
+  refs,
+  resolve,
+  { size = MAX_BATCH_REFS } = {},
+) {
+  const unique = [...new Set((refs ?? []).map(asText).filter(Boolean))];
+  if (!unique.length) return new Map();
+
+  const batches = [];
+  for (let index = 0; index < unique.length; index += size) {
+    batches.push(unique.slice(index, index + size));
+  }
+
+  const settled = await Promise.allSettled(
+    batches.map((batch) => resolve(batch)),
+  );
+  const merged = new Map();
+  settled.forEach((result, index) => {
+    // A batch that failed still contributes its refs, as unresolvable, so those
+    // chips read "not found" instead of vanishing.
+    const response = result.status === "fulfilled" ? result.value : {};
+    for (const [ref, row] of indexResolvedRefs(response, batches[index])) {
+      merged.set(ref, row);
+    }
+  });
+  return merged;
+}

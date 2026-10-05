@@ -229,35 +229,106 @@ test("series colours follow the surface, ready for a light theme", async ({
 });
 
 /**
- * The *identity* of the leading series is pinned in
- * `tests/unit/ReportChartComponent.test.js`, where the hover event and the
- * formatter can be driven directly. In a real browser ECharts puts an invisible
- * capture layer over the marks, so there is no reliable way to ask the page
- * which band is under the cursor — this covers what the browser can answer:
- * that the tooltip tracks the pointer and always names a real series.
+ * Hover each stacked band in turn and require the tooltip to name *that*
+ * band's series.
+ *
+ * The bands are found by their fill: ECharts draws each series with the colour
+ * at its own index in the option's `color` array, so a mark's fill identifies
+ * which series it belongs to without this test having to guess at geometry.
+ * That is what makes this an identity check rather than "a lead row exists" —
+ * the bug it guards is the tooltip naming the series the pointer just left.
  */
-test("the tooltip follows the pointer and names a real series", async ({
+test("the tooltip names the series of the band under the cursor", async ({
   page,
 }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
   await openReport(page);
 
-  const surface = chartPanel(page).locator(".chart-surface");
-  // Mouse coordinates are viewport-relative, and this panel sits below the fold.
+  const panel = chartPanel(page);
+  const surface = panel.locator(".chart-surface");
+  await surface.locator("svg").first().waitFor({ timeout: 60_000 });
   await surface.scrollIntoViewIfNeeded();
-  const box = await surface.boundingBox();
+  // Marks are drawn after the first paint.
+  await expect
+    .poll(
+      async () =>
+        surface.evaluate(
+          (host) => host.querySelectorAll("path,rect").length > 8,
+        ),
+      { timeout: 20_000 },
+    )
+    .toBe(true);
+
+  /**
+   * name → colour, straight from the legend the component renders. The legend
+   * swatch is painted with the series' own colour, so this is the chart's real
+   * mapping rather than a guess at which palette it resolved to.
+   */
+  const seriesColor = await panel.evaluate((root) => {
+    const toHex = (value) => {
+      const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+      if (!match) return value.toLowerCase();
+      return `#${match
+        .slice(1)
+        .map((part) => Number(part).toString(16).padStart(2, "0"))
+        .join("")}`;
+    };
+    const out = {};
+    for (const item of root.querySelectorAll(".chart-legend__item")) {
+      const name = item
+        .querySelector(".chart-legend__name")
+        ?.textContent.trim();
+      const swatch = item.querySelector(".chart-legend__swatch");
+      if (name && swatch) {
+        out[name] = toHex(getComputedStyle(swatch).backgroundColor);
+      }
+    }
+    return out;
+  });
+
+  /** Every drawn mark, grouped by the colour that identifies its series. */
+  const bandsByFill = await surface.evaluate((host) => {
+    const toHex = (value) => {
+      const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+      if (!match) return value.toLowerCase();
+      return `#${match
+        .slice(1)
+        .map((part) => Number(part).toString(16).padStart(2, "0"))
+        .join("")}`;
+    };
+    const bands = {};
+    for (const node of host.querySelectorAll("path,rect")) {
+      const box = node.getBoundingClientRect();
+      if (box.width < 5 || box.height < 5 || box.width > 200) continue;
+      const fill = toHex(
+        node.getAttribute("fill") || getComputedStyle(node).fill || "",
+      );
+      (bands[fill] ??= []).push({
+        x: box.x + box.width / 2,
+        y: box.y + box.height / 2,
+      });
+    }
+    return bands;
+  });
+
   const lead = page.locator(".report-tooltip__lead .report-tooltip__name");
 
-  const seen = new Set();
-  for (const fraction of [0.74, 0.62, 0.5, 0.38]) {
-    await page.mouse.move(
-      box.x + box.width * 0.6,
-      box.y + box.height * fraction,
-    );
+  let checked = 0;
+  // Walk the series in a deliberately non-adjacent order, so a lead left over
+  // from the previous band would name a different series than the one hovered.
+  for (const name of [
+    SERIES_NAMES[2],
+    SERIES_NAMES[1],
+    SERIES_NAMES[0],
+    SERIES_NAMES[2],
+  ]) {
+    const points = bandsByFill[seriesColor[name]];
+    if (!points?.length) continue;
+    const point = points[Math.floor(points.length / 2)];
+    await page.mouse.move(point.x, point.y);
     await expect(page.locator(".report-tooltip")).toBeVisible();
-    const name = (await lead.textContent())?.trim();
-    expect(SERIES_NAMES).toContain(name);
-    seen.add(name);
+    await expect(lead).toHaveText(name);
+    checked += 1;
   }
-  expect(seen.size).toBeGreaterThan(1);
+  expect(checked).toBeGreaterThanOrEqual(3);
 });
