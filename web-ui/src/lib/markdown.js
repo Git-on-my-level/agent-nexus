@@ -1,7 +1,10 @@
 import DOMPurify from "isomorphic-dompurify";
 import { Marked } from "marked";
 
-import { classifyWorkUrl, tokenizeRefText } from "./refResolve.js";
+// `refText.js`, not `refResolve.js`: the resolve module reaches for
+// `workspacePath` and so for `$app/paths`, and this file is imported straight
+// into plain Node by `scripts/check-visual-report-conformance.mjs`.
+import { classifyWorkUrl, tokenizeRefText } from "./refText.js";
 
 const marked = new Marked({
   gfm: true,
