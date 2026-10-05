@@ -96,6 +96,14 @@ class RepoTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "core/helper.go"):
             checks.static_checks(checks.changed_paths("static"))
 
+    def test_gitignored_go_source_cannot_mask_staged_type_error(self):
+        self.write("core/a.go", "package core\nfunc A() { B() }\n")
+        self.write(".gitignore", "core/helper.go\n")
+        self.git("add", "core/a.go", ".gitignore")
+        self.write("core/helper.go", "package core\nfunc B() {}\n")
+        with self.assertRaisesRegex(RuntimeError, "core/helper.go"):
+            checks.static_checks(checks.changed_paths("static"))
+
     def test_shared_changes_and_missing_base_are_conservative(self):
         for path in ("Makefile", "scripts/git-hooks/checks.py", "contracts/anx-schema.yaml", "pnpm-lock.yaml",
                      "core/cmd/contract-gen/main.go", "core/cmd/route-inventory/main.go"):

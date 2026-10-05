@@ -115,6 +115,12 @@ def static_checks(changed, all_files=False):
                            "or stage/revert those edits first.")
     if not all_files:
         untracked = paths(git("ls-files", "--others", "--exclude-standard", "-z"))
+        # Git-ignore rules do not hide Go sources from the compiler. Hidden,
+        # underscore, vendor and testdata directories are excluded by go ./....
+        go_untracked = paths(git("ls-files", "--others", "-z", "--", "core", "cli", "mcp", "contracts"))
+        untracked |= {p for p in go_untracked if Path(p).suffix == ".go"
+                      and not any(part.startswith((".", "_")) or part in {"vendor", "testdata"}
+                                  for part in Path(p).parts)}
         inputs = sorted(p for p in untracked if
                         (p.startswith((*[m + "/" for m in MODULES], "contracts/", "scripts/git-hooks/"))
                          and Path(p).suffix in {".go", ".mod", ".sum", ".js", ".mjs", ".cjs",
