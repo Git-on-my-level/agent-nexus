@@ -7,7 +7,7 @@
     liveWorkspaceEvents,
     TASK_LIST_EVENT_TYPES,
   } from "$lib/liveWorkspaceEvents.js";
-  import { initializeAuthSession } from "$lib/authSession";
+  import { authenticatedAgent, initializeAuthSession } from "$lib/authSession";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
@@ -21,7 +21,12 @@
   } from "$lib/actorSession";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
   import AnxRefPreview from "$lib/components/AnxRefPreview.svelte";
+  import AgeBadge from "$lib/components/AgeBadge.svelte";
+  import AnxRefChip from "$lib/components/AnxRefChip.svelte";
+  import FinePrint from "$lib/components/FinePrint.svelte";
+  import HealthBadge from "$lib/components/HealthBadge.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
+  import PanelToggle from "$lib/components/layout/PanelToggle.svelte";
   import PlanView from "$lib/components/PlanView.svelte";
   import EvidenceHandoff from "$lib/components/participation/EvidenceHandoff.svelte";
   import TaskParticipation from "$lib/components/participation/TaskParticipation.svelte";
@@ -47,6 +52,18 @@
     humanizeInstants,
     connectionName,
   } from "$lib/pm/presentation.js";
+  import {
+    nextStepModel,
+    planHealthModel,
+    planStatusMismatch,
+  } from "$lib/planHealth.js";
+  import {
+    panelAutoCollapsed,
+    panelCollapsed,
+    readPanelPreference,
+    SHELL_PANELS,
+    writePanelPreference,
+  } from "$lib/shellPanels.js";
   import {
     evidenceSources,
     observationHistory,
@@ -74,15 +91,60 @@
   let requestId = 0;
   let refPreview = $state();
 
-  const PLAN_HEALTH_BADGES = {
-    on_track: { label: "On track", tone: "ok" },
-    stalled: { label: "Stalled", tone: "warn" },
-    blocked: { label: "Blocked", tone: "danger" },
-  };
-  let planHealth = $derived(PLAN_HEALTH_BADGES[planState?.health] ?? null);
   let planProgress = $derived(
     Number(planState?.progress?.total) > 0 ? planState.progress : null,
   );
+  /**
+   * One health vocabulary, shared with the Overview tiles, so the badge on
+   * this page and the badge on the dashboard cannot disagree.
+   */
+  let planHealth = $derived(
+    planHealthModel(
+      { plan_health: work?.plan_health, health: { status: planState?.health } },
+      { hasPlan: Boolean(plan), progress: planProgress },
+    ),
+  );
+  /** "Next" comes from the computed next step, with the plan's own title. */
+  let nextStep = $derived(
+    nextStepModel(
+      { next_step: work?.next_step, plan_state: planState },
+      { plan },
+    ),
+  );
+  /**
+   * A card parked in `done` whose plan still has open steps is worth a quiet
+   * hint: either one can legitimately be ahead of the other, so it is a note
+   * rather than an error.
+   */
+  let statusMismatch = $derived(
+    plan ? planStatusMismatch(work?.phase, planHealth, planProgress) : "",
+  );
+
+  /**
+   * The right rail collapses, remembered per viewer. It stacks below the
+   * content under `xl` anyway, so the toggle only has work to do on a wide
+   * window — `shellPanels` disables it rather than offering a no-op.
+   */
+  let railPreference = $state(null);
+  let viewportWidth = $state(0);
+  let railViewerId = $derived($authenticatedAgent?.agent_id || "");
+  $effect(() => {
+    railPreference = readPanelPreference(SHELL_PANELS.RAIL, railViewerId);
+  });
+  let railCollapsed = $derived(
+    panelCollapsed({
+      panel: SHELL_PANELS.RAIL,
+      preference: railPreference,
+      viewportWidth,
+    }),
+  );
+  let railAutoCollapsed = $derived(
+    panelAutoCollapsed({ panel: SHELL_PANELS.RAIL, viewportWidth }),
+  );
+  function toggleRail(collapsed) {
+    railPreference = collapsed;
+    writePanelPreference(SHELL_PANELS.RAIL, collapsed, railViewerId);
+  }
 
   /**
    * The plan and every ref the page is about to chip, in two reads: one plan,
@@ -153,6 +215,18 @@
   let lastAttemptAt = $derived(work?.refresh?.last_attempt_at || "");
   let failedAttempts = $derived(Number(work?.refresh?.failures) || 0);
   let sources = $derived(evidenceSources(observations, work));
+  /**
+   * Is the Source block saying anything? A task created here with nobody on
+   * it answers "Agent Nexus" and "Not assigned", which is two rows of nothing.
+   */
+  let sourceDetailsWorthShowing = $derived(
+    Boolean(
+      work?.owner ||
+      (work?.source?.authority && work.source.authority !== "nexus") ||
+      work?.source?.native_id ||
+      work?.source?.url,
+    ),
+  );
   // Evidence links are distinct already; a long comment thread still gets a
   // short list first.
   const LINK_PREVIEW = 6;
@@ -162,6 +236,7 @@
   let mirrors = $state([]);
   let hasNext = $derived(
     Boolean(
+      nextStep ||
       work?.next_actor ||
       work?.next_action ||
       work?.blockers?.length ||
@@ -355,6 +430,7 @@
   });
 </script>
 
+<svelte:window bind:innerWidth={viewportWidth} />
 <svelte:head><title>{work?.title || "Task"} · Agent Nexus</title></svelte:head>
 <WorkspacePageShell>
   <a
@@ -403,7 +479,12 @@
           disabled={loading}>{loading ? "Reloading…" : "Reload"}</button
         ><a class="ui-btn-primary" href={pmHref}>Ask PM</a>{/snippet}
     </WorkspacePageHeader>
-    <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
+    <div
+      class="grid gap-6 {railCollapsed
+        ? ''
+        : 'xl:grid-cols-[minmax(0,1fr)_18rem]'}"
+      data-task-rail={railCollapsed ? "collapsed" : "expanded"}
+    >
       <div class="min-w-0 space-y-7">
         <!--
           An initiative leads with its plan: where it stands, how healthy it is
@@ -415,18 +496,24 @@
             <div class="flex flex-wrap items-baseline justify-between gap-2">
               <h2 class="ui-label">Plan</h2>
               <span class="flex items-center gap-2">
-                {#if planHealth}
-                  <SignalBadge tone={planHealth.tone}>
-                    {planHealth.label}
-                  </SignalBadge>
-                {/if}
+                <HealthBadge health={planHealth} variant="pill" />
                 {#if planProgress}
                   <span class="text-micro text-fg-muted" data-plan-progress
                     >{planProgress.done}/{planProgress.total} steps</span
                   >
                 {/if}
+                {#if planState?.last_movement_at}
+                  <AgeBadge at={planState.last_movement_at} verb="moved" />
+                {/if}
               </span>
             </div>
+            {#if statusMismatch}
+              <!-- A note, not an alert: a card and its plan can legitimately
+                   be a step apart, and the reader decides which is right. -->
+              <p class="mt-1 text-micro text-warn-text" data-plan-mismatch>
+                {statusMismatch}
+              </p>
+            {/if}
             {#if planError}
               <p class="mt-2 text-meta text-fg-muted">{planError}</p>
             {:else}
@@ -458,8 +545,20 @@
           <section>
             <h2 class="ui-label">Done when</h2>
             <ul class="list-disc space-y-1 break-words pl-5 text-meta text-fg">
+              <!-- Criteria are authored text: a `card:` in one is the same
+                   chip it is anywhere else, and `\`On tr…\`` is a code span,
+                   not three backticks. -->
               {#each work.definition_of_done as criterion}<li>
-                  {criterion}
+                  <MarkdownRenderer
+                    inline
+                    source={criterion}
+                    resolved={planRefs}
+                    organizationSlug={$page.params.organization}
+                    workspaceSlug={$page.params.workspace}
+                    onpreview={(model, anchor) =>
+                      refPreview?.open(model, anchor)}
+                    onpreviewclose={() => refPreview?.requestClose()}
+                  />
                 </li>{/each}
             </ul>
           </section>
@@ -467,6 +566,29 @@
         {#if hasNext}
           <section>
             <h2 class="ui-label">Next</h2>
+            {#if nextStep}
+              <!-- The step core computed, named by the plan's own title rather
+                   than by its raw id. -->
+              <p class="text-meta text-fg" data-next-step>
+                {nextStep.title}{#if nextStep.extra}<span class="text-fg-muted"
+                    >{" "}+{nextStep.extra} more</span
+                  >{/if}
+                {#if nextStep.ref}
+                  <span class="ml-1 align-middle">
+                    <AnxRefChip
+                      refValue={nextStep.ref}
+                      resolved={planRefs}
+                      organizationSlug={$page.params.organization}
+                      workspaceSlug={$page.params.workspace}
+                      showKind={false}
+                      onpreview={(model, anchor) =>
+                        refPreview?.open(model, anchor)}
+                      onpreviewclose={() => refPreview?.requestClose()}
+                    />
+                  </span>
+                {/if}
+              </p>
+            {/if}
             <p class="text-meta text-fg">
               {#if work.next_actor}<ActorLabel
                   label={actorDisplayLabel(
@@ -496,6 +618,7 @@
         <TaskParticipation
           tasks={[{ ref: work.ref || workId, title: work.title }]}
           {workspaceHref}
+          quietWhenEmpty
         />
         <section>
           <h2 class="ui-label">Evidence</h2>
@@ -504,9 +627,10 @@
             unavailable={Boolean(evidenceError) && !observations.length}
           />
           {#if nexusOwned && !lastCheckedAt && !observations.length}
-            <p class="text-meta text-fg-muted">
-              Created here — nothing to check
-            </p>
+            <FinePrint label="Why there is nothing to check">
+              This task was created here, so there is no outside source to read
+              back from.
+            </FinePrint>
           {:else}
             <!--
               One line per source, not one block per read. A reader reports
@@ -887,74 +1011,101 @@
         class="min-w-0 space-y-6 text-meta"
         aria-label="Source and follow-through"
       >
-        <section>
-          <h2 class="ui-label">Source</h2>
-          <dl class="mt-2 space-y-2">
-            <div>
-              <dt class="text-micro text-fg-subtle">Authority</dt>
-              <dd class="break-words text-fg">
-                {sourceLabel(work.source)}{#if work.source?.native_id}
-                  <span class="text-fg-subtle"> · </span><span
-                    class="font-mono text-fg-muted"
-                    >{work.source.native_id}</span
-                  >{/if}
-              </dd>
-              {#if safeSourceHref(work.source?.url)}<dd>
-                  <a
-                    class="text-accent-text hover:underline"
-                    href={safeSourceHref(work.source.url)}
-                    target="_blank"
-                    rel="noreferrer"
-                    data-task-source-link
-                    aria-keyshortcuts="O"
-                    title="Open source record (O)">Open source record ↗</a
-                  >
-                </dd>{/if}
-            </div>
-            <div>
-              <dt class="text-micro text-fg-subtle">Owner</dt>
-              <dd>
-                {#if work.owner}<ActorLabel
-                    label={actorDisplayLabel(
-                      work.owner,
-                      $actorRegistry,
-                      $principalRegistry,
-                    )}
-                    seed={work.owner}
-                    size="xs"
-                  />{:else}<span class="text-fg-muted">Not assigned</span>{/if}
-              </dd>
-            </div>
-            {#if work.project_ref}
-              <div>
-                <dt class="text-micro text-fg-subtle">Project</dt>
-                <dd class="break-words text-fg">{work.project_ref}</dd>
-              </div>
-            {/if}
-            {#each [["start_at", "Start"], ["due_at", "Due"]] as [field, title]}{#if work[field]}<div
-                >
-                  <dt class="text-micro text-fg-subtle">{title}</dt>
-                  <dd class="text-fg">
-                    {formatAbsoluteDateTime(work[field])}
+        <div class="flex items-center justify-between gap-2">
+          <h2 class="ui-label mb-0">Source</h2>
+          <PanelToggle
+            label="details"
+            side="right"
+            collapsed={railCollapsed}
+            auto={railAutoCollapsed}
+            onToggle={toggleRail}
+          />
+        </div>
+        {#if !railCollapsed}
+          <section>
+            <dl class="mt-2 space-y-2">
+              <!--
+              Authority and Owner are the rail's point when a task comes from
+              somewhere else. When neither is set — a task created here with
+              nobody on it — they are two rows of "Agent Nexus" and "Not
+              assigned", which is why they fold away instead.
+            -->
+              {#if sourceDetailsWorthShowing}
+                <div>
+                  <dt class="text-micro text-fg-subtle">Authority</dt>
+                  <dd class="break-words text-fg">
+                    {sourceLabel(work.source)}{#if work.source?.native_id}
+                      <span class="text-fg-subtle"> · </span><span
+                        class="font-mono text-fg-muted"
+                        >{work.source.native_id}</span
+                      >{/if}
                   </dd>
-                </div>{/if}{/each}
-          </dl>
-          {#if work.source?.authority !== "nexus"}
-            <p class="mt-2 text-micro text-fg-subtle">
-              Status and workflow are owned by the source. Ask PM to request a
-              change.
-            </p>
-          {/if}
-        </section>
-        <section>
-          <h2 class="ui-label">Inbox</h2>
-          <a
-            class="mt-2 inline-block text-accent-text hover:underline"
-            href={workspaceHref(
-              `/inbox?mailbox=watching&work_ref=${encodeURIComponent(work.ref || workId)}`,
-            )}>Inbox for this task →</a
-          >
-        </section>
+                  {#if safeSourceHref(work.source?.url)}<dd>
+                      <a
+                        class="text-accent-text hover:underline"
+                        href={safeSourceHref(work.source.url)}
+                        target="_blank"
+                        rel="noreferrer"
+                        data-task-source-link
+                        aria-keyshortcuts="O"
+                        title="Open source record (O)">Open source record ↗</a
+                      >
+                    </dd>{/if}
+                </div>
+              {/if}
+              {#if work.owner}
+                <div>
+                  <dt class="text-micro text-fg-subtle">Owner</dt>
+                  <dd>
+                    <ActorLabel
+                      label={actorDisplayLabel(
+                        work.owner,
+                        $actorRegistry,
+                        $principalRegistry,
+                      )}
+                      seed={work.owner}
+                      size="xs"
+                    />
+                  </dd>
+                </div>
+              {/if}
+              {#if work.project_ref}
+                <div>
+                  <dt class="text-micro text-fg-subtle">Project</dt>
+                  <dd class="break-words text-fg">{work.project_ref}</dd>
+                </div>
+              {/if}
+              {#each [["start_at", "Start"], ["due_at", "Due"]] as [field, title]}{#if work[field]}<div
+                  >
+                    <dt class="text-micro text-fg-subtle">{title}</dt>
+                    <dd class="text-fg">
+                      {formatAbsoluteDateTime(work[field])}
+                    </dd>
+                  </div>{/if}{/each}
+            </dl>
+            {#if work.source?.authority !== "nexus"}
+              <p class="mt-2 text-micro text-fg-subtle">
+                Status and workflow are owned by the source. Ask PM to request a
+                change.
+              </p>
+            {/if}
+            {#if !sourceDetailsWorthShowing}
+              <FinePrint label="Where this task came from">
+                Created here, with nobody assigned, so there is no outside
+                authority or owner to name.
+              </FinePrint>
+            {/if}
+          </section>
+          <section>
+            <h2 class="ui-label">Inbox</h2>
+            <a
+              class="mt-2 inline-block text-accent-text hover:underline"
+              href={workspaceHref(
+                `/inbox?mailbox=watching&work_ref=${encodeURIComponent(work.ref || workId)}`,
+              )}>Inbox for this task →</a
+            >
+          </section>
+        {/if}
       </aside>
     </div>
   {/if}

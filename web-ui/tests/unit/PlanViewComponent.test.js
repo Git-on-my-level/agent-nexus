@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, render } from "@testing-library/svelte";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import PlanView from "../../src/lib/components/PlanView.svelte";
 import { refResolveExample } from "../../src/lib/fixtures/refResolveExample.js";
@@ -44,7 +44,26 @@ const mount = (plan, props = {}) =>
     ...props,
   });
 
-afterEach(() => cleanup());
+/**
+ * The tree measures the room it has so the remaining steps fit without
+ * scrolling, which means `bind:clientWidth` and so a ResizeObserver. jsdom has
+ * none; a stub is enough, because the geometry itself is unit-tested directly.
+ */
+beforeEach(() => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe("PlanView", () => {
   it("says so when a card has no plan", () => {
@@ -263,5 +282,88 @@ describe("PlanView", () => {
     expect(container.querySelector(".plan-issues").textContent).toContain(
       'depends on "ghost"',
     );
+  });
+});
+
+describe("PlanView names steps rather than refs", () => {
+  const plan = {
+    steps: [
+      step("spec", [], {
+        ref: "card:shared-report-contracts",
+        title: "Write the spec",
+      }),
+      step("ship", ["spec"], { title: "Ship it" }),
+    ],
+  };
+
+  it("shows the step title, with its ref as a chip beneath it", () => {
+    const { container } = mount(plan, {
+      planState: stateFor(plan, {
+        steps: [
+          { id: "spec", status: "active", resolvable: true },
+          { id: "ship", status: "not_started", resolvable: false },
+        ],
+      }),
+    });
+    const titles = [...container.querySelectorAll(".plan-node__title")].map(
+      (node) => node.textContent,
+    );
+    expect(titles).toContain("Write the spec");
+    // The raw ref is not the node's label.
+    expect(titles).not.toContain("card:shared-report-contracts");
+    // The chip is still there, beneath the title.
+    const node = container.querySelector('[data-plan-node="spec"]');
+    expect(node.querySelector(".plan-node__title").textContent).toBe(
+      "Write the spec",
+    );
+    expect(node.querySelector("[data-anx-ref]")).not.toBeNull();
+  });
+
+  it("folds a finished prefix in the timeline and says how many", () => {
+    const long = {
+      steps: [
+        step("a", [], { title: "A" }),
+        step("b", ["a"], { title: "B" }),
+        step("c", ["b"], { title: "C" }),
+      ],
+    };
+    const { container } = mount(long, {
+      planState: stateFor(long, {
+        steps: [
+          { id: "a", status: "done", resolvable: false },
+          { id: "b", status: "done", resolvable: false },
+          { id: "c", status: "active", resolvable: false },
+        ],
+      }),
+    });
+    const fold = container.querySelector("[data-plan-done-count]");
+    expect(fold.dataset.planDoneCount).toBe("2");
+    expect(fold.textContent).toContain("2 steps done");
+    // The remaining step is drawn; the folded ones are not.
+    expect(container.querySelector('[data-plan-node="c"]')).not.toBeNull();
+    expect(container.querySelector('[data-plan-node="a"]')).toBeNull();
+    // They are still listed in the fallback, so nothing is actually lost.
+    const list = container.querySelector(".plan-steps");
+    expect(list.textContent).toContain("A");
+    expect(list.textContent).toContain("B");
+  });
+
+  it("shows an external step as a chip with its status, never not-found", () => {
+    const external = {
+      steps: [
+        step("pr", [], {
+          ref: "https://github.com/Git-on-my-level/agent-nexus/pull/246",
+          title: "Land the renderer",
+        }),
+      ],
+    };
+    const { container } = mount(external, {
+      planState: stateFor(external, {
+        steps: [{ id: "pr", status: "active", resolvable: true }],
+      }),
+    });
+    const chip = container.querySelector("[data-anx-ref]");
+    expect(chip.textContent).not.toContain("not found");
+    expect(chip.getAttribute("href")).toContain("github.com");
   });
 });

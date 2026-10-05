@@ -1,5 +1,7 @@
 <script>
   import RefText from "$lib/components/RefText.svelte";
+  import UnavailableValue from "$lib/components/UnavailableValue.svelte";
+  import { metricValue } from "$lib/unavailableValue.js";
   let {
     panel,
     resolved = new Map(),
@@ -45,9 +47,16 @@
 {:else if panel.type === "metric-strip"}
   <div class="metrics">
     {#each panel.data.items as item}
+      <!-- A metric tile is sized for a number. A missing one is an em dash
+           with the reason on hover, never a paragraph at 40px. -->
+      {@const metric = metricValue(item.value)}
       <div class="metric" data-tone={item.tone ?? "neutral"}>
         <p class="metric-label">{item.label}</p>
-        <strong class="metric-value">{item.value}</strong>
+        <strong class="metric-value">
+          {#if metric.available}{metric.text}{:else}<UnavailableValue
+              reason={metric.reason}
+            />{/if}
+        </strong>
         <p class="metric-detail">
           <RefText text={item.detail} {...refProps()} />
         </p>
@@ -99,7 +108,11 @@
         <dl>
           {#each item.attributes as attribute}<div>
               <dt>{attribute.label}</dt>
-              <dd>{attribute.value}</dd>
+              <dd>
+                {#if metricValue(attribute.value).available}{attribute.value}{:else}<UnavailableValue
+                    reason={metricValue(attribute.value).reason}
+                  />{/if}
+              </dd>
             </div>{/each}
         </dl>
       </article>

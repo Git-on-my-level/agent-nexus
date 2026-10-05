@@ -88,9 +88,9 @@ export const QA_SCENES = [
     path: "/o/local/w/local",
     workspaceMode: "home-first-run",
     waitFor: async (page) => {
-      // The Overview no longer lists Inbox items one by one; it links across
-      // with a count, and the item's own title lives in the Inbox.
-      await page.waitForSelector("text=1 item needs you");
+      // One urgent band, not a second Inbox: it counts what is waiting and
+      // links across, and an item's own title lives in the Inbox.
+      await page.locator("[data-urgent-ask-count]").waitFor();
       await page.waitForSelector("text=No open initiatives.");
       await page.locator("[data-overview-detail]:not([open])").waitFor();
     },
@@ -103,6 +103,13 @@ export const QA_SCENES = [
       await page.waitForSelector(
         "[data-overview-report='doc-fleet-dashboard']",
       );
+      // The worst initiative is first, and the collapsed tails are both there.
+      await page
+        .locator("[data-initiative-group='attention'] [data-tile-health]")
+        .first()
+        .waitFor();
+      await page.locator("[data-initiative-group='done']").waitFor();
+      await page.locator("[data-initiative-group='no-plan']").waitFor();
       await page.waitForSelector("text=Approve rollback wording");
     },
   },
@@ -111,6 +118,7 @@ export const QA_SCENES = [
     path: "/o/local/w/local",
     workspaceMode: "home-empty",
     waitFor: async (page) => {
+      await page.locator("[data-urgent-state='empty']").waitFor();
       await page.waitForSelector("text=Nothing is waiting on you.");
       await page.waitForSelector("text=No open initiatives.");
       await page.waitForSelector(
@@ -514,6 +522,156 @@ function overviewPopulatedWork() {
   ];
 }
 
+/**
+ * The initiative rows the Overview sorts.
+ *
+ * One of each state the attention sort cares about — blocked, stale, on track,
+ * and one with no plan at all — so the QA scenes and the layout sweep see the
+ * real order, the collapsed tails and the mini plans rather than four
+ * identical planless tiles. The summaries are markdown on purpose: the tile
+ * must show prose, never `**Goal:**`.
+ */
+function overviewInitiatives(work) {
+  const planFor = (statuses, overrides = {}) => ({
+    steps: statuses.map(([id, status]) => ({ id, status })),
+    progress: {
+      done: statuses.filter(([, status]) => status === "done").length,
+      total: statuses.length,
+    },
+    critical_path: statuses.map(([id]) => id),
+    next_steps: statuses
+      .filter(([, status]) => status !== "done")
+      .map(([id]) => id),
+    shape: "chain",
+    last_movement_at: qaHoursAgo(5),
+    ...overrides,
+  });
+  const geometryFor = (statuses) => ({
+    shape: "chain",
+    total_nodes: statuses.length,
+    collapsed_nodes: 0,
+    nodes: statuses.map(([id, status], index) => ({
+      id,
+      status,
+      layer: index,
+      after: index ? [statuses[index - 1][0]] : [],
+    })),
+  });
+
+  const byRef = {
+    "card:rollback-wording": {
+      summary: "**Goal:** agree the wording we roll back with.",
+      plan_health: {
+        state: "blocked",
+        reason: "Waiting on a human decision since Tuesday.",
+        since: qaHoursAgo(30),
+      },
+      next_step: {
+        id: "agree-wording",
+        title: "Agree the rollback wording",
+        ref: "https://github.com/Git-on-my-level/agent-nexus/pull/246",
+      },
+      needs: ["Rollback wording decision"],
+      statuses: [
+        ["draft-wording", "done"],
+        ["review-wording", "done"],
+        ["agree-wording", "blocked"],
+        ["publish", "not_started"],
+      ],
+    },
+    "card:launch-checklist": {
+      summary: "**Goal:** every launch step has an owner and a date.",
+      plan_health: {
+        state: "at_risk",
+        reason: "Two steps slipped their due date.",
+        since: qaHoursAgo(20),
+      },
+      next_step: { id: "assign-owners", title: "Assign the remaining owners" },
+      statuses: [
+        ["scope", "done"],
+        ["assign-owners", "active"],
+        ["dry-run", "not_started"],
+      ],
+    },
+    "card:cutover-note": {
+      summary: "Write down what we decided about the cutover window.",
+      plan_health: { state: "on_track", reason: "Work is progressing." },
+      next_step: { id: "write-it-up", title: "Write it up" },
+      statuses: [
+        ["decide", "done"],
+        ["write-it-up", "active"],
+      ],
+    },
+  };
+
+  const items = work.map((item) => {
+    const extra = byRef[item.ref];
+    if (!extra) {
+      return {
+        ...item,
+        summary: "",
+        priority: "none",
+        progress: { done: 0, total: 0 },
+        needs: [],
+        board_ref: "board:launch",
+        plan_state: null,
+        geometry: null,
+      };
+    }
+    const { statuses, ...rest } = extra;
+    return {
+      ...item,
+      priority: "none",
+      needs: [],
+      board_ref: "board:launch",
+      plan_state: planFor(statuses),
+      geometry: geometryFor(statuses),
+      progress: planFor(statuses).progress,
+      ...rest,
+    };
+  });
+
+  // One finished initiative and one with no plan, so both collapsed tails are
+  // exercised by the sweep.
+  items.push({
+    ref: "card:schema-freeze",
+    title: "Freeze the schema",
+    phase: "done",
+    source: { authority: "nexus" },
+    updated_at: qaHoursAgo(72),
+    summary: "Shipped in v0.12.0.",
+    priority: "none",
+    needs: [],
+    board_ref: "board:launch",
+    plan_health: { state: "done", reason: "Every step is done." },
+    plan_state: planFor([
+      ["agree", "done"],
+      ["ship", "done"],
+    ]),
+    geometry: geometryFor([
+      ["agree", "done"],
+      ["ship", "done"],
+    ]),
+    progress: { done: 2, total: 2 },
+  });
+  items.push({
+    ref: "card:dogfood-notes",
+    title: "Collect dogfood notes",
+    phase: "backlog",
+    source: { authority: "nexus" },
+    updated_at: qaHoursAgo(96),
+    summary: "No plan written yet.",
+    priority: "none",
+    needs: [],
+    board_ref: "board:launch",
+    plan_state: null,
+    geometry: null,
+    progress: { done: 0, total: 0 },
+  });
+
+  return items;
+}
+
 function overviewFirstRunInboxItem() {
   return {
     ...QA_INBOX_POPULATED[0],
@@ -566,14 +724,7 @@ function overviewSnapshot(scenario) {
     initiatives: {
       status: "ok",
       count: work.length,
-      items: work.map((item) => ({
-        ...item,
-        summary: "",
-        priority: "none",
-        progress: { done: 0, total: 0 },
-        needs: [],
-        board_ref: "board:launch",
-      })),
+      items: populated ? overviewInitiatives(work) : [],
     },
     dashboard: {
       status: "ok",

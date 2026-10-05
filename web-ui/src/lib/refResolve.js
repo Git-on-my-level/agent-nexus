@@ -66,6 +66,23 @@ const STATUS_TONES = Object.freeze({
   merged: "ok",
   closed: "neutral",
   open: "neutral",
+  draft: "neutral",
+});
+
+/**
+ * External authorities, as a reader names them.
+ *
+ * Batch resolve answers an external ref with
+ * `{kind: "external", authority, native_id, title, url, status}`. The chip
+ * labels it by its authority — "GitHub", not "external" — because that is the
+ * thing the reader recognises and the thing that tells them the status word
+ * belongs to someone else's workflow.
+ */
+const AUTHORITY_LABELS = Object.freeze({
+  github: "GitHub",
+  multica: "Multica",
+  git: "Git",
+  ssh_git: "Git",
 });
 
 /**
@@ -126,6 +143,10 @@ export function indexResolvedRefs(response, requested = []) {
       url: asText(row?.url),
       progress: normalizeProgress(row?.progress),
       resolvable: row?.resolvable !== false,
+      // External refs: `kind: "external"` with the authority that owns the
+      // record, the id it knows it by, and that system's own status word.
+      authority: asText(row?.authority ?? row?.source?.authority),
+      nativeId: asText(row?.native_id ?? row?.source?.native_id),
       // `owner` is an actor ref; `owner_display` is the name a reader knows it
       // by, and core falls back to the ref when it cannot resolve a name.
       ownerDisplay: asText(row?.owner_display) || asText(row?.owner),
@@ -146,30 +167,6 @@ export function indexResolvedRefs(response, requested = []) {
     }
   }
   return byRef;
-}
-
-/**
- * "moved 3h ago" — how long since a ref last moved.
- *
- * This repeats the vocabulary of `formatWait` in `inboxMailbox.js` rather than
- * importing it: that module pulls the whole inbox graph in behind it, and a
- * chip rendered on any page should not drag the inbox along. The two want
- * folding into one shared duration helper, which is a change to
- * `inboxMailbox.js` and so is better made once the Overview work has landed
- * than as a conflict now.
- */
-export function formatMovedAgo(value, now = Date.now()) {
-  const at = value ? new Date(value).getTime() : NaN;
-  if (!Number.isFinite(at)) return "";
-  const elapsed = Number(now) - at;
-  if (elapsed < 0) return "";
-  const minutes = Math.floor(elapsed / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
 }
 
 function normalizeProgress(value) {
@@ -198,20 +195,51 @@ export function refChipModel(ref, resolved, context = {}) {
   const external = classifyWorkUrl(raw);
   const { prefix, value } = parseRef(raw);
 
+  const authority = asText(hit?.authority) || external?.source || "";
+  // `kind: "external"` says "this record lives somewhere else"; the authority
+  // says where. Both are more use to a reader than the word "external".
+  const isExternalKind = asText(hit?.kind) === "external";
+
   // For a work URL the URL itself is the more specific answer: core resolves
   // an external link through a source-backed card and so calls it a `card`,
   // but "PR" is what the reader recognises, and it is read off the URL rather
   // than guessed.
-  const kind = external?.kind || asText(hit?.kind) || prefix;
-  const resolvable = hit ? hit.resolvable !== false : Boolean(external);
+  const kind =
+    external?.kind || (isExternalKind ? "" : asText(hit?.kind)) || prefix;
+
+  /*
+   * A valid external ref is never "not found".
+   *
+   * A GitHub pull request the browser can read off the URL, or one core
+   * answered with an `external` row, is a real destination — so a resolve that
+   * came back empty or failed must not turn a working link into a dashed
+   * "not found" chip. That was the plan-graph bug: every external step read
+   * "not found" while linking perfectly well.
+   */
+  const externalIdentity = Boolean(external) || isExternalKind;
+  const resolvable = externalIdentity
+    ? true
+    : hit
+      ? hit.resolvable !== false
+      : false;
+
   const title =
-    asText(hit?.title) || external?.label || (resolvable ? raw : "");
+    asText(hit?.title) ||
+    external?.label ||
+    asText(hit?.nativeId) ||
+    (resolvable ? raw : "");
 
   const status = asText(hit?.status);
+  const authorityLabel = AUTHORITY_LABELS[authority] ?? "";
   return {
     raw,
     kind,
-    kindLabel: KIND_LABELS[kind] ?? "",
+    // The most specific thing known: "PR" when the kind says so, otherwise the
+    // authority that owns the record. An external ref always says one or the
+    // other, so a chip never reads "external" at the reader.
+    kindLabel: externalIdentity
+      ? KIND_LABELS[kind] || authorityLabel || "External"
+      : (KIND_LABELS[kind] ?? ""),
     title: title || raw,
     status,
     statusLabel: status ? status.replaceAll("_", " ") : "",
@@ -223,8 +251,20 @@ export function refChipModel(ref, resolved, context = {}) {
     lastMovedAt: asText(hit?.lastMovedAt),
     progress: hit?.progress ?? null,
     resolvable,
-    isExternal: Boolean(external),
-    href: refHref({ raw, prefix, value, hit, external, context, resolvable }),
+    isExternal: externalIdentity,
+    authority,
+    authorityLabel,
+    nativeId: asText(hit?.nativeId),
+    href: refHref({
+      raw,
+      prefix,
+      value,
+      hit,
+      external,
+      context,
+      resolvable,
+      externalIdentity,
+    }),
   };
 }
 
@@ -247,10 +287,21 @@ export function safeRefDestination(value) {
   return "";
 }
 
-function refHref({ raw, prefix, value, hit, external, context, resolvable }) {
+function refHref({
+  raw,
+  prefix,
+  value,
+  hit,
+  external,
+  context,
+  resolvable,
+  externalIdentity = false,
+}) {
   // Nothing to open: a "not found" chip must not offer a link into a 404.
   if (!resolvable) return "";
   if (external) return safeRefDestination(raw);
+  // An external row core resolved carries the URL on the record.
+  if (externalIdentity) return safeRefDestination(hit?.url);
 
   const org = asText(context.organizationSlug);
   const workspace = asText(context.workspaceSlug);

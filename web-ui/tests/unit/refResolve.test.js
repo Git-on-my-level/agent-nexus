@@ -7,7 +7,6 @@ import {
   CHIP_REF_PREFIXES,
   classifyWorkUrl,
   collectPageRefs,
-  formatMovedAgo,
   indexResolvedRefs,
   isChipRef,
   refChipModel,
@@ -379,24 +378,6 @@ describe("refChipModel", () => {
   });
 });
 
-describe("formatMovedAgo", () => {
-  const now = Date.parse("2026-10-04T12:00:00Z");
-  const ago = (ms) => new Date(now - ms).toISOString();
-
-  it("reads in minutes, hours and days", () => {
-    expect(formatMovedAgo(ago(30_000), now)).toBe("just now");
-    expect(formatMovedAgo(ago(5 * 60_000), now)).toBe("5m ago");
-    expect(formatMovedAgo(ago(3 * 3_600_000), now)).toBe("3h ago");
-    expect(formatMovedAgo(ago(2 * 86_400_000), now)).toBe("2d ago");
-  });
-
-  it("says nothing for a missing or future timestamp", () => {
-    expect(formatMovedAgo(null, now)).toBe("");
-    expect(formatMovedAgo("not a date", now)).toBe("");
-    expect(formatMovedAgo(new Date(now + 60_000).toISOString(), now)).toBe("");
-  });
-});
-
 describe("workspace-relative URLs from core", () => {
   const context = { organizationSlug: "scaling", workspaceSlug: "anx" };
   const withUrl = (url) =>
@@ -539,5 +520,98 @@ describe("resolveRefsInBatches", () => {
   it("makes no request for an empty page", async () => {
     const resolve = async () => ({ items: [] });
     expect((await resolveRefsInBatches([], resolve)).size).toBe(0);
+  });
+});
+
+describe("external refs", () => {
+  const context = { organizationSlug: "scaling", workspaceSlug: "anx" };
+
+  /** The shape the parallel core change answers an external ref with. */
+  const externalRow = (overrides = {}) => ({
+    ref: "https://github.com/o/r/pull/12",
+    kind: "external",
+    authority: "github",
+    native_id: "o/r#12",
+    title: "Ship the renderer",
+    url: "https://github.com/o/r/pull/12",
+    status: "open",
+    resolvable: true,
+    ...overrides,
+  });
+
+  it("reads the external row core sends", () => {
+    const resolved = indexResolvedRefs({ items: [externalRow()] });
+    const model = refChipModel(
+      "https://github.com/o/r/pull/12",
+      resolved,
+      context,
+    );
+    expect(model).toMatchObject({
+      title: "Ship the renderer",
+      status: "open",
+      statusLabel: "open",
+      isExternal: true,
+      authority: "github",
+      authorityLabel: "GitHub",
+      nativeId: "o/r#12",
+      resolvable: true,
+      href: "https://github.com/o/r/pull/12",
+    });
+  });
+
+  it("labels an external row with no recognisable kind by its authority", () => {
+    const resolved = indexResolvedRefs({
+      items: [
+        externalRow({ ref: "ext:o/r/42", url: "https://github.com/o/r/42" }),
+      ],
+    });
+    expect(refChipModel("ext:o/r/42", resolved, context)).toMatchObject({
+      kindLabel: "GitHub",
+      resolvable: true,
+      href: "https://github.com/o/r/42",
+    });
+  });
+
+  it("shows a merged pull request as a done-toned status", () => {
+    const resolved = indexResolvedRefs({
+      items: [externalRow({ status: "merged" })],
+    });
+    expect(
+      refChipModel("https://github.com/o/r/pull/12", resolved, context)
+        .statusTone,
+    ).toBe("ok");
+  });
+
+  it("never reads not-found for a valid GitHub ref the resolve missed", () => {
+    // This is the plan-graph bug: a batch that failed, or a core that does not
+    // resolve externals yet, recorded the ref as unresolvable. A URL the
+    // browser can classify is still a real destination.
+    const resolved = indexResolvedRefs({}, ["https://github.com/o/r/pull/12"]);
+    expect(resolved.get("https://github.com/o/r/pull/12").resolvable).toBe(
+      false,
+    );
+    const model = refChipModel(
+      "https://github.com/o/r/pull/12",
+      resolved,
+      context,
+    );
+    expect(model.resolvable).toBe(true);
+    expect(model.title).toBe("o/r#12");
+    expect(model.href).toBe("https://github.com/o/r/pull/12");
+  });
+
+  it("still reads not-found for an ANX ref that resolves to nothing", () => {
+    const resolved = indexResolvedRefs({}, ["card:gone"]);
+    expect(refChipModel("card:gone", resolved, context)).toMatchObject({
+      resolvable: false,
+      href: "",
+    });
+  });
+
+  it("refuses an external url that would execute", () => {
+    const resolved = indexResolvedRefs({
+      items: [externalRow({ ref: "ext:bad", url: "javascript:alert(1)" })],
+    });
+    expect(refChipModel("ext:bad", resolved, context).href).toBe("");
   });
 });

@@ -1387,7 +1387,17 @@
                 </span>
               {/if}
               <span class="shrink-0 text-fg-subtle">/</span>
-              <div class="flex min-h-0 min-w-0 flex-1 items-center gap-1.5">
+              <!--
+                `overflow-hidden`: the status pill cannot shrink, and the
+                breadcrumb nav sits on `min-w-0`, so once the row is tight
+                enough the pill lays out past the nav's box and paints over
+                Share. It used to take a phone to get there; with the sidebar
+                taking 232px it also happens at 1024. Clipping keeps the title
+                truncating first and keeps the pill off the actions.
+              -->
+              <div
+                class="flex min-h-0 min-w-0 flex-1 items-center gap-1.5 overflow-hidden"
+              >
                 <span
                   class="min-w-0 shrink truncate text-fg-muted"
                   aria-current="page"

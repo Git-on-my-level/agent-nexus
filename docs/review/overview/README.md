@@ -5,9 +5,9 @@ integration test independently verifies archive filtering and dashboard
 pin/fallback against SQLite.
 
 Historical before/after screenshots contained contributor-specific project and
-human names and have been removed. They remain in Git history. To capture the
-neutral fixture, run `cd web-ui && pnpm exec playwright test
-tests/e2e/overview.spec.js --project=default --workers=1`.
+human names and have been removed; review binaries do not ship in this repo at
+all now. They remain in Git history. To exercise the neutral fixture, run
+`cd web-ui && pnpm exec playwright test tests/e2e/overview.spec.js
+--project=default --workers=1`.
 
-Current captures covering initiative plan health, shape-specific tile graphics
-and the "Since you last looked" digest are in `docs/review/initiative/`.
+To capture the current Overview for a review, see `docs/review/sca-629/`.
