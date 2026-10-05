@@ -133,6 +133,52 @@ The coordinator reviews and executes live hosted migrations. Producing the
 manifest does not authorize its execution. See the design rationale in
 `docs/architecture/fleet-sync-initiatives.md`.
 
+## Retiring copies owned by another workspace
+
+`retire_elsewhere.py` is a separate, dry-run-first command. Recurring fleet-sync
+still never accesses another workspace. First ingest the source evidence into
+existing initiatives in each owning workspace using that workspace's normal
+writer. This command only **reads** destinations; it never folds or writes there.
+Each destination uses its own configured `base_url` and locally enrolled `agent`.
+No token is copied from the source workspace.
+
+Use a source config with a `destinations` object, whose keys are reviewed workspace
+labels and whose values contain `base_url`, `agent`, `mapping_doc` and optionally
+`anx_binary`. The source config also needs those fields. Supply a reviewed JSON
+array of candidates, each with `ref`, `destination` (a configured label), and
+`source: {authority, connection_id, native_id}`. No implicit discovery or archive
+of other cards occurs. Explicit candidates may supply ownership absent from old
+observations; a conflicting published local/elsewhere route still defers them.
+
+```sh
+python3 adapters/fleet-sync/retire_elsewhere.py --config retirement-config.json \
+  --candidates retirement-candidates.json --output retirement.json
+# Coordinator only, after reviewing the manifest and stopping legacy writers:
+python3 adapters/fleet-sync/retire_elsewhere.py --config retirement-config.json \
+  --apply retirement.json --approve-digest <reviewed-digest>
+```
+
+The manifest records source fences, published mappings, destination endpoints,
+initiative URLs, observed evidence revision/digest, and each deferred reason.
+Unavailable destination credentials, missing evidence, unproven source ownership,
+non-Nexus/inactive initiatives and unmatched destination routes remain deferred.
+Apply never promotes a deferred row, even if evidence has since appeared: generate
+and review a fresh manifest. Historic items outside the recurring reader window
+must be deliberately ingested locally in their owning workspace before retirement.
+
+Apply checks the full eligible batch before its first mutation and rechecks the
+full source identity in destination evidence immediately before each source
+archive. It preserves source bodies and annotations, adds a version-fenced
+tombstone anchored to the source mapping document (with `destination_url` and a
+Markdown link in its note), reads it back, and uses the source board archive fence. Exact tombstones
+make retries resumable. Changed mappings, endpoints or source fences fail closed.
+Destination reads and source writes cannot form an atomic transaction: concurrent
+removal of destination evidence after the last read is still possible. Quiesce
+initiative edits during coordinator apply. New unrelated destination evidence
+need not invalidate a reviewed manifest. No archive is authorized by generating
+one; review the digest separately. Restore with `anx cards restore <ref>` in the
+source workspace if needed.
+
 ## Report
 
 The dashboard is one `anx.visual-report` schema version 1 document titled "Fleet Dashboard" under the configured topic. It is validated with `node web-ui/scripts/validate-visual-report.mjs` before publish and again after readback. An invalid report is not published.
@@ -186,5 +232,8 @@ python3 -m unittest discover -s adapters/fleet-sync/tests -v
 For the isolated real-core/CLI migration smoke, build both binaries and run
 `python3 adapters/fleet-sync/tests/smoke_local.py --core <anx-core> --cli <anx>`.
 It uses a temporary workspace and cleans up its server.
+`python3 adapters/fleet-sync/tests/smoke_retire.py --core <anx-core> --cli <anx>`
+checks retirement against two isolated cores with separate credentials, including
+the source mapping relation and destination URL roundtrip, then removes both.
 
 Requires Python 3.11+. The report test shells `node` and skips when `node` is not installed.

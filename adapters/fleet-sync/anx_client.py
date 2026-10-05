@@ -92,6 +92,13 @@ class AnxClient:
             raise AnxError("invalid_request", "docs get did not return revision content")
         return content
 
+    def docs_ref(self, ref: str) -> str:
+        result = self._call(["docs", "get", ref], timeout=60)
+        canonical = (result.get("document") or {}).get("ref")
+        if not isinstance(canonical, str) or not canonical.startswith("document:"):
+            raise AnxError("invalid_response", "docs get did not return a canonical document ref")
+        return canonical
+
     def _call_body(self, args: list[str], body: dict, *, timeout: float) -> dict:
         import tempfile
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
