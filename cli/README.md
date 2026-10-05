@@ -44,3 +44,12 @@ those cards accessible.
 `anx workspace dashboard list` reads validated pin candidates on demand; Overview
 returns only the selected dashboard. Cards attached to archived project topics
 are excluded along with cards on archived boards.
+
+## Release updates
+
+`anx update status|now|policy auto|notify|off` manages installer-owned CLI releases.
+The default `auto` starts a short-lived daily worker on successful coordination
+writes; reads and dry runs remain exempt. `ANX_UPDATE_POLICY=off` disables automatic
+checks in CI. Existing installs need one rerun of `scripts/install-anx.sh` to obtain
+a digest-bound ownership receipt. See [self-update policy](docs/self-update.md) for
+rollback, skill sync, compatibility, and the agentctl ergonomics audit.

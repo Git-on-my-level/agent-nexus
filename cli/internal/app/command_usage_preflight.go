@@ -19,6 +19,14 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 		return "help", nil
 	}
 
+	if args[0] == "update" {
+		o, err := parseUpdateOptions(args[1:])
+		name := "update"
+		if len(args) > 1 && !strings.HasPrefix(args[1], "-") {
+			name += " " + o.verb
+		}
+		return name, err
+	}
 	if args[0] == "series" || args[0] == "adapters" {
 		p, err := parseSeriesCommand(args)
 		return p.group + " " + p.verb, err

@@ -1,13 +1,10 @@
 package app
 
 import (
-	"archive/tar"
-	"archive/zip"
-	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,11 +21,9 @@ import (
 )
 
 var (
+	updateReleaseAPIURL  = "https://api.github.com/repos/Git-on-my-level/agent-nexus/releases/latest"
 	updateReleaseBaseURL = "https://github.com/Git-on-my-level/agent-nexus/releases"
 	updateExecutablePath = os.Executable
-	updateMkdirTemp      = os.MkdirTemp
-	updateRemoveAll      = os.RemoveAll
-	updateStat           = os.Stat
 	updateWriteFile      = os.WriteFile
 	updateChmod          = os.Chmod
 	updateRename         = os.Rename
@@ -47,41 +42,24 @@ type updatePlan struct {
 }
 
 func (a *App) runUpdate(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
-	fs := newSilentFlagSet("update")
-	var (
-		checkFlag   trackedBool
-		versionFlag trackedString
-	)
-	fs.Var(&checkFlag, "check", "Report update availability without downloading or replacing the binary")
-	fs.Var(&versionFlag, "version", "Install a specific release tag (for example v1.2.3)")
-
-	if err := fs.Parse(args); err != nil {
-		return nil, errnorm.Usage("invalid_update_flags", err.Error())
-	}
-	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_update_args", "unexpected positional arguments for `anx update`")
-	}
-
-	plan, err := buildUpdatePlan(ctx, cfg, strings.TrimSpace(versionFlag.value))
+	o, err := parseUpdateOptions(args)
 	if err != nil {
 		return nil, err
 	}
-	if checkFlag.value || plan.AlreadyCurrent {
-		result := renderUpdatePlan(plan, false)
-		appendUpdateBridgeReminderText(&result.Text)
-		return result, nil
+	if o.verb == "status" {
+		return a.runUpdateStatus(cfg)
 	}
-
-	binaryBytes, mode, err := downloadUpdateBinary(ctx, cfg.Timeout, plan.TargetVersion, plan.ArchiveName)
-	if err != nil {
-		return nil, err
+	if o.verb == "policy" {
+		dir, err := a.updateDirectory(cfg)
+		if err != nil {
+			return nil, err
+		}
+		if err := writeUpdateJSON(filepath.Join(dir, "policy.json"), map[string]string{"policy": o.policy}); err != nil {
+			return nil, err
+		}
+		return a.runUpdateStatus(cfg)
 	}
-	if err := replaceExecutable(plan.InstallPath, binaryBytes, mode); err != nil {
-		return nil, err
-	}
-	result := renderUpdatePlan(plan, true)
-	appendUpdateBridgeReminderText(&result.Text)
-	return result, nil
+	return a.performManagedUpdate(ctx, cfg, o)
 }
 
 func appendUpdateBridgeReminderText(dest *string) {
@@ -164,8 +142,45 @@ func renderUpdatePlan(plan updatePlan, updated bool) *commandResult {
 }
 
 func resolveLatestReleaseTag(ctx context.Context, timeout time.Duration) (string, error) {
-	client := &http.Client{Timeout: timeout}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(updateReleaseBaseURL, "/")+"/latest", nil)
+	client, err := updateHTTPClient(timeout, "api", updateReleaseAPIURL)
+	if updateReleaseAPIURL != "" {
+		if err != nil {
+			return "", err
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, updateReleaseAPIURL, nil)
+		if err != nil {
+			return "", err
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return "", err
+		}
+		if resp.StatusCode == http.StatusOK {
+			var release struct {
+				Tag string `json:"tag_name"`
+			}
+			err = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&release)
+			_ = resp.Body.Close()
+			if err != nil {
+				return "", err
+			}
+			if err := validateReleaseTag(release.Tag); err != nil {
+				return "", err
+			}
+			return normalizeReleaseTag(release.Tag), nil
+		}
+		status := resp.StatusCode
+		_ = resp.Body.Close()
+		if status != http.StatusForbidden && status != http.StatusTooManyRequests {
+			return "", fmt.Errorf("release API returned status %d", status)
+		}
+	}
+	entry := strings.TrimRight(updateReleaseBaseURL, "/") + "/latest"
+	client, err = updateHTTPClient(timeout, "latest", entry)
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, entry, nil)
 	if err != nil {
 		return "", err
 	}
@@ -174,9 +189,18 @@ func resolveLatestReleaseTag(ctx context.Context, timeout time.Duration) (string
 		return "", err
 	}
 	defer resp.Body.Close()
-	tag := strings.TrimSpace(pathBase(resp.Request.URL.Path))
-	if tag == "" || strings.EqualFold(tag, "latest") {
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("latest release page returned status %d", resp.StatusCode)
+	}
+	// The final path must be a release tag on the same origin.
+	base, _ := http.NewRequest(http.MethodGet, entry, nil)
+	prefix := strings.TrimSuffix(base.URL.Path, "latest") + "tag/"
+	if !strings.HasPrefix(resp.Request.URL.Path, prefix) {
 		return "", fmt.Errorf("latest release redirect did not resolve a tag")
+	}
+	tag := pathBase(resp.Request.URL.Path)
+	if err := validateReleaseTag(tag); err != nil {
+		return "", err
 	}
 	return normalizeReleaseTag(tag), nil
 }
@@ -187,6 +211,9 @@ func updateArchiveName(version string) (string, error) {
 	version = normalizeReleaseTag(version)
 	if version == "" {
 		return "", errnorm.Local("version_required", "release version is required to resolve the update archive name")
+	}
+	if err := validateReleaseTag(version); err != nil {
+		return "", err
 	}
 	switch goos {
 	case "linux", "darwin", "windows":
@@ -206,24 +233,31 @@ func updateArchiveName(version string) (string, error) {
 }
 
 func downloadUpdateBinary(ctx context.Context, timeout time.Duration, version string, archiveName string) ([]byte, os.FileMode, error) {
-	client := &http.Client{Timeout: timeout}
 	baseURL := strings.TrimRight(updateReleaseBaseURL, "/") + "/download/" + normalizeReleaseTag(version)
 
-	archiveBytes, err := fetchBytes(ctx, client, baseURL+"/"+archiveName)
+	archiveBytes, err := fetchReleaseBytes(ctx, timeout, baseURL+"/"+archiveName)
 	if err != nil {
 		return nil, 0, errnorm.Wrap(errnorm.KindNetwork, "download_failed", "failed to download CLI release archive", err)
 	}
-	checksumBytes, err := fetchBytes(ctx, client, baseURL+"/checksums.txt")
+	checksumBytes, err := fetchReleaseBytes(ctx, timeout, baseURL+"/checksums.txt")
 	if err != nil {
 		return nil, 0, errnorm.Wrap(errnorm.KindNetwork, "download_failed", "failed to download CLI checksum manifest", err)
 	}
 	if err := verifyReleaseChecksum(archiveName, archiveBytes, checksumBytes); err != nil {
 		return nil, 0, err
 	}
-	return extractReleaseBinary(archiveName, archiveBytes)
+	binary, mode, err := extractReleaseBinaryContext(ctx, archiveName, archiveBytes)
+	if err != nil {
+		return nil, 0, errnorm.Wrap(errnorm.KindLocal, "archive_invalid", "release extraction failed", err)
+	}
+	return binary, mode, nil
 }
 
-func fetchBytes(ctx context.Context, client *http.Client, rawURL string) ([]byte, error) {
+func fetchReleaseBytes(ctx context.Context, timeout time.Duration, rawURL string) ([]byte, error) {
+	client, err := updateHTTPClient(timeout, "asset", rawURL)
+	if err != nil {
+		return nil, err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, err
@@ -233,7 +267,7 @@ func fetchBytes(ctx context.Context, client *http.Client, rawURL string) ([]byte
 		return nil, err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	body, err := readReleaseBytes(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -241,6 +275,18 @@ func fetchBytes(ctx context.Context, client *http.Client, rawURL string) ([]byte
 		return nil, fmt.Errorf("request failed with status %d", resp.StatusCode)
 	}
 	return body, nil
+}
+
+func readReleaseBytes(reader io.Reader) ([]byte, error) {
+	const limit = 128 << 20
+	b, err := io.ReadAll(io.LimitReader(reader, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > limit {
+		return nil, fmt.Errorf("release payload exceeds 128 MiB")
+	}
+	return b, nil
 }
 
 func verifyReleaseChecksum(archiveName string, archiveBytes []byte, checksumBytes []byte) error {
@@ -265,103 +311,6 @@ func verifyReleaseChecksum(archiveName string, archiveBytes []byte, checksumByte
 			errnorm.Local("checksum_mismatch", "downloaded CLI archive checksum did not match checksums.txt"),
 			map[string]any{"expected": expected, "actual": actual, "archive_name": archiveName},
 		)
-	}
-	return nil
-}
-
-func extractReleaseBinary(archiveName string, archiveBytes []byte) ([]byte, os.FileMode, error) {
-	if strings.HasSuffix(archiveName, ".zip") {
-		return extractZIPBinary(archiveBytes)
-	}
-	return extractTarGZBinary(archiveBytes)
-}
-
-func extractZIPBinary(archiveBytes []byte) ([]byte, os.FileMode, error) {
-	reader, err := zip.NewReader(bytes.NewReader(archiveBytes), int64(len(archiveBytes)))
-	if err != nil {
-		return nil, 0, errnorm.Wrap(errnorm.KindLocal, "archive_invalid", "failed to read CLI zip archive", err)
-	}
-	for _, file := range reader.File {
-		if pathBase(file.Name) != "anx.exe" {
-			continue
-		}
-		rc, err := file.Open()
-		if err != nil {
-			return nil, 0, errnorm.Wrap(errnorm.KindLocal, "archive_invalid", "failed to open CLI binary inside zip archive", err)
-		}
-		defer rc.Close()
-		body, err := io.ReadAll(rc)
-		if err != nil {
-			return nil, 0, errnorm.Wrap(errnorm.KindLocal, "archive_invalid", "failed to read CLI binary inside zip archive", err)
-		}
-		mode := file.Mode()
-		if mode == 0 {
-			mode = 0o755
-		}
-		return body, mode, nil
-	}
-	return nil, 0, errnorm.Local("archive_invalid", "CLI zip archive did not contain anx.exe")
-}
-
-func extractTarGZBinary(archiveBytes []byte) ([]byte, os.FileMode, error) {
-	gzReader, err := gzip.NewReader(bytes.NewReader(archiveBytes))
-	if err != nil {
-		return nil, 0, errnorm.Wrap(errnorm.KindLocal, "archive_invalid", "failed to open CLI tar.gz archive", err)
-	}
-	defer gzReader.Close()
-
-	tarReader := tar.NewReader(gzReader)
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, 0, errnorm.Wrap(errnorm.KindLocal, "archive_invalid", "failed to read CLI tar archive", err)
-		}
-		if header.Typeflag != tar.TypeReg {
-			continue
-		}
-		if pathBase(header.Name) != "anx" {
-			continue
-		}
-		body, err := io.ReadAll(tarReader)
-		if err != nil {
-			return nil, 0, errnorm.Wrap(errnorm.KindLocal, "archive_invalid", "failed to read CLI binary inside tar archive", err)
-		}
-		mode := os.FileMode(header.Mode)
-		if mode == 0 {
-			mode = 0o755
-		}
-		return body, mode, nil
-	}
-	return nil, 0, errnorm.Local("archive_invalid", "CLI tar.gz archive did not contain anx")
-}
-
-func replaceExecutable(installPath string, binaryBytes []byte, mode os.FileMode) error {
-	info, err := updateStat(installPath)
-	if err == nil && info.Mode() != 0 {
-		mode = info.Mode().Perm()
-	}
-	if mode == 0 {
-		mode = 0o755
-	}
-
-	tmpDir, err := updateMkdirTemp(filepath.Dir(installPath), ".anx-update-")
-	if err != nil {
-		return errnorm.Wrap(errnorm.KindLocal, "update_write_failed", "failed to allocate a temporary install directory", err)
-	}
-	defer func() { _ = updateRemoveAll(tmpDir) }()
-
-	tmpPath := filepath.Join(tmpDir, filepath.Base(installPath))
-	if err := updateWriteFile(tmpPath, binaryBytes, mode); err != nil {
-		return errnorm.Wrap(errnorm.KindLocal, "update_write_failed", "failed to write the updated CLI binary", err)
-	}
-	if err := updateChmod(tmpPath, mode); err != nil {
-		return errnorm.Wrap(errnorm.KindLocal, "update_write_failed", "failed to set executable permissions on the updated CLI binary", err)
-	}
-	if err := updateRename(tmpPath, installPath); err != nil {
-		return errnorm.Wrap(errnorm.KindLocal, "update_replace_failed", "failed to replace the current CLI binary in place", err)
 	}
 	return nil
 }
@@ -423,6 +372,20 @@ func normalizeReleaseTag(raw string) string {
 	return "v" + raw
 }
 
+func validateReleaseTag(tag string) error {
+	if len(tag) == 0 || len(tag) > 128 {
+		return fmt.Errorf("invalid release tag")
+	}
+	for _, ch := range tag {
+		if ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' || strings.ContainsRune(".+-", ch) {
+			continue
+		}
+		return fmt.Errorf("invalid release tag")
+	}
+	_, err := parseSemanticVersion(tag)
+	return err
+}
+
 func displayValue(raw string) string {
 	if strings.TrimSpace(raw) == "" {
 		return "(none)"
@@ -443,6 +406,7 @@ func updateUsageText() string {
 	return strings.TrimSpace(`Update the installed anx CLI binary in place.
 
 Usage:
+  anx update status|now|policy auto|notify|off
   anx update [--check] [--version <tag>]
 
 Options:
@@ -450,7 +414,15 @@ Options:
   --version <tag>         install a specific release tag instead of the recommended/latest version
 
 Behavior:
-  - resolves the latest release from GitHub when no explicit version is provided
+  - auto (default) checks on the first successful work write per UTC day in a detached two-minute worker
+  - notify checks without installing and emits one daily warning when a newer release is known
+  - off disables automatic checks; ANX_UPDATE_POLICY overrides the saved policy
+  - status is offline and separates the observed binary from its installer receipt
+  - updates only digest-matching ANX installer-managed releases; rerun scripts/install-anx.sh for old installs
+  - verifies the release checksum and executable version; rolls back on replacement verification failure
+  - runs the new binary's managed skills sync after replacement
+  - read-only commands, help, local maintenance and dry runs never trigger binary updates
+  - resolves the latest GitHub release, falling back to its public redirect when the API is rate-limited
   - downloads the matching release archive for the current OS/arch and replaces the current binary
   - reminds managed bridge users to rerun anx bridge install
 

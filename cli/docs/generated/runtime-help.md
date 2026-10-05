@@ -163,6 +163,9 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `secret get --reveal` (command): Reveal secret value
 - `secret exec` (command): Reveal multiple secrets by name
 - `secret update` (command): Update secret value
+- `update status` (local-helper): Inspect update policy, ownership, binary, installer receipt, and last failure offline.
+- `update now` (local-helper): Verify and atomically replace an ANX-managed release, then sync skills.
+- `update policy` (local-helper): Set automatic update policy: auto (default), notify, or off.
 - `series list` (local-helper): List workspace series definitions and owning adapters.
 - `series show` (local-helper): Show bounded observations, freshness, and provenance.
 - `series query` (local-helper): Query at most 200 buckets per label set.
@@ -468,6 +471,7 @@ ANX environment variables
 
 ANX_AS selects a derived agent. --as wins over ANX_AS. When neither is set, anx checks agentctl run context, then verified harness markers.
 ANX_BASE_URL selects the core workspace. ANX_CONFIG_DIR or --config-dir selects the absolute host config directory when HOME is unavailable, including agentctl command callbacks. ANX_TIMEOUT, ANX_JSON and ANX_NO_COLOR control request and output behavior.
+ANX_UPDATE_POLICY overrides the saved CLI release policy: auto (default), notify, or off. Read-only commands never trigger binary maintenance. Inspect anx update status or anx help update.
 ANX_ACCESS_TOKEN supplies an explicit bearer for controlled human or test contexts. It does not use the host assertion grant.
 
 Run anx config workspaces when unsure which workspace applies. Use anx config use <alias|url> to set a user-global default, or anx config map "~/work/project/**" <alias|url> for a directory rule. anx config unmap "~/work/project/**" removes a rule. Quote globs so the shell does not expand them.
@@ -5374,6 +5378,111 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx secret update ... ; anx --json secret update ... ; anx secret update ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `update status`
+
+Inspect update policy, ownership, binary, installer receipt, and last failure offline.
+
+```text
+Update the installed anx CLI binary in place.
+
+Usage:
+  anx update status|now|policy auto|notify|off
+  anx update [--check] [--version <tag>]
+
+Options:
+  --check                 report the selected target version without changing the binary
+  --version <tag>         install a specific release tag instead of the recommended/latest version
+
+Behavior:
+  - auto (default) checks on the first successful work write per UTC day in a detached two-minute worker
+  - notify checks without installing and emits one daily warning when a newer release is known
+  - off disables automatic checks; ANX_UPDATE_POLICY overrides the saved policy
+  - status is offline and separates the observed binary from its installer receipt
+  - updates only digest-matching ANX installer-managed releases; rerun scripts/install-anx.sh for old installs
+  - verifies the release checksum and executable version; rolls back on replacement verification failure
+  - runs the new binary's managed skills sync after replacement
+  - read-only commands, help, local maintenance and dry runs never trigger binary updates
+  - resolves the latest GitHub release, falling back to its public redirect when the API is rate-limited
+  - downloads the matching release archive for the current OS/arch and replaces the current binary
+  - reminds managed bridge users to rerun anx bridge install
+
+Examples:
+  anx update --check
+  anx update
+  anx update --version v1.2.3
+  anx update
+```
+
+## `update now`
+
+Verify and atomically replace an ANX-managed release, then sync skills.
+
+```text
+Update the installed anx CLI binary in place.
+
+Usage:
+  anx update status|now|policy auto|notify|off
+  anx update [--check] [--version <tag>]
+
+Options:
+  --check                 report the selected target version without changing the binary
+  --version <tag>         install a specific release tag instead of the recommended/latest version
+
+Behavior:
+  - auto (default) checks on the first successful work write per UTC day in a detached two-minute worker
+  - notify checks without installing and emits one daily warning when a newer release is known
+  - off disables automatic checks; ANX_UPDATE_POLICY overrides the saved policy
+  - status is offline and separates the observed binary from its installer receipt
+  - updates only digest-matching ANX installer-managed releases; rerun scripts/install-anx.sh for old installs
+  - verifies the release checksum and executable version; rolls back on replacement verification failure
+  - runs the new binary's managed skills sync after replacement
+  - read-only commands, help, local maintenance and dry runs never trigger binary updates
+  - resolves the latest GitHub release, falling back to its public redirect when the API is rate-limited
+  - downloads the matching release archive for the current OS/arch and replaces the current binary
+  - reminds managed bridge users to rerun anx bridge install
+
+Examples:
+  anx update --check
+  anx update
+  anx update --version v1.2.3
+  anx update
+```
+
+## `update policy`
+
+Set automatic update policy: auto (default), notify, or off.
+
+```text
+Update the installed anx CLI binary in place.
+
+Usage:
+  anx update status|now|policy auto|notify|off
+  anx update [--check] [--version <tag>]
+
+Options:
+  --check                 report the selected target version without changing the binary
+  --version <tag>         install a specific release tag instead of the recommended/latest version
+
+Behavior:
+  - auto (default) checks on the first successful work write per UTC day in a detached two-minute worker
+  - notify checks without installing and emits one daily warning when a newer release is known
+  - off disables automatic checks; ANX_UPDATE_POLICY overrides the saved policy
+  - status is offline and separates the observed binary from its installer receipt
+  - updates only digest-matching ANX installer-managed releases; rerun scripts/install-anx.sh for old installs
+  - verifies the release checksum and executable version; rolls back on replacement verification failure
+  - runs the new binary's managed skills sync after replacement
+  - read-only commands, help, local maintenance and dry runs never trigger binary updates
+  - resolves the latest GitHub release, falling back to its public redirect when the API is rate-limited
+  - downloads the matching release archive for the current OS/arch and replaces the current binary
+  - reminds managed bridge users to rerun anx bridge install
+
+Examples:
+  anx update --check
+  anx update
+  anx update --version v1.2.3
+  anx update
 ```
 
 ## `series list`

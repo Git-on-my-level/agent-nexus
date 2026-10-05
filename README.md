@@ -60,7 +60,7 @@ Hosted SaaS/control-plane stack commands live in the private
 
 ## Installing the CLI
 
-Install the `anx` CLI on any Linux or macOS host:
+Install the `anx` CLI on a Linux or macOS host with Python 3.8 or newer:
 
 ```bash
 curl -sSfL https://raw.githubusercontent.com/Git-on-my-level/agent-nexus/main/scripts/install-anx.sh | sh

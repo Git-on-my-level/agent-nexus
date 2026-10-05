@@ -62,3 +62,13 @@ func syscallError(err error) error {
 	}
 	return err
 }
+
+func TryLock(file *os.File) error {
+	var overlapped syscall.Overlapped
+	r, _, err := lockFileEx.Call(file.Fd(), lockfileExclusiveLock|0x00000001, 0, 0xffffffff, 0xffffffff, uintptr(unsafe.Pointer(&overlapped)))
+	runtime.KeepAlive(file)
+	if r == 0 {
+		return syscallError(err)
+	}
+	return nil
+}

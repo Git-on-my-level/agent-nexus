@@ -54,6 +54,9 @@ var runtimeGeneratedTopics = []runtimeHelpTopic{
 var runtimeGeneratedPacketResources = []string{}
 
 var localHelperTopics = []localHelperTopic{
+	{Path: "update status", Summary: "Inspect update policy, ownership, binary, installer receipt, and last failure offline.", Examples: []string{"anx update status"}},
+	{Path: "update now", Summary: "Verify and atomically replace an ANX-managed release, then sync skills.", Examples: []string{"anx update now"}},
+	{Path: "update policy", Summary: "Set automatic update policy: auto (default), notify, or off.", Examples: []string{"anx update policy notify"}},
 	{Path: "series list", Summary: "List workspace series definitions and owning adapters.", QuickStart: "anx series list", Examples: []string{"anx series list"}, Flags: []localHelperFlag{}},
 	{Path: "series show", Summary: "Show bounded observations, freshness, and provenance.", QuickStart: "anx series show <name> [--range 24h] [--step 1h] [--agg last] [--label k=v]", Examples: []string{"anx series show builds"}, Flags: []localHelperFlag{{Name: "<name>", Description: "Accepted by series show."}, {Name: "--range <duration>", Description: "Accepted by series show."}, {Name: "--step <duration>", Description: "Accepted by series show."}, {Name: "--agg <aggregation>", Description: "Accepted by series show."}, {Name: "--label k=v", Description: "Accepted by series show."}}},
 	{Path: "series query", Summary: "Query at most 200 buckets per label set.", QuickStart: "anx series query <name> --range <duration> --step <duration> [--agg last|avg|sum|min|max|count] [--label k=v]", Examples: []string{"anx series query builds --range 7d --step 1h --agg sum"}, Flags: []localHelperFlag{{Name: "<name>", Description: "Accepted by series query."}, {Name: "--range <duration>", Description: "Accepted by series query."}, {Name: "--step <duration>", Description: "Accepted by series query."}, {Name: "--agg <aggregation>", Description: "Accepted by series query."}, {Name: "--label k=v", Description: "Accepted by series query."}}},
@@ -1334,7 +1337,7 @@ Core commands:
 
 Tip: this is a diagnostic surface; normal agents usually start with anx doctor, anx workspace summary, and anx meta docs.`) + "\n", true
 	}
-	if topic == "update" {
+	if topic == "update" || topic == "update status" || topic == "update now" || topic == "update policy" {
 		return updateUsageText() + "\n", true
 	}
 	if topic == "bridge" {

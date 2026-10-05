@@ -555,6 +555,18 @@ func (a *App) runHostDoctor(ctx context.Context, cfg config.Resolved) (*commandR
 			}
 		}
 	}
+	if status, statusErr := a.runUpdateStatus(cfg); statusErr == nil {
+		data := asMap(status.Data)
+		state, _ := data["state"].(updateState)
+		checks = append(checks, doctorCheck{Name: "cli_update", OK: state.FailureStage == "", Status: func() string {
+			if state.FailureStage != "" {
+				return "warn"
+			}
+			return "pass"
+		}(), Message: fmt.Sprintf("policy=%s managed=%t skip_reason=%s last_failure_stage=%s rollback=%s", anyString(data["policy"]), asBool(data["managed"]), anyString(data["skip_reason"]), state.FailureStage, state.Rollback)})
+	} else {
+		checks = append(checks, doctorCheck{Name: "cli_update", Status: "warn", Message: statusErr.Error()})
+	}
 	client, clientErr := httpclient.New(cfg)
 	if clientErr == nil {
 		resp, callErr := client.RawCall(ctx, httpclient.RawRequest{Method: "GET", Path: "/readyz"})

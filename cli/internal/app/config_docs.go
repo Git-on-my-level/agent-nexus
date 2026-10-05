@@ -15,6 +15,7 @@ func cliEnvironmentVariables() []cliEnvironmentVariable {
 		{Name: "ANX_BASE_URL", Overrides: "core API base URL", Summary: "Select the enrolled workspace core.", Example: "ANX_BASE_URL=https://anx.example.com"},
 		{Name: "ANX_CONFIG_DIR", Overrides: "local host config root", Summary: "Absolute directory containing workspace preferences, enrolled hosts and callback logs.", Example: "ANX_CONFIG_DIR=/Users/me/.config/anx"},
 		{Name: "ANX_TIMEOUT", Overrides: "request timeout", Summary: "Set request timeout as a Go duration.", Example: "ANX_TIMEOUT=30s"},
+		{Name: "ANX_UPDATE_POLICY", Overrides: "automatic CLI release policy", Summary: "Override saved update policy with auto, notify, or off.", Example: "ANX_UPDATE_POLICY=off"},
 		{Name: "ANX_JSON", Overrides: "JSON output mode", Summary: "Emit JSON envelopes.", Example: "ANX_JSON=true"},
 		{Name: "ANX_ACCESS_TOKEN", Overrides: "explicit bearer", Summary: "Use a caller supplied bearer in a human or test context.", Example: "ANX_ACCESS_TOKEN=<token>"},
 	}
@@ -25,6 +26,7 @@ func envDocText() string {
 
 ANX_AS selects a derived agent. --as wins over ANX_AS. When neither is set, anx checks agentctl run context, then verified harness markers.
 ANX_BASE_URL selects the core workspace. ANX_CONFIG_DIR or --config-dir selects the absolute host config directory when HOME is unavailable, including agentctl command callbacks. ANX_TIMEOUT, ANX_JSON and ANX_NO_COLOR control request and output behavior.
+ANX_UPDATE_POLICY overrides the saved CLI release policy: auto (default), notify, or off. Read-only commands never trigger binary maintenance. Inspect anx update status or anx help update.
 ANX_ACCESS_TOKEN supplies an explicit bearer for controlled human or test contexts. It does not use the host assertion grant.
 
 Run anx config workspaces when unsure which workspace applies. Use anx config use <alias|url> to set a user-global default, or anx config map "~/work/project/**" <alias|url> for a directory rule. anx config unmap "~/work/project/**" removes a rule. Quote globs so the shell does not expand them.

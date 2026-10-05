@@ -20,3 +20,9 @@ func Lock(file *os.File) error {
 func Unlock(file *os.File) error {
 	return syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
 }
+
+// TryLock uses the same kernel lock as Lock, without waiting. Lock files must
+// remain at a stable inode: never unlink one to recover a dead owner.
+func TryLock(file *os.File) error {
+	return syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+}

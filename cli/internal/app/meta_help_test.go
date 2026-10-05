@@ -13,6 +13,45 @@ import (
 	"agent-nexus-cli/internal/registry"
 )
 
+func TestRunJSONHelpCatalogUsesStableTopicKeys(t *testing.T) {
+	t.Parallel()
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cli.ReadFile = func(path string) ([]byte, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+	if code := cli.Run([]string{"--json", "help"}); code != 0 {
+		t.Fatalf("help exit=%d stderr=%s", code, stderr.String())
+	}
+	var envelope struct {
+		OK     bool `json:"ok"`
+		Result struct {
+			Topics []map[string]json.RawMessage `json:"topics"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if !envelope.OK || len(envelope.Result.Topics) == 0 {
+		t.Fatalf("expected successful help catalog: %s", stdout.String())
+	}
+	for _, topic := range envelope.Result.Topics {
+		if len(topic) != 4 {
+			t.Fatalf("unexpected topic keys: %v", topic)
+		}
+		for _, key := range []string{"path", "kind", "summary", "side_effect_class"} {
+			var value string
+			if err := json.Unmarshal(topic[key], &value); err != nil || value == "" {
+				t.Fatalf("expected nonempty string for %q: %v", key, topic)
+			}
+		}
+	}
+}
+
 func TestRunMetaCommandsJSON(t *testing.T) {
 	t.Parallel()
 
