@@ -901,6 +901,9 @@ wait
 }
 
 func TestHandleClaimedTurnKillsGrandchildOnShutdown(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real process lifecycle integration; run without -short")
+	}
 	dir := t.TempDir()
 	pidFile := dir + "/grandchild.pid"
 	script := "/bin/sleep 120 & echo $! > '" + pidFile + "'; wait"
@@ -1373,6 +1376,9 @@ func TestHandleClaimedTurnDirectRunnerMapsStartExitAndDeadline(t *testing.T) {
 }
 
 func TestHandleClaimedTurnDirectRunnerCompletesWhenGrandchildHoldsStdout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real process lifecycle integration; run without -short")
+	}
 	prevDelay := harnessWaitDelay
 	harnessWaitDelay = 400 * time.Millisecond
 	t.Cleanup(func() { harnessWaitDelay = prevDelay })
@@ -1396,6 +1402,9 @@ func TestHandleClaimedTurnDirectRunnerCompletesWhenGrandchildHoldsStdout(t *test
 }
 
 func TestHandleClaimedTurnDirectRunnerNeverExitsMapsDeadline(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real process lifecycle integration; run without -short")
+	}
 	harness, posts := pmTurnHarness(t)
 	harness.cfg.Timeout = 20 * time.Second
 	turn := claimedTurn()
@@ -2936,16 +2945,21 @@ func TestHandleClaimedTurnFailRefusedAfterUndeliverableForgetsTurn(t *testing.T)
 }
 
 func TestHandleClaimedTurnHeartbeat409CancelsHarness(t *testing.T) {
+	var mu sync.Mutex
 	heartbeats := 0
 	gets := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/heartbeat"):
+			mu.Lock()
 			heartbeats++
+			mu.Unlock()
 			w.WriteHeader(http.StatusConflict)
 			io.WriteString(w, `{"error":{"code":"lease_mismatch","message":"lease token does not match"}}`)
 		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/pm/turns/"):
+			mu.Lock()
 			gets++
+			mu.Unlock()
 			io.WriteString(w, `{"id":"turn-1","status":"delivered","response":"done"}`)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
 			t.Errorf("complete after lease lost: %s", r.URL.Path)
@@ -2956,7 +2970,7 @@ func TestHandleClaimedTurnHeartbeat409CancelsHarness(t *testing.T) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	stderr := &bytes.Buffer{}
+	stderr := &lockedBuffer{}
 	app := New()
 	app.Stderr = stderr
 	app.Stdout = io.Discard
@@ -2964,13 +2978,13 @@ func TestHandleClaimedTurnHeartbeat409CancelsHarness(t *testing.T) {
 	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
 	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
 	turn := claimedTurn()
-	turn["lease_expires_at"] = time.Now().Add(40 * time.Millisecond).UTC().Format(time.RFC3339Nano)
+	turn["lease_expires_at"] = time.Now().Add(time.Second).UTC().Format(time.RFC3339Nano)
 	restore := stubAgentctlStreams(t, func(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, []byte, error) {
 		select {
 		case <-ctx.Done():
 			return nil, nil, ctx.Err()
-		case <-time.After(2 * time.Second):
-			return []byte("too late"), nil, nil
+		case <-time.After(5 * time.Second):
+			return nil, nil, fmt.Errorf("runner was not cancelled after lease loss")
 		}
 	})
 	defer restore()
@@ -2978,10 +2992,13 @@ func TestHandleClaimedTurnHeartbeat409CancelsHarness(t *testing.T) {
 	if !settled {
 		t.Fatal("expected settled after lease loss")
 	}
-	if heartbeats < 1 {
+	mu.Lock()
+	gotHeartbeats, gotGets := heartbeats, gets
+	mu.Unlock()
+	if gotHeartbeats < 1 {
 		t.Fatal("expected a heartbeat")
 	}
-	if gets < 1 {
+	if gotGets < 1 {
 		t.Fatal("expected lease-loss recovery get")
 	}
 	if !strings.Contains(stderr.String(), "lease lost") {
@@ -3012,7 +3029,7 @@ func TestHandleClaimedTurnHeartbeat404Disables(t *testing.T) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	stderr := &bytes.Buffer{}
+	stderr := &lockedBuffer{}
 	app := New()
 	app.Stderr = stderr
 	app.Stdout = io.Discard
@@ -3020,18 +3037,30 @@ func TestHandleClaimedTurnHeartbeat404Disables(t *testing.T) {
 	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
 	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
 	restore := stubAgentctlStreams(t, func(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, []byte, error) {
-		time.Sleep(80 * time.Millisecond)
+		// Keep the runner active until the 404 response has been processed.
+		// A fixed sleep can finish before the heartbeat is scheduled on a busy host.
+		waitCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		ticker := time.NewTicker(time.Millisecond)
+		defer ticker.Stop()
+		for !app.turnMem().heartbeatOff() || !strings.Contains(stderr.String(), "disabling heartbeats") {
+			select {
+			case <-waitCtx.Done():
+				return nil, nil, waitCtx.Err()
+			case <-ticker.C:
+			}
+		}
 		return []byte("Approve the restock."), nil, nil
 	})
 	defer restore()
 	first := claimedTurn()
-	first["lease_expires_at"] = time.Now().Add(40 * time.Millisecond).UTC().Format(time.RFC3339Nano)
+	first["lease_expires_at"] = time.Now().Add(time.Second).UTC().Format(time.RFC3339Nano)
 	if !app.handleClaimedTurn(context.Background(), nil, cfg, t.TempDir(), "", []string{"/bin/echo", "{prompt}"}, nil, first, nil) {
 		t.Fatal("first turn")
 	}
 	second := claimedTurn()
 	second["id"] = "turn-2"
-	second["lease_expires_at"] = time.Now().Add(40 * time.Millisecond).UTC().Format(time.RFC3339Nano)
+	second["lease_expires_at"] = time.Now().Add(time.Second).UTC().Format(time.RFC3339Nano)
 	if !app.handleClaimedTurn(context.Background(), nil, cfg, t.TempDir(), "", []string{"/bin/echo", "{prompt}"}, nil, second, nil) {
 		t.Fatal("second turn")
 	}
@@ -3052,6 +3081,7 @@ func TestHandleClaimedTurnHeartbeat404Disables(t *testing.T) {
 func TestHandleClaimedTurnHeartbeatRenewsWhileRunning(t *testing.T) {
 	var mu sync.Mutex
 	heartbeats := 0
+	heartbeatSeen := make(chan struct{}, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/heartbeat"):
@@ -3059,6 +3089,11 @@ func TestHandleClaimedTurnHeartbeatRenewsWhileRunning(t *testing.T) {
 			heartbeats++
 			mu.Unlock()
 			fmt.Fprintf(w, `{"id":"turn-1","lease_expires_at":%q}`, time.Now().Add(time.Minute).UTC().Format(time.RFC3339Nano))
+			w.(http.Flusher).Flush()
+			select {
+			case heartbeatSeen <- struct{}{}:
+			default:
+			}
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
 			io.WriteString(w, `{"id":"turn-1","status":"delivered"}`)
 		default:
@@ -3074,12 +3109,19 @@ func TestHandleClaimedTurnHeartbeatRenewsWhileRunning(t *testing.T) {
 	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
 	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
 	restore := stubAgentctlStreams(t, func(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, []byte, error) {
-		time.Sleep(80 * time.Millisecond)
-		return []byte("Approve the restock."), nil, nil
+		// Wait for the heartbeat response while the runner is still active.
+		waitCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		select {
+		case <-heartbeatSeen:
+			return []byte("Approve the restock."), nil, nil
+		case <-waitCtx.Done():
+			return nil, nil, waitCtx.Err()
+		}
 	})
 	defer restore()
 	turn := claimedTurn()
-	turn["lease_expires_at"] = time.Now().Add(40 * time.Millisecond).UTC().Format(time.RFC3339Nano)
+	turn["lease_expires_at"] = time.Now().Add(time.Second).UTC().Format(time.RFC3339Nano)
 	if !app.handleClaimedTurn(context.Background(), nil, cfg, t.TempDir(), "", []string{"/bin/echo", "{prompt}"}, nil, turn, nil) {
 		t.Fatal("expected settled")
 	}

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"crypto/sha1"
 	"encoding/json"
 	"errors"
@@ -256,12 +255,14 @@ func handleInboxStream(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	defer ticker.Stop()
 
 	for {
-		items, err := opts.primitiveStore.ListDerivedInboxItems(r.Context(), primitives.DerivedInboxListFilter{})
+		// Reuse the list's permission and subject-visibility filters on every
+		// poll, before constructing payload digests or SSE records.
+		items, err := loadOpenInboxItems(r, opts)
 		if err != nil {
 			writeSSEErrorEvent(controller, w, flusher, "internal_error", "failed to load inbox projections for stream")
 			return
 		}
-		allRecords := buildInboxStreamRecords(r.Context(), opts, items)
+		allRecords := buildInboxStreamRecords(items)
 		records := allRecords
 		if firstPoll {
 			records = inboxRecordsAfterID(records, lastEventID)
@@ -319,6 +320,9 @@ func handleAgentNotificationReceiptsStream(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	threadID = resolvedThread.ID
+	if !requireAccessibleThreadFilter(w, r, opts, threadID, "thread") {
+		return
+	}
 
 	lastEventID := resolveLastEventID(r)
 	controller, flusher, ok := prepareSSE(w)
@@ -333,6 +337,11 @@ func handleAgentNotificationReceiptsStream(w http.ResponseWriter, r *http.Reques
 	defer ticker.Stop()
 
 	for {
+		// A long-lived connection must stop exposing receipts if access changes.
+		if !threadAccessible(r, opts, threadID) {
+			writeSSEErrorEvent(controller, w, flusher, "not_found", "thread not found")
+			return
+		}
 		wakeups, err := opts.primitiveStore.ListAgentWakeups(r.Context(), primitives.AgentWakeupListFilter{
 			ThreadID: threadID,
 			Order:    "asc",
@@ -390,10 +399,9 @@ type inboxStreamRecord struct {
 	data    map[string]any
 }
 
-func buildInboxStreamRecords(ctx context.Context, opts handlerOptions, items []primitives.DerivedInboxItem) []inboxStreamRecord {
+func buildInboxStreamRecords(items []map[string]any) []inboxStreamRecord {
 	records := make([]inboxStreamRecord, 0, len(items))
-	for _, item := range items {
-		payload := enrichHumanAttentionNotificationStatus(ctx, opts, payloadFromDerivedInboxItem(item))
+	for _, payload := range items {
 		itemID := strings.TrimSpace(anyString(payload["id"]))
 		if itemID == "" {
 			continue

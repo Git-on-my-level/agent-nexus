@@ -1,7 +1,7 @@
 [
   {
     "name": "four backticks ignore shorter nested fence",
-    "markdown": "Ready\n````markdown\n```\n- [x] Example\nNeeds David: example\n````\n- [ ] Ship",
+    "markdown": "Ready\n````markdown\n```\n- [x] Example\nNeeds Alex: example\n````\n- [ ] Ship",
     "summary": "Ready",
     "progress": {
       "done": 0,
@@ -21,14 +21,14 @@
   },
   {
     "name": "closing fences cannot have info strings",
-    "markdown": "```\n```text\n- [x] Example\n```\nNeeds David: approve",
+    "markdown": "```\n```text\n- [x] Example\n```\nNeeds Alex: approve",
     "summary": "",
     "progress": {
       "done": 0,
       "total": 0
     },
     "needs": [
-      "Needs David: approve"
+      "Needs Alex: approve"
     ]
   },
   {
@@ -55,7 +55,7 @@
   },
   {
     "name": "fenced example inside padded list item",
-    "markdown": "-   Container\n    ```markdown\n    - [x] Example\n    Needs David: example\n    ```\n- [ ] Real task",
+    "markdown": "-   Container\n    ```markdown\n    - [x] Example\n    Needs Alex: example\n    ```\n- [ ] Real task",
     "summary": "-   Container",
     "progress": {
       "done": 0,
@@ -65,7 +65,7 @@
   },
   {
     "name": "fenced example inside nested list container",
-    "markdown": "- Parent\n  -   Nested\n      ```markdown\n      - [x] Example\n      Needs David: example\n      ```\n  - [ ] Real nested task",
+    "markdown": "- Parent\n  -   Nested\n      ```markdown\n      - [x] Example\n      Needs Alex: example\n      ```\n  - [ ] Real nested task",
     "summary": "- Parent",
     "progress": {
       "done": 0,
@@ -95,7 +95,7 @@
   },
   {
     "name": "tab indented fenced example inside a list",
-    "markdown": "- Parent\n\t```markdown\n\t- [x] Example\n\tNeeds David: example\n\t```\n- [ ] Real task",
+    "markdown": "- Parent\n\t```markdown\n\t- [x] Example\n\tNeeds Alex: example\n\t```\n- [ ] Real task",
     "summary": "- Parent",
     "progress": {
       "done": 0,
@@ -135,7 +135,7 @@
   },
   {
     "name": "four-space indented task and Needs example is code",
-    "markdown": "    - [x] Example\n    Needs David: example\n- [ ] Real task",
+    "markdown": "    - [x] Example\n    Needs Alex: example\n- [ ] Real task",
     "summary": "",
     "progress": {
       "done": 0,

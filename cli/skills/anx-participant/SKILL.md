@@ -5,7 +5,7 @@ description: Keep substantive Agent Nexus work visible with explicit task refs, 
 
 # ANX participant
 
-Skill contract: anx.participant.v12. Installation does not prove that a session loaded this version.
+Skill contract: anx.participant.v13. Installation does not prove that a session loaded this version.
 
 Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence.
 
@@ -35,7 +35,7 @@ Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence
 - Keep one plan per initiative card. Add steps rather than writing progress prose, and link steps to real `card:`, `doc:` / `document:`, `topic:` refs or source issue/PR URLs. Never pick a view: the graph determines chain, DAG or lanes. Keep about 15 or fewer open cards and very few open asks.
 - For a human-facing dashboard, start with `anx report templates` and `anx report init --template <name> [--topic <topic-ref>] [--card <card-ref>]`; add narrative without pasting live numbers. Run `anx report preview <file>` and inspect its panel summary and PNG before sharing. Publish with `anx report publish <file> --topic <topic-ref> [--title <title>] [--doc <doc-ref>]`. It validates the report, writes a text document, and verifies the saved revision.
 - Ask only for a human decision (direction, money, risk or an irreversible choice). Recommend one answer, offer at most 2–3 alternatives, and batch related questions. Do not also block the card or set `next_actor` to the human for the same ask. Keep `next_actor` on the agent and advance after the answer using its response event as evidence, for example `anx work done <card> --evidence event:<response_event_id>`.
-- Lead with the outcome and what needs the human, then details. Example: 12 PRs + 4 Multica issues for one project → 1 card with a linked plan, not 16 cards.
+- Lead with the outcome and what needs the human, then details. Example: 12 PRs + 4 tracker issues for one project → 1 card with a linked plan, not 16 cards.
 
 ## Privacy and handoff
 

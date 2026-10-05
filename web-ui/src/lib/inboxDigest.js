@@ -1,3 +1,5 @@
+import { markdownExcerpt } from "$lib/markdown.js";
+
 /**
  * Operator-language digests for Watching update rows.
  *
@@ -27,6 +29,14 @@ function text(value) {
   return String(value ?? "").trim();
 }
 
+/**
+ * A message body as one line of prose. Comments are authored markdown, so the
+ * raw source leaks syntax into a digest row (`**Blocked:** waiting…`).
+ */
+function prose(value) {
+  return markdownExcerpt(text(value), { limit: 240 });
+}
+
 function refsOf(event) {
   return Array.isArray(event?.refs) ? event.refs.map(text) : [];
 }
@@ -44,7 +54,7 @@ function afterColon(summary) {
 
 /**
  * First name of a person-shaped label ("Leo Park" → "Leo"). Anything that
- * does not look like a person's name (a handle, "codex on m5-mbp") is kept
+ * does not look like a person's name (a handle, "codex on workstation-a") is kept
  * whole, because a truncated handle identifies nobody.
  */
 export function shortActorName(label) {
@@ -145,7 +155,7 @@ export function describeUpdateEvent(event, { titleFor = () => "" } = {}) {
       plural: "left {n} comments",
       objectRef: "",
       objectTitle: "",
-      excerpt: text(payload.text),
+      excerpt: prose(payload.text),
     };
   }
   if (type.startsWith("document_")) {

@@ -1673,6 +1673,51 @@
     font-size: 0.9rem;
   }
 
+  /*
+   * `<details>/<summary>` is authored HTML the renderer keeps, because it is
+   * how a long aside stays folded away. Style it as a disclosure rather than
+   * leaving it as the browser default, which does not match anything else.
+   */
+  .markdown-rendered details {
+    margin: 0.6rem 0;
+    padding: 0.25rem 0.625rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--bg-soft);
+  }
+
+  .markdown-rendered summary {
+    cursor: pointer;
+    padding: 0.25rem 0;
+    color: var(--fg-muted);
+    font-size: 0.8125rem;
+    font-weight: 500;
+  }
+
+  .markdown-rendered summary:hover {
+    color: var(--fg);
+  }
+
+  .markdown-rendered details[open] > summary {
+    margin-bottom: 0.25rem;
+    border-bottom: 1px solid var(--line-subtle);
+  }
+
+  /*
+   * Ref-chip placeholder. `MarkdownRenderer` mounts the real chip into it, so
+   * this is what the server-rendered and no-JS output looks like: the raw ref,
+   * marked as a ref rather than styled as prose.
+   */
+  .markdown-rendered .md-ref {
+    color: var(--accent-text);
+    overflow-wrap: anywhere;
+  }
+
+  /* Once the chip is mounted the placeholder is just a wrapper. */
+  .markdown-rendered .md-ref--mounted {
+    color: inherit;
+  }
+
   .ui-panel {
     border-radius: var(--radius-md);
     border: 1px solid var(--line);

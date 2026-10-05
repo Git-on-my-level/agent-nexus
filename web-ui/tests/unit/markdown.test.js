@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import {
   countMarkdownTaskProgress,
   extractDocumentOutline,
+  markdownExcerpt,
+  markdownPlainText,
   renderMarkdown,
 } from "../../src/lib/markdown.js";
 
@@ -280,5 +282,177 @@ describe("extractDocumentOutline", () => {
     for (const heading of outline) {
       expect(html).toContain(`id="${heading.id}"`);
     }
+  });
+});
+
+describe("renderMarkdown GFM and HTML handling", () => {
+  it("renders task lists as checkboxes", () => {
+    const html = renderMarkdown("- [ ] open\n- [x] done\n");
+    expect(html).toContain('type="checkbox"');
+    expect(html).toContain("checked");
+    expect(html).toContain("open");
+    expect(html).toContain("done");
+  });
+
+  it("renders tables", () => {
+    const html = renderMarkdown("| a | b |\n|---|---|\n| 1 | 2 |\n");
+    expect(html).toContain("<table>");
+    expect(html).toContain("<th>a</th>");
+    expect(html).toContain("<td>1</td>");
+  });
+
+  it("renders fenced code blocks without chipping refs inside them", () => {
+    const html = renderMarkdown("```\ncard:example\n```\n");
+    expect(html).toContain("<pre>");
+    expect(html).toContain("card:example");
+    expect(html).not.toContain("data-md-ref");
+  });
+
+  it("autolinks a bare URL", () => {
+    const html = renderMarkdown("see https://example.test/x now");
+    expect(html).toContain('href="https://example.test/x"');
+  });
+
+  it("renders a details/summary disclosure", () => {
+    const html = renderMarkdown(
+      "<details><summary>Why</summary>\n\nBecause.\n\n</details>\n",
+    );
+    expect(html).toContain("<details>");
+    expect(html).toContain("<summary>Why</summary>");
+    expect(html).toContain("Because.");
+  });
+
+  it("hides HTML comments such as the fleet-sync evidence marker", () => {
+    const html = renderMarkdown(
+      "<!-- fleet-sync:evidence:v1 -->\n\nVisible body.\n",
+    );
+    expect(html).not.toContain("fleet-sync");
+    expect(html).not.toContain("<!--");
+    expect(html).toContain("Visible body.");
+  });
+
+  it("hides an inline HTML comment without eating the prose around it", () => {
+    const html = renderMarkdown("before <!-- note --> after");
+    expect(html).not.toContain("note");
+    expect(html).toContain("before");
+    expect(html).toContain("after");
+  });
+});
+
+describe("renderMarkdown ref chips", () => {
+  it("emits a chip placeholder for an ANX ref in prose", () => {
+    const html = renderMarkdown("Blocked by card:release-b until Friday.");
+    expect(html).toContain('data-md-ref="card:release-b"');
+    expect(html).toContain("Blocked by ");
+    expect(html).toContain(" until Friday.");
+  });
+
+  it("emits a chip placeholder for an autolinked GitHub pull request", () => {
+    const html = renderMarkdown("fixed in https://github.com/o/r/pull/12");
+    expect(html).toContain('data-md-ref="https://github.com/o/r/pull/12"');
+    // The chip is the destination, so no anchor is emitted for it.
+    expect(html).not.toContain('<a href="https://github.com/o/r/pull/12"');
+    // The placeholder text is the readable label, not the raw URL.
+    expect(html).toContain("o/r#12");
+  });
+
+  it("leaves a labelled link alone rather than nesting a chip inside it", () => {
+    const html = renderMarkdown("[the fix](https://github.com/o/r/pull/12)");
+    expect(html).toContain('href="https://github.com/o/r/pull/12"');
+    expect(html).not.toContain("data-md-ref");
+  });
+
+  it("does not chip a ref written inside a link label", () => {
+    const html = renderMarkdown("[card:release-b](https://example.test)");
+    expect(html).not.toContain("data-md-ref");
+    expect(html).toContain("card:release-b");
+  });
+
+  it("does not chip a ref inside a code span", () => {
+    const html = renderMarkdown("write `card:release-b` to point at it");
+    expect(html).toContain("<code>card:release-b</code>");
+    expect(html).not.toContain("data-md-ref");
+  });
+
+  it("can be turned off", () => {
+    const html = renderMarkdown("Blocked by card:release-b.", {
+      refChips: false,
+    });
+    expect(html).not.toContain("data-md-ref");
+    expect(html).toContain("card:release-b");
+  });
+
+  it("chips refs in inline mode too", () => {
+    const html = renderMarkdown("card:release-b moves", { inline: true });
+    expect(html).toContain('data-md-ref="card:release-b"');
+    expect(html).not.toContain("<p>");
+  });
+
+  it("keeps a ref value out of href position even if it looks executable", () => {
+    const html = renderMarkdown("[x](javascript:alert(1))");
+    expect(html).not.toContain("javascript:");
+  });
+});
+
+describe("markdownExcerpt", () => {
+  it("returns an empty string for empty or non-string input", () => {
+    expect(markdownExcerpt("")).toBe("");
+    expect(markdownExcerpt(null)).toBe("");
+    expect(markdownExcerpt(42)).toBe("");
+  });
+
+  it("strips inline markdown so a tile never shows **Goal:**", () => {
+    expect(markdownExcerpt("**Goal:** ship the renderer\n")).toBe(
+      "Goal: ship the renderer",
+    );
+  });
+
+  it("skips a leading fenced code block and uses the first prose line", () => {
+    expect(markdownExcerpt("```\nnot prose\n```\n\nReal line.\n")).toBe(
+      "Real line.",
+    );
+  });
+
+  it("skips a leading HTML comment marker", () => {
+    expect(
+      markdownExcerpt("<!-- fleet-sync:evidence:v1 -->\n\nReal line.\n"),
+    ).toBe("Real line.");
+  });
+
+  it("flattens a heading, a link and a code span", () => {
+    expect(markdownExcerpt("# Release [B](https://e.test) uses `anx`\n")).toBe(
+      "Release B uses anx",
+    );
+  });
+
+  it("uses the first list item when the body opens with a list", () => {
+    expect(markdownExcerpt("- [x] first step\n- second\n")).toBe("first step");
+  });
+
+  it("collapses newlines inside one paragraph", () => {
+    expect(markdownExcerpt("one\ntwo\nthree\n")).toBe("one two three");
+  });
+
+  it("truncates on a word boundary with an ellipsis", () => {
+    const excerpt = markdownExcerpt(
+      "alpha bravo charlie delta echo foxtrot golf",
+      { limit: 20 },
+    );
+    expect(excerpt.endsWith("…")).toBe(true);
+    expect(excerpt.length).toBeLessThanOrEqual(21);
+    expect(excerpt).not.toContain("  ");
+  });
+});
+
+describe("markdownPlainText", () => {
+  it("flattens a whole body into one line of prose", () => {
+    expect(markdownPlainText("# Title\n\n**Goal:** a\n\n- one\n- two\n")).toBe(
+      "Title Goal: a one two",
+    );
+  });
+
+  it("returns an empty string for empty or non-string input", () => {
+    expect(markdownPlainText("")).toBe("");
+    expect(markdownPlainText(null)).toBe("");
   });
 });

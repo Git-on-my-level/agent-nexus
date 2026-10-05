@@ -704,7 +704,7 @@ describe("server auth session helpers", () => {
 
   it("preserves hosted workspace proxy paths for session refresh and agent lookup", async () => {
     const { event } = createSessionEvent({
-      organizationSlug: "scaling-forever",
+      organizationSlug: "example-team",
       refreshToken: "refresh-token",
       workspaceSlug: "alpha",
     });
@@ -744,9 +744,9 @@ describe("server auth session helpers", () => {
     await expect(
       loadWorkspaceAuthenticatedAgent({
         event,
-        organizationSlug: "scaling-forever",
+        organizationSlug: "example-team",
         workspaceSlug: "alpha",
-        coreBaseUrl: "http://localhost:5173/ws/scaling-forever/alpha",
+        coreBaseUrl: "http://localhost:5173/ws/example-team/alpha",
       }),
     ).resolves.toEqual({
       agent_id: "agent-1",
@@ -756,14 +756,14 @@ describe("server auth session helpers", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://127.0.0.1:5173/ws/scaling-forever/alpha/auth/token",
+      "http://127.0.0.1:5173/ws/example-team/alpha/auth/token",
       expect.objectContaining({
         method: "POST",
       }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://127.0.0.1:5173/ws/scaling-forever/alpha/agents/me",
+      "http://127.0.0.1:5173/ws/example-team/alpha/agents/me",
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({

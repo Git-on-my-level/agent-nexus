@@ -123,7 +123,7 @@ describe("task-scoped participation", () => {
         .fn()
         .mockResolvedValueOnce({ participants: [row("p1")], next_cursor: "" })
         .mockRejectedValueOnce(
-          Object.assign(new Error("private /home/person/session"), { status }),
+          Object.assign(new Error("private /opt/example/session"), { status }),
         );
       const read = createParticipationReader({ listWorkParticipants });
       const tasks = [{ ref: "card:a" }];

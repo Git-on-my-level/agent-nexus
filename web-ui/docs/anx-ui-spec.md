@@ -41,7 +41,7 @@ Agent Nexus web UI does **not**:
 - Every write operation MUST include the actor ID.
 - The UI displays actor `display_name` wherever `actor_id` appears.
 - Machine identifiers are not labels. Actor ids, machine-minted principal handles (`passkey.<slug>.<hex>`, `external.<hash>`), connection ids, thread refs and raw error payloads are never printed as the name of something. The UI shows the name (or a person-chosen handle) and keeps the identifier behind a copy affordance where an operator may need it for the CLI or a bug report: "Copy actor id" on `/more`, "Copy connection id" and "Copy error" on Integrations (connections read "GitHub · main" when a tool has more than one), "Copy ref" on the Threads list, task and doc pages and in ⌘K. Access and agent pages show principal, host key and run ids the same way (`CopyableId`).
-- **Who wrote something.** A host-derived agent is named by its host relation, "codex on m5-mbp", wherever the UI names an author or requester (task and doc messages, Inbox requesters, timelines, ⌘K). The shell loads the roster (`GET /agents`) once and `buildActorNameMap` prefers the agent's `display_name` over the actor record's name (`lib/actorSession.js` → `agentRegistry`). An event written inside a launcher run carries `run_attribution`; message items show a quiet "via run exec-…" beside the time that opens that run on the agent's page (`components/agents/RunAttribution.svelte`).
+- **Who wrote something.** A host-derived agent is named by its host relation, "codex on workstation-a", wherever the UI names an author or requester (task and doc messages, Inbox requesters, timelines, ⌘K). The shell loads the roster (`GET /agents`) once and `buildActorNameMap` prefers the agent's `display_name` over the actor record's name (`lib/actorSession.js` → `agentRegistry`). An event written inside a launcher run carries `run_attribution`; message items show a quiet "via run exec-…" beside the time that opens that run on the agent's page (`components/agents/RunAttribution.svelte`).
 - **Auth-first model**: Production deployments require authenticated principals by default.
   - Passkey registration/login creates a linked actor with `principal_kind=human`, `auth_method=passkey`.
   - Agents are not registered one by one. A machine is enrolled once as a **host** (`anx host enroll`, approved in Access, or a headless token); every agent on it is derived from the host as `<name>.<host>` (`principal_kind=agent`, `auth_method=host_assertion`) the first time it uses `anx`. Agent invites and public-key self-registration do not exist.
@@ -352,7 +352,7 @@ while an enrolling machine is still polling:
   resolves the Inbox item in one transaction. **Deny** is one click and
   changes nothing. After either, the Administrators list is re-read.
 - Lists pending host enrollments (`GET /auth/hosts/enrollments/pending`): requested host name, `os_user@hostname`, requesting IP, agents found on the machine, adopted agent names, age and expiry, and the user code the machine printed, set large.
-- Approval is deliberate: **Approve…** opens an inline confirmation that repeats the code ("Approve only if J6FA-N4XI is the code printed on m5-mbp.local") and says every agent running there can act in the workspace; only **Codes match, approve** calls `POST …/approve`. **Deny** is one click. An expired request cannot be approved. After a decision the page says what happens next (an approved host appears under Hosts once the machine finishes).
+- Approval is deliberate: **Approve…** opens an inline confirmation that repeats the code ("Approve only if J6FA-N4XI is the code printed on workstation-a.local") and says every agent running there can act in the workspace; only **Codes match, approve** calls `POST …/approve`. **Deny** is one click. An expired request cannot be approved. After a decision the page says what happens next (an approved host appears under Hosts once the machine finishes).
 - The list polls every few seconds while the page is visible, so a request shows up while the operator is looking. Host cards re-read on the roster stream (`liveAgentChanges`). Core may return a full workspace web UI verification URL ending in `/access/hosts/enroll`; that route redirects here (`#host-requests`). Without a configured URL, the CLI tells the operator to open Access → Hosts.
 
 **Hosts:**
@@ -397,7 +397,7 @@ workspace administrators can manage access.") instead of seven sections each
 describing an empty workspace it was not allowed to see. A 403 is that answer;
 a 401 is an expired session and stays on the error path.
 
-**Recent access events:** auth audit events as sentences with names and host names ("Maya Chen approved m5-mbp", "codex on m5-mbp used anx for the first time"); event ids sit behind a copy button on hover. Eight show first, then more, then older pages.
+**Recent access events:** auth audit events as sentences with names and host names ("Maya Chen approved workstation-a", "codex on workstation-a used anx for the first time"); event ids sit behind a copy button on hover. Eight show first, then more, then older pages.
 
 Agent identity is managed through host enrollment and host-level exclusions; there are no per-agent enrollment or wake controls. There is no Refresh button: actions re-read what they change.
 
@@ -407,7 +407,7 @@ Agent identity is managed through host enrollment and host-level exclusions; the
 
 Each row answers who, where, doing what, and for how long:
 
-- **Who:** display name ("codex on m5-mbp"), `@handle`, runtime (adapter and model of the active run, or the adapter when the agent is one), and the bridge indicator (a secondary icon; online means tagging wakes it now). Bridge state is never the row's state.
+- **Who:** display name ("codex on workstation-a"), `@handle`, runtime (adapter and model of the active run, or the adapter when the agent is one), and the bridge indicator (a secondary icon; online means tagging wakes it now). Bridge state is never the row's state.
 - **Waiting on you:** the oldest open ask (title linked to the Inbox item, kind, severity, the task it is about, "N more open"), how long it has waited, and **Answer in Inbox**. Waiting rows sort by longest wait. The roster never answers an ask.
 - **Working:** the current task (linked), the last progress note quoted with its age, and run time (or time since the last update without a run). Longest-running first.
 - **Idle:** current task or "No current task", last signal age.

@@ -22,7 +22,7 @@ export const actorDirectoryIncomplete = writable(false);
 export const principalDirectoryIncomplete = writable(false);
 /**
  * Agent roster summaries (`GET /agents`) for the current workspace. A derived
- * agent is named by its host relation ("codex on m5-mbp") wherever the UI
+ * agent is named by its host relation ("codex on workstation-a") wherever the UI
  * says who did something; see `buildActorNameMap`.
  */
 export const agentRegistry = writable([]);
@@ -439,7 +439,7 @@ export function buildActorNameMap(
     }
   }
 
-  // A host-derived agent is named by its host relation ("codex on m5-mbp"),
+  // A host-derived agent is named by its host relation ("codex on workstation-a"),
   // which outranks the actor's own display name: the host is what tells the
   // operator where the work ran.
   for (const agent of agents ?? []) {

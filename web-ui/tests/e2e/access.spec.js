@@ -85,10 +85,10 @@ test("lists agents under their host and people by name", async ({ page }) => {
     ref: "actor:actor-codex",
     actor_id: "actor-codex",
     host_id: "host-1",
-    host_slug: "m5-mbp",
+    host_slug: "workstation-a",
     name: "codex",
-    handle: "codex.m5-mbp",
-    display_name: "codex on m5-mbp",
+    handle: "codex.workstation-a",
+    display_name: "codex on workstation-a",
     identity_kind: "derived",
     state: "working",
     bridge_online: true,
@@ -130,7 +130,7 @@ test("lists agents under their host and people by name", async ({ page }) => {
           {
             agent_id: "agent-codex",
             actor_id: "actor-codex",
-            username: "codex.m5-mbp",
+            username: "codex.workstation-a",
             principal_kind: "agent",
             auth_method: "host_assertion",
             created_at: "2026-03-01T10:00:00Z",
@@ -160,11 +160,11 @@ test("lists agents under their host and people by name", async ({ page }) => {
           {
             id: "host-1",
             ref: "host:host-1",
-            handle: "m5-mbp",
-            slug: "m5-mbp",
-            display_name: "m5-mbp",
-            os_user: "david",
-            hostname: "m5-mbp.local",
+            handle: "workstation-a",
+            slug: "workstation-a",
+            display_name: "workstation-a",
+            os_user: "operator",
+            hostname: "workstation-a.local",
             discovered_adapters: ["codex"],
             key_id: "hkey_1",
             excluded_names: [],
@@ -182,7 +182,9 @@ test("lists agents under their host and people by name", async ({ page }) => {
 
   await page.goto("/o/local/w/local/access");
   const main = page.getByRole("main");
-  await expect(main.locator('[data-host-agent="codex.m5-mbp"]')).toBeVisible();
+  await expect(
+    main.locator('[data-host-agent="codex.workstation-a"]'),
+  ).toBeVisible();
   await expect(main.getByText("riley@example.com")).toBeVisible();
   // The derived agent is not repeated as a principal, and invites stay human-only.
   await expect(main.locator('[data-principal="agent-codex"]')).toHaveCount(0);

@@ -20,10 +20,10 @@ function agent(name, state, overrides = {}) {
     ref: `actor:actor-${name}`,
     actor_id: `actor-${name}`,
     host_id: HOST_ID,
-    host_slug: "m5-mbp",
+    host_slug: "workstation-a",
     name,
-    handle: `${name}.m5-mbp`,
-    display_name: `${name} on m5-mbp`,
+    handle: `${name}.workstation-a`,
+    display_name: `${name} on workstation-a`,
     identity_kind: "derived",
     state,
     bridge_online: false,
@@ -210,10 +210,10 @@ async function installAgentsApi(page, overrides = {}) {
     json(route, 200, {
       host: {
         id: HOST_ID,
-        slug: "m5-mbp",
-        display_name: "m5-mbp",
-        os_user: "david",
-        hostname: "m5-mbp.local",
+        slug: "workstation-a",
+        display_name: "workstation-a",
+        os_user: "operator",
+        hostname: "workstation-a.local",
         discovered_adapters: ["codex", "claude"],
         key_id: "hkey_1",
         excluded_names: [],
@@ -244,12 +244,12 @@ test("roster groups agents by derived state and hands asks to the Inbox", async 
   );
   await expect(page.locator("[data-agents-nav-count]").first()).toHaveText("1");
 
-  const working = page.locator('[data-agent-row="codex.m5-mbp"]');
+  const working = page.locator('[data-agent-row="codex.workstation-a"]');
   await expect(working).toContainText("codex sol");
   await expect(working).toContainText("Parry window at 120 ms");
   await expect(working).toContainText("14m");
 
-  const waiting = page.locator('[data-agent-row="claude.m5-mbp"]');
+  const waiting = page.locator('[data-agent-row="claude.workstation-a"]');
   await expect(waiting).toContainText("Confirm 20-minute quest path");
   await expect(waiting).toContainText("on Lock hub quest path");
   await expect(waiting).toContainText("3h 12m");
@@ -264,7 +264,7 @@ test("roster groups agents by derived state and hands asks to the Inbox", async 
   await expect(page.getByRole("button", { name: /Send/ })).toHaveCount(0);
 
   await expect(
-    page.locator('[data-agent-row="release-bot.m5-mbp"]'),
+    page.locator('[data-agent-row="release-bot.workstation-a"]'),
   ).toContainText("Never checked in");
 });
 
@@ -281,7 +281,7 @@ test("roster keys move, open and hand off to the Inbox", async ({ page }) => {
 
   await page.keyboard.press("j");
   await expect(
-    page.locator('[data-agent-row="claude.m5-mbp"]'),
+    page.locator('[data-agent-row="claude.workstation-a"]'),
   ).toHaveAttribute("aria-current", "true");
   await page.keyboard.press("i");
   await expect(page).toHaveURL(/\/inbox\?mailbox=needs-you&item=/);
@@ -291,16 +291,16 @@ test("roster keys move, open and hand off to the Inbox", async ({ page }) => {
   await page.keyboard.press("j");
   await page.keyboard.press("j");
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/agents\/codex\.m5-mbp$/);
+  await expect(page).toHaveURL(/\/agents\/codex\.workstation-a$/);
 });
 
 test("agent page shows work, runs and notes, with credentials aside", async ({
   page,
 }) => {
   await installAgentsApi(page);
-  await page.goto(`${BASE}/agents/codex.m5-mbp`);
+  await page.goto(`${BASE}/agents/codex.workstation-a`);
   await expect(
-    page.getByRole("heading", { name: "codex on m5-mbp" }),
+    page.getByRole("heading", { name: "codex on workstation-a" }),
   ).toBeVisible();
   await expect(page.locator("[data-agent-state-label]")).toHaveText("Working");
   const run = page.locator('[data-run-id="run-1"]');
@@ -312,14 +312,16 @@ test("agent page shows work, runs and notes, with credentials aside", async ({
   const via = message.locator("[data-run-attribution]");
   await expect(via).toHaveText("via run exec-7f3a");
   await via.click();
-  await expect(page).toHaveURL(/\/agents\/codex\.m5-mbp\?run=run-1#runs$/);
+  await expect(page).toHaveURL(
+    /\/agents\/codex\.workstation-a\?run=run-1#runs$/,
+  );
   await expect(run).toHaveClass(/bg-accent-soft/);
-  await expect(page.getByText("Exclude on m5-mbp…")).toBeVisible();
+  await expect(page.getByText("Exclude on workstation-a…")).toBeVisible();
 });
 
 test("waiting agent page links its ask into the Inbox", async ({ page }) => {
   await installAgentsApi(page);
-  await page.goto(`${BASE}/agents/claude.m5-mbp`);
+  await page.goto(`${BASE}/agents/claude.workstation-a`);
   const ask = page.locator("[data-agent-open-ask]");
   await expect(ask).toContainText("Confirm 20-minute quest path");
   await expect(ask).toContainText("3h 12m");
@@ -343,15 +345,15 @@ for (const viewport of AUDIT_VIEWPORTS) {
         scrollPositions: ["top", "bottom"],
       });
 
-      await page.goto(`${BASE}/agents/codex.m5-mbp`);
+      await page.goto(`${BASE}/agents/codex.workstation-a`);
       await expect(page.locator('[data-run-id="run-1"]')).toBeVisible();
       await expectCleanLayout(page, "agent page", {
         scrollPositions: ["top", "bottom"],
       });
 
-      await page.goto(`${BASE}/agents/nobody.m5-mbp`);
+      await page.goto(`${BASE}/agents/nobody.workstation-a`);
       await expect(
-        page.getByText("No agent named nobody.m5-mbp"),
+        page.getByText("No agent named nobody.workstation-a"),
       ).toBeVisible();
       await expectCleanLayout(page, "unknown agent");
 

@@ -45,6 +45,7 @@ func (s *boardLifecycleFailureStore) PutDerivedTopicProjection(ctx context.Conte
 }
 
 func newPrimitivesTestServerWithStore(t *testing.T, workspace *storage.Workspace, primitiveStore PrimitiveStore) primitivesTestHarness {
+	requireIntegrationTest(t)
 	t.Helper()
 
 	contractPath := filepath.Join("..", "..", "..", "contracts", "anx-schema.yaml")
@@ -80,6 +81,7 @@ func newPrimitivesTestServerWithStore(t *testing.T, workspace *storage.Workspace
 }
 
 func TestBoardCreateSucceedsWhenLifecycleEventAppendFails(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
@@ -127,6 +129,7 @@ func TestBoardCreateSucceedsWhenLifecycleEventAppendFails(t *testing.T) {
 }
 
 func TestBoardAddCardSucceedsWhenLifecycleProjectionRefreshFails(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())

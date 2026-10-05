@@ -27,6 +27,7 @@ func responseSecurityFixture(t *testing.T) (primitivesTestHarness, string) {
 }
 
 func TestInboxResponseRequiresHumanAcrossWritePaths(t *testing.T) {
+	requireIntegrationTest(t)
 	h, itemID := responseSecurityFixture(t)
 	ctx := context.Background()
 	standalone := seedMachinePrincipalForLockoutTest(t, ctx, h.workspace.DB(), "standalone-security", "actor-standalone-security", "standalone-security", "standalone-security-token")
@@ -56,6 +57,7 @@ func TestInboxResponseRequiresHumanAcrossWritePaths(t *testing.T) {
 }
 
 func TestInboxResponseConcurrentReplayIsSingleEvent(t *testing.T) {
+	requireIntegrationTest(t)
 	h, itemID := responseSecurityFixture(t)
 	endpoint := h.baseURL + "/inbox/" + url.PathEscape(itemID) + "/respond"
 	body := map[string]any{"idempotency_key": "reply-once-1", "response_text": "Approved", "outcome": "approved", "notify_mode": "none"}

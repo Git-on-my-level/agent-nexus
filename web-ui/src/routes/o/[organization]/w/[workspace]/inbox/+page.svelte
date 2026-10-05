@@ -73,6 +73,7 @@
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
   import DecisionPanel from "$lib/components/pm/DecisionPanel.svelte";
   import KeyboardShortcutsDialog from "$lib/components/KeyboardShortcutsDialog.svelte";
+  import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import InboxActorName from "$lib/components/inbox/InboxActorName.svelte";
   import InboxContextStrip from "$lib/components/inbox/InboxContextStrip.svelte";
   import InboxRespondPanel from "$lib/components/inbox/InboxRespondPanel.svelte";
@@ -1352,11 +1353,10 @@
                   presenceActorId={selected.requester?.id || ""}
                 />
                 {#if selected.body}
-                  <p
-                    class="whitespace-pre-wrap text-meta leading-relaxed text-fg [overflow-wrap:anywhere]"
-                  >
-                    {selected.body}
-                  </p>
+                  <MarkdownRenderer
+                    source={selected.body}
+                    class="text-meta leading-relaxed text-fg [overflow-wrap:anywhere]"
+                  />
                 {/if}
                 {#if needsResponse}
                   <InboxRespondPanel
@@ -1402,11 +1402,10 @@
                         >{/if}
                     </p>
                     {#if selected.item?.response_text}
-                      <p
-                        class="whitespace-pre-wrap text-meta text-fg [overflow-wrap:anywhere]"
-                      >
-                        {selected.item.response_text}
-                      </p>
+                      <MarkdownRenderer
+                        source={selected.item.response_text}
+                        class="text-meta text-fg [overflow-wrap:anywhere]"
+                      />
                     {/if}
                   </div>
                   <a

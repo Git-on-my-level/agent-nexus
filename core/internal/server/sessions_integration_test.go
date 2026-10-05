@@ -27,6 +27,7 @@ func sessionInput(native string, seq int64) map[string]any {
 	return map[string]any{"provider": "generic", "host_scope": "private-host", "native_session_id": native, "native_session_id_kind": "opaque", "sequence": seq, "activity": "active", "capabilities": map[string]any{"resume": "unsupported", "history": "unknown", "logs": "unsupported"}}
 }
 func TestGenericSessionsAuthenticationScopeAndOrdering(t *testing.T) {
+	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{enableDevActorMode: true, allowUnauthenticatedWrites: true})
 	ctx := context.Background()
 	db := env.workspace.DB()
@@ -123,6 +124,7 @@ func TestGenericSessionsAuthenticationScopeAndOrdering(t *testing.T) {
 }
 
 func TestWorkParticipantsNonlockingPrivateAndExpiring(t *testing.T) {
+	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	db := env.workspace.DB()
@@ -261,6 +263,7 @@ func TestWorkParticipantsNonlockingPrivateAndExpiring(t *testing.T) {
 }
 
 func TestSessionConcurrentRegistrationAndParticipants(t *testing.T) {
+	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	db := env.workspace.DB()
@@ -313,6 +316,7 @@ func TestSessionConcurrentRegistrationAndParticipants(t *testing.T) {
 }
 
 func TestWorkParticipantProjectScope(t *testing.T) {
+	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	db := env.workspace.DB()
@@ -341,6 +345,7 @@ func TestWorkParticipantProjectScope(t *testing.T) {
 }
 
 func TestSessionParticipationPurgeCleanup(t *testing.T) {
+	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	db := env.workspace.DB()
@@ -373,6 +378,7 @@ func TestSessionParticipationPurgeCleanup(t *testing.T) {
 }
 
 func TestSessionRoutesRejectUnsupportedMethodsAndPaths(t *testing.T) {
+	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	db := env.workspace.DB()

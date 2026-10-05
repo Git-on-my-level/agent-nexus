@@ -3,16 +3,16 @@
 
   A Google-Docs / Notion-flavoured Markdown editor: a formatting toolbar, a
   Write / Split / Preview mode switch, live preview powered by the shared
-  `renderMarkdown`, and a footer that surfaces dirty / saving state plus the
+  `MarkdownRenderer`, and a footer that surfaces dirty / saving state plus the
   base revision used for optimistic concurrency. It stays a thin presentational
   layer: the page owns `value` (bindable), the save action, and the
   `if_base_revision` write so storage semantics are unchanged.
 -->
 <script>
-  import { renderMarkdown } from "$lib/markdown.js";
   import { formatShortcut } from "$lib/keyboardHints.js";
   import Button from "$lib/components/Button.svelte";
   import Icon from "$lib/components/Icon.svelte";
+  import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
 
   let {
     value = $bindable(""),
@@ -28,7 +28,7 @@
   /** @type {"write" | "split" | "preview"} */
   let mode = $state("split");
   let textareaEl = $state(null);
-  let previewHtml = $derived(renderMarkdown(value));
+  let hasPreview = $derived(Boolean(String(value ?? "").trim()));
 
   const MODES = [
     { value: "write", label: "Write" },
@@ -441,11 +441,14 @@
           ? 'lg:w-1/2 border-t border-line lg:border-t-0'
           : ''}"
       >
-        {#if previewHtml}
-          <div class="markdown-rendered markdown-rendered--doc text-fg">
-            <!-- eslint-disable-next-line svelte/no-at-html-tags -- output is sanitized by renderMarkdown -->
-            {@html previewHtml}
-          </div>
+        {#if hasPreview}
+          <!-- The same renderer the saved document will use. No chips: an
+               editor has no page-level resolve to give them titles. -->
+          <MarkdownRenderer
+            source={value}
+            class="markdown-rendered--doc text-fg"
+            refChips={false}
+          />
         {:else}
           <p class="text-meta italic text-fg-subtle">Nothing to preview yet.</p>
         {/if}

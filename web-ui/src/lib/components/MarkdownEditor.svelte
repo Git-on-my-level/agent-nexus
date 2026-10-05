@@ -1,5 +1,5 @@
 <script>
-  import { renderMarkdown } from "$lib/markdown.js";
+  import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import { formatShortcut } from "$lib/keyboardHints.js";
 
   let {
@@ -13,7 +13,7 @@
 
   let mode = $state("write");
   let textareaEl = $state(null);
-  let previewHtml = $derived(renderMarkdown(value));
+  let hasPreview = $derived(Boolean(String(value ?? "").trim()));
 
   const TOOLBAR = [
     {
@@ -289,10 +289,12 @@
         {rows}
       ></textarea>
     {:else}
-      <div class="md-editor-preview markdown-rendered">
-        {#if previewHtml}
-          <!-- eslint-disable-next-line svelte/no-at-html-tags -- output is sanitized by renderMarkdown -->
-          {@html previewHtml}
+      <div class="md-editor-preview">
+        {#if hasPreview}
+          <!-- The same renderer the saved body will use, so the preview is a
+               preview rather than a second renderer's opinion. No chips: an
+               editor has no page-level resolve to give them titles. -->
+          <MarkdownRenderer source={value} refChips={false} />
         {:else}
           <p class="md-editor-empty">Nothing to preview</p>
         {/if}

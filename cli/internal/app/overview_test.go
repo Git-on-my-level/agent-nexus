@@ -24,7 +24,7 @@ func TestOverviewAndDashboardCommands(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		w.Write([]byte(`{"generated_at":"2026-10-04T12:00:00Z","work":{"total":7},"initiatives":{"items":[{"ref":"card:pilot","title":"Launch pilot","progress":{"done":3,"total":7},"priority":"p1","needs":["Needs David: approve"]}]},"needs_you":{"count":2,"rows":[]},"dashboard":{"reports":[]}}`))
+		w.Write([]byte(`{"generated_at":"2026-10-04T12:00:00Z","work":{"total":7},"initiatives":{"items":[{"ref":"card:pilot","title":"Launch pilot","progress":{"done":3,"total":7},"priority":"p1","needs":["Needs Alex: approve"]}]},"needs_you":{"count":2,"rows":[]},"dashboard":{"reports":[]}}`))
 	}))
 	defer server.Close()
 	for _, args := range [][]string{{"overview"}, {"overview", "changes"}, {"workspace", "dashboard", "list"}, {"workspace", "dashboard", "set", "document:ceo"}, {"workspace", "dashboard", "set", "none"}} {
@@ -35,7 +35,7 @@ func TestOverviewAndDashboardCommands(t *testing.T) {
 		}
 	}
 	text := runCLIForTest(t, t.TempDir(), map[string]string{}, nil, []string{"--base-url", server.URL, "overview"})
-	if !strings.Contains(text, "progress.done=3") || !strings.Contains(text, "progress.total=7") || !strings.Contains(text, `needs.0="Needs David: approve"`) {
+	if !strings.Contains(text, "progress.done=3") || !strings.Contains(text, "progress.total=7") || !strings.Contains(text, `needs.0="Needs Alex: approve"`) {
 		t.Fatalf("text Overview diverged from the shared initiative projection: %s", text)
 	}
 	if commandSideEffectClass("workspace dashboard set") != "remote_coordination_write" {

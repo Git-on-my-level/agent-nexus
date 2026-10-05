@@ -85,7 +85,7 @@ cross-compiles `./internal/observation` with `GOOS=linux`.
 
 Work must first be registered with matching source authority, connection ID and
 source-native ID. Workspace ID is injected from the running deployment and
-cannot cross workspace boundaries. GitHub and Multica use bounded HTTPS readers
+cannot cross workspace boundaries. The optional GitHub and Multica connectors use bounded HTTPS readers
 with redirects disabled. Multica also requires `source_workspace_id` and its
 actual approved HTTPS `base_url`. Alternatively, set `transport=multica_cli`,
 `cli_binary` to the approved installed absolute executable, and `cli_profile` to
@@ -493,3 +493,18 @@ their existing live-lease semantics.
 A pending human proposal blocks changed PM proposals only for the same approver
 actor, work, and scope. Another actor's human proposal does not block the current
 actor's PM. This matches the actor boundary used for deduplication and supersession.
+
+### Optional source connector boundary
+
+Source readers run only for targets in an operator-installed observation config.
+Leaving `ANX_OBSERVATION_CONFIG` unset disables observation collection. Installing
+an upstream CLI alone does not enable a connector. Each configured connection
+must supply its source origin, workspace binding, read-only credential reference
+or approved CLI profile, and resource bounds; none has a personal service default.
+
+Multica is an optional third-party issue-source connector, with the same evidence
+and source-authority rules as GitHub. Its CLI transport uses an explicitly approved
+binary and profile and inherits that CLI's network policy; use the HTTPS transport
+when the observer must enforce DNS pinning. Neither transport dispatches work or
+writes source issues. See `adapters/observation/README.md` for configuration and
+transport limits.

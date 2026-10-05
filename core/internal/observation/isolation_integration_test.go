@@ -31,7 +31,7 @@ func requireIsolationRunner(t *testing.T, runner isolatedExecutor) isolatedExecu
 }
 
 // isolationWorkDir is the compile/stage root for real sandbox tests. This
-// host's TMPDIR is /Volumes/scratch/tmp, which the Seatbelt profile denies
+// host's TMPDIR is /custom/tmp, which the Seatbelt profile denies
 // for content reads. Under full-suite load, path aliasing of that volume
 // made sandbox-exec fail even after the runner copied the artifact.
 func isolationWorkDir(t *testing.T) string {
@@ -163,6 +163,9 @@ func TestNewIsolatedRunnerMatchesGOOS(t *testing.T) {
 }
 
 func TestIsolationConformance(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real sandbox/subprocess integration; run without -short")
+	}
 	runner := isolationRunnerOrSkip(t)
 	dir := isolationWorkDir(t)
 	home := os.Getenv("HOME")
@@ -230,6 +233,9 @@ int main(void) {
 }
 
 func TestIsolationNegativeDenials(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real sandbox/subprocess integration; run without -short")
+	}
 	runner := isolationRunnerOrSkip(t)
 	dir := isolationWorkDir(t)
 	home := os.Getenv("HOME")
@@ -297,6 +303,9 @@ int main(void){ for(int i=0;i<4096;i++) fputs("{\"facts\":{\"overflow\":true},\"
 }
 
 func TestIsolatedTransformLifecycle(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real sandbox/subprocess integration; run without -short")
+	}
 	_ = isolationRunnerOrSkip(t)
 	dir := isolationWorkDir(t)
 	src := `#include <stdio.h>
@@ -371,6 +380,9 @@ int main(void){
 `
 
 func TestRealCanaryFailureDoesNotActivate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real sandbox/subprocess integration; run without -short")
+	}
 	_ = isolationRunnerOrSkip(t)
 	dir := isolationWorkDir(t)
 	policy := isolationTestPolicy()
@@ -445,6 +457,9 @@ int main(void){
 }
 
 func TestRealPolicyViolationKeepsLastGood(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real sandbox/subprocess integration; run without -short")
+	}
 	_ = isolationRunnerOrSkip(t)
 	dir := isolationWorkDir(t)
 	policy := isolationTestPolicy()
@@ -530,6 +545,9 @@ func (r jitBoundTestReader) Read(ctx context.Context, target Target) (Report, er
 // A harmless fixture outside every allowlisted root must be unreadable, even
 // under /private/tmp which was exposed by the old file-read* plus denylist.
 func TestSeatbeltDeniesUnlistedReadAndAllowsScratch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real sandbox/subprocess integration; run without -short")
+	}
 	runner := requireIsolationRunner(t, NewSeatbeltRunner())
 	dir := isolationWorkDir(t)
 	secret := filepath.Join(dir, "outside-reader")
@@ -557,6 +575,9 @@ int main(void) {
 
 // Use only a controlled same-uid fixture process, with a synthetic environment.
 func TestSeatbeltSysctlAllowsRuntimeReadsAndDeniesProcessArgumentsByName(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real sandbox/subprocess integration; run without -short")
+	}
 	runner := requireIsolationRunner(t, NewSeatbeltRunner())
 	child := exec.Command("/bin/sleep", "30")
 	child.Env = []string{"ANX_SYNTHETIC_FIXTURE=not-a-secret"}
@@ -601,6 +622,9 @@ int main(int argc, char **argv) {
 }
 
 func TestSeatbeltGoRuntimeWithNumericSysctls(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real sandbox/subprocess integration; run without -short")
+	}
 	runner := requireIsolationRunner(t, NewSeatbeltRunner())
 	dir := isolationWorkDir(t)
 	source := filepath.Join(dir, "runtime-probe.go")
@@ -639,6 +663,9 @@ func TestSeatbeltProfileSignalsOnlySelf(t *testing.T) {
 
 // Exercise the actual testing fatal/skip paths without invoking sandbox-exec.
 func TestSeatbeltUnavailableQualificationGate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real sandbox/subprocess integration; run without -short")
+	}
 	if os.Getenv("ANX_SEATBELT_GATE_CHILD") == "1" {
 		requireIsolationRunner(t, &SeatbeltRunner{})
 		t.Fatal("unavailable runner returned")

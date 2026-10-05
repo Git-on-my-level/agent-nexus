@@ -21,6 +21,7 @@
   } from "$lib/actorSession";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
   import AnxRefPreview from "$lib/components/AnxRefPreview.svelte";
+  import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import PlanView from "$lib/components/PlanView.svelte";
   import EvidenceHandoff from "$lib/components/participation/EvidenceHandoff.svelte";
   import TaskParticipation from "$lib/components/participation/TaskParticipation.svelte";
@@ -84,32 +85,45 @@
   );
 
   /**
-   * The plan and every ref its steps point at, in two reads: one plan, one
-   * batch resolve. Chips never fetch for themselves, so a twenty-step plan is
-   * still two requests rather than twenty-one.
+   * The plan and every ref the page is about to chip, in two reads: one plan,
+   * one batch resolve. Chips never fetch for themselves, so a twenty-step plan
+   * whose body also names six tasks is still two requests rather than
+   * twenty-seven.
+   *
+   * Prose counts: the card body, the acceptance criteria and the blockers all
+   * render through the shared markdown renderer now, and a `card:` written in
+   * one of those is the same chip a plan step is.
    */
   async function loadPlan(ticket, id) {
     plan = null;
     planState = null;
     planRefs = new Map();
     planError = "";
-    let result;
+    let steps = [];
     try {
-      result = await coreClient.getCardPlan(id);
+      const result = await coreClient.getCardPlan(id);
+      if (ticket !== requestId) return;
+      steps = Array.isArray(result?.plan?.steps) ? result.plan.steps : [];
+      if (steps.length) {
+        plan = result.plan;
+        planState = result.plan_state ?? null;
+      }
     } catch {
       // A card without a plan is the common case, not a failure worth shouting
       // about; only a card that has one and could not be read is.
-      return;
     }
     if (ticket !== requestId) return;
-    const steps = Array.isArray(result?.plan?.steps) ? result.plan.steps : [];
-    if (!steps.length) return;
-    plan = result.plan;
-    planState = result.plan_state ?? null;
 
-    const refs = collectPageRefs([], {
-      extraRefs: steps.map((step) => step?.ref).filter(Boolean),
-    });
+    const refs = collectPageRefs(
+      [
+        work?.summary,
+        work?.next_action,
+        work?.wake_condition,
+        ...(work?.definition_of_done ?? []),
+        ...(work?.blockers ?? []),
+      ],
+      { extraRefs: steps.map((step) => step?.ref).filter(Boolean) },
+    );
     if (!refs.length) return;
     try {
       const resolved = await resolveRefsInBatches(refs, (batch) =>
@@ -430,9 +444,15 @@
             {/if}
           </section>
         {:else if work.summary}
-          <p class="whitespace-pre-wrap break-words text-meta text-fg">
-            {work.summary}
-          </p>
+          <MarkdownRenderer
+            source={work.summary}
+            class="text-meta text-fg [overflow-wrap:anywhere]"
+            resolved={planRefs}
+            organizationSlug={$page.params.organization}
+            workspaceSlug={$page.params.workspace}
+            onpreview={(model, anchor) => refPreview?.open(model, anchor)}
+            onpreviewclose={() => refPreview?.requestClose()}
+          />
         {/if}
         {#if work.definition_of_done?.length}
           <section>
@@ -754,9 +774,15 @@
         {#if plan && work.summary}
           <section data-initiative-body>
             <h2 class="ui-label">Card body</h2>
-            <p class="mt-2 whitespace-pre-wrap break-words text-meta text-fg">
-              {work.summary}
-            </p>
+            <MarkdownRenderer
+              source={work.summary}
+              class="mt-2 text-meta text-fg [overflow-wrap:anywhere]"
+              resolved={planRefs}
+              organizationSlug={$page.params.organization}
+              workspaceSlug={$page.params.workspace}
+              onpreview={(model, anchor) => refPreview?.open(model, anchor)}
+              onpreviewclose={() => refPreview?.requestClose()}
+            />
           </section>
         {/if}
         <!--

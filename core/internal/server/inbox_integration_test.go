@@ -10,6 +10,7 @@ import (
 )
 
 func TestHumanAttentionDerivationAndResponseSuppressesItem(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServerWithHumanPrincipal(t)
@@ -116,6 +117,7 @@ func TestHumanAttentionDerivationAndResponseSuppressesItem(t *testing.T) {
 }
 
 func TestHumanAttentionSupportsReviewAndEscalateKinds(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServerWithHumanPrincipal(t)
@@ -158,6 +160,7 @@ func TestHumanAttentionSupportsReviewAndEscalateKinds(t *testing.T) {
 }
 
 func TestInboxReadsMaterializedProjectionWithFreshness(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -213,6 +216,7 @@ func TestInboxReadsMaterializedProjectionWithFreshness(t *testing.T) {
 }
 
 func TestInboxReadDoesNotRecomputePendingProjection(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newManualProjectionTestServer(t)
@@ -235,6 +239,7 @@ func TestInboxReadDoesNotRecomputePendingProjection(t *testing.T) {
 }
 
 func TestHumanAttentionResponseRequiresResolvableTargetOrExplicitNone(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServerWithHumanPrincipal(t)
@@ -364,6 +369,7 @@ func findInboxItem(items []map[string]any, predicate func(map[string]any) bool) 
 }
 
 func TestHumanAttentionRequestedRejectsInvalidResponseProposals(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)

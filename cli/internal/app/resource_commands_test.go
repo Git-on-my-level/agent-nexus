@@ -288,9 +288,9 @@ func TestCreateCommandsAppendShareableURL(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	hostedBase := server.URL + "/ws/david-zhang/personal"
+	hostedBase := server.URL + "/ws/example-team/personal"
 	boardOut := runCLIForTest(t, home, nil, nil, []string{"--base-url", hostedBase, "boards", "create", "--title", "Board URL"})
-	if !strings.Contains(boardOut, "fact result.url="+server.URL+"/o/david-zhang/w/personal/boards/board_123") {
+	if !strings.Contains(boardOut, "fact result.url="+server.URL+"/o/example-team/w/personal/boards/board_123") {
 		t.Fatalf("expected board create URL, got:\n%s", boardOut)
 	}
 
@@ -299,12 +299,12 @@ func TestCreateCommandsAppendShareableURL(t *testing.T) {
 		t.Fatalf("write content file: %v", err)
 	}
 	cardOut := runCLIForTest(t, home, nil, nil, []string{"--base-url", hostedBase, "cards", "create", "--board", "board_123", "--title", "Card URL", "--body-file", contentFile})
-	if !strings.Contains(cardOut, "fact result.url="+strconv.Quote(server.URL+"/o/david-zhang/w/personal/boards/board_123?card=card_123")) {
+	if !strings.Contains(cardOut, "fact result.url="+strconv.Quote(server.URL+"/o/example-team/w/personal/boards/board_123?card=card_123")) {
 		t.Fatalf("expected card create URL, got:\n%s", cardOut)
 	}
 
 	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", hostedBase, "boards", "create", "--title", "Board URL"}))
-	if got := anyStringValue(asMap(payload["result"])["url"]); got != server.URL+"/o/david-zhang/w/personal/boards/board_123" {
+	if got := anyStringValue(asMap(payload["result"])["url"]); got != server.URL+"/o/example-team/w/personal/boards/board_123" {
 		t.Fatalf("expected structured URL, got %#v", payload)
 	}
 }
@@ -326,9 +326,9 @@ func TestURLCommandPrintsShareableURL(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	hostedBase := server.URL + "/ws/david-zhang/personal"
+	hostedBase := server.URL + "/ws/example-team/personal"
 	out := strings.TrimSpace(runCLIForTest(t, home, nil, nil, []string{"--base-url", hostedBase, "url", "card", "card:card_123"}))
-	expected := server.URL + "/o/david-zhang/w/personal/boards/anx-features?card=cli-json-body-input"
+	expected := server.URL + "/o/example-team/w/personal/boards/anx-features?card=cli-json-body-input"
 	if !strings.Contains(out, "fact result.url="+strconv.Quote(expected)) {
 		t.Fatalf("expected %q, got %q", expected, out)
 	}

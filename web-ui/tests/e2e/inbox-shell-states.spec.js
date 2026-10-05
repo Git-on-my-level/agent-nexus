@@ -288,7 +288,7 @@ async function installWorkspaceApi(page, overrides = {}) {
       {
         agent_id: "agent-hermes",
         actor_id: "actor-hermes",
-        username: "m4-hermes",
+        username: "worker-a",
         principal_kind: "agent",
         auth_method: "public_key",
         revoked: false,
@@ -1197,7 +1197,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
             persona_id: "persona-agent",
             actor_id: "actor-hermes",
             principal_kind: "agent",
-            display_label: "m4-hermes",
+            display_label: "worker-a",
           },
         ],
       });

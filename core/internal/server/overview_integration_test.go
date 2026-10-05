@@ -15,6 +15,7 @@ import (
 )
 
 func TestDashboardEndpointsPreserveHeadRevisionIdentity(t *testing.T) {
+	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	store := h.primitiveStore.(*primitives.Store)
 	ctx := context.Background()
@@ -70,11 +71,12 @@ func TestDashboardEndpointsPreserveHeadRevisionIdentity(t *testing.T) {
 }
 
 func TestOverviewArchivePinAndInitiativeProjection(t *testing.T) {
+	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
-	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"executive","display_name":"David","created_at":"2026-10-04T12:00:00Z","tags":["human"]}}`, 201).Body.Close()
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"executive","display_name":"Alex","created_at":"2026-10-04T12:00:00Z","tags":["human"]}}`, 201).Body.Close()
 	ctx := context.Background()
 	store := h.primitiveStore.(*primitives.Store)
-	active, err := store.CreateBoard(ctx, "executive", map[string]any{"title": "Omi · Initiatives"})
+	active, err := store.CreateBoard(ctx, "executive", map[string]any{"title": "Demo · Initiatives"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +89,7 @@ func TestOverviewArchivePinAndInitiativeProjection(t *testing.T) {
 		if i >= 7 {
 			board = archived
 		}
-		_, err = store.CreateWork(ctx, "executive", anyString(board["id"]), map[string]any{"title": fmt.Sprintf("Initiative %d", i), "summary": "Ship a useful outcome\n- [x] Design\n- [ ] Build\n```markdown\n- [x] Example\nNeeds ghost: example\n```\nNeeds David: choose a launch date\nNeeds Alice: approve\n- [ ]", "priority": "p1"})
+		_, err = store.CreateWork(ctx, "executive", anyString(board["id"]), map[string]any{"title": fmt.Sprintf("Initiative %d", i), "summary": "Ship a useful outcome\n- [x] Design\n- [ ] Build\n```markdown\n- [x] Example\nNeeds ghost: example\n```\nNeeds Alex: choose a launch date\nNeeds Alice: approve\n- [ ]", "priority": "p1"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -125,7 +127,7 @@ func TestOverviewArchivePinAndInitiativeProjection(t *testing.T) {
 	if err != nil || len(live["items"].([]map[string]any)) != 7 {
 		t.Fatalf("archived project leaked into shared initiatives: %v %v", live, err)
 	}
-	report := `{"kind":"anx.visual-report","schema_version":1,"title":"Omi dashboard","summary":"Seven initiatives","generated_at":"2026-10-04T12:00:00Z","projects":[{"id":"omi","title":"Omi","summary":"Build","outcome":"Launch"}],"sources":[],"panels":[{"id":"note","project_id":"omi","type":"explanation","title":"Progress","author":"Test","provenance":"reported","observed_at":null,"freshness":"unavailable","source_ids":[],"data":{"text":"3 of 7 ready"}}]}`
+	report := `{"kind":"anx.visual-report","schema_version":1,"title":"Demo dashboard","summary":"Seven initiatives","generated_at":"2026-10-04T12:00:00Z","projects":[{"id":"demo","title":"Demo","summary":"Build","outcome":"Launch"}],"sources":[],"panels":[{"id":"note","project_id":"demo","type":"explanation","title":"Progress","author":"Test","provenance":"reported","observed_at":null,"freshness":"unavailable","source_ids":[],"data":{"text":"3 of 7 ready"}}]}`
 	older, _, err := store.CreateDocument(ctx, "executive", map[string]any{"title": "Pinned dashboard"}, report, "text", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -134,7 +136,7 @@ func TestOverviewArchivePinAndInitiativeProjection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	invalid, _, err := store.CreateDocument(ctx, "executive", map[string]any{"title": "Invalid newest report"}, strings.Replace(report, `"projects":[{"id":"omi","title":"Omi","summary":"Build","outcome":"Launch"}]`, `"projects":[{}]`, 1), "text", nil)
+	invalid, _, err := store.CreateDocument(ctx, "executive", map[string]any{"title": "Invalid newest report"}, strings.Replace(report, `"projects":[{"id":"demo","title":"Demo","summary":"Build","outcome":"Launch"}]`, `"projects":[{}]`, 1), "text", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +175,7 @@ func TestOverviewArchivePinAndInitiativeProjection(t *testing.T) {
 	}
 	first := initiatives[0].(map[string]any)
 	progress := first["progress"].(map[string]any)
-	if progress["done"] != float64(1) || progress["total"] != float64(3) || len(first["needs"].([]any)) != 2 || first["needs"].([]any)[0] != "Needs David: choose a launch date" || first["needs"].([]any)[1] != "Needs Alice: approve" {
+	if progress["done"] != float64(1) || progress["total"] != float64(3) || len(first["needs"].([]any)) != 2 || first["needs"].([]any)[0] != "Needs Alex: choose a launch date" || first["needs"].([]any)[1] != "Needs Alice: approve" {
 		t.Fatal(first)
 	}
 	dashboard := func(b map[string]any) map[string]any {

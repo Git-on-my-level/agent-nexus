@@ -31,9 +31,9 @@ describe("RefText", () => {
 
   it("links a bare URL that is not work", () => {
     const { container } = mount("See https://example.test/notes for detail.");
-    const link = container.querySelector("a.ref-text__link");
+    const link = container.querySelector("a[href]");
     expect(link.getAttribute("href")).toBe("https://example.test/notes");
-    expect(link.getAttribute("rel")).toBe("noreferrer noopener");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
     expect(link.getAttribute("target")).toBe("_blank");
   });
 
@@ -42,7 +42,16 @@ describe("RefText", () => {
       "fixed in https://github.com/Git-on-my-level/agent-nexus/pull/246",
     );
     expect(container.querySelector("[data-anx-ref]")).not.toBeNull();
-    expect(container.querySelector("a.ref-text__link")).toBeNull();
+    // The chip is the destination; no second anchor for the same URL.
+    expect(container.querySelectorAll("a:not(.anx-ref-chip)")).toHaveLength(0);
+  });
+
+  it("renders markdown in report prose through the shared renderer", () => {
+    const { container } = mount("**Goal:** ship `card:x` by Friday");
+    expect(container.querySelector("strong")?.textContent).toBe("Goal:");
+    // A ref inside a code span is an example, not a destination.
+    expect(container.querySelector("code")?.textContent).toBe("card:x");
+    expect(container.querySelector("[data-anx-ref]")).toBeNull();
   });
 
   it("renders an unresolvable ref as a not-found chip rather than dropping it", () => {

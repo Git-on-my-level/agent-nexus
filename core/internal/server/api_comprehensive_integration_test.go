@@ -10,6 +10,7 @@ import (
 )
 
 func TestComprehensiveHTTPAPIFlow(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)

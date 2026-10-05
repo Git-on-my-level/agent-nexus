@@ -1,0 +1,215 @@
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"testing"
+	"time"
+
+	"agent-nexus-core/internal/primitives"
+)
+
+func TestInboxStreamAppliesListVisibilityOnEveryPoll(t *testing.T) {
+	requireIntegrationTest(t)
+	t.Parallel()
+	for _, role := range []string{"owner", "stranger", "agent"} {
+		t.Run(role, func(t *testing.T) {
+			t.Parallel()
+			env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+			ctx := context.Background()
+			db := env.workspace.DB()
+			owner := seedHumanPrincipalForLockoutTest(t, ctx, db, "stream-owner", "stream-owner-actor", "stream-owner", "stream-owner-token")
+			stranger := seedHumanPrincipalForLockoutTest(t, ctx, db, "stream-stranger", "stream-stranger-actor", "stream-stranger", "stream-stranger-token")
+			agent := seedMachinePrincipalForLockoutTest(t, ctx, db, "stream-agent", "stream-agent-actor", "stream.agent", "stream-agent-token")
+			token := map[string]string{"owner": owner.AccessToken, "stranger": stranger.AccessToken, "agent": agent.AccessToken}[role]
+			store := env.primitiveStore.(*primitives.Store)
+			private := seedStreamPrivacyThread(t, store, owner.ActorID, true)
+			public := seedStreamPrivacyThread(t, store, owner.ActorID, false)
+			hidden := seedStreamPrivacyThread(t, store, owner.ActorID, false)
+			if _, err := store.ArchiveThread(ctx, owner.ActorID, hidden); err != nil {
+				t.Fatal(err)
+			}
+			privateItem := streamPrivacyInboxItem(private, "private-ask", "private body")
+			publicItem := streamPrivacyInboxItem(public, "public-ask", "public body")
+			hiddenItem := streamPrivacyInboxItem(public, "hidden-subject-ask", "hidden subject body")
+			hiddenItem.Data["subject_ref"] = "thread:" + hidden
+			hiddenItem.Data["related_refs"] = []any{"thread:" + hidden}
+			seedStreamPrivacyInbox(t, store, private, privateItem)
+			seedStreamPrivacyInbox(t, store, public, publicItem, hiddenItem)
+
+			// An unknown resume cursor must not bypass snapshot authorization.
+			resp := openAuthenticatedPrivacyStream(t, env.server.URL+"/stream/inbox", token, "unknown-cursor")
+			reader, stop := startSSEReader(resp.Body)
+			defer stop()
+			want := map[string]string{"public-ask": "public body"}
+			if role == "owner" {
+				want["private-ask"] = "private body"
+			}
+			assertPrivacyInboxEvents(t, reader, want)
+			assertPrivacyInboxList(t, env.server.URL, token, want)
+
+			// Both a new private ask and an update to an existing ask must be
+			// filtered, while a public update proves the stream is still polling.
+			privateItem.Data["body"] = "updated private body"
+			publicItem.Data["body"] = "updated public body"
+			seedStreamPrivacyInbox(t, store, private, privateItem, streamPrivacyInboxItem(private, "new-private-ask", "new private body"))
+			seedStreamPrivacyInbox(t, store, public, publicItem, hiddenItem)
+			want = map[string]string{"public-ask": "updated public body"}
+			if role == "owner" {
+				want["private-ask"] = "updated private body"
+				want["new-private-ask"] = "new private body"
+			}
+			assertPrivacyInboxEvents(t, reader, want)
+			assertPrivacyInboxList(t, env.server.URL, token, want)
+
+			// Visibility can change without reconnecting. An archived subject's
+			// changed payload must disappear while a new visible item arrives.
+			if _, err := store.ArchiveThread(ctx, owner.ActorID, public); err != nil {
+				t.Fatal(err)
+			}
+			publicItem.Data["body"] = "hidden after archive"
+			seedStreamPrivacyInbox(t, store, public, publicItem, hiddenItem)
+			visible := seedStreamPrivacyThread(t, store, owner.ActorID, false)
+			seedStreamPrivacyInbox(t, store, visible, streamPrivacyInboxItem(visible, "visible-after-archive", "still visible"))
+			assertPrivacyInboxEvents(t, reader, map[string]string{"visible-after-archive": "still visible"})
+			delete(want, "public-ask")
+			want["visible-after-archive"] = "still visible"
+			assertPrivacyInboxList(t, env.server.URL, token, want)
+		})
+	}
+}
+
+func TestReceiptStreamEnforcesThreadPrivacy(t *testing.T) {
+	requireIntegrationTest(t)
+	t.Parallel()
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	ctx := context.Background()
+	db := env.workspace.DB()
+	owner := seedHumanPrincipalForLockoutTest(t, ctx, db, "receipt-owner", "receipt-owner-actor", "receipt-owner", "receipt-owner-token")
+	stranger := seedHumanPrincipalForLockoutTest(t, ctx, db, "receipt-stranger", "receipt-stranger-actor", "receipt-stranger", "receipt-stranger-token")
+	agent := seedMachinePrincipalForLockoutTest(t, ctx, db, "receipt-agent", "receipt-agent-actor", "receipt.agent", "receipt-agent-token")
+	store := env.primitiveStore.(*primitives.Store)
+	thread := seedStreamPrivacyThread(t, store, owner.ActorID, true)
+	seedReceiptStreamWakeup(t, store, primitives.AgentWakeup{
+		WakeupID: "private-wakeup", ThreadID: thread,
+		TargetActorID: agent.ActorID, TargetHandle: agent.Username,
+		Status: primitives.AgentWakeupStatusRequested, TriggerText: "private receipt body",
+		Refs: []string{"thread:" + thread},
+	})
+	url := env.server.URL + "/stream/agent-notification-receipts?thread_id=" + thread
+	for _, token := range []string{stranger.AccessToken, agent.AccessToken} {
+		resp := getJSONExpectStatusWithAuth(t, url, token, http.StatusNotFound)
+		resp.Body.Close()
+	}
+	resp := openAuthenticatedPrivacyStream(t, url, owner.AccessToken, "")
+	reader, stop := startSSEReader(resp.Body)
+	defer stop()
+	first := awaitSSEEvent(t, reader, 3*time.Second)
+	receipt, _ := first.Data["receipt"].(map[string]any)
+	if first.Event != "notification_receipt" || anyString(receipt["trigger_text"]) != "private receipt body" {
+		t.Fatalf("owner did not receive private receipt: %#v", first)
+	}
+	if _, err := store.PatchThread(ctx, owner.ActorID, thread, map[string]any{"pm_actor_id": stranger.ActorID}, nil); err != nil {
+		t.Fatal(err)
+	}
+	// The owner loses access while connected; no further receipt is emitted.
+	next := awaitSSEEvent(t, reader, 3*time.Second)
+	errorData, _ := next.Data["error"].(map[string]any)
+	if next.Event != "error" || anyString(errorData["code"]) != "not_found" {
+		t.Fatalf("expected access loss to close receipt stream, got %#v", next)
+	}
+}
+
+func seedStreamPrivacyThread(t *testing.T, store *primitives.Store, owner string, private bool) string {
+	t.Helper()
+	data := map[string]any{"title": "Stream privacy test"}
+	if private {
+		data["pm_actor_id"] = owner
+		data["pm_conversation_id"] = "stream-private-conversation"
+	}
+	created, err := store.CreateThread(context.Background(), owner, data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return anyString(created.Thread["id"])
+}
+
+func streamPrivacyInboxItem(thread, id, body string) primitives.DerivedInboxItem {
+	return primitives.DerivedInboxItem{
+		ID: id, ThreadID: thread, Category: "ask", TriggerAt: "2026-10-05T12:00:00Z", GeneratedAt: "2026-10-05T12:00:00Z",
+		Data: map[string]any{"id": id, "kind": "ask", "title": id + " title", "body": body, "subject_ref": "thread:" + thread, "related_refs": []any{"thread:" + thread}},
+	}
+}
+
+func seedStreamPrivacyInbox(t *testing.T, store *primitives.Store, thread string, items ...primitives.DerivedInboxItem) {
+	t.Helper()
+	if err := store.ReplaceDerivedInboxItems(context.Background(), thread, items); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func openAuthenticatedPrivacyStream(t *testing.T, url, token, cursor string) *http.Response {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	t.Cleanup(cancel)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Last-Event-ID", cursor)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		t.Fatalf("stream returned status %d", resp.StatusCode)
+	}
+	return resp
+}
+
+func assertPrivacyInboxEvents(t *testing.T, reader <-chan sseEvent, want map[string]string) {
+	t.Helper()
+	seen := map[string]bool{}
+	for range want {
+		event := awaitSSEEvent(t, reader, 3*time.Second)
+		item, _ := event.Data["item"].(map[string]any)
+		id := anyString(item["id"])
+		body, ok := want[id]
+		if event.Event != "inbox_item" || !ok || seen[id] || anyString(item["body"]) != body {
+			t.Fatalf("unexpected inbox event: %#v; expected %#v", event, want)
+		}
+		if anyString(item["title"]) != id+" title" || anyString(item["subject_ref"]) == "" || len(stringSliceAny(item["related_refs"])) == 0 {
+			t.Fatalf("authorized inbox payload lost fields: %#v", item)
+		}
+		seen[id] = true
+	}
+	select {
+	case event := <-reader:
+		t.Fatalf("unexpected extra inbox event: %#v", event)
+	case <-time.After(150 * time.Millisecond):
+	}
+}
+
+func assertPrivacyInboxList(t *testing.T, baseURL, token string, want map[string]string) {
+	t.Helper()
+	resp := getJSONExpectStatusWithAuth(t, baseURL+"/inbox", token, http.StatusOK)
+	defer resp.Body.Close()
+	var payload struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Items) != len(want) {
+		t.Fatalf("list visibility differs from stream: %#v; want %#v", payload.Items, want)
+	}
+	for _, item := range payload.Items {
+		body, ok := want[anyString(item["id"])]
+		if !ok || anyString(item["body"]) != body {
+			t.Fatalf("unexpected listed item: %#v", item)
+		}
+	}
+}

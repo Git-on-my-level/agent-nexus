@@ -102,7 +102,7 @@ function buildWork() {
           authority: "github",
           run_id: `run_${LONG_ID}`,
           url: "https://example.test/runs/1",
-          host: "m4-hermes",
+          host: "worker-a",
           harness: "claude-code",
           agent: "release-verifier",
           model: "claude-opus-5",

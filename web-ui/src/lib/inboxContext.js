@@ -1,5 +1,6 @@
 import { coreClient } from "$lib/coreClient";
 import { splitTypedRef } from "$lib/inboxUtils.js";
+import { markdownExcerpt } from "$lib/markdown.js";
 
 /**
  * Context for one inbox item: what it blocks and the latest progress note
@@ -18,11 +19,16 @@ function text(value) {
   return String(value ?? "").trim();
 }
 
+/**
+ * One line of a progress note, as prose.
+ *
+ * Notes are authored markdown, so slicing the source showed syntax: a note
+ * opening `**Blocked:** waiting on review` read as `**Blocked:** waiting…`.
+ * The shared renderer's plain-text excerpt is what the line should have been
+ * all along.
+ */
 export function excerpt(value, length = EXCERPT_LENGTH) {
-  const flat = text(value).replace(/\s+/g, " ");
-  return flat.length > length
-    ? `${flat.slice(0, length - 1).trimEnd()}…`
-    : flat;
+  return markdownExcerpt(text(value), { limit: length });
 }
 
 /** Backing threads worth reading for an item, most specific first. */

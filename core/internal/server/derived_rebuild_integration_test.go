@@ -8,6 +8,7 @@ import (
 )
 
 func TestDerivedRebuildIdempotentAndInboxStable(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)

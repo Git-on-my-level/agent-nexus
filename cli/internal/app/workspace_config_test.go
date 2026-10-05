@@ -47,7 +47,7 @@ func writeWorkspaceHost(t *testing.T, configDir, id, base string) {
 func TestWorkspaceResolutionOrder(t *testing.T) {
 	home := t.TempDir()
 	dir := filepath.Join(home, ".config", "anx")
-	cwd := filepath.Join(home, "work", "omi", "repo")
+	cwd := filepath.Join(home, "work", "demo", "repo")
 	for _, tc := range []struct {
 		name                string
 		hosts               int
@@ -62,7 +62,7 @@ func TestWorkspaceResolutionOrder(t *testing.T) {
 		{name: "default beats single", hosts: 1, defaultURL: "b", wantURL: "https://b.example", wantSource: "config:default"},
 		{name: "default resolves multi", hosts: 2, defaultURL: "a", wantURL: "https://a.example", wantSource: "config:default"},
 		{name: "directory beats default", hosts: 2, defaultURL: "a", rules: map[string]string{filepath.Join(home, "work", "**"): "b"}, wantURL: "https://b.example", wantSource: "config:directory-rule:" + filepath.Join(home, "work", "**")},
-		{name: "specific directory beats broad", hosts: 2, defaultURL: "a", rules: map[string]string{filepath.Join(home, "work", "**"): "a", "~/work/omi/**": "b"}, wantURL: "https://b.example", wantSource: "config:directory-rule:~/work/omi/**"},
+		{name: "specific directory beats broad", hosts: 2, defaultURL: "a", rules: map[string]string{filepath.Join(home, "work", "**"): "a", "~/work/demo/**": "b"}, wantURL: "https://b.example", wantSource: "config:directory-rule:~/work/demo/**"},
 		{name: "environment beats directory", hosts: 2, defaultURL: "a", rules: map[string]string{"~/work/**": "a"}, env: map[string]string{"ANX_BASE_URL": "https://env.example"}, wantURL: "https://env.example", wantSource: "env:ANX_BASE_URL"},
 		{name: "URL flag beats environment", hosts: 2, defaultURL: "a", rules: map[string]string{"~/work/**": "a"}, env: map[string]string{"ANX_BASE_URL": "https://env.example"}, flags: []string{"--base-url", "https://flag.example"}, wantURL: "https://flag.example", wantSource: "flag:--base-url"},
 		{name: "workspace flag beats environment", hosts: 2, defaultURL: "a", rules: map[string]string{"~/work/**": "a"}, env: map[string]string{"ANX_BASE_URL": "https://env.example"}, flags: []string{"--workspace", "b"}, wantURL: "https://b.example", wantSource: "flag:--workspace"},
@@ -104,7 +104,7 @@ func TestWorkspaceResolutionOrder(t *testing.T) {
 func TestWorkspaceConfigCommandsAreGlobalAndRepairAmbiguity(t *testing.T) {
 	home := t.TempDir()
 	dir := filepath.Join(t.TempDir(), "custom-config")
-	cwd := filepath.Join(home, "outside-repos", "omi")
+	cwd := filepath.Join(home, "outside-repos", "demo")
 	writeWorkspaceHost(t, dir, "ws_a", "https://a.example")
 	writeWorkspaceHost(t, dir, "ws_b", "https://b.example")
 	a, stdout := workspaceTestApp(t, home, cwd, map[string]string{"ANX_CONFIG_DIR": dir})

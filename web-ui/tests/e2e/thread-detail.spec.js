@@ -36,7 +36,7 @@ test("thread detail separates messages from timeline and nests replies", async (
       id: "evt-0999",
       ts: "2026-03-03T08:00:00.000Z",
       type: "message_posted",
-      actor_id: "agent-m4-hermes",
+      actor_id: "agent-worker-a",
       thread_id: "thread-onboarding",
       refs: ["thread:thread-onboarding"],
       summary: "Earlier timeline-only message",
@@ -98,15 +98,15 @@ test("thread detail separates messages from timeline and nests replies", async (
           cursor === "page-2"
             ? [
                 {
-                  agent_id: "agent-m4-hermes",
-                  actor_id: "actor-m4-hermes",
-                  username: "m4-hermes",
+                  agent_id: "agent-worker-a",
+                  actor_id: "actor-worker-a",
+                  username: "worker-a",
                   principal_kind: "agent",
                   auth_method: "public_key",
                   revoked: false,
                   registration: {
-                    handle: "m4-hermes",
-                    actor_id: "actor-m4-hermes",
+                    handle: "worker-a",
+                    actor_id: "actor-worker-a",
                     status: "active",
                     workspace_bindings: [
                       { workspace_id: "local", enabled: true },
@@ -114,11 +114,11 @@ test("thread detail separates messages from timeline and nests replies", async (
                   },
                   wake_routing: {
                     applicable: true,
-                    handle: "m4-hermes",
+                    handle: "worker-a",
                     taggable: true,
                     online: true,
                     state: "online",
-                    summary: "Online as @m4-hermes.",
+                    summary: "Online as @worker-a.",
                   },
                 },
                 {
@@ -419,10 +419,10 @@ test("thread detail separates messages from timeline and nests replies", async (
   await expect(
     page.getByText("Earlier timeline-only message", { exact: true }),
   ).toBeVisible();
-  await expect(page.locator("#message-evt-0999")).toContainText("m4-hermes");
+  await expect(page.locator("#message-evt-0999")).toContainText("worker-a");
   await page.locator("#message-text").fill("@");
   await expect(page.locator("#message-mention-list")).toContainText(
-    "@m4-hermes",
+    "@worker-a",
   );
   await expect(page.locator("#message-mention-list")).toContainText("@jarvis");
   await expect(page.locator("#message-mention-list")).toContainText("@clawd");
@@ -461,7 +461,7 @@ test("thread detail separates messages from timeline and nests replies", async (
   await expect(
     page.getByText("Message: Reply message from e2e", { exact: true }),
   ).toBeVisible();
-  await expect(page.locator("#event-evt-0999")).toContainText("m4-hermes");
+  await expect(page.locator("#event-evt-0999")).toContainText("worker-a");
   await expect(page.locator("#event-event-new-1")).toContainText(
     "Thread Detail Tester",
   );
@@ -485,7 +485,7 @@ test("thread detail separates messages from timeline and nests replies", async (
   await expect(
     page.getByRole("tab", { name: "Messages", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
-  await expect(page.locator("#message-evt-0999")).toContainText("m4-hermes");
+  await expect(page.locator("#message-evt-0999")).toContainText("worker-a");
   await expect(page.locator("#message-evt-0999")).toHaveClass(
     /anx-deep-link-target/,
   );

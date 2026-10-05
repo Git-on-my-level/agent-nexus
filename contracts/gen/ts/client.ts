@@ -5141,7 +5141,7 @@ export const commandRegistry: CommandSpec[] = [
     "examples": [
       {
         "title": "Publish from stdin",
-        "command": "anx docs put - --handle kb-shared --title \"Note\" --tags knowledge --source https://example.invalid/note.md --hosts m4-air --verified-at 2026-09-08T12:00:00Z"
+        "command": "anx docs put - --handle kb-shared --title \"Note\" --tags knowledge --source https://example.invalid/note.md --hosts laptop-a --verified-at 2026-09-08T12:00:00Z"
       }
     ],
     "body_schema": {

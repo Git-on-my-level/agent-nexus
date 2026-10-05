@@ -17,6 +17,7 @@ import (
 )
 
 func TestThreadsCreatePatchListAndTimeline(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -116,6 +117,7 @@ func TestThreadsCreatePatchListAndTimeline(t *testing.T) {
 }
 
 func TestPatchThreadIfUpdatedAtOptimisticLocking(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -204,6 +206,7 @@ func TestPatchThreadIfUpdatedAtOptimisticLocking(t *testing.T) {
 }
 
 func TestPatchThreadProvenanceRoundTrip(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -275,6 +278,7 @@ func TestPatchThreadProvenanceRoundTrip(t *testing.T) {
 }
 
 func TestListThreadsStateAndSearch(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -345,6 +349,7 @@ func containsStringSlice(haystack []string, needle string) bool {
 }
 
 func TestThreadCadenceValidationSupportsCronAndRejectsInvalidValue(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 	if err := schedule.ValidateCadence("every-day"); err == nil {
 		t.Fatal("expected invalid cadence to be rejected")
@@ -352,6 +357,7 @@ func TestThreadCadenceValidationSupportsCronAndRejectsInvalidValue(t *testing.T)
 }
 
 func TestThreadTimelineIncludesReferencedObjectsAndOmitsMissingRefs(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -435,6 +441,7 @@ func TestThreadTimelineIncludesReferencedObjectsAndOmitsMissingRefs(t *testing.T
 }
 
 func TestThreadTimelineIncludesDocumentLifecycleEventsAndExpansions(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -557,6 +564,7 @@ func TestThreadTimelineIncludesDocumentLifecycleEventsAndExpansions(t *testing.T
 }
 
 func TestThreadContextBundlesRecentEventsArtifactsAndOpenCards(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -724,6 +732,7 @@ func TestThreadContextBundlesRecentEventsArtifactsAndOpenCards(t *testing.T) {
 }
 
 func TestThreadContextRejectsInvalidQueryParams(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -759,6 +768,7 @@ func TestThreadContextRejectsInvalidQueryParams(t *testing.T) {
 }
 
 func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
+	requireIntegrationTest(t)
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)

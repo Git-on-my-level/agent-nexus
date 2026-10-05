@@ -7,6 +7,8 @@ BRIDGE_DIR := adapters/agent-bridge
 HTTP_RECORD_DIR := tools/anx-http-record
 PYTHON ?= python3
 PRE_COMMIT_BIN := $(CURDIR)/.venv/bin/pre-commit
+STATIC_ARGS ?=
+TEST_FAST_ARGS ?=
 
 CORE_HOST ?= 127.0.0.1
 CORE_PORT ?= 8000
@@ -48,7 +50,15 @@ web-ui-static-ci: ## Same steps as CI job web-ui-static-check (frozen lockfile +
 	$(MAKE) -C $(WEB_UI_DIR) check
 	pnpm -C $(WEB_UI_DIR) run build
 
+.PHONY: check-static test-fast
+check-static: ## Offline static checks of staged changes and generated-contract drift (STATIC_ARGS=--all for all files)
+	$(PYTHON) -B scripts/git-hooks/checks.py static $(STATIC_ARGS)
+
+test-fast: ## Changed-module Go -short and Vitest units; TEST_FAST_ARGS=--all checks all modules
+	$(PYTHON) -B scripts/git-hooks/checks.py fast $(TEST_FAST_ARGS)
+
 check: ## Run repo, core, cli, and web-ui checks
+	$(MAKE) oss-boundary-check
 	$(MAKE) contract-check
 	$(MAKE) workflow-check
 	$(MAKE) -C $(CORE_DIR) check
@@ -61,6 +71,11 @@ lint: ## Run lint checks for repo, core, and web-ui
 	$(MAKE) workflow-check
 	$(MAKE) -C $(CORE_DIR) lint
 	$(MAKE) -C $(WEB_UI_DIR) lint
+
+.PHONY: oss-boundary-check
+oss-boundary-check: ## Reject private paths/hosts and optional external patterns in tracked text
+	python3 ./scripts/test-oss-boundary.py
+	./scripts/check-oss-boundary.sh
 
 test: ## Run tests in both core and web-ui
 	$(MAKE) -C $(CORE_DIR) test

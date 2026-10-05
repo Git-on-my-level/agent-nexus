@@ -38,7 +38,7 @@ func TestJoinSourceURL(t *testing.T) {
 
 func TestDocsTitleFromMarkdown(t *testing.T) {
 	t.Parallel()
-	if got := docsTitleFromMarkdown("# Omi now\n\nbody\n", "NOW.md"); got != "Omi now" {
+	if got := docsTitleFromMarkdown("# Demo now\n\nbody\n", "NOW.md"); got != "Demo now" {
 		t.Fatalf("heading title: %q", got)
 	}
 	if got := docsTitleFromMarkdown("no heading\n", "lessons/runbook.md"); got != "runbook" {

@@ -34,13 +34,13 @@ func TestRouteMentionSkipsSelfAuthoredMessages(t *testing.T) {
 		},
 		state,
 	)
-	service.cache.byHandle["m4-hermes"] = auth.AuthPrincipalSummary{
-		ActorID:       "actor-m4-hermes",
-		Username:      "m4-hermes",
+	service.cache.byHandle["worker-a"] = auth.AuthPrincipalSummary{
+		ActorID:       "actor-worker-a",
+		Username:      "worker-a",
 		PrincipalKind: "agent",
 		Registration: &auth.AgentRegistration{
-			Handle:                     "m4-hermes",
-			ActorID:                    "actor-m4-hermes",
+			Handle:                     "worker-a",
+			ActorID:                    "actor-worker-a",
 			Status:                     "active",
 			BridgeSigningPublicKeySPKI: "not-needed-for-self-skip",
 			BridgeProofSignatureB64:    "not-needed-for-self-skip",
@@ -52,13 +52,13 @@ func TestRouteMentionSkipsSelfAuthoredMessages(t *testing.T) {
 
 	ok, err := service.routeMention(
 		context.Background(),
-		"m4-hermes",
+		"worker-a",
 		map[string]any{
 			"id":        "event-message-1",
 			"thread_id": "thread-1",
-			"actor_id":  "actor-m4-hermes",
+			"actor_id":  "actor-worker-a",
 		},
-		"@m4-hermes replying to my own wake",
+		"@worker-a replying to my own wake",
 	)
 	if err != nil {
 		t.Fatalf("routeMention: %v", err)
@@ -106,13 +106,13 @@ func TestRouteMentionQueuesNotificationForOfflineAgent(t *testing.T) {
 		},
 		state,
 	)
-	service.cache.byHandle["m4-hermes"] = auth.AuthPrincipalSummary{
-		ActorID:       "actor-m4-hermes",
-		Username:      "m4-hermes",
+	service.cache.byHandle["worker-a"] = auth.AuthPrincipalSummary{
+		ActorID:       "actor-worker-a",
+		Username:      "worker-a",
 		PrincipalKind: "agent",
 		Registration: &auth.AgentRegistration{
-			Handle:  "m4-hermes",
-			ActorID: "actor-m4-hermes",
+			Handle:  "worker-a",
+			ActorID: "actor-worker-a",
 			Status:  "pending",
 			WorkspaceBindings: []auth.AgentRegistrationWorkspaceBinding{
 				{WorkspaceID: "ws-main", Enabled: true},
@@ -122,14 +122,14 @@ func TestRouteMentionQueuesNotificationForOfflineAgent(t *testing.T) {
 
 	ok, err := service.routeMention(
 		context.Background(),
-		"m4-hermes",
+		"worker-a",
 		map[string]any{
 			"id":        "event-message-1",
 			"thread_id": "thread-1",
 			"actor_id":  "actor-human",
 			"ts":        "2026-03-30T10:00:00Z",
 		},
-		"@m4-hermes please check this",
+		"@worker-a please check this",
 	)
 	if err != nil {
 		t.Fatalf("routeMention: %v", err)
@@ -182,13 +182,13 @@ func TestRouteMentionWakePacketIncludesSubjectFromThread(t *testing.T) {
 		},
 		state,
 	)
-	service.cache.byHandle["m4-hermes"] = auth.AuthPrincipalSummary{
-		ActorID:       "actor-m4-hermes",
-		Username:      "m4-hermes",
+	service.cache.byHandle["worker-a"] = auth.AuthPrincipalSummary{
+		ActorID:       "actor-worker-a",
+		Username:      "worker-a",
 		PrincipalKind: "agent",
 		Registration: &auth.AgentRegistration{
-			Handle:  "m4-hermes",
-			ActorID: "actor-m4-hermes",
+			Handle:  "worker-a",
+			ActorID: "actor-worker-a",
 			Status:  "pending",
 			WorkspaceBindings: []auth.AgentRegistrationWorkspaceBinding{
 				{WorkspaceID: "ws-main", Enabled: true},
@@ -198,14 +198,14 @@ func TestRouteMentionWakePacketIncludesSubjectFromThread(t *testing.T) {
 
 	ok, err := service.routeMention(
 		context.Background(),
-		"m4-hermes",
+		"worker-a",
 		map[string]any{
 			"id":        "event-message-subj",
 			"thread_id": "thread-subj",
 			"actor_id":  "actor-human",
 			"ts":        "2026-03-30T11:00:00Z",
 		},
-		"@m4-hermes with subject",
+		"@worker-a with subject",
 	)
 	if err != nil {
 		t.Fatalf("routeMention: %v", err)
@@ -266,12 +266,12 @@ func TestRouteMentionRefreshesPrincipalCacheWhenRegistrationIsStale(t *testing.T
 				listPrincipalCalls++
 				return []auth.AuthPrincipalSummary{
 					{
-						ActorID:       "actor-m4-hermes",
-						Username:      "m4-hermes",
+						ActorID:       "actor-worker-a",
+						Username:      "worker-a",
 						PrincipalKind: "agent",
 						Registration: &auth.AgentRegistration{
-							Handle:  "m4-hermes",
-							ActorID: "actor-m4-hermes",
+							Handle:  "worker-a",
+							ActorID: "actor-worker-a",
 							Status:  "active",
 							WorkspaceBindings: []auth.AgentRegistrationWorkspaceBinding{
 								{WorkspaceID: "ws-main", Enabled: true},
@@ -298,23 +298,23 @@ func TestRouteMentionRefreshesPrincipalCacheWhenRegistrationIsStale(t *testing.T
 		},
 		state,
 	)
-	service.cache.byHandle["m4-hermes"] = auth.AuthPrincipalSummary{
-		ActorID:       "actor-m4-hermes",
-		Username:      "m4-hermes",
+	service.cache.byHandle["worker-a"] = auth.AuthPrincipalSummary{
+		ActorID:       "actor-worker-a",
+		Username:      "worker-a",
 		PrincipalKind: "agent",
 		Registration:  nil,
 	}
 
 	ok, err := service.routeMention(
 		context.Background(),
-		"m4-hermes",
+		"worker-a",
 		map[string]any{
 			"id":        "event-message-1",
 			"thread_id": "thread-1",
 			"actor_id":  "actor-human",
 			"ts":        "2026-03-31T10:00:00Z",
 		},
-		"@m4-hermes please check this",
+		"@worker-a please check this",
 	)
 	if err != nil {
 		t.Fatalf("routeMention: %v", err)
