@@ -3,6 +3,7 @@ package observation
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -200,12 +201,13 @@ func liveMulticaReader(t *testing.T) (Target, *MulticaCLIReader) {
 			t.Fatal(err)
 		}
 	}
-	// David's read-only canary: profile desktop-multica-01.tail76ea03.ts.net,
-	// workspace slug scaling-forever, issue SCA-453. Never comment or change status.
-	profile := envOr("ANX_MULTICA_PROFILE", "desktop-multica-01.tail76ea03.ts.net")
-	workspace := envOr("ANX_MULTICA_WORKSPACE_ID", "f895fd35-edb9-44e2-8e5a-7f78bd93f47e")
-	issue := envOr("ANX_MULTICA_ISSUE_ID", "SCA-453")
-	base := envOr("ANX_MULTICA_BASE_URL", "https://multica-01.tail76ea03.ts.net")
+	// Live reads require an explicitly selected source; never default to a
+	// contributor's profile, workspace or issue.
+	config, err := multicaCanaryConfig(os.Getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, workspace, issue, base := config[0], config[1], config[2], config[3]
 	target := Target{WorkspaceID: "ws_main", ConnectionID: "multica-main", Source: "multica", Kind: "issue", NativeID: issue}
 	reader, err := NewMulticaCLIReader(MulticaCLIConfig{Binary: bin, Profile: profile, BaseURL: base, WorkspaceID: target.WorkspaceID, ConnectionID: target.ConnectionID, SourceWorkspaceID: workspace, Timeout: 30 * time.Second})
 	if err != nil {
@@ -289,4 +291,37 @@ func TestLiveGenerateHarnessGitHub(t *testing.T) {
 	}
 	mread := lifecycleGenerated(t, manager, "multica-issue-transform", mversion, mreader)
 	t.Logf("model-generated multica canary title=%q native=%s revision=%s", mread.Title, mread.NativeStatus, mversion.Revision)
+}
+
+// multicaCanaryConfig validates configuration before any source command runs.
+func multicaCanaryConfig(getenv func(string) string) ([4]string, error) {
+	var values [4]string
+	for i, key := range []string{"ANX_MULTICA_PROFILE", "ANX_MULTICA_WORKSPACE_ID", "ANX_MULTICA_ISSUE_ID", "ANX_MULTICA_BASE_URL"} {
+		values[i] = strings.TrimSpace(getenv(key))
+		if values[i] == "" {
+			return values, fmt.Errorf("live Multica canary requires %s", key)
+		}
+	}
+	return values, nil
+}
+
+func TestMulticaCanaryRequiresExplicitSource(t *testing.T) {
+	keys := []string{"ANX_MULTICA_PROFILE", "ANX_MULTICA_WORKSPACE_ID", "ANX_MULTICA_ISSUE_ID", "ANX_MULTICA_BASE_URL"}
+	config := map[string]string{keys[0]: "test-profile", keys[1]: "source-workspace", keys[2]: "TEST-1", keys[3]: "https://source.example.test"}
+	if got, err := multicaCanaryConfig(func(key string) string { return config[key] }); err != nil || got[2] != "TEST-1" {
+		t.Fatalf("explicit target: config=%v err=%v", got, err)
+	}
+	for _, missing := range keys {
+		t.Run(missing, func(t *testing.T) {
+			_, err := multicaCanaryConfig(func(key string) string {
+				if key == missing {
+					return "  "
+				}
+				return config[key]
+			})
+			if err == nil || !strings.Contains(err.Error(), missing) {
+				t.Fatalf("missing source must fail before a read: %v", err)
+			}
+		})
+	}
 }
