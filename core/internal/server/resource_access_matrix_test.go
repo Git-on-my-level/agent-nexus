@@ -212,6 +212,9 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 					// Point routes use their actual private path selector, without
 					// unrelated private IDs injected into the request body.
 					payload := map[string]any{}
+					if p.Method == "PATCH" && p.Path == "/hosts/{host_id}" {
+						payload["display_name"] = "Privacy roster fixture"
+					}
 					if p.Policy == "reference-write" {
 						payload = privacyWritePayload(t, p.Path, principal.ActorID, boardID, cardID, threadID, anyString(document["id"]), anyString(event["id"]), agent.AgentID)
 					}
