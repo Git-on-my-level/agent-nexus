@@ -175,6 +175,90 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def recovery_digest(path):
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return ""
+    if not stat.S_ISREG(info.st_mode):
+        raise RuntimeError("Transaction path is not a regular file")
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, "rb") as source:
+        opened = os.fstat(source.fileno())
+        if not stat.S_ISREG(opened.st_mode) or (info.st_dev, info.st_ino) != (opened.st_dev, opened.st_ino):
+            raise RuntimeError("Transaction file changed while opening")
+        checksum = hashlib.sha256()
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            checksum.update(block)
+        return checksum.hexdigest()
+
+
+def valid_digest(value):
+    return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+
+
+def require_fields(value, fields):
+    if not isinstance(value, dict) or set(value) != set(fields) or any(item is None for item in value.values()):
+        raise RuntimeError("Incomplete recovery transaction object")
+
+
+RECEIPT_FIELDS = ("managed_by", "version", "sha256", "installed_at")
+
+
+def validate_receipt(record):
+    require_fields(record, RECEIPT_FIELDS)
+    if any(not isinstance(value, str) for value in record.values()):
+        raise RuntimeError("Invalid recovery receipt field type")
+    if record["managed_by"] != "anx" or not TAG.fullmatch(record["version"]) or not valid_digest(record["sha256"]):
+        raise RuntimeError("Invalid recovery receipt identity")
+    if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})", record["installed_at"]):
+        raise RuntimeError("Invalid recovery receipt timestamp")
+    datetime.datetime.fromisoformat(record["installed_at"].replace("Z", "+00:00"))
+
+
+def validate_transaction(path, tx):
+    require_fields(tx, ("schema_version", "phase", "backup_path", "old_sha256", "old_record", "old_record_exists", "new_record"))
+    if type(tx["schema_version"]) is not int or tx["schema_version"] != 1 or tx["phase"] not in ("prepared", "committed"):
+        raise RuntimeError("Invalid recovery transaction")
+    if not isinstance(tx["backup_path"], str) or not isinstance(tx["old_sha256"], str) or type(tx["old_record_exists"]) is not bool:
+        raise RuntimeError("Invalid recovery transaction field type")
+    validate_receipt(tx["new_record"])
+    if tx["old_record_exists"]:
+        validate_receipt(tx["old_record"])
+        if tx["old_record"]["sha256"] != tx["old_sha256"]:
+            raise RuntimeError("Original receipt differs from transaction digest")
+    else:
+        # Go encodes an absent receipt as a typed object with empty strings.
+        if tx["old_record"] != {}:
+            require_fields(tx["old_record"], RECEIPT_FIELDS)
+            if any(value != "" for value in tx["old_record"].values()):
+                raise RuntimeError("Unexpected original receipt in recovery transaction")
+    if not tx["old_sha256"]:
+        if tx["backup_path"] or tx["old_record_exists"]:
+            raise RuntimeError("Inconsistent first-install transaction")
+    else:
+        backup = Path(tx["backup_path"])
+        if not valid_digest(tx["old_sha256"]) or not backup.is_absolute() or os.path.normpath(tx["backup_path"]) != tx["backup_path"]:
+            raise RuntimeError("Invalid original digest or rollback path")
+        if backup.parent.resolve() != path.parent.resolve() or backup.name == path.name or not backup.name.startswith(".anx-rollback-"):
+            raise RuntimeError("Invalid recovery transaction backup")
+
+
+def inspect_transaction_files(path, tx):
+    current = recovery_digest(path)
+    if current and current not in (tx["old_sha256"], tx["new_record"]["sha256"]):
+        raise RuntimeError("Binary differs from both transaction digests; preserving recovery evidence")
+    if tx["phase"] == "committed" and current != tx["new_record"]["sha256"]:
+        raise RuntimeError("Committed binary differs from transaction")
+    if tx["backup_path"]:
+        saved = recovery_digest(Path(tx["backup_path"]))
+        if saved and saved != tx["old_sha256"]:
+            raise RuntimeError("Rollback backup changed")
+        if tx["phase"] == "prepared" and current != tx["old_sha256"] and not saved:
+            raise RuntimeError("Rollback backup missing")
+    return current
+
+
 def receipt_path(path):
     return Path(str(path) + ".anx-install.json")
 
@@ -201,6 +285,8 @@ def install_lock(path):
 
 
 def cleanup_transaction(path, tx):
+    validate_transaction(path, tx)
+    inspect_transaction_files(path, tx)
     if tx["backup_path"]:
         Path(tx["backup_path"]).unlink(missing_ok=True)
     journal_path(path).unlink(missing_ok=True)
@@ -211,19 +297,18 @@ def recover(path):
     if not journal_path(path).exists():
         return
     tx = json.loads(journal_path(path).read_text())
+    validate_transaction(path, tx)
+    current = inspect_transaction_files(path, tx)
     backup = Path(tx["backup_path"]) if tx["backup_path"] else None
-    if tx["schema_version"] != 1 or tx["phase"] not in ("prepared", "committed") or backup and (backup.parent.resolve() != path.parent.resolve() or not backup.name.startswith(".anx-rollback-")):
-        raise RuntimeError("Invalid recovery transaction")
     if tx["phase"] == "committed":
-        if digest(path) != tx["new_record"]["sha256"]:
-            raise RuntimeError("Committed binary differs from transaction")
         atomic_json(receipt_path(path), tx["new_record"])
     else:
         if not tx["old_sha256"]:
-            path.unlink(missing_ok=True)
-        elif not path.exists() or digest(path) != tx["old_sha256"]:
-            if not backup or digest(backup) != tx["old_sha256"]:
-                raise RuntimeError("Rollback backup missing or changed")
+            # A complete first-install record authorizes removing its candidate
+            # only, never unrelated bytes subsequently placed at this path.
+            if current:
+                path.unlink()
+        elif current != tx["old_sha256"]:
             rename_durable(backup, path)
         if tx["old_record_exists"]:
             atomic_json(receipt_path(path), tx["old_record"])
@@ -265,8 +350,10 @@ def install(path, binary, version):
                       "installed_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
             tx = {"schema_version": 1, "phase": "prepared", "backup_path": backup, "old_sha256": old_sha,
                   "old_record": old_record, "old_record_exists": old_record_exists, "new_record": record}
+            validate_transaction(path, tx)
             atomic_json(journal_path(path), tx)
             try:
+                inspect_transaction_files(path, tx)
                 rename_durable(candidate, path)
                 probe(path, version)
                 atomic_json(receipt_path(path), record)

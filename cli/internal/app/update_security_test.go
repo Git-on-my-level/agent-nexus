@@ -216,7 +216,7 @@ func TestUpdateRecoveryIsIdempotentAfterBackupRename(t *testing.T) {
 	_ = readUpdateJSON(installRecordPath(path), &old)
 	backup := filepath.Join(filepath.Dir(path), ".anx-rollback-test")
 	_ = os.WriteFile(backup, []byte("original"), 0755)
-	tx := updateTransaction{SchemaVersion: 1, Phase: "prepared", BackupPath: backup, OldSHA256: old.SHA256, OldRecord: old, OldRecordExists: true}
+	tx := updateTransaction{SchemaVersion: 1, Phase: "prepared", BackupPath: backup, OldSHA256: old.SHA256, OldRecord: old, OldRecordExists: true, NewRecord: updateInstallRecord{ManagedBy: "anx", Version: "v0.12.11", SHA256: sha256HexForTest([]byte("replacement")), InstalledAt: "2026-10-05T00:00:00Z"}}
 	_ = writeUpdateJSON(updateTransactionPath(path), tx)
 	// Recovery already restored the binary, then died before restoring receipt.
 	_ = os.Remove(backup)

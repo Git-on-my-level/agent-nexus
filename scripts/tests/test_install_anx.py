@@ -1,6 +1,7 @@
 """Adversarial installer tests: real probes, locks and filesystem transactions,
 with only release HTTP mocked. No public network or real user home is accessed.
 """
+import copy
 import fcntl
 import hashlib
 import io
@@ -79,7 +80,8 @@ except Exception as error:
         path = self.install / "anx"
         path.write_bytes(b"original")
         path.chmod(0o755)
-        receipt = {"managed_by": "anx", "version": "v0.12.10", "sha256": hashlib.sha256(b"original").hexdigest()}
+        receipt = {"managed_by": "anx", "version": "v0.12.10", "sha256": hashlib.sha256(b"original").hexdigest(),
+                   "installed_at": "2026-10-05T00:00:00Z"}
         (self.install / "anx.anx-install.json").write_text(json.dumps(receipt))
         return receipt
 
@@ -216,6 +218,196 @@ except Exception as error:
             module["recover"](path)
         self.assertEqual(path.read_bytes(), b"original")
         self.assertEqual(json.loads(module["receipt_path"](path).read_text()), original)
+
+    def seed_transaction(self, first_install=False):
+        original = self.seed_original()
+        module = load_installer()
+        path = self.install / "anx"
+        backup = self.install / ".anx-rollback-test"
+        backup.write_bytes(b"original")
+        candidate = {"managed_by": "anx", "version": "v0.12.11", "sha256": hashlib.sha256(self.binary).hexdigest(),
+                     "installed_at": "2026-10-05T00:00:00Z"}
+        tx = {"schema_version": 1, "phase": "prepared", "backup_path": str(backup),
+              "old_sha256": original["sha256"], "old_record": original, "old_record_exists": True, "new_record": candidate}
+        if first_install:
+            tx.update(backup_path="", old_sha256="", old_record={}, old_record_exists=False)
+            backup.unlink()
+            module["receipt_path"](path).unlink()
+        path.write_bytes(self.binary)
+        module["journal_path"](path).write_text(json.dumps(tx))
+        return module, path, tx
+
+    def evidence_snapshot(self, module, path, backup=""):
+        paths = [path, module["receipt_path"](path), module["journal_path"](path)]
+        if backup:
+            paths.append(Path(backup))
+        return {str(item): (item.read_bytes(), item.lstat().st_ino) if item.exists() else None for item in paths}
+
+    def test_recovery_preserves_foreign_binary_after_crash(self):
+        self.seed_original()
+        module = load_installer()
+        path = self.install / "anx"
+        real_write = module["atomic_json"]
+        def crash_before_receipt(destination, value):
+            if destination == module["receipt_path"](path):
+                raise SystemExit("simulated crash")
+            real_write(destination, value)
+        with mock.patch.dict(module, {"atomic_json": crash_before_receipt}):
+            with self.assertRaises(SystemExit):
+                module["install"](path, self.binary, "v0.12.11")
+        tx = json.loads(module["journal_path"](path).read_text())
+        path.write_bytes(b"unrelated development bytes")
+        for phase in ("prepared", "committed"):
+            with self.subTest(phase=phase):
+                tx["phase"] = phase
+                module["journal_path"](path).write_text(json.dumps(tx))
+                before = self.evidence_snapshot(module, path, tx["backup_path"])
+                # Run the installer's actual main path, including recovery
+                # before the normal explicit installation can replace bytes.
+                result = self.run_installer()
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertIn("both transaction digests", result.stderr)
+                self.assertEqual(self.evidence_snapshot(module, path, tx["backup_path"]), before)
+
+    def test_recovery_rejects_partial_empty_and_inconsistent_journals(self):
+        module, path, complete = self.seed_transaction()
+        variants = {
+            "minimal reproduction": {"schema_version": 1, "phase": "prepared"},
+            "empty digests and receipt": dict(complete, old_sha256="", backup_path="", old_record_exists=False, old_record={}, new_record={}),
+            "empty backup": dict(complete, backup_path=""),
+            "relative backup": dict(complete, backup_path=".anx-rollback-relative"),
+            "invalid original digest": dict(complete, old_sha256="garbage"),
+            "first install with original receipt": dict(complete, old_sha256="", backup_path=""),
+            "unexpected original receipt": dict(complete, old_record_exists=False),
+            "invalid phase": dict(complete, phase="unknown"),
+            "invalid schema": dict(complete, schema_version=2),
+            "boolean schema": dict(complete, schema_version=True),
+            "nonboolean receipt existence": dict(complete, old_record_exists="false"),
+            "unexpected field": dict(complete, old_sh256=complete["old_sha256"]),
+        }
+        for key in complete:
+            absent = copy.deepcopy(complete)
+            del absent[key]
+            variants["missing " + key] = absent
+            variants["null " + key] = dict(complete, **{key: None})
+        for receipt in ("old_record", "new_record"):
+            for key in complete[receipt]:
+                absent, null = copy.deepcopy(complete), copy.deepcopy(complete)
+                del absent[receipt][key]
+                null[receipt][key] = None
+                variants[receipt + " missing " + key] = absent
+                variants[receipt + " null " + key] = null
+        for name, receipt, key, value in [
+                ("empty candidate digest", "new_record", "sha256", ""),
+                ("original receipt mismatch", "old_record", "sha256", "0" * 64),
+                ("invalid candidate owner", "new_record", "managed_by", "foreign"),
+                ("invalid candidate version", "new_record", "version", "v1/../../x"),
+                ("invalid timestamp", "new_record", "installed_at", "yesterday")]:
+            tx = copy.deepcopy(complete)
+            tx[receipt][key] = value
+            variants[name] = tx
+        path.write_bytes(b"original")
+        for name, tx in variants.items():
+            with self.subTest(journal=name):
+                module["journal_path"](path).write_text(json.dumps(tx))
+                before = self.evidence_snapshot(module, path, complete["backup_path"])
+                result = self.run_installer()
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertEqual(self.evidence_snapshot(module, path, complete["backup_path"]), before)
+
+    def test_first_install_recovery_removes_only_recorded_candidate(self):
+        for contents in (self.binary, None, b"foreign"):
+            for absent_record in ({}, dict.fromkeys(("managed_by", "version", "sha256", "installed_at"), "")):
+                with self.subTest(contents=contents, absent_record=absent_record):
+                    module, path, tx = self.seed_transaction(first_install=True)
+                    tx["old_record"] = absent_record  # Python and Go journal encodings.
+                    module["journal_path"](path).write_text(json.dumps(tx))
+                    if contents is None:
+                        path.unlink()
+                    else:
+                        path.write_bytes(contents)
+                    before = self.evidence_snapshot(module, path)
+                    with module["install_lock"](path):
+                        if contents == b"foreign":
+                            with self.assertRaisesRegex(RuntimeError, "both transaction digests"):
+                                module["recover"](path)
+                            self.assertEqual(self.evidence_snapshot(module, path), before)
+                        else:
+                            module["recover"](path)
+                            self.assertFalse(path.exists())
+                            self.assertFalse(module["receipt_path"](path).exists())
+                            self.assertFalse(module["journal_path"](path).exists())
+
+    def test_recovery_preserves_changed_and_symlinked_backups(self):
+        for symlink in (False, True):
+            with self.subTest(symlink=symlink):
+                module, path, tx = self.seed_transaction()
+                backup = Path(tx["backup_path"])
+                if symlink:
+                    backup.unlink()
+                    backup.symlink_to(path)
+                else:
+                    backup.write_bytes(b"foreign backup")
+                before = self.evidence_snapshot(module, path, backup)
+                with module["install_lock"](path), self.assertRaises(RuntimeError):
+                    module["recover"](path)
+                self.assertEqual(self.evidence_snapshot(module, path, backup), before)
+
+    def test_installer_preserves_target_changed_after_journal_preparation(self):
+        self.seed_original()
+        module = load_installer()
+        path = self.install / "anx"
+        real_write = module["atomic_json"]
+        saved = {}
+        def change_after_journal(destination, value):
+            real_write(destination, value)
+            if destination == module["journal_path"](path):
+                path.write_bytes(b"foreign bytes arriving during staging")
+                saved.update(self.evidence_snapshot(module, path, value["backup_path"]))
+        with mock.patch.dict(module, {"atomic_json": change_after_journal}):
+            with self.assertRaisesRegex(RuntimeError, "both transaction digests"):
+                module["install"](path, self.binary, "v0.12.11")
+        tx = json.loads(module["journal_path"](path).read_text())
+        self.assertEqual(self.evidence_snapshot(module, path, tx["backup_path"]), saved)
+
+    def test_recovery_accepts_recorded_original_candidate_or_absence(self):
+        for managed in (True, False):
+            for contents in (b"original", self.binary, None):
+                with self.subTest(managed=managed, contents=contents):
+                    module, path, tx = self.seed_transaction()
+                    if not managed:
+                        tx.update(old_record_exists=False, old_record={})
+                        module["receipt_path"](path).unlink()
+                    if contents is None:
+                        path.unlink()
+                    else:
+                        path.write_bytes(contents)
+                    if contents == b"original":
+                        Path(tx["backup_path"]).unlink()  # Already consumed by interrupted rollback.
+                    module["journal_path"](path).write_text(json.dumps(tx))
+                    with module["install_lock"](path):
+                        module["recover"](path)
+                    self.assertEqual(path.read_bytes(), b"original")
+                    if managed:
+                        self.assertEqual(json.loads(module["receipt_path"](path).read_text()), tx["old_record"])
+                    else:
+                        self.assertFalse(module["receipt_path"](path).exists())
+                    self.assertFalse(module["journal_path"](path).exists())
+
+    def test_recovery_completes_committed_cleanup(self):
+        for backup_present in (True, False):
+            with self.subTest(backup_present=backup_present):
+                module, path, tx = self.seed_transaction()
+                tx["phase"] = "committed"
+                if not backup_present:
+                    Path(tx["backup_path"]).unlink()
+                module["journal_path"](path).write_text(json.dumps(tx))
+                with module["install_lock"](path):
+                    module["recover"](path)
+                self.assertEqual(path.read_bytes(), self.binary)
+                self.assertEqual(json.loads(module["receipt_path"](path).read_text()), tx["new_record"])
+                self.assertFalse(Path(tx["backup_path"]).exists())
+                self.assertFalse(module["journal_path"](path).exists())
 
     def test_drifted_skills_fail_without_overwriting_the_copy(self):
         module = load_installer()

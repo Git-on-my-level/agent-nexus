@@ -36,7 +36,7 @@ func managedUpdateFixture(t *testing.T) (*App, config.Resolved, string) {
 		t.Fatal(err)
 	}
 	digest, _ := binaryDigest(path)
-	if err := writeUpdateJSON(installRecordPath(path), updateInstallRecord{ManagedBy: "anx", Version: "v0.12.10", SHA256: digest}); err != nil {
+	if err := writeUpdateJSON(installRecordPath(path), updateInstallRecord{ManagedBy: "anx", Version: "v0.12.10", SHA256: digest, InstalledAt: "2026-10-05T00:00:00Z"}); err != nil {
 		t.Fatal(err)
 	}
 	updateExecutablePath = func() (string, error) { return path, nil }

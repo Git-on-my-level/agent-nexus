@@ -158,7 +158,7 @@ func TestRunUpdateReplacesBinaryFromRequestedVersion(t *testing.T) {
 	updateExecutablePath = func() (string, error) { return execPath, nil }
 
 	digest, _ := binaryDigest(execPath)
-	if err := writeUpdateJSON(installRecordPath(execPath), updateInstallRecord{ManagedBy: "anx", Version: "v0.0.1", SHA256: digest}); err != nil {
+	if err := writeUpdateJSON(installRecordPath(execPath), updateInstallRecord{ManagedBy: "anx", Version: "v0.0.1", SHA256: digest, InstalledAt: "2026-10-05T00:00:00Z"}); err != nil {
 		t.Fatal(err)
 	}
 	oldProbe, oldSync := updateProbeBinary, updateSyncSkills

@@ -75,8 +75,18 @@ an interrupted prepared transaction by restoring the old binary and receipt;
 an interrupted committed transaction finishes receipt and backup cleanup.
 Recovery is idempotent, including interruption during rollback. Offline status
 shows a pending transaction and backup even before the normal update state is
-written. Failed recovery retains evidence for repair. Filesystem/hardware support
-for synchronization remains the boundary of power-loss durability.
+written. Recovery validates every journal field and receipt (including digest,
+version, timestamp, and original-receipt consistency) before changing files.
+Existing target bytes must match the recorded original or candidate; a
+first-install rollback may remove only its recorded candidate. Backup files must
+also match their recorded digest, and symlink/nonregular targets or backups are
+rejected. Missing backups are allowed only after an original was already restored
+or a committed update reached cleanup. Malformed journals or foreign bytes stop
+recovery and preserve the binary, receipt, journal, and backup for manual repair;
+offline status retains the failed rollback outcome. Replacement rechecks target
+identity after staging. Filesystem/hardware support for synchronization remains
+the boundary of power-loss durability, and the process lock coordinates the
+installer/updater rather than unrelated tools writing the same files concurrently.
 
 Archive handling caps compressed downloads and total expanded data at 128 MiB,
 including ignored entries, and permits at most 1,024 entries. Go extraction

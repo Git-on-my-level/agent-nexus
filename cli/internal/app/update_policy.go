@@ -228,9 +228,11 @@ func (a *App) runUpdateStatus(cfg config.Resolved) (*commandResult, error) {
 	if txErr == nil {
 		transaction = tx
 		if tx.Phase == "prepared" {
-			state.Rollback = "pending"
 			state.BackupPath = tx.BackupPath
-			state.FailureStage = "transaction_pending"
+			if state.Rollback != "failed" {
+				state.Rollback = "pending"
+				state.FailureStage = "transaction_pending"
+			}
 		}
 	}
 	if txErr != nil && !errors.Is(txErr, os.ErrNotExist) {
