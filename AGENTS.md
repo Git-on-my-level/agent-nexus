@@ -12,7 +12,7 @@ Agent Nexus is split into a small set of modules with different jobs:
 - `core/`: canonical state and evidence service. Owns durable organizational truth and evidence-safe mutations.
 - `cli/`: agent-first command-line runtime. Optimized for non-interactive, script-safe, text/JSON-friendly workflows.
 - `web-ui/`: human-operator control surface. Optimized for glanceable visibility, triage, and explicit human intervention.
-- `adapters/`: optional runtime integrations that connect external agents or services to Agent Nexus.
+- `adapters/`: first-party generic adapters (agent-bridge).
 - `runbooks/`: operational and release guidance.
 
 ## Progressive Discovery
@@ -64,6 +64,19 @@ Before handoff on cross-module work:
 
 - `make check`
 - `make e2e-smoke`
+
+## Before you open a PR
+
+- Keep the OSS repo generic: no hosted/control-plane, personal, or ecosystem-specific logic. Third-party integrations must be optional and documented; setup-specific adapters belong outside this repo.
+- List every new or changed HTTP route in the PR description so hosted deployment can classify it.
+- Run all required checks for each module you touched. For `web-ui`, run the complete Playwright e2e suite locally.
+- Write Playwright tests with `async ({}, testInfo)` destructuring, never `(fixtures, testInfo)`.
+- Contracts first: update canonical contracts before implementation, then run `make contract-gen` and `make contract-check-committed`.
+- Remove placeholder refs, handles, and paths from shipped code and docs.
+- Before pushing, adversarially review correctness, security, contract and back-compat risks, and missing tests.
+- After pushing, confirm the pushed head contains every fix claimed in the PR.
+- Never skip or retry flaky tests to hide failures; fix the root cause or quarantine the test with a linked issue.
+- Describe user-visible behavior before and after, validation, changed routes, and any uncertainty in the PR.
 
 ## References
 - [README.md](README.md)
