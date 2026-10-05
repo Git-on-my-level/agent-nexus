@@ -965,8 +965,8 @@
             class="shell-search-trigger"
             onclick={() => (commandPaletteOpen = true)}
             type="button"
-            aria-label="Search"
-            title={navCollapsed ? "Search" : undefined}
+            aria-label="Search the workspace"
+            title={navCollapsed ? "Search the workspace" : undefined}
           >
             <svg
               class="shell-search-trigger-icon"

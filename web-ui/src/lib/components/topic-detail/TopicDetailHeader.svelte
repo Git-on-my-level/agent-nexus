@@ -61,8 +61,14 @@
 </WorkspaceResourceTopRow>
 
 {#if topic?.trashed_at}
+  <!--
+    Stacked below `sm`. `flex-wrap` does not save a `flex-1 min-w-0` child from
+    a `max-w-xs` sibling: with no min-content floor the first column shrinks to
+    nothing instead of wrapping, so at 390px the whole "Trashed by … 3h ago"
+    line had zero width and read as missing.
+  -->
   <div
-    class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-danger bg-danger-soft px-3 py-2 text-meta text-danger-text"
+    class="mb-4 flex flex-col items-start justify-between gap-3 rounded-md border border-danger bg-danger-soft px-3 py-2 text-meta text-danger-text sm:flex-row sm:items-center"
   >
     <div class="min-w-0 flex-1">
       <div class="flex items-center gap-2 font-semibold">
@@ -93,7 +99,7 @@
         {/if}
       </p>
     </div>
-    <p class="shrink-0 max-w-xs text-micro text-danger-text">
+    <p class="max-w-xs shrink-0 text-micro text-danger-text">
       This diagnostic view is read-only. Restore with
       <code>anx topics restore</code>.
     </p>

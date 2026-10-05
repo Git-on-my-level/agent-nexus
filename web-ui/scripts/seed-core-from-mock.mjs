@@ -1521,7 +1521,9 @@ async function requestAuthJson(
 async function seedDevFixtureIdentities() {
   const bootstrapToken = String(process.env.ANX_BOOTSTRAP_TOKEN ?? "").trim();
   if (!bootstrapToken) {
-    console.warn("ANX_DEV_SEED_IDENTITIES=1 requires ANX_BOOTSTRAP_TOKEN; skipping identities.");
+    console.warn(
+      "ANX_DEV_SEED_IDENTITIES=1 requires ANX_BOOTSTRAP_TOKEN; skipping identities.",
+    );
     return;
   }
   const status = await request("GET", "/auth/bootstrap/status");
@@ -1529,48 +1531,84 @@ async function seedDevFixtureIdentities() {
     console.log("Dev fixture identities skipped (bootstrap already consumed).");
     return;
   }
-  const human = seedPersonas.find((p) => p.principal_kind === "human" && p.default === true);
+  const human = seedPersonas.find(
+    (p) => p.principal_kind === "human" && p.default === true,
+  );
   if (!human) throw new Error("dev seed requires a default human persona");
-  const registered = await requestJson(coreBaseUrl, "POST", "/auth/passkey/dev/register", {
-    display_name: human.display_label,
-    bootstrap_token: bootstrapToken,
-    existing_actor_id: human.actor_id,
-  }, [201]);
+  const registered = await requestJson(
+    coreBaseUrl,
+    "POST",
+    "/auth/passkey/dev/register",
+    {
+      display_name: human.display_label,
+      bootstrap_token: bootstrapToken,
+      existing_actor_id: human.actor_id,
+    },
+    [201],
+  );
   const adminToken = registered.tokens.access_token;
-  const bundle = [{
-    persona_id: human.persona_id,
-    actor_id: human.actor_id,
-    agent_id: registered.agent.agent_id,
-    auth_username: registered.agent.username,
-    display_label: human.display_label,
-    principal_kind: "human",
-    default: true,
-    dev_bridge: false,
-    access_token: adminToken,
-    refresh_token: registered.tokens.refresh_token,
-  }];
+  const bundle = [
+    {
+      persona_id: human.persona_id,
+      actor_id: human.actor_id,
+      agent_id: registered.agent.agent_id,
+      auth_username: registered.agent.username,
+      display_label: human.display_label,
+      principal_kind: "human",
+      default: true,
+      dev_bridge: false,
+      access_token: adminToken,
+      refresh_token: registered.tokens.refresh_token,
+    },
+  ];
   const keyPair = generateCliEd25519KeyPair();
-  const nonce = Buffer.from(generateKeyPairSync("ed25519").privateKey.export({ type: "pkcs8", format: "der" })).subarray(-16).toString("base64url");
+  const nonce = Buffer.from(
+    generateKeyPairSync("ed25519").privateKey.export({
+      type: "pkcs8",
+      format: "der",
+    }),
+  )
+    .subarray(-16)
+    .toString("base64url");
   const expiresAt = new Date(Date.now() + 20 * 60_000).toISOString();
-  const created = await requestAuthJson("POST", "/auth/hosts/enrollment-tokens", {
-    label: "dev-host seed", expires_at: expiresAt,
-  }, adminToken, [201]);
+  const created = await requestAuthJson(
+    "POST",
+    "/auth/hosts/enrollment-tokens",
+    {
+      label: "dev-host seed",
+      expires_at: expiresAt,
+    },
+    adminToken,
+    [201],
+  );
   const slug = "dev-host";
   const privateKey = createPrivateKey({
-    key: pkcs8FromCliPrivateKey(keyPair.privateKeyBase64), format: "der", type: "pkcs8",
+    key: pkcs8FromCliPrivateKey(keyPair.privateKeyBase64),
+    format: "der",
+    type: "pkcs8",
   });
   const enrollmentMessage = `anx-host-headless-enroll|${nonce}|${slug}|${keyPair.publicKeyBase64}`;
-  const hostResponse = await requestJson(coreBaseUrl, "POST", "/auth/hosts/enrollments/headless", {
-    public_key: keyPair.publicKeyBase64,
-    requested_slug: slug,
-    os_user: "dev-seed",
-    hostname: slug,
-    discovered_adapters: ["generic"],
-    request_nonce: nonce,
-    adoptions: [],
-    enrollment_token: created.token,
-    signature: sign(null, Buffer.from(enrollmentMessage), privateKey).toString("base64"),
-  }, [201]);
+  const hostResponse = await requestJson(
+    coreBaseUrl,
+    "POST",
+    "/auth/hosts/enrollments/headless",
+    {
+      public_key: keyPair.publicKeyBase64,
+      requested_slug: slug,
+      os_user: "dev-seed",
+      hostname: slug,
+      discovered_adapters: ["generic"],
+      request_nonce: nonce,
+      adoptions: [],
+      enrollment_token: created.token,
+      signature: sign(
+        null,
+        Buffer.from(enrollmentMessage),
+        privateKey,
+      ).toString("base64"),
+    },
+    [201],
+  );
   const host = hostResponse.host;
   for (const p of seedPersonas.filter((p) => p.principal_kind === "agent")) {
     const signedAt = new Date().toISOString();
@@ -1582,7 +1620,9 @@ async function seedDevFixtureIdentities() {
       key_id: host.key_id,
       agent_name: name,
       signed_at: signedAt,
-      signature: sign(null, Buffer.from(message), privateKey).toString("base64"),
+      signature: sign(null, Buffer.from(message), privateKey).toString(
+        "base64",
+      ),
       existing_actor_id: p.actor_id,
     });
     bundle.push({
@@ -1610,7 +1650,9 @@ async function seedDevFixtureIdentities() {
       key_id: host.key_id,
       agent_name: name,
       signed_at: signedAt,
-      signature: sign(null, Buffer.from(message), privateKey).toString("base64"),
+      signature: sign(null, Buffer.from(message), privateKey).toString(
+        "base64",
+      ),
     });
     bundle.push({
       persona_id: name,
@@ -1627,56 +1669,101 @@ async function seedDevFixtureIdentities() {
       host_private_key: keyPair.privateKeyBase64,
     });
   }
-  const outDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".dev");
+  const outDir = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    ".dev",
+  );
   await mkdir(outDir, { recursive: true });
-  await writeFile(path.join(outDir, "local-identities.json"), `${JSON.stringify({ generated_at: new Date().toISOString(), host, personas: bundle }, null, 2)}\n`, "utf8");
+  await writeFile(
+    path.join(outDir, "local-identities.json"),
+    `${JSON.stringify({ generated_at: new Date().toISOString(), host, personas: bundle }, null, 2)}\n`,
+    "utf8",
+  );
   console.log(`Wrote dev host and ${bundle.length} persona identities`);
   return bundle;
 }
 
 async function seedCommandCenter(bundle) {
-  if (!bundle.length || !["default", "game-dev-studio"].includes(scenarioName)) {
+  if (
+    !bundle.length ||
+    !["default", "game-dev-studio"].includes(scenarioName)
+  ) {
     return;
   }
   const byActor = new Map(bundle.map((p) => [p.actor_id, p]));
   const operator = byActor.get("actor-gds-producer");
   if (!operator?.access_token) return;
   const stalePersona = bundle.find((p) => p.persona_id === "release-bot");
-  if (!stalePersona?.actor_id) throw new Error("command-center seed requires release-bot");
+  if (!stalePersona?.actor_id)
+    throw new Error("command-center seed requires release-bot");
   const inbox = await requestAuthGet("/inbox", operator.access_token);
-  for (const sourceEventID of ["evt-gds-human-attn-combat", "evt-gds-human-attn-vertical"]) {
-    const item = (inbox.items ?? []).find((candidate) => candidate.source_event_id === sourceEventID);
-    if (!item?.id) throw new Error(`command-center seed requires inbox item for ${sourceEventID}`);
-    await requestAuthJson("POST", `/inbox/${encodeURIComponent(item.id)}/respond`, {
-      actor_id: operator.actor_id,
-      response_text: "Decision recorded for the development scenario.",
-      outcome: "answered",
-      notify_mode: "none",
-      related_refs: [],
-    }, operator.access_token, [201]);
+  for (const sourceEventID of [
+    "evt-gds-human-attn-combat",
+    "evt-gds-human-attn-vertical",
+  ]) {
+    const item = (inbox.items ?? []).find(
+      (candidate) => candidate.source_event_id === sourceEventID,
+    );
+    if (!item?.id)
+      throw new Error(
+        `command-center seed requires inbox item for ${sourceEventID}`,
+      );
+    await requestAuthJson(
+      "POST",
+      `/inbox/${encodeURIComponent(item.id)}/respond`,
+      {
+        actor_id: operator.actor_id,
+        response_text: "Decision recorded for the development scenario.",
+        outcome: "answered",
+        notify_mode: "none",
+        related_refs: [],
+      },
+      operator.access_token,
+      [201],
+    );
   }
   const roster = await requestAuthGet("/agents", operator.access_token);
-  const rosterByActor = new Map((roster.agents ?? []).map((a) => [a.actor_id, a]));
+  const rosterByActor = new Map(
+    (roster.agents ?? []).map((a) => [a.actor_id, a]),
+  );
   const roles = [
     ["working", "actor-gds-gameplay"],
     ["waiting_on_human", "actor-gds-art"],
     ["idle", "actor-gds-narrative"],
     ["stale", stalePersona.actor_id],
   ];
-  if (roles.some(([, actorId]) => rosterByActor.get(actorId)?.identity_kind === "standalone")) {
-    console.warn("Command-center roster seed awaits host adoption of game-studio fixture agents.");
+  if (
+    roles.some(
+      ([, actorId]) =>
+        rosterByActor.get(actorId)?.identity_kind === "standalone",
+    )
+  ) {
+    console.warn(
+      "Command-center roster seed awaits host adoption of game-studio fixture agents.",
+    );
     return;
   }
-  if (roles.some(([, actorId]) => !rosterByActor.get(actorId) || !byActor.get(actorId)?.access_token)) {
-    console.warn("Command-center roster seed awaits derived fixture identity tokens.");
+  if (
+    roles.some(
+      ([, actorId]) =>
+        !rosterByActor.get(actorId) || !byActor.get(actorId)?.access_token,
+    )
+  ) {
+    console.warn(
+      "Command-center roster seed awaits derived fixture identity tokens.",
+    );
     return;
   }
   const cards = await requestAuthGet("/cards", operator.access_token);
-  const card = (cards.cards ?? []).find((c) =>
-    String(c.title ?? "") === "Run QA bug bash and triage release blockers",
+  const card = (cards.cards ?? []).find(
+    (c) =>
+      String(c.title ?? "") === "Run QA bug bash and triage release blockers",
   );
   if (!card?.ref || !card?.thread_id) {
-    throw new Error("command-center seed requires the bug-bash card ref and thread");
+    throw new Error(
+      "command-center seed requires the bug-bash card ref and thread",
+    );
   }
   const now = new Date();
   const observedAt = now.toISOString();
@@ -1695,49 +1782,84 @@ async function seedCommandCenter(bundle) {
     ...(state === "completed" ? { ended_at: observedAt } : {}),
     last_observed_at: observedAt,
   });
-  await requestAuthJson("POST", "/runs", runBase("actor-gds-gameplay", "exec-dev-working", "running"), byActor.get("actor-gds-gameplay").access_token);
-  await requestAuthJson("PATCH", "/agents/me/presence", {
-    current_card_ref: card.ref,
-    note: "Implementing the combat pass; capture build is next.",
-  }, byActor.get("actor-gds-gameplay").access_token);
-  await requestAuthJson("POST", "/runs", runBase("actor-gds-narrative", "exec-dev-idle", "completed"), byActor.get("actor-gds-narrative").access_token);
+  await requestAuthJson(
+    "POST",
+    "/runs",
+    runBase("actor-gds-gameplay", "exec-dev-working", "running"),
+    byActor.get("actor-gds-gameplay").access_token,
+  );
+  await requestAuthJson(
+    "PATCH",
+    "/agents/me/presence",
+    {
+      current_card_ref: card.ref,
+      note: "Implementing the combat pass; capture build is next.",
+    },
+    byActor.get("actor-gds-gameplay").access_token,
+  );
+  await requestAuthJson(
+    "POST",
+    "/runs",
+    runBase("actor-gds-narrative", "exec-dev-idle", "completed"),
+    byActor.get("actor-gds-narrative").access_token,
+  );
   const waiting = rosterByActor.get("actor-gds-art");
   if ((waiting.open_asks_count ?? 0) === 0) {
-    await requestAuthJson("POST", "/events", {
-      request_key: "dev-roster-art-review",
-      event: {
-        type: "human_attention_requested",
-        thread_id: card.thread_id,
-        refs: [`thread:${card.thread_id}`, card.ref],
-        summary: "Review the capture UI contrast before sign-off",
-        payload: {
-          kind: "review",
-          title: "Review capture UI contrast",
-          requester_actor_id: "actor-gds-art",
-          requester_agent_id: waiting.id,
-          subject_ref: card.ref,
-          response_proposals: ["Approve the contrast pass", "Request revisions"],
+    await requestAuthJson(
+      "POST",
+      "/events",
+      {
+        request_key: "dev-roster-art-review",
+        event: {
+          type: "human_attention_requested",
+          thread_id: card.thread_id,
+          refs: [`thread:${card.thread_id}`, card.ref],
+          summary: "Review the capture UI contrast before sign-off",
+          payload: {
+            kind: "review",
+            title: "Review capture UI contrast",
+            requester_actor_id: "actor-gds-art",
+            requester_agent_id: waiting.id,
+            subject_ref: card.ref,
+            response_proposals: [
+              "Approve the contrast pass",
+              "Request revisions",
+            ],
+          },
+          provenance: { sources: ["seed:game-dev-studio"] },
         },
-        provenance: { sources: ["seed:game-dev-studio"] },
       },
-    }, byActor.get("actor-gds-art").access_token);
+      byActor.get("actor-gds-art").access_token,
+    );
   }
   const after = await requestAuthGet("/agents", operator.access_token);
-  const actual = new Map((after.agents ?? []).map((a) => [a.actor_id, a.state]));
+  const actual = new Map(
+    (after.agents ?? []).map((a) => [a.actor_id, a.state]),
+  );
   for (const [expected, actorId] of roles) {
     if (actual.get(actorId) !== expected) {
-      throw new Error(`command-center roster seed: ${actorId} is ${actual.get(actorId)}, expected ${expected}`);
+      throw new Error(
+        `command-center roster seed: ${actorId} is ${actual.get(actorId)}, expected ${expected}`,
+      );
     }
   }
-  console.log("Seeded command-center roster states: working, waiting, idle, stale.");
+  console.log(
+    "Seeded command-center roster states: working, waiting, idle, stale.",
+  );
 }
 
 async function requestAuthGet(path, accessToken) {
   const response = await fetch(`${coreBaseUrl}${path}`, {
-    headers: { accept: "application/json", authorization: `Bearer ${accessToken}` },
+    headers: {
+      accept: "application/json",
+      authorization: `Bearer ${accessToken}`,
+    },
   });
   const parsed = parseJson(await response.text());
-  if (!response.ok) throw new Error(`GET ${path} -> ${response.status}: ${parsed?.error?.message ?? "failed"}`);
+  if (!response.ok)
+    throw new Error(
+      `GET ${path} -> ${response.status}: ${parsed?.error?.message ?? "failed"}`,
+    );
   return parsed;
 }
 

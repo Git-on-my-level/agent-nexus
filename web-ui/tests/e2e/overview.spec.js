@@ -65,6 +65,21 @@ const archived = Array.from({ length: 18 }, (_, index) => ({
   freshness: { status: "unknown" },
   board_ref: "board:old",
 }));
+/**
+ * Health per seeded initiative, worst first once sorted: one blocked, one at
+ * risk, one stale, three on track, one done — plus the planless tail the
+ * archived rows provide.
+ */
+const INITIATIVE_HEALTH = [
+  { state: "blocked", reason: "Waiting on the pilot decision." },
+  { state: "at_risk", reason: "Two steps slipped their due date." },
+  { state: "stale", reason: "Nothing has moved for 9 days." },
+  { state: "on_track", reason: "Work is progressing." },
+  { state: "on_track", reason: "Work is progressing." },
+  { state: "on_track", reason: "Work is progressing." },
+  { state: "done", reason: "Every step is done." },
+];
+
 const asks = ["Choose the launch date", "Approve the customer pilot"].map(
   (title, index) => ({
     id: `ask-${index}`,
@@ -117,10 +132,21 @@ async function installOverview(page, { gate = null, failure = false } = {}) {
     initiatives: {
       status: "ok",
       count: 7,
-      items: active.map((item) => ({
+      items: active.map((item, index) => ({
         ...item,
+        // The body is markdown; the tile must show prose, not the source.
         summary: item.summary.split("\n")[0],
         progress: { done: 3, total: 7 },
+        // One of each state the attention sort cares about, so the seeded
+        // Overview shows the real order rather than seven identical tiles.
+        plan_health: INITIATIVE_HEALTH[index],
+        plan_state: {
+          steps: [],
+          progress: { done: 3, total: 7 },
+          critical_path: [],
+          next_steps: [`step-${index}`],
+          last_movement_at: NOW,
+        },
         needs:
           item.ref === active[0].ref ? ["Needs Alex: approve the pilot"] : [],
         href: `/tasks/${item.handle}`,
@@ -204,14 +230,14 @@ test("seeded CEO Overview screenshot and section order", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1700 });
   await installOverview(page);
   await page.goto(OVERVIEW);
-  // The dashboard no longer restates the Inbox decision by decision: one line
-  // says how many are waiting, and the affected initiative carries the pill.
-  await expect(
-    page.getByRole("link", { name: "2 items need you →" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: "Choose the launch date" }),
-  ).toHaveCount(0);
+  // One urgent band at the top: it counts what is waiting and links each row
+  // to the surface that owns it, rather than becoming a second Inbox.
+  const band = page.locator('[data-overview-section="urgent"]');
+  await expect(band).toHaveAttribute("data-urgent-state", "active");
+  await expect(band.locator("[data-urgent-ask-count]")).toHaveText("2 asks");
+  await expect(band.locator("[data-urgent-initiative-count]")).toContainText(
+    "3 initiatives need attention",
+  );
   await expect(
     page.getByRole("heading", { name: "Demo dashboard", exact: true }),
   ).toBeVisible();
@@ -235,12 +261,24 @@ test("seeded CEO Overview screenshot and section order", async ({ page }) => {
       page.getByRole("link", { name: "Open document", exact: true }),
     ).toBeVisible();
 
+    // Worst first, with the finished one folded out of the grid.
     await expect(
       page.locator('[aria-label="Open initiatives"] > li'),
-    ).toHaveCount(7);
+    ).toHaveCount(6);
+    const tiles = page.locator(
+      "[data-initiative-group='attention'] [data-tile-health]",
+    );
+    await expect(tiles.nth(0)).toHaveAttribute("data-tile-health", "blocked");
+    await expect(tiles.nth(1)).toHaveAttribute("data-tile-health", "at_risk");
+    await expect(tiles.nth(2)).toHaveAttribute("data-tile-health", "stale");
+    await expect(tiles.first()).toContainText("3/7");
+    // A tile shows prose, never the markdown source.
+    await expect(tiles.first().locator("[data-tile-excerpt]")).toHaveText(
+      "A clear outcome for initiative 1.",
+    );
     await expect(
-      page.locator('[aria-label="Open initiatives"] > li').first(),
-    ).toContainText("3/7");
+      page.locator("[data-initiative-group='done'] [data-initiative-tile]"),
+    ).toHaveCount(1);
     await expect(page.locator("[data-overview-detail]")).not.toHaveAttribute(
       "open",
     );
@@ -249,11 +287,8 @@ test("seeded CEO Overview screenshot and section order", async ({ page }) => {
       .evaluateAll((nodes) =>
         nodes.map((node) => node.dataset.overviewSection),
       );
-    expect(sections.slice(0, 3)).toEqual([
-      "needs-you",
-      "reports",
-      "initiatives",
-    ]);
+    // Urgent first, then every initiative, then the pinned dashboard.
+    expect(sections.slice(0, 3)).toEqual(["urgent", "initiatives", "reports"]);
     await expect(
       page.getByText("Archived backlog 1", { exact: true }),
     ).toHaveCount(0);
@@ -364,16 +399,20 @@ test("Overview keeps its skeleton while the snapshot loads", async ({
   gate.resolve();
   await expect(
     page.locator('[aria-label="Open initiatives"] > li'),
-  ).toHaveCount(7);
+  ).toHaveCount(6);
 });
 
 test("failed snapshot reports an error", async ({ page }) => {
   test.skip(BEFORE);
   await installOverview(page, { failure: true });
   await page.goto(OVERVIEW);
+  // Each section says it could not load; the band says the same thing in one
+  // line rather than claiming nothing is waiting.
   await expect(
-    page.getByRole("alert").filter({ hasText: "Needs you is unavailable" }),
+    page.getByRole("alert").filter({ hasText: "Initiatives are unavailable" }),
   ).toBeVisible();
+  const band = page.locator('[data-overview-section="urgent"]');
+  await expect(band).toContainText("could not be read");
 });
 
 test("compact dashboard ignores document filter state", async ({ page }) => {
