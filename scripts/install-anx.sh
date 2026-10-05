@@ -337,9 +337,19 @@ def install(path, binary, version):
             recover(path)
             if path.is_symlink():
                 raise RuntimeError("Refusing a symlink installation target")
-            old_sha = digest(path) if path.exists() else ""
+            old_sha = recovery_digest(path)
             old_record_exists = receipt_path(path).exists()
-            old_record = json.loads(receipt_path(path).read_text()) if old_record_exists else {}
+            old_record_bytes = receipt_path(path).read_bytes() if old_record_exists else b""
+            old_record = json.loads(old_record_bytes) if old_record_exists else {}
+            reenroll = False
+            if old_record_exists:
+                validate_receipt(old_record)
+                # Explicit installation may enroll changed bytes only after
+                # strict recovery has finished. A stale receipt cannot serve as
+                # rollback ownership for those bytes; preserve it separately.
+                reenroll = bool(old_sha and old_record["sha256"] != old_sha)
+                if reenroll:
+                    old_record, old_record_exists = {}, False
             backup = ""
             if old_sha:
                 fd, backup = tempfile.mkstemp(prefix=".anx-rollback-", dir=path.parent)
@@ -351,6 +361,14 @@ def install(path, binary, version):
             tx = {"schema_version": 1, "phase": "prepared", "backup_path": backup, "old_sha256": old_sha,
                   "old_record": old_record, "old_record_exists": old_record_exists, "new_record": record}
             validate_transaction(path, tx)
+            if reenroll:
+                inspect_transaction_files(path, tx)
+                evidence = Path(tempfile.mkdtemp(prefix=".anx-reenroll-", dir=path.parent))
+                durable_file(evidence / "anx", Path(backup).read_bytes(), stat.S_IMODE(Path(backup).stat().st_mode))
+                durable_file(evidence / "anx.anx-install.json", old_record_bytes)
+                sync_dir(evidence)
+                sync_dir(path.parent)
+                print(f"Re-enrolling changed binary; previous binary and stale receipt preserved in {evidence}", file=sys.stderr)
             atomic_json(journal_path(path), tx)
             try:
                 inspect_transaction_files(path, tx)

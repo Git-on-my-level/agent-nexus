@@ -36,6 +36,14 @@ SHA-256. Source/dev builds, binaries changed outside the installer, and known
 package manager paths are skipped with an explicit status reason. Older releases
 have no receipt: rerun the release installer once to enroll them. Do not manufacture
 receipts or automatically adopt a path merely because its name is `anx`.
+If a source build overwrites a managed binary, explicitly rerunning the verified
+installer re-enrolls it when no unresolved transaction is pending. Before
+replacement, it retains the changed binary (with its permissions) and the exact
+stale receipt in a private `.anx-reenroll-*` directory beside the executable,
+and prints that directory for manual inspection. The new transaction treats
+the changed binary as unmanaged: rollback restores those bytes without an active
+ownership receipt, while the saved evidence remains. Pending transaction recovery
+still rejects mismatched receipts or foreign bytes before any re-enrollment.
 The release installer requires Python 3.8 or newer and supports macOS and Linux;
 Windows self-replacement remains
 unsupported and is reported in status.

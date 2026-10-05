@@ -102,6 +102,66 @@ except Exception as error:
         result = self.run_installer()
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_explicit_reenrollment_preserves_changed_binary_and_stale_receipt(self):
+        result = self.run_installer()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        path = self.install / "anx"
+        receipt_path = self.install / "anx.anx-install.json"
+        stale_receipt = receipt_path.read_bytes()
+        changed = b"source build overwrote the managed executable"
+        path.write_bytes(changed)
+        path.chmod(0o700)
+        result = self.run_installer()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(path.read_bytes(), self.binary)
+        receipt = json.loads(receipt_path.read_text())
+        self.assertEqual(receipt["sha256"], hashlib.sha256(self.binary).hexdigest())
+        evidence, = self.install.glob(".anx-reenroll-*")
+        self.assertEqual((evidence / "anx").read_bytes(), changed)
+        self.assertEqual((evidence / "anx").stat().st_mode & 0o777, 0o700)
+        self.assertEqual((evidence / "anx.anx-install.json").read_bytes(), stale_receipt)
+        self.assertIn(str(evidence), result.stderr)
+        self.assertFalse((self.install / "anx.anx-transaction.json").exists())
+        self.assertFalse(list(self.install.glob(".anx-rollback-*")))
+
+    def test_reenrollment_failure_and_crash_restore_changed_bytes_as_unmanaged(self):
+        for crash in (False, True):
+            with self.subTest(crash=crash):
+                self.seed_original()
+                module = load_installer()
+                path = self.install / "anx"
+                stale_receipt = module["receipt_path"](path).read_bytes()
+                changed = b"source build"
+                path.write_bytes(changed)
+                real_probe, real_write = module["probe"], module["atomic_json"]
+                def probe(candidate, version):
+                    if candidate == path and not crash:
+                        raise RuntimeError("post-replace failure")
+                    return real_probe(candidate, version)
+                def write(destination, value):
+                    if destination == module["receipt_path"](path) and crash:
+                        raise SystemExit("simulated crash")
+                    return real_write(destination, value)
+                with mock.patch.dict(module, {"probe": probe, "atomic_json": write}):
+                    with self.assertRaises(SystemExit if crash else RuntimeError):
+                        module["install"](path, self.binary, "v0.12.11")
+                if crash:
+                    tx = json.loads(module["journal_path"](path).read_text())
+                    self.assertFalse(tx["old_record_exists"])
+                    self.assertEqual(tx["old_record"], {})
+                    self.assertEqual(tx["old_sha256"], hashlib.sha256(changed).hexdigest())
+                    with module["install_lock"](path):
+                        module["recover"](path)
+                self.assertEqual(path.read_bytes(), changed)
+                self.assertFalse(module["receipt_path"](path).exists())
+                self.assertFalse(module["journal_path"](path).exists())
+                self.assertFalse(list(self.install.glob(".anx-rollback-*")))
+                evidence = list(self.install.glob(".anx-reenroll-*"))
+                self.assertEqual(len(evidence), 2 if crash else 1)
+                for directory in evidence:
+                    self.assertEqual((directory / "anx").read_bytes(), changed)
+                    self.assertEqual((directory / "anx.anx-install.json").read_bytes(), stale_receipt)
+
     def test_bad_checksum_preserves_original(self):
         original = self.seed_original()
         (self.root / "checksums.txt").write_text("0" * 64 + "  " + self.archive_name + "\n")
