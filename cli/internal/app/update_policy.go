@@ -68,7 +68,7 @@ func parseUpdateOptions(args []string) (updateOptions, error) {
 		return o, errnorm.Usage("invalid_update_args", "invalid update arguments")
 	}
 	if o.version != "" {
-		if _, err := parseSemanticVersion(o.version); err != nil || strings.ContainsAny(o.version, "/\\?#") {
+		if _, err := parseSemanticVersion(o.version); err != nil || strings.ContainsAny(o.version, "/\\?# \t\r\n\"'") {
 			return o, errnorm.Usage("invalid_update_version", "expected a release tag such as v0.12.11")
 		}
 	}

@@ -94,7 +94,11 @@ func commandSideEffectClass(command string) string {
 		return "remote_coordination_write"
 	}
 	if parts[0] == "update" {
-		if command == "update status" || strings.Contains(command, "--check") {
+		if command == "update status" {
+			return "read_only"
+		}
+		// Bool options use their final parsed value; --check=false still installs.
+		if options, err := parseUpdateOptions(parts[1:]); err == nil && options.check {
 			return "read_only"
 		}
 		return "local_operational_write"

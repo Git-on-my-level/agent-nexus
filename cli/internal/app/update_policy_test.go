@@ -428,3 +428,17 @@ func TestJSONHelpCatalogClassifiesUpdateAndReads(t *testing.T) {
 		t.Fatalf("status=%+v", status)
 	}
 }
+
+func TestUpdateSideEffectClassificationUsesFinalCheckValue(t *testing.T) {
+	for command, expected := range map[string]string{
+		"update --check":               "read_only",
+		"update --check=true":          "read_only",
+		"update --check=false":         "local_operational_write",
+		"update --check --check=false": "local_operational_write",
+		"update --check=false --check": "read_only",
+	} {
+		if actual := commandSideEffectClass(command); actual != expected {
+			t.Fatalf("%s: got %s want %s", command, actual, expected)
+		}
+	}
+}
