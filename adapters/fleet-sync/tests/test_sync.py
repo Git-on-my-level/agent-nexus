@@ -7,6 +7,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from initiatives import DuplicateSourceIdentityConflict
 from fleet_sync import _quiet_status, publish, report_publication_enabled, validate_text, main
 
 
@@ -82,6 +83,40 @@ class ReportPublicationTests(unittest.TestCase):
             client.docs_list.assert_not_called()
             client.docs_create.assert_not_called()
             client.docs_revise.assert_not_called()
+
+    def test_planning_conflict_is_returned_in_run_summary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "config.json"
+            config.write_text(json.dumps({
+                "base_url": "https://nexus.example/ws/product",
+                "agent": "fleet-sync",
+                "topic": "fleet-operations",
+                "mapping_doc": "doc:mapping",
+                "report": {"publish": False},
+            }), encoding="utf-8")
+            client = Mock()
+            client.docs_content.return_value = json.dumps({
+                "version": 1, "workspace": "https://nexus.example/ws/product", "rules": []})
+            output = io.StringIO()
+            conflict = DuplicateSourceIdentityConflict(
+                'conflicting source item "SCA-1 · Example" (identity=["multica","local","1"]): '
+                'differing fields project change its initiative route')
+            with patch("fleet_sync.AnxClient", return_value=client), \
+                 patch("fleet_sync.BudgetRunner"), \
+                 patch("fleet_sync.validate_mapping"), \
+                 patch("fleet_sync.collect", return_value=[]), \
+                 patch("fleet_sync.source_items", return_value=[]), \
+                 patch("fleet_sync.plan_ingestion", side_effect=conflict), \
+                 patch("fleet_sync.apply_ingestion") as apply_ingestion, \
+                 redirect_stdout(output):
+                code = main(["--config", str(config), "--state", str(Path(directory) / "state.json")])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(output.getvalue())
+            self.assertIn('identity=["multica","local","1"]', summary["errors"][0])
+            self.assertIn("project", summary["errors"][0])
+            self.assertEqual(summary["warnings"], [])
+            apply_ingestion.assert_not_called()
 
 
 if __name__ == "__main__":

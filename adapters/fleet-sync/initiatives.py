@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 from collections import defaultdict
+from datetime import datetime, timezone
 from urllib.parse import quote, urlsplit
 
 from anx_client import AnxError
@@ -13,8 +14,19 @@ from project import plan_reads
 BEGIN = '<!-- fleet-sync:evidence:v1 -->'
 END = '<!-- /fleet-sync:evidence -->'
 MATCH_FIELDS = {'authority', 'connection_id', 'project', 'labels', 'repo', 'title_pattern'}
+VOLATILE_FIELDS = {'status', 'updated_at', 'title', 'labels', 'url'}
+ROUTING_FIELDS = MATCH_FIELDS | {'title'}
+READER_PRIORITY = {
+    name: priority for priority, name in enumerate(
+        ('multica', 'github', 'nexus', 'hermes', 'agentctl', 'fleetctl', 'prometheus')
+    )
+}
 UNSORTED_CLUSTERS = 5
 UNSORTED_SAMPLES = 10
+
+
+class DuplicateSourceIdentityConflict(ValueError):
+    """A duplicate source identity would route to different destinations."""
 
 
 def canonical(value):
@@ -116,20 +128,25 @@ def source_items(reads, config, now):
     # Reuse source normalization only, with no known cards: absence never closes
     # an initiative, and terminal evidence is retained without registering cards.
     items = []
-    raw = {}
-    for read in reads:
-        for row in read.get('items', []):
-            raw[(read['name'], row.get('native_id'))] = row
     projection_config = {**config, 'boards': {'agent_work': '', 'pull_requests': '', 'ops_hygiene': ''}}
-    for plan in plan_reads(reads, {}, projection_config, now=now):
-        row = raw.get((plan['authority'], plan['native_id']), {})
-        items.append({
-            'authority': plan['authority'], 'connection_id': plan['connection_id'],
-            'native_id': plan['native_id'], 'title': row.get('title') or plan['title'],
-            'url': plan.get('url'), 'status': plan['facts']['phase'],
-            'project': row.get('project'), 'labels': row.get('labels', []),
-            'repo': row.get('repo'),
-        })
+    for read in reads:
+        rows = defaultdict(list)
+        for row in read.get('items', []):
+            rows[row.get('native_id')].append(row)
+        for plan in plan_reads([read], {}, projection_config, now=now):
+            matching_rows = rows.get(plan['native_id']) or []
+            row = matching_rows.pop(0) if matching_rows else {}
+            item = {
+                'authority': plan['authority'], 'connection_id': plan['connection_id'],
+                'native_id': plan['native_id'], 'title': row.get('title') or plan['title'],
+                'url': plan.get('url'), 'status': plan['facts']['phase'],
+                'project': row.get('project'), 'labels': row.get('labels', []),
+                'repo': row.get('repo'), '_observed_at': plan.get('observed_at'),
+                '_reader': read.get('name') or plan['authority'],
+            }
+            if row.get('updated_at'):
+                item['updated_at'] = row['updated_at']
+            items.append(item)
     return sorted(items, key=identity)
 
 
@@ -198,13 +215,37 @@ def revision_body(card, summary):
 
 
 def plan_ingestion(items, mapping, client):
-    unique = {}
+    grouped = defaultdict(list)
     for item in items:
-        key = identity(item)
-        if key in unique and unique[key] != item:
-            raise ValueError('conflicting duplicate source identity')
-        unique[key] = item
-    items = sorted(unique.values(), key=identity)
+        grouped[identity(item)].append(item)
+    unique, warnings = [], []
+    for key, candidates in sorted(grouped.items()):
+        differing_fields = _differing_fields(candidates)
+        if len(candidates) > 1 and differing_fields:
+            destinations = {_routing_destination(route(_public_item(row), mapping)) for row in candidates}
+            if len(destinations) > 1:
+                routing_fields = sorted(set(differing_fields) & ROUTING_FIELDS)
+                item_name = _source_item_name(candidates)
+                raise DuplicateSourceIdentityConflict(
+                    f'conflicting source item {item_name} (identity={key}): '
+                    f'differing fields {", ".join(differing_fields)}; '
+                    f'routing fields {", ".join(routing_fields) or "unknown"} change its initiative route'
+                )
+            winner = min(candidates, key=_candidate_sort_key)
+            selected_reader = winner.get('_reader') or winner.get('authority')
+            warnings.append({
+                'identity': json.loads(key),
+                'item': _source_item_name(candidates),
+                'differing_fields': differing_fields,
+                'volatile_fields': sorted(set(differing_fields) & VOLATILE_FIELDS),
+                'selected_reader': selected_reader,
+                'selected_timestamp': _latest_timestamp(winner),
+                'resolution': 'selected item with newest observed/updated timestamp; reader priority breaks ties',
+            })
+        else:
+            winner = min(candidates, key=_candidate_sort_key)
+        unique.append(_public_item(winner))
+    items = sorted(unique, key=identity)
     groups, elsewhere, unsorted = defaultdict(list), defaultdict(list), []
     for item in items:
         target, reason = route(item, mapping)
@@ -229,8 +270,77 @@ def plan_ingestion(items, mapping, client):
     proposals = cluster_proposals(unsorted, mapping.get('proposal_threshold', 5))
     return {'initiatives': changes, 'unsorted': unsorted, 'proposals': proposals,
             'elsewhere': dict(sorted(elsewhere.items())),
+            'warnings': warnings,
             'counts': {'items': len(items), 'mapped': sum(len(v) for v in groups.values()),
                        'unsorted': len(unsorted), 'elsewhere': sum(map(len, elsewhere.values())), 'new_cards': 0}}
+
+
+def _public_item(item):
+    return {key: value for key, value in item.items() if not key.startswith('_')}
+
+
+def _differing_fields(candidates):
+    fields = set().union(*(set(_public_item(item)) for item in candidates))
+    return sorted(field for field in fields
+                  if len({(field in _public_item(item), canonical(_public_item(item).get(field)))
+                          for item in candidates}) > 1)
+
+
+def _routing_destination(result):
+    target, reason = result
+    if target:
+        return ('initiative', target)
+    if reason.startswith('elsewhere:'):
+        return ('elsewhere', reason.removeprefix('elsewhere:'))
+    return ('unmatched', None)
+
+
+def _source_item_name(candidates):
+    winner = min(candidates, key=_candidate_sort_key)
+    title = winner.get('title')
+    native_id = winner.get('native_id')
+    return f'{title!r} ({native_id})' if title and title != native_id else str(native_id)
+
+
+def _candidate_sort_key(item):
+    timestamp = _latest_datetime(item)
+    reader = str(item.get('_reader') or item.get('reader') or item.get('authority') or '')
+    explicit_priority = item.get('_reader_priority')
+    priority = explicit_priority if type(explicit_priority) is int else READER_PRIORITY.get(reader, len(READER_PRIORITY))
+    return (-timestamp.timestamp(), priority, reader, canonical(_public_item(item)))
+
+
+def _latest_datetime(item):
+    stamps = [
+        parsed for parsed in (
+            _parse_timestamp(item.get('updated_at')),
+            _parse_timestamp(item.get('_updated_at')),
+            _parse_timestamp(item.get('_observed_at')),
+            _parse_timestamp(item.get('observed_at')),
+        ) if parsed is not None
+    ]
+    return max(stamps) if stamps else datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
+def _parse_timestamp(value):
+    if not isinstance(value, str):
+        return None
+    try:
+        stamp = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return stamp.astimezone(timezone.utc)
+
+
+def _latest_timestamp(item):
+    stamps = [item.get(field) for field in ('updated_at', '_updated_at', '_observed_at', 'observed_at')]
+    valid = [(stamp, _parse_timestamp(stamp)) for stamp in stamps]
+    valid = [(stamp, parsed) for stamp, parsed in valid if parsed is not None]
+    if not valid:
+        return None
+    return max(valid, key=lambda pair: pair[1])[0]
 
 
 def cluster_proposals(items, threshold):
@@ -274,7 +384,8 @@ def cluster_proposals(items, threshold):
 
 
 def apply_ingestion(client, plan):
-    summary = {'created': 0, 'revised': 0, 'skipped': 0, 'errors': []}
+    summary = {'created': 0, 'revised': 0, 'skipped': 0, 'errors': [],
+               'warnings': list(plan.get('warnings') or [])}
     for change in plan['initiatives']:
         if change['action'] == 'skip':
             summary['skipped'] += 1
