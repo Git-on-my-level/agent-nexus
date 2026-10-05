@@ -1,3 +1,5 @@
+import { mkdir } from "node:fs/promises";
+
 import { expect, test } from "@playwright/test";
 
 import { AUDIT_VIEWPORTS, expectCleanLayout } from "../helpers/layoutAudit.js";
@@ -304,3 +306,36 @@ test("report panel text renders markdown rather than printing it", async ({
   await expect(explanation.locator("strong").first()).toHaveText("v0.12.12");
   await expect(explanation).not.toContainText("**v0.12.12**");
 });
+
+/**
+ * Before / after for a review. Off unless `REVIEW_CAPTURES` is set — it
+ * asserts nothing, so it has no place in a CI run. Output lands in the
+ * gitignored `web-ui/.screenshots/review/`; review binaries are not committed.
+ *
+ *   REVIEW_CAPTURES=after pnpm exec playwright test \
+ *     tests/e2e/embedded-report-layout.spec.js --project=default --workers=1
+ */
+const CAPTURE = process.env.REVIEW_CAPTURES || "";
+const CAPTURE_OUT = ".screenshots/review";
+
+for (const { label, width, height } of [
+  { label: "desktop", width: 1440, height: 1600 },
+  { label: "390", width: 390, height: 1800 },
+]) {
+  test(`capture embedded report @ ${label}`, async ({ page }, testInfo) => {
+    test.skip(!CAPTURE, "set REVIEW_CAPTURES=before|after to capture");
+    test.setTimeout(120_000);
+    await openOverview(page, width, height);
+    await mkdir(CAPTURE_OUT, { recursive: true });
+    const file = `${CAPTURE_OUT}/${CAPTURE}-embedded-report-${label}.png`;
+    await page.screenshot({
+      path: file,
+      animations: "disabled",
+      fullPage: true,
+    });
+    await testInfo.attach(`${CAPTURE}-embedded-report-${label}`, {
+      path: file,
+      contentType: "image/png",
+    });
+  });
+}
