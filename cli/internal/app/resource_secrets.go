@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/url"
 	"os"
 	"os/exec"
@@ -112,7 +111,7 @@ func (a *App) runSecretCreate(ctx context.Context, args []string, cfg config.Res
 
 	var value string
 	if fromStdin.set && fromStdin.value {
-		data, err := io.ReadAll(a.Stdin)
+		data, err := a.readStdinBytes(0)
 		if err != nil {
 			return nil, "secret create", errnorm.Wrap(errnorm.KindLocal, "stdin_read_failed", "failed to read from stdin", err)
 		}
@@ -260,7 +259,7 @@ func (a *App) runSecretUpdate(ctx context.Context, args []string, cfg config.Res
 
 	var value string
 	if fromStdin.set && fromStdin.value {
-		data, err := io.ReadAll(a.Stdin)
+		data, err := a.readStdinBytes(0)
 		if err != nil {
 			return nil, "secret update", errnorm.Wrap(errnorm.KindLocal, "stdin_read_failed", "failed to read from stdin", err)
 		}

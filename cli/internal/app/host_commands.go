@@ -250,7 +250,7 @@ func (a *App) hostEnroll(ctx context.Context, args []string, cfg config.Resolved
 		if a.StdinIsTTY != nil && a.StdinIsTTY() {
 			return nil, errnorm.Usage("invalid_args", "--token-stdin requires piped input")
 		}
-		raw, err := io.ReadAll(io.LimitReader(a.Stdin, 4097))
+		raw, err := a.readStdinBytes(4097)
 		if err != nil || len(raw) > 4096 || strings.TrimSpace(string(raw)) == "" {
 			return nil, errnorm.Usage("invalid_args", "stdin must contain one enrollment token")
 		}

@@ -240,6 +240,11 @@ UI_ORG_SLUG="${ANX_DEFAULT_ORGANIZATION:-local}"
   go build -o "$CLI_BIN" ./cmd/anx )
 
 EXPECTED_VERSION="$("${ROOT_DIR}/scripts/read-version.sh")"
+MIN_CLI_VERSION="$(sed -n 's/^const MinCompatibleCLI = "\([^"]*\)"$/\1/p' "${ROOT_DIR}/core/internal/buildinfo/compatibility.go")"
+if [[ -z "${MIN_CLI_VERSION}" ]]; then
+  echo "could not read MinCompatibleCLI" >&2
+  exit 1
+fi
 
 # Start core.
 mkdir -p "$TMP_DIR/workspace"
@@ -291,7 +296,7 @@ if [[ "$(json_get "$TMP_DIR/core-handshake.json" 'core_version')" != "$EXPECTED_
   cat "$TMP_DIR/core-handshake.json" >&2 || true
   exit 1
 fi
-if [[ "$(json_get "$TMP_DIR/core-handshake.json" 'min_cli_version')" != "$EXPECTED_VERSION" ]]; then
+if [[ "$(json_get "$TMP_DIR/core-handshake.json" 'min_cli_version')" != "$MIN_CLI_VERSION" ]]; then
   echo "min_cli_version mismatch in handshake" >&2
   cat "$TMP_DIR/core-handshake.json" >&2 || true
   exit 1

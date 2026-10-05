@@ -79,7 +79,6 @@ human lockout override. Their grant covers fleet enrollment and administrative
 reads only. Agents cannot use their credentials to mint human identities. Administration writes recheck the
 grant inside their transaction, including requests paused during body upload.
 
-
 ## User-global workspace selection
 
 Run `anx config workspaces` when unsure. It lists enrolled workspaces and aliases, the default, and which directory rule applies to cwd, even when selection is ambiguous. Enrollment discovers an alias from the workspace slug (falling back to local workspace metadata), preserves the default, and prints the command to select the new workspace.
@@ -104,8 +103,13 @@ An example file:
 ```json
 {
   "default": "https://anx.example.com/ws/personal/main",
-  "aliases": {"personal": "https://anx.example.com/ws/personal/main", "demo": "https://anx.example.com/ws/demo/main"},
-  "directory_rules": {"/opt/example/workspace/demo/**": "https://anx.example.com/ws/demo/main"}
+  "aliases": {
+    "personal": "https://anx.example.com/ws/personal/main",
+    "demo": "https://anx.example.com/ws/demo/main"
+  },
+  "directory_rules": {
+    "/opt/example/workspace/demo/**": "https://anx.example.com/ws/demo/main"
+  }
 }
 ```
 
@@ -131,7 +135,11 @@ identifier. Reuse it for the same conversation and use a new one for fresh conte
   "provider": "custom-agent",
   "native_session_id": "conversation-42",
   "native_session_id_kind": "opaque",
-  "capabilities": {"resume": "unknown", "history": "unsupported", "logs": "unknown"},
+  "capabilities": {
+    "resume": "unknown",
+    "history": "unsupported",
+    "logs": "unknown"
+  },
   "activity": "active",
   "sequence": 1
 }
@@ -152,7 +160,7 @@ session evidence stays unknown; do not substitute a parent or guessed session.
 Then prepare `participation.json` with the returned `session_id`:
 
 ```json
-{"session_id":"<session-id>","activity":"active","sequence":1}
+{ "session_id": "<session-id>", "activity": "active", "sequence": 1 }
 ```
 
 ```bash
@@ -386,8 +394,9 @@ Run `anx doctor` for enrollment, host key permissions, identity resolution, agen
 
 Symptoms:
 
-- server returns `cli_outdated`
+- server returns `cli_outdated` (HTTP 426) when this CLI is below handshake `min_cli_version`
 - commands fail before mutation with compatibility errors
+- a managed install with update policy `auto` installs the recommended release and retries the command once; `notify`, `off`, and unmanaged installs print `anx update --version <recommended>` and do not replace the binary
 - `anx doctor` fails with `cli_outdated` when this CLI is below `min_cli_version`, and warns when it is below `recommended_cli_version` (`anx update --version <recommended>`)
 
 Actions:
@@ -475,10 +484,12 @@ Observation input is the API request object:
     "observed_at": "2026-09-08T00:00:00Z",
     "source_sequence": 42,
     "status": "reported",
-    "facts": {"native_status": "in_progress"},
-    "evidence": [{"ref": "artifact:synthetic-check", "summary": "Synthetic example only"}],
+    "facts": { "native_status": "in_progress" },
+    "evidence": [
+      { "ref": "artifact:synthetic-check", "summary": "Synthetic example only" }
+    ],
     "uncertainty": ["Deployment not verified"],
-    "coverage": {"complete": false}
+    "coverage": { "complete": false }
   }
 }
 ```
@@ -746,18 +757,18 @@ open a Discord gateway.
 
 Core env (set on `anx-core`, not in Git):
 
-| Env | Role |
-|---|---|
-| `ANX_PM_TELEGRAM_WEBHOOK_SECRET` | Telegram secret header; at least 32 characters |
-| `ANX_PM_TELEGRAM_BOT_ID` | Expected bot / tenant id |
-| `ANX_PM_TELEGRAM_BOT_TOKEN` | Outbound `sendMessage` |
-| `ANX_PM_DISCORD_PUBLIC_KEY` | 32-byte hex Ed25519 public key |
-| `ANX_PM_DISCORD_APPLICATION_ID` | Expected application id |
-| `ANX_PM_DISCORD_BOT_TOKEN` | Outbound REST `Bot` token |
-| `ANX_PM_TELEGRAM_API_BASE` | Test-only Bot API base (local fake) |
-| `ANX_PM_DISCORD_API_BASE` | Test-only Discord REST base (local fake, include `/api/v10`) |
-| `ANX_PM_TELEGRAM_WEBHOOK_URL` | Optional doctor GET target |
-| `ANX_PM_DISCORD_WEBHOOK_URL` | Optional doctor GET target |
+| Env                              | Role                                                         |
+| -------------------------------- | ------------------------------------------------------------ |
+| `ANX_PM_TELEGRAM_WEBHOOK_SECRET` | Telegram secret header; at least 32 characters               |
+| `ANX_PM_TELEGRAM_BOT_ID`         | Expected bot / tenant id                                     |
+| `ANX_PM_TELEGRAM_BOT_TOKEN`      | Outbound `sendMessage`                                       |
+| `ANX_PM_DISCORD_PUBLIC_KEY`      | 32-byte hex Ed25519 public key                               |
+| `ANX_PM_DISCORD_APPLICATION_ID`  | Expected application id                                      |
+| `ANX_PM_DISCORD_BOT_TOKEN`       | Outbound REST `Bot` token                                    |
+| `ANX_PM_TELEGRAM_API_BASE`       | Test-only Bot API base (local fake)                          |
+| `ANX_PM_DISCORD_API_BASE`        | Test-only Discord REST base (local fake, include `/api/v10`) |
+| `ANX_PM_TELEGRAM_WEBHOOK_URL`    | Optional doctor GET target                                   |
+| `ANX_PM_DISCORD_WEBHOOK_URL`     | Optional doctor GET target                                   |
 
 When dedicated bots exist: create the bots, set the env vars, register the
 webhook/interactions URL at core ingress, bind each human identity, then run

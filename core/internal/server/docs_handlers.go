@@ -16,6 +16,15 @@ import (
 	"agent-nexus-core/internal/schema"
 )
 
+func writeInvalidDocumentRequest(w http.ResponseWriter, err error) {
+	body := errorPayload("invalid_request", err.Error())
+	var report *primitives.VisualReportValidationError
+	if errors.As(err, &report) && len(report.Errors) > 0 {
+		body["details"] = map[string]any{"errors": report.Errors}
+	}
+	writeJSON(w, http.StatusBadRequest, map[string]any{"error": body})
+}
+
 func handleListDocuments(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
@@ -212,7 +221,7 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 			return
 		}
 		if errors.Is(err, primitives.ErrInvalidDocumentRequest) {
-			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			writeInvalidDocumentRequest(w, err)
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create document")
@@ -547,7 +556,7 @@ func handleUpdateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		case errors.Is(err, primitives.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "document not found")
 		case errors.Is(err, primitives.ErrInvalidDocumentRequest):
-			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			writeInvalidDocumentRequest(w, err)
 		case errors.Is(err, primitives.ErrConflict):
 			writeError(w, http.StatusConflict, "conflict", "document has been updated; refresh and retry")
 		default:
@@ -1110,7 +1119,7 @@ func handlePutDocument(w http.ResponseWriter, r *http.Request, opts handlerOptio
 				return
 			}
 			if errors.Is(err, primitives.ErrInvalidDocumentRequest) {
-				writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+				writeInvalidDocumentRequest(w, err)
 				return
 			}
 			writeError(w, http.StatusInternalServerError, "internal_error", "failed to update document")
@@ -1135,7 +1144,7 @@ func handlePutDocument(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			return
 		}
 		if errors.Is(err, primitives.ErrInvalidDocumentRequest) {
-			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			writeInvalidDocumentRequest(w, err)
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create document")

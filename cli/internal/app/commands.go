@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -382,6 +383,44 @@ func (a *App) runAPICall(ctx context.Context, args []string, cfg config.Resolved
 
 const stdinReadTimeout = 2 * time.Second
 
+// readStdinBytes is the only stdin reader. It records that this process consumed
+// stdin before returning, so a cli_outdated retry does not re-execute with an
+// empty stream. limit <= 0 reads until EOF.
+// markNonReplayableInput records that a user-supplied path cannot be read again
+// after this process exits. Pipes, /dev/stdin, /dev/fd/*, and /proc/self/fd/*
+// are not regular files; re-executing the command would see an empty stream.
+func (a *App) markNonReplayableInput(path string) {
+	if a == nil {
+		return
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().IsRegular() {
+		return
+	}
+	a.stdinConsumed = true
+}
+
+func (a *App) readInputFile(path string) ([]byte, error) {
+	a.markNonReplayableInput(path)
+	readFile := os.ReadFile
+	if a != nil && a.ReadFile != nil {
+		readFile = a.ReadFile
+	}
+	return readFile(path)
+}
+
+func (a *App) readStdinBytes(limit int64) ([]byte, error) {
+	if a == nil || a.Stdin == nil {
+		return nil, nil
+	}
+	a.stdinConsumed = true
+	reader := a.Stdin
+	if limit > 0 {
+		reader = io.LimitReader(a.Stdin, limit)
+	}
+	return io.ReadAll(reader)
+}
+
 func (a *App) readStdinBody() ([]byte, error) {
 	if a.Stdin == nil {
 		return nil, nil
@@ -396,12 +435,13 @@ func (a *App) readStdinBody() ([]byte, error) {
 	}
 	ch := make(chan readResult, 1)
 	go func() {
-		data, err := io.ReadAll(a.Stdin)
+		data, err := a.readStdinBytes(0)
 		ch <- readResult{data, err}
 	}()
 
 	select {
 	case res := <-ch:
+		a.stdinConsumed = true
 		if res.err != nil {
 			return nil, res.err
 		}
