@@ -55,6 +55,7 @@
   import WorkspaceTour from "$lib/components/onboarding/WorkspaceTour.svelte";
   import InboxNavCount from "$lib/components/inbox/InboxNavCount.svelte";
   import AgentsNavCount from "$lib/components/agents/AgentsNavCount.svelte";
+  import AccessNavCount from "$lib/components/access/AccessNavCount.svelte";
   import {
     handleEscapeTextBlurCommit,
     handleModEnterBlurCommit,
@@ -1166,6 +1167,14 @@
                         <span class="shell-settings-link-text"
                           >{item.label}</span
                         >
+                        {#if item.count === "access-pending"}
+                          <AccessNavCount
+                            workspace={activeWorkspaceSlug}
+                            enabled={identityReady &&
+                              !workspaceBootstrapPending &&
+                              !shouldRedirectToLogin}
+                          />
+                        {/if}
                       </a>
                     {/each}
                   </div>
@@ -1297,6 +1306,15 @@
                 title={shellIdentity.primaryLabel}
                 >{shellIdentity.primaryLabel}</span
               >
+              <!-- Access lives inside this menu, so what waits there has to
+                   be visible while the menu is shut. -->
+              <AccessNavCount
+                workspace={activeWorkspaceSlug}
+                enabled={identityReady &&
+                  !workspaceBootstrapPending &&
+                  !shouldRedirectToLogin}
+                variant="trigger"
+              />
               <svg
                 class="shell-account-chevron"
                 fill="none"

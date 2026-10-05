@@ -42,6 +42,20 @@ describe("navigation model", () => {
     ]);
   });
 
+  it("marks which items carry a count, so the shell renders one badge each", () => {
+    expect(
+      [...navigationItems, ...settingsNavItems]
+        .filter((item) => item.count)
+        .map((item) => [item.href, item.count]),
+    ).toEqual([
+      ["/inbox", "inbox-needs-you"],
+      ["/agents", "agents-working"],
+      // Access sits inside the account menu, so the shell also puts this
+      // number on the menu trigger.
+      ["/access", "access-pending"],
+    ]);
+  });
+
   it("detects known routes", () => {
     expect(isKnownSection("/overview")).toBe(true);
     expect(isKnownSection("/inbox")).toBe(true);

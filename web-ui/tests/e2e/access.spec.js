@@ -193,3 +193,129 @@ test("lists agents under their host and people by name", async ({ page }) => {
     main.locator('[data-principal="agent-ops-human"] p').first(),
   ).toHaveText(/^riley@example\.com/);
 });
+
+test("badges pending access on the account trigger and the Access item", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("workspaceTourSeen.local", "1");
+  });
+  await page.context().addCookies([
+    {
+      name: "anx_ui_session_local",
+      value: "test-refresh-token",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+    },
+  ]);
+  const json = (body) => ({
+    status: 200,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const state = {
+    pending: [
+      {
+        id: "henr_1",
+        user_code: "J6FA-N4XI",
+        requested_slug: "ci-runner",
+        os_user: "runner",
+        hostname: "ci-runner.local",
+        discovered_adapters: ["generic"],
+        adoption_names: [],
+        requesting_ip: "203.0.113.17",
+        status: "pending",
+        expires_at: new Date(Date.now() + 8 * 60_000).toISOString(),
+        created_at: new Date().toISOString(),
+      },
+      // Approved: waiting on the machine, so it is not part of the number.
+      {
+        id: "henr_2",
+        user_code: "K7GB-P5YJ",
+        requested_slug: "staging-box",
+        os_user: "runner",
+        hostname: "staging-box.local",
+        discovered_adapters: ["generic"],
+        adoption_names: [],
+        status: "approved",
+        expires_at: new Date(Date.now() + 8 * 60_000).toISOString(),
+        created_at: new Date().toISOString(),
+      },
+    ],
+  };
+  await page.route("**/auth/session", (route) =>
+    route.fulfill(
+      json({
+        authenticated: true,
+        agent: {
+          agent_id: "agent-ops-human",
+          actor_id: "actor-ops-human",
+          username: "passkey.ops.human.8dff59fc",
+          principal_kind: "human",
+        },
+      }),
+    ),
+  );
+  await page.route("**/auth/hosts/enrollments/pending", (route) =>
+    route.fulfill(json({ enrollments: state.pending })),
+  );
+  await page.route("**/auth/admins", (route) =>
+    route.fulfill(json({ admins: [] })),
+  );
+  await page.route("**/auth/principals?**", (route) =>
+    route.fulfill(
+      json({
+        principals: [
+          {
+            agent_id: "agent-ops-human",
+            actor_id: "actor-ops-human",
+            username: "riley@example.com",
+            principal_kind: "human",
+            auth_method: "passkey",
+            created_at: "2026-03-01T10:00:00Z",
+            revoked: false,
+          },
+        ],
+        active_human_principal_count: 1,
+      }),
+    ),
+  );
+  await page.route("**/auth/invites", (route) =>
+    route.fulfill(json({ invites: [] })),
+  );
+  await page.route("**/auth/audit?**", (route) =>
+    route.fulfill(json({ events: [] })),
+  );
+  await page.route("**/auth/hosts/enrollment-tokens", (route) =>
+    route.fulfill(json({ enrollment_tokens: [] })),
+  );
+  await page.route(/(?<!\/auth)\/hosts$/, (route) =>
+    route.fulfill(json({ hosts: [] })),
+  );
+  await page.route(/\/agents$/, (route) => route.fulfill(json({ agents: [] })));
+
+  await page.goto("/o/local/w/local/access");
+
+  // One number, on the trigger that hides the Access item.
+  const trigger = page.locator("[data-access-trigger-count]");
+  await expect(trigger).toHaveText("1");
+  await expect(trigger).toHaveAttribute("title", "1 access request waiting");
+  // The page agrees with the badge: two rows, one decision.
+  await expect(page.locator("[data-pending-access-count]")).toHaveText("1");
+  await expect(page.locator("[data-host-enrollment]")).toHaveCount(2);
+
+  // And on the Access item itself, once the menu is open.
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await expect(page.locator("[data-access-nav-count]")).toHaveText("1");
+
+  // Deciding the last request clears the badge rather than showing a zero.
+  await page.keyboard.press("Escape");
+  await page.route("**/auth/hosts/enrollments/henr_1/deny", (route) =>
+    route.fulfill(json({ enrollment: { id: "henr_1", status: "denied" } })),
+  );
+  state.pending = [];
+  await page.getByRole("button", { name: "Deny", exact: true }).click();
+  await expect(page.locator("[data-access-trigger-count]")).toHaveCount(0);
+  await expect(page.locator("[data-pending-access]")).toHaveCount(0);
+});
