@@ -5,7 +5,8 @@
     grantCandidates,
     hostForTarget,
   } from "$lib/authAdminModel.js";
-  import { formatAbsoluteDateTime } from "$lib/formatDate";
+  import { isAdministrationRefusal } from "$lib/coreAuthErrors.js";
+  import { formatAbsoluteDate, formatAbsoluteDateTime } from "$lib/formatDate";
   import ActorAvatar from "$lib/components/ActorAvatar.svelte";
   import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
@@ -24,6 +25,7 @@
     principals = [],
     hosts = [],
     auditEvents = [],
+    activeHumanCount = 0,
     currentPrincipalId = "",
     displayName = (principal) => principal?.username ?? "",
     canEdit = false,
@@ -47,19 +49,52 @@
     }),
   );
   let candidates = $derived(grantCandidates({ principals, admins, hosts }));
+  // The principal list is one page. Core's own active-human count is
+  // authoritative, so the section can say how many people it is not showing
+  // instead of implying that the page is the whole truth.
+  let unlistedHumans = $derived(
+    Math.max(
+      0,
+      activeHumanCount - rows.filter((row) => row.kind === "human").length,
+    ),
+  );
 
+  // An unparseable timestamp has no date to show, and nothing else on the row
+  // may be substituted for it.
   function grantedLabel(row) {
-    if (!row.grantedAt) return "";
-    const when = formatAbsoluteDateTime(row.grantedAt);
+    const when = formatAbsoluteDate(row.grantedAt);
     if (!when) return "";
     return row.kind === "human"
       ? `admin since joining ${when}`
-      : `since ${when}`;
+      : `admin since ${when}`;
+  }
+
+  /** The row's detail line, so a missing part never leaves a stray "·". */
+  function details(row) {
+    return [
+      // An agent with no display name reads as its own handle; repeating it
+      // here would restate the line above.
+      row.kind === "agent" && row.handle !== row.name ? row.handle : "",
+      row.hostSlug,
+      grantedLabel(row),
+    ].filter(Boolean);
   }
 
   function prepareGrant() {
     const id = target.trim();
     if (!id) return;
+    // Administration is not granted to a person; they hold it already. Saying
+    // so beats a confirm step that promises something core will reject.
+    const human = principals.find(
+      (principal) =>
+        principal?.principal_kind === "human" &&
+        (principal.agent_id === id || principal.username === id),
+    );
+    if (human) {
+      error =
+        "People already administer this workspace. Only agents are granted administration.";
+      return;
+    }
     const match = candidates.find(
       (candidate) => candidate.principalId === id || candidate.username === id,
     );
@@ -93,9 +128,8 @@
 
   // A refused change is a permission answer, not a fault to debug.
   function changeFailure(err) {
-    const status = Number(err?.status);
-    if (status === 401 || status === 403) {
-      return "Only a signed-in person can change administration.";
+    if (isAdministrationRefusal(err) || Number(err?.status) === 403) {
+      return "Only a person can change administration.";
     }
     const details = String(err?.details ?? "").trim();
     if (details) return details;
@@ -108,15 +142,14 @@
     Only workspace administrators can see who administers this workspace.
   </p>
 {:else}
+  <!-- What a grant actually trusts is spelled out in the confirm step, where
+       the reader is about to make one. Here: who holds it, and how it moves. -->
   <p class="mb-3 text-meta text-fg-muted">
-    Administrators can decide host enrollments, manage enrollment tokens, revoke
-    other hosts, and read inventory and audit. Principal and human invitation
-    revocation require a person. Only a person can grant or revoke this
-    authority. Revocation takes effect on the next request. Granting an agent on
-    a host trusts every process that can read that host's shared key and request
-    that agent name. Human invitations remain human-only. A person administers
-    from the moment they join; take it away by revoking their access under
-    People.
+    Administrators decide host enrollments, manage enrollment tokens, revoke
+    other hosts, and read inventory and audit. Revoking a principal or a human
+    invitation still needs a person, and only a person can grant or revoke
+    administration. A person administers from the moment they join; take that
+    away by revoking their access under People.
   </p>
   <ul class="overflow-hidden rounded-md border border-line bg-bg-soft">
     {#each rows as row (row.key)}
@@ -139,20 +172,18 @@
           <p
             class="flex min-w-0 items-center gap-1.5 text-micro text-fg-subtle"
           >
-            <!-- An agent with no display name reads as its own handle; the
-                 line below it would then repeat the line above. -->
-            {#if row.kind === "agent" && row.handle && row.handle !== row.name}
-              <span class="truncate font-mono">{row.handle}</span>
-            {/if}
-            {#if row.hostSlug}
-              <span aria-hidden="true">·</span>
-              <span class="truncate">{row.hostSlug}</span>
-            {/if}
-            {#if grantedLabel(row)}
-              <span aria-hidden="true">·</span>
-              <span class="truncate">{grantedLabel(row)}</span>
-            {/if}
-            <span aria-hidden="true">·</span>
+            {#each details(row) as detail, index (index)}
+              {#if index > 0}<span aria-hidden="true">·</span>{/if}
+              <span
+                class="truncate {index === 0 && row.kind === 'agent'
+                  ? 'font-mono'
+                  : ''}"
+                title={detail === grantedLabel(row)
+                  ? formatAbsoluteDateTime(row.grantedAt)
+                  : undefined}>{detail}</span
+              >
+            {/each}
+            {#if details(row).length}<span aria-hidden="true">·</span>{/if}
             <CopyableId value={row.principalId} label="Copy principal id" />
           </p>
         </div>
@@ -173,10 +204,17 @@
       </li>
     {:else}
       <li class="px-4 py-3 text-meta text-fg-muted">
-        Nobody administers this workspace yet.
+        No agents have administration access.
       </li>
     {/each}
   </ul>
+  {#if unlistedHumans}
+    <p class="mt-2 text-micro text-fg-subtle" data-auth-admins-unlisted>
+      {unlistedHumans === 1 ? "1 more person" : `${unlistedHumans} more people`}
+      {unlistedHumans === 1 ? "administers" : "administer"} this workspace and is
+      not shown here. People lists everyone.
+    </p>
+  {/if}
   {#if canEdit}
     <form
       class="mt-3 flex flex-wrap items-end gap-2"
@@ -197,10 +235,9 @@
       </label>
       <datalist id="auth-admin-candidates">
         {#each candidates as candidate (candidate.principalId)}
-          <option
-            value={candidate.username}
-            label={candidate.hostSlug ? `on ${candidate.hostSlug}` : undefined}
-          ></option>
+          <!-- No `label`: Firefox renders it instead of the value, which
+               would hide every agent name behind its host. -->
+          <option value={candidate.username}></option>
         {/each}
       </datalist>
       <Button
@@ -210,6 +247,11 @@
         disabled={!target.trim()}>Grant administration</Button
       >
     </form>
+    {#if error && !pending}
+      <!-- A refusal raised before the confirm step opens has no dialog to
+           appear in. -->
+      <p class="mt-2 text-micro text-danger-text" role="alert">{error}</p>
+    {/if}
   {/if}
 {/if}
 <ConfirmModal

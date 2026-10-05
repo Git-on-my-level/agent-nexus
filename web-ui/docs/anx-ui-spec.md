@@ -120,8 +120,15 @@ zero). Agents is presence: who is working, waiting on a human, idle or stale.
 It never answers an ask; a waiting agent's row links into the Inbox. Ask PM is
 an action in the shell, not a nav category. The account menu in the sidebar
 footer and the `/more` hub group the secondary destinations under two labels:
-**Settings** (Access, Secrets, Integrations) and **Diagnostics** (Audit,
-Threads). Sign out is the last item of the account menu.
+**Settings** (Archive, Access, Secrets, Integrations) and **Diagnostics**
+(Audit, Threads). Sign out is the last item of the account menu.
+
+Access carries the one count that lives behind the account menu: how many
+access requests wait for a decision. Because the Access item is out of sight
+until the menu opens, the same number also sits on the menu trigger (the
+avatar and name button), and on the Access row in `/more`. One number, the
+detail on hover, and nothing at zero — or for a reader without administration
+authority, who could not act on it.
 
 Overview (`/overview`) summarizes four existing reads and links into them. It
 does not answer an ask, move a task, or edit a document. **Needs you** is the
@@ -323,7 +330,9 @@ Every shortcut the palette shows is bound, by the palette itself, in a capture-p
 
 Access (`/access`, under Settings) is where machines and people get and lose access. Sections, top to bottom:
 
-**Waiting for approval** (only while requests exist):
+**Waiting for you** (only while requests exist; the heading reads **Enrollment
+in progress** when every row is an approved ceremony waiting on its machine
+rather than on the reader):
 
 - Lists pending host enrollments (`GET /auth/hosts/enrollments/pending`): requested host name, `os_user@hostname`, requesting IP, agents found on the machine, adopted agent names, age and expiry, and the user code the machine printed, set large.
 - Approval is deliberate: **Approve…** opens an inline confirmation that repeats the code ("Approve only if J6FA-N4XI is the code printed on m5-mbp.local") and says every agent running there can act in the workspace; only **Codes match, approve** calls `POST …/approve`. **Deny** is one click. An expired request cannot be approved. After a decision the page says what happens next (an approved host appears under Hosts once the machine finishes).
@@ -336,6 +345,27 @@ Access (`/access`, under Settings) is where machines and people get and lose acc
 - **Revoke host…** opens an inline confirmation inside the card that names every agent that loses access and requires typing the host name before `DELETE /hosts/{id}`. Revoked hosts collapse behind "Show N revoked hosts".
 - **Enroll a machine** shows the command (`anx --base-url <core> host enroll`, with a copy button) and the headless option: create a one-time token with a label and lifetime (10 minutes to 24 hours); the token and the full `host enroll --token` command are shown once with copy buttons. Unused tokens can be revoked; used and expired ones collapse. With no hosts, this panel is open by default.
 
+**Administrators:**
+
+- Who can administer this workspace, people and agents in one list, because a
+  list of only the explicit grants would read as if nobody else could act. A
+  person holds administration implicitly from the moment they join; an agent
+  holds it only from an explicit grant (`GET /auth/admins`). Rows carry the
+  display name, the kind (Person or Agent), an agent's handle and host, and
+  the date administration started. The principal id sits behind a copy button.
+- An agent's grant date comes from the `auth_admin_granted` audit events the
+  page already loaded, because `AuthAdmin` carries no grant timestamp. Outside
+  that window the date is omitted rather than guessed at.
+- **Grant administration** takes an agent username or principal id and
+  confirms what the grant allows, naming the principal and the host whose
+  shared key can request it. **Revoke administration** confirms the same way.
+  Both are offered only to a person (`POST /auth/admins/{id}/grant|revoke` is
+  human-only); an agent administrator sees the list and no controls. A person
+  is never offered a grant — remove their authority by revoking their access
+  under People.
+- `listPrincipals` returns one page, so when it does not reach every person
+  the section says how many more administer the workspace without being shown.
+
 **People:**
 
 - Humans only, by name (actor display name, then username), with joined and last-seen age and the principal id behind a copy button. Agents are never listed here; they appear under their hosts.
@@ -343,6 +373,12 @@ Access (`/access`, under Settings) is where machines and people get and lose acc
 - Revoking a person asks for confirmation. The last active human requires break-glass: typing the principal id and a lockout reason (`allow_human_lockout`, `human_lockout_reason`). The signed-in principal cannot revoke itself.
 
 **Standalone agents** (only when present): agents registered before hosts and not adopted. They keep working until revoked here.
+
+**Refused reads:** every read on this page needs administration authority and
+they are refused together, so a principal without it gets one line ("Only
+workspace administrators can manage access.") instead of seven sections each
+describing an empty workspace it was not allowed to see. A 403 is that answer;
+a 401 is an expired session and stays on the error path.
 
 **Recent access events:** auth audit events as sentences with names and host names ("Maya Chen approved m5-mbp", "codex on m5-mbp used anx for the first time"); event ids sit behind a copy button on hover. Eight show first, then more, then older pages.
 

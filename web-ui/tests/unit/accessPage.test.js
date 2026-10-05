@@ -366,7 +366,7 @@ describe("access page", () => {
     expect(rows[1].textContent).toContain("fleet.host-a");
     expect(rows[1].textContent).toContain("Agent");
     expect(rows[1].textContent).toContain("host-a");
-    expect(rows[1].textContent).toMatch(/since .*2026/);
+    expect(rows[1].textContent).toMatch(/admin since .*2026/);
     expect(admins.textContent).toContain("2");
   });
 
@@ -381,23 +381,36 @@ describe("access page", () => {
     expect(row.textContent).not.toContain("since");
   });
 
-  it("says administration is not visible instead of showing an error on 403", async () => {
+  it("says access is not yours to manage, once, when every read is refused", async () => {
     const refused = new Error("forbidden");
     refused.status = 403;
-    coreClientMock.listAuthAdmins.mockRejectedValue(refused);
-    coreClientMock.listPendingHostEnrollments.mockRejectedValue(refused);
+    for (const call of [
+      "listHosts",
+      "listPendingHostEnrollments",
+      "listHostEnrollmentTokens",
+      "listAuthAdmins",
+      "listPrincipals",
+      "listInvites",
+      "listAuthAudit",
+    ]) {
+      coreClientMock[call].mockRejectedValue(refused);
+    }
     render(AccessPage, { props: { data: { outOfWorkspaceMode: "local" } } });
     expect(
       await screen.findByText(
-        "Only workspace administrators can see who administers this workspace.",
+        "Only workspace administrators can manage access.",
       ),
     ).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Only workspace administrators can see access requests.",
-      ),
-    ).toBeTruthy();
+    // A refusal is an answer, not a fault, and the page must not then go on
+    // to describe a workspace the reader was not allowed to see.
     expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText("No machines enrolled yet")).toBeNull();
+    expect(screen.queryByText("No people yet.")).toBeNull();
+    expect(screen.queryByText("No access events yet.")).toBeNull();
+    expect(
+      screen.queryByText(/Last step: enroll the machine your agents run on/),
+    ).toBeNull();
+    expect(document.querySelector("[data-auth-admin]")).toBeNull();
     // No badge for a reader who could not act on the number anyway.
     await waitFor(() =>
       expect(get(pendingAccessCount)).toEqual({
@@ -406,6 +419,135 @@ describe("access page", () => {
         forbidden: true,
       }),
     );
+  });
+
+  it("keeps a refused host read from claiming the workspace has no machines", async () => {
+    const refused = new Error("forbidden");
+    refused.status = 403;
+    coreClientMock.listHosts.mockRejectedValue(refused);
+    render(AccessPage, { props: { data: { outOfWorkspaceMode: "local" } } });
+    // Pending requests still load, so this is not the all-refused case.
+    expect(await screen.findByText("J6FA-N4XI")).toBeTruthy();
+    expect(screen.queryByText("No machines enrolled yet")).toBeNull();
+    expect(
+      screen.queryByText(/Last step: enroll the machine your agents run on/),
+    ).toBeNull();
+  });
+
+  it("treats a 401 as a failed read, not as a missing grant", async () => {
+    // Telling a signed-out administrator they are not an administrator is
+    // worse than saying the read failed.
+    const expired = new Error("unauthorized");
+    expired.status = 401;
+    coreClientMock.listAuthAdmins.mockRejectedValue(expired);
+    render(AccessPage, { props: { data: { outOfWorkspaceMode: "local" } } });
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "Only workspace administrators can see who administers this workspace.",
+      ),
+    ).toBeNull();
+    expect(
+      screen.queryByText("Only workspace administrators can manage access."),
+    ).toBeNull();
+  });
+
+  it("offers an agent administrator no way to change a grant", async () => {
+    authenticatedAgent.set({
+      agent_id: "agent-fleet",
+      actor_id: "actor-fleet",
+      username: "fleet.host-a",
+      principal_kind: "agent",
+    });
+    coreClientMock.listAuthAdmins.mockResolvedValue({
+      admins: [{ principal_id: "agent-fleet", username: "fleet.host-a" }],
+    });
+    coreClientMock.listPrincipals.mockResolvedValue({
+      principals: [
+        {
+          agent_id: "agent-other",
+          username: "other.host-a",
+          principal_kind: "agent",
+          revoked: false,
+        },
+      ],
+      active_human_principal_count: 1,
+    });
+    render(AccessPage, { props: { data: { outOfWorkspaceMode: "local" } } });
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-auth-admin="agent-fleet"]'),
+      ).toBeTruthy(),
+    );
+    // Only a person can grant or revoke; core refuses an agent either way.
+    expect(
+      screen.queryByLabelText("Agent username or principal ID"),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Grant administration" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Revoke administration" }),
+    ).toBeNull();
+  });
+
+  it("counts the people core reports, not just the page it returned", async () => {
+    coreClientMock.listPrincipals.mockResolvedValue({
+      // A fleet's agent principals can fill the newest-first page and push
+      // the people who joined at setup off it entirely.
+      principals: [
+        {
+          agent_id: "agent-fleet",
+          username: "fleet.host-a",
+          principal_kind: "agent",
+          revoked: false,
+        },
+      ],
+      active_human_principal_count: 6,
+    });
+    coreClientMock.listAuthAdmins.mockResolvedValue({
+      admins: [{ principal_id: "agent-fleet", username: "fleet.host-a" }],
+    });
+    render(AccessPage, { props: { data: { outOfWorkspaceMode: "local" } } });
+    const admins = await screen.findByRole("region", {
+      name: /^Administrators/,
+    });
+    await waitFor(() => expect(admins.textContent).toContain("7"));
+    expect(
+      (await screen.findByText(/more people administer this workspace/))
+        .textContent,
+    ).toContain("6 more people");
+    // Never the sentence that core's break-glass rule makes impossible.
+    expect(
+      screen.queryByText("Nobody administers this workspace yet."),
+    ).toBeNull();
+  });
+
+  it("refuses to promise a grant that core will reject for a person", async () => {
+    coreClientMock.listPrincipals.mockResolvedValue({
+      principals: [
+        {
+          agent_id: "agent-human-admin",
+          actor_id: "actor-human-admin",
+          username: "admin@example.com",
+          principal_kind: "human",
+          created_at: "2026-03-01T10:00:00Z",
+          revoked: false,
+        },
+      ],
+      active_human_principal_count: 1,
+    });
+    render(AccessPage, { props: { data: { outOfWorkspaceMode: "local" } } });
+    const input = await screen.findByLabelText(
+      "Agent username or principal ID",
+    );
+    await fireEvent.input(input, { target: { value: "admin@example.com" } });
+    await fireEvent.submit(input.closest("form"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(coreClientMock.grantAuthAdmin).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText(/People already administer this workspace/),
+    ).toBeTruthy();
   });
 
   it("publishes the pending decision count for the shell badge", async () => {

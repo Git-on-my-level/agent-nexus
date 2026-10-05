@@ -57,6 +57,10 @@
   import AgentsNavCount from "$lib/components/agents/AgentsNavCount.svelte";
   import AccessNavCount from "$lib/components/access/AccessNavCount.svelte";
   import {
+    pendingAccessCount,
+    pendingAccessLabel,
+  } from "$lib/pendingAccessCount.js";
+  import {
     handleEscapeTextBlurCommit,
     handleModEnterBlurCommit,
     handleModEnterFormSubmit,
@@ -237,6 +241,21 @@
     }),
   );
   let initials = $derived(shellIdentity.initials);
+  // Access lives inside this menu, so the trigger carries its badge. An
+  // explicit aria-label on a button suppresses any name its children would
+  // contribute, so the number has to be part of the label itself or a screen
+  // reader never hears it.
+  let pendingAccess = $derived(
+    $pendingAccessCount.workspace === activeWorkspaceSlug &&
+      !$pendingAccessCount.forbidden
+      ? ($pendingAccessCount.count ?? 0)
+      : 0,
+  );
+  let accountMenuLabel = $derived(
+    pendingAccess > 0
+      ? `Account menu, ${pendingAccessLabel(pendingAccess)}`
+      : "Account menu",
+  );
   let shellContentConfig = $derived(getShellContentConfig(currentAppPath));
   let moreBottomNavActive = $derived(isMoreHubActivePath(currentAppPath));
   const shellNavForTitle = [
@@ -1295,7 +1314,7 @@
               type="button"
               aria-expanded={accountMenuOpen}
               aria-haspopup="menu"
-              aria-label="Account menu"
+              aria-label={accountMenuLabel}
               onclick={toggleAccountMenu}
             >
               <span class="shell-account-avatar" aria-hidden="true"
