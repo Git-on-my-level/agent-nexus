@@ -6,6 +6,7 @@
     {"authority": "multica", "connection_id": "multica-main", "native_id": "source-issue-id", "initiative": "card:release-b"}
   ],
   "rules": [
+    {"id": "other-workspace-prs", "elsewhere": "other-workspace", "match": {"authority": "github", "repo": "Example/other-product"}},
     {"id": "release-b-label", "initiative": "card:release-b", "match": {"authority": "multica", "labels": ["release-b"]}},
     {"id": "product-project", "initiative": "card:product-outcome", "match": {"authority": "multica", "connection_id": "multica-main", "project": "multica-project-id"}},
     {"id": "product-prs", "initiative": "card:product-outcome", "match": {"authority": "github", "repo": "Example/product"}},

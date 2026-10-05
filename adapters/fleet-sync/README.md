@@ -28,7 +28,7 @@ python3 adapters/fleet-sync/fleet_sync.py --quiet
 ## Initiative mapping (required)
 
 Recurring runs create **zero cards**. Each item becomes linked evidence on an
-existing Nexus-owned initiative, or a row in the single Unsorted dashboard panel.
+existing Nexus-owned initiative, an Unsorted sample, or a count for another workspace.
 Operational readers also feed aggregate dashboard metrics and history. The old
 per-item registration/observation writer has been removed; an old config without
 `mapping_doc` fails closed before reading sources or writing anything.
@@ -37,7 +37,7 @@ Rules live in a versioned ANX document, **not** a hidden host-only routing file.
 The host config supplies `mapping_doc: "doc:fleet-sync-mapping"`, credentials stay
 with the workspace-local host, and the document contains plain JSON matching
 `mapping.example.json`. Its `workspace` must exactly match the config's `base_url`
-(without a trailing slash). Targets are local `card:<handle>` refs; the adapter
+(without a trailing slash). Initiative targets are local `card:<handle>` refs; the adapter
 verifies they exist, are active, and are Nexus-owned. It never creates targets.
 
 Pins use the full `(authority, connection_id, native_id)` identity and win over
@@ -45,6 +45,22 @@ rules. Rules run top to bottom, first match wins. Fields within a rule are ANDed
 `authority`, `connection_id`, `project` (Multica project ID), `labels` (all exact
 names), `repo` (exact owner/name), and `title_pattern` (Python regex). Unknown fields,
 duplicate rule IDs/pins, invalid regexes, and a different workspace are errors.
+
+Each rule or pin requires exactly one destination: `initiative` or `elsewhere`.
+For example, `{"id":"omi-prs","elsewhere":"omi","match":{"authority":"github","repo":"Example/omi"}}`
+declares ownership elsewhere. `elsewhere` is a plain workspace label: 1–63 lowercase
+ASCII letters, digits, hyphens or underscores, starting with a letter or digit.
+URLs, card refs, empty labels and mixed destinations are rejected. Pins still win
+over rules, and rules still use first match. Place specific ownership rules before
+broad local initiative rules.
+
+Elsewhere-owned items contribute neither Unsorted items nor proposals. The
+dashboard shows one count per destination (for example, “156 items belong to omi”);
+`--plan` includes full membership in `planned_writes.elsewhere` and its total in
+`counts.elsewhere`. Labels are never resolved to endpoints: the adapter performs
+no reads or writes in those workspaces. Fleet-wide source metrics still describe
+all sources read. Previously linked local evidence stays historical, and legacy
+migration defers elsewhere-owned cards without archiving them.
 
 To add a rule:
 
@@ -72,9 +88,11 @@ The existing initiative plan and core-derived state are preserved. An exact
 source URL/step-ref match already links the source; ingestion adds no separate
 step association and never edits steps or their statuses. Do not hand-edit the marked block. A malformed block stops the run.
 
-Unmatched items stay in **one** Unsorted panel, with a full count, at most 199
-listed rows plus an explicit overflow row (the report contract caps tables at
-200). `--plan` always includes the complete list. Projects, repositories and every label are evaluated independently. Clusters
+Unmatched items stay in **one** Unsorted panel, with full item/suggestion counts,
+the five largest suggestions (stable ties), and ten sample items. Sample text is
+capped at 160 characters; full titles, URLs, identities and all suggestions are
+available through `--plan` (also spelled `--dry-run`). Incomplete reads retain a
+`+` count marker. Projects, repositories and every label are evaluated independently. Clusters
 with at least five members qualify (configurable); overlapping qualifying
 clusters, including transitive overlaps, share one suggestion with deduplicated
 items and all dimensions recorded in the preview. Disjoint groups and source
@@ -118,6 +136,14 @@ manifest does not authorize its execution. See the design rationale in
 ## Report
 
 The dashboard is one `anx.visual-report` schema version 1 document titled "Fleet Dashboard" under the configured topic. It is validated with `node web-ui/scripts/validate-visual-report.mjs` before publish and again after readback. An invalid report is not published.
+
+The complete report, including Unsorted and destination counts, has a 96 KiB
+UTF-8 budget, leaving headroom below the 128 KiB contract limit. Sizing, validation
+and publishing use the same JSON encoding. Detail tables shrink with explicit
+shown/total row counts when necessary; oversized charts can become an omission
+notice. Overview counts and routing summaries are preserved. If those summaries
+alone cannot fit, the run fails before any writes. The preview membership is
+never shortened by dashboard sizing.
 
 Host-local sources do not get a `sources` entry. The visual-report schema requires every source `url` to be an absolute HTTP(S) URL, so a missing URL cannot be omitted or set to null. Pull request URLs and Multica issue URLs are cited where they exist. A Multica issue URL is `{app_url}/{workspace_slug}/issues/{id}`, the same path `multica issue url` prints and the web app builds as `issueDetail`. The adapter derives it from config because the Multica CLI's `app_url` setting is optional and may be unset. Host panels name the host in the table instead.
 

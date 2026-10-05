@@ -245,6 +245,17 @@ class RoutingTests(unittest.TestCase):
 
 
 class MigrationTests(unittest.TestCase):
+    def test_elsewhere_legacy_cards_are_deferred_without_writes(self):
+        client = Client()
+        client.add_legacy(1)
+        m = mapping(rules=[{'id': 'other', 'elsewhere': 'omi', 'match': {'project': 'p'}}])
+        manifest = inventory(client, m, WS)
+        self.assertEqual(manifest['counts']['archive_after_fold'], 0)
+        self.assertEqual(manifest['preview']['counts']['elsewhere'], 1)
+        result = apply_migration(client, manifest, WS, manifest['digest'])
+        self.assertEqual(result['archived'], [])
+        self.assertEqual(client.writes, [])
+
     def test_dry_run_does_not_write_and_apply_is_resumable(self):
         client = Client()
         ref = client.add_legacy(1)
