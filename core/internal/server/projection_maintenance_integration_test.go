@@ -715,8 +715,8 @@ func TestOpsHealthEndpointReportsProjectionMaintenanceErrors(t *testing.T) {
 	if strings.TrimSpace(health.LastError.Message) == "" {
 		t.Fatalf("expected non-empty maintenance error message, got %#v", health.LastError)
 	}
-	if !strings.Contains(health.LastError.Message, "synthetic projection failure") {
-		t.Fatalf("expected underlying failure text in last_error.message, got %#v", health.LastError)
+	if health.LastError.Message != "projection maintenance failed" {
+		t.Fatalf("health must not expose shared failure details, got %#v", health.LastError)
 	}
 }
 

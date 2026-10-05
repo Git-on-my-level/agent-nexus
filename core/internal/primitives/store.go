@@ -231,7 +231,15 @@ func (s *Store) AppendEvent(ctx context.Context, actorID string, event map[strin
 	if err := s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(len(prepared.PayloadJSON) + len(prepared.RefsJSON) + 512)}, blobLedgerWritePlan{}); err != nil {
 		return nil, err
 	}
-	if err := insertPreparedEvent(ctx, s.db, prepared); err != nil {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if err := insertPreparedEvent(ctx, tx, prepared); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 

@@ -94,6 +94,15 @@ inherit their board, and evidence inherits every referenced private resource.
 The selected PM agent and the private owner retain access; unrelated humans,
 agents, and anonymous development readers do not.
 
+Canonical event payloads (including nested refs), notification triggers/refs,
+plans, and runs participate in inherited ownership. Migration 54 backfills
+`resource_access_edges`; database triggers maintain that index atomically with
+canonical JSON/scalar writes, including imports. Use `resourceaccess.ReferenceSQL`
+for SQL reference matching so aliases and Unicode whitespace match the parser.
+Event content and navigational `ref_edges` also commit in a single transaction.
+Filtering a linked plan suppresses its stored refs and titles, not merely live
+reference previews. Never serialize a shared maintenance error to a reader.
+
 All canonical, PM and command-center database access must use
 `internal/resourceaccess` handles with the request context. Scoped SELECTs use
 canonical ownership CTEs before limits, cursors, aggregates and joins. Transaction
@@ -124,6 +133,9 @@ infrastructure, not the number or contents of accessible workspace records.
 The route matrix in `internal/server/testdata/resource_access_routes.json` must
 classify each exact method/path in the generated contract route inventory.
 `TestResourceAccessRouteInventory` fails on new, stale or unsupported entries.
+Mounted-route checks also compare actual registration and authentication
+classifiers; direct mux additions cannot bypass the inventory. Exemptions are
+restricted to reviewed service boundaries and exercised for data disclosure.
 Every record/collection/reference-write/stream entry is exercised against a
 private board with a public card thread, using both a stranger and an unauthorized
 agent. Identity/transport-only exemptions require an explicit rationale. Extend

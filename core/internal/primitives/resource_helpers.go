@@ -400,7 +400,8 @@ func replaceRefEdgesSelective(ctx context.Context, exec eventExec, sourceType, s
 		if _, err := exec.ExecContext(
 			ctx,
 			`INSERT INTO ref_edges(id, source_type, source_id, target_type, target_id, edge_type, created_at, metadata_json)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			 ON CONFLICT(source_type,source_id,target_type,target_id,edge_type) DO NOTHING`,
 			uuid.NewString(),
 			sourceType,
 			sourceID,
@@ -410,9 +411,6 @@ func replaceRefEdgesSelective(ctx context.Context, exec eventExec, sourceType, s
 			now,
 			meta,
 		); err != nil {
-			if isUniqueViolation(err) {
-				continue
-			}
 			return fmt.Errorf("insert ref edge for %s %s -> %s %s (%s): %w", sourceType, sourceID, targetType, targetID, edgeType, err)
 		}
 	}

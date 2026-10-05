@@ -588,7 +588,12 @@ func enforceRouteAccess(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	}
 
 	switch requirement.bucket {
-	case routeAccessAlwaysPublic, routeAccessPublicAuthCeremony:
+	case routeAccessAlwaysPublic:
+		return true
+	case routeAccessPublicAuthCeremony:
+		if r.Method == http.MethodPost && (r.URL.Path == "/agent-wakeups/claim" || r.URL.Path == "/agent-wakeups/complete" || r.URL.Path == "/agent-wakeups/fail") {
+			return authenticateAgentWakeupMutation(w, r, opts)
+		}
 		return true
 	case routeAccessWorkspaceBusiness:
 		if isReadOnlyRequest(r.Method) && opts.enableDevActorMode {
@@ -680,9 +685,12 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			if !enforceRouteAccess(w, r, opts, requirement) {
 				return
 			}
-			attachResourceAccessScope(r, opts)
-			if !authorizeResourceSelectors(w, r) {
-				return
+			_, authenticated := cachedAuthenticatedPrincipal(r)
+			if requirement.supported && requirement.bucket != routeAccessAlwaysPublic && (requirement.bucket != routeAccessPublicAuthCeremony || authenticated) {
+				attachResourceAccessScope(r, opts)
+				if !authorizeResourceSelectors(w, r) {
+					return
+				}
 			}
 			if !enforceWorkspaceWriteAccess(w, opts, requirement) {
 				return
@@ -695,9 +703,6 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			}
 			if limit := requestBodyLimitForRequest(r.URL.Path, r.Method, requirement, opts.requestBodyLimits); limit > 0 {
 				r.Body = http.MaxBytesReader(w, r.Body, limit)
-			}
-			if !authorizeResourceBody(w, r) {
-				return
 			}
 			// Unsupported routes are rejected by their handlers. Do not create a
 			// provisional run before that rejection (or bypass read-only policy).
@@ -2112,6 +2117,10 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return routeAccessRequirement{}
 		}
 		switch {
+		case strings.HasSuffix(remainder, "/revisions"):
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: r.Method == http.MethodGet || r.Method == http.MethodPost}
+		case strings.Contains(remainder, "/revisions/"):
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: r.Method == http.MethodGet}
 		case strings.HasSuffix(remainder, "/plan"):
 			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: r.Method == http.MethodGet || r.Method == http.MethodPut}
 		case strings.HasSuffix(remainder, "/timeline"):

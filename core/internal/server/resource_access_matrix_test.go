@@ -11,6 +11,8 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"regexp"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -52,7 +54,7 @@ func loadPrivacyRouteMatrix(t *testing.T) []privacyRoutePolicy {
 			t.Fatalf("duplicate privacy policy: %s", key)
 		}
 		switch p.Policy {
-		case "record", "collection", "reference-write", "stream", "independent":
+		case "record", "collection", "reference-write", "stream", "independent", "maintenance":
 		default:
 			t.Errorf("unimplemented privacy policy %q: %s", p.Policy, key)
 		}
@@ -78,6 +80,9 @@ func TestResourceAccessRouteInventory(t *testing.T) { loadPrivacyRouteMatrix(t) 
 func TestResourceAccessRouteMatrix(t *testing.T) {
 	requireIntegrationTest(t)
 	policies := loadPrivacyRouteMatrix(t)
+	// Rebuild is a successful canonical maintenance action; run it after the
+	// seeded projection fixtures have been exercised.
+	sort.SliceStable(policies, func(i, j int) bool { return policies[i].Policy != "maintenance" && policies[j].Policy == "maintenance" })
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	db := env.workspace.DB()
@@ -145,6 +150,7 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	rosterAgent := seedNotificationTestAgent(t, env, "roster.matrixhost")
 	now := time.Now().UTC()
 	for kind, value := range map[string]any{
 		"decision": pm.Decision{ID: "matrix-private-decision", WorkspaceID: "ws_main", ActorID: owner.ActorID, WorkRef: anyString(card.Card["ref"]), Instruction: "Confidential decision sentinel", Status: pm.AwaitingAnswer, Revision: 1, CreatedAt: now},
@@ -158,10 +164,10 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err = db.ExecContext(ctx, `INSERT INTO runs(id,handle,launcher,external_id,host_id,agent_id,adapter,state,liveness,result_collected,labels_json,card_ref,last_observed_at) VALUES('matrix-private-run','matrix-private-run','test','private','matrix-host',?,'test','running','alive',0,'[]',?,?)`, agent.AgentID, card.Card["ref"], now.Format(time.RFC3339Nano)); err != nil {
+	if _, err = db.ExecContext(ctx, `INSERT INTO runs(id,handle,launcher,external_id,host_id,agent_id,adapter,state,liveness,result_collected,labels_json,card_ref,last_observed_at) VALUES('matrix-private-run','matrix-private-run','test','private','matrix-host',?,'test','running','alive',0,'[]',?,?)`, hostAgentID(t, env, rosterAgent.ActorID), card.Card["ref"], now.Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = db.ExecContext(ctx, `INSERT INTO agent_presence(agent_id,current_card_ref,note,observed_at) VALUES(?,?,?,?)`, agent.AgentID, card.Card["ref"], "Confidential presence sentinel", now.Format(time.RFC3339Nano)); err != nil {
+	if _, err = db.ExecContext(ctx, `INSERT INTO agent_presence(agent_id,current_card_ref,note,observed_at) VALUES(?,?,?,?)`, hostAgentID(t, env, rosterAgent.ActorID), card.Card["ref"], "Confidential presence sentinel", now.Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}
 	contract, err := schema.Load("../../../contracts/anx-schema.yaml")
@@ -169,7 +175,7 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 		t.Fatal(err)
 	}
 	env.server.Config.Handler = NewHandler("0.2.2", WithAuthStore(env.authStore), WithActorRegistry(env.registry), WithPrimitiveStore(store), WithSchemaContract(contract), WithRunStore(commandcenter.NewStore(db, commandcenter.SQLIdentities{DB: db})), WithPMRuntime(runtime))
-	replacements := strings.NewReplacer("{run_id}", "matrix-private-run", "{agent_id}", agent.AgentID, "{conversation_id}", conversation.ID, "{decision_id}", "matrix-private-decision", "{action_id}", "matrix-private-action", "{turn_id}", "matrix-private-turn", "{document_id}", anyString(document["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{comment_id}", anyString(event["id"]), "{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{artifact_id}", anyString(artifact["id"]), "{event_id}", anyString(event["id"]), "{inbox_id}", askID, "{revision_id}", anyString(card.Card["head_revision_id"]))
+	replacements := strings.NewReplacer("{host_id}", rosterAgent.Host.ID, "{run_id}", "matrix-private-run", "{agent_id}", agent.AgentID, "{conversation_id}", conversation.ID, "{decision_id}", "matrix-private-decision", "{action_id}", "matrix-private-action", "{turn_id}", "matrix-private-turn", "{document_id}", anyString(document["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{comment_id}", anyString(event["id"]), "{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{artifact_id}", anyString(artifact["id"]), "{event_id}", anyString(event["id"]), "{inbox_id}", askID, "{revision_id}", anyString(card.Card["head_revision_id"]))
 	hidden := []string{boardID, cardID, threadID, boardThread, anyString(event["id"]), anyString(artifact["id"]), askID, conversation.ID, "matrix-private-decision", "matrix-private-action", "matrix-private-turn", "matrix-private-run", "Confidential"}
 	snapshot := func() string {
 		var v string
@@ -179,16 +185,18 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 		return v
 	}
 	for _, principal := range []lockoutPrincipalSeed{stranger, agent} {
+		seedStreamPrivacyInbox(t, store, threadID, item)
+		seedStreamPrivacyInbox(t, store, publicThread, streamPrivacyInboxItem(publicThread, "public-control-ask", "Visible inbox control"))
 		t.Run(principal.ActorID, func(t *testing.T) {
 			for _, p := range policies {
-				if p.Policy == "independent" {
-					continue
-				}
-				if p.Policy != "record" && p.Policy != "collection" && p.Policy != "reference-write" && p.Policy != "stream" {
+				if p.Policy != "record" && p.Policy != "collection" && p.Policy != "reference-write" && p.Policy != "stream" && p.Policy != "independent" && p.Policy != "maintenance" {
 					t.Fatalf("unimplemented policy %q for %s %s", p.Policy, p.Method, p.Path)
 				}
 				t.Run(p.Method+" "+p.Path, func(t *testing.T) {
 					path := replacements.Replace(p.Path)
+					if p.Policy == "independent" {
+						path = regexp.MustCompile(`\{[^/{}]+\}`).ReplaceAllString(path, "privacy-fixture")
+					}
 					if strings.Contains(path, "{") {
 						t.Fatalf("missing private fixture for %s", path)
 					}
@@ -253,8 +261,14 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 						if resp.StatusCode != 200 || !strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
 							t.Errorf("stream failed: %d %s", resp.StatusCode, out)
 						}
-					} else if p.Policy == "collection" {
-						if resp.StatusCode != 200 && !(resp.StatusCode == 403 && (strings.HasPrefix(p.Path, "/agent-") || p.Path == "/agents/me" || p.Path == "/pm/bindings")) {
+					} else if p.Policy == "independent" {
+						// Exercise identity/transport exemptions too. Absent optional
+						// services may return 503; no response may serialize secrets.
+						if resp.StatusCode >= 500 && resp.StatusCode != 503 {
+							t.Errorf("exempt route failed: %d %s", resp.StatusCode, out)
+						}
+					} else if p.Policy == "collection" || p.Policy == "maintenance" {
+						if resp.StatusCode != 200 && !(resp.StatusCode == 403 && (strings.HasPrefix(p.Path, "/agent-") || p.Path == "/agents/me" || p.Path == "/pm/bindings" || p.Path == "/hosts/{host_id}")) {
 							t.Errorf("collection status %d: %s", resp.StatusCode, out)
 						}
 					} else if resp.StatusCode != 404 && resp.StatusCode != 403 {
@@ -352,4 +366,13 @@ func privacyWritePayload(t *testing.T, path, actor, board, card, thread, doc, ev
 		t.Fatalf("missing reference-write fixture: %s", path)
 		return nil
 	}
+}
+
+func hostAgentID(t *testing.T, env authIntegrationEnv, actorID string) string {
+	t.Helper()
+	var id string
+	if err := env.workspace.DB().QueryRow(`SELECT id FROM agents WHERE actor_id=?`, actorID).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	return id
 }

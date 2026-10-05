@@ -405,17 +405,17 @@
     {
       "method": "GET",
       "path": "/cards/{card_id}/revisions",
-      "access_class": "handler_defined"
+      "access_class": "workspace_business_surface"
     },
     {
       "method": "POST",
       "path": "/cards/{card_id}/revisions",
-      "access_class": "handler_defined"
+      "access_class": "workspace_business_surface"
     },
     {
       "method": "GET",
       "path": "/cards/{card_id}/revisions/{revision_id}",
-      "access_class": "handler_defined"
+      "access_class": "workspace_business_surface"
     },
     {
       "method": "GET",

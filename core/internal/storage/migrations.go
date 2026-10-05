@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/handles"
+	"agent-nexus-core/internal/resourceaccess"
 
 	"github.com/google/uuid"
 )
@@ -972,13 +973,18 @@ var migrations = []migration{
 	}},
 	{Version: 54, Statements: []string{
 		`CREATE TABLE resource_access_tombstones(kind TEXT NOT NULL,id TEXT NOT NULL,ref TEXT NOT NULL,owner TEXT NOT NULL,PRIMARY KEY(kind,id,ref,owner));`,
+		`CREATE TABLE resource_access_edges(source_kind TEXT NOT NULL,source_id TEXT NOT NULL,target_ref TEXT NOT NULL COLLATE NOCASE,PRIMARY KEY(source_kind,source_id,target_ref));`,
+		`CREATE INDEX idx_resource_access_edges_target ON resource_access_edges(target_ref,source_kind,source_id);`,
 	}, AfterApply: func(ctx context.Context, tx *sql.Tx) error {
+		if err := installResourceAccessEdges(ctx, tx); err != nil {
+			return err
+		}
 		// Some legacy migration tests intentionally have only a partial schema.
 		for table, statement := range map[string]string{
 			"ref_edges":           `CREATE INDEX idx_ref_edges_access_target ON ref_edges(target_type,target_id COLLATE NOCASE,edge_type)`,
 			"cards":               `CREATE INDEX idx_cards_access_thread ON cards(thread_id)`,
 			"derived_inbox_items": `CREATE INDEX idx_inbox_access_card ON derived_inbox_items(source_card_id)`,
-			"work_metadata":       `CREATE INDEX idx_work_access_project ON work_metadata(json_extract(metadata_json,'$.project_ref') COLLATE NOCASE)`,
+			"work_metadata":       `CREATE INDEX idx_work_access_project ON work_metadata(` + resourceaccess.ReferenceSQL("json_extract(metadata_json,'$.project_ref')") + ` COLLATE NOCASE)`,
 		} {
 			exists, err := sqliteTableExists(ctx, tx, table)
 			if err != nil {
@@ -999,6 +1005,55 @@ var migrations = []migration{
 		}
 		return nil
 	}},
+}
+
+// Index canonical JSON references in the same statement as their records. This
+// covers every producer (including imports), and backfills existing workspaces.
+// These ownership edges are separate from navigational ref_edges: replacing a
+// record's top-level refs must never discard payload-derived authorization.
+func installResourceAccessEdges(ctx context.Context, tx *sql.Tx) error {
+	for _, source := range []struct {
+		table, kind, id string
+		columns         []string
+	}{
+		{"events", "event", "id", []string{"refs_json", "payload_json"}},
+		{"agent_wakeups", "wakeup", "wakeup_id", []string{"refs_json"}},
+		{"card_plans", "plan", "card_id", []string{"body_json"}},
+		{"runs", "run", "id", []string{"card_ref"}},
+	} {
+		exists, err := sqliteTableExists(ctx, tx, source.table)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			continue
+		}
+		insert := func(prefix, from string) string {
+			var parts []string
+			for _, column := range source.columns {
+				value := prefix + column
+				if column == "card_ref" {
+					value = "json_quote(" + value + ")"
+				}
+				parts = append(parts, `SELECT '`+source.kind+`',`+prefix+source.id+`,`+resourceaccess.ReferenceSQL("j.atom")+` FROM `+from+`json_tree(CASE WHEN json_valid(`+value+`) THEN `+value+` ELSE '{}' END) j WHERE j.type='text' AND trim(j.atom)<>''`)
+			}
+			// An outer UPSERT can override a trigger's legacy OR IGNORE policy.
+			// An explicit conflict target remains safe for duplicate JSON atoms.
+			return `INSERT INTO resource_access_edges(source_kind,source_id,target_ref) ` + strings.Join(parts, ` UNION `) + ` ON CONFLICT(source_kind,source_id,target_ref) DO NOTHING;`
+		}
+		clear := `DELETE FROM resource_access_edges WHERE source_kind='` + source.kind + `' AND source_id=OLD.` + source.id + `;`
+		for _, statement := range []string{
+			insert("r.", source.table+" r, "),
+			`CREATE TRIGGER access_` + source.table + `_insert AFTER INSERT ON ` + source.table + ` BEGIN ` + insert("NEW.", "") + ` END`,
+			`CREATE TRIGGER access_` + source.table + `_update AFTER UPDATE OF ` + strings.Join(append([]string{source.id}, source.columns...), ",") + ` ON ` + source.table + ` BEGIN ` + clear + insert("NEW.", "") + ` END`,
+			`CREATE TRIGGER access_` + source.table + `_delete AFTER DELETE ON ` + source.table + ` BEGIN ` + clear + ` END`,
+		} {
+			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("index %s authorization: %w", source.table, err)
+			}
+		}
+	}
+	return nil
 }
 
 func applyMigration49SeriesTokenScope(ctx context.Context, tx *sql.Tx) error {

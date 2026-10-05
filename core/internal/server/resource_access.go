@@ -2,13 +2,9 @@ package server
 
 import (
 	"agent-nexus-core/internal/primitives"
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
-	"net/url"
 	"strings"
 )
 
@@ -42,37 +38,41 @@ func authorizeResourceValues(w http.ResponseWriter, r *http.Request, values any)
 }
 func authorizeResourceSelectors(w http.ResponseWriter, r *http.Request) bool {
 	values := []string{}
-	for _, part := range strings.Split(r.URL.EscapedPath(), "/") {
-		if decoded, err := url.PathUnescape(part); err == nil {
-			values = append(values, decoded)
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	switch r.URL.Path {
+	case "/artifacts/attachments", "/docs/search", "/work/capabilities":
+		parts = nil // Exact service operations have no path resource parameter.
+	}
+	// Only resource positions have selector meaning. Arbitrary query values or
+	// path segments on health/auth/identity routes must not become existence probes.
+	for i := 0; i+1 < len(parts); i++ {
+		switch parts[i] {
+		case "boards", "cards", "threads", "topics", "docs", "documents", "artifacts", "events", "inbox", "work", "runs", "revisions":
+			kind := map[string]string{"boards": "board", "cards": "card", "threads": "thread", "topics": "topic", "docs": "document", "documents": "document", "artifacts": "artifact", "events": "event", "inbox": "inbox", "work": "card", "runs": "run"}[parts[i]]
+			value := parts[i+1]
+			if kind != "" && !strings.Contains(value, ":") {
+				value = kind + ":" + value
+			}
+			values = append(values, value)
 		}
 	}
-	for _, entries := range r.URL.Query() {
-		for _, entry := range entries {
+	var keys []string
+	switch r.URL.Path {
+	case "/events", "/stream/events":
+		keys = []string{"thread_id", "topic_id"}
+	case "/artifacts":
+		keys = []string{"thread_id", "ids"}
+	case "/docs":
+		keys = []string{"thread_id"}
+	case "/stream/inbox", "/stream/agent-notification-receipts":
+		keys = []string{"thread_id"}
+	case "/ref-edges":
+		keys = []string{"source_ref", "target_ref"}
+	}
+	for _, key := range keys {
+		for _, entry := range r.URL.Query()[key] {
 			values = append(values, strings.Split(entry, ",")...)
 		}
 	}
 	return authorizeResourceValues(w, r, values)
-}
-
-// Validate the original JSON before handlers discard unknown fields, return an
-// idempotency replay, or create run attribution. Multipart/binary uploads retain
-// their streaming decoder and authorize their resource selectors separately.
-func authorizeResourceBody(w http.ResponseWriter, r *http.Request) bool {
-	if isReadOnlyRequest(r.Method) || r.Body == nil || !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
-		return true
-	}
-	raw, err := io.ReadAll(r.Body)
-	if err != nil {
-		if !writeRequestTooLargeError(w, err) {
-			writeError(w, 400, "invalid_json", "request body could not be read")
-		}
-		return false
-	}
-	r.Body = io.NopCloser(bytes.NewReader(raw))
-	var value any
-	if json.Unmarshal(raw, &value) != nil {
-		return true
-	} // Handler owns syntax errors.
-	return authorizeResourceValues(w, r, value)
 }

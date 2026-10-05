@@ -63,12 +63,19 @@ func TestResourceAccessScopeInheritanceAndMutationGuards(t *testing.T) {
 	if _, err = ws.DB().ExecContext(ctx, `UPDATE events SET handle=NULL WHERE id=?`, event["id"]); err != nil {
 		t.Fatal(err)
 	}
-	for _, r := range []struct{ id, ref string }{{"hidden-run", strings.ToUpper(ref)}, {"public-run", ""}} {
+	for _, r := range []struct{ id, ref string }{{"hidden-run", strings.ToUpper(ref)}, {"spaced-run", "card: \t" + id + "\n"}, {"public-run", ""}} {
 		if _, err = ws.DB().ExecContext(ctx, `INSERT INTO runs(id,handle,launcher,external_id,host_id,agent_id,adapter,state,liveness,result_collected,labels_json,card_ref,last_observed_at) VALUES(?,?,'test',?,'host','agent','test','running','alive',0,'[]',?,'now')`, r.id, r.id, r.id, r.ref); err != nil {
 			t.Fatal(err)
 		}
 	}
 	var runIDs string
+	runEvidence, err := s.AppendEvent(ctx, "owner", map[string]any{"type": "message_posted", "refs": []string{"run:hidden-run"}, "payload": map[string]any{"text": "private run evidence"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.CanAccessResource(WithAccessScope(ctx, AccessScope{ActorID: "stranger"}), "event", anyStringValue(runEvidence["id"])) {
+		t.Fatal("private run evidence exposed")
+	}
 	if err = s.db.QueryRowContext(WithAccessScope(ctx, AccessScope{ActorID: "stranger"}), `SELECT group_concat(id) FROM runs`).Scan(&runIDs); err != nil {
 		t.Fatal(err)
 	}

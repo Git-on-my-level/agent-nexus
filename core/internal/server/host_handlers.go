@@ -209,6 +209,11 @@ func hostProof(w http.ResponseWriter, r *http.Request, opts handlerOptions, id, 
 		hostError(w, err)
 		return false
 	}
+	// Host identity alone grants no private-board access. Wakeup ceremonies
+	// resolve the delegated target actor separately before installing its scope.
+	if strings.HasPrefix(r.URL.Path, "/hosts/") {
+		attachResourceAccessScope(r, opts)
+	}
 	return true
 }
 func handleHostAuthRoutes(w http.ResponseWriter, r *http.Request, opts handlerOptions) {

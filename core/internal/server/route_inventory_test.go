@@ -18,7 +18,7 @@ func TestRouteInventoryUsesMountedClassifiers(t *testing.T) {
 		"/stream/events":             string(routeAccessWorkspaceBusiness),
 		"/meta/handshake":            string(routeAccessAlwaysPublic),
 		"/cards/{card_id}":           string(routeAccessWorkspaceBusiness),
-		"/cards/{card_id}/revisions": "handler_defined",
+		"/cards/{card_id}/revisions": string(routeAccessWorkspaceBusiness),
 	}
 	for _, route := range routes {
 		if route.AccessClass != want[route.Path] {
