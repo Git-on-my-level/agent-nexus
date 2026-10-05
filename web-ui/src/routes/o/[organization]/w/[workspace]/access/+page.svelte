@@ -255,11 +255,29 @@
   // Hosts and tokens only. The two lists above them have their own reader,
   // which polls; loading them here as well fetched each of them twice on
   // every roster event.
+  /**
+   * Await reads for the reader who started them.
+   *
+   * Returns null once the reader has changed, so the caller applies nothing.
+   * Every read on this page is inventory one principal was allowed to see;
+   * a response that arrives after the session became someone else would
+   * repaint their rows and, worse, clear the refusal that hid them. Going
+   * through here is what keeps that from depending on each caller
+   * remembering.
+   */
+  async function readForThisReader(reads) {
+    const epoch = decisions.current();
+    const results = await Promise.allSettled(reads);
+    return decisions.isStale(epoch) ? null : results;
+  }
+
   async function loadHosts() {
-    const [hostsResult, tokensResult] = await Promise.allSettled([
+    const results = await readForThisReader([
       coreClient.listHosts(),
       coreClient.listHostEnrollmentTokens(),
     ]);
+    if (!results) return;
+    const [hostsResult, tokensResult] = results;
     settle("hosts", hostsResult, (value) => {
       hosts = value?.hosts ?? [];
     });
@@ -269,13 +287,15 @@
   }
 
   async function loadPeople() {
+    const results = await readForThisReader([
+      coreClient.listPrincipals({ limit: 200 }),
+      coreClient.listInvites(),
+      coreClient.listAuthAudit({ limit: 50 }),
+      coreClient.listAuthAdmins(),
+    ]);
+    if (!results) return;
     const [principalsResult, invitesResult, auditResult, adminsResult] =
-      await Promise.allSettled([
-        coreClient.listPrincipals({ limit: 200 }),
-        coreClient.listInvites(),
-        coreClient.listAuthAudit({ limit: 50 }),
-        coreClient.listAuthAdmins(),
-      ]);
+      results;
     settle("admins", adminsResult, (value) => {
       admins = value?.admins ?? [];
     });
@@ -348,12 +368,12 @@
    * failed, rather than reporting an empty section it cannot vouch for.
    */
   async function loadPending() {
-    const epoch = decisions.current();
-    const [pendingResult, requestsResult] = await Promise.allSettled([
+    const results = await readForThisReader([
       coreClient.listPendingHostEnrollments(),
       coreClient.listAccessRequests(),
     ]);
-    if (decisions.isStale(epoch)) return;
+    if (!results) return;
+    const [pendingResult, requestsResult] = results;
     let changed = false;
     settle("pending", pendingResult, (value) => {
       const next = value?.enrollments ?? [];
@@ -464,9 +484,11 @@
   }
 
   async function saveExclusions(host, names) {
+    const epoch = decisions.current();
     const result = await coreClient.patchHost(host.id, {
       excluded_names: names,
     });
+    if (decisions.isStale(epoch)) return;
     const updated = result?.host;
     if (updated) {
       hosts = hosts.map((entry) => (entry.id === updated.id ? updated : entry));
@@ -495,7 +517,11 @@
     inviteError = "";
     createdInviteToken = "";
     try {
+      const epoch = decisions.current();
       const result = await coreClient.createInvite({ kind: "human" });
+      // A one-time token belongs to the person who asked for it; showing it
+      // to whoever is signed in by the time it arrives would hand it over.
+      if (decisions.isStale(epoch)) return;
       createdInviteToken = result?.token ?? "";
       await loadPeople();
     } catch (error) {
@@ -570,10 +596,12 @@
     if (loadingMoreAudit || !auditCursor) return;
     loadingMoreAudit = true;
     try {
+      const epoch = decisions.current();
       const result = await coreClient.listAuthAudit({
         limit: 50,
         cursor: auditCursor,
       });
+      if (decisions.isStale(epoch)) return;
       auditEvents = [...auditEvents, ...(result?.events ?? [])];
       auditCursor = result?.next_cursor ?? "";
     } catch (error) {

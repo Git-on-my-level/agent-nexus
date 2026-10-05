@@ -23,11 +23,13 @@
    * proposal and Acknowledge all fail with `invalid_request` and leave the
    * request pending — the reader would think they had answered. Approving
    * also hands over real authority, so it asks the same second question the
-   * Access page asks, in the same words.
+   * Access page asks, in the same words, and only of a person
+   * (`canDecideAccess`), since core accepts that decision from nobody else.
    */
   let {
     kind = "",
     access = null,
+    canDecideAccess = false,
     proposals = [],
     draft = $bindable(""),
     chosen = "",
@@ -47,7 +49,14 @@
   let isReview = $derived(String(kind ?? "").toLowerCase() === "review");
   let isAccess = $derived(Boolean(access?.requestId));
 
-  let confirming = $state(false);
+  // The confirmation belongs to one request, not to the panel. This component
+  // is reused as the reader moves between inbox items, so a boolean would
+  // stay true under the next request and put its Grant button one click away
+  // from a reader who never saw its authority text.
+  let confirmingRequestId = $state("");
+  let confirming = $derived(
+    isAccess && confirmingRequestId === access.requestId,
+  );
   let confirmEl = $state(null);
 
   let who = $derived(access?.requesterLabel || "This agent");
@@ -62,16 +71,30 @@
   }
 
   async function startConfirm() {
-    confirming = true;
+    if (!isAccess) return;
+    confirmingRequestId = access.requestId;
     // Clicking Approve unmounts the focused button, and the panel below it
     // carries the authority the reader is about to hand over.
     await tick();
     confirmEl?.focus?.();
   }
+
+  /** Decide the request the confirmation was opened for, or nothing. */
+  function decide(requestId, text, outcome) {
+    if (!canDecideAccess || requestId !== access?.requestId) return;
+    send(text, outcome);
+  }
 </script>
 
 <div class="space-y-4">
-  {#if isAccess}
+  {#if isAccess && !canDecideAccess}
+    <!-- Core takes this decision from a person only, so an agent principal
+         is told who can decide rather than shown controls that 403. -->
+    <p class="text-meta text-fg-muted" data-inbox-access-human-only>
+      A person has to decide this request. Signed in as an agent, you can read
+      it but not approve or deny it.
+    </p>
+  {:else if isAccess}
     <div data-inbox-access-decision>
       {#if confirming}
         <div
@@ -92,7 +115,8 @@
               type="button"
               disabled={busy}
               onclick={() =>
-                send(
+                decide(
+                  confirmingRequestId,
                   `Approved ${access?.grant || "the grant"}.`,
                   ACCESS_APPROVE_OUTCOME,
                 )}>Grant administration</button
@@ -101,7 +125,7 @@
               class="ui-btn-secondary"
               type="button"
               disabled={busy}
-              onclick={() => (confirming = false)}>Cancel</button
+              onclick={() => (confirmingRequestId = "")}>Cancel</button
             >
           </div>
         </div>
@@ -117,8 +141,12 @@
             class="ui-btn-secondary"
             type="button"
             disabled={busy}
-            onclick={() => send("Denied the request.", ACCESS_DENY_OUTCOME)}
-            >Deny request</button
+            onclick={() =>
+              decide(
+                access?.requestId,
+                "Denied the request.",
+                ACCESS_DENY_OUTCOME,
+              )}>Deny request</button
           >
         </div>
       {/if}

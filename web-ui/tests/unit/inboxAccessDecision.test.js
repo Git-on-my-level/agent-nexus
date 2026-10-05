@@ -20,10 +20,10 @@ const ACCESS = {
 
 function panel(props = {}) {
   const onSend = vi.fn();
-  render(InboxRespondPanel, {
-    props: { kind: "review", onSend, ...props },
+  const result = render(InboxRespondPanel, {
+    props: { kind: "review", canDecideAccess: true, onSend, ...props },
   });
-  return onSend;
+  return Object.assign(onSend, { rerender: result.rerender });
 }
 
 function clickButton(label) {
@@ -154,6 +154,51 @@ describe("InboxRespondPanel on an access request", () => {
     // And the plain review buttons, which send `answered`, are gone too.
     expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Reject" })).toBeNull();
+  });
+
+  it("does not carry a confirmation over to the next request", async () => {
+    // The panel is reused as the reader moves between inbox items. A boolean
+    // `confirming` left B one click from a grant whose authority text B's
+    // reader never saw.
+    const onSend = panel({ access: ACCESS });
+    await clickButton("Approve…");
+    expect(document.querySelector("[data-inbox-access-confirm]")).toBeTruthy();
+
+    const other = { ...ACCESS, requestId: "areq_2", requesterLabel: "other" };
+    await onSend.rerender({ access: other });
+
+    // B starts at its own first step, not inside A's confirmation.
+    expect(document.querySelector("[data-inbox-access-confirm]")).toBeNull();
+    expect(screen.getByRole("button", { name: "Approve…" })).toBeTruthy();
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("returns to the confirmation only for the request it was opened for", async () => {
+    const onSend = panel({ access: ACCESS });
+    await clickButton("Approve…");
+    const other = { ...ACCESS, requestId: "areq_2" };
+    await onSend.rerender({ access: other });
+    await onSend.rerender({ access: ACCESS });
+    // Coming back to A resumes A's own confirmation; nothing was sent on the
+    // way through B.
+    expect(document.querySelector("[data-inbox-access-confirm]")).toBeTruthy();
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("offers an agent no grant controls, and says who can decide", async () => {
+    // Core takes this decision from a person only; the server 403s, so the
+    // controls were an invitation to a failure.
+    const onSend = panel({ access: ACCESS, canDecideAccess: false });
+    expect(
+      screen.getByText(/A person has to decide this request/),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Approve…" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Deny request" })).toBeNull();
+    expect(document.querySelector("[data-inbox-access-decision]")).toBeNull();
+    // Nor the ordinary review controls, which core rejects on these items.
+    expect(document.querySelector("textarea")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(onSend).not.toHaveBeenCalled();
   });
 
   it("leaves an ordinary review exactly as it was", async () => {

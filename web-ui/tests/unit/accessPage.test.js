@@ -806,6 +806,68 @@ describe("access page", () => {
     await waitFor(() => expect(get(pendingAccessCount).count).toBe(1));
   });
 
+  it("drops a held human inventory read that lands after the reader changed", async () => {
+    // The reproduction: hold the human's administrator read, switch to an
+    // unprivileged agent, let that reader's read be refused, then release the
+    // old response. It must not repaint, and must not clear the refusal.
+    let releaseAdmins = () => {};
+    coreClientMock.listAuthAdmins.mockReturnValueOnce(
+      new Promise((resolve) => {
+        releaseAdmins = () =>
+          resolve({
+            admins: [
+              {
+                principal_id: "agent-held",
+                actor_id: "actor-held",
+                username: "held.host-a",
+                auth_admin: true,
+              },
+            ],
+          });
+      }),
+    );
+    render(AccessPage, { props: { data: { outOfWorkspaceMode: "local" } } });
+    await screen.findByRole("region", { name: /^Administrators/ });
+
+    const refused = new Error("forbidden");
+    refused.status = 403;
+    for (const call of [
+      "listAuthAdmins",
+      "listPrincipals",
+      "listAccessRequests",
+      "listInvites",
+      "listAuthAudit",
+      "listHosts",
+      "listHostEnrollmentTokens",
+      "listPendingHostEnrollments",
+    ]) {
+      coreClientMock[call].mockRejectedValue(refused);
+    }
+    authenticatedAgent.set({
+      agent_id: "agent-other",
+      actor_id: "actor-other",
+      username: "other.host-a",
+      principal_kind: "agent",
+      auth_method: "host_assertion",
+    });
+    expect(
+      await screen.findByText(
+        "Only workspace administrators can manage access.",
+      ),
+    ).toBeTruthy();
+
+    // The previous reader's response arrives now.
+    releaseAdmins();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(screen.queryByText("held.host-a")).toBeNull();
+    expect(document.querySelector('[data-auth-admin="agent-held"]')).toBeNull();
+    // And the refusal it would have cleared is still in force.
+    expect(
+      screen.getByText("Only workspace administrators can manage access."),
+    ).toBeTruthy();
+  });
+
   it("empties a section that a refused poll can no longer vouch for", async () => {
     // Same page, same reader: a read that starts succeeding and then is
     // refused must not leave its rows behind either.

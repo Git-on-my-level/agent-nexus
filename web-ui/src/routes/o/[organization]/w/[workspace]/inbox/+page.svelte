@@ -12,7 +12,11 @@
     principalRegistry,
     selectedActorId,
   } from "$lib/actorSession";
-  import { initializeAuthSession } from "$lib/authSession";
+  import {
+    authenticatedAgent,
+    initializeAuthSession,
+    isHumanWorkspacePrincipal,
+  } from "$lib/authSession";
   import { restartSession } from "$lib/workspaceBootstrap";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
@@ -94,6 +98,8 @@
   let choice = $state("");
   let reply = $state("");
   let chosen = $state("");
+  // Core accepts an access decision from a person only.
+  let decidesAccess = $derived(isHumanWorkspacePrincipal($authenticatedAgent));
   let helpOpen = $state(false);
   let requestId = 0;
   let selectionRequest = 0;
@@ -1362,6 +1368,7 @@
                   <InboxRespondPanel
                     kind={selected.category}
                     access={selected.access}
+                    canDecideAccess={decidesAccess}
                     proposals={selected.responseProposals}
                     bind:draft={reply}
                     {chosen}

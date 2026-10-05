@@ -93,6 +93,14 @@ vi.mock("$lib/coreClient", () => ({
 }));
 vi.mock("$lib/authSession", () => ({
   initializeAuthSession: vi.fn(async () => ({})),
+  // The Inbox pane asks whether the reader may decide an access request.
+  isHumanWorkspacePrincipal: () => true,
+  authenticatedAgent: {
+    subscribe: (fn) => {
+      fn({ actor_id: "human", principal_kind: "human" });
+      return () => {};
+    },
+  },
 }));
 
 import InboxPage from "../../src/routes/o/[organization]/w/[workspace]/inbox/+page.svelte";
