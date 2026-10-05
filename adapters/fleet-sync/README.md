@@ -122,7 +122,10 @@ Stop/upgrade every old fleet-sync writer before migration. Run one migrator per
 workspace. Apply requires the exact reviewed digest, the same workspace, and the
 same mapping published in ANX. It folds and reads back evidence first, preserves
 the original detail-card body and adds a version-fenced destination/digest relation tombstone, then archives
-with the board concurrency fence. No purge, trash, source mutation, or agent
+with the board, work-version and latest-observation fences checked atomically
+by core. A new source observation, even with unchanged phase, rejects archive
+with 409 and requires a fresh preview. Deploy a core supporting
+`if_latest_observation_id` before applying either migrator. No purge, trash, source mutation, or agent
 identity transfer occurs. A failed fold archives nothing; a later failure may
 leave a safe partial batch. Re-running the same manifest resumes exact tombstones
 and skips already archived cards. Changed cards fail closed. Archive retains
@@ -170,10 +173,15 @@ Apply checks the full eligible batch before its first mutation and rechecks the
 full source identity in destination evidence immediately before each source
 archive. It preserves source bodies and annotations, adds a version-fenced
 tombstone anchored to the source mapping document (with `destination_url` and a
-Markdown link in its note), reads it back, and uses the source board archive fence. Exact tombstones
-make retries resumable. Changed mappings, endpoints or source fences fail closed.
+Markdown link in its note), reads it back, and supplies the source board,
+work-version and latest-observation archive fences. Core checks the observation
+ID atomically; another poll after readback returns 409 without archiving. Both
+published mappings are reread after tombstone/evidence readback immediately
+before each archive; either differing from the manifest stops the batch.
+Exact tombstones make retries resumable. Changed mappings, endpoints or source fences fail closed.
 Destination reads and source writes cannot form an atomic transaction: concurrent
-removal of destination evidence after the last read is still possible. Quiesce
+removal of destination evidence or a routing edit after the last read is still
+possible. Quiesce
 initiative edits during coordinator apply. New unrelated destination evidence
 need not invalidate a reviewed manifest. No archive is authorized by generating
 one; review the digest separately. Restore with `anx cards restore <ref>` in the

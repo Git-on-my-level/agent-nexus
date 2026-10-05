@@ -9,7 +9,7 @@ from urllib.parse import quote, urlsplit
 
 from anx_client import AnxClient, AnxError
 from initiatives import digest, evidence_entries, identity, route, validate_mapping
-from migrate import legacy_item, source_fence
+from migrate import legacy_item, source_fence, observation_id
 
 
 def endpoint(config):
@@ -142,16 +142,20 @@ def tombstone(row, manifest_digest, mapping_ref):
             'note': f"Source evidence verified in [owning initiative]({row['initiative_url']}); archived legacy copy retained."}
 
 
-def apply_retirement(client, config, manifest, approval, destinations):
-    validate_manifest(manifest, config, approval)
+def verify_mappings(client, config, manifest, destinations, labels):
     if published(client, config) != manifest['mapping']:
         raise ValueError('source published mapping differs from reviewed manifest')
     if client.docs_ref(config['mapping_doc']) != manifest['mapping_ref']:
         raise ValueError('source mapping document ref changed')
-    candidates = [r for r in manifest['cards'] if r['eligible']]
-    for label in sorted({r['destination'] for r in candidates}):
+    for label in sorted(labels):
         if published(destinations[label], config['destinations'][label]) != manifest['destinations'][label]['mapping']:
             raise ValueError('destination published mapping differs from reviewed manifest')
+
+
+def apply_retirement(client, config, manifest, approval, destinations):
+    validate_manifest(manifest, config, approval)
+    candidates = [r for r in manifest['cards'] if r['eligible']]
+    verify_mappings(client, config, manifest, destinations, {r['destination'] for r in candidates})
     active, done = [], []
     # Preflight the entire eligible batch before the first source mutation.
     for row in candidates:
@@ -186,7 +190,11 @@ def apply_retirement(client, config, manifest, approval, destinations):
         if relation not in (readback.get('relations') or []) or source_fence(readback) != row['source_fence']:
             raise ValueError('tombstone readback/source changed; stopping')
         verify_evidence(destinations[row['destination']], row)
-        client.card_archive(row['ref'], board['updated_at'])
+        # Mapping reads are deliberately after tombstone/evidence readback:
+        # ownership may change during any earlier part of this batch.
+        verify_mappings(client, config, manifest, destinations, {row['destination']})
+        client.card_archive(row['ref'], board['updated_at'],
+                            observation_id=observation_id(readback), work_version=readback['version'])
         archived.append(row['ref'])
     return {'archived': archived, 'already_archived': done, 'deferred': sum(not r['eligible'] for r in manifest['cards']), 'created': 0}
 

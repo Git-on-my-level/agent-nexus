@@ -11,11 +11,12 @@ import sys
 import tempfile
 import time
 import urllib.request
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from anx_client import AnxClient
+from anx_client import AnxClient, AnxError
 from initiatives import apply_ingestion, plan_ingestion
-from migrate import legacy_item
+from migrate import legacy_item, inventory as local_inventory, apply_migration
 from readers.run import Runner
 from retire_elsewhere import inventory, apply_retirement
 
@@ -73,6 +74,85 @@ def workspace(core_binary, cli_binary, scratch):
             process.wait(timeout=10)
 
 
+def regression_cases(root, source, dest, config, src_board, dst_mapping, initiative):
+    src_mapping = json.loads(source.docs_content(config['mapping_doc']))
+    local_target = source._call(['cards', 'create', '--board', src_board, '--title', 'Local outcome', '--body', 'Local initiative'], timeout=30)['card']['ref']
+
+    def observe(ref, key):
+        source._call_body(['work', 'observations', 'submit', ref], {'observation': {
+            'idempotency_key': key, 'reader_id': 'fleet-sync/multica', 'reader_revision': '1',
+            'observed_at': datetime.now(timezone.utc).isoformat(), 'status': 'reported',
+            'facts': {'phase': 'ready'}, 'evidence': []}}, timeout=30)
+
+    for case in ('observation-retirement', 'observation-local', 'mapping-source', 'mapping-destination'):
+        ref = source._call_body(['work', 'create'], {'board_ref': src_board, 'title': case,
+            'summary': 'Preserve me', 'source': {'authority': 'multica', 'connection_id': 'test', 'native_id': case}}, timeout=30)['work']['ref']
+        observe(ref, 'initial')
+        item = legacy_item(source.work_get(ref))
+        candidates = [{'ref': ref, 'source': {k: item[k] for k in ('authority', 'connection_id', 'native_id')}, 'destination': 'other'}]
+        clients = {'other': dest}
+        assert not apply_ingestion(dest, plan_ingestion([item], dst_mapping, dest))['errors']
+        destination_before = dest.card_get(initiative)
+        local_mapping = {'version': 1, 'workspace': config['base_url'], 'pins': [
+            {**candidates[0]['source'], 'initiative': local_target}], 'rules': []}
+
+        def preview():
+            if case == 'observation-local':
+                return local_inventory(source, local_mapping, config['base_url'])
+            return inventory(source, config, candidates, clients)
+
+        def apply(manifest):
+            if case == 'observation-local':
+                return apply_migration(source, manifest, config['base_url'], manifest['digest'])
+            return apply_retirement(source, config, manifest, manifest['digest'], clients)
+
+        manifest = preview()
+        if case.startswith('observation-'):
+            original = source.card_archive
+
+            def race(ref, stamp, **fences):
+                before = source.work_get(ref)
+                observe(ref, 'same-phase-after-final-read')
+                after = source.work_get(ref)
+                assert before['latest_observation']['id'] != after['latest_observation']['id']
+                assert before['phase'] == after['phase'] and before['version'] == after['version']
+                assert source.board_get(src_board)['updated_at'] == stamp
+                return original(ref, stamp, **fences)
+
+            with patch.object(source, 'card_archive', side_effect=race):
+                try:
+                    apply(manifest)
+                    raise AssertionError('observation race archived the source')
+                except AnxError as exc:
+                    assert exc.code == 'conflict', exc
+        else:
+            changed_client = source if case == 'mapping-source' else dest
+            approved_mapping = src_mapping if case == 'mapping-source' else dst_mapping
+            changed_file = root / (case + '.json')
+            changed_file.write_text(json.dumps({**approved_mapping, 'rules': []}))
+            original = source.work_patch
+
+            def race(ref, body):
+                result = original(ref, body)
+                changed_client.docs_revise('document:fleet-sync-mapping', str(changed_file))
+                return result
+
+            with patch.object(source, 'work_patch', side_effect=race):
+                try:
+                    apply(manifest)
+                    raise AssertionError('mapping race archived the source')
+                except ValueError as exc:
+                    assert 'published mapping differs' in str(exc), exc
+            changed_file.write_text(json.dumps(approved_mapping))
+            changed_client.docs_revise('document:fleet-sync-mapping', str(changed_file))
+        assert not source.card_get(ref).get('archived_at'), case
+        assert source.card_get(ref)['summary'] == 'Preserve me'
+        assert dest.card_get(initiative) == destination_before
+        # Re-preview after restoring routing / reading the new observation is safe.
+        assert apply(preview())['archived'] == [ref], case
+        print('PASS real-core regression:', case)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--core', required=True)
@@ -111,6 +191,7 @@ def main():
             assert relation['destination_url'] == dst_url + '/tasks/' + initiative.replace(':', '%3A'), relation
             assert apply_retirement(source, config, manifest, manifest['digest'], clients)['already_archived'] == [legacy]
             assert dest.card_get(initiative) == before, 'retirement modified destination'
+            regression_cases(root, source, dest, config, src_board, dst_mapping, initiative)
             print('PASS: two isolated cores and separate credentials; missing evidence deferred; URL tombstone roundtrip, source-only archive, body preservation, resumable replay, destination unchanged')
 
 

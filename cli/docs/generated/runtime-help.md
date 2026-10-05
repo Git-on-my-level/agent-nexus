@@ -2601,6 +2601,7 @@ Inputs:
   Optional:
   - body `actor_id` (string)
   - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-ref-or-handle>`, `anx boards workspace <board-ref-or-handle>`, or the latest board mutation response.
+  - body `if_latest_observation_id` (string): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
   - body `if_version` (integer): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
 
 Global flags:

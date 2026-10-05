@@ -64,8 +64,13 @@ class AnxClient:
     def work_patch(self, ref: str, body: dict) -> dict:
         return self._call_body(["work", "patch", ref], body, timeout=60)
 
-    def card_archive(self, ref: str, board_stamp: str) -> dict:
-        return self._call_body(["cards", "archive", ref], {"if_board_updated_at": board_stamp}, timeout=60)
+    def card_archive(self, ref: str, board_stamp: str, *, observation_id: str, work_version: int) -> dict:
+        if not isinstance(observation_id, str) or not observation_id:
+            raise ValueError('archive requires the verified latest observation id')
+        return self._call_body(["cards", "archive", ref], {
+            "if_board_updated_at": board_stamp, "if_latest_observation_id": observation_id,
+            "if_version": work_version,
+        }, timeout=60)
 
     def board_get(self, ref: str) -> dict:
         return self._call(["boards", "get", ref], timeout=60)["board"]

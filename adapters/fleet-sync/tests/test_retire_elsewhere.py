@@ -121,9 +121,9 @@ class RetirementTests(unittest.TestCase):
         manifest = self.preview()
         original = self.source.card_archive
 
-        def concurrent_change(ref, stamp):
+        def concurrent_change(ref, stamp, **fences):
             self.source.stamp += 1
-            return original(ref, stamp)
+            return original(ref, stamp, **fences)
 
         with patch.object(self.source, 'card_archive', side_effect=concurrent_change):
             with self.assertRaises(AnxError):
@@ -145,6 +145,38 @@ class RetirementTests(unittest.TestCase):
                 self.apply(manifest)
         self.assertEqual(self.source.writes, [('tombstone', self.ref)])
         self.assertFalse(self.source.cards[self.ref].get('archived_at'))
+
+    def test_new_observation_after_final_readback_is_rejected_atomically(self):
+        manifest = self.preview()
+        original = self.source.card_archive
+
+        def observe_before_archive(ref, stamp, **fences):
+            self.source.works[ref]['latest_observation']['id'] = 'new-poll-same-phase'
+            return original(ref, stamp, **fences)
+
+        with patch.object(self.source, 'card_archive', side_effect=observe_before_archive):
+            with self.assertRaises(AnxError):
+                self.apply(manifest)
+        self.assertEqual(self.source.writes, [('tombstone', self.ref)])
+        self.assertFalse(self.source.cards[self.ref].get('archived_at'))
+
+    def test_mapping_changes_after_tombstone_stop_archive(self):
+        for which in ('source', 'destination'):
+            with self.subTest(which=which):
+                self.setUp()
+                manifest = self.preview()
+                original = self.source.work_patch
+
+                def change_mapping(ref, body):
+                    original(ref, body)
+                    (self.source_mapping if which == 'source' else self.dest_mapping)['rules'] = []
+
+                with patch.object(self.source, 'work_patch', side_effect=change_mapping):
+                    with self.assertRaisesRegex(ValueError, 'published mapping differs'):
+                        self.apply(manifest)
+                self.assertEqual(self.source.writes, [('tombstone', self.ref)])
+                self.assertEqual(self.dest.writes, [])
+                self.assertFalse(self.source.cards[self.ref].get('archived_at'))
 
     def test_duplicate_candidates_rejected(self):
         self.candidates.append(copy.deepcopy(self.candidates[0]))

@@ -1206,9 +1206,10 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 		return
 	}
 	var req struct {
-		ActorID          string  `json:"actor_id"`
-		IfBoardUpdatedAt *string `json:"if_board_updated_at"`
-		IfWorkVersion    *int64  `json:"if_version"`
+		ActorID               string  `json:"actor_id"`
+		IfBoardUpdatedAt      *string `json:"if_board_updated_at"`
+		IfWorkVersion         *int64  `json:"if_version"`
+		IfLatestObservationID *string `json:"if_latest_observation_id"`
 	}
 	if !decodeJSONBody(w, r, &req) {
 		return
@@ -1224,13 +1225,18 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 		writeError(w, http.StatusBadRequest, "invalid_request", "if_version must be non-negative")
 		return
 	}
+	if req.IfLatestObservationID != nil && strings.TrimSpace(*req.IfLatestObservationID) == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "if_latest_observation_id must be nonempty")
+		return
+	}
 	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
 	if !ok {
 		return
 	}
 	result, err := opts.primitiveStore.ArchiveBoardCard(r.Context(), actorID, boardID, identifier, primitives.RemoveBoardCardInput{
-		IfBoardUpdatedAt: req.IfBoardUpdatedAt,
-		IfWorkVersion:    req.IfWorkVersion,
+		IfBoardUpdatedAt:      req.IfBoardUpdatedAt,
+		IfWorkVersion:         req.IfWorkVersion,
+		IfLatestObservationID: req.IfLatestObservationID,
 	})
 	if err != nil {
 		switch {
@@ -1241,7 +1247,7 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 		case errors.Is(err, primitives.ErrAlreadyTrashed):
 			writeError(w, http.StatusConflict, "already_trashed", "card is trashed")
 		case errors.Is(err, primitives.ErrConflict):
-			writeError(w, http.StatusConflict, "conflict", "board has been updated; refresh and retry")
+			writeError(w, http.StatusConflict, "conflict", "board, work version or latest observation has changed; refresh and retry")
 		default:
 			writeError(w, http.StatusInternalServerError, "internal_error", "failed to archive board card")
 		}
