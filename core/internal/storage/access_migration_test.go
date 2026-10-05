@@ -320,3 +320,50 @@ func assertAccessIndexesUsed(t *testing.T, db *sql.DB) {
 		}
 	}
 }
+
+func TestResourceAccessMigrationReconcilesPrivacy57(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	ws, err := storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	public, err := s.CreateWork(ctx, "owner", "", map[string]any{"title": "public"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, _, err := s.CreateDocument(ctx, "owner", map[string]any{"id": "[]", "title": "private"}, "private", "text", []string{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.PatchThread(ctx, "owner", doc["thread_id"].(string), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Old 57 indexed container serialization as a bare scalar reference.
+	if _, err = ws.DB().Exec(`UPDATE artifacts SET content_refs_json='["[]"]' WHERE id IN (SELECT artifact_id FROM card_revisions WHERE card_id=?)`, public["id"]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = ws.DB().Exec(`INSERT OR IGNORE INTO resource_access_edges VALUES('board',?,'[]')`, public["board_id"]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = ws.DB().Exec(`DELETE FROM schema_migrations WHERE version>=58`); err != nil {
+		t.Fatal(err)
+	}
+	if err = ws.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ws, err = storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s = primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	scope := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "stranger"})
+	if !s.CanAccessResource(scope, "card", public["id"].(string)) {
+		t.Fatal("preview57 false edges survived reconciliation")
+	}
+	if s.CanAccessResource(scope, "document", "[]") {
+		t.Fatal("private scalar ID became accessible")
+	}
+}

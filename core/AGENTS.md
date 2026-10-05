@@ -100,10 +100,13 @@ observations constrain the whole card before projection or search. Migration 55 
 `resource_access_edges`; database triggers maintain that index atomically with
 canonical JSON/scalar writes, including imports. Migration 56 reconciles earlier
 55 previews with metadata edges and the normalized project/wakeup indexes.
-Migration 57 reconciles every ref-bearing storage source and blob manifest.
+Migrations 57/58 reconcile every ref-bearing source and blob manifest, including
+scalar-vs-structured parsing in already-applied previews.
 `resourceaccess.OwnershipSources` drives atomic triggers; `ReferenceAtoms` scans
 nested JSON values/keys and typed refs in text with shared normalization.
-Use the registered SQLite driver so `anx_resource_refs` is available to imports.
+Use the registered SQLite driver so the reference scalar functions are available
+to imports. Structured JSON contributes atoms, not whole container serialization;
+scalar text preserves even JSON-shaped IDs. Keep this distinction in new fields.
 Blob writers publish `content_refs_json` atomically with metadata; startup scans
 older content through its configured backend. Unindexed/unavailable old blobs
 remain inaccessible until indexed. Document search inherits private comments

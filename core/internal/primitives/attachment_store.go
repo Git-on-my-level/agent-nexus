@@ -301,7 +301,7 @@ func (s *Store) CreateArtifactAttachment(ctx context.Context, actorID string, ar
 		contentHash,
 		string(refsJSON),
 		string(metadataJSON),
-		resourceaccess.ReferenceAtomsJSON(captured.String()),
+		resourceaccess.ContentReferenceAtomsJSON(captured.String(), mimeType),
 	); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)

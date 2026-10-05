@@ -384,7 +384,7 @@ func (s *Store) insertCardRevisionTx(ctx context.Context, tx *accessTx, actorID,
 		revision.ContentHash,
 		revision.RefsJSON,
 		revision.MetadataJSON,
-		resourceaccess.ReferenceAtomsJSON(string(revision.EncodedContent)),
+		resourceaccess.ContentReferenceAtomsJSON(string(revision.EncodedContent), "structured"),
 	); err != nil {
 		return fmt.Errorf("insert card artifact: %w", err)
 	}

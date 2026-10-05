@@ -40,7 +40,7 @@ func accessCTEs(scope AccessScope) string {
 		return "NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind='" + kind + "' AND id=" + id + ")"
 	}
 	cleanJSON := func(column string) string {
-		return "NOT EXISTS (SELECT 1 FROM json_each(anx_resource_refs(" + column + ")) j WHERE j.value COLLATE NOCASE IN (SELECT ref FROM _anx_denied_refs) OR j.value COLLATE NOCASE IN (SELECT id FROM _anx_denied WHERE kind<>'plan'))"
+		return "NOT EXISTS (SELECT 1 FROM json_each(" + resourceaccess.ReferenceSQLAtoms(column, strings.HasSuffix(column, "_json") || column == "_row.body" || column == "_row.labels") + ") j WHERE j.value COLLATE NOCASE IN (SELECT ref FROM _anx_denied_refs) OR j.value COLLATE NOCASE IN (SELECT id FROM _anx_denied WHERE kind<>'plan'))"
 	}
 	add := func(table, where string) {
 		graph += ", " + table + " AS (SELECT * FROM main." + table + " AS _row WHERE " + where + ")"
@@ -158,7 +158,7 @@ func requireAccessibleValues(ctx context.Context, q queryRower, values any) erro
 	}
 	var denied bool
 	query := `WITH RECURSIVE ` + accessCTEs(scope) + ` SELECT EXISTS (
- SELECT 1 FROM json_each(anx_resource_refs(?)) j WHERE (
+ SELECT 1 FROM json_each(anx_resource_json_refs(?)) j WHERE (
  j.value COLLATE NOCASE IN (SELECT id FROM _anx_denied WHERE kind<>'plan') OR
  j.value COLLATE NOCASE IN (SELECT ref FROM _anx_denied_refs)))`
 	if err = q.QueryRowContext(ctx, query, string(encoded)).Scan(&denied); err != nil {

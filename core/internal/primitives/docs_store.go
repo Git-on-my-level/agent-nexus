@@ -603,7 +603,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		contentHash,
 		string(refsJSON),
 		string(artifactMetadataJSON),
-		resourceaccess.ReferenceAtomsJSON(string(encodedContent)),
+		resourceaccess.ContentReferenceAtomsJSON(string(encodedContent), contentType),
 	); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -1221,7 +1221,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		contentHash,
 		string(refsJSON),
 		string(artifactMetadataJSON),
-		resourceaccess.ReferenceAtomsJSON(string(encodedContent)),
+		resourceaccess.ContentReferenceAtomsJSON(string(encodedContent), contentType),
 	); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)

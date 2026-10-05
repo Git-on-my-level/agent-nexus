@@ -54,3 +54,16 @@ func TestReferenceAtomsEncodedStructuredValue(t *testing.T) {
 		t.Fatalf("encoded ref lost: %v", got)
 	}
 }
+
+func TestStructuredContainersAreNotScalarReferences(t *testing.T) {
+	for _, value := range []string{"{}", "[]"} {
+		for _, kind := range []string{"structured", "application/json; charset=utf-8", "application/example+json"} {
+			if got := ContentReferenceAtomsJSON(value, kind); got != "[]" {
+				t.Fatalf("container became ref: %s", got)
+			}
+		}
+		if !slices.Contains(ReferenceAtoms(value), value) {
+			t.Fatalf("scalar ID lost: %s", value)
+		}
+	}
+}

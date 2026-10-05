@@ -466,7 +466,7 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 		contentHash,
 		string(refsJSON),
 		string(metadataJSON),
-		resourceaccess.ReferenceAtomsJSON(string(encodedContent)),
+		resourceaccess.ContentReferenceAtomsJSON(string(encodedContent), contentType),
 	); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -608,7 +608,7 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 		contentHash,
 		string(artifactRefsJSON),
 		string(artifactMetadataJSON),
-		resourceaccess.ReferenceAtomsJSON(string(encodedContent)),
+		resourceaccess.ContentReferenceAtomsJSON(string(encodedContent), contentType),
 	); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)

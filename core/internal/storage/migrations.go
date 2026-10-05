@@ -1001,6 +1001,17 @@ var migrations = []migration{
 	// ownership sources and repaired indexes must not depend on a fresh install.
 	{Version: 56, AfterApply: installResourceAccess},
 	{Version: 57, AfterApply: installCompleteResourceAccess},
+	// Reconcile the short-lived 57 preview's ambiguous scalar/JSON extraction.
+	{Version: 58, AfterApply: func(ctx context.Context, tx *sql.Tx) error {
+		if exists, err := sqliteTableExists(ctx, tx, "artifacts"); err != nil {
+			return err
+		} else if exists {
+			if _, err = tx.ExecContext(ctx, `UPDATE artifacts SET content_refs_json=NULL`); err != nil {
+				return err
+			}
+		}
+		return installCompleteResourceAccess(ctx, tx)
+	}},
 }
 
 func installCompleteResourceAccess(ctx context.Context, tx *sql.Tx) error {
@@ -1016,9 +1027,9 @@ func installCompleteResourceAccess(ctx context.Context, tx *sql.Tx) error {
 			continue
 		}
 		insert := func(prefix, from string) string {
-			return `INSERT INTO resource_access_series_refs SELECT ` + prefix + `series,` + prefix + `labels,j.value FROM ` + from + `json_each(anx_resource_refs(json_array(` + prefix + `labels,` + prefix + state + `))) j WHERE j.value<>'' ON CONFLICT DO NOTHING;`
+			return `INSERT INTO resource_access_series_refs SELECT ` + prefix + `series,` + prefix + `labels,j.value FROM ` + from + `json_each(anx_resource_json_refs(json_array(json(` + prefix + `labels),` + prefix + state + `))) j WHERE j.value<>'' ON CONFLICT DO NOTHING;`
 		}
-		for _, statement := range []string{insert("r.", table+" r, "), `CREATE TRIGGER IF NOT EXISTS access_` + table + `_insert AFTER INSERT ON ` + table + ` BEGIN ` + insert("NEW.", "") + ` END`, `CREATE TRIGGER IF NOT EXISTS access_` + table + `_update AFTER UPDATE ON ` + table + ` BEGIN ` + insert("NEW.", "") + ` END`} {
+		for _, statement := range []string{insert("r.", table+" r, "), `DROP TRIGGER IF EXISTS access_` + table + `_insert`, `DROP TRIGGER IF EXISTS access_` + table + `_update`, `CREATE TRIGGER IF NOT EXISTS access_` + table + `_insert AFTER INSERT ON ` + table + ` BEGIN ` + insert("NEW.", "") + ` END`, `CREATE TRIGGER IF NOT EXISTS access_` + table + `_update AFTER UPDATE ON ` + table + ` BEGIN ` + insert("NEW.", "") + ` END`} {
 			if _, err := tx.ExecContext(ctx, statement); err != nil {
 				return err
 			}
@@ -1125,7 +1136,7 @@ func installResourceAccessEdges(ctx context.Context, tx *sql.Tx) error {
 			var parts []string
 			for _, column := range columns {
 				value := prefix + column
-				parts = append(parts, `SELECT '`+source.Kind+`',`+prefix+source.ID+`,j.value FROM `+from+`json_each(anx_resource_refs(`+value+`)) j WHERE j.value<>''`)
+				parts = append(parts, `SELECT '`+source.Kind+`',`+prefix+source.ID+`,j.value FROM `+from+`json_each(`+resourceaccess.ReferenceSQLAtoms(value, strings.HasSuffix(column, "_json"))+`) j WHERE j.value<>''`)
 			}
 			// An outer UPSERT can override a trigger's legacy OR IGNORE policy.
 			// An explicit conflict target remains safe for duplicate JSON atoms.

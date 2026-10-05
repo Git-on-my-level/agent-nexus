@@ -132,6 +132,9 @@ func TestResourceAccessScalarDocumentID(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if !s.CanAccessResource(WithAccessScope(ctx, AccessScope{ActorID: "stranger"}), "card", anyStringValue(card["id"])) {
+			t.Fatalf("unrelated public work hidden by private document ID %q", id)
+		}
 		if _, err = ws.DB().Exec(`UPDATE cards SET pinned_document_id=? WHERE id=?`, id, card["id"]); err != nil {
 			t.Fatal(err)
 		}

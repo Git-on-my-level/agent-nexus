@@ -107,7 +107,7 @@ func (s *Store) insertPreparedArtifactTx(ctx context.Context, tx *accessTx, prep
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		prepared.artifactID, handle, prepared.kind, nullableString(prepared.artifactThreadID),
 		prepared.metadata["created_at"], prepared.actorID, prepared.contentType, prepared.contentHash,
-		string(prepared.refsJSON), string(prepared.metadataJSON), resourceaccess.ReferenceAtomsJSON(string(prepared.encodedContent))); err != nil {
+		string(prepared.refsJSON), string(prepared.metadataJSON), resourceaccess.ContentReferenceAtomsJSON(string(prepared.encodedContent), prepared.contentType)); err != nil {
 		if isUniqueViolation(err) {
 			return ErrConflict
 		}

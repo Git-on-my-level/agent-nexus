@@ -16,15 +16,15 @@ func (s *Store) BackfillArtifactAccess(ctx context.Context) error {
 	if s.db == nil || s.blob == nil {
 		return nil
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id,content_hash FROM artifacts WHERE content_refs_json IS NULL`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,content_hash,content_type FROM artifacts WHERE content_refs_json IS NULL`)
 	if err != nil {
 		return err
 	}
-	type entry struct{ id, hash string }
+	type entry struct{ id, hash, contentType string }
 	var entries []entry
 	for rows.Next() {
 		var e entry
-		if err := rows.Scan(&e.id, &e.hash); err != nil {
+		if err := rows.Scan(&e.id, &e.hash, &e.contentType); err != nil {
 			rows.Close()
 			return err
 		}
@@ -42,7 +42,7 @@ func (s *Store) BackfillArtifactAccess(ctx context.Context) error {
 			failures = append(failures, fmt.Errorf("index artifact content %s: %w", e.id, err))
 			continue
 		}
-		if _, err := s.db.ExecContext(ctx, `UPDATE artifacts SET content_refs_json=? WHERE id=? AND content_hash=? AND content_refs_json IS NULL`, resourceaccess.ReferenceAtomsJSON(string(body)), e.id, e.hash); err != nil {
+		if _, err := s.db.ExecContext(ctx, `UPDATE artifacts SET content_refs_json=? WHERE id=? AND content_hash=? AND content_refs_json IS NULL`, resourceaccess.ContentReferenceAtomsJSON(string(body), e.contentType), e.id, e.hash); err != nil {
 			return err
 		}
 	}

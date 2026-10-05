@@ -16,7 +16,11 @@ var embeddedRef = regexp.MustCompile(`(?i)\b(thread|board|card|topic|document|do
 
 var embeddedURL = regexp.MustCompile(`(?i)https?://[^\s\p{Z}\x{85}\x{0B}<>()\[\]{}"'` + "`" + `]+`)
 
-func ReferenceAtoms(value string) []string {
+func ReferenceAtoms(value string) []string { return referenceAtoms(value, false) }
+
+// Structured values contribute their string atoms, never the serialization of
+// a container. Scalar fields separately retain even JSON-shaped legacy IDs.
+func referenceAtoms(value string, structured bool) []string {
 	// Malformed text must not suppress otherwise readable references. Replacement
 	// separates valid text runs without joining bytes into a different identifier.
 	value = strings.ToValidUTF8(value, " ")
@@ -75,7 +79,9 @@ func ReferenceAtoms(value string) []string {
 	}
 	// A SQL TEXT value can be an explicit legacy ID even when its bytes are
 	// also valid JSON (including {}, [], or a quoted string). Retain both views.
-	add(value)
+	if !structured {
+		add(value)
+	}
 	var decoded any
 	if json.Unmarshal([]byte(value), &decoded) == nil {
 		switch decoded.(type) {
@@ -83,7 +89,9 @@ func ReferenceAtoms(value string) []string {
 			walk(decoded)
 		default:
 			// Scalar TEXT IDs may also happen to be valid JSON numbers/bools/null.
-			add(value)
+			if !structured {
+				add(value)
+			}
 		}
 	} else {
 		walk(value)
@@ -101,15 +109,38 @@ func ReferenceAtomsJSON(value string) string {
 	return string(b)
 }
 
+func ContentReferenceAtomsJSON(value, contentType string) string {
+	contentType = strings.ToLower(strings.TrimSpace(strings.SplitN(contentType, ";", 2)[0]))
+	structured := contentType == "structured" || contentType == "application/json" || strings.HasSuffix(contentType, "+json")
+	b, _ := json.Marshal(referenceAtoms(value, structured))
+	return string(b)
+}
+
+// ReferenceSQLAtoms preserves the storage field's JSON/scalar distinction.
+func ReferenceSQLAtoms(column string, structured bool) string {
+	name := "anx_resource_refs"
+	if structured {
+		name = "anx_resource_json_refs"
+	}
+	return name + "(" + column + ")"
+}
+
 func init() {
-	sqlite.MustRegisterDeterministicScalarFunction("anx_resource_refs", 1, func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
-		var value string
-		switch v := args[0].(type) {
-		case string:
-			value = v
-		case []byte:
-			value = string(v)
+	for _, structured := range []bool{false, true} {
+		name := "anx_resource_refs"
+		if structured {
+			name = "anx_resource_json_refs"
 		}
-		return ReferenceAtomsJSON(value), nil
-	})
+		sqlite.MustRegisterDeterministicScalarFunction(name, 1, func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
+			var value string
+			switch v := args[0].(type) {
+			case string:
+				value = v
+			case []byte:
+				value = string(v)
+			}
+			b, _ := json.Marshal(referenceAtoms(value, structured))
+			return string(b), nil
+		})
+	}
 }
