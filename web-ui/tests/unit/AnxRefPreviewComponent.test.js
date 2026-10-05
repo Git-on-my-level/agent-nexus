@@ -73,7 +73,10 @@ describe("AnxRefPreview", () => {
     expect(text).toContain("Release B");
     expect(text).toContain("p1");
     expect(text).toContain("Next: Computed progress and health");
-    expect(text).toContain("moved");
+    // The age is a badge now: "21h", with "Moved <timestamp>" on hover.
+    const age = container.querySelector("time.age-badge");
+    expect(age?.textContent?.trim()).toMatch(/^\d+[mhdwy]$|^now$/);
+    expect(age?.getAttribute("title")).toMatch(/^Moved /);
   });
 
   it("omits a row the response did not carry", async () => {

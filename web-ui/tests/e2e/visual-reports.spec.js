@@ -1095,3 +1095,76 @@ test("live query data is withheld when the report head changed", async ({
   await expect(report).not.toContainText("3/7");
   expectReadOnly(state);
 });
+
+test("an unreported metric is an em dash with the reason on hover", async ({
+  page,
+}) => {
+  const example = cloneExample();
+  /*
+   * A metric strip beside the existing panels: one real reading, and two the
+   * producer could not get. The contract makes `value` a string, so an
+   * absence arrives as a *word* — which is exactly why it used to wrap
+   * through a tile sized for `94%`.
+   */
+  example.panels.push({
+    id: "release-measures",
+    project_id: example.projects[0].id,
+    type: "metric-strip",
+    title: "Release measures",
+    author: "claude",
+    provenance: "reported",
+    observed_at: OBSERVED_AT,
+    freshness: "current",
+    source_ids: [],
+    data: {
+      items: [
+        { label: "Reviewed", value: "94%", detail: "Of the changed files." },
+        { label: "Coverage", value: "unknown", detail: "The read failed." },
+        { label: "Latency", value: "n/a", detail: "Not reported this run." },
+      ],
+    },
+  });
+  await installReportDocument(page, example);
+  await page.goto(DOC_PATH);
+
+  const strip = reportRegion(page).locator(
+    "[data-report-panel='release-measures']",
+  );
+  await expect(strip).toBeVisible();
+  const values = strip.locator(".metric-value");
+  await expect(values.nth(0)).toHaveText("94%");
+
+  // Not the word "unknown" wrapping through a tile sized for a number.
+  const missing = strip.locator("[data-unavailable]");
+  await expect(missing).toHaveCount(2);
+  await expect(missing.nth(0)).toHaveText("—");
+  // A producer that said "unknown" said something; it is quoted back on hover
+  // rather than printed where the number goes.
+  await expect(missing.nth(0)).toHaveAttribute("title", /unknown/);
+  await expect(missing.nth(1)).toHaveAttribute("title", /n\/a/);
+  await expect(
+    strip.locator(".metric-value").filter({ hasText: "unknown" }),
+  ).toHaveCount(0);
+
+  // And the strip still fits: nothing wrapped out of its box.
+  const overflows = await strip.evaluate(
+    (node) => node.scrollWidth > node.clientWidth + 1,
+  );
+  expect(overflows).toBe(false);
+});
+
+test("an unreported point in a metric chart reads as a dash, never zero", async ({
+  page,
+}) => {
+  await installReportDocument(page);
+  await page.goto(DOC_PATH);
+  const chart = reportRegion(page).locator(
+    "[data-report-panel='example-metrics']",
+  );
+  await expect(chart).toBeVisible();
+  const missing = chart.locator(".report-chart [data-unavailable]");
+  await expect(missing).toHaveCount(1);
+  await expect(missing).toHaveText("—");
+  await expect(missing).toHaveAttribute("title", /not the same as zero/);
+  await expect(chart).toContainText("— means unavailable, never zero.");
+});

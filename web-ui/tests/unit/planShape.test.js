@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  PLAN_COLLAPSE_MIN,
   layerSteps,
   normalizePlanSteps,
   planComponents,
@@ -279,5 +280,155 @@ describe("todayMarkerIndex", () => {
       { id: "c", due: "2026-10-20" },
     ];
     expect(todayMarkerIndex(nodes, now)).toBe(2);
+  });
+});
+
+describe("planTreeGeometry folds the finished prefix", () => {
+  /** Core computes status; these cases state what it said. */
+  const stateFor = (steps, overrides = {}) => ({
+    steps,
+    shape: "dag",
+    progress: { done: 0, total: steps.length },
+    critical_path: [],
+    next_steps: [],
+    ...overrides,
+  });
+
+  const chain = (ids) =>
+    plan(ids.map((id, index) => step(id, index ? [ids[index - 1]] : [])));
+
+  it("folds a leading run of done layers into one summary column", () => {
+    const ids = ["a", "b", "c", "d"];
+    const layout = planLayout(chain(ids), {
+      planState: stateFor([
+        { id: "a", status: "done" },
+        { id: "b", status: "done" },
+        { id: "c", status: "active" },
+        { id: "d", status: "not_started" },
+      ]),
+    });
+    const geometry = planTreeGeometry(layout);
+    expect(geometry.collapsed).toMatchObject({ count: 2 });
+    expect(geometry.nodes.map((node) => node.id)).toEqual(["c", "d"]);
+  });
+
+  it("does not fold a single done step, which saves nothing", () => {
+    const layout = planLayout(chain(["a", "b", "c"]), {
+      planState: stateFor([
+        { id: "a", status: "done" },
+        { id: "b", status: "active" },
+        { id: "c", status: "not_started" },
+      ]),
+    });
+    expect(PLAN_COLLAPSE_MIN).toBe(2);
+    expect(planTreeGeometry(layout).collapsed).toBeNull();
+    expect(planTreeGeometry(layout).nodes).toHaveLength(3);
+  });
+
+  it("does not fold a done layer that sits between live ones", () => {
+    // Hiding a middle layer would break the reader's sense of what depends on
+    // what, so only a leading run folds.
+    const layout = planLayout(chain(["a", "b", "c", "d"]), {
+      planState: stateFor([
+        { id: "a", status: "active" },
+        { id: "b", status: "done" },
+        { id: "c", status: "done" },
+        { id: "d", status: "not_started" },
+      ]),
+    });
+    expect(planTreeGeometry(layout).collapsed).toBeNull();
+  });
+
+  it("draws a finished plan in full rather than folding it to nothing", () => {
+    const layout = planLayout(chain(["a", "b", "c"]), {
+      planState: stateFor([
+        { id: "a", status: "done" },
+        { id: "b", status: "done" },
+        { id: "c", status: "done" },
+      ]),
+    });
+    const geometry = planTreeGeometry(layout);
+    expect(geometry.collapsed).toBeNull();
+    expect(geometry.nodes).toHaveLength(3);
+  });
+
+  it("keeps a dependency on folded work visible as an edge from the summary", () => {
+    const layout = planLayout(chain(["a", "b", "c", "d"]), {
+      planState: stateFor([
+        { id: "a", status: "done" },
+        { id: "b", status: "done" },
+        { id: "c", status: "active" },
+        { id: "d", status: "not_started" },
+      ]),
+    });
+    const geometry = planTreeGeometry(layout);
+    const fromFolded = geometry.edges.filter((edge) => edge.fromCollapsed);
+    expect(fromFolded.map((edge) => edge.to)).toEqual(["c"]);
+    // No edge points into the folded prefix: there is nothing there to hit.
+    expect(geometry.edges.some((edge) => edge.to === "b")).toBe(false);
+  });
+
+  it("can be turned off", () => {
+    const layout = planLayout(chain(["a", "b", "c"]), {
+      planState: stateFor([
+        { id: "a", status: "done" },
+        { id: "b", status: "done" },
+        { id: "c", status: "active" },
+      ]),
+    });
+    expect(
+      planTreeGeometry(layout, { collapseDone: false }).collapsed,
+    ).toBeNull();
+  });
+});
+
+describe("planTreeGeometry fits the width it is given", () => {
+  const wide = (count) =>
+    plan(
+      Array.from({ length: count }, (_, index) =>
+        step(`s${index}`, index ? [`s${index - 1}`] : []),
+      ),
+    );
+  const layoutFor = (count) =>
+    planLayout(wide(count), {
+      planState: {
+        steps: Array.from({ length: count }, (_, index) => ({
+          id: `s${index}`,
+          status: "not_started",
+        })),
+        shape: "dag",
+        progress: { done: 0, total: count },
+        critical_path: [],
+        next_steps: [],
+      },
+    });
+
+  it("uses its preferred size when there is room", () => {
+    const geometry = planTreeGeometry(layoutFor(3), { availableWidth: 4000 });
+    expect(geometry.nodes[0].width).toBe(176);
+    expect(geometry.width).toBeLessThanOrEqual(4000);
+  });
+
+  it("shrinks gaps, then nodes, so the remaining steps fit on screen", () => {
+    const roomy = planTreeGeometry(layoutFor(6), { availableWidth: 4000 });
+    const tight = planTreeGeometry(layoutFor(6), { availableWidth: 900 });
+    expect(tight.width).toBeLessThanOrEqual(900);
+    expect(tight.nodes[0].width).toBeLessThan(roomy.nodes[0].width);
+    // Still legible: the floor is a width a step title can be read in.
+    expect(tight.nodes[0].width).toBeGreaterThanOrEqual(108);
+  });
+
+  it("scrolls rather than shrinking past legibility", () => {
+    // 20 columns in 400px cannot fit; the region scrolls, which is the one
+    // deliberate sideways scroller on the page.
+    const geometry = planTreeGeometry(layoutFor(20), { availableWidth: 400 });
+    expect(geometry.width).toBeGreaterThan(400);
+    expect(geometry.nodes[0].width).toBe(108);
+  });
+
+  it("lays out at its preferred size when the width is not known yet", () => {
+    // Server render, or before the first measurement.
+    const geometry = planTreeGeometry(layoutFor(4), { availableWidth: 0 });
+    expect(geometry.nodes[0].width).toBe(176);
   });
 });

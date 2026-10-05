@@ -476,6 +476,68 @@
     flex-direction: column;
   }
 
+  /*
+   * Collapsed left nav: an icon rail, not a hidden nav.
+   *
+   * The icons, the active marker and the Inbox / Agents counts all stay, so a
+   * collapsed nav is still navigable — hiding the nav outright would make the
+   * toggle a trap on a narrow window. Only the words go.
+   */
+  .shell-sidebar--collapsed {
+    width: 3.25rem;
+    padding-inline: 0.375rem;
+  }
+
+  .shell-sidebar--collapsed .shell-nav-copy,
+  .shell-sidebar--collapsed .shell-search-kbd,
+  .shell-sidebar--collapsed .workspace-switcher-label,
+  .shell-sidebar--collapsed .workspace-switcher-chevron,
+  .shell-sidebar--collapsed .shell-account-name,
+  .shell-sidebar--collapsed .shell-account-chevron,
+  .shell-sidebar--collapsed .shell-settings-link-text,
+  .shell-sidebar--collapsed .shell-account-link-text,
+  .shell-sidebar--collapsed .shell-persona-error {
+    display: none;
+  }
+
+  .shell-sidebar--collapsed .shell-nav-link,
+  .shell-sidebar--collapsed .shell-settings-link,
+  .shell-sidebar--collapsed .shell-search-trigger,
+  .shell-sidebar--collapsed .shell-ask-pm,
+  .shell-sidebar--collapsed .shell-account-link,
+  .shell-sidebar--collapsed .shell-account-row,
+  .shell-sidebar--collapsed .workspace-switcher-trigger {
+    justify-content: center;
+    gap: 0;
+    padding-inline: 0;
+  }
+
+  /* A count badge has no room beside a centred icon; it rides on it. */
+  .shell-sidebar--collapsed .shell-nav-link {
+    position: relative;
+  }
+
+  .shell-sidebar--collapsed .shell-nav-link [data-inbox-nav-count],
+  .shell-sidebar--collapsed .shell-nav-link [data-agents-nav-count] {
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    margin-left: 0;
+    padding-inline: 3px;
+    font-size: 9px;
+    line-height: 12px;
+  }
+
+  .shell-sidebar-toggle-row {
+    display: flex;
+    justify-content: flex-end;
+    padding-bottom: 0.25rem;
+  }
+
+  .shell-sidebar--collapsed .shell-sidebar-toggle-row {
+    justify-content: center;
+  }
+
   .workspace-switcher {
     position: relative;
   }

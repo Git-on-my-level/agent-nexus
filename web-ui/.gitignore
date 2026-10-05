@@ -20,6 +20,9 @@ pnpm-debug.log*
 .qa-baseline/
 # QA visual runner (`scripts/qa-visual.mjs`) screenshot output
 output/
+# Screenshot output: `scripts/capture-screenshot.mjs` and the review captures in
+# `tests/e2e/review-captures.spec.js`. Review binaries are not committed.
+.screenshots/
 
 # Vite writes this beside the config while loading an ESM config file; it is
 # transient, so it must never ride along in a `git add -A`.

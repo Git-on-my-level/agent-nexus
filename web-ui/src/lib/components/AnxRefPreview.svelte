@@ -15,11 +15,11 @@
    */
   import { onMount } from "svelte";
 
+  import AgeBadge from "$lib/components/AgeBadge.svelte";
   import {
     clearContextMenu,
     registerContextMenu,
   } from "$lib/contextMenuSingleton.js";
-  import { formatMovedAgo } from "$lib/refResolve.js";
 
   const ID = "anx-ref-preview";
 
@@ -173,10 +173,6 @@
       // A denied clipboard is not worth an error state; the ref is on screen.
     }
   }
-
-  let movedLabel = $derived(
-    model?.lastMovedAt ? formatMovedAgo(model.lastMovedAt) : "",
-  );
 </script>
 
 {#if model}
@@ -231,7 +227,10 @@
 
     <p class="anx-ref-preview__meta">
       {#if model.owner}<span>{model.owner}</span>{/if}
-      {#if movedLabel}<span>moved {movedLabel}</span>{/if}
+      {#if model.lastMovedAt}<AgeBadge
+          at={model.lastMovedAt}
+          verb="moved"
+        />{/if}
     </p>
 
     <div class="anx-ref-preview__actions">

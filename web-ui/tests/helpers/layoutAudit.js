@@ -56,11 +56,18 @@ async function captureState(page, stateLabel) {
   });
 }
 
+/**
+ * The widths every state is audited at.
+ *
+ * 390 / 768 / 1024 are the three David's review calls out: a phone, a tablet,
+ * and the width the sidebar first appears at — the narrowest window that has
+ * to hold nav plus content. 1440 is the room most of this is designed in.
+ */
 export const AUDIT_VIEWPORTS = [
-  { name: "mobile", width: 375, height: 812 },
+  { name: "phone", width: 390, height: 844 },
   { name: "tablet", width: 768, height: 1024 },
-  // Between md and lg: narrow desktop window with the sidebar visible.
-  { name: "narrow-desktop", width: 1000, height: 840 },
+  // `lg`: the sidebar appears here, so it is the width it has least room in.
+  { name: "small-desktop", width: 1024, height: 840 },
   { name: "desktop", width: 1440, height: 900 },
 ];
 

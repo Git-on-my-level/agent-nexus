@@ -1,5 +1,6 @@
 <script>
   import ActorLabel from "$lib/components/ActorLabel.svelte";
+  import FinePrint from "$lib/components/FinePrint.svelte";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
   import {
     actorDisplayLabel,
@@ -66,9 +67,11 @@
         The latest read failed. This is an earlier report.
       </p>{/if}
   {:else}
-    <p>
+    <!-- One line for an absence, and the caveat behind a toggle. -->
+    <p data-evidence-quiet>No activity</p>
+    <FinePrint label="What evidence means">
       No shared evidence report for handoff yet. Participation and completed
       runs do not establish task completion.
-    </p>
+    </FinePrint>
   {/if}
 </div>

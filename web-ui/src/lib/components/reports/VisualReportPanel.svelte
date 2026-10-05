@@ -6,6 +6,8 @@
   import ReportDetails from "./ReportDetails.svelte";
   import ActorLabel from "$lib/components/ActorLabel.svelte";
   import RefText from "$lib/components/RefText.svelte";
+  import UnavailableValue from "$lib/components/UnavailableValue.svelte";
+  import { metricValue } from "$lib/unavailableValue.js";
   import { safeReportUrl } from "$lib/visualReports.js";
 
   let {
@@ -85,13 +87,19 @@
         .map((item) => item.label);
     return [];
   }
-  const date = (value) =>
-    value
-      ? new Date(value)
-          .toISOString()
-          .replace("T", " ")
-          .replace(/\.\d{3}Z$/, " UTC")
-      : "Unknown";
+  /**
+   * An instant, or `""` when there is none. The caller renders the dash, so a
+   * missing timestamp is one glyph rather than the word "Unknown" wrapping
+   * through a provenance line.
+   */
+  const date = (value) => {
+    const at = value ? new Date(value) : null;
+    if (!at || Number.isNaN(at.getTime())) return "";
+    return at
+      .toISOString()
+      .replace("T", " ")
+      .replace(/\.\d{3}Z$/, " UTC");
+  };
 </script>
 
 <section
@@ -137,7 +145,14 @@
       {#if panel.type === "chart"}
         <ReportChart data={panel.data} title={panel.title} />
       {:else if panel.type === "metric"}
-        <p class="text-title">{panel.data.value} {panel.data.unit ?? ""}</p>
+        {@const metric = metricValue(panel.data.value, {
+          unit: panel.data.unit ?? "",
+        })}
+        <p class="text-title">
+          {#if metric.available}{metric.text}{:else}<UnavailableValue
+              reason={metric.reason}
+            />{/if}
+        </p>
       {:else if ["metric-strip", "callout", "comparison"].includes(panel.type)}
         <ReportDetails {panel} {...refProps()} />
       {:else if panel.type === "explanation"}
@@ -190,7 +205,9 @@
                   <span class="report-status-label">{item.status}</span>
                 </div>
                 <p class="mt-1 text-micro text-fg-muted">
-                  {item.date ?? "Date not established"}
+                  {#if item.date}{item.date}{:else}<UnavailableValue
+                      reason="No date established for this milestone."
+                    />{/if}
                 </p>
                 <p class="mt-1 text-meta text-fg-muted">
                   <RefText text={item.detail} {...refProps()} />
@@ -245,7 +262,7 @@
         <div
           class="report-chart"
           role="img"
-          aria-label={`${panel.data.label}: ${panel.data.points.map((point) => `${point.label} ${point.value ?? "unknown"}`).join(", ")}. Unit: ${panel.data.unit}`}
+          aria-label={`${panel.data.label}: ${panel.data.points.map((point) => `${point.label} ${point.value ?? "not reported"}`).join(", ")}. Unit: ${panel.data.unit}`}
         >
           {#each panel.data.points as point}
             <div class="report-chart-row">
@@ -258,14 +275,18 @@
                   ></div>
                 {/if}
               </div>
-              <strong>{point.value ?? "?"}</strong>
+              <strong
+                >{#if point.value !== null && point.value !== undefined}{point.value}{:else}<UnavailableValue
+                    reason="Not reported for this point, which is not the same as zero."
+                  />{/if}</strong
+              >
             </div>
           {/each}
         </div>
         {#if panel.data.points.some((point) => point.value === null)}<p
             class="mt-3 text-micro text-fg-muted"
           >
-            ? means unavailable, never zero.
+            — means unavailable, never zero.
           </p>{/if}
       {:else if panel.type === "artifact-preview"}
         <div class="flex flex-wrap items-start justify-between gap-2">
@@ -299,9 +320,12 @@
         >
         <p class="text-micro text-fg-muted">
           {freshness === "current" ? "Current · " : ""}Observed
-          <time datetime={panel.observed_at ?? undefined}
-            >{date(panel.observed_at)}</time
-          >
+          {#if date(panel.observed_at)}<time
+              datetime={panel.observed_at ?? undefined}
+              >{date(panel.observed_at)}</time
+            >{:else}<UnavailableValue
+              reason="This panel carries no observation time."
+            />{/if}
         </p>
       </div>
       <button
@@ -333,7 +357,11 @@
                 rel="noopener noreferrer">{source.label} ↗</a
               >
               <p class="mt-1 text-micro text-fg-muted">
-                {source.kind} · Observed {date(source.observed_at)}
+                {source.kind} · Observed {#if date(source.observed_at)}{date(
+                    source.observed_at,
+                  )}{:else}<UnavailableValue
+                    reason="This source carries no observation time."
+                  />{/if}
               </p>
               {#if claimsForSource(source.id).length}<p
                   class="mt-1 text-micro text-fg-muted"

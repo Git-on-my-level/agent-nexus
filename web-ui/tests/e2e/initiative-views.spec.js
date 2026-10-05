@@ -141,8 +141,11 @@ test("initiative page leads with the plan, and the card body follows", async ({
   await expect(planSection).toBeVisible({ timeout: 60_000 });
 
   // Status line and health lead the page. Scoped to the health badge, since
-  // "Blocked" also labels the blocked steps inside the diagram.
-  await expect(planSection.locator(".ui-badge").first()).toHaveText("Blocked");
+  // "Blocked" also labels the blocked steps inside the diagram. The page has
+  // room for words, so the badge is the pill form: a glyph and the label.
+  const planHealth = planSection.locator("[data-health]").first();
+  await expect(planHealth).toHaveAttribute("data-health", "blocked");
+  await expect(planHealth).toContainText("Blocked");
   await expect(page.locator("[data-plan-progress]")).toHaveText("1/4 steps");
 
   // The plan's shape picks the view: this one branches, so it is a tree.
@@ -165,9 +168,9 @@ test("initiative page leads with the plan, and the card body follows", async ({
     );
   expect(order).toEqual(["plan", "body"]);
 
-  await mkdir("../docs/review/initiative", { recursive: true });
+  await mkdir(".screenshots/review", { recursive: true });
   await page.screenshot({
-    path: "../docs/review/initiative/initiative-desktop.png",
+    path: ".screenshots/review/initiative-desktop.png",
     animations: "disabled",
   });
   await page.screenshot({
@@ -245,9 +248,9 @@ test("the plan reads at phone width", async ({ page }, testInfo) => {
   );
   expect(documentOverflows).toBe(false);
 
-  await mkdir("../docs/review/initiative", { recursive: true });
+  await mkdir(".screenshots/review", { recursive: true });
   await page.screenshot({
-    path: "../docs/review/initiative/initiative-phone.png",
+    path: ".screenshots/review/initiative-phone.png",
     animations: "disabled",
   });
   await page.screenshot({
@@ -441,20 +444,40 @@ for (const viewport of [
     await expect(tiles.first()).toBeVisible({ timeout: 60_000 });
     await expect(tiles).toHaveCount(3);
 
+    /*
+     * Worst first. The sort is the dashboard's whole job: blocked, then stale,
+     * then on track — whatever order the projection sent them in.
+     */
+    await expect(tiles.nth(0)).toHaveAttribute("data-tile-health", "blocked");
+    await expect(tiles.nth(1)).toHaveAttribute("data-tile-health", "stale");
+    await expect(tiles.nth(2)).toHaveAttribute("data-tile-health", "on_track");
+
     // Each tile answers state and progress without opening anything.
     await expect(tiles.first()).toContainText("Release B");
-    await expect(tiles.first()).toContainText("Blocked");
     await expect(tiles.first()).toContainText("Tech tree");
     await expect(tiles.first()).toContainText("Next: Plan model");
-    await expect(tiles.first()).toContainText("moved 3h ago");
     await expect(tiles.first().locator("[data-tile-needs]")).toContainText(
       "Ref chips everywhere",
     );
 
-    await expect(tiles.nth(1)).toContainText("On track");
-    await expect(tiles.nth(1)).toContainText("Timeline");
-    await expect(tiles.nth(2)).toContainText("Stalled");
-    await expect(tiles.nth(2)).toContainText("Lanes");
+    // Health is a compact badge: a glyph, with the full text and core's
+    // reason on hover rather than truncated to "Blo…" in a tile header.
+    const health = tiles.first().locator("[data-health]");
+    await expect(health).toHaveAttribute("data-health", "blocked");
+    await expect(health).toHaveAttribute(
+      "title",
+      "Blocked — A step on the critical path is blocked.",
+    );
+
+    // The age is a badge: "3h", with the verb and exact instant on hover.
+    const age = tiles.first().locator("time.age-badge");
+    await expect(age).toHaveText("3h");
+    await expect(age).toHaveAttribute("title", /^Moved .*\(3h\)$/);
+
+    await expect(tiles.nth(1)).toContainText("Agent ergonomics");
+    await expect(tiles.nth(1)).toContainText("Lanes");
+    await expect(tiles.nth(2)).toContainText("Live dashboards");
+    await expect(tiles.nth(2)).toContainText("Timeline");
 
     // The mini-viz follows the shape core computed: a tree draws a column per
     // dependency layer, lanes a track per run, a chain one track.
@@ -465,13 +488,13 @@ for (const viewport of [
     await expect(tiles.first().locator(".tile-track")).toHaveCount(3);
     await expect(tiles.nth(1).locator("[data-viz-kind]")).toHaveAttribute(
       "data-viz-kind",
-      "track",
-    );
-    await expect(tiles.nth(2).locator("[data-viz-kind]")).toHaveAttribute(
-      "data-viz-kind",
       "lanes",
     );
-    await expect(tiles.nth(2).locator(".tile-track")).toHaveCount(2);
+    await expect(tiles.nth(1).locator(".tile-track")).toHaveCount(2);
+    await expect(tiles.nth(2).locator("[data-viz-kind]")).toHaveAttribute(
+      "data-viz-kind",
+      "track",
+    );
 
     // What changed since this viewer last looked, from the server digest.
     const strip = page.locator("[data-since-you-last-looked]");
@@ -491,10 +514,22 @@ for (const viewport of [
       new RegExp("/tasks/card%3Arelease-b$"),
     );
 
-    // One Inbox line, not a restatement of the Inbox.
+    // One urgent band, not a restatement of the Inbox: it counts what is
+    // waiting, and names the initiative that has stopped moving.
+    const band = page.locator('[data-overview-section="urgent"]');
+    await expect(band).toHaveAttribute("data-urgent-state", "active");
+    await expect(band.locator("[data-urgent-ask-count]")).toHaveText("2 asks");
     await expect(
-      page.getByRole("link", { name: "2 items need you →" }),
-    ).toBeVisible();
+      band.locator("[data-urgent-initiative='card:release-b']"),
+    ).toContainText("Release B");
+
+    // And it is above the initiatives, which are above the dashboard.
+    const order = await page
+      .locator("[data-overview-section]")
+      .evaluateAll((nodes) =>
+        nodes.map((node) => node.dataset.overviewSection),
+      );
+    expect(order.slice(0, 3)).toEqual(["urgent", "initiatives", "reports"]);
 
     const section = page.locator('[data-overview-section="initiatives"]');
     await section.screenshot({
@@ -508,9 +543,9 @@ for (const viewport of [
 
     // The whole page, so the digest strip and the single Inbox line are in
     // frame alongside the tiles.
-    await mkdir("../docs/review/initiative", { recursive: true });
+    await mkdir(".screenshots/review", { recursive: true });
     await page.screenshot({
-      path: `../docs/review/initiative/overview-${viewport.label}.png`,
+      path: `.screenshots/review/overview-${viewport.label}.png`,
       animations: "disabled",
     });
     await page.screenshot({

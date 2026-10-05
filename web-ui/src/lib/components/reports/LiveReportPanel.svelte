@@ -1,5 +1,6 @@
 <script>
   import LiveInitiativeDetails from "./LiveInitiativeDetails.svelte";
+  import UnavailableValue from "$lib/components/UnavailableValue.svelte";
   import { inboxItemMailboxId } from "$lib/inboxUtils.js";
   import { formatLiveAge } from "$lib/liveReports.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
@@ -22,16 +23,21 @@
   let fleetEnrollments = $derived(live?.data?.enrollments ?? []);
   let fleetSeries = $derived(live?.data?.series ?? []);
   let maxCount = $derived(Math.max(1, ...buckets.map((item) => item.count)));
+  /** An instant, or `""` so the caller can render the dash. */
   const date = (value) => {
     const at = new Date(value);
     return Number.isFinite(at.getTime())
       ? at.toISOString().slice(0, 16).replace("T", " ") + " UTC"
-      : "Unknown";
+      : "";
   };
+  /**
+   * A fleet reading. `null` when the host has not reported one, so the row
+   * shows a dash with the reason rather than a sentence where a value goes.
+   */
   const fleetValue = (latest) => {
     if (latest?.state !== undefined) return latest.state;
     if (latest?.value !== undefined) return String(latest.value);
-    return "No recent reading";
+    return null;
   };
 </script>
 
@@ -96,7 +102,12 @@
         {#each items as item}
           <li>
             <p>{item.summary}</p>
-            <p class="muted"><time datetime={item.ts}>{date(item.ts)}</time></p>
+            <p class="muted">
+              {#if date(item.ts)}<time datetime={item.ts}>{date(item.ts)}</time
+                >{:else}<UnavailableValue
+                  reason="This activity row carries no timestamp."
+                />{/if}
+            </p>
           </li>
         {/each}
       </ol>
@@ -134,7 +145,11 @@
             <li>
               <strong>{enrollment.requested_slug}</strong>
               <p class="muted">
-                {enrollment.status} · expires {date(enrollment.expires_at)}
+                {enrollment.status} · expires {#if date(enrollment.expires_at)}{date(
+                    enrollment.expires_at,
+                  )}{:else}<UnavailableValue
+                    reason="No expiry recorded for this request."
+                  />{/if}
               </p>
             </li>
           {/each}
@@ -150,22 +165,27 @@
           <li>
             <strong>{metric.name}</strong>
             <p class="muted">
-              {metric.status} · {metric.adapter} on {metric.host} · last push {date(
-                metric.last_push,
-              )}
+              {metric.status} · {metric.adapter} on {metric.host} · last push {#if date(metric.last_push)}{date(
+                  metric.last_push,
+                )}{:else}<UnavailableValue
+                  reason="This series has never been pushed."
+                />{/if}
             </p>
             {#each metric.streams ?? [] as stream}
+              {@const observedAt = date(
+                stream.latest?.observed_at || stream.last_observed_at,
+              )}
               <p>
                 {Object.entries(stream.labels ?? {})
                   .map(([key, value]) => key + "=" + value)
                   .join(" · ")}
-                {fleetValue(stream.latest)}
-                {metric.unit}
-                <span class="muted"
-                  >· {date(
-                    stream.latest?.observed_at || stream.last_observed_at,
-                  )}</span
-                >
+                {#if fleetValue(stream.latest) !== null}{fleetValue(
+                    stream.latest,
+                  )}
+                  {metric.unit}{:else}<UnavailableValue
+                    reason="No recent reading from this host."
+                  />{/if}
+                {#if observedAt}<span class="muted">· {observedAt}</span>{/if}
               </p>
             {/each}
             {#if metric.message}<p class="muted">{metric.message}</p>{/if}
@@ -183,9 +203,11 @@
     </p>{/if}
   {#if live?.observed_at}
     <p class="observed">
-      Live as of <time datetime={live.observed_at}
-        >{date(live.observed_at)}</time
-      >
+      Live as of {#if date(live.observed_at)}<time datetime={live.observed_at}
+          >{date(live.observed_at)}</time
+        >{:else}<UnavailableValue
+          reason="This read carries no observation time."
+        />{/if}
     </p>
   {/if}
 </div>

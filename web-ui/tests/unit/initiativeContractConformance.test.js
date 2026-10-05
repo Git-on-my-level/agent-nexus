@@ -47,11 +47,31 @@ describe("the Overview tile reads core's serialized initiative", () => {
       status: "on_track",
       reason: "Work is progressing.",
     });
-    expect(model()).toMatchObject({
-      health: "on_track",
-      healthLabel: "On track",
-      healthTone: "ok",
-      healthReason: "Work is progressing.",
+    expect(model().health).toMatchObject({
+      state: "on_track",
+      label: "On track",
+      short: "On track",
+      tone: "ok",
+      reason: "Work is progressing.",
+      known: true,
+    });
+  });
+
+  it("prefers the computed plan_health field once core sends it", () => {
+    // The parallel core change adds `plan_health {state, reason, since}`; the
+    // tile has to read it in preference to the older status field.
+    expect(
+      model({
+        plan_health: {
+          state: "at_risk",
+          reason: "two steps slipped",
+          since: "2026-10-02T00:00:00Z",
+        },
+      }).health,
+    ).toMatchObject({
+      state: "at_risk",
+      reason: "two steps slipped",
+      since: "2026-10-02T00:00:00Z",
     });
   });
 
@@ -95,11 +115,19 @@ describe("the Overview tile reads core's serialized initiative", () => {
   });
 
   it("names the next step from the id core sends", () => {
-    expect(model().next).toBe("Build");
+    expect(model().next).toMatchObject({ id: "build", title: "Build" });
   });
 
-  it("prefers the plan's last movement for moved-ago", () => {
-    expect(model().movedLabel).toBe("2h ago");
+  it("prefers the computed next_step, with the title core gives it", () => {
+    expect(
+      model({
+        next_step: { id: "build", title: "Build the thing", ref: "card:build" },
+      }).next,
+    ).toMatchObject({ title: "Build the thing", ref: "card:build" });
+  });
+
+  it("prefers the plan's last movement for the age badge", () => {
+    expect(model().movedAt).toBe(tile.plan_state.last_movement_at);
   });
 
   it("degrades for a planless initiative without inventing a plan", () => {
@@ -109,7 +137,9 @@ describe("the Overview tile reads core's serialized initiative", () => {
     expect(planless.hasPlan).toBe(false);
     expect(planless.segments).toEqual([]);
     expect(planless.shape).toBe("");
-    expect(planless.next).toBe("");
+    expect(planless.next).toBeNull();
+    expect(planless.health.state).toBe("no_plan");
+    expect(planless.group).toBe("no_plan");
     // The summary progress core preserves is still shown.
     expect(planless.progress).toEqual(tile.progress);
   });

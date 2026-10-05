@@ -5,15 +5,28 @@
    * the view — adding one step with `after:` is what turns a timeline into a
    * tree — so `planShape.js` decides and this only draws.
    *
-   * Accessibility is not a separate mode. Nodes are the same ref chips
-   * everywhere, in declaration order in the DOM, so they are focusable and
-   * readable in every shape; only the SVG edge layer is hidden from assistive
-   * tech, and the dependencies it draws are also written out in the step list
-   * below. That list is the fallback the tech tree needs, and it is the same
-   * markup `dependency-diagram` panels already render.
+   * What a node says: the **step's title**, with its ref as a chip beneath it.
+   * A chip alone used to be the whole node, which meant a reader looking for
+   * "pick the launch date" saw `card:launch-date` — or, for an external step,
+   * a raw GitHub URL. The title is what the author wrote; the chip is where it
+   * points, and whether that thing is open or merged.
+   *
+   * What it hides: a plan's finished prefix. `planTreeGeometry` folds leading
+   * all-done layers into one summary column and shrinks the rest to the width
+   * the page actually has, so the remaining steps and the critical path are on
+   * screen rather than past the right edge.
+   *
+   * Accessibility is not a separate mode. Nodes are in declaration order in
+   * the DOM and the titles are real text, so they are focusable and readable in
+   * every shape; only the SVG edge layer is hidden from assistive tech, and the
+   * dependencies it draws are also written out in the step list below. That
+   * list is the fallback the tech tree needs, and it is the same markup
+   * `dependency-diagram` panels already render — it also still lists the
+   * collapsed steps, so nothing is hidden from it.
    */
   import AnxRefChip from "$lib/components/AnxRefChip.svelte";
   import {
+    PLAN_COLLAPSE_MIN,
     planLayout,
     planTreeGeometry,
     todayMarkerIndex,
@@ -42,11 +55,17 @@
 
   let layout = $derived(planLayout(plan, { planState, resolved, now }));
   let nodeById = $derived(new Map(layout.nodes.map((node) => [node.id, node])));
-  let geometry = $derived(planTreeGeometry(layout));
-  let geometryById = $derived(
-    new Map(geometry.nodes.map((node) => [node.id, node])),
-  );
 
+  /**
+   * How much room the diagram has. Measured rather than assumed: the fit is
+   * the difference between "the critical path is on screen" and "it is three
+   * columns past the right edge", and the same plan has to fit a phone and a
+   * wide monitor.
+   */
+  let frameWidth = $state(0);
+  let geometry = $derived(
+    planTreeGeometry(layout, { availableWidth: frameWidth }),
+  );
   /** Timeline and lane order follow the layers, which is dependency order. */
   let chainOrder = $derived(
     layout.layers
@@ -54,7 +73,27 @@
       .concat(layout.cyclic)
       .map((id) => nodeById.get(id)),
   );
-  let markerIndex = $derived(todayMarkerIndex(chainOrder, now));
+
+  /**
+   * A timeline's finished prefix folds the same way a tree's does, and for the
+   * same reason: a 12-step plan with 9 done is three steps of news.
+   */
+  let chainView = $derived.by(() => {
+    let prefix = 0;
+    while (
+      prefix < chainOrder.length &&
+      chainOrder[prefix]?.status === "done"
+    ) {
+      prefix += 1;
+    }
+    // Nothing left to show means the plan is finished; draw it in full. And
+    // folding one step saves nothing, so it takes two.
+    if (prefix < PLAN_COLLAPSE_MIN || prefix === chainOrder.length) {
+      return { doneCount: 0, steps: chainOrder };
+    }
+    return { doneCount: prefix, steps: chainOrder.slice(prefix) };
+  });
+  let markerIndex = $derived(todayMarkerIndex(chainView.steps, now));
 
   const STATUS_LABELS = {
     done: "Done",
@@ -86,18 +125,43 @@
   function dependencyTitles(node) {
     return node.after.map((id) => nodeById.get(id)?.title ?? id);
   }
+
+  const doneSummary = (count) =>
+    `${count} ${count === 1 ? "step" : "steps"} done`;
 </script>
+
+{#snippet stepBody(node)}
+  <!-- Title first, ref beneath: the words the author wrote, then where they
+       point. A step with no ref is just its title. -->
+  <span class="plan-node__title" title={node.title}>{node.title}</span>
+  <span class="plan-node__meta">
+    {#if node.ref}
+      <AnxRefChip
+        refValue={node.ref}
+        {resolved}
+        {organizationSlug}
+        {workspaceSlug}
+        showKind={false}
+        {onpreview}
+        {onpreviewclose}
+      />
+    {:else}
+      <span class="plan-node__status">{statusLabel(node.status)}</span>
+    {/if}
+  </span>
+{/snippet}
 
 {#if !layout.nodes.length}
   <p class="plan-empty">No plan yet.</p>
 {:else}
   <div class="plan" data-plan-shape={shape}>
     {#if shape === "dag"}
-      <!-- Horizontal scroll on a narrow screen; the region takes focus so it
-           can be scrolled from the keyboard. -->
+      <!-- Horizontal scroll only when the fit ran out of room; the region
+           takes focus so it can be scrolled from the keyboard. -->
       <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
       <div
         class="plan-tree-scroll"
+        bind:clientWidth={frameWidth}
         tabindex="0"
         role="region"
         aria-label="Plan diagram"
@@ -119,36 +183,42 @@
                 d={edge.path}
                 class="plan-edge"
                 class:plan-edge--critical={edge.onCriticalPath}
+                class:plan-edge--from-collapsed={edge.fromCollapsed}
               />
             {/each}
           </svg>
-          {#each layout.nodes as node (node.id)}
-            {@const box = geometryById.get(node.id)}
+          {#if geometry.collapsed}
+            <!-- The finished prefix, as one column. The steps are still in the
+                 list below, so nothing is lost by folding them. -->
+            <div
+              class="plan-done-column"
+              data-plan-done-count={geometry.collapsed.count}
+              style:left="{geometry.collapsed.x}px"
+              style:top="{geometry.collapsed.y}px"
+              style:width="{geometry.collapsed.width}px"
+              style:height="{geometry.collapsed.height}px"
+              title={`${doneSummary(geometry.collapsed.count)} — listed under View plan steps`}
+            >
+              <span class="plan-done-column__check" aria-hidden="true">✓</span>
+              <span class="plan-done-column__count"
+                >{geometry.collapsed.count}</span
+              >
+              <span class="plan-done-column__label">done</span>
+            </div>
+          {/if}
+          {#each geometry.nodes as box (box.id)}
+            {@const node = nodeById.get(box.id)}
             <div
               class="plan-node"
               class:plan-node--critical={node.onCriticalPath}
               data-status={node.status}
+              data-plan-node={node.id}
               style:left="{box.x}px"
               style:top="{box.y}px"
               style:width="{box.width}px"
               style:height="{box.height}px"
             >
-              {#if node.ref}
-                <AnxRefChip
-                  refValue={node.ref}
-                  {resolved}
-                  {organizationSlug}
-                  {workspaceSlug}
-                  showKind={false}
-                  {onpreview}
-                  {onpreviewclose}
-                />
-              {:else}
-                <span class="plan-node__title">{node.title}</span>
-              {/if}
-              <span class="plan-node__status">
-                {statusLabel(node.status)}
-              </span>
+              {@render stepBody(node)}
             </div>
           {/each}
         </div>
@@ -159,24 +229,9 @@
           <section class="plan-lane" aria-label={`Lane ${index + 1}`}>
             <ol class="plan-track">
               {#each laneSteps(lane) as node (node.id)}
-                <li data-status={node.status}>
+                <li data-status={node.status} data-plan-node={node.id}>
                   <span class="plan-track__dot" aria-hidden="true"></span>
-                  {#if node.ref}
-                    <AnxRefChip
-                      refValue={node.ref}
-                      {resolved}
-                      {organizationSlug}
-                      {workspaceSlug}
-                      showKind={false}
-                      {onpreview}
-                      {onpreviewclose}
-                    />
-                  {:else}
-                    <span class="plan-node__title">{node.title}</span>
-                  {/if}
-                  <span class="plan-node__status"
-                    >{statusLabel(node.status)}</span
-                  >
+                  <span class="plan-track__body">{@render stepBody(node)}</span>
                 </li>
               {/each}
             </ol>
@@ -185,7 +240,18 @@
       </div>
     {:else}
       <ol class="plan-track plan-track--timeline">
-        {#each chainOrder as node, index (node.id)}
+        {#if chainView.doneCount}
+          <li class="plan-done-row" data-plan-done-count={chainView.doneCount}>
+            <span
+              class="plan-track__dot plan-track__dot--done"
+              aria-hidden="true"
+            ></span>
+            <span class="plan-done-row__label"
+              >{doneSummary(chainView.doneCount)}</span
+            >
+          </li>
+        {/if}
+        {#each chainView.steps as node, index (node.id)}
           {#if index === markerIndex}
             <li class="plan-today" aria-label="Today">
               <span class="plan-today__line" aria-hidden="true"></span>
@@ -194,27 +260,17 @@
           {/if}
           <li
             data-status={node.status}
+            data-plan-node={node.id}
             class:plan-critical={node.onCriticalPath}
           >
             <span class="plan-track__dot" aria-hidden="true"></span>
-            {#if node.ref}
-              <AnxRefChip
-                refValue={node.ref}
-                {resolved}
-                {organizationSlug}
-                {workspaceSlug}
-                showKind={false}
-                {onpreview}
-                {onpreviewclose}
-              />
-            {:else}
-              <span class="plan-node__title">{node.title}</span>
-            {/if}
-            <span class="plan-node__status">{statusLabel(node.status)}</span>
-            {#if node.due}<span class="plan-node__due">{node.due}</span>{/if}
+            <span class="plan-track__body">
+              {@render stepBody(node)}
+              {#if node.due}<span class="plan-node__due">{node.due}</span>{/if}
+            </span>
           </li>
         {/each}
-        {#if markerIndex === chainOrder.length}
+        {#if markerIndex === chainView.steps.length}
           <li class="plan-today" aria-label="Today">
             <span class="plan-today__line" aria-hidden="true"></span>
             <span class="plan-today__label">Today</span>
@@ -232,8 +288,9 @@
     {/if}
 
     <!--
-      The step list: the tech tree's screen-reader fallback, and the only place
-      the dependencies drawn as edges are written out as words.
+      The step list: the tech tree's screen-reader fallback, the only place the
+      dependencies drawn as edges are written out as words, and the place the
+      collapsed done steps are still listed in full.
     -->
     <details class="plan-steps" open={stepsExpanded}>
       <summary>View plan steps <span>({layout.nodes.length})</span></summary>
@@ -290,12 +347,17 @@
     stroke: var(--accent-solid);
     stroke-width: 2.5;
   }
+  /* An edge out of the folded prefix: real, but not the reader's problem. */
+  .plan-edge--from-collapsed {
+    stroke-dasharray: 3 3;
+    opacity: 0.6;
+  }
   .plan-node {
     position: absolute;
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: 2px;
+    gap: 3px;
     box-sizing: border-box;
     padding: 6px 8px;
     border: 1px solid var(--line);
@@ -324,13 +386,61 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 12px;
+    font-weight: 500;
     color: var(--fg);
+  }
+  /* The chip sits under the title and may not fit: clip it rather than let it
+     widen the node and break the column grid. */
+  .plan-node__meta {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 4px;
+    overflow: hidden;
   }
   .plan-node__status,
   .plan-node__due,
   .plan-node__after {
     color: var(--fg-muted);
     font-size: 10px;
+  }
+
+  /* The folded finished prefix. */
+  .plan-done-column {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    box-sizing: border-box;
+    padding: 6px 4px;
+    border: 1px dashed var(--line-strong);
+    border-radius: 5px;
+    background: var(--bg-soft);
+    color: var(--fg-muted);
+    cursor: help;
+  }
+  .plan-done-column__check {
+    color: var(--ok-text, var(--accent-solid));
+    font-size: 12px;
+    line-height: 1;
+  }
+  .plan-done-column__count {
+    font-size: 13px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--fg);
+  }
+  .plan-done-column__label {
+    font-size: 10px;
+  }
+  .plan-done-row {
+    color: var(--fg-muted);
+    font-size: 11px;
+  }
+  .plan-done-row__label {
+    color: var(--fg-muted);
   }
 
   .plan-lanes {
@@ -350,6 +460,13 @@
     gap: 8px;
     min-width: 0;
   }
+  .plan-track__body {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 8px;
+  }
   .plan-track__dot {
     flex: none;
     width: 8px;
@@ -357,6 +474,7 @@
     border-radius: 50%;
     background: var(--line-strong);
   }
+  .plan-track__dot--done,
   .plan-track li[data-status="done"] .plan-track__dot {
     background: var(--ok-text, var(--accent-solid));
   }
@@ -416,8 +534,10 @@
     min-width: 0;
   }
 
+  /* On a phone the node's own status word is the first thing to go: the dot
+     and the column already carry it. */
   @media (max-width: 640px) {
-    .plan-node__status {
+    .plan-track__body .plan-node__status {
       display: none;
     }
   }
