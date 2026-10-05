@@ -443,6 +443,9 @@ test("golden path integration runs against a real anx-core", async ({
   });
 
   await page.getByRole("link", { name: "Inbox", exact: true }).click();
+  // Svelte's client-side navigation resolves cold route imports after click
+  // returns. Wait for navigation before applying the content assertion budget.
+  await page.waitForURL("**/o/local/w/local/inbox", { timeout: 30_000 });
   await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
 
   // Open the ask we created rather than acknowledging another test's data.

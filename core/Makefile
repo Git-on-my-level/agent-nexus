@@ -72,8 +72,12 @@ check-linux-observation:
 	@CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o /dev/null ./internal/observation
 	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /dev/null ./internal/observation
 
+# HTTP fixtures run projection/SSE workers; bound fixture concurrency so
+# those background workers do not compete across every available CPU.
+# The expanded privacy matrix also needs a package budget above Go's 10m
+# default. Individual request and assertion deadlines remain unchanged.
 test:
-	@go test ./...
+	@go test -parallel=2 -timeout=12m ./...
 
 check: fmt vet test check-offline check-linux-observation
 
