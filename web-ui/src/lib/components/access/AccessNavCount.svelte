@@ -1,6 +1,7 @@
 <script>
   import {
     pendingAccessCount,
+    pendingAccessLabel,
     startPendingAccessCount,
   } from "$lib/pendingAccessCount.js";
 
@@ -9,7 +10,11 @@
    * on the account menu trigger that hides it. One number; the hover title
    * says what the number is. Zero renders nothing: a workspace with nobody
    * waiting has no badge, not a grey "0". Neither does a reader who may not
-   * decide access — they would never be able to act on it.
+   * decide access — they could never act on it.
+   *
+   * On the trigger the number is decorative: the button carries an explicit
+   * `aria-label`, which suppresses any name a descendant would contribute, so
+   * the layout folds the count into that label instead (`pendingAccessLabel`).
    */
   let { workspace = "", enabled = false, variant = "sidebar" } = $props();
 
@@ -18,26 +23,21 @@
     return startPendingAccessCount(workspace);
   });
 
-  let count = $derived(
+  let snapshot = $derived(
     $pendingAccessCount.workspace === workspace
-      ? ($pendingAccessCount.count ?? 0)
-      : 0,
+      ? $pendingAccessCount
+      : { count: null, forbidden: false },
   );
+  let count = $derived(snapshot.forbidden ? 0 : (snapshot.count ?? 0));
   let text = $derived(count > 0 ? (count > 99 ? "99+" : String(count)) : "");
-  let label = $derived(
-    count === 1
-      ? "1 access request waiting"
-      : `${count} access requests waiting`,
-  );
+  let label = $derived(pendingAccessLabel(count));
 </script>
 
 {#if text}
   {#if variant === "trigger"}
-    <!-- On the account menu trigger, where the Access item is out of sight
-         until the menu opens. -->
     <span
       class="shrink-0 rounded-full bg-warn px-1.5 text-[10px] font-semibold leading-4 text-bg tabular-nums"
-      aria-label={label}
+      aria-hidden="true"
       title={label}
       data-access-trigger-count>{text}</span
     >

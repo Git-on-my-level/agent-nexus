@@ -16,15 +16,13 @@ function text(value) {
   return String(value ?? "").trim();
 }
 
-function subjectIds(event) {
-  return [text(event?.subject_agent_id), text(event?.subject_actor_id)].filter(
-    Boolean,
-  );
-}
-
 /**
- * Newest `auth_admin_granted` time per principal, keyed by both the principal
- * and actor id the event carries.
+ * Newest `auth_admin_granted` time per principal.
+ *
+ * Keyed by the subject principal id only. One actor can own several agent
+ * principals on different hosts, so an actor id would let one principal's
+ * grant date be reported as another's — and core records the principal id on
+ * every one of these events, so nothing is lost by ignoring the actor.
  *
  * @param {object[]} auditEvents
  * @returns {Map<string, string>}
@@ -34,11 +32,10 @@ export function grantTimesFromAudit(auditEvents = []) {
   for (const event of Array.isArray(auditEvents) ? auditEvents : []) {
     if (text(event?.event_type) !== "auth_admin_granted") continue;
     const at = text(event?.occurred_at);
-    if (!at) continue;
-    for (const id of subjectIds(event)) {
-      const seen = times.get(id);
-      if (!seen || Date.parse(at) > Date.parse(seen)) times.set(id, at);
-    }
+    const id = text(event?.subject_agent_id);
+    if (!at || !id) continue;
+    const seen = times.get(id);
+    if (!seen || Date.parse(at) > Date.parse(seen)) times.set(id, at);
   }
   return times;
 }
@@ -120,10 +117,7 @@ export function buildAdminRows({
           text(admin.host_slug) ||
           hostSlugByAgentId.get(principalId) ||
           text(principal?.host_slug),
-        grantedAt:
-          grantTimes.get(principalId) ||
-          grantTimes.get(text(admin.actor_id)) ||
-          "",
+        grantedAt: grantTimes.get(principalId) || "",
         isYou: principalId === me,
         revocable: true,
       };

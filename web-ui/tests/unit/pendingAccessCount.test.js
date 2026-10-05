@@ -11,6 +11,7 @@ const {
   claimPendingAccessCount,
   countPendingAccessItems,
   pendingAccessCount,
+  pendingAccessLabel,
   publishPendingAccessForbidden,
   publishPendingAccessSources,
   resetPendingAccessCount,
@@ -21,12 +22,16 @@ function enrollment(id, status = "pending") {
   return { id, status, requested_slug: id };
 }
 
-function forbidden(status, code) {
+function refusal(status, code) {
   const error = new Error("nope");
   error.status = status;
   if (code) error.body = { error: { code } };
   return error;
 }
+
+// Short enough that a real poll fires inside a test, so the tests below
+// observe the interval rather than the absence of one.
+const FAST = { refreshMs: 5 };
 
 /** Waits for the store to reach a value the predicate accepts. */
 async function until(predicate, label) {
@@ -72,7 +77,7 @@ describe("startPendingAccessCount", () => {
     coreClientMock.listPendingHostEnrollments.mockResolvedValue({
       enrollments: [enrollment("a"), enrollment("b", "approved")],
     });
-    const stop = startPendingAccessCount("main");
+    const stop = startPendingAccessCount("main", FAST);
     await until((value) => value.count === 1, "first poll");
     expect(get(pendingAccessCount)).toEqual({
       workspace: "main",
@@ -82,14 +87,30 @@ describe("startPendingAccessCount", () => {
     stop();
   });
 
+  it("polls again on the interval", async () => {
+    coreClientMock.listPendingHostEnrollments.mockResolvedValue({
+      enrollments: [enrollment("a")],
+    });
+    const stop = startPendingAccessCount("main", FAST);
+    await until((value) => value.count === 1, "first poll");
+    const first = coreClientMock.listPendingHostEnrollments.mock.calls.length;
+    await until(
+      () => coreClientMock.listPendingHostEnrollments.mock.calls.length > first,
+      "second poll",
+    );
+    stop();
+  });
+
   it("stops polling and shows no badge when the reader may not see access", async () => {
-    coreClientMock.listPendingHostEnrollments.mockRejectedValue(forbidden(403));
-    const stop = startPendingAccessCount("main");
-    await until((value) => value.forbidden, "forbidden");
+    coreClientMock.listPendingHostEnrollments.mockRejectedValue(refusal(403));
+    const stop = startPendingAccessCount("main", FAST);
+    await until((value) => value.forbidden, "refused");
     expect(get(pendingAccessCount).count).toBeNull();
+    // The latch has to hold across several would-be intervals; otherwise the
+    // shell hammers a route it will never be allowed to read.
     const callsAfterRefusal =
       coreClientMock.listPendingHostEnrollments.mock.calls.length;
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    await new Promise((resolve) => setTimeout(resolve, 60));
     expect(coreClientMock.listPendingHostEnrollments).toHaveBeenCalledTimes(
       callsAfterRefusal,
     );
@@ -98,10 +119,23 @@ describe("startPendingAccessCount", () => {
 
   it("treats an auth_admin_required body as a refusal, whatever the status", async () => {
     coreClientMock.listPendingHostEnrollments.mockRejectedValue(
-      forbidden(undefined, "auth_admin_required"),
+      refusal(undefined, "auth_admin_required"),
     );
-    const stop = startPendingAccessCount("main");
-    await until((value) => value.forbidden, "forbidden by code");
+    const stop = startPendingAccessCount("main", FAST);
+    await until((value) => value.forbidden, "refused by code");
+    stop();
+  });
+
+  it("keeps polling after a 401: an expired session is not a refusal", async () => {
+    // Latching here would tell an administrator they are not one, and hide
+    // the badge for the rest of the session even after a successful re-auth.
+    coreClientMock.listPendingHostEnrollments.mockRejectedValue(refusal(401));
+    const stop = startPendingAccessCount("main", FAST);
+    await until(
+      () => coreClientMock.listPendingHostEnrollments.mock.calls.length >= 3,
+      "keeps retrying after 401",
+    );
+    expect(get(pendingAccessCount).forbidden).toBe(false);
     stop();
   });
 
@@ -109,12 +143,18 @@ describe("startPendingAccessCount", () => {
     coreClientMock.listPendingHostEnrollments.mockResolvedValueOnce({
       enrollments: [enrollment("a")],
     });
-    const stop = startPendingAccessCount("main");
+    const stop = startPendingAccessCount("main", FAST);
     await until((value) => value.count === 1, "first poll");
     coreClientMock.listPendingHostEnrollments.mockRejectedValue(
       new Error("core unreachable"),
     );
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    const before = coreClientMock.listPendingHostEnrollments.mock.calls.length;
+    await until(
+      () =>
+        coreClientMock.listPendingHostEnrollments.mock.calls.length >
+        before + 1,
+      "failing polls ran",
+    );
     expect(get(pendingAccessCount)).toEqual({
       workspace: "main",
       count: 1,
@@ -128,8 +168,8 @@ describe("startPendingAccessCount", () => {
       enrollments: [enrollment("a")],
     });
     const release = claimPendingAccessCount();
-    const stop = startPendingAccessCount("main");
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    const stop = startPendingAccessCount("main", FAST);
+    await new Promise((resolve) => setTimeout(resolve, 60));
     expect(coreClientMock.listPendingHostEnrollments).not.toHaveBeenCalled();
     // The page publishes instead, so the badge is still current.
     publishPendingAccessSources("main", { enrollments: [enrollment("a")] });
@@ -147,9 +187,9 @@ describe("startPendingAccessCount", () => {
     coreClientMock.listPendingHostEnrollments.mockResolvedValue({
       enrollments: [enrollment("a")],
     });
-    const stopMain = startPendingAccessCount("main");
+    const stopMain = startPendingAccessCount("main", FAST);
     await until((value) => value.count === 1, "main");
-    const stopOther = startPendingAccessCount("other");
+    const stopOther = startPendingAccessCount("other", FAST);
     expect(get(pendingAccessCount).workspace).toBe("other");
     await until((value) => value.workspace === "other", "other");
     stopMain();
@@ -160,6 +200,14 @@ describe("startPendingAccessCount", () => {
     const stop = startPendingAccessCount("");
     expect(coreClientMock.listPendingHostEnrollments).not.toHaveBeenCalled();
     stop();
+  });
+});
+
+describe("pendingAccessLabel", () => {
+  it("says what the number is, in the singular when it is one", () => {
+    expect(pendingAccessLabel(1)).toBe("1 access request waiting");
+    expect(pendingAccessLabel(4)).toBe("4 access requests waiting");
+    expect(pendingAccessLabel(0)).toBe("0 access requests waiting");
   });
 });
 

@@ -13,6 +13,7 @@
   import { describeAuthAuditEvent } from "$lib/authAuditModel.js";
   import { authenticatedAgent } from "$lib/authSession";
   import { coreClient } from "$lib/coreClient";
+  import { isAdministrationRefusal } from "$lib/coreAuthErrors.js";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
   import {
     claimPendingAccessCount,
@@ -126,9 +127,9 @@
   );
   // Administration reaches people implicitly and agents by explicit grant;
   // the heading counts both, the same way the list shows both.
-  let adminCount = $derived(
-    humans.filter((principal) => !principal.revoked).length + admins.length,
-  );
+  // `listPrincipals` returns one page, newest first, and host-derived agents
+  // can fill it; core's active-human count is the number that is true.
+  let adminCount = $derived(activeHumanPrincipalCount + admins.length);
   // What the shell badge counts: requests the reader can still decide.
   let pendingDecisionCount = $derived(
     countPendingAccessItems({ enrollments: pending }),
@@ -139,10 +140,17 @@
   let visibleAudit = $derived(
     showAllAudit ? auditEvents : auditEvents.slice(0, AUDIT_PREVIEW),
   );
+  // Every read on this page needs administration authority, so they are
+  // refused together. Saying that once beats seven sections each describing
+  // an empty workspace the reader was not allowed to see.
+  let accessRefused = $derived(
+    Object.values(sections).every((section) => section.forbidden),
+  );
   let showTourBanner = $derived(
     tourArrived &&
       canManageAccess &&
       sections.hosts.status === "ready" &&
+      !sections.hosts.forbidden &&
       activeHosts.length === 0,
   );
 
@@ -173,21 +181,11 @@
     );
   }
 
-  // Administration-only reads answer 403 for a principal without it. That is
-  // an answer, not a failure: the section says so plainly instead of showing
-  // a red error the reader cannot act on.
-  function isForbidden(error) {
-    const status = Number(error?.status);
-    if (status === 401 || status === 403) return true;
-    const code = String(error?.body?.error?.code ?? "");
-    return code === "auth_admin_required" || code === "auth_required";
-  }
-
   function settle(key, result, apply) {
     if (result.status === "fulfilled") {
       apply(result.value);
       sections[key] = { status: "ready", error: "", forbidden: false };
-    } else if (isForbidden(result.reason)) {
+    } else if (isAdministrationRefusal(result.reason)) {
       sections[key] = { status: "ready", error: "", forbidden: true };
     } else {
       sections[key] = {
@@ -220,7 +218,8 @@
       pending = value?.enrollments ?? [];
     });
     publishPending(
-      pendingResult.status === "rejected" && isForbidden(pendingResult.reason),
+      pendingResult.status === "rejected" &&
+        isAdministrationRefusal(pendingResult.reason),
     );
     settle("tokens", tokensResult, (value) => {
       tokens = value?.enrollment_tokens ?? [];
@@ -273,7 +272,7 @@
         void refreshAgentRoster();
       }
     } catch (error) {
-      if (isForbidden(error)) {
+      if (isAdministrationRefusal(error)) {
         sections.pending = { status: "ready", error: "", forbidden: true };
         publishPending(true);
         return;
@@ -478,9 +477,11 @@
       if (!document.hidden) void pollPending();
     }, PENDING_POLL_MS);
     return () => {
+      // First: a throw in either teardown below must not strand the claim and
+      // leave the shell badge frozen for the rest of the session.
+      releaseCount();
       clearInterval(poll);
       stopAgentChanges();
-      releaseCount();
     };
   });
 </script>
@@ -533,514 +534,558 @@
       <p class="text-meta text-fg-muted">Loading access…</p>
     {/if}
 
-    {#if showTourBanner}
-      <aside class="tour-arrival-banner" role="status" aria-live="polite">
-        <div class="tour-arrival-banner__body">
-          <p class="tour-arrival-banner__title">
-            Last step: enroll the machine your agents run on
-          </p>
-          <p class="tour-arrival-banner__text">
-            Run <code>{enrollCommand}</code> there, then approve the request that
-            appears below. Every agent on that machine can use the workspace from
-            then on, with no per-agent setup.
-          </p>
-        </div>
-      </aside>
-    {/if}
-
-    {#if enrollmentNotice}
-      <p
-        class="flex items-center gap-3 rounded-md border border-line bg-bg-soft px-3 py-2 text-micro text-fg-muted"
-        role="status"
-        data-enrollment-notice
+    {#if accessRefused}
+      <div
+        class="rounded-md border border-line bg-bg-soft px-4 py-10 text-center text-meta text-fg-muted"
+        data-access-refused
       >
-        <span class="min-w-0 flex-1">{enrollmentNotice}</span>
-        <button
-          class="shrink-0 hover:text-fg"
-          type="button"
-          onclick={() => (enrollmentNotice = "")}>Dismiss</button
-        >
-      </p>
+        <p>Only workspace administrators can manage access.</p>
+        <p class="mt-2 text-micro">
+          Ask a person who administers this workspace to make the change, or to
+          grant you administration.
+        </p>
+      </div>
     {/if}
 
-    <!-- Everything waiting on a decision, above everything that is already
+    {#if !accessRefused}
+      {#if showTourBanner}
+        <aside class="tour-arrival-banner" role="status" aria-live="polite">
+          <div class="tour-arrival-banner__body">
+            <p class="tour-arrival-banner__title">
+              Last step: enroll the machine your agents run on
+            </p>
+            <p class="tour-arrival-banner__text">
+              Run <code>{enrollCommand}</code> there, then approve the request that
+              appears below. Every agent on that machine can use the workspace from
+              then on, with no per-agent setup.
+            </p>
+          </div>
+        </aside>
+      {/if}
+
+      {#if enrollmentNotice}
+        <p
+          class="flex items-center gap-3 rounded-md border border-line bg-bg-soft px-3 py-2 text-micro text-fg-muted"
+          role="status"
+          data-enrollment-notice
+        >
+          <span class="min-w-0 flex-1">{enrollmentNotice}</span>
+          <button
+            class="shrink-0 hover:text-fg"
+            type="button"
+            onclick={() => (enrollmentNotice = "")}>Dismiss</button
+          >
+        </p>
+      {/if}
+
+      <!-- Everything waiting on a decision, above everything that is already
          settled. `#host-requests` is the anchor the CLI's verification URL
          and the agent pages link to, so it stays on this section. -->
-    {#if pending.length}
-      <section
-        id="host-requests"
-        class="scroll-mt-20"
-        aria-labelledby="pending-access-title"
-        data-pending-access
-      >
-        <h2
-          id="pending-access-title"
-          class="mb-2 flex items-center gap-2 text-meta font-semibold text-fg"
+      {#if pending.length}
+        <section
+          id="host-requests"
+          class="scroll-mt-20"
+          aria-labelledby="pending-access-title"
+          data-pending-access
         >
-          <span class="h-2 w-2 rounded-full bg-warn" aria-hidden="true"></span>
-          <!-- An approved ceremony is waiting on the machine, not on the
-               reader, so it does not claim to need a decision. -->
-          {pendingDecisionCount ? "Waiting for you" : "Enrollment in progress"}
-          {#if pendingDecisionCount}
-            <span class="font-normal text-fg-muted" data-pending-access-count
-              >{pendingDecisionCount}</span
-            >
-          {/if}
-        </h2>
-        <ul
-          class="divide-y divide-line-subtle overflow-hidden rounded-md border bg-bg-soft"
-          style="border-color: color-mix(in srgb, var(--warn) 40%, var(--line))"
-        >
-          {#each pending as enrollment (enrollment.id)}
-            <HostEnrollmentRequest
-              {enrollment}
-              {now}
-              busy={enrollmentBusy.id === enrollment.id
-                ? enrollmentBusy.action
-                : ""}
-              error={enrollmentErrors[enrollment.id] ?? ""}
-              onapprove={(entry) => decideEnrollment(entry, "approve")}
-              ondeny={(entry) => decideEnrollment(entry, "deny")}
-            />
-          {/each}
-        </ul>
-      </section>
-    {:else if sections.pending.forbidden}
-      <p class="text-meta text-fg-muted" data-pending-access-forbidden>
-        Only workspace administrators can see access requests.
-      </p>
-    {:else if sections.pending.status === "error"}
-      <p
-        class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
-      >
-        Pending host requests did not load: {sections.pending.error}
-      </p>
-    {/if}
-
-    <section
-      id="hosts"
-      bind:this={hostsSectionEl}
-      class="scroll-mt-20"
-      aria-labelledby="hosts-title"
-    >
-      <div class="mb-2 flex items-baseline justify-between gap-3">
-        <h2 id="hosts-title" class="text-meta font-semibold text-fg">
-          Hosts
-          {#if activeHosts.length}
-            <span class="ml-1 font-normal text-fg-muted"
-              >{activeHosts.length}</span
-            >
-          {/if}
-        </h2>
-        {#if activeHosts.length}
-          <button
-            class="text-micro font-medium text-accent-text hover:underline"
-            type="button"
-            aria-expanded={enrollOpen}
-            onclick={() => (enrollOpen = !enrollOpen)}
-            >{enrollOpen ? "Close" : "Enroll a machine"}</button
+          <h2
+            id="pending-access-title"
+            class="mb-2 flex items-center gap-2 text-meta font-semibold text-fg"
           >
-        {/if}
-      </div>
-
-      {#if enrollOpen || (sections.hosts.status === "ready" && !activeHosts.length)}
-        <div
-          class="mb-3 space-y-4 rounded-md border border-line bg-bg-soft px-4 py-3"
-          data-host-enroll-help
-        >
-          <div class="space-y-1.5">
-            <p class="text-meta text-fg">
-              {activeHosts.length
-                ? "Enroll another machine"
-                : "No machines enrolled yet"}
-            </p>
-            <p class="text-micro text-fg-muted">
-              Run this on the machine your agents use. It prints a code; the
-              request appears above, and you approve it when the codes match.
-              Agents already set up on that machine keep their history.
-            </p>
-            <div class="flex items-center gap-1 rounded bg-bg px-2 py-1.5">
-              <code
-                class="min-w-0 flex-1 break-all font-mono text-micro text-fg"
-                data-host-enroll-command>{enrollCommand}</code
+            <span class="h-2 w-2 rounded-full bg-warn" aria-hidden="true"
+            ></span>
+            <!-- An approved ceremony is waiting on the machine, not on the
+               reader, so it does not claim to need a decision. -->
+            {pendingDecisionCount
+              ? "Waiting for you"
+              : "Enrollment in progress"}
+            {#if pendingDecisionCount}
+              <span class="font-normal text-fg-muted" data-pending-access-count
+                >{pendingDecisionCount}</span
               >
-              <CopyButton value={enrollCommand} label="Copy command" />
+            {/if}
+          </h2>
+          <ul
+            class="divide-y divide-line-subtle overflow-hidden rounded-md border bg-bg-soft"
+            style="border-color: color-mix(in srgb, var(--warn) 40%, var(--line))"
+          >
+            {#each pending as enrollment (enrollment.id)}
+              <HostEnrollmentRequest
+                {enrollment}
+                {now}
+                busy={enrollmentBusy.id === enrollment.id
+                  ? enrollmentBusy.action
+                  : ""}
+                error={enrollmentErrors[enrollment.id] ?? ""}
+                onapprove={(entry) => decideEnrollment(entry, "approve")}
+                ondeny={(entry) => decideEnrollment(entry, "deny")}
+              />
+            {/each}
+          </ul>
+        </section>
+      {:else if sections.pending.forbidden}
+        <p class="text-meta text-fg-muted" data-pending-access-forbidden>
+          Only workspace administrators can see access requests.
+        </p>
+      {:else if sections.pending.status === "error"}
+        <p
+          class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
+        >
+          Pending host requests did not load: {sections.pending.error}
+        </p>
+      {/if}
+
+      <section
+        id="hosts"
+        bind:this={hostsSectionEl}
+        class="scroll-mt-20"
+        aria-labelledby="hosts-title"
+      >
+        <div class="mb-2 flex items-baseline justify-between gap-3">
+          <h2 id="hosts-title" class="text-meta font-semibold text-fg">
+            Hosts
+            {#if activeHosts.length}
+              <span class="ml-1 font-normal text-fg-muted"
+                >{activeHosts.length}</span
+              >
+            {/if}
+          </h2>
+          {#if activeHosts.length}
+            <button
+              class="text-micro font-medium text-accent-text hover:underline"
+              type="button"
+              aria-expanded={enrollOpen}
+              onclick={() => (enrollOpen = !enrollOpen)}
+              >{enrollOpen ? "Close" : "Enroll a machine"}</button
+            >
+          {/if}
+        </div>
+
+        {#if enrollOpen || (sections.hosts.status === "ready" && !sections.hosts.forbidden && !activeHosts.length)}
+          <div
+            class="mb-3 space-y-4 rounded-md border border-line bg-bg-soft px-4 py-3"
+            data-host-enroll-help
+          >
+            <div class="space-y-1.5">
+              <p class="text-meta text-fg">
+                {activeHosts.length
+                  ? "Enroll another machine"
+                  : "No machines enrolled yet"}
+              </p>
+              <p class="text-micro text-fg-muted">
+                Run this on the machine your agents use. It prints a code; the
+                request appears above, and you approve it when the codes match.
+                Agents already set up on that machine keep their history.
+              </p>
+              <div class="flex items-center gap-1 rounded bg-bg px-2 py-1.5">
+                <code
+                  class="min-w-0 flex-1 break-all font-mono text-micro text-fg"
+                  data-host-enroll-command>{enrollCommand}</code
+                >
+                <CopyButton value={enrollCommand} label="Copy command" />
+              </div>
+            </div>
+            <div class="space-y-2 border-t border-line-subtle pt-3">
+              <p class="text-micro text-fg-muted">
+                For CI or cloud machines that cannot wait for approval, create a
+                one-time token instead.
+              </p>
+              {#if sections.tokens.status === "error"}
+                <p class="text-micro text-danger-text">
+                  {sections.tokens.error}
+                </p>
+              {/if}
+              <HostEnrollmentTokens
+                {tokens}
+                {cliBaseUrl}
+                {now}
+                oncreate={createToken}
+                onrevoke={revokeToken}
+              />
             </div>
           </div>
-          <div class="space-y-2 border-t border-line-subtle pt-3">
-            <p class="text-micro text-fg-muted">
-              For CI or cloud machines that cannot wait for approval, create a
-              one-time token instead.
-            </p>
-            {#if sections.tokens.status === "error"}
-              <p class="text-micro text-danger-text">{sections.tokens.error}</p>
-            {/if}
-            <HostEnrollmentTokens
-              {tokens}
-              {cliBaseUrl}
-              {now}
-              oncreate={createToken}
-              onrevoke={revokeToken}
-            />
-          </div>
-        </div>
-      {/if}
+        {/if}
 
-      {#if sections.hosts.status === "error"}
-        <p
-          class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
-        >
-          {sections.hosts.error}
-        </p>
-      {:else if activeHosts.length}
-        <div class="space-y-3">
-          {#each activeHosts as host (host.id)}
-            <HostCard
-              {host}
-              agents={host.agents ?? []}
-              canManage={canManageAccess}
-              {workspaceHref}
-              {now}
-              onexclusions={saveExclusions}
-              onrevoke={revokeHost}
-            />
-          {/each}
-        </div>
-      {/if}
-      {#if revokedHosts.length}
-        <button
-          class="mt-2 text-micro text-fg-muted hover:text-fg"
-          type="button"
-          onclick={() => (showRevokedHosts = !showRevokedHosts)}
-          >{showRevokedHosts
-            ? "Hide revoked hosts"
-            : `Show ${revokedHosts.length} revoked ${revokedHosts.length === 1 ? "host" : "hosts"}`}</button
-        >
-        {#if showRevokedHosts}
-          <div class="mt-2 space-y-3">
-            {#each revokedHosts as host (host.id)}
+        {#if sections.hosts.status === "error"}
+          <p
+            class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+          >
+            {sections.hosts.error}
+          </p>
+        {:else if activeHosts.length}
+          <div class="space-y-3">
+            {#each activeHosts as host (host.id)}
               <HostCard
                 {host}
                 agents={host.agents ?? []}
+                canManage={canManageAccess}
                 {workspaceHref}
                 {now}
+                onexclusions={saveExclusions}
+                onrevoke={revokeHost}
               />
             {/each}
           </div>
         {/if}
-      {/if}
-    </section>
-
-    <section
-      id="admins"
-      class="scroll-mt-20 space-y-3"
-      aria-labelledby="admins-title"
-    >
-      <h2 id="admins-title" class="text-meta font-semibold text-fg">
-        Administrators
-        {#if sections.admins.status === "ready" && !sections.admins.forbidden && adminCount}
-          <span class="ml-1 font-normal text-fg-muted">{adminCount}</span>
+        {#if revokedHosts.length}
+          <button
+            class="mt-2 text-micro text-fg-muted hover:text-fg"
+            type="button"
+            onclick={() => (showRevokedHosts = !showRevokedHosts)}
+            >{showRevokedHosts
+              ? "Hide revoked hosts"
+              : `Show ${revokedHosts.length} revoked ${revokedHosts.length === 1 ? "host" : "hosts"}`}</button
+          >
+          {#if showRevokedHosts}
+            <div class="mt-2 space-y-3">
+              {#each revokedHosts as host (host.id)}
+                <HostCard
+                  {host}
+                  agents={host.agents ?? []}
+                  {workspaceHref}
+                  {now}
+                />
+              {/each}
+            </div>
+          {/if}
         {/if}
-      </h2>
-      {#if sections.admins.status === "error"}
-        <p class="text-meta text-danger-text" role="alert">
-          {sections.admins.error}
-        </p>
-      {:else if sections.admins.status === "ready"}
-        <AuthAdminGrants
-          {admins}
-          {principals}
-          {hosts}
-          {auditEvents}
-          currentPrincipalId={authenticatedAgentId}
-          displayName={principalName}
-          canEdit={$authenticatedAgent?.principal_kind === "human"}
-          forbidden={sections.admins.forbidden}
-          onchanged={loadPeople}
-        />
-      {/if}
-    </section>
+      </section>
 
-    <section id="people" class="scroll-mt-20" aria-labelledby="people-title">
-      <div class="mb-2 flex items-baseline justify-between gap-3">
-        <h2 id="people-title" class="text-meta font-semibold text-fg">
-          People
-          {#if humans.length}
-            <span class="ml-1 font-normal text-fg-muted">{humans.length}</span>
+      <section
+        id="admins"
+        class="scroll-mt-20 space-y-3"
+        aria-labelledby="admins-title"
+      >
+        <h2 id="admins-title" class="text-meta font-semibold text-fg">
+          Administrators
+          {#if sections.admins.status === "ready" && !sections.admins.forbidden && adminCount}
+            <span class="ml-1 font-normal text-fg-muted">{adminCount}</span>
           {/if}
         </h2>
-        {#if !hostedMode}
-          <Button
-            variant="secondary"
-            size="compact"
-            busy={creatingInvite}
-            onclick={inviteHuman}
-            >{creatingInvite ? "Creating invite…" : "Invite a person"}</Button
-          >
+        {#if sections.admins.status === "error"}
+          <p class="text-meta text-danger-text" role="alert">
+            {sections.admins.error}
+          </p>
+        {:else if sections.admins.status === "ready"}
+          <AuthAdminGrants
+            {admins}
+            {principals}
+            {hosts}
+            {auditEvents}
+            activeHumanCount={activeHumanPrincipalCount}
+            currentPrincipalId={authenticatedAgentId}
+            displayName={principalName}
+            canEdit={$authenticatedAgent?.principal_kind === "human"}
+            forbidden={sections.admins.forbidden}
+            onchanged={loadPeople}
+          />
         {/if}
-      </div>
+      </section>
 
-      {#if hostedMode}
-        <p class="mb-2 text-micro text-fg-muted">
-          To invite a person, go to
-          <a
-            class="font-medium text-accent-text hover:text-accent-text"
-            href={$page.data?.shellCapabilities?.peoplePath || "/"}
-            >{$page.data?.shellCapabilities?.peopleLabel || "your account"}</a
-          >.
-        </p>
-      {/if}
-      {#if inviteError}
-        <p
-          class="mb-2 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
-          role="alert"
-        >
-          {inviteError}
-        </p>
-      {/if}
-      {#if createdInviteToken}
-        <div
-          class="mb-2 space-y-2 rounded-md border border-ok bg-ok-soft px-3 py-2.5"
-          role="status"
-          data-invite-token-banner
-        >
-          <div class="flex items-start justify-between gap-3">
-            <p class="text-micro text-ok-text">
-              Invite created. Send this one-time token to the person; they paste
-              it under “Join with an invite token” when they sign in. It is not
-              shown again.
-            </p>
-            <button
-              class="shrink-0 text-micro text-fg-muted hover:text-fg"
-              type="button"
-              onclick={() => (createdInviteToken = "")}>Dismiss</button
+      <section id="people" class="scroll-mt-20" aria-labelledby="people-title">
+        <div class="mb-2 flex items-baseline justify-between gap-3">
+          <h2 id="people-title" class="text-meta font-semibold text-fg">
+            People
+            {#if humans.length}
+              <span class="ml-1 font-normal text-fg-muted">{humans.length}</span
+              >
+            {/if}
+          </h2>
+          {#if !hostedMode}
+            <Button
+              variant="secondary"
+              size="compact"
+              busy={creatingInvite}
+              onclick={inviteHuman}
+              >{creatingInvite ? "Creating invite…" : "Invite a person"}</Button
             >
-          </div>
-          <div class="flex items-center gap-1 rounded bg-bg px-2 py-1.5">
-            <code class="min-w-0 flex-1 break-all font-mono text-micro text-fg"
-              >{createdInviteToken}</code
-            >
-            <CopyButton value={createdInviteToken} label="Copy token" />
-          </div>
+          {/if}
         </div>
-      {/if}
 
-      {#if sections.principals.status === "error"}
-        <p
-          class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
-        >
-          {sections.principals.error}
-        </p>
-      {:else if sections.principals.status === "ready"}
-        <ul class="overflow-hidden rounded-md border border-line bg-bg-soft">
-          {#each humans as principal (principal.agent_id)}
-            {@const name = principalName(principal)}
-            {@const isYou = principal.agent_id === authenticatedAgentId}
-            <li
-              class="flex items-center gap-3 border-t border-line-subtle px-4 py-2 first:border-t-0 {principal.revoked
-                ? 'opacity-50'
-                : ''}"
-              data-principal={principal.agent_id}
-            >
-              <ActorAvatar label={name} seed={principal.agent_id} size="xs" />
-              <div class="min-w-0 flex-1">
-                <p class="truncate text-meta text-fg">
-                  {name}
-                  {#if isYou}<span class="ml-1 text-micro text-fg-muted"
-                      >(you)</span
-                    >{/if}
-                  {#if principal.revoked}<span
-                      class="ml-1 rounded bg-danger-soft px-1.5 py-0.5 text-micro text-danger-text"
-                      >Revoked</span
-                    >{/if}
-                </p>
-                <p class="flex items-center gap-1.5 text-micro text-fg-subtle">
-                  <span title={formatAbsoluteDateTime(principal.created_at)}
-                    >joined {formatAge(principal.created_at, now) === "<1m"
-                      ? "just now"
-                      : `${formatAge(principal.created_at, now)} ago`}</span
+        {#if hostedMode}
+          <p class="mb-2 text-micro text-fg-muted">
+            To invite a person, go to
+            <a
+              class="font-medium text-accent-text hover:text-accent-text"
+              href={$page.data?.shellCapabilities?.peoplePath || "/"}
+              >{$page.data?.shellCapabilities?.peopleLabel || "your account"}</a
+            >.
+          </p>
+        {/if}
+        {#if inviteError}
+          <p
+            class="mb-2 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
+            role="alert"
+          >
+            {inviteError}
+          </p>
+        {/if}
+        {#if createdInviteToken}
+          <div
+            class="mb-2 space-y-2 rounded-md border border-ok bg-ok-soft px-3 py-2.5"
+            role="status"
+            data-invite-token-banner
+          >
+            <div class="flex items-start justify-between gap-3">
+              <p class="text-micro text-ok-text">
+                Invite created. Send this one-time token to the person; they
+                paste it under “Join with an invite token” when they sign in. It
+                is not shown again.
+              </p>
+              <button
+                class="shrink-0 text-micro text-fg-muted hover:text-fg"
+                type="button"
+                onclick={() => (createdInviteToken = "")}>Dismiss</button
+              >
+            </div>
+            <div class="flex items-center gap-1 rounded bg-bg px-2 py-1.5">
+              <code
+                class="min-w-0 flex-1 break-all font-mono text-micro text-fg"
+                >{createdInviteToken}</code
+              >
+              <CopyButton value={createdInviteToken} label="Copy token" />
+            </div>
+          </div>
+        {/if}
+
+        {#if sections.principals.status === "error"}
+          <p
+            class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+          >
+            {sections.principals.error}
+          </p>
+        {:else if sections.principals.forbidden}
+          <p class="text-meta text-fg-muted" data-principals-forbidden>
+            Only workspace administrators can see the people in this workspace.
+          </p>
+        {:else if sections.principals.status === "ready"}
+          <ul class="overflow-hidden rounded-md border border-line bg-bg-soft">
+            {#each humans as principal (principal.agent_id)}
+              {@const name = principalName(principal)}
+              {@const isYou = principal.agent_id === authenticatedAgentId}
+              <li
+                class="flex items-center gap-3 border-t border-line-subtle px-4 py-2 first:border-t-0 {principal.revoked
+                  ? 'opacity-50'
+                  : ''}"
+                data-principal={principal.agent_id}
+              >
+                <ActorAvatar label={name} seed={principal.agent_id} size="xs" />
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-meta text-fg">
+                    {name}
+                    {#if isYou}<span class="ml-1 text-micro text-fg-muted"
+                        >(you)</span
+                      >{/if}
+                    {#if principal.revoked}<span
+                        class="ml-1 rounded bg-danger-soft px-1.5 py-0.5 text-micro text-danger-text"
+                        >Revoked</span
+                      >{/if}
+                  </p>
+                  <p
+                    class="flex items-center gap-1.5 text-micro text-fg-subtle"
                   >
-                  {#if principal.last_seen_at}
-                    <span aria-hidden="true">·</span>
-                    <span title={formatAbsoluteDateTime(principal.last_seen_at)}
-                      >seen {formatAge(principal.last_seen_at, now) === "<1m"
+                    <span title={formatAbsoluteDateTime(principal.created_at)}
+                      >joined {formatAge(principal.created_at, now) === "<1m"
                         ? "just now"
-                        : `${formatAge(principal.last_seen_at, now)} ago`}</span
+                        : `${formatAge(principal.created_at, now)} ago`}</span
                     >
-                  {/if}
-                  <span aria-hidden="true">·</span>
-                  <CopyableId
-                    value={principal.agent_id}
-                    label="Copy principal id"
-                  />
-                </p>
-              </div>
-              {#if !principal.revoked && !isYou}
+                    {#if principal.last_seen_at}
+                      <span aria-hidden="true">·</span>
+                      <span
+                        title={formatAbsoluteDateTime(principal.last_seen_at)}
+                        >seen {formatAge(principal.last_seen_at, now) === "<1m"
+                          ? "just now"
+                          : `${formatAge(principal.last_seen_at, now)} ago`}</span
+                      >
+                    {/if}
+                    <span aria-hidden="true">·</span>
+                    <CopyableId
+                      value={principal.agent_id}
+                      label="Copy principal id"
+                    />
+                  </p>
+                </div>
+                {#if !principal.revoked && !isYou}
+                  <button
+                    class="shrink-0 text-micro text-danger-text hover:underline"
+                    type="button"
+                    onclick={() => startPrincipalRevoke(principal)}
+                    >{activeHumanPrincipalCount === 1
+                      ? "Break glass…"
+                      : "Revoke…"}</button
+                  >
+                {/if}
+              </li>
+            {:else}
+              <li class="px-4 py-3 text-meta text-fg-muted">No people yet.</li>
+            {/each}
+          </ul>
+
+          {#if pendingInvites.length}
+            <p class="mb-1 mt-3 text-micro font-medium text-fg-muted">
+              Open invites
+            </p>
+            <ul
+              class="overflow-hidden rounded-md border border-line-subtle text-micro"
+            >
+              {#each pendingInvites as invite (invite.id)}
+                <li
+                  class="flex items-center gap-3 border-t border-line-subtle px-3 py-1.5 first:border-t-0"
+                  data-invite={invite.id}
+                >
+                  <span class="text-fg-muted"
+                    >Invite created {formatAge(invite.created_at, now) === "<1m"
+                      ? "just now"
+                      : `${formatAge(invite.created_at, now)} ago`}</span
+                  >
+                  <CopyableId value={invite.id} label="Copy invite id" />
+                  <button
+                    class="ml-auto shrink-0 text-danger-text hover:underline disabled:opacity-50"
+                    type="button"
+                    disabled={revokingInviteId === invite.id}
+                    onclick={() =>
+                      (revokeInviteConfirm = { open: true, id: invite.id })}
+                    >{revokingInviteId === invite.id
+                      ? "Revoking…"
+                      : "Revoke"}</button
+                  >
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        {/if}
+      </section>
+
+      {#if standaloneAgents.length}
+        <section aria-labelledby="standalone-title">
+          <h2
+            id="standalone-title"
+            class="mb-1 text-meta font-semibold text-fg"
+          >
+            Standalone agents
+            <span class="ml-1 font-normal text-fg-muted"
+              >{standaloneAgents.length}</span
+            >
+          </h2>
+          <p class="mb-2 text-micro text-fg-muted">
+            Registered before hosts and not adopted by one. They keep working
+            until revoked; enroll their machine to bring them under a host.
+          </p>
+          <ul class="overflow-hidden rounded-md border border-line bg-bg-soft">
+            {#each standaloneAgents as principal (principal.agent_id)}
+              <li
+                class="flex items-center gap-3 border-t border-line-subtle px-4 py-2 first:border-t-0"
+                data-standalone-agent={principal.agent_id}
+              >
+                <div class="min-w-0 flex-1">
+                  <a
+                    class="truncate text-meta text-fg hover:underline"
+                    href={workspaceHref(
+                      `/agents/${encodeURIComponent(principal.username || principal.agent_id)}`,
+                    )}>{principalName(principal)}</a
+                  >
+                  <p
+                    class="flex items-center gap-1.5 text-micro text-fg-subtle"
+                  >
+                    <span>@{principal.username}</span>
+                    <span aria-hidden="true">·</span>
+                    <CopyableId
+                      value={principal.agent_id}
+                      label="Copy agent id"
+                    />
+                  </p>
+                </div>
                 <button
                   class="shrink-0 text-micro text-danger-text hover:underline"
                   type="button"
                   onclick={() => startPrincipalRevoke(principal)}
-                  >{activeHumanPrincipalCount === 1
-                    ? "Break glass…"
-                    : "Revoke…"}</button
-                >
-              {/if}
-            </li>
-          {:else}
-            <li class="px-4 py-3 text-meta text-fg-muted">No people yet.</li>
-          {/each}
-        </ul>
-
-        {#if pendingInvites.length}
-          <p class="mb-1 mt-3 text-micro font-medium text-fg-muted">
-            Open invites
-          </p>
-          <ul
-            class="overflow-hidden rounded-md border border-line-subtle text-micro"
-          >
-            {#each pendingInvites as invite (invite.id)}
-              <li
-                class="flex items-center gap-3 border-t border-line-subtle px-3 py-1.5 first:border-t-0"
-                data-invite={invite.id}
-              >
-                <span class="text-fg-muted"
-                  >Invite created {formatAge(invite.created_at, now) === "<1m"
-                    ? "just now"
-                    : `${formatAge(invite.created_at, now)} ago`}</span
-                >
-                <CopyableId value={invite.id} label="Copy invite id" />
-                <button
-                  class="ml-auto shrink-0 text-danger-text hover:underline disabled:opacity-50"
-                  type="button"
-                  disabled={revokingInviteId === invite.id}
-                  onclick={() =>
-                    (revokeInviteConfirm = { open: true, id: invite.id })}
-                  >{revokingInviteId === invite.id
-                    ? "Revoking…"
-                    : "Revoke"}</button
+                  >Revoke…</button
                 >
               </li>
             {/each}
           </ul>
-        {/if}
+        </section>
       {/if}
-    </section>
 
-    {#if standaloneAgents.length}
-      <section aria-labelledby="standalone-title">
-        <h2 id="standalone-title" class="mb-1 text-meta font-semibold text-fg">
-          Standalone agents
-          <span class="ml-1 font-normal text-fg-muted"
-            >{standaloneAgents.length}</span
-          >
+      <section aria-labelledby="audit-title">
+        <h2 id="audit-title" class="mb-2 text-meta font-semibold text-fg">
+          Recent access events
         </h2>
-        <p class="mb-2 text-micro text-fg-muted">
-          Registered before hosts and not adopted by one. They keep working
-          until revoked; enroll their machine to bring them under a host.
-        </p>
-        <ul class="overflow-hidden rounded-md border border-line bg-bg-soft">
-          {#each standaloneAgents as principal (principal.agent_id)}
-            <li
-              class="flex items-center gap-3 border-t border-line-subtle px-4 py-2 first:border-t-0"
-              data-standalone-agent={principal.agent_id}
+        {#if sections.audit.status === "error"}
+          <p
+            class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+          >
+            {sections.audit.error}
+          </p>
+        {:else if sections.audit.forbidden}
+          <p class="text-meta text-fg-muted" data-audit-forbidden>
+            Only workspace administrators can see access events.
+          </p>
+        {:else if sections.audit.status === "ready"}
+          {#if auditEvents.length}
+            <ol
+              class="overflow-hidden rounded-md border border-line bg-bg-soft"
             >
-              <div class="min-w-0 flex-1">
-                <a
-                  class="truncate text-meta text-fg hover:underline"
-                  href={workspaceHref(
-                    `/agents/${encodeURIComponent(principal.username || principal.agent_id)}`,
-                  )}>{principalName(principal)}</a
+              {#each visibleAudit as event (event.event_id)}
+                <li
+                  class="group/audit flex items-center gap-3 border-t border-line-subtle px-4 py-1.5 first:border-t-0"
+                  data-audit-event={event.event_type}
                 >
-                <p class="flex items-center gap-1.5 text-micro text-fg-subtle">
-                  <span>@{principal.username}</span>
-                  <span aria-hidden="true">·</span>
-                  <CopyableId
-                    value={principal.agent_id}
-                    label="Copy agent id"
-                  />
-                </p>
+                  <p
+                    class="min-w-0 flex-1 text-meta text-fg [overflow-wrap:anywhere]"
+                  >
+                    {auditSentence(event)}
+                  </p>
+                  <span
+                    class="shrink-0 text-micro text-fg-subtle"
+                    title={formatAbsoluteDateTime(event.occurred_at)}
+                    >{formatAge(event.occurred_at, now) === "<1m"
+                      ? "just now"
+                      : `${formatAge(event.occurred_at, now)} ago`}</span
+                  >
+                  <span
+                    class="shrink-0 opacity-0 transition-opacity group-hover/audit:opacity-100 focus-within:opacity-100"
+                    ><CopyButton
+                      value={event.event_id}
+                      label="Copy event id"
+                      iconOnly
+                    /></span
+                  >
+                </li>
+              {/each}
+            </ol>
+            {#if auditEvents.length > AUDIT_PREVIEW || auditCursor}
+              <div class="mt-2 flex gap-3">
+                {#if !showAllAudit && auditEvents.length > AUDIT_PREVIEW}
+                  <button
+                    class="text-micro text-fg-muted hover:text-fg"
+                    type="button"
+                    onclick={() => (showAllAudit = true)}
+                    >Show {auditEvents.length - AUDIT_PREVIEW} more</button
+                  >
+                {:else if auditCursor}
+                  <button
+                    class="text-micro text-fg-muted hover:text-fg disabled:opacity-50"
+                    type="button"
+                    disabled={loadingMoreAudit}
+                    onclick={loadMoreAudit}
+                    >{loadingMoreAudit
+                      ? "Loading…"
+                      : "Load older events"}</button
+                  >
+                {/if}
               </div>
-              <button
-                class="shrink-0 text-micro text-danger-text hover:underline"
-                type="button"
-                onclick={() => startPrincipalRevoke(principal)}>Revoke…</button
-              >
-            </li>
-          {/each}
-        </ul>
+            {/if}
+          {:else}
+            <p
+              class="rounded-md border border-line bg-bg-soft px-4 py-3 text-meta text-fg-muted"
+            >
+              No access events yet.
+            </p>
+          {/if}
+        {/if}
       </section>
     {/if}
-
-    <section aria-labelledby="audit-title">
-      <h2 id="audit-title" class="mb-2 text-meta font-semibold text-fg">
-        Recent access events
-      </h2>
-      {#if sections.audit.status === "error"}
-        <p
-          class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
-        >
-          {sections.audit.error}
-        </p>
-      {:else if sections.audit.status === "ready"}
-        {#if auditEvents.length}
-          <ol class="overflow-hidden rounded-md border border-line bg-bg-soft">
-            {#each visibleAudit as event (event.event_id)}
-              <li
-                class="group/audit flex items-center gap-3 border-t border-line-subtle px-4 py-1.5 first:border-t-0"
-                data-audit-event={event.event_type}
-              >
-                <p
-                  class="min-w-0 flex-1 text-meta text-fg [overflow-wrap:anywhere]"
-                >
-                  {auditSentence(event)}
-                </p>
-                <span
-                  class="shrink-0 text-micro text-fg-subtle"
-                  title={formatAbsoluteDateTime(event.occurred_at)}
-                  >{formatAge(event.occurred_at, now) === "<1m"
-                    ? "just now"
-                    : `${formatAge(event.occurred_at, now)} ago`}</span
-                >
-                <span
-                  class="shrink-0 opacity-0 transition-opacity group-hover/audit:opacity-100 focus-within:opacity-100"
-                  ><CopyButton
-                    value={event.event_id}
-                    label="Copy event id"
-                    iconOnly
-                  /></span
-                >
-              </li>
-            {/each}
-          </ol>
-          {#if auditEvents.length > AUDIT_PREVIEW || auditCursor}
-            <div class="mt-2 flex gap-3">
-              {#if !showAllAudit && auditEvents.length > AUDIT_PREVIEW}
-                <button
-                  class="text-micro text-fg-muted hover:text-fg"
-                  type="button"
-                  onclick={() => (showAllAudit = true)}
-                  >Show {auditEvents.length - AUDIT_PREVIEW} more</button
-                >
-              {:else if auditCursor}
-                <button
-                  class="text-micro text-fg-muted hover:text-fg disabled:opacity-50"
-                  type="button"
-                  disabled={loadingMoreAudit}
-                  onclick={loadMoreAudit}
-                  >{loadingMoreAudit ? "Loading…" : "Load older events"}</button
-                >
-              {/if}
-            </div>
-          {/if}
-        {:else}
-          <p
-            class="rounded-md border border-line bg-bg-soft px-4 py-3 text-meta text-fg-muted"
-          >
-            No access events yet.
-          </p>
-        {/if}
-      {/if}
-    </section>
   </div>
 {/if}
 

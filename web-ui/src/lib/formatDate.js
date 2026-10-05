@@ -17,6 +17,25 @@ export function formatAbsoluteDateTime(isoString) {
 }
 
 /**
+ * Format an ISO 8601 instant as a local calendar date, with no time of day.
+ * Returns "" for null/undefined or unparseable inputs.
+ *
+ * For dates where the hour carries no meaning (when someone joined, when a
+ * grant was made), so the reading line is not padded with "4:00 PM".
+ */
+export function formatAbsoluteDate(isoString) {
+  if (!isoString) return "";
+  const date = new Date(isoString);
+  if (isNaN(date.getTime())) return "";
+
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+/**
  * Format an ISO 8601 timestamp as a human-readable relative or absolute date.
  * Returns "" for null/undefined inputs; returns the raw value if not parseable.
  *

@@ -10,10 +10,10 @@ import {
 const HOSTS = [
   {
     id: "host_1",
-    slug: "m5-mbp",
+    slug: "build-runner",
     agents: [
-      { id: "agent-codex", handle: "codex.m5-mbp" },
-      { id: "agent-claude", handle: "claude.m5-mbp" },
+      { id: "agent-runner-a", handle: "runner-a.build-runner" },
+      { id: "agent-runner-b", handle: "runner-b.build-runner" },
     ],
   },
 ];
@@ -43,22 +43,22 @@ const PRINCIPALS = [
     revoked: true,
   },
   {
-    agent_id: "agent-codex",
-    actor_id: "actor-codex",
-    username: "codex.m5-mbp",
+    agent_id: "agent-runner-a",
+    actor_id: "actor-runner-a",
+    username: "runner-a.build-runner",
     principal_kind: "agent",
     revoked: false,
   },
   {
-    agent_id: "agent-claude",
-    actor_id: "actor-claude",
-    username: "claude.m5-mbp",
+    agent_id: "agent-runner-b",
+    actor_id: "actor-runner-b",
+    username: "runner-b.build-runner",
     principal_kind: "agent",
     revoked: false,
   },
   {
     agent_id: "agent-retired",
-    username: "retired.m5-mbp",
+    username: "retired.build-runner",
     principal_kind: "agent",
     revoked: true,
   },
@@ -66,10 +66,10 @@ const PRINCIPALS = [
 
 const ADMINS = [
   {
-    principal_id: "agent-codex",
-    actor_id: "actor-codex",
-    username: "codex.m5-mbp",
-    host_slug: "m5-mbp",
+    principal_id: "agent-runner-a",
+    actor_id: "actor-runner-a",
+    username: "runner-a.build-runner",
+    host_slug: "build-runner",
     auth_admin: true,
   },
 ];
@@ -79,27 +79,27 @@ const AUDIT = [
     event_id: "e1",
     event_type: "auth_admin_granted",
     occurred_at: "2026-03-10T09:00:00Z",
-    subject_agent_id: "agent-codex",
-    subject_actor_id: "actor-codex",
+    subject_agent_id: "agent-runner-a",
+    subject_actor_id: "actor-runner-a",
   },
   {
     event_id: "e0",
     event_type: "auth_admin_granted",
     occurred_at: "2026-03-02T09:00:00Z",
-    subject_agent_id: "agent-codex",
+    subject_agent_id: "agent-runner-a",
   },
   {
     event_id: "e2",
     event_type: "host_enroll_approved",
     occurred_at: "2026-03-11T09:00:00Z",
-    subject_agent_id: "agent-claude",
+    subject_agent_id: "agent-runner-b",
   },
 ];
 
 const names = {
   "actor-maya": "Maya Chen",
   "actor-alex": "Alex Ruiz",
-  "actor-codex": "Codex on m5-mbp",
+  "actor-runner-a": "Runner A on build-runner",
 };
 const displayName = (principal) =>
   names[principal?.actor_id] ?? principal?.username ?? "";
@@ -107,9 +107,31 @@ const displayName = (principal) =>
 describe("grantTimesFromAudit", () => {
   it("keeps the newest grant per principal and ignores other events", () => {
     const times = grantTimesFromAudit(AUDIT);
-    expect(times.get("agent-codex")).toBe("2026-03-10T09:00:00Z");
-    expect(times.get("actor-codex")).toBe("2026-03-10T09:00:00Z");
-    expect(times.has("agent-claude")).toBe(false);
+    expect(times.get("agent-runner-a")).toBe("2026-03-10T09:00:00Z");
+    expect(times.has("agent-runner-b")).toBe(false);
+  });
+
+  it("keys grants by principal, never by actor", () => {
+    // One actor can own several agent principals on different hosts, so an
+    // actor key would report one principal's grant date as another's.
+    const times = grantTimesFromAudit(AUDIT);
+    expect(times.has("actor-runner-a")).toBe(false);
+  });
+
+  it("gives no date to a sibling principal of an actor that was granted", () => {
+    const rows = buildAdminRows({
+      admins: [
+        {
+          principal_id: "agent-sibling",
+          actor_id: "actor-runner-a",
+          username: "runner-c.other-host",
+        },
+      ],
+      principals: [],
+      hosts: [],
+      auditEvents: AUDIT,
+    });
+    expect(rows[0].grantedAt).toBe("");
   });
 
   it("tolerates a missing or non-array audit list", () => {
@@ -133,7 +155,12 @@ describe("buildAdminRows", () => {
     ).toEqual([
       ["human", "Alex Ruiz", "", "2026-02-01T10:00:00Z"],
       ["human", "Maya Chen", "", "2026-03-01T10:00:00Z"],
-      ["agent", "Codex on m5-mbp", "m5-mbp", "2026-03-10T09:00:00Z"],
+      [
+        "agent",
+        "Runner A on build-runner",
+        "build-runner",
+        "2026-03-10T09:00:00Z",
+      ],
     ]);
     expect(rows.find((row) => row.name === "Maya Chen").isYou).toBe(true);
     expect(rows.find((row) => row.name === "Alex Ruiz").isYou).toBe(false);
@@ -189,11 +216,15 @@ describe("buildAdminRows", () => {
 
   it("recovers the host from the roster when the grant omits it", () => {
     const rows = buildAdminRows({
-      admins: [{ principal_id: "agent-codex", username: "codex.m5-mbp" }],
+      admins: [
+        { principal_id: "agent-runner-a", username: "runner-a.build-runner" },
+      ],
       principals: PRINCIPALS,
       hosts: HOSTS,
     });
-    expect(rows.find((row) => row.kind === "agent").hostSlug).toBe("m5-mbp");
+    expect(rows.find((row) => row.kind === "agent").hostSlug).toBe(
+      "build-runner",
+    );
   });
 });
 
@@ -207,9 +238,9 @@ describe("grantCandidates", () => {
       }),
     ).toEqual([
       {
-        principalId: "agent-claude",
-        username: "claude.m5-mbp",
-        hostSlug: "m5-mbp",
+        principalId: "agent-runner-b",
+        username: "runner-b.build-runner",
+        hostSlug: "build-runner",
       },
     ]);
   });
@@ -219,18 +250,21 @@ describe("grantCandidates", () => {
       grantCandidates({ principals: PRINCIPALS, admins: [], hosts: HOSTS })
         .map((candidate) => candidate.username)
         .sort(),
-    ).toEqual(["claude.m5-mbp", "codex.m5-mbp"]);
+    ).toEqual(["runner-a.build-runner", "runner-b.build-runner"]);
   });
 });
 
 describe("hostForTarget", () => {
   it("resolves a host from a principal id or a username", () => {
     expect(
-      hostForTarget("agent-claude", { principals: PRINCIPALS, hosts: HOSTS }),
-    ).toBe("m5-mbp");
+      hostForTarget("agent-runner-b", { principals: PRINCIPALS, hosts: HOSTS }),
+    ).toBe("build-runner");
     expect(
-      hostForTarget("claude.m5-mbp", { principals: PRINCIPALS, hosts: HOSTS }),
-    ).toBe("m5-mbp");
+      hostForTarget("runner-b.build-runner", {
+        principals: PRINCIPALS,
+        hosts: HOSTS,
+      }),
+    ).toBe("build-runner");
   });
 
   it("returns nothing for an agent on no known host", () => {

@@ -301,12 +301,19 @@ test("badges pending access on the account trigger and the Access item", async (
   const trigger = page.locator("[data-access-trigger-count]");
   await expect(trigger).toHaveText("1");
   await expect(trigger).toHaveAttribute("title", "1 access request waiting");
+  // The trigger's own aria-label suppresses descendant names, so the number
+  // has to be in the label or it reaches no screen reader at all.
+  await expect(
+    page.getByRole("button", {
+      name: "Account menu, 1 access request waiting",
+    }),
+  ).toBeVisible();
   // The page agrees with the badge: two rows, one decision.
   await expect(page.locator("[data-pending-access-count]")).toHaveText("1");
   await expect(page.locator("[data-host-enrollment]")).toHaveCount(2);
 
   // And on the Access item itself, once the menu is open.
-  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("button", { name: /^Account menu/ }).click();
   await expect(page.locator("[data-access-nav-count]")).toHaveText("1");
 
   // Deciding the last request clears the badge rather than showing a zero.
@@ -318,4 +325,7 @@ test("badges pending access on the account trigger and the Access item", async (
   await page.getByRole("button", { name: "Deny", exact: true }).click();
   await expect(page.locator("[data-access-trigger-count]")).toHaveCount(0);
   await expect(page.locator("[data-pending-access]")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Account menu" }),
+  ).toBeVisible();
 });
