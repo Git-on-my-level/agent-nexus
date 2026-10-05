@@ -49,6 +49,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         config = load_config(args.config)
+        publish_report = report_publication_enabled(config)
         selected = parse_only(args.only)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
@@ -77,20 +78,24 @@ def main(argv: list[str] | None = None) -> int:
         state = {}
     state["workspace"] = config["base_url"].rstrip("/")
     generated_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    snapshot = headline_snapshot({read["name"]: read for read in reads}, now)
-    shown_history = record_history(list(state.get("history") or []), at=generated_at, metrics=snapshot)
-    report = build_report(
-        reads, generated_at=generated_at, now=now, hosts=config.get("hosts") or [], history=shown_history,
-        operator=operator_name(config),
-    )
-    try:
-        add_unsorted_panel(report, plans, reads)
-    except ValueError as exc:
-        print(str(exc), file=sys.stderr)
-        return 1
-    node_bin = node_binary(config)
-    validator = validator_script(config)
-    valid, diagnostics = validate_report(report, node_bin, validator)
+    shown_history = None
+    report = None
+    valid, diagnostics = True, []
+    if publish_report:
+        snapshot = headline_snapshot({read["name"]: read for read in reads}, now)
+        shown_history = record_history(list(state.get("history") or []), at=generated_at, metrics=snapshot)
+        report = build_report(
+            reads, generated_at=generated_at, now=now, hosts=config.get("hosts") or [], history=shown_history,
+            operator=operator_name(config),
+        )
+        try:
+            add_unsorted_panel(report, plans, reads)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        node_bin = node_binary(config)
+        validator = validator_script(config)
+        valid, diagnostics = validate_report(report, node_bin, validator)
     if args.dry_run:
         if args.quiet:
             return _quiet_status(reads, valid=valid, diagnostics=diagnostics, errors=[])
@@ -100,28 +105,33 @@ def main(argv: list[str] | None = None) -> int:
             "readers": [_reader_summary(read) for read in reads],
             "mapping": mapping,
             "planned_writes": plans,
-            "report_valid": valid,
+            "report_publication_enabled": publish_report,
+            "report_valid": valid if publish_report else None,
             "report_diagnostics": diagnostics,
             "report": report,
         }, sys.stdout, indent=2)
         sys.stdout.write("\n")
         return 0 if valid and not _failure_lines(reads) else 1
-    if not valid:
+    if publish_report and not valid:
         if args.quiet:
             print("report failed validation: " + "; ".join(diagnostics[:4]), file=sys.stderr)
         else:
             print(json.dumps({"valid": False, "errors": diagnostics}), file=sys.stderr)
         return 1
     assert client is not None
-    state["history"] = shown_history
+    if shown_history is not None:
+        state["history"] = shown_history
     summary = apply_ingestion(client, plans)
     summary["readers"] = [_reader_summary(read) for read in reads]
-    try:
-        summary.update(publish(client, config, state, report, node_bin, validator))
-    except (AnxError, OSError, ValueError) as exc:
-        summary["errors"].append(str(exc)[:300])
-        save_state(args.state, state)
-        return _finish(summary, reads, quiet=args.quiet)
+    if publish_report:
+        try:
+            summary.update(publish(client, config, state, report, node_bin, validator))
+        except (AnxError, OSError, ValueError) as exc:
+            summary["errors"].append(str(exc)[:300])
+            save_state(args.state, state)
+            return _finish(summary, reads, quiet=args.quiet)
+    else:
+        summary["report_published"] = False
     save_state(args.state, state)
     return _finish(summary, reads, quiet=args.quiet)
 
@@ -164,6 +174,8 @@ def _failure_lines(reads: list[dict]) -> list[str]:
 
 
 def publish(client: AnxClient, config: dict, state: dict, report: dict, node_bin: str, validator: Path) -> dict:
+    if not report_publication_enabled(config):
+        return {"report_published": False}
     ref = state.get("dashboard_ref") or find_dashboard(client.docs_list())
     with tempfile.TemporaryDirectory() as directory:
         path = str(Path(directory) / "fleet-dashboard.json")
@@ -217,7 +229,19 @@ def load_config(path: str) -> dict:
     for key in ("base_url", "agent", "topic"):
         if not data.get(key):
             raise ValueError(f"config is missing {key}")
+    report_publication_enabled(data)
     return data
+
+
+def report_publication_enabled(config: dict) -> bool:
+    """Report publication stays enabled unless explicitly disabled."""
+    report = config.get("report", {})
+    if not isinstance(report, dict):
+        raise ValueError("config report must be an object")
+    publish = report.get("publish", True)
+    if not isinstance(publish, bool):
+        raise ValueError("config report.publish must be true or false")
+    return publish
 
 
 def parse_only(value: str) -> list[str]:
