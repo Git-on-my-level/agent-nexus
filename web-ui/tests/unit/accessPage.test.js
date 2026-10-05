@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/svelte";
+import { get } from "svelte/store";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const pageStore = vi.hoisted(() => {
@@ -76,6 +77,10 @@ vi.mock("$lib/coreClient", () => ({
 }));
 
 import { authenticatedAgent } from "../../src/lib/authSession.js";
+import {
+  pendingAccessCount,
+  resetPendingAccessCount,
+} from "../../src/lib/pendingAccessCount.js";
 import AccessPage from "../../src/routes/o/[organization]/w/[workspace]/access/+page.svelte";
 
 const PENDING = {
@@ -126,6 +131,7 @@ describe("access page", () => {
   afterEach(() => {
     cleanup();
     authenticatedAgent.set(null);
+    resetPendingAccessCount();
     vi.clearAllMocks();
   });
 
@@ -296,5 +302,126 @@ describe("access page", () => {
       );
     });
     expect(await screen.findByText(/Approved m5-mbp/)).toBeTruthy();
+  });
+
+  it("lists people and granted agents together, with host and grant date", async () => {
+    coreClientMock.listPrincipals.mockResolvedValue({
+      principals: [
+        {
+          agent_id: "agent-human-admin",
+          actor_id: "actor-human-admin",
+          username: "admin@example.com",
+          principal_kind: "human",
+          created_at: "2026-03-01T10:00:00Z",
+          revoked: false,
+        },
+        {
+          agent_id: "agent-fleet",
+          actor_id: "actor-fleet",
+          username: "fleet.host-a",
+          principal_kind: "agent",
+          revoked: false,
+        },
+      ],
+      active_human_principal_count: 1,
+    });
+    coreClientMock.listAuthAdmins.mockResolvedValue({
+      admins: [
+        {
+          principal_id: "agent-fleet",
+          actor_id: "actor-fleet",
+          username: "fleet.host-a",
+          host_slug: "host-a",
+          auth_admin: true,
+        },
+      ],
+    });
+    coreClientMock.listAuthAudit.mockResolvedValue({
+      events: [
+        {
+          event_id: "authevt_1",
+          event_type: "auth_admin_granted",
+          occurred_at: "2026-03-14T09:30:00Z",
+          subject_agent_id: "agent-fleet",
+        },
+      ],
+    });
+    render(AccessPage, { props: { data: { outOfWorkspaceMode: "local" } } });
+
+    const admins = await screen.findByRole("region", {
+      name: /^Administrators/,
+    });
+    // The person holds administration implicitly; the agent holds a grant.
+    let rows = [];
+    await waitFor(() => {
+      rows = [...admins.querySelectorAll("[data-auth-admin]")];
+      expect(rows.map((row) => row.dataset.authAdmin)).toEqual([
+        "agent-human-admin",
+        "agent-fleet",
+      ]);
+    });
+    expect(rows[0].textContent).toContain("admin@example.com");
+    expect(rows[0].textContent).toContain("Person");
+    expect(rows[0].textContent).toContain("admin since joining");
+    expect(rows[1].textContent).toContain("fleet.host-a");
+    expect(rows[1].textContent).toContain("Agent");
+    expect(rows[1].textContent).toContain("host-a");
+    expect(rows[1].textContent).toMatch(/since .*2026/);
+    expect(admins.textContent).toContain("2");
+  });
+
+  it("omits an agent's grant date rather than guessing when audit does not reach it", async () => {
+    coreClientMock.listAuthAdmins.mockResolvedValue({
+      admins: [{ principal_id: "agent-fleet", username: "fleet.host-a" }],
+    });
+    coreClientMock.listAuthAudit.mockResolvedValue({ events: [] });
+    render(AccessPage, { props: { data: { outOfWorkspaceMode: "local" } } });
+    await screen.findByText("fleet.host-a");
+    const row = document.querySelector('[data-auth-admin="agent-fleet"]');
+    expect(row.textContent).not.toContain("since");
+  });
+
+  it("says administration is not visible instead of showing an error on 403", async () => {
+    const refused = new Error("forbidden");
+    refused.status = 403;
+    coreClientMock.listAuthAdmins.mockRejectedValue(refused);
+    coreClientMock.listPendingHostEnrollments.mockRejectedValue(refused);
+    render(AccessPage, { props: { data: { outOfWorkspaceMode: "local" } } });
+    expect(
+      await screen.findByText(
+        "Only workspace administrators can see who administers this workspace.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Only workspace administrators can see access requests.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    // No badge for a reader who could not act on the number anyway.
+    await waitFor(() =>
+      expect(get(pendingAccessCount)).toEqual({
+        workspace: "main",
+        count: null,
+        forbidden: true,
+      }),
+    );
+  });
+
+  it("publishes the pending decision count for the shell badge", async () => {
+    coreClientMock.listPendingHostEnrollments.mockResolvedValue({
+      enrollments: [PENDING, { ...PENDING, id: "henr_2", status: "approved" }],
+    });
+    render(AccessPage, { props: { data: { outOfWorkspaceMode: "local" } } });
+    // Two rows wait, but only one of them waits on the reader.
+    await waitFor(() => expect(get(pendingAccessCount).count).toBe(1));
+    expect(get(pendingAccessCount).workspace).toBe("main");
+    await waitFor(() =>
+      expect(
+        document
+          .querySelector("[data-pending-access-count]")
+          ?.textContent?.trim(),
+      ).toBe("1"),
+    );
   });
 });

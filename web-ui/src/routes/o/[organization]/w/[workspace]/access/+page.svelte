@@ -15,6 +15,12 @@
   import { coreClient } from "$lib/coreClient";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
   import {
+    claimPendingAccessCount,
+    countPendingAccessItems,
+    publishPendingAccessForbidden,
+    publishPendingAccessSources,
+  } from "$lib/pendingAccessCount.js";
+  import {
     isWorkspaceTourArrived,
     markWorkspaceTourArrived,
   } from "$lib/tourState";
@@ -56,13 +62,13 @@
 
   /** Section state: each section loads and fails on its own. */
   let sections = $state({
-    hosts: { status: "idle", error: "" },
-    pending: { status: "idle", error: "" },
-    tokens: { status: "idle", error: "" },
-    admins: { status: "idle", error: "" },
-    principals: { status: "idle", error: "" },
-    invites: { status: "idle", error: "" },
-    audit: { status: "idle", error: "" },
+    hosts: { status: "idle", error: "", forbidden: false },
+    pending: { status: "idle", error: "", forbidden: false },
+    tokens: { status: "idle", error: "", forbidden: false },
+    admins: { status: "idle", error: "", forbidden: false },
+    principals: { status: "idle", error: "", forbidden: false },
+    invites: { status: "idle", error: "", forbidden: false },
+    audit: { status: "idle", error: "", forbidden: false },
   });
 
   let hosts = $state([]);
@@ -118,6 +124,15 @@
         !hostAgentIds.has(principal.agent_id),
     ),
   );
+  // Administration reaches people implicitly and agents by explicit grant;
+  // the heading counts both, the same way the list shows both.
+  let adminCount = $derived(
+    humans.filter((principal) => !principal.revoked).length + admins.length,
+  );
+  // What the shell badge counts: requests the reader can still decide.
+  let pendingDecisionCount = $derived(
+    countPendingAccessItems({ enrollments: pending }),
+  );
   let pendingInvites = $derived(
     invites.filter((invite) => !invite.revoked_at && !invite.consumed_at),
   );
@@ -158,16 +173,36 @@
     );
   }
 
+  // Administration-only reads answer 403 for a principal without it. That is
+  // an answer, not a failure: the section says so plainly instead of showing
+  // a red error the reader cannot act on.
+  function isForbidden(error) {
+    const status = Number(error?.status);
+    if (status === 401 || status === 403) return true;
+    const code = String(error?.body?.error?.code ?? "");
+    return code === "auth_admin_required" || code === "auth_required";
+  }
+
   function settle(key, result, apply) {
     if (result.status === "fulfilled") {
       apply(result.value);
-      sections[key] = { status: "ready", error: "" };
+      sections[key] = { status: "ready", error: "", forbidden: false };
+    } else if (isForbidden(result.reason)) {
+      sections[key] = { status: "ready", error: "", forbidden: true };
     } else {
       sections[key] = {
         status: "error",
         error: message(result.reason, "This did not load."),
+        forbidden: false,
       };
     }
+  }
+
+  // The shell badge and this page show the same number, from the same read.
+  function publishPending(forbidden = false) {
+    if (!workspaceSlug) return;
+    if (forbidden) publishPendingAccessForbidden(workspaceSlug);
+    else publishPendingAccessSources(workspaceSlug, { enrollments: pending });
   }
 
   async function loadHosts() {
@@ -184,6 +219,9 @@
     settle("pending", pendingResult, (value) => {
       pending = value?.enrollments ?? [];
     });
+    publishPending(
+      pendingResult.status === "rejected" && isForbidden(pendingResult.reason),
+    );
     settle("tokens", tokensResult, (value) => {
       tokens = value?.enrollment_tokens ?? [];
     });
@@ -228,12 +266,18 @@
         next.length !== pending.length ||
         next.some((entry, index) => entry.id !== pending[index]?.id);
       pending = next;
-      sections.pending = { status: "ready", error: "" };
+      sections.pending = { status: "ready", error: "", forbidden: false };
+      publishPending();
       if (changed) {
         void loadHosts();
         void refreshAgentRoster();
       }
-    } catch {
+    } catch (error) {
+      if (isForbidden(error)) {
+        sections.pending = { status: "ready", error: "", forbidden: true };
+        publishPending(true);
+        return;
+      }
       // The section keeps its last state; the next poll tries again.
     }
   }
@@ -248,6 +292,7 @@
         await coreClient.denyHostEnrollment(enrollment.id);
       }
       pending = pending.filter((entry) => entry.id !== enrollment.id);
+      publishPending();
       enrollmentNotice =
         action === "approve"
           ? `Approved ${enrollment.requested_slug}. It appears under Hosts once the machine finishes enrolling.`
@@ -418,6 +463,9 @@
 
   onMount(() => {
     if (!canManageAccess) return;
+    // This page polls pending access every few seconds; while it is open the
+    // shell badge reads that instead of polling a second time.
+    const releaseCount = claimPendingAccessCount();
     void loadAll();
     // Host cards show agent states; core's roster stream says when they move.
     const stopAgentChanges = liveAgentChanges({
@@ -432,6 +480,7 @@
     return () => {
       clearInterval(poll);
       stopAgentChanges();
+      releaseCount();
     };
   });
 </script>
@@ -514,19 +563,29 @@
       </p>
     {/if}
 
+    <!-- Everything waiting on a decision, above everything that is already
+         settled. `#host-requests` is the anchor the CLI's verification URL
+         and the agent pages link to, so it stays on this section. -->
     {#if pending.length}
       <section
         id="host-requests"
         class="scroll-mt-20"
-        aria-labelledby="host-requests-title"
+        aria-labelledby="pending-access-title"
+        data-pending-access
       >
         <h2
-          id="host-requests-title"
+          id="pending-access-title"
           class="mb-2 flex items-center gap-2 text-meta font-semibold text-fg"
         >
           <span class="h-2 w-2 rounded-full bg-warn" aria-hidden="true"></span>
-          Awaiting enrollment
-          <span class="font-normal text-fg-muted">{pending.length}</span>
+          <!-- An approved ceremony is waiting on the machine, not on the
+               reader, so it does not claim to need a decision. -->
+          {pendingDecisionCount ? "Waiting for you" : "Enrollment in progress"}
+          {#if pendingDecisionCount}
+            <span class="font-normal text-fg-muted" data-pending-access-count
+              >{pendingDecisionCount}</span
+            >
+          {/if}
         </h2>
         <ul
           class="divide-y divide-line-subtle overflow-hidden rounded-md border bg-bg-soft"
@@ -546,6 +605,10 @@
           {/each}
         </ul>
       </section>
+    {:else if sections.pending.forbidden}
+      <p class="text-meta text-fg-muted" data-pending-access-forbidden>
+        Only workspace administrators can see access requests.
+      </p>
     {:else if sections.pending.status === "error"}
       <p
         class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
@@ -668,9 +731,16 @@
       {/if}
     </section>
 
-    <section class="space-y-3" aria-labelledby="agent-admin-heading">
-      <h2 id="agent-admin-heading" class="text-body font-semibold text-fg">
-        Agent administration
+    <section
+      id="admins"
+      class="scroll-mt-20 space-y-3"
+      aria-labelledby="admins-title"
+    >
+      <h2 id="admins-title" class="text-meta font-semibold text-fg">
+        Administrators
+        {#if sections.admins.status === "ready" && !sections.admins.forbidden && adminCount}
+          <span class="ml-1 font-normal text-fg-muted">{adminCount}</span>
+        {/if}
       </h2>
       {#if sections.admins.status === "error"}
         <p class="text-meta text-danger-text" role="alert">
@@ -681,7 +751,11 @@
           {admins}
           {principals}
           {hosts}
+          {auditEvents}
+          currentPrincipalId={authenticatedAgentId}
+          displayName={principalName}
           canEdit={$authenticatedAgent?.principal_kind === "human"}
+          forbidden={sections.admins.forbidden}
           onchanged={loadPeople}
         />
       {/if}

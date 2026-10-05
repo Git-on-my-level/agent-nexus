@@ -60,6 +60,9 @@ export const settingsNavGroups = [
         href: "/access",
         icon: "access",
         hint: "Hosts, people and invites",
+        // The shell shows how many access requests wait for a decision
+        // beside this item, and on the account trigger that hides it.
+        count: "access-pending",
       },
       {
         label: "Secrets",
