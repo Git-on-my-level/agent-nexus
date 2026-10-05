@@ -75,6 +75,14 @@ format: ## Apply formatting in both core and web-ui
 contract-gen: ## Regenerate OpenAPI-derived contract artifacts
 	./scripts/contract-gen
 
+.PHONY: route-inventory route-inventory-check
+route-inventory: ## Generate method/path/core access class inventory from contracts and router
+	cd core && go run ./cmd/route-inventory
+
+route-inventory-check: route-inventory ## Fail if the committed route inventory is stale
+	git cat-file -e HEAD:contracts/gen/meta/routes.json
+	git diff --exit-code -- contracts/gen/meta/routes.json
+
 contract-check: ## Regenerate contracts and validate working tree (Go tests + TS compile)
 	./scripts/contract-check
 

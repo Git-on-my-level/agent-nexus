@@ -1,0 +1,1076 @@
+{
+  "version": 1,
+  "route_count": 214,
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/actors",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/actors",
+      "access_class": "dev_only_legacy_actor_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/adapters",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/adapters",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "DELETE",
+      "path": "/adapters/{name}",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/adapters/{name}/revoke",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/adapters/{name}/token",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/agent-inbox/answers/read",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/agent-inbox/asks",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/agent-notifications",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/agent-notifications/dismiss",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/agent-notifications/read",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/agent-wakeups/claim",
+      "access_class": "public_auth_ceremony"
+    },
+    {
+      "method": "POST",
+      "path": "/agent-wakeups/complete",
+      "access_class": "public_auth_ceremony"
+    },
+    {
+      "method": "POST",
+      "path": "/agent-wakeups/fail",
+      "access_class": "public_auth_ceremony"
+    },
+    {
+      "method": "GET",
+      "path": "/agents",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/agents/me",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "PATCH",
+      "path": "/agents/me/presence",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/agents/{agent_id}",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/artifacts",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/artifacts",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/artifacts/attachments",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/artifacts/{artifact_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/artifacts/{artifact_id}/archive",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/artifacts/{artifact_id}/content",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/artifacts/{artifact_id}/purge",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/artifacts/{artifact_id}/restore",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/artifacts/{artifact_id}/trash",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/artifacts/{artifact_id}/unarchive",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/admins",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/admins/{principal_id}/grant",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/admins/{principal_id}/revoke",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/audit",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/bootstrap/status",
+      "access_class": "public_auth_ceremony"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/hosts/enrollment-tokens",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/hosts/enrollment-tokens",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/hosts/enrollment-tokens/{token_id}/revoke",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/hosts/enrollments",
+      "access_class": "public_auth_ceremony"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/hosts/enrollments/headless",
+      "access_class": "public_auth_ceremony"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/hosts/enrollments/pending",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/hosts/enrollments/{enrollment_id}",
+      "access_class": "public_auth_ceremony"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/hosts/enrollments/{enrollment_id}/approve",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/hosts/enrollments/{enrollment_id}/complete",
+      "access_class": "public_auth_ceremony"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/hosts/enrollments/{enrollment_id}/deny",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/invites",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/invites",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/invites/{invite_id}/revoke",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/passkey/dev/login",
+      "access_class": "public_auth_ceremony"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/passkey/dev/register",
+      "access_class": "public_auth_ceremony"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/passkey/login/options",
+      "access_class": "public_auth_ceremony"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/passkey/login/verify",
+      "access_class": "public_auth_ceremony"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/passkey/register/options",
+      "access_class": "public_auth_ceremony"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/passkey/register/verify",
+      "access_class": "public_auth_ceremony"
+    },
+    {
+      "method": "GET",
+      "path": "/auth/principals",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/principals/{principal_id}/revoke",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/token",
+      "access_class": "public_auth_ceremony"
+    },
+    {
+      "method": "GET",
+      "path": "/boards",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/boards",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/boards/{board_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "PATCH",
+      "path": "/boards/{board_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/boards/{board_id}/archive",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/boards/{board_id}/cards",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/boards/{board_id}/cards",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/boards/{board_id}/cards/batch",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/boards/{board_id}/cards/{card_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/boards/{board_id}/purge",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/boards/{board_id}/restore",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/boards/{board_id}/trash",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/boards/{board_id}/unarchive",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/boards/{board_id}/workspace",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/cards",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/cards",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/cards/{card_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "PATCH",
+      "path": "/cards/{card_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/cards/{card_id}/archive",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/cards/{card_id}/move",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/cards/{card_id}/plan",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "PUT",
+      "path": "/cards/{card_id}/plan",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/cards/{card_id}/purge",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/cards/{card_id}/restore",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/cards/{card_id}/revisions",
+      "access_class": "handler_defined"
+    },
+    {
+      "method": "POST",
+      "path": "/cards/{card_id}/revisions",
+      "access_class": "handler_defined"
+    },
+    {
+      "method": "GET",
+      "path": "/cards/{card_id}/revisions/{revision_id}",
+      "access_class": "handler_defined"
+    },
+    {
+      "method": "GET",
+      "path": "/cards/{card_id}/timeline",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/cards/{card_id}/trash",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/derived/rebuild",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/docs",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/docs",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/docs/search",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/docs/{document_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "PATCH",
+      "path": "/docs/{document_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "PUT",
+      "path": "/docs/{document_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/docs/{document_id}/archive",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/docs/{document_id}/comments",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/docs/{document_id}/comments",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "DELETE",
+      "path": "/docs/{document_id}/comments/{comment_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "PATCH",
+      "path": "/docs/{document_id}/comments/{comment_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/docs/{document_id}/comments/{comment_id}/replies",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/docs/{document_id}/purge",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/docs/{document_id}/report",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/docs/{document_id}/restore",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/docs/{document_id}/revisions",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/docs/{document_id}/revisions",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/docs/{document_id}/revisions/{revision_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/docs/{document_id}/trash",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/docs/{document_id}/unarchive",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/events",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/events",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/events/{event_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/events/{event_id}/archive",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/events/{event_id}/restore",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/events/{event_id}/trash",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/events/{event_id}/unarchive",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "access_class": "always_public"
+    },
+    {
+      "method": "POST",
+      "path": "/home/read",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/home/unread",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/hosts",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "DELETE",
+      "path": "/hosts/{host_id}",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/hosts/{host_id}",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "PATCH",
+      "path": "/hosts/{host_id}",
+      "access_class": "public_auth_ceremony"
+    },
+    {
+      "method": "POST",
+      "path": "/hosts/{host_id}/bridge/check-in",
+      "access_class": "public_auth_ceremony"
+    },
+    {
+      "method": "GET",
+      "path": "/inbox",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/inbox/{inbox_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/inbox/{inbox_id}/respond",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/livez",
+      "access_class": "always_public"
+    },
+    {
+      "method": "GET",
+      "path": "/meta/commands",
+      "access_class": "always_public"
+    },
+    {
+      "method": "GET",
+      "path": "/meta/commands/{command_id}",
+      "access_class": "always_public"
+    },
+    {
+      "method": "GET",
+      "path": "/meta/concepts",
+      "access_class": "always_public"
+    },
+    {
+      "method": "GET",
+      "path": "/meta/concepts/{concept_name}",
+      "access_class": "always_public"
+    },
+    {
+      "method": "GET",
+      "path": "/meta/handshake",
+      "access_class": "always_public"
+    },
+    {
+      "method": "POST",
+      "path": "/ops/blob-usage/rebuild",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/ops/health",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/ops/usage-summary",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/overview",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/overview/changes",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/pm/actions",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/pm/actions/{action_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/pm/actions/{action_id}/acknowledge",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/pm/actions/{action_id}/reconcile",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/pm/bindings",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/pm/bindings",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/pm/context",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/pm/conversations",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/pm/conversations",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/pm/conversations/{conversation_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/pm/conversations/{conversation_id}/messages",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/pm/decisions",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/pm/decisions",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/pm/decisions/{decision_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/pm/decisions/{decision_id}/answer",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/pm/decisions/{decision_id}/dispatch",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/pm/ingress/discord",
+      "access_class": "always_public"
+    },
+    {
+      "method": "POST",
+      "path": "/pm/ingress/telegram",
+      "access_class": "always_public"
+    },
+    {
+      "method": "POST",
+      "path": "/pm/turns/claim",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/pm/turns/{turn_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/pm/turns/{turn_id}/complete",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/pm/turns/{turn_id}/context",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/pm/turns/{turn_id}/decisions",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/pm/turns/{turn_id}/fail",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/pm/turns/{turn_id}/heartbeat",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/pm/turns/{turn_id}/release",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/readyz",
+      "access_class": "always_public"
+    },
+    {
+      "method": "GET",
+      "path": "/ref-edges",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/refs/resolve",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/reports/preview",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/runs",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/runs",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/runs/{run_id}",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/secrets",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/secrets",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/secrets/reveal-batch",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "DELETE",
+      "path": "/secrets/{secret_id}",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "PUT",
+      "path": "/secrets/{secret_id}",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/secrets/{secret_id}/reveal",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/series",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/series/{name}",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/series/{name}/points",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/series/{name}/query",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/sessions",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/sessions/{session_id}",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/stream/agent-notification-receipts",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/stream/agents",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/stream/events",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/stream/inbox",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/threads",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/threads/{thread_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/threads/{thread_id}/context",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/threads/{thread_id}/timeline",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/threads/{thread_id}/workspace",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/topics",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/topics",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/topics/{topic_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "PATCH",
+      "path": "/topics/{topic_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/topics/{topic_id}/archive",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/topics/{topic_id}/restore",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/topics/{topic_id}/timeline",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/topics/{topic_id}/trash",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/topics/{topic_id}/unarchive",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/topics/{topic_id}/workspace",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/usage/summary",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/version",
+      "access_class": "always_public"
+    },
+    {
+      "method": "GET",
+      "path": "/work",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/work",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/work/capabilities",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/work/{card_ref}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "PATCH",
+      "path": "/work/{card_ref}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/work/{card_ref}/observations",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/work/{card_ref}/observations",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/work/{card_ref}/participants",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/work/{card_ref}/participants",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/work/{card_ref}/refresh",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/work/{card_ref}/refresh",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "PUT",
+      "path": "/workspace/dashboard",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/workspace/dashboard/reports",
+      "access_class": "workspace_business_surface"
+    }
+  ]
+}
