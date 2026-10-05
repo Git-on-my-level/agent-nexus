@@ -106,8 +106,11 @@ const LIVE_INITIATIVES = {
         ref: "card:release-b",
         title: "Release B: initiative plans, live dashboards, agent ergonomics",
         // Markdown on purpose: a report panel must render it, never print it.
+        // The ref is here and nowhere else in the report: an authored live
+        // panel is a query, so this is the only place it can be collected
+        // from.
         summary:
-          "**Goal:** a workspace overview where you can see each initiative's progress and state at a glance and drill into it.",
+          "**Goal:** a workspace overview where you can see each initiative's progress and state at a glance and drill into it. Blocked behind card:adapter-contract.",
         priority: "p1",
         phase: "in_progress",
         health: { status: "on_track", reason: "Work is progressing." },
@@ -189,7 +192,27 @@ const SNAPSHOT = {
   work: { status: "ok", total: 0, human_count: 0, items: [] },
 };
 
+/** What core would answer for the refs this report names. */
+const RESOLVED = {
+  "card:adapter-contract": {
+    kind: "card",
+    title: "Approve the adapter contract",
+    status: "blocked",
+    resolvable: true,
+  },
+  "card:release-b": {
+    kind: "card",
+    title: "Release B: initiative plans, live dashboards, agent ergonomics",
+    status: "in_progress",
+    resolvable: true,
+  },
+};
+
+/** Every `refs` array the page sent, so a test can see what was asked for. */
+let resolveCalls = [];
+
 async function installEmbeddedReport(page) {
+  resolveCalls = [];
   await page.clock.setFixedTime(new Date(NOW));
   await installWorkspaceApi(page, {});
   await page.route("**/*", async (route) => {
@@ -217,7 +240,13 @@ async function installEmbeddedReport(page) {
       });
     }
     if (path === "/refs/resolve" && request.method() === "POST") {
-      return json({ items: [] });
+      const asked = JSON.parse(request.postData() || "{}").refs ?? [];
+      resolveCalls.push(asked);
+      return json({
+        items: asked
+          .filter((ref) => RESOLVED[ref])
+          .map((ref) => ({ ref, ...RESOLVED[ref] })),
+      });
     }
     return route.fallback();
   });
@@ -305,6 +334,26 @@ test("report panel text renders markdown rather than printing it", async ({
   const explanation = page.locator("[data-report-panel='standing']");
   await expect(explanation.locator("strong").first()).toHaveText("v0.12.12");
   await expect(explanation).not.toContainText("**v0.12.12**");
+});
+
+test("a ref written only in a live summary resolves", async ({ page }) => {
+  test.setTimeout(120_000);
+  await openOverview(page, 1440, 1000);
+
+  const chip = page.locator(
+    "[data-report-initiative] [data-anx-ref='card:adapter-contract']",
+  );
+  await expect(chip).toBeVisible();
+
+  // Asked for: collection reads the observation, not the authored query.
+  await expect
+    .poll(() => resolveCalls.flat())
+    .toContain("card:adapter-contract");
+
+  // And answered: the chip carries core's title rather than rendering dashed
+  // and "not found", which is what a ref no one requested looks like.
+  await expect(chip).toContainText("Approve the adapter contract");
+  await expect(chip).not.toContainText("not found");
 });
 
 /**

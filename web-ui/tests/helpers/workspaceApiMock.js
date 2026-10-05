@@ -17,16 +17,17 @@ import { EXPECTED_SCHEMA_VERSION } from "../../src/lib/config.js";
 import { getExpectedCommandRegistryDigest } from "../../src/lib/commandRegistryDigest.js";
 
 /**
- * The workspace shell clips its main column (`overflow: hidden`), so content
- * wider than the viewport is cut off silently instead of making the document
- * scroll: the layout audit's `page-overflow-x` check cannot see it. This
- * asserts that no text is painted outside the viewport with no way to reach it.
+ * Text painted outside the viewport that the reader cannot get to.
+ *
+ * Exported separately from the assertion so the rule itself can be tested: it
+ * is a geometry heuristic with real teeth, and a hole in it silently passes
+ * the very layouts it exists to catch.
  *
  * @param {import("@playwright/test").Page} page
- * @param {string} label
+ * @returns {Promise<string[]>} one line per offender, at most six
  */
-export async function expectNoClippedContent(page, label) {
-  const offenders = await page.evaluate(() => {
+export async function findClippedContent(page) {
+  return page.evaluate(() => {
     const out = [];
     /** Does this box tell the reader there is more text than it shows? */
     const truncates = (style) =>
@@ -37,38 +38,43 @@ export async function expectNoClippedContent(page, label) {
     /**
      * Can the reader get to this text?
      *
-     * Walk out from the element. A box that truncates with an ellipsis or a
-     * line clamp says there is more — and the box that does it may be the
-     * element itself, not an ancestor. A horizontal scroller can be scrolled.
-     * But a box that clips this element's own rect and neither truncates nor
-     * scrolls has eaten the text, and no scroller further out can give it
-     * back: scrolling the plan brings a node into view, it does not reveal
-     * what the node's own `overflow: hidden` cut off.
+     * Walk out from the element, carrying the rect that still has to be
+     * reachable. A box that scrolls, or that ellipsizes, takes honest
+     * responsibility for the overflow inside it — but only while that box is
+     * itself visible, so the walk continues with the box's own rect rather
+     * than stopping there. A box that cuts the rect and does neither has eaten
+     * the text, and nothing further out can give it back: scrolling the plan
+     * brings a node into view, it does not reveal what the node's own
+     * `overflow: hidden` cut off.
      *
-     * Stopping at the first non-visible ancestor (what this did before) called
-     * a working scroller a clip: a plan node is `overflow: hidden` and sits
-     * inside the plan's own `overflow-x: auto` box, so a node off the right
-     * edge is one scroll away, not lost.
+     * Both halves of that have been wrong here before. Stopping at the first
+     * non-visible ancestor called a working scroller a clip. Accepting an
+     * ellipsis and returning passed an 800px ellipsis box inside a 300px
+     * `overflow: hidden` parent, where neither the text nor the ellipsis is on
+     * screen.
      */
     const reachable = (el) => {
-      if (truncates(getComputedStyle(el))) return true;
-      const rect = el.getBoundingClientRect();
+      let target = el.getBoundingClientRect();
+      let absorbed = false;
+
       for (let node = el.parentElement; node; node = node.parentElement) {
         const style = getComputedStyle(node);
         if (style.overflowX === "visible") continue;
-        if (truncates(style)) return true;
         const box = node.getBoundingClientRect();
-        const cutsThisElement =
-          rect.right > box.right + 1 || rect.left < box.left - 1;
-        if (
+        const scrolls =
           /(auto|scroll)/.test(style.overflowX) &&
-          node.scrollWidth > node.clientWidth + 1
-        )
-          return true;
-        // Clipped here, by a box that cannot be scrolled: the text is gone.
-        if (cutsThisElement) return false;
+          node.scrollWidth > node.clientWidth + 1;
+        const ellipsizes = truncates(style);
+        const cuts = target.right > box.right + 1 || target.left < box.left - 1;
+        if (cuts && !scrolls && !ellipsizes) return false;
+        if (scrolls || ellipsizes) {
+          absorbed = true;
+          target = box;
+        }
       }
-      return false;
+      // Nothing took responsibility, so the text simply hangs off the page;
+      // and whatever did has to be on screen itself to be any use.
+      return absorbed && target.right <= innerWidth + 1 && target.left >= -1;
     };
 
     for (const el of document.body.querySelectorAll("*")) {
@@ -94,6 +100,19 @@ export async function expectNoClippedContent(page, label) {
     }
     return out;
   });
+}
+
+/**
+ * The workspace shell clips its main column (`overflow: hidden`), so content
+ * wider than the viewport is cut off silently instead of making the document
+ * scroll: the layout audit's `page-overflow-x` check cannot see it. This
+ * asserts that no text is painted outside the viewport with no way to reach it.
+ *
+ * @param {import("@playwright/test").Page} page
+ * @param {string} label
+ */
+export async function expectNoClippedContent(page, label) {
+  const offenders = await findClippedContent(page);
   expect
     .soft(
       offenders,

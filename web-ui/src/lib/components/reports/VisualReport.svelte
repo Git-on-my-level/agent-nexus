@@ -36,29 +36,51 @@
    * Every ref written anywhere in the report, resolved in one request so chips
    * in table cells, callouts, timelines and diagram nodes render without a
    * fetch each.
+   *
+   * Observed panels, not authored ones: a live panel's prose arrives with its
+   * observation, so a ref written only in a live initiative's summary is not
+   * in the report at load time. Reading the authored panels left those chips
+   * dashed and "not found" for a ref that resolves perfectly well. The effect
+   * re-runs when an observation lands, and the key guard keeps a refresh that
+   * names the same refs from re-asking.
    */
   let refPreview = $state();
   let resolvedRefs = $state(new Map());
+  /**
+   * The ref set the latest request asked for. Deliberately outside the
+   * reactive graph — the effect both reads and writes it, and as state that
+   * would be a loop.
+   *
+   * Staleness is decided when a response lands rather than by cancelling on
+   * re-run: an observation that refreshes without changing any ref re-runs
+   * this effect, and cancelling there would throw away the in-flight answer
+   * and leave every chip blank.
+   */
+  const resolving = { key: "" };
   $effect(() => {
-    const refs = collectPageRefs(reportRefStrings(report?.panels ?? []));
+    const refs = collectPageRefs(reportRefStrings(observedPanels));
     if (!refs.length) {
+      resolving.key = "";
       resolvedRefs = new Map();
       return;
     }
-    let cancelled = false;
+    const key = refs.join("\u0000");
+    if (key === resolving.key) return;
+    resolving.key = key;
     // Batched: a report may name more refs than one request accepts, and an
     // oversized request is rejected whole.
     void resolveRefsInBatches(refs, (batch) => coreClient.resolveRefs(batch))
       .then((result) => {
-        if (!cancelled) resolvedRefs = result;
+        if (resolving.key === key) resolvedRefs = result;
       })
       .catch(() => {
-        // Unresolved refs still render, as "not found" chips.
-        if (!cancelled) resolvedRefs = indexResolvedRefs({}, refs);
+        // Unresolved refs still render, as "not found" chips. The key is
+        // cleared so the next observation retries rather than inheriting the
+        // failure.
+        if (resolving.key !== key) return;
+        resolving.key = "";
+        resolvedRefs = indexResolvedRefs({}, refs);
       });
-    return () => {
-      cancelled = true;
-    };
   });
   const refProps = () => ({
     resolved: resolvedRefs,
