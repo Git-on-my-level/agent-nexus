@@ -69,8 +69,17 @@ async function stop(child) {
   if (child.exitCode === null) child.kill("SIGKILL");
 }
 
-async function main() {
-  const input = args(process.argv.slice(2));
+export function isSandboxLaunchFailure(error) {
+  return /chromium sandboxing failed/i.test(
+    error instanceof Error ? error.message : String(error),
+  );
+}
+
+export async function main(
+  argv = process.argv.slice(2),
+  { launchBrowser = (options) => chromium.launch(options) } = {},
+) {
+  const input = args(argv);
   JSON.parse(await readFile(input.report, "utf8"));
   const observations = JSON.parse(await readFile(input.observations, "utf8"));
   if (!Array.isArray(observations))
@@ -84,78 +93,98 @@ async function main() {
     path.dirname(fileURLToPath(import.meta.url)),
     "..",
   );
-  const port = await freePort();
-  const server = spawn(
-    process.execPath,
-    [
-      path.join(webRoot, "node_modules", "vite", "bin", "vite.js"),
-      "dev",
-      "--host",
-      "127.0.0.1",
-      "--port",
-      String(port),
-      "--strictPort",
-    ],
-    {
-      cwd: webRoot,
-      env: {
-        ...process.env,
-        ANX_REPORT_PREVIEW_REPORT: path.resolve(input.report),
-        ANX_REPORT_PREVIEW_OBSERVATIONS: path.resolve(input.observations),
-      },
-      stdio: "ignore",
-    },
-  );
+  let browser;
   try {
-    const url = `http://127.0.0.1:${port}/internal/report-preview`;
-    await waitUntilReady(server, url);
-    const browser = await chromium.launch({
+    browser = await launchBrowser({
       headless: true,
       chromiumSandbox: true,
     });
-    try {
-      const page = await browser.newPage({
-        viewport: { width: 1440, height: 1000 },
-        colorScheme: "light",
-      });
-      const pageErrors = [];
-      page.on("pageerror", (error) => pageErrors.push(error.message));
-      await page.goto(url, { waitUntil: "networkidle", timeout: 30_000 });
-      if (pageErrors.length)
-        throw new Error(`report preview page error: ${pageErrors.join("; ")}`);
-      const reportSurface = page.locator('[aria-label="Visual report"]');
-      await reportSurface.waitFor({ state: "visible", timeout: 15_000 });
-      await page.waitForFunction(
-        () => {
-          const surface = document.querySelector(
-            '[aria-label="Visual report"]',
-          );
-          return surface && !surface.innerText.includes("Reading workspace…");
+  } catch (error) {
+    if (isSandboxLaunchFailure(error))
+      return { rendered: false, reason: "sandbox_unavailable" };
+    throw error;
+  }
+
+  let server;
+  try {
+    const port = await freePort();
+    server = spawn(
+      process.execPath,
+      [
+        path.join(webRoot, "node_modules", "vite", "bin", "vite.js"),
+        "dev",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        String(port),
+        "--strictPort",
+      ],
+      {
+        cwd: webRoot,
+        env: {
+          ...process.env,
+          ANX_REPORT_PREVIEW_REPORT: path.resolve(input.report),
+          ANX_REPORT_PREVIEW_OBSERVATIONS: path.resolve(input.observations),
         },
-        null,
-        { timeout: 15_000 },
-      );
-      const renderedText = await reportSurface.innerText();
-      if (pageErrors.length)
-        throw new Error(`report preview page error: ${pageErrors.join("; ")}`);
-      if (renderedText.includes("Reading workspace…"))
-        throw new Error("report preview retained a loading placeholder");
-      for (const expectedText of expectedTexts) {
-        if (!renderedText.includes(expectedText))
-          throw new Error(
-            `report preview did not render fixture content: ${expectedText}`,
-          );
-      }
-      await reportSurface.screenshot({ path: output, animations: "disabled" });
-    } finally {
-      await browser.close();
+        stdio: "ignore",
+      },
+    );
+    const url = `http://127.0.0.1:${port}/internal/report-preview`;
+    await waitUntilReady(server, url);
+    const page = await browser.newPage({
+      viewport: { width: 1440, height: 1000 },
+      colorScheme: "light",
+    });
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await page.goto(url, { waitUntil: "networkidle", timeout: 30_000 });
+    if (pageErrors.length)
+      throw new Error(`report preview page error: ${pageErrors.join("; ")}`);
+    const reportSurface = page.locator('[aria-label="Visual report"]');
+    await reportSurface.waitFor({ state: "visible", timeout: 15_000 });
+    await page.waitForFunction(
+      () => {
+        const surface = document.querySelector(
+          '[aria-label="Visual report"]',
+        );
+        return surface && !surface.innerText.includes("Reading workspace…");
+      },
+      null,
+      { timeout: 15_000 },
+    );
+    const renderedText = await reportSurface.innerText();
+    if (pageErrors.length)
+      throw new Error(`report preview page error: ${pageErrors.join("; ")}`);
+    if (renderedText.includes("Reading workspace…"))
+      throw new Error("report preview retained a loading placeholder");
+    for (const expectedText of expectedTexts) {
+      if (!renderedText.includes(expectedText))
+        throw new Error(
+          `report preview did not render fixture content: ${expectedText}`,
+        );
     }
+    await reportSurface.screenshot({ path: output, animations: "disabled" });
+    return { rendered: true };
   } finally {
-    await stop(server);
+    if (server) await stop(server);
+    await browser.close();
   }
 }
 
-main().catch((error) => {
-  process.stderr.write(`${error?.message ?? "report preview failed"}\n`);
-  process.exitCode = 1;
-});
+const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : "";
+export async function run(argv = process.argv.slice(2), dependencies = {}) {
+  try {
+    const result = await main(argv, dependencies);
+    if (result.reason) process.stdout.write(`${JSON.stringify(result)}\n`);
+    return 0;
+  } catch (error) {
+    process.stderr.write(`${error?.message ?? "report preview failed"}\n`);
+    return 1;
+  }
+}
+
+if (invokedPath === fileURLToPath(import.meta.url)) {
+  run().then((exitCode) => {
+    process.exitCode = exitCode;
+  });
+}

@@ -106,14 +106,24 @@ func (a *App) runReportPreview(ctx context.Context, args []string, cfg config.Re
 	}
 
 	outputPath, _ := filepath.Abs(parsed.output)
-	rendered, renderErr := renderReportPNG(ctx, report, observations, outputPath)
+	rendered, renderReason, renderErr := renderReportPNG(ctx, report, observations, outputPath)
 	if renderErr != nil {
-		warnings = append(warnings, output.Warning{Code: "preview_png_unavailable", Message: "PNG rendering is unavailable; the panel summary is still shown."})
+		renderReason = "preview_png_unavailable"
+		warnings = append(warnings, output.Warning{Code: renderReason, Message: "PNG rendering is unavailable; the panel summary is still shown."})
+	} else if renderReason == "sandbox_unavailable" {
+		warnings = append(warnings, output.Warning{Code: renderReason, Message: "Chromium sandboxing is unavailable; showing the text panel summary."})
 	}
 	panels := summarizeReportPanels(report, observations)
+	text := reportPreviewText(report, outputPath, rendered, renderReason, panels)
+	return &commandResult{Text: strings.TrimSpace(text), Warnings: warnings, Data: map[string]any{"png": outputPath, "rendered": rendered, "reason": renderReason, "panels": panels}}, nil
+}
+
+func reportPreviewText(report map[string]any, outputPath string, rendered bool, renderReason string, panels []any) string {
 	text := fmt.Sprintf("Report preview: %s\n", reportStringValue(report["title"]))
 	if rendered {
 		text += fmt.Sprintf("PNG: %s\n", outputPath)
+	} else if renderReason == "sandbox_unavailable" {
+		text += "PNG: unavailable (Chromium sandbox unavailable; text summary follows)\n"
 	} else {
 		text += "PNG: unavailable\n"
 	}
@@ -121,7 +131,7 @@ func (a *App) runReportPreview(ctx context.Context, args []string, cfg config.Re
 		panel := asMap(raw)
 		text += fmt.Sprintf("%d. %s | what: %s | source: %s | freshness: %s\n", i+1, panel["title"], panel["what"], panel["source"], panel["freshness"])
 	}
-	return &commandResult{Text: strings.TrimSpace(text), Warnings: warnings, Data: map[string]any{"png": outputPath, "rendered": rendered, "panels": panels}}, nil
+	return text
 }
 
 func isReportDocumentRef(value string) bool {
@@ -243,42 +253,60 @@ func reportObservationFreshness(observation map[string]any, missing string) stri
 	return status
 }
 
-func renderReportPNG(ctx context.Context, report map[string]any, observations []any, outputPath string) (bool, error) {
+func renderReportPNG(ctx context.Context, report map[string]any, observations []any, outputPath string) (bool, string, error) {
 	root := findReportRendererRoot()
 	if root == "" {
-		return false, fmt.Errorf("web UI preview renderer was not found")
+		return false, "", fmt.Errorf("web UI preview renderer was not found")
 	}
 	temporary, err := os.MkdirTemp("", "anx-report-preview-")
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	defer os.RemoveAll(temporary)
 	reportPath := filepath.Join(temporary, "report.json")
 	observationsPath := filepath.Join(temporary, "observations.json")
 	encodedReport, err := json.Marshal(report)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	encodedObservations, err := json.Marshal(observations)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	if err := os.WriteFile(reportPath, encodedReport, 0o600); err != nil {
-		return false, err
+		return false, "", err
 	}
 	if err := os.WriteFile(observationsPath, encodedObservations, 0o600); err != nil {
-		return false, err
+		return false, "", err
 	}
 	script := filepath.Join(root, "scripts", "preview-visual-report.mjs")
 	command := exec.CommandContext(ctx, "node", script, "--report", reportPath, "--observations", observationsPath, "--output", outputPath)
 	command.Dir = root
-	if out, err := command.CombinedOutput(); err != nil {
-		return false, fmt.Errorf("renderer did not complete: %s", strings.TrimSpace(string(out)))
+	out, err := command.CombinedOutput()
+	if err != nil {
+		return false, "", fmt.Errorf("renderer did not complete: %s", strings.TrimSpace(string(out)))
+	}
+	if reason, ok := reportRendererFallbackReason(out); ok {
+		return false, reason, nil
 	}
 	if !fileExists(outputPath) {
-		return false, fmt.Errorf("renderer did not create a PNG")
+		return false, "", fmt.Errorf("renderer did not create a PNG")
 	}
-	return true, nil
+	return true, "", nil
+}
+
+func reportRendererFallbackReason(output []byte) (string, bool) {
+	var result struct {
+		Rendered bool   `json:"rendered"`
+		Reason   string `json:"reason"`
+	}
+	if err := json.Unmarshal(output, &result); err != nil || result.Rendered || result.Reason == "" {
+		return "", false
+	}
+	if result.Reason != "sandbox_unavailable" {
+		return "", false
+	}
+	return result.Reason, true
 }
 
 func findReportRendererRoot() string {

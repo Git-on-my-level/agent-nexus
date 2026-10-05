@@ -138,3 +138,52 @@ test("headless report preview writes a PNG from injected live observations", asy
   );
   expect(png.length).toBeGreaterThan(500);
 });
+
+test("sandbox launch failure returns a machine-readable text fallback", async (fixtures, testInfo) => {
+  void fixtures;
+  const reportPath = testInfo.outputPath("fallback-report.json");
+  const observationsPath = testInfo.outputPath("fallback-observations.json");
+  const outputPath = testInfo.outputPath("fallback.png");
+  await mkdir(dirname(reportPath), { recursive: true });
+  await Promise.all([
+    writeFile(reportPath, JSON.stringify({ title: "Fallback report" }), "utf8"),
+    writeFile(observationsPath, "[]", "utf8"),
+  ]);
+
+  const driver = `
+    import { run } from ${JSON.stringify(renderer.href)};
+    const exitCode = await run(${JSON.stringify([
+      "--report",
+      reportPath,
+      "--observations",
+      observationsPath,
+      "--output",
+      outputPath,
+    ])}, {
+      launchBrowser: async (options) => {
+        if (options.chromiumSandbox !== true)
+          throw new Error("preview launch did not require Chromium sandboxing");
+        throw new Error("Chromium sandboxing failed!");
+      },
+    });
+    process.exitCode = exitCode;
+  `;
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ["--input-type=module", "--eval", driver],
+    { cwd: webRoot, timeout: 30_000 },
+  );
+
+  expect(JSON.parse(stdout)).toEqual({
+    rendered: false,
+    reason: "sandbox_unavailable",
+  });
+  let outputCreated = true;
+  try {
+    await readFile(outputPath);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    outputCreated = false;
+  }
+  expect(outputCreated).toBe(false);
+});
