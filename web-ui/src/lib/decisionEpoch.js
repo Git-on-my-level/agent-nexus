@@ -1,5 +1,5 @@
 /**
- * Which reads a decision invalidates.
+ * Which reads are still worth applying.
  *
  * A surface that polls while the reader decides has two kinds of stale read:
  * one that started before the decision, and one that started after it began
@@ -16,14 +16,22 @@
  *
  * Reads issued after a decision settles capture the new value and are kept,
  * which is what lets the reconciling read run straight after `during`.
+ *
+ * `invalidate` covers the other reason an outstanding read stops being worth
+ * applying: the reader changed. A response fetched for one principal must
+ * never land in a page now being read by another.
  */
 export function createDecisionEpoch() {
   let epoch = 0;
   return {
     /** Capture before the first await of a read. */
     current: () => epoch,
-    /** True when a decision started or settled while the read was out. */
+    /** True when something invalidating happened while the read was out. */
     isStale: (captured) => captured !== epoch,
+    /** Discard every read currently in flight. */
+    invalidate() {
+      epoch += 1;
+    },
     /**
      * Run a decision, invalidating every read that overlapped it.
      *

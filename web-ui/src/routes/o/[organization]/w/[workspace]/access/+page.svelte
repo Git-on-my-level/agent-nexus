@@ -11,7 +11,10 @@
   import { liveAgentChanges } from "$lib/liveWorkspaceEvents.js";
   import { formatAge } from "$lib/agentPresence.js";
   import { describeAuthAuditEvent } from "$lib/authAuditModel.js";
-  import { authenticatedAgent } from "$lib/authSession";
+  import {
+    authenticatedAgent,
+    isHumanWorkspacePrincipal,
+  } from "$lib/authSession";
   import { coreClient } from "$lib/coreClient";
   import { createDecisionEpoch } from "$lib/decisionEpoch.js";
   import { isAdministrationRefusal } from "$lib/coreAuthErrors.js";
@@ -19,6 +22,7 @@
   import {
     claimPendingAccessCount,
     countPendingAccessItems,
+    clearPendingAccessCount,
     publishPendingAccessForbidden,
     publishPendingAccessSources,
   } from "$lib/pendingAccessCount.js";
@@ -148,9 +152,28 @@
   // `listPrincipals` returns one page, newest first, and host-derived agents
   // can fill it; core's active-human count is the number that is true.
   let adminCount = $derived(activeHumanPrincipalCount + admins.length);
-  // What the shell badge counts, by core's own rule (`AccessSummary`).
+  // Deciding a grant is human-only, so an agent principal never sees the
+  // requests — including the ones a person was reading a moment ago in this
+  // same mounted page.
+  let isHumanPrincipal = $derived(
+    isHumanWorkspacePrincipal($authenticatedAgent),
+  );
+
+  // Rows are shown only while a current, unrefused read vouches for them.
+  // Without this gate a refusal leaves the previous reader's rows, and their
+  // live controls, beside the line explaining that they cannot be shown.
+  let visibleAccessRequests = $derived(
+    isHumanPrincipal && !sections.requests.forbidden ? accessRequests : [],
+  );
+  let visiblePending = $derived(sections.pending.forbidden ? [] : pending);
+
+  // What the shell badge counts, by core's own rule (`AccessSummary`), over
+  // what this reader may actually see.
   let pendingDecisionCount = $derived(
-    countPendingAccessItems({ enrollments: pending, accessRequests }, now),
+    countPendingAccessItems(
+      { enrollments: visiblePending, accessRequests: visibleAccessRequests },
+      now,
+    ),
   );
   let pendingInvites = $derived(
     invites.filter((invite) => !invite.revoked_at && !invite.consumed_at),
@@ -204,6 +227,10 @@
       apply(result.value);
       sections[key] = { status: "ready", error: "", forbidden: false };
     } else if (isAdministrationRefusal(result.reason)) {
+      // Refused means this reader may not see it. Every `apply` reads its
+      // list out of the response, so handing it nothing empties the section
+      // rather than leaving the previous reader's rows on screen.
+      apply(undefined);
       sections[key] = { status: "ready", error: "", forbidden: true };
     } else {
       sections[key] = {
@@ -220,8 +247,8 @@
     if (forbidden) publishPendingAccessForbidden(workspaceSlug);
     else
       publishPendingAccessSources(workspaceSlug, {
-        enrollments: pending,
-        accessRequests,
+        enrollments: visiblePending,
+        accessRequests: visibleAccessRequests,
       });
   }
 
@@ -265,6 +292,38 @@
     });
   }
 
+  /**
+   * Drop everything this page read for whoever was signed in a moment ago.
+   *
+   * Every list here is inventory one principal was allowed to see. When the
+   * session becomes someone else without the page unmounting, none of it is
+   * vouched for any more: in-flight reads are discarded, the rows and the
+   * one-time invite token go, each section returns to idle, and the shell
+   * count stops reporting a number nothing will refresh.
+   */
+  function forgetReaderState() {
+    decisions.invalidate();
+    hosts = [];
+    pending = [];
+    accessRequests = [];
+    tokens = [];
+    admins = [];
+    principals = [];
+    activeHumanPrincipalCount = 0;
+    invites = [];
+    auditEvents = [];
+    auditCursor = "";
+    createdInviteToken = "";
+    enrollmentNotice = "";
+    enrollmentErrors = {};
+    requestErrors = {};
+    for (const key of Object.keys(sections)) {
+      sections[key] = { status: "idle", error: "", forbidden: false };
+    }
+    loaded = false;
+    clearPendingAccessCount();
+  }
+
   async function loadAll() {
     await Promise.all([loadHosts(), loadPending(), loadPeople()]);
     loaded = true;
@@ -296,16 +355,14 @@
     ]);
     if (decisions.isStale(epoch)) return;
     let changed = false;
-    if (pendingResult.status === "fulfilled") {
-      const next = pendingResult.value?.enrollments ?? [];
+    settle("pending", pendingResult, (value) => {
+      const next = value?.enrollments ?? [];
       changed = !sameIds(next, pending);
       pending = next;
-    }
-    settle("pending", pendingResult, () => {});
-    if (requestsResult.status === "fulfilled") {
-      accessRequests = requestsResult.value?.requests ?? [];
-    }
-    settle("requests", requestsResult, () => {});
+    });
+    settle("requests", requestsResult, (value) => {
+      accessRequests = value?.requests ?? [];
+    });
     publishPending(
       [sections.pending, sections.requests].every(
         (section) => section.forbidden,
@@ -318,6 +375,8 @@
   }
 
   async function decideAccessRequest(request, action) {
+    // The rows are gated already; this is the second lock on the authority.
+    if (!isHumanPrincipal) return;
     requestBusy = { ...requestBusy, [request.id]: action };
     requestErrors = { ...requestErrors, [request.id]: "" };
     await decisions.during(async () => {
@@ -552,6 +611,26 @@
     tourArrived = isWorkspaceTourArrived(workspaceSlug);
   });
 
+  // Identity can change under a mounted page: sign out and in, or a dev
+  // persona switch. Held in a plain object rather than `$state` because it
+  // records what the effect has already handled; making it reactive would
+  // re-run the effect that writes it.
+  const reader = { identity: "" };
+  $effect(() => {
+    const identity = [
+      $authenticatedAgent?.agent_id ?? "",
+      $authenticatedAgent?.actor_id ?? "",
+      $authenticatedAgent?.principal_kind ?? "",
+    ].join("|");
+    if (identity === reader.identity) return;
+    const firstReader = reader.identity === "";
+    reader.identity = identity;
+    // The first pass is the mount, which loads on its own.
+    if (firstReader) return;
+    forgetReaderState();
+    if (canManageAccess) void loadAll();
+  });
+
   onMount(() => {
     if (!canManageAccess) return;
     // This page polls pending access every few seconds; while it is open the
@@ -673,7 +752,7 @@
       <!-- Everything waiting on a decision, above everything that is already
          settled. `#host-requests` is the anchor the CLI's verification URL
          and the agent pages link to, so it stays on this section. -->
-      {#if pending.length || accessRequests.length}
+      {#if visiblePending.length || visibleAccessRequests.length}
         <section
           id="host-requests"
           class="scroll-mt-20"
@@ -704,7 +783,7 @@
           >
             <!-- Agents asking for authority come first: a person decides
                  those, and an enrolling machine is still polling. -->
-            {#each accessRequests as request (request.id)}
+            {#each visibleAccessRequests as request (request.id)}
               <AccessRequestRow
                 {request}
                 {now}
@@ -716,7 +795,7 @@
                 ondeny={(entry) => decideAccessRequest(entry, "deny")}
               />
             {/each}
-            {#each pending as enrollment (enrollment.id)}
+            {#each visiblePending as enrollment (enrollment.id)}
               <HostEnrollmentRequest
                 {enrollment}
                 {now}
@@ -736,7 +815,7 @@
       <!-- Deciding a grant is human-only, so an agent administrator can read
            enrollments and not requests. Saying "ask for administration" there
            would be advice that cannot work. -->
-      {#if sections.requests.forbidden && !sections.pending.forbidden}
+      {#if (sections.requests.forbidden || !isHumanPrincipal) && !sections.pending.forbidden && sections.requests.status !== "idle"}
         <p class="mt-2 text-micro text-fg-muted" data-access-requests-forbidden>
           Agents asking for a grant are shown to people only.
         </p>

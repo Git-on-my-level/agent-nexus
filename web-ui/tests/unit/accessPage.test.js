@@ -766,6 +766,98 @@ describe("access page", () => {
     }
   });
 
+  it("drops the previous reader's requests when the principal changes", async () => {
+    // The reproduction from the review: a person is reading the page, the
+    // session becomes an auth-admin agent without the page unmounting, and
+    // the next request poll is refused. The person's request, its reason and
+    // its approval controls must not survive that.
+    coreClientMock.listAccessRequests.mockResolvedValue({
+      requests: [ACCESS_REQUEST],
+    });
+    render(AccessPage, { props: { data: { outOfWorkspaceMode: "local" } } });
+    expect(await screen.findByText(/asks to administer access/)).toBeTruthy();
+    expect(screen.getByText(/ship the release/)).toBeTruthy();
+    await waitFor(() => expect(get(pendingAccessCount).count).toBe(2));
+
+    const refused = new Error("forbidden");
+    refused.status = 403;
+    coreClientMock.listAccessRequests.mockRejectedValue(refused);
+    authenticatedAgent.set({
+      agent_id: "agent-fleet",
+      actor_id: "actor-fleet",
+      username: "fleet.host-a",
+      principal_kind: "agent",
+      auth_method: "host_assertion",
+    });
+
+    // No row, no reason, no controls — and the explanation stands alone.
+    await waitFor(() =>
+      expect(
+        screen.getByText("Agents asking for a grant are shown to people only."),
+      ).toBeTruthy(),
+    );
+    expect(document.querySelector("[data-access-request]")).toBeNull();
+    expect(screen.queryByText(/ship the release/)).toBeNull();
+    expect(screen.queryByText(/asks to administer access/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Approve…" })).toBeTruthy();
+    // The enrollment this reader may still decide is the only Approve left.
+    expect(screen.getAllByRole("button", { name: "Approve…" })).toHaveLength(1);
+    // And the number stops counting what it may no longer see.
+    await waitFor(() => expect(get(pendingAccessCount).count).toBe(1));
+  });
+
+  it("empties a section that a refused poll can no longer vouch for", async () => {
+    // Same page, same reader: a read that starts succeeding and then is
+    // refused must not leave its rows behind either.
+    coreClientMock.listAccessRequests.mockResolvedValue({
+      requests: [ACCESS_REQUEST],
+    });
+    coreClientMock.listPrincipals.mockResolvedValue({
+      principals: [
+        {
+          agent_id: "p-someone",
+          actor_id: "actor-someone",
+          username: "someone@example.com",
+          principal_kind: "human",
+          created_at: "2026-03-01T10:00:00Z",
+          revoked: false,
+        },
+      ],
+      active_human_principal_count: 1,
+    });
+    render(AccessPage, { props: { data: { outOfWorkspaceMode: "local" } } });
+    expect(await screen.findByText(/asks to administer access/)).toBeTruthy();
+    // Listed twice on purpose: once as an administrator, once under People.
+    await waitFor(() =>
+      expect(screen.getAllByText("someone@example.com").length).toBe(2),
+    );
+
+    const refused = new Error("forbidden");
+    refused.status = 403;
+    coreClientMock.listAccessRequests.mockRejectedValue(refused);
+    coreClientMock.listPrincipals.mockRejectedValue(refused);
+    // Deciding the enrollment re-reads every section, now against refusals.
+    coreClientMock.listPendingHostEnrollments.mockResolvedValue({
+      enrollments: [],
+    });
+    const enrollment = document.querySelector("[data-host-enrollment]");
+    await fireEvent.click(
+      [...enrollment.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Deny",
+      ),
+    );
+
+    await waitFor(() =>
+      expect(document.querySelector("[data-access-request]")).toBeNull(),
+    );
+    expect(screen.queryByText(/ship the release/)).toBeNull();
+    // People is refused the same way, and must not keep its roster either.
+    await waitFor(() =>
+      expect(screen.queryAllByText("someone@example.com")).toHaveLength(0),
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("re-reads after a decision that reported failure", async () => {
     // Core grants and projects in separate steps, so a reported failure can
     // still have landed. The page must not take the error as the last word.
