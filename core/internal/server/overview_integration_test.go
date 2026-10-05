@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -136,9 +137,13 @@ func TestOverviewArchivePinAndInitiativeProjection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	invalid, _, err := store.CreateDocument(ctx, "executive", map[string]any{"title": "Invalid newest report"}, strings.Replace(report, `"projects":[{"id":"demo","title":"Demo","summary":"Build","outcome":"Launch"}]`, `"projects":[{}]`, 1), "text", nil)
-	if err != nil {
-		t.Fatal(err)
+	broken := strings.Replace(report, `"projects":[{"id":"demo","title":"Demo","summary":"Build","outcome":"Launch"}]`, `"projects":[{}]`, 1)
+	if _, _, err = store.CreateDocument(ctx, "executive", map[string]any{"title": "Invalid newest report"}, broken, "text", nil); err == nil {
+		t.Fatal("stored an invalid visual report")
+	}
+	var reportErr *primitives.VisualReportValidationError
+	if !errors.As(err, &reportErr) || len(reportErr.Errors) == 0 {
+		t.Fatalf("invalid visual report write: %v", err)
 	}
 	read := func() map[string]any {
 		t.Helper()
@@ -212,7 +217,6 @@ func TestOverviewArchivePinAndInitiativeProjection(t *testing.T) {
 			t.Fatalf("pin: %d %v", resp.StatusCode, b)
 		}
 	}
-	pin(invalid["ref"], 400)
 	pin(older["ref"], 200)
 	if dashboard(read())["id"] != older["id"] {
 		t.Fatal("pin was not persisted")
