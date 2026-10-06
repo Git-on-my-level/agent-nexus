@@ -1,4 +1,5 @@
 <script>
+  import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import PlanView from "$lib/components/PlanView.svelte";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
 
@@ -60,7 +61,23 @@
               >{/if}
           </span>
         </div>
-        {#if item.summary}<p class="summary">{item.summary}</p>{/if}
+        {#if item.summary}
+          <!-- Authored markdown, like every other body in the product. A
+               report panel printing `**Goal:**` was the one surface still
+               showing its source. Block rendering, not inline: a summary with
+               a list in it should render the list rather than run its dashes
+               together. Clamped to two lines — a dashboard panel is a glance,
+               and the initiative page has the whole body. -->
+          <MarkdownRenderer
+            source={item.summary}
+            class="summary"
+            {resolved}
+            {organizationSlug}
+            {workspaceSlug}
+            {onpreview}
+            {onpreviewclose}
+          />
+        {/if}
         {#if planProgress?.total > 0}<div class="progress">
             <progress
               value={planProgress.done}
@@ -113,6 +130,8 @@
 <style>
   .initiatives {
     display: grid;
+    /* An implicit column sizes to its widest child's max-content. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 20px;
     margin: 0;
     padding: 0;
@@ -120,6 +139,8 @@
   }
   .initiatives > li {
     display: grid;
+    /* An implicit column sizes to its widest child's max-content. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 14px;
     min-width: 0;
     padding-bottom: 16px;
@@ -159,7 +180,6 @@
   .meta [data-health="stalled"] {
     color: var(--warn-text);
   }
-  .summary,
   .progress,
   .assignees,
   .muted {
@@ -167,9 +187,20 @@
     font-size: 11px;
     line-height: 1.6;
   }
-  .summary {
+  /*
+   * `:global` because the summary is rendered by `MarkdownRenderer`, whose
+   * markup this component's scoping does not reach. Kept under `.initiatives`
+   * so it stays this component's rule rather than a global one.
+   */
+  .initiatives :global(.summary) {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
     margin-top: 5px;
-    white-space: pre-wrap;
+    color: var(--fg-muted);
+    font-size: 11px;
+    line-height: 1.6;
   }
   .progress {
     display: flex;
@@ -191,6 +222,8 @@
   }
   .needs {
     display: grid;
+    /* An implicit column sizes to its widest child's max-content. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 7px;
     margin: 0;
     padding: 0;

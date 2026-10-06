@@ -479,22 +479,33 @@ for (const viewport of [
     await expect(tiles.nth(2)).toContainText("Live dashboards");
     await expect(tiles.nth(2)).toContainText("Timeline");
 
-    // The mini-viz follows the shape core computed: a tree draws a column per
-    // dependency layer, lanes a track per run, a chain one track.
-    await expect(tiles.first().locator("[data-viz-kind]")).toHaveAttribute(
-      "data-viz-kind",
-      "tree",
-    );
-    await expect(tiles.first().locator(".tile-track")).toHaveCount(3);
-    await expect(tiles.nth(1).locator("[data-viz-kind]")).toHaveAttribute(
-      "data-viz-kind",
-      "lanes",
-    );
-    await expect(tiles.nth(1).locator(".tile-track")).toHaveCount(2);
-    await expect(tiles.nth(2).locator("[data-viz-kind]")).toHaveAttribute(
-      "data-viz-kind",
-      "track",
-    );
+    /*
+     * One flat bar per tile — a segment per step, in plan order. The tile used
+     * to draw the plan's real shape in miniature; at tile size that became a
+     * block of colour tall enough to crowd the rows under it, and said less
+     * than the shape's own name does in the line below. The shape is still
+     * named, and the graph itself is a click away on the initiative page.
+     */
+    for (const index of [0, 1, 2]) {
+      const bar = tiles.nth(index).locator(".tile-bar");
+      await expect(bar).toHaveCount(1);
+      // A single row: every segment shares one offsetTop.
+      const rows = await bar.evaluate(
+        (node) =>
+          new Set(
+            [...node.querySelectorAll(".seg")].map((seg) => seg.offsetTop),
+          ).size,
+      );
+      expect(rows).toBe(1);
+      // And it is 8px tall, the height the mockup draws it at.
+      const height = await bar
+        .locator(".seg")
+        .first()
+        .evaluate((node) => Math.round(node.getBoundingClientRect().height));
+      expect(height).toBe(8);
+    }
+    // Release B's plan has four steps, so the bar has four segments.
+    await expect(tiles.first().locator(".tile-bar .seg")).toHaveCount(4);
 
     // What changed since this viewer last looked, from the server digest.
     const strip = page.locator("[data-since-you-last-looked]");

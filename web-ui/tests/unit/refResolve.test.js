@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   MAX_BATCH_REFS,
+  hasUnreadableRefs,
+  keepReadableRefs,
   resolveRefsInBatches,
   safeRefDestination,
   CHIP_REF_PREFIXES,
@@ -497,12 +499,85 @@ describe("resolveRefsInBatches", () => {
       if (batch.includes("card:0")) throw new Error("rejected");
       return { items: batch.map(row) };
     });
-    // The failed batch's refs survive as "not found" rather than vanishing.
+    // The failed batch's refs survive as "not found" rather than vanishing,
+    // and say they were never read so a caller does not cache the failure.
     expect(resolved.get("card:0")).toEqual({
       ref: "card:0",
       resolvable: false,
+      unreadable: true,
     });
     expect(resolved.get("card:250")).toMatchObject({ resolvable: true });
+    expect(resolved.get("card:250").unreadable).toBeUndefined();
+    expect(hasUnreadableRefs(resolved)).toBe(true);
+  });
+
+  it("does not call a ref the resolver answered for unreadable", async () => {
+    // A ref the resolver answered about is a fact, however unwelcome: it is
+    // "not found", and asking again gets the same answer. Only a request that
+    // never completed is worth retrying, and a caller cannot tell the two
+    // apart from `resolvable` alone.
+    const resolved = await resolveRefsInBatches(
+      ["card:gone", "card:here"],
+      async () => ({ items: [row("card:here")] }),
+    );
+    expect(resolved.get("card:gone")).toEqual({
+      ref: "card:gone",
+      resolvable: false,
+    });
+    expect(hasUnreadableRefs(resolved)).toBe(false);
+  });
+
+  it("reports nothing unreadable for an empty or missing answer", () => {
+    expect(hasUnreadableRefs(new Map())).toBe(false);
+    expect(hasUnreadableRefs(null)).toBe(false);
+    expect(hasUnreadableRefs(undefined)).toBe(false);
+  });
+
+  it("keeps a readable row when the next answer could not read it", () => {
+    const previous = new Map([
+      ["card:a", { ref: "card:a", title: "Adapter", resolvable: true }],
+    ]);
+    const next = new Map([
+      ["card:a", { ref: "card:a", resolvable: false, unreadable: true }],
+      ["card:b", { ref: "card:b", resolvable: false, unreadable: true }],
+    ]);
+    const merged = keepReadableRefs(previous, next);
+    // A title the reader can see beats "not found" from a request that failed.
+    expect(merged.get("card:a")).toMatchObject({ title: "Adapter" });
+    // Nothing was ever read for this one, so there is nothing to keep.
+    expect(merged.get("card:b")).toMatchObject({ resolvable: false });
+  });
+
+  it("lets an answered row replace a readable one, missing included", () => {
+    const previous = new Map([
+      ["card:a", { ref: "card:a", title: "Adapter", resolvable: true }],
+      ["card:b", { ref: "card:b", title: "Release", resolvable: true }],
+    ]);
+    const next = new Map([
+      [
+        "card:a",
+        { ref: "card:a", title: "Adapter contract", resolvable: true },
+      ],
+      ["card:b", { ref: "card:b", resolvable: false }],
+      ["card:c", { ref: "card:c", resolvable: false, unreadable: true }],
+    ]);
+    const merged = keepReadableRefs(previous, next);
+    expect(merged.get("card:a")).toMatchObject({ title: "Adapter contract" });
+    // Deleted, renamed out of reach, or never there: that is news about the
+    // ref, not a failed request, so it stands.
+    expect(merged.get("card:b")).toEqual({ ref: "card:b", resolvable: false });
+  });
+
+  it("returns a fully readable answer untouched", () => {
+    const next = new Map([["card:a", { ref: "card:a", resolvable: true }]]);
+    expect(keepReadableRefs(new Map(), next)).toBe(next);
+    expect(keepReadableRefs(null, next)).toBe(next);
+    expect(
+      keepReadableRefs(
+        new Map([["card:a", { ref: "card:a", resolvable: true }]]),
+        next,
+      ),
+    ).toBe(next);
   });
 
   it("dedupes before counting against the cap", async () => {

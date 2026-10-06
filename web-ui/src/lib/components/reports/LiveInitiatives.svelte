@@ -46,7 +46,11 @@
     >
       <span class="tile-head">
         <span class="tile-title">{tile.title}</span>
-        <HealthBadge health={tile.health} />
+        <!-- The mockup's status pill: a short word, not a glyph. It reads at a
+             glance without a hover, and the vocabulary is short enough
+             ("Blocked", "At risk", "Stale", "On track") that it never needs
+             truncating — which was the reason the glyph existed. -->
+        <HealthBadge health={tile.health} variant="pill" />
       </span>
 
       {#if tile.excerpt}
@@ -67,32 +71,32 @@
 
       {#if tile.segments.length}
         <!--
-          The shape core computed picks the mini-viz: one track for a chain,
-          a track per independent run for lanes, a column per dependency
-          layer for a tree. Core sends `layer` and `after`, so a tree here is
-          the real graph in miniature rather than a bar standing in for one.
+          One row of segments, in plan order: the mockup's bar. A tile used to
+          draw the plan's real shape in miniature — a column per dependency
+          layer for a tree — which at tile size became a block of colour tall
+          enough to crowd everything under it, and said less than the word
+          "tech tree" already says in the line below. The shape stays named;
+          the graph itself is one click away on the initiative page.
         -->
         <span class="tile-viz" data-tile-shape={tile.shape}>
           <span
             class="tile-bar"
-            data-viz-kind={tile.viz.kind}
+            style:--tile-segments={tile.segments.length}
             role="img"
             aria-label={`${tile.title} checklist: ${tile.progress?.done ?? 0} of ${tile.progress?.total ?? 0} steps done`}
           >
-            {#each tile.viz.tracks as track, index (index)}
-              <span class="tile-track">
-                {#each track as segment (segment.id)}
-                  <span
-                    class="seg"
-                    data-status={segment.status}
-                    class:seg--critical={segment.onCriticalPath}
-                  ></span>
-                {/each}
-              </span>
+            {#each tile.segments as segment (segment.id)}
+              <span
+                class="seg"
+                data-status={segment.status}
+                class:seg--critical={segment.onCriticalPath}
+              ></span>
             {/each}
           </span>
           <span class="tile-meta">
-            {#if tile.progress}{tile.progress.done}/{tile.progress.total}{/if}
+            {#if tile.progress}<span class="tile-count"
+                >{tile.progress.done}/{tile.progress.total}</span
+              >{/if}
             {#if tile.shapeLabel}
               <span class="tile-shape">{tile.shapeLabel}</span>
             {/if}
@@ -107,11 +111,15 @@
             aria-label={`${tile.title} checklist`}
           ></progress>
           <span class="tile-meta"
-            >{tile.progress.done}/{tile.progress.total}</span
+            ><span class="tile-count"
+              >{tile.progress.done}/{tile.progress.total}</span
+            ></span
           >
         </span>
       {/if}
 
+      <!-- One meta line, the way the mockup writes it: "Next: … · moved 2h
+           ago". Two separate blocks made the tile's last two rows compete. -->
       <span class="tile-foot">
         {#if tile.next}
           <span class="tile-next" data-tile-next
@@ -119,6 +127,9 @@
               ? ` +${tile.next.extra}`
               : ""}</span
           >
+        {/if}
+        {#if tile.next && tile.movedAt}
+          <span class="tile-sep" aria-hidden="true">·</span>
         {/if}
         {#if tile.movedAt}
           <AgeBadge at={tile.movedAt} verb="moved" {now} />
@@ -197,13 +208,16 @@
   }
   .tile {
     display: grid;
-    gap: 7px;
+    /* An implicit column sizes to its widest child's max-content. */
+    grid-template-columns: minmax(0, 1fr);
+    /* Mockup density: 18px padding, 12px internal gap, 12px radius. */
+    gap: 12px;
     align-content: start;
     height: 100%;
-    padding: 11px 12px;
+    padding: 18px;
     border: 1px solid var(--line);
-    border-radius: 6px;
-    background: var(--bg);
+    border-radius: 12px;
+    background: var(--panel);
     color: var(--fg);
   }
   .tile:hover {
@@ -230,8 +244,9 @@
   }
   .tile-title {
     min-width: 0;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 600;
+    line-height: 1.3;
     overflow-wrap: anywhere;
   }
   .tile:hover .tile-title {
@@ -239,7 +254,7 @@
   }
   .tile-excerpt {
     color: var(--fg-muted);
-    font-size: 12px;
+    font-size: 13px;
     line-height: 1.5;
     /* Two lines: a tile is a glance, not the card body. */
     display: -webkit-box;
@@ -258,33 +273,22 @@
   }
   .tile-viz {
     display: grid;
-    gap: 5px;
+    /* An implicit column sizes to its widest child's max-content. */
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
   }
+  /*
+   * One row, one column per step, each the same width — the mockup's bar. The
+   * count of steps comes in as a custom property so the track widths are the
+   * grid's job rather than flex rounding's.
+   */
   .tile-bar {
     display: grid;
-    gap: 2px;
-  }
-  /* A tree reads left to right by layer, so its columns sit side by side. */
-  .tile-bar[data-viz-kind="tree"] {
-    grid-auto-flow: column;
-    grid-auto-columns: 1fr;
-  }
-  .tile-track {
-    display: flex;
-    gap: 2px;
-    height: 6px;
-  }
-  /* A tree's layers stack within their column. */
-  .tile-bar[data-viz-kind="tree"] .tile-track {
-    flex-direction: column;
-    height: auto;
-    min-height: 6px;
-  }
-  .tile-bar[data-viz-kind="tree"] .seg {
-    min-height: 6px;
+    grid-template-columns: repeat(var(--tile-segments, 1), minmax(0, 1fr));
+    gap: 3px;
   }
   .seg {
-    flex: 1;
+    height: 8px;
     min-width: 2px;
     border-radius: 2px;
     background: var(--line-strong);
@@ -298,7 +302,7 @@
   .seg[data-status="blocked"] {
     background: var(--warn-text);
   }
-  /* The spine of a tree, shown as weight rather than another colour. */
+  /* The spine of the plan, shown as weight rather than another colour. */
   .seg--critical {
     box-shadow: inset 0 0 0 1px var(--fg-muted);
   }
@@ -317,7 +321,16 @@
     align-items: center;
     gap: 3px 8px;
     color: var(--fg-muted);
-    font-size: 11px;
+    font-size: 12.5px;
+  }
+  .tile-count {
+    font-variant-numeric: tabular-nums;
+  }
+  .tile-sep {
+    color: var(--fg-subtle, var(--fg-muted));
+  }
+  .tile-foot {
+    gap: 3px 6px;
   }
   .tile-shape {
     text-transform: lowercase;

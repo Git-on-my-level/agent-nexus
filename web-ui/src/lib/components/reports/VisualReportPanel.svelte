@@ -530,6 +530,8 @@
   }
   .report-timeline {
     display: grid;
+    /* An implicit column sizes to its widest child's max-content. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 20px;
   }
   .report-timeline li {

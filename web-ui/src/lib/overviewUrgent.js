@@ -210,6 +210,7 @@ export function criticalInitiatives(tiles = [], covered = new Set()) {
  * @param {{
  *   asks?: Array<{status: string, rows?: object[], count?: number, truncated?: boolean, workspace?: object, message?: string}>,
  *   tiles?: object[],
+ *   notCovered?: Array<{slug?: string, label?: string}>,
  *   askLimit?: number,
  *   initiativeLimit?: number,
  * }} input
@@ -217,6 +218,7 @@ export function criticalInitiatives(tiles = [], covered = new Set()) {
 export function urgentBandModel({
   asks = [],
   tiles = [],
+  notCovered = [],
   askLimit = 6,
   initiativeLimit = 6,
 } = {}) {
@@ -254,6 +256,19 @@ export function urgentBandModel({
       workspace: read?.workspace ?? {},
       message: asText(read?.message) || "This workspace could not be read.",
     })),
+    /*
+     * Workspaces this browser has no session for. Not a failure — hosted
+     * writes a session per workspace, and the viewer has simply not opened
+     * these — so the band states its coverage rather than reporting an
+     * outage. Both lists exist because they want different words: one is
+     * "not included", the other is "tried and could not".
+     */
+    notCovered: (Array.isArray(notCovered) ? notCovered : []).map(
+      (workspace) => ({
+        slug: asText(workspace?.slug),
+        label: asText(workspace?.label) || asText(workspace?.slug),
+      }),
+    ),
     get empty() {
       return askCount === 0 && critical.length === 0;
     },

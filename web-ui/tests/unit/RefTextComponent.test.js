@@ -149,6 +149,74 @@ describe("reportRefStrings", () => {
     ).toEqual(["card:a", "needs doc:b"]);
   });
 
+  it("collects a live initiative's summary, where its only refs are", () => {
+    // The authored panel is a query: no prose, no refs. Everything a reader
+    // sees in a live panel arrives with the observation, so collecting from
+    // the authored panel asked for nothing and every ref written in a live
+    // summary rendered dashed and "not found".
+    const authored = {
+      id: "initiatives",
+      type: "live-initiatives",
+      data: { limit: 5 },
+    };
+    expect(reportRefStrings([authored])).toEqual([]);
+
+    const observed = {
+      ...authored,
+      live: {
+        status: "ok",
+        data: {
+          items: [
+            {
+              ref: "card:release-b",
+              title: "Release B",
+              summary: "Blocked behind card:adapter-contract until Friday.",
+            },
+          ],
+        },
+      },
+    };
+    expect(reportRefStrings([observed])).toEqual([
+      "card:release-b",
+      "Blocked behind card:adapter-contract until Friday.",
+    ]);
+  });
+
+  it("asks for nothing from a live panel that has not answered yet", () => {
+    // A loading or failed observation has no prose to scan, and asking for a
+    // half-read panel's refs would resolve a set the reader cannot see.
+    for (const live of [
+      undefined,
+      { status: "loading", data: {} },
+      { status: "unavailable", message: "no access" },
+      { status: "ok", data: {} },
+    ]) {
+      expect(
+        reportRefStrings([
+          { type: "live-initiatives", data: { limit: 5 }, live },
+        ]),
+      ).toEqual([]);
+    }
+  });
+
+  it("keeps collecting authored text from a panel that also has live data", () => {
+    // Live collection is additive: a report mixes authored panels with live
+    // ones, and the batch has to carry both.
+    expect(
+      reportRefStrings([
+        { type: "explanation", data: { text: "See card:a" } },
+        {
+          type: "live-initiatives",
+          data: { limit: 5 },
+          live: {
+            status: "ok",
+            data: { items: [{ ref: "card:b", summary: "After card:c." }] },
+          },
+        },
+      ]),
+    ).toEqual(["See card:a", "card:b", "After card:c."]);
+  });
+
   it("ignores panels with no ref-bearing text", () => {
     expect(
       reportRefStrings([
