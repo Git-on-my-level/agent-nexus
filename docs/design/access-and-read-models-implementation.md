@@ -173,3 +173,11 @@ regression in the disabled readiness foundation: its owner must remeasure the
 merged schema-65 code with zero-blob startup before proposing replacement pins.
 The feed API's maximum 643 statements is explicitly not a passing full-request
 budget; batching and parity must be demonstrated before switching a reader.
+
+Foundation identity hardening makes the opaque-to-canonical registry tuple
+immutable and enforces declared reference constraints through persistent triggers
+on every connection, including the production workspace configuration with
+foreign keys disabled. This does not satisfy the remaining dispatcher isolation,
+source-provenance capture or canonical-hook SQL-allowlisting gates. Membership
+binding cascades also need bounded historical-generation retirement before
+write enablement.

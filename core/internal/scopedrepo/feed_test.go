@@ -216,8 +216,12 @@ func TestFeedHydrationRejectsCorruptionAndUnadmittedKeys(t *testing.T) {
 		t.Run(mutation, func(t *testing.T) {
 			db, s, request, streams := feedFixture(t)
 			seedFeed(t, db, "public", "documents", "owner", "row", 1)
-			// Disabling FKs here models persisted corruption, not an authorized writer.
+			// Bypass integrity guards only to model persisted corruption. Ordinary
+			// writers cannot redirect this source, even with foreign keys disabled.
 			must(t, exec(db, `PRAGMA foreign_keys=OFF`))
+			if mutation == `UPDATE scope_resources SET id='changed'` {
+				must(t, exec(db, `DROP TRIGGER scope_resource_source_immutable`))
+			}
 			must(t, exec(db, mutation))
 			err := s.ReadFeed(context.Background(), request, streams, func(r scopedrepo.FeedReader) error {
 				rows, e := r.Candidates(0, nil, 1)

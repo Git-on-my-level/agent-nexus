@@ -43,8 +43,10 @@ remain enablement gates. The legacy epoch must cover every relevant canonical
 and external PM source; matching its current value does not establish that
 coverage. Regrant writers must monotonically advance membership generations;
 audience binding changes must advance their binding generation. Domain and
-projection generations must never be reused. Foreign-key-enabled deletion of a
-membership cascades its stream bindings.
+projection generations must never be reused. Deletion of a membership cascades its stream bindings through persistent
+triggers even on connections with foreign keys disabled. This indexed operation
+can touch historical generations; bounded retirement and revocation remain
+write-enablement gates.
 
 The binding digest includes principal identity, ordered scope/stream selection,
 roles, domain state/generation, membership generations, certificate versions and
