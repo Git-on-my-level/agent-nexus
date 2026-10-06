@@ -132,6 +132,13 @@ contributors even though inherited privacy follows PM IDs across kinds. Inbox
 parent columns contribute both raw atoms and typed refs, including legacy aliases.
 Canonical inbox collections use their indexed SQL visibility and batch metadata
 hydration; avoid rebuilding authorization for every already-filtered ordinary row.
+Migration 63 indexes ancillary profile fields without making profile denials
+resource identities: those denials are graph leaves. Host/auth/actor profiles
+remain scoped. Bind cached denial rows as data, never literal SQL, and avoid
+repeated CTE references that duplicate the ownership graph during SQLite
+preparation. Read selector checks reuse the epoch-validated request snapshot;
+transactional mutation checks always evaluate their current graph. PM principal
+caches protect routing state only; authority I/O stays outside shared locks.
 Use the registered SQLite driver so the reference scalar functions are available
 to imports. Structured JSON contributes atoms, not whole container serialization;
 scalar text preserves even JSON-shaped IDs. Keep this distinction in new fields.

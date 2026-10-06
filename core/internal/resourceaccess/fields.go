@@ -1,5 +1,7 @@
 package resourceaccess
 
+import "sort"
+
 // OwnershipSource is the executable storage-field inventory. Every column is
 // scanned recursively (JSON) or as text; triggers atomically maintain its edges.
 // A source kind identifies one table, never two: replacement must not erase
@@ -41,4 +43,19 @@ var FilterSources = map[string][]string{
 	"secrets":                {"name", "description"},
 	"series_adapters":        {"description"},
 	"series_definitions":     {"unit"},
+}
+
+// Ancillary profiles inherit content visibility but never become resource
+// identities themselves. Their indexed denials are leaves of the graph.
+func FilterOwnershipSources() []OwnershipSource {
+	var sources []OwnershipSource
+	for table, columns := range FilterSources {
+		id := "id"
+		if table == "series_adapters" || table == "series_definitions" {
+			id = "name"
+		}
+		sources = append(sources, OwnershipSource{table, "filter/" + table, id, columns})
+	}
+	sort.Slice(sources, func(i, j int) bool { return sources[i].Table < sources[j].Table })
+	return sources
 }

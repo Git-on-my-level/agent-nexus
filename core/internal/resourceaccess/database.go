@@ -12,7 +12,7 @@ type QueryRower interface {
 }
 type Policy struct {
 	Read     func(string) string
-	ReadOnDB func(context.Context, QueryRower, string) string
+	ReadOnDB func(context.Context, QueryRower, string, []any) (string, []any)
 	Check    func(context.Context, QueryRower, any) error
 }
 type policyKey struct{}
@@ -34,11 +34,11 @@ func ReadQuery(ctx context.Context, q string) string {
 	return q
 }
 
-func readOnDB(ctx context.Context, q QueryRower, query string) string {
+func readOnDB(ctx context.Context, q QueryRower, query string, args []any) (string, []any) {
 	if p, ok := PolicyFrom(ctx); ok && p.ReadOnDB != nil {
-		return p.ReadOnDB(ctx, q, query)
+		return p.ReadOnDB(ctx, q, query, args)
 	}
-	return ReadQuery(ctx, query)
+	return ReadQuery(ctx, query), args
 }
 
 type DB struct{ raw *sql.DB }
@@ -51,10 +51,12 @@ func NewDB(raw *sql.DB) *DB {
 	return &DB{raw: raw}
 }
 func (d *DB) QueryContext(ctx context.Context, q string, args ...any) (*sql.Rows, error) {
-	return d.raw.QueryContext(ctx, readOnDB(ctx, d.raw, q), args...)
+	q, args = readOnDB(ctx, d.raw, q, args)
+	return d.raw.QueryContext(ctx, q, args...)
 }
 func (d *DB) QueryRowContext(ctx context.Context, q string, args ...any) *sql.Row {
-	return d.raw.QueryRowContext(ctx, readOnDB(ctx, d.raw, q), args...)
+	q, args = readOnDB(ctx, d.raw, q, args)
+	return d.raw.QueryRowContext(ctx, q, args...)
 }
 func (d *DB) CheckValues(ctx context.Context, values any) error {
 	if err := ValidateText(values); err != nil {

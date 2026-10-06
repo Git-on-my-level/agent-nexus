@@ -18,6 +18,18 @@ type sqlValueToken struct {
 	arg  int
 }
 
+// AnonymousSQLParameters reports whether prepending an anonymous binding can
+// shift every existing parameter uniformly. Explicit numbers/names retain their
+// original binding semantics by using the uncached policy rewrite instead.
+func AnonymousSQLParameters(q string) bool {
+	for _, t := range sqlValueTokens(q) {
+		if t.text == "?" && t.arg < 0 || t.text == ":" || t.text == "@" || t.text == "$" {
+			return false
+		}
+	}
+	return true
+}
+
 func sqlValueTokens(q string) []sqlValueToken {
 	var tokens []sqlValueToken
 	arg := 0

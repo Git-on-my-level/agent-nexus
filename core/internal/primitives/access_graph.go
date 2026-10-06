@@ -51,12 +51,12 @@ func ownershipClosure(name, roots string, owner bool) string {
 	// contributor must constrain the document before MATCH/rank/limit are applied.
 	terms = append(terms, "SELECT 'document',r.id"+carry+" FROM "+name+" d JOIN main.events e ON d.kind='event' AND e.id=d.id JOIN main.documents r ON r.thread_id=e.thread_id WHERE e.type='message_posted' AND COALESCE(e.thread_id,'')<>''")
 	refs := func(join, ref string) {
-		terms = append(terms, "SELECT e.source_type,e.source_id"+carry+" FROM "+name+" d "+join+" JOIN main.ref_edges e INDEXED BY idx_ref_edges_access_cover ON e.target_type=d.kind AND e.target_id="+ref+" COLLATE NOCASE AND e.edge_type='ref'")
-		terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d "+join+" JOIN main.resource_access_exact_edges e ON e.target_key="+resourceaccess.AtomKeySQL("(d.kind||':'||"+ref+")")+"")
+		terms = append(terms, "SELECT e.source_type,e.source_id"+carry+" FROM "+name+" d "+join+" JOIN main.ref_edges e INDEXED BY idx_ref_edges_access_cover ON e.target_type=d.kind AND e.target_id="+ref+" COLLATE NOCASE AND e.edge_type='ref' WHERE d.kind NOT LIKE 'filter/%'")
+		terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d "+join+" JOIN main.resource_access_exact_edges e ON e.target_key="+resourceaccess.AtomKeySQL("(d.kind||':'||"+ref+")")+" WHERE d.kind NOT LIKE 'filter/%'")
 	}
 	refs("", "d.id")
 	refs("JOIN main.runs r ON d.kind='run' AND r.id=d.id", "r.handle")
-	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_exact_edges e ON e.target_key="+resourceaccess.AtomKeySQL("d.id")+" WHERE d.kind<>'plan'")
+	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_exact_edges e ON e.target_key="+resourceaccess.AtomKeySQL("d.id")+" WHERE d.kind<>'plan' AND d.kind NOT LIKE 'filter/%'")
 	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.work_metadata m ON d.kind='card' AND m.card_id=d.id JOIN main.resource_access_exact_edges e ON e.target_key="+resourceaccess.AtomKeySQL("json_extract(m.metadata_json,'$.source.url')")+" WHERE m.authority<>'nexus'")
 	for _, kind := range []string{"thread", "board", "card", "topic", "document", "event", "artifact"} {
 		refs("JOIN main."+resourceTables[kind]+" r ON d.kind='"+kind+"' AND r.id=d.id", "r.handle")
@@ -89,17 +89,17 @@ func ownershipClosure(name, roots string, owner bool) string {
 // Resolve only the denied identities, including virtual revision handles and
 // historical aliases. NULL/empty handles never become reference values.
 func ownershipRefs(name, relation string) string {
-	terms := []string{"SELECT d.kind,d.id,d.id AS ref FROM " + relation + " d"}
-	terms = append(terms, "SELECT d.kind,d.id,r.handle FROM "+relation+" d JOIN main.runs r ON d.kind='run' AND r.id=d.id WHERE COALESCE(r.handle,'')<>''")
-	for _, kind := range []string{"thread", "board", "card", "topic", "document", "event", "artifact"} {
-		terms = append(terms, "SELECT d.kind,d.id,r.handle FROM "+relation+" d JOIN main."+resourceTables[kind]+" r ON d.kind='"+kind+"' AND r.id=d.id WHERE COALESCE(r.handle,'')<>''")
-	}
-	for _, kind := range []string{"card", "document"} {
-		terms = append(terms, "SELECT d.kind,d.id,COALESCE(NULLIF(p.handle,''),p.id)||'-r'||r.revision_number FROM "+relation+" d JOIN main."+kind+"_revisions r ON d.kind='"+kind+"_revision' AND r.revision_id=d.id JOIN main."+resourceTables[kind]+" p ON p.id=r."+kind+"_id")
-	}
-	terms = append(terms, "SELECT d.kind,d.id,r.alias_handle FROM "+relation+" d JOIN main.resource_handle_aliases r ON r.resource_type=d.kind AND r.resource_id=d.id WHERE COALESCE(r.alias_handle,'')<>''", "SELECT d.kind,d.id,r.ref FROM "+relation+" d JOIN main.resource_access_tombstones r ON r.kind=d.kind AND r.id=d.id")
-	terms = append(terms, "SELECT d.kind,d.id,json_extract(m.metadata_json,'$.source.url') FROM "+relation+" d JOIN main.work_metadata m ON d.kind='card' AND m.card_id=d.id WHERE m.authority<>'nexus' AND COALESCE(json_extract(m.metadata_json,'$.source.url'),'')<>''")
-	return name + "(kind,id,ref) AS MATERIALIZED (" + strings.Join(terms, " UNION ") + ")"
+	// SQLite deep-copies a CTE at every FROM reference during preparation,
+	// even when MATERIALIZED. Resolve identities through one indexed join rather
+	// than a UNION arm per kind (each arm used to duplicate the entire closure).
+	// Keep raw IDs for missing/derived resources and external card URLs, which
+	// are not navigable identities in the mention index.
+	return name + `(kind,id,ref) AS MATERIALIZED (
+ SELECT DISTINCT d.kind,d.id,j.value FROM ` + relation + ` d
+ LEFT JOIN main.resource_access_identities i ON i.kind=d.kind AND i.resource_id=d.id
+ LEFT JOIN main.work_metadata m ON d.kind='card' AND m.card_id=d.id AND m.authority<>'nexus'
+ JOIN json_each(json_array(d.id,i.ref,json_extract(m.metadata_json,'$.source.url'))) j
+ WHERE d.kind NOT LIKE 'filter/%' AND j.value IS NOT NULL AND j.value<>'')`
 }
 
 func privateOwnershipGraph() string {
