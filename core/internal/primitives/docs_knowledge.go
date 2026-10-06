@@ -82,6 +82,14 @@ func normalizeDocumentTags(raw any, parent map[string]any, key string) ([]string
 	return out, nil
 }
 
+// Binary content remains in its blob and ownership manifest, never a text index.
+func documentSearchBody(content []byte, contentType string) string {
+	if strings.TrimSpace(contentType) == "binary" {
+		return ""
+	}
+	return string(content)
+}
+
 func documentSearchText(title, summary, source string, tags []string, content []byte, contentType string) string {
 	parts := []string{
 		strings.TrimSpace(title),
@@ -90,7 +98,7 @@ func documentSearchText(title, summary, source string, tags []string, content []
 		strings.Join(tags, " "),
 	}
 	if strings.TrimSpace(contentType) != "binary" {
-		parts = append(parts, string(content))
+		parts = append(parts, documentSearchBody(content, contentType))
 	}
 	text := strings.Join(parts, "\n")
 	if len(text) <= documentSearchTextMaxBytes {

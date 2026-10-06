@@ -733,7 +733,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		return nil, nil, err
 	}
 
-	if err := upsertDocumentFTSTx(ctx, tx, documentID, title, string(encodedContent), docSummary, source, tags, threadID); err != nil {
+	if err := upsertDocumentFTSTx(ctx, tx, documentID, title, documentSearchBody(encodedContent, contentType), docSummary, source, tags, threadID); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
@@ -1381,7 +1381,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		return nil, nil, err
 	}
 
-	if err := upsertDocumentFTSTx(ctx, tx, documentID, nextTitle, string(encodedContent), nextSummary, nextSource, nextTags, nextThreadID); err != nil {
+	if err := upsertDocumentFTSTx(ctx, tx, documentID, nextTitle, documentSearchBody(encodedContent, contentType), nextSummary, nextSource, nextTags, nextThreadID); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
