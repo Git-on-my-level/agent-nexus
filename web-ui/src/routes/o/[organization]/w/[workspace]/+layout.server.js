@@ -19,7 +19,10 @@ import {
   LAST_WORKSPACE_COOKIE,
   lastWorkspaceCookieValue,
 } from "$lib/server/workspaceRedirect";
-import { toPublicWorkspaceCatalog } from "$lib/server/workspaceCatalog";
+import {
+  toPublicWorkspaceCatalog,
+  workspaceSessionProbe,
+} from "$lib/server/workspaceCatalog";
 import {
   resolveWorkspaceCatalog,
   resolveWorkspaceInRoute,
@@ -263,7 +266,15 @@ export async function load(event) {
     ...(provider.mode === "hosted"
       ? { workspaceSession: { agent: session.agent ?? null } }
       : {}),
-    ...toPublicWorkspaceCatalog(catalog),
+    /*
+     * `page.data` merges root-first, so this copy of `workspaces` replaces the
+     * root layout's. It has to carry `hasSession` too, or the Overview reads a
+     * catalog that says every workspace is readable and fans out to all of
+     * them.
+     */
+    ...toPublicWorkspaceCatalog(catalog, {
+      hasSession: workspaceSessionProbe(event, provider),
+    }),
     workspace: {
       organizationSlug: workOrg,
       slug: workSlug,

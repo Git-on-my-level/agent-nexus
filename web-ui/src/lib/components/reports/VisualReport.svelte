@@ -9,7 +9,9 @@
   import AnxRefPreview from "$lib/components/AnxRefPreview.svelte";
   import {
     collectPageRefs,
+    hasUnreadableRefs,
     indexResolvedRefs,
+    keepReadableRefs,
     resolveRefsInBatches,
   } from "$lib/refResolve.js";
   import { reportRefStrings } from "./reportRefs.js";
@@ -36,29 +38,75 @@
    * Every ref written anywhere in the report, resolved in one request so chips
    * in table cells, callouts, timelines and diagram nodes render without a
    * fetch each.
+   *
+   * Observed panels, not authored ones: a live panel's prose arrives with its
+   * observation, so a ref written only in a live initiative's summary is not
+   * in the report at load time. Reading the authored panels left those chips
+   * dashed and "not found" for a ref that resolves perfectly well. The effect
+   * re-runs when an observation lands, and the key guard keeps a refresh that
+   * names the same refs from re-asking.
    */
   let refPreview = $state();
   let resolvedRefs = $state(new Map());
+  /**
+   * What the latest request asked for: the ref set, and which request it was.
+   * Deliberately outside the reactive graph — the effect both reads and writes
+   * it, and as state that would be a loop.
+   *
+   * Staleness is decided when a response lands rather than by cancelling on
+   * re-run: an observation that refreshes without changing any ref re-runs
+   * this effect, and cancelling there would throw away the in-flight answer
+   * and leave every chip blank.
+   *
+   * It takes the counter as well as the key to decide that, because the key
+   * only says *what* was asked and two requests can ask the same thing. Switch
+   * dashboards A → B → A with the first A request still in flight and its
+   * answer — resolved before anything moved — arrives last and matches the key
+   * exactly, overwriting the titles and statuses the second A just read. Only
+   * the newest request may write.
+   */
+  const resolving = { key: "", generation: 0 };
   $effect(() => {
-    const refs = collectPageRefs(reportRefStrings(report?.panels ?? []));
+    const refs = collectPageRefs(reportRefStrings(observedPanels));
     if (!refs.length) {
+      resolving.key = "";
+      // A report with no refs supersedes an in-flight answer like any other.
+      resolving.generation += 1;
       resolvedRefs = new Map();
       return;
     }
-    let cancelled = false;
+    // Sorted: the same refs in a different order are the same question. A live
+    // initiatives panel lists by attention, so an unchanged set arrives
+    // reordered the moment anything moves, and treating that as a new question
+    // both re-asks and supersedes the answer already on its way — with a slow
+    // resolver, every answer in turn.
+    const key = [...refs].sort().join("\u0000");
+    if (key === resolving.key) return;
+    resolving.key = key;
+    const generation = ++resolving.generation;
     // Batched: a report may name more refs than one request accepts, and an
     // oversized request is rejected whole.
     void resolveRefsInBatches(refs, (batch) => coreClient.resolveRefs(batch))
       .then((result) => {
-        if (!cancelled) resolvedRefs = result;
+        if (resolving.generation !== generation) return;
+        resolvedRefs = keepReadableRefs(resolvedRefs, result);
+        // A batch that could not be read is not an answer about those refs.
+        // Its chips read "not found" because that beats blank, but remembering
+        // the key would keep a single 503 on screen for as long as the reader
+        // stays on these refs: clearing it means the next report or
+        // observation asks again. A ref the resolver answered "no such thing"
+        // is not retried — that answer will not change by asking twice.
+        if (hasUnreadableRefs(result)) resolving.key = "";
       })
       .catch(() => {
-        // Unresolved refs still render, as "not found" chips.
-        if (!cancelled) resolvedRefs = indexResolvedRefs({}, refs);
+        // A batch that rejects is already handled above, as unreadable refs;
+        // this is the resolver itself failing to run. Chips fall back to
+        // "not found", and the key is cleared so the next report or
+        // observation retries rather than inheriting the failure.
+        if (resolving.generation !== generation) return;
+        resolving.key = "";
+        resolvedRefs = indexResolvedRefs({}, refs);
       });
-    return () => {
-      cancelled = true;
-    };
   });
   const refProps = () => ({
     resolved: resolvedRefs,

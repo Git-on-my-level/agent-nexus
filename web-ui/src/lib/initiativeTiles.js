@@ -50,7 +50,7 @@ export function tileGroup(state) {
 }
 
 /**
- * Segments for the tile's mini-viz: one per step, carrying the status that
+ * Segments for the tile's progress bar: one per step, carrying the status that
  * colours it and whether it sits on the critical path.
  *
  * Core's `geometry` is preferred — it is already bounded to 24 nodes and counts
@@ -72,75 +72,10 @@ export function planSegments(planState, geometry = null, limit = 24) {
     segments: shown.map((step) => ({
       id: asText(step?.id),
       status: asText(step?.status) || "not_started",
-      layer: Number.isFinite(Number(step?.layer)) ? Number(step.layer) : 0,
-      after: Array.isArray(step?.after) ? step.after.map(asText) : [],
       onCriticalPath: critical.has(asText(step?.id)),
     })),
     overflow: omitted,
   };
-}
-
-/**
- * The mini-viz, laid out the way the plan's shape asks for.
- *
- * A chain is one track of steps. Lanes are one track per independent run. A
- * tree is a column per dependency layer — core sends `layer` and `after`, so
- * this is the real graph in miniature rather than a bar standing in for one.
- *
- * @param {{segments: object[]}} input
- * @param {string} shape
- * @returns {{kind: "track"|"lanes"|"tree", tracks: object[][]}}
- */
-export function miniViz({ segments = [] } = {}, shape = "") {
-  if (!segments.length) return { kind: "track", tracks: [] };
-
-  if (shape === "dag") {
-    const byLayer = new Map();
-    for (const segment of segments) {
-      if (!byLayer.has(segment.layer)) byLayer.set(segment.layer, []);
-      byLayer.get(segment.layer).push(segment);
-    }
-    return {
-      kind: "tree",
-      tracks: [...byLayer.keys()]
-        .sort((a, b) => a - b)
-        .map((layer) => byLayer.get(layer)),
-    };
-  }
-
-  if (shape === "lanes") {
-    // Independent runs, grouped over the edges core sent.
-    const byId = new Map(segments.map((segment) => [segment.id, segment]));
-    const neighbours = new Map(segments.map((segment) => [segment.id, []]));
-    for (const segment of segments) {
-      for (const parent of segment.after) {
-        if (!byId.has(parent)) continue;
-        neighbours.get(segment.id).push(parent);
-        neighbours.get(parent).push(segment.id);
-      }
-    }
-    const seen = new Set();
-    const tracks = [];
-    for (const segment of segments) {
-      if (seen.has(segment.id)) continue;
-      const group = [];
-      const stack = [segment.id];
-      seen.add(segment.id);
-      while (stack.length) {
-        const id = stack.pop();
-        group.push(byId.get(id));
-        for (const next of neighbours.get(id)) {
-          if (seen.has(next)) continue;
-          seen.add(next);
-          stack.push(next);
-        }
-      }
-      tracks.push(group);
-    }
-    return { kind: "lanes", tracks };
-  }
-
-  return { kind: "track", tracks: [segments] };
 }
 
 /**
@@ -201,7 +136,6 @@ export function initiativeTileModel(item, options = {}) {
     shapeLabel: SHAPE_LABELS[shape] ?? "",
     hasPlan: Boolean(planState),
     ...bars,
-    viz: miniViz(bars, shape),
     next,
     needs,
     /** ISO instant for the age badge; the badge owns the wording. */

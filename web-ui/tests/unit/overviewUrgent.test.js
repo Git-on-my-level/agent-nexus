@@ -302,3 +302,40 @@ describe("the band says each thing once", () => {
     ]);
   });
 });
+
+describe("coverage, not outage", () => {
+  const unreadable = [
+    { slug: "beta", label: "Beta" },
+    { slug: "gamma", label: "Gamma" },
+  ];
+
+  it("names the workspaces it did not look at, without calling them failures", () => {
+    const band = urgentBandModel({
+      asks: [asksFromSnapshot(snapshot({ count: 0, rows: [] }), here)],
+      tiles: [],
+      notCovered: unreadable,
+    });
+    expect(band.notCovered).toEqual(unreadable);
+    expect(band.unavailable).toEqual([]);
+    // Coverage is a footnote: with nothing waiting, the band is still empty.
+    expect(band.empty).toBe(true);
+  });
+
+  it("keeps a real read failure separate from a workspace it never asked", () => {
+    const band = urgentBandModel({
+      asks: [
+        asksFromSnapshot(snapshot(), here),
+        { status: "unavailable", workspace: there, message: "403" },
+      ],
+      tiles: [],
+      notCovered: [{ slug: "beta", label: "Beta" }],
+    });
+    expect(band.unavailable).toHaveLength(1);
+    expect(band.notCovered).toHaveLength(1);
+  });
+
+  it("tolerates a missing list", () => {
+    expect(urgentBandModel({}).notCovered).toEqual([]);
+    expect(urgentBandModel({ notCovered: null }).notCovered).toEqual([]);
+  });
+});

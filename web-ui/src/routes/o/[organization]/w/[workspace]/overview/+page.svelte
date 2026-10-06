@@ -98,6 +98,20 @@
         ),
     ),
   );
+  /*
+   * Hosted scopes a session per workspace, written only once the viewer has
+   * opened that workspace. Asking one we have no session for is a guaranteed
+   * 401, and reporting those 401s as "could not be read" turned a band with
+   * nothing waiting into a page-wide warning about an outage that was not
+   * happening. Ask the ones we can answer for; say plainly that the rest are
+   * not covered.
+   */
+  let readableWorkspaces = $derived(
+    otherWorkspaces.filter((entry) => entry.hasSession !== false),
+  );
+  let unreadableWorkspaces = $derived(
+    otherWorkspaces.filter((entry) => entry.hasSession === false),
+  );
 
   let initiativeTileList = $derived(
     model?.initiatives?.status === "ok"
@@ -113,6 +127,7 @@
         ...otherWorkspaceAsks,
       ],
       tiles: initiativeTileList,
+      notCovered: unreadableWorkspaces,
     }),
   );
 
@@ -125,7 +140,7 @@
 
   async function fanOutOpenAsks() {
     const ticket = ++fanOutRequest;
-    const targets = otherWorkspaces;
+    const targets = readableWorkspaces;
     if (!targets.length) {
       otherWorkspaceAsks = [];
       return;

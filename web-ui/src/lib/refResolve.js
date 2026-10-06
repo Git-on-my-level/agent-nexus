@@ -373,11 +373,59 @@ export async function resolveRefsInBatches(
   const merged = new Map();
   settled.forEach((result, index) => {
     // A batch that failed still contributes its refs, as unresolvable, so those
-    // chips read "not found" instead of vanishing.
-    const response = result.status === "fulfilled" ? result.value : {};
+    // chips read "not found" instead of vanishing — but marked `unreadable`,
+    // because a reader seeing "not found" is the least bad way to render a
+    // batch we could not read, not a fact we are allowed to keep.
+    const unread = result.status !== "fulfilled";
+    const response = unread ? {} : result.value;
     for (const [ref, row] of indexResolvedRefs(response, batches[index])) {
-      merged.set(ref, row);
+      merged.set(ref, unread ? { ...row, unreadable: true } : row);
     }
   });
+  return merged;
+}
+
+/**
+ * Was any part of this answer never read, as opposed to answered "no such ref"?
+ *
+ * A failed batch and a ref core says does not exist both arrive as
+ * `resolvable: false`, which is right for rendering and wrong for caching: a
+ * missing ref is a fact about the ref, while a 503 is a fact about one request
+ * and has to be asked again. A caller that remembers an answer so it can skip
+ * re-asking checks this first, or a transient failure becomes a permanent
+ * "not found" for as long as the reader stays on those refs.
+ *
+ * @param {Map<string, object>|null|undefined} resolved
+ */
+export function hasUnreadableRefs(resolved) {
+  for (const row of resolved?.values?.() ?? []) {
+    if (row?.unreadable) return true;
+  }
+  return false;
+}
+
+/**
+ * The answer to show when part of a new one could not be read.
+ *
+ * A ref that resolved a moment ago is better left showing the title the reader
+ * already has than turned into "not found" by a request that failed, so an
+ * `unreadable` row yields to what is on screen. Rows the resolver did answer
+ * always win, a genuine "not found" included: that is news about the ref.
+ *
+ * Without this, retrying an answer whose batches partly failed can lose
+ * ground — the second attempt's newly-failed batch overwrites titles the first
+ * attempt read perfectly well.
+ *
+ * @param {Map<string, object>|null|undefined} previous
+ * @param {Map<string, object>} next
+ */
+export function keepReadableRefs(previous, next) {
+  if (!previous?.size || !hasUnreadableRefs(next)) return next;
+  const merged = new Map(next);
+  for (const [ref, row] of next) {
+    if (!row?.unreadable) continue;
+    const known = previous.get(ref);
+    if (known && !known.unreadable) merged.set(ref, known);
+  }
   return merged;
 }

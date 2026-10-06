@@ -227,6 +227,8 @@
   }
   .report-layout-stack {
     display: grid;
+    /* An implicit column sizes to its widest child's max-content. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 24px;
   }
   .report-layout-section-heading {
@@ -302,6 +304,8 @@
   }
   .report-tab-content:not([hidden]) {
     display: grid;
+    /* An implicit column sizes to its widest child's max-content. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 24px;
     padding-top: 20px;
   }

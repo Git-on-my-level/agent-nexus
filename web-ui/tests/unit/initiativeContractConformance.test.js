@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { initiativeTileModel, miniViz } from "../../src/lib/initiativeTiles.js";
+import { initiativeTileModel } from "../../src/lib/initiativeTiles.js";
 import { indexResolvedRefs, refChipModel } from "../../src/lib/refResolve.js";
 import { sinceYouLastLookedStrip } from "../../src/lib/sinceYouLastLooked.js";
 
@@ -99,12 +99,6 @@ describe("the Overview tile reads core's serialized initiative", () => {
     ]);
   });
 
-  it("carries the layers and edges core computed, for the tree", () => {
-    const { segments } = model();
-    expect(segments.map((segment) => segment.layer)).toEqual([0, 1]);
-    expect(segments[1].after).toEqual(["design"]);
-  });
-
   it("reports what the bounded geometry omitted", () => {
     expect(model().overflow).toBe(tile.geometry.collapsed_nodes);
     expect(
@@ -142,48 +136,6 @@ describe("the Overview tile reads core's serialized initiative", () => {
     expect(planless.group).toBe("no_plan");
     // The summary progress core preserves is still shown.
     expect(planless.progress).toEqual(tile.progress);
-  });
-});
-
-describe("the mini-viz follows the shape core computed", () => {
-  const segments = (shape, nodes) =>
-    model({ geometry: { ...tile.geometry, shape, nodes } });
-
-  it("lays a chain out as one track", () => {
-    expect(model().viz).toMatchObject({ kind: "track" });
-    expect(model().viz.tracks).toHaveLength(1);
-  });
-
-  it("lays a tree out as a column per dependency layer", () => {
-    const built = segments("dag", [
-      { id: "a", status: "done", layer: 0, after: [] },
-      { id: "b", status: "active", layer: 1, after: ["a"] },
-      { id: "c", status: "not_started", layer: 1, after: ["a"] },
-      { id: "d", status: "not_started", layer: 2, after: ["b", "c"] },
-    ]);
-    expect(built.viz.kind).toBe("tree");
-    expect(built.viz.tracks.map((track) => track.length)).toEqual([1, 2, 1]);
-  });
-
-  it("lays lanes out as a track per independent run", () => {
-    const built = segments("lanes", [
-      { id: "a", status: "done", layer: 0, after: [] },
-      { id: "b", status: "active", layer: 1, after: ["a"] },
-      { id: "x", status: "not_started", layer: 0, after: [] },
-      { id: "y", status: "not_started", layer: 1, after: ["x"] },
-    ]);
-    expect(built.viz.kind).toBe("lanes");
-    expect(built.viz.tracks.map((track) => track.map((s) => s.id))).toEqual([
-      ["a", "b"],
-      ["x", "y"],
-    ]);
-  });
-
-  it("returns nothing to draw for a plan with no nodes", () => {
-    expect(miniViz({ segments: [] }, "dag")).toEqual({
-      kind: "track",
-      tracks: [],
-    });
   });
 });
 
