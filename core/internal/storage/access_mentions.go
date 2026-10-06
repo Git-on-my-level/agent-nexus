@@ -159,7 +159,16 @@ func installResourceAccessMentions(ctx context.Context, tx *sql.Tx) error {
 	for _, source := range resourceaccess.OwnershipSources {
 		tables[source.Table] = true
 	}
+	epochTables := make([]string, 0, len(tables))
 	for table := range tables {
+		epochTables = append(epochTables, table)
+	}
+	return installResourceAccessEpochTriggers(ctx, tx, epochTables)
+}
+
+// Install epoch invalidation without clearing or rebuilding authorization data.
+func installResourceAccessEpochTriggers(ctx context.Context, tx *sql.Tx, tables []string) error {
+	for _, table := range tables {
 		exists, err := sqliteTableExists(ctx, tx, table)
 		if err != nil {
 			return err

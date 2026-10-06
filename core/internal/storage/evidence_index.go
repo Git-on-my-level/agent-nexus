@@ -121,16 +121,22 @@ func applyMigration65EvidenceIndex(ctx context.Context, tx *sql.Tx) error {
 	}
 	// These projections inherit canonical card ownership and every reference in
 	// their payload/key. Install atomic edges after the bounded backfill too.
-	if err = installResourceAccessEdges(ctx, tx); err != nil {
+	sources := []resourceaccess.OwnershipSource{}
+	for _, source := range resourceaccess.OwnershipSources {
+		if source.Kind == "board" || source.Kind == "work_metadata" || source.Kind == "work_observation" || source.Kind == "work_evidence_record" || source.Kind == "work_evidence_alias" {
+			sources = append(sources, source)
+		}
+	}
+	if err = installResourceAccessSourceEdgesBatched(ctx, tx, sources, 32); err != nil {
 		return err
 	}
 	if err = installExternalKeyReferenceEdges(ctx, tx); err != nil {
 		return err
 	}
-	// Main's mention/epoch migration ran before the new projection tables existed.
-	// Rebuild at upgrade time, register their epoch triggers, and retain numeric
-	// projection IDs as internal nodes rather than resource identities.
-	if err = installResourceAccessMentions(ctx, tx); err != nil {
+	// Main's existing edge/mention triggers maintain the new rows atomically.
+	// Register only new epoch sources; preserve all existing identities/indexes.
+	// Numeric evidence IDs are internal and need no identity backfill.
+	if err = installResourceAccessEpochTriggers(ctx, tx, []string{"work_evidence_records", "work_evidence_index", "resource_access_external_edges"}); err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_access_identity_key ON resource_access_identities(kind,anx_resource_atom_key(CAST(ref AS BLOB)),resource_id)`)
