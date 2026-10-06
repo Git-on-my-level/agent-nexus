@@ -160,8 +160,12 @@ func applyWorkspaceMigrations(ctx context.Context, db *sql.DB) error {
 	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE scope_format_state SET ledger_digest=? WHERE singleton=1`, digest); err != nil {
-		return err
+	// An unchanged fenced reopen must not fire the authority-capture UPDATE
+	// trigger and invalidate an otherwise resumable staged generation.
+	if digest != storedDigest {
+		if _, err := tx.ExecContext(ctx, `UPDATE scope_format_state SET ledger_digest=? WHERE singleton=1`, digest); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

@@ -74,11 +74,13 @@ func (r *Runner) Acquire(ctx context.Context) (int64, error) {
 	if err := r.validate(); err != nil {
 		return 0, err
 	}
-	tx, err := r.DB.BeginTx(ctx, nil)
+	ctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancel()
+	tx, cleanup, err := beginChunk(ctx, r.DB)
 	if err != nil {
 		return 0, err
 	}
-	defer tx.Rollback()
+	defer cleanup()
 	_, err = tx.ExecContext(ctx, `INSERT INTO scope_migration_jobs(job) VALUES(?) ON CONFLICT DO NOTHING`, r.Job)
 	if err != nil {
 		return 0, err
@@ -146,6 +148,8 @@ func (r *Runner) step(ctx context.Context, token int64, limit, maxBytes int, dur
 	if limit < 1 || limit > MaxChunk || maxBytes < 1 || maxBytes > r.MaxBytes || duration <= 0 || duration > 50*time.Millisecond {
 		return Progress{}, ErrBudget
 	}
+	ctx, cancel := context.WithTimeout(ctx, duration)
+	defer cancel()
 	if r.CheckDisk != nil {
 		if err := r.CheckDisk(ctx); err != nil {
 			return Progress{}, err
@@ -154,13 +158,11 @@ func (r *Runner) step(ctx context.Context, token int64, limit, maxBytes int, dur
 	// Bind the transaction itself to the work budget, so expiration also
 	// rolls back pending writes and prevents a later successful Commit.
 	// Time spent acquiring SQLite's write lock consumes the same budget.
-	ctx, cancel := context.WithTimeout(ctx, duration)
-	defer cancel()
-	tx, err := r.DB.BeginTx(ctx, nil)
+	tx, cleanup, err := beginChunk(ctx, r.DB)
 	if err != nil {
 		return Progress{}, err
 	}
-	defer tx.Rollback()
+	defer cleanup()
 	p, err := r.progress(ctx, tx, token)
 	if err != nil {
 		return Progress{}, err
@@ -289,18 +291,18 @@ func (r *Runner) LifecycleStep(ctx context.Context, token int64) (bool, error) {
 	if r.Rebuilder == nil {
 		return true, nil
 	}
+	ctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancel()
 	if r.CheckDisk != nil {
 		if err := r.CheckDisk(ctx); err != nil {
 			return false, err
 		}
 	}
-	ctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
-	defer cancel()
-	tx, err := r.DB.BeginTx(ctx, nil)
+	tx, cleanup, err := beginChunk(ctx, r.DB)
 	if err != nil {
 		return false, err
 	}
-	defer tx.Rollback()
+	defer cleanup()
 	p, err := r.progress(ctx, tx, token)
 	if err != nil {
 		return false, err

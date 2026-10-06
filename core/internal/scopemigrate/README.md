@@ -76,6 +76,15 @@ by the server shutdown context, and `Close()` joined **before** `Workspace.Close
 The worker never performs historical blob reads, and never repairs a missing
 manifest. Migration and lifecycle slices use <=64 candidates and <=50ms; failed
 transactions advance no success watermark. Readiness does not wait for a slice.
+Lease acquisition, migration and lifecycle transactions pin a worker connection
+and disable its SQLite busy wait. A competing writer causes immediate SQLITE_BUSY
+and a later slice retries; the connection's serving timeout is restored after
+rollback/commit, or the connection is discarded if restoration fails. Pool waits
+and transaction work use the slice context. Physical driver initialization and
+OS scheduling are outside the SQLite lock-wait bound; opening a cold connection
+can exceed the requested duration and is refused once its context has expired.
+Unchanged fenced opens do not write
+the ledger digest, so they preserve the captured epoch and staged progress.
 
 B's frozen `readmodel.Step(ctx, LifecycleTx)` at `d8e9d4b8` is absent from this
 integration base. Once the package is integrated, A/B must supply the reviewed
