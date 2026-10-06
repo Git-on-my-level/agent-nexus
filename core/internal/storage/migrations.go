@@ -1018,6 +1018,7 @@ var migrations = []migration{
 	{Version: 59, AfterApply: repairLegacyReferenceAccess},
 	// Rebuild truncated scalar-text edges and replace old TEXT-argument triggers.
 	{Version: 60, AfterApply: repairNULReferenceAccess},
+	{Version: 61, AfterApply: installResourceAccessMentions},
 }
 
 func repairNULReferenceAccess(ctx context.Context, tx *sql.Tx) error {

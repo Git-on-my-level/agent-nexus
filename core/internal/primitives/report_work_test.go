@@ -52,7 +52,8 @@ func TestReportWorkQueryIsScopedAndBounded(t *testing.T) {
 		if filter.ProjectRef != "" {
 			index = "idx_work_metadata_project"
 		}
-		if !strings.Contains(plan, index) {
+		indexedBoard := filter.ProjectRef == "" && strings.Contains(plan, "idx_cards_access_board")
+		if !strings.Contains(plan, index) && !indexedBoard {
 			t.Fatalf("scope does not use index %s: %s", index, plan)
 		}
 		page, err := s.ListReportWork(ctx, filter)

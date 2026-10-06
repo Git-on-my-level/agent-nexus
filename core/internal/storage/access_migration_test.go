@@ -44,6 +44,7 @@ func TestResourceAccessMigrationReconcilesPrivacy56(t *testing.T) {
 		}
 	}
 	for _, sql := range []string{
+		`DROP INDEX idx_access_unknown_artifacts`,
 		`ALTER TABLE artifacts DROP COLUMN content_refs_json`,
 		`DELETE FROM resource_access_edges`,
 		`DELETE FROM schema_migrations WHERE version>=57`,

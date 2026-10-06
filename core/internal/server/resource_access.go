@@ -17,6 +17,9 @@ func attachResourceAccessScope(r *http.Request, opts handlerOptions) {
 		scope.ActorID = principal.ActorID
 	}
 	ctx := primitives.WithAccessScope(r.Context(), scope)
+	if r.Method == http.MethodGet && !strings.HasPrefix(r.URL.Path, "/stream/") {
+		ctx = primitives.WithRequestAccessScope(r.Context(), scope)
+	}
 	if store, ok := opts.primitiveStore.(*primitives.Store); ok {
 		ctx = context.WithValue(ctx, resourceAccessCheckKey{}, store.CheckResourceValues)
 	}
