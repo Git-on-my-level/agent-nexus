@@ -114,3 +114,22 @@ These shared types contain the exact fields; worker checkpoint cursors remain
 D-owned durable state and are not caller-supplied. Changes enter B/C only through
 the lead-owned canonical transaction hook. The interface types do not themselves
 confer authority or enable routes.
+
+The frozen canonical adapter hook is
+`scopedrepo.CanonicalHook.ApplyCanonical(context.Context, scopedrepo.MutationTx,
+scopes.CanonicalMutation) error`. A invokes
+`scopedrepo.ApplyCanonicalHooks(ctx, existingResourceaccessTx, mutation, hooks...)`
+inside the source mutation transaction. It pins source authority, expires the
+proxy/rows and caps all hooks together at 256 SQL calls. Reviewed adapters must
+use transaction-preserving single statements; under that trusted contract,
+errors/panics roll back. Exact template allowlisting remains a wiring gate. This trusted adapter boundary is not a computation capability or a
+replacement for reviewed bounded SQL. No canonical constructors are wired yet.
+
+`Reader.ResourceIdentity(scope, kind, opaqueID)` resolves the new immutable
+`scope_resource_rids` mapping in the authorized read transaction. The positive
+integer RID is private, database-global, and registered atomically with its opaque
+resource identity. Canonical source IDs and RIDs never appear in JSON. The
+`CanonicalMutation` descriptor binds that identity to the adjacent old/new
+version and at most four distinct audience deltas. Structural validation is not
+source-provenance validation: A must still capture these fields from canonical
+rows, build B's feed adapter, and prove complete mutation coverage before serving.

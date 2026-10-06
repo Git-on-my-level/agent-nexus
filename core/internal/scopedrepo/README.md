@@ -19,6 +19,7 @@ adds no inspection/recovery workflow.
 | `scope_domains(id,state,generation)`                                         | Internal authorization, indexed scope directory              |
 | `scope_memberships(principal,scope_id,role,generation)`                      | Internal authorization; exact principal/scope binding        |
 | `scope_resources(scope_id,kind,id,canonical_id,version)`                     | Scope-owned reference directory; no canonical payload copies |
+| `scope_resource_rids(rid,scope_id,kind,resource_id)`                         | Internal positive integer key; never an external identity    |
 | `scope_aliases(scope_id,kind,alias,resource_id,retired)`                     | Scoped identity including reserved retired aliases           |
 | `scope_replays(principal,replay_key,scope_id,kind,request_hash,resource_id)` | Creator replay; reauthorizes scope and checks request hash   |
 | `scope_projection_values(scope_id,projection_key,value)`                     | Derived value, readable/writable only under its source scope |
@@ -33,6 +34,15 @@ adds no inspection/recovery workflow.
   authority on their own.
 - `Read(ctx, scopes.RequestSelection, func(Reader) error)` authorizes every selected
   scope in one transaction and expires the render-only Reader on return.
+  `Reader.ResourceIdentity(scope, kind, resourceID)` returns
+  `(scopes.ResourceIdentity, error)` by two exact unique-key probes, sharing the
+  256-operation budget. The private RID is globally unique within this database,
+  allocated by an insert trigger in the resource registration transaction and
+  immutable/reserved even across SQLite replacement. Replay retains the same RID.
+  RID and canonical ID are excluded from JSON; transports must use opaque IDs.
+  Initialization never scans existing registries: this unpublished shadow schema
+  expects a fresh generation. A worker must explicitly fill any older experimental
+  generation before it can become ready.
   `Write(ctx, scopes.RequestSelection, func(Writer) error)` accepts exactly one
   scope and exposes opaque derived values. Complete dispatcher separation remains
   an integration gate; business code cannot be given both factories.
@@ -62,7 +72,36 @@ alias, replay string) (string,error)` creates a random 128-bit reference identit
 `go generate ./internal/scopedrepo` copies reviewed SQL templates into Go constants.
 `manifest.json` has only template name and ownership category. It cannot express
 policy or construct SQL. Generator tests reject unowned templates and stale output.
-Queries are exact/range key lookups; no arbitrary query method is exposed.
+Business capabilities expose exact/range key lookups, not arbitrary SQL.
+
+### Trusted canonical hook contract
+
+`scopedrepo.CanonicalHook.ApplyCanonical(context.Context, MutationTx,
+scopes.CanonicalMutation) error` is the injection interface for A-owned adapters.
+`ApplyCanonicalHooks(ctx, *resourceaccess.Tx, mutation, hooks...) error` consumes
+an **existing canonical transaction**; it neither begins nor commits one. Up to
+four hooks share a 256-call budget. The proxy exposes only `ExecContext` and
+`QueryContext`, pins the source context/policy, and closes returned rows when its
+callback expires. Hooks must issue only reviewed transaction-preserving single
+statements (no transaction control, compound SQL or schema changes). Under that trusted-template
+contract, any SQL/budget/callback failure, including an ignored proxy error or
+panic, rolls back the source transaction. The canonical writer commits
+only after success. Both source and supplied contexts control cancellation and
+deadlines, including row iteration; authority and all context values remain pinned to the source context.
+
+`scopes.CanonicalMutation` carries the internal identity, previous version and
+one to four distinct family/audience `Change` deltas. The new version must be the
+previous version plus one; every delta must name the same scope/resource/version.
+Audience moves use old-only/new-only deltas. Adapters receive detached copies.
+
+This raw SQL proxy belongs **only to trusted repository adapters using reviewed,
+bounded templates**; it is not a business computation capability, and a call
+count does not bound arbitrary SQL work. Exact B/C template allowlisting is a
+wiring gate; the current proxy does not parse or mechanically restrict SQL.
+Descriptor validation is structural, not proof of provenance. A still owns canonical capture coverage, constructor
+wiring and the concrete B/C template adapters. Those require same-transaction
+source reads and mutation capture, plus legacy-policy parity before enablement.
+The import gate below remains in force; this contract alone enables no handler.
 
 ## Explicit integration gates
 

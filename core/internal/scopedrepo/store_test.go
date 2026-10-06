@@ -234,6 +234,7 @@ func TestShadowSchemaInventory(t *testing.T) {
 		"scope_aliases":           "alias,kind,resource_id,retired,scope_id",
 		"scope_replays":           "kind,principal,replay_key,request_hash,resource_id,scope_id",
 		"scope_projection_values": "projection_key,scope_id,value",
+		"scope_resource_rids":     "kind,resource_id,rid,scope_id",
 	}
 	rows, e := db.Query(`SELECT name FROM sqlite_schema WHERE type='table' AND name GLOB 'scope_*' ORDER BY name`)
 	must(t, e)

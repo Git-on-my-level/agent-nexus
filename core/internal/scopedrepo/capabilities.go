@@ -13,6 +13,7 @@ import (
 // Writer/factory; replacing the foundation import gate requires that analyzer.
 type Reader interface {
 	CoveredScopes() ([]scopes.ID, error)
+	ResourceIdentity(scope scopes.ID, kind, resourceID string) (scopes.ResourceIdentity, error)
 	DocumentTitle(scope scopes.ID, resourceID string) (string, error)
 }
 
@@ -25,12 +26,17 @@ type Writer interface {
 }
 
 type reader struct {
-	covered func() ([]scopes.ID, error)
-	title   func(scopes.ID, string) (string, error)
+	identity func(scopes.ID, string, string) (scopes.ResourceIdentity, error)
+	covered  func() ([]scopes.ID, error)
+	title    func(scopes.ID, string) (string, error)
 }
 
 func (r *reader) CoveredScopes() ([]scopes.ID, error)                      { return r.covered() }
 func (r *reader) DocumentTitle(scope scopes.ID, id string) (string, error) { return r.title(scope, id) }
+
+func (r *reader) ResourceIdentity(scope scopes.ID, kind, id string) (scopes.ResourceIdentity, error) {
+	return r.identity(scope, kind, id)
+}
 
 // Read authorizes the complete selection before executing a render callback.
 // Callbacks get a capability, never the Store or a reusable authorization result.
@@ -91,6 +97,26 @@ func (s *Store) Read(ctx context.Context, request scopes.RequestSelection, fn fu
 			return "", scopes.ErrBudget
 		}
 		return title.String, nil
+	}
+	r.identity = func(scope scopes.ID, kind, id string) (scopes.ResourceIdentity, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		out := scopes.ResourceIdentity{}
+		if !alive {
+			return out, scopes.ErrClosed
+		}
+		if !selected[scope] {
+			return out, scopes.ErrDenied
+		}
+		ops++
+		if ops > scopes.MaxComputationOps || len(kind) > 32 || len(id) > 512 {
+			return out, scopes.ErrBudget
+		}
+		e := tx.QueryRowContext(ctx, query_identity, scope, kind, id).Scan(&out.ScopeID, &out.Kind, &out.ResourceID, &out.RID, &out.CanonicalID, &out.CanonicalVersion)
+		if errors.Is(e, sql.ErrNoRows) {
+			return scopes.ResourceIdentity{}, scopes.ErrDenied
+		}
+		return out, e
 	}
 	closeCap := func() { mu.Lock(); alive = false; mu.Unlock() }
 	defer closeCap()
