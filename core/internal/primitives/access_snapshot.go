@@ -25,10 +25,10 @@ func WithRequestAccessScope(ctx context.Context, scope AccessScope) context.Cont
 	state := &denialRequestState{}
 	ctx = context.WithValue(ctx, denialRequestKey{}, state)
 	p, _ := resourceaccess.PolicyFrom(ctx)
-	p.ReadOnDB = func(c context.Context, db resourceaccess.QueryRower, query string) string {
+	p.ReadOnDB = func(c context.Context, db resourceaccess.QueryRower, query string, args []any) (string, []any) {
 		// Identity/service SQL with no resource relation needs no closure.
 		if accessCTEs(scope, query) == "" {
-			return scopeRead(c, query)
+			return scopeRead(c, query), args
 		}
 		state.Lock()
 		if state.snapshot == nil {
@@ -39,7 +39,15 @@ func WithRequestAccessScope(ctx context.Context, scope AccessScope) context.Cont
 			}
 		}
 		state.Unlock()
-		return scopeRead(c, query)
+		if snapshot := denialSnapshotFrom(c); snapshot != nil && resourceaccess.AnonymousSQLParameters(query) {
+			// The snapshot is data, never SQL syntax. Its one binding precedes
+			// the statement's anonymous bindings, preserving their order.
+			bound := make([]any, 0, len(args)+1)
+			bound = append(bound, snapshot.rows)
+			bound = append(bound, args...)
+			return scopeReadWithSnapshot(c, query, snapshot), bound
+		}
+		return scopeRead(c, query), args
 	}
 	return resourceaccess.WithPolicy(ctx, p)
 }

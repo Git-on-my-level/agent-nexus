@@ -22,3 +22,9 @@ func repairResourceAccessReadIndexes(ctx context.Context, tx *sql.Tx) error {
 	}
 	return resourceaccess.InstallPMAccess(ctx, tx, true)
 }
+
+// Forward-only repair for databases already at v62. Keep profile fields scoped
+// without comparing every stored value against every denied reference at reads.
+func indexResourceAccessProfiles(ctx context.Context, tx *sql.Tx) error {
+	return installResourceAccessSourceEdges(ctx, tx, resourceaccess.FilterOwnershipSources())
+}

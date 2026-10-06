@@ -83,8 +83,8 @@ func TestResourceAccessPMWriteIndex(t *testing.T) {
 	visible("public-control", 1)
 	// Captured snapshots must retain indexed PM point plans without body walks.
 	policy, _ := resourceaccess.PolicyFrom(scope)
-	query := policy.ReadOnDB(scope, ws.DB(), `SELECT body FROM pm_records WHERE kind='decision' AND id=?`)
-	rows, e := ws.DB().Query(`EXPLAIN QUERY PLAN `+query, "public-control")
+	query, args := policy.ReadOnDB(scope, ws.DB(), `SELECT body FROM pm_records WHERE kind='decision' AND id=?`, []any{"public-control"})
+	rows, e := ws.DB().Query(`EXPLAIN QUERY PLAN `+query, args...)
 	if e != nil {
 		t.Fatal(e)
 	}

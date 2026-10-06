@@ -37,20 +37,27 @@ func newPMPrincipalLookup(store pmPrincipalStore) *pmPrincipalLookup {
 
 func (l *pmPrincipalLookup) find(ctx context.Context, actorID string) (auth.AuthPrincipalSummary, error) {
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	now := l.now()
-	if cached, ok := l.identities[actorID]; ok {
-		if now.Before(cached.expires) {
-			principal, err := l.store.GetPrincipalSummary(ctx, cached.agentID)
-			if err == nil && principal.ActorID == actorID && !principal.Revoked {
-				return principal, nil
-			}
+	cached, ok := l.identities[actorID]
+	if ok && !now.Before(cached.expires) {
+		delete(l.identities, actorID)
+		ok = false
+	}
+	l.mu.Unlock()
+	// Protect only routing state. Database authority reads must not serialize
+	// independent PM requests behind this mutex.
+	if ok {
+		principal, err := l.store.GetPrincipalSummary(ctx, cached.agentID)
+		if err == nil && principal.ActorID == actorID && !principal.Revoked {
+			return principal, nil
+		}
+		l.mu.Lock()
+		if l.identities[actorID] == cached {
 			delete(l.identities, actorID)
-			if err != nil {
-				return auth.AuthPrincipalSummary{}, err
-			}
-		} else {
-			delete(l.identities, actorID)
+		}
+		l.mu.Unlock()
+		if err != nil {
+			return auth.AuthPrincipalSummary{}, err
 		}
 	}
 	limit, cursor := 200, ""
@@ -61,10 +68,12 @@ func (l *pmPrincipalLookup) find(ctx context.Context, actorID string) (auth.Auth
 		}
 		for _, item := range items {
 			if item.ActorID == actorID && !item.Revoked {
+				l.mu.Lock()
 				if len(l.identities) >= 256 {
 					clear(l.identities)
 				}
 				l.identities[actorID] = pmPrincipalIdentity{agentID: item.AgentID, expires: now.Add(30 * time.Second)}
+				l.mu.Unlock()
 				return item, nil
 			}
 		}

@@ -1020,6 +1020,7 @@ var migrations = []migration{
 	{Version: 60, AfterApply: repairNULReferenceAccess},
 	{Version: 61, AfterApply: installResourceAccessMentions},
 	{Version: 62, AfterApply: repairResourceAccessReadIndexes},
+	{Version: 63, AfterApply: indexResourceAccessProfiles},
 }
 
 func repairNULReferenceAccess(ctx context.Context, tx *sql.Tx) error {
