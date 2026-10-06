@@ -17,7 +17,7 @@ func TestRunJSONHelpCatalogUsesStableTopicKeys(t *testing.T) {
 	t.Parallel()
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
@@ -57,7 +57,7 @@ func TestRunMetaCommandsJSON(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -96,7 +96,7 @@ func TestRunMetaCommandIncludesWhyAndExample(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -136,7 +136,7 @@ func TestRunGeneratedHelpTopic(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -191,7 +191,7 @@ func TestRunGeneratedTopicsHelpMentionsPrimaryCoordination(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -221,7 +221,7 @@ func TestRunGeneratedAuthHelpTopics(t *testing.T) {
 		t.Helper()
 		stdout := &bytes.Buffer{}
 		stderr := &bytes.Buffer{}
-		cli := New()
+		cli := newTestApp(t)
 		cli.Stdout = stdout
 		cli.Stderr = stderr
 		cli.Stdin = strings.NewReader("")
@@ -277,7 +277,7 @@ func TestRunGeneratedHelpTopicSupportsPacketsReceiptsCreatePath(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -372,7 +372,7 @@ func TestRunEventsHelpMentionsLocalExplainAcrossEntryPoints(t *testing.T) {
 		t.Helper()
 		stdout := &bytes.Buffer{}
 		stderr := &bytes.Buffer{}
-		cli := New()
+		cli := newTestApp(t)
 		cli.Stdout = stdout
 		cli.Stderr = stderr
 		cli.Stdin = strings.NewReader("")
@@ -422,7 +422,7 @@ func TestRunLocalHelperHelpTopicsResolveAcrossEntryPoints(t *testing.T) {
 		t.Helper()
 		stdout := &bytes.Buffer{}
 		stderr := &bytes.Buffer{}
-		cli := New()
+		cli := newTestApp(t)
 		cli.Stdout = stdout
 		cli.Stderr = stderr
 		cli.Stdin = strings.NewReader("")
@@ -485,7 +485,7 @@ func TestJSONModeTrailingHelpShowsHelpEnvelope(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -515,7 +515,7 @@ func TestJSONModeTrailingHelpShowsHelpEnvelope(t *testing.T) {
 func TestRootUsageAuthNotDuplicatedInGeneratedGroups(t *testing.T) {
 	t.Parallel()
 
-	text := New().rootUsageTextAll()
+	text := newTestApp(t).rootUsageTextAll()
 	genIdx := strings.Index(text, "Generated Command Groups:")
 	if genIdx < 0 {
 		t.Fatalf("expected Generated Command Groups section in root usage")
@@ -532,7 +532,7 @@ func TestRootUsageAuthNotDuplicatedInGeneratedGroups(t *testing.T) {
 func TestRootUsageLeadsWithTopicsBoardsDocsDomainModel(t *testing.T) {
 	t.Parallel()
 
-	text := New().rootUsageTextAll()
+	text := newTestApp(t).rootUsageTextAll()
 	domainIdx := strings.Index(text, "Domain model:")
 	coreIdx := strings.Index(text, "Core Commands:")
 	if domainIdx < 0 || coreIdx < 0 || domainIdx > coreIdx {
@@ -562,7 +562,7 @@ func TestHelpResolvesRuntimeAliasesThreadsGetInboxAck(t *testing.T) {
 		t.Helper()
 		stdout := &bytes.Buffer{}
 		stderr := &bytes.Buffer{}
-		cli := New()
+		cli := newTestApp(t)
 		cli.Stdout = stdout
 		cli.Stderr = stderr
 		cli.Stdin = strings.NewReader("")
@@ -597,7 +597,7 @@ func TestRunDocsHelpMentionsCanonicalRevise(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -716,7 +716,7 @@ func TestRunCommitmentsHelpIsRemoved(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -740,7 +740,7 @@ func TestRunProvenanceHelpTopic(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -789,7 +789,7 @@ func TestRunSubcommandHelpToken(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -813,7 +813,7 @@ func TestRunRootHelpMentionsOnboardingTopic(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -843,7 +843,7 @@ func TestRunOnboardingHelpTopic(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -1024,7 +1024,7 @@ func TestGeneratedCommandHelpIncludesBodySchemaAndEnums(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -1079,7 +1079,7 @@ func TestGeneratedCommandHelpIncludesCLIInputAffordance(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -1209,7 +1209,7 @@ func runHelpCommand(t *testing.T, args ...string) string {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -1321,7 +1321,7 @@ func runHelpCommandAllowExit(t *testing.T, args []string) (string, string, int) 
 	t.Helper()
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")

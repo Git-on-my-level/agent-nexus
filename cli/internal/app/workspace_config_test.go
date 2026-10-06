@@ -17,7 +17,7 @@ import (
 func workspaceTestApp(t *testing.T, home, cwd string, env map[string]string) (*App, *bytes.Buffer) {
 	t.Helper()
 	stdout := &bytes.Buffer{}
-	a := New()
+	a := newTestApp(t)
 	a.Stdout = stdout
 	a.Stderr = &bytes.Buffer{}
 	a.UserHomeDir = func() (string, error) { return home, nil }

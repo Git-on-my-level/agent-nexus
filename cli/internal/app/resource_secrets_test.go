@@ -92,7 +92,7 @@ func TestSecretCreateAndUpdateRequireExplicitStdin(t *testing.T) {
 			t.Parallel()
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
-			cli := New()
+			cli := newTestApp(t)
 			cli.Stdout = stdout
 			cli.Stderr = stderr
 			cli.Stdin = strings.NewReader("secret-value")

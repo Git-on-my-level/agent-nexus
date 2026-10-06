@@ -15,7 +15,7 @@ import (
 )
 
 func isolatedSkillsApp(home string) *App {
-	a := New()
+	a := newTestAppWithHome(home)
 	a.UserHomeDir = func() (string, error) { return home, nil }
 	a.Getenv = func(string) string { return "" }
 	a.skillLookPath = func(string) (string, error) { return "", errors.New("not installed") }

@@ -17,7 +17,7 @@ import (
 
 func TestInputFileMarksNonRegularStreams(t *testing.T) {
 	t.Parallel()
-	app := New()
+	app := newTestApp(t)
 	app.ReadFile = func(string) ([]byte, error) { return []byte("document body"), nil }
 
 	info, err := os.Stat("/dev/stdin")
@@ -31,7 +31,7 @@ func TestInputFileMarksNonRegularStreams(t *testing.T) {
 		t.Fatalf("/dev/stdin regular=%v consumed=%v", info.Mode().IsRegular(), app.stdinConsumed)
 	}
 
-	fifoApp := New()
+	fifoApp := newTestApp(t)
 	fifoApp.ReadFile = func(string) ([]byte, error) { return []byte("from fifo"), nil }
 	fifo := filepath.Join(t.TempDir(), "input.fifo")
 	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
@@ -41,13 +41,13 @@ func TestInputFileMarksNonRegularStreams(t *testing.T) {
 	if err != nil || string(data) != "from fifo" || !fifoApp.stdinConsumed {
 		t.Fatalf("data=%q err=%v consumed=%v", data, err, fifoApp.stdinConsumed)
 	}
-	fromFile := New()
+	fromFile := newTestApp(t)
 	fromFile.ReadFile = func(string) ([]byte, error) { return []byte(`{"ok":true}`), nil }
 	if _, err := fromFile.readBodyInput(fifo); err != nil || !fromFile.stdinConsumed {
 		t.Fatalf("from-file fifo err=%v consumed=%v", err, fromFile.stdinConsumed)
 	}
 
-	regular := New()
+	regular := newTestApp(t)
 	path := filepath.Join(t.TempDir(), "notes.md")
 	if err := os.WriteFile(path, []byte("notes"), 0o600); err != nil {
 		t.Fatal(err)

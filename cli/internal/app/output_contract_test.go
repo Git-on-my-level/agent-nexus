@@ -23,7 +23,7 @@ func TestEnvelopeV2AndUnknownCommandRepair(t *testing.T) {
 		{[]string{"--json", "verison"}, false, "unknown_command", 2, "version"},
 	} {
 		var stdout, stderr bytes.Buffer
-		a := New()
+		a := newTestApp(t)
 		a.Stdout = &stdout
 		a.Stderr = &stderr
 		if got := a.Run(tc.args); got != tc.exit {
@@ -131,7 +131,7 @@ func TestAwaitActionsFollowStructuredOutcome(t *testing.T) {
 func TestDebugRoutingAndMetadata(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
-	a := New()
+	a := newTestApp(t)
 	a.Stdout = &stdout
 	a.Stderr = &stderr
 	if got := a.Run([]string{"--json", "debug", "meta", "commands"}); got != 0 {
@@ -166,7 +166,7 @@ func TestDebugRoutingAndMetadata(t *testing.T) {
 func TestOutdatedRepairAndExitCode(t *testing.T) {
 	t.Parallel()
 	var stdout bytes.Buffer
-	a := New()
+	a := newTestApp(t)
 	a.Stdout = &stdout
 	if got := a.renderError(resolveMachineCommandIdentity("work list"), true, errnorm.Local("cli_outdated", "upgrade required")); got != 7 {
 		t.Fatalf("exit=%d", got)

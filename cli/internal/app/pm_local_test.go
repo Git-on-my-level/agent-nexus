@@ -182,7 +182,7 @@ func TestCompleteTurnDropsUnresolvableEvidenceRefs(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	stderr := &bytes.Buffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -1236,7 +1236,7 @@ func pmTurnHarness(t *testing.T) (pmTurnTest, *pmTurnPosts) {
 	}))
 	t.Cleanup(srv.Close)
 	stderr := &bytes.Buffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -1438,7 +1438,7 @@ func TestPMServeExitsAfterThreeForbiddenClaims(t *testing.T) {
 	sleepFn = func(context.Context, time.Duration) error { return nil }
 	t.Cleanup(func() { sleepFn = sleepCtx })
 	stderr := &bytes.Buffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -1490,7 +1490,7 @@ func TestPMServeBacksOffAndExitsOnNonRetryableClaim(t *testing.T) {
 	sleepFn = func(context.Context, time.Duration) error { return nil }
 	t.Cleanup(func() { sleepFn = sleepCtx })
 	stderr := &bytes.Buffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -1535,7 +1535,7 @@ func TestPMServeKeepsPollingTransientClaimErrors(t *testing.T) {
 	t.Cleanup(func() { sleepFn = sleepCtx })
 	ctx, cancel := context.WithCancel(context.Background())
 	stderr := &lockedBuffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -1626,7 +1626,7 @@ func TestPMServeReleasesHeldTurnOnShutdown(t *testing.T) {
 	pmServeShutdownGrace = 30 * time.Millisecond
 	t.Cleanup(func() { pmServeShutdownGrace = prevGrace })
 	stderr := &bytes.Buffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -1705,7 +1705,7 @@ func TestReleaseTurnPostsRunnerIDAndLeaseToken(t *testing.T) {
 		io.WriteString(w, `{"id":"turn-1","status":"sending","claimed":false}`)
 	}))
 	t.Cleanup(srv.Close)
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = io.Discard
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -1745,7 +1745,7 @@ func TestPMServeCleanStopReturnsNil(t *testing.T) {
 	sleepFn = func(ctx context.Context, _ time.Duration) error { return ctx.Err() }
 	t.Cleanup(func() { sleepFn = sleepCtx })
 	stderr := &bytes.Buffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -1822,7 +1822,7 @@ func TestPMServeSignalDuringRunReleasesInsteadOfFailing(t *testing.T) {
 			pmServeShutdownGrace = time.Second
 			t.Cleanup(func() { pmServeShutdownGrace = prevGrace })
 			stderr := &lockedBuffer{}
-			app := New()
+			app := newTestApp(t)
 			app.Stderr = stderr
 			app.Stdout = io.Discard
 			app.Getenv = func(string) string { return "" }
@@ -1930,7 +1930,7 @@ func TestCompleteTurnTruncatesWithMarkerAndKeepsEvidence(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	stderr := &bytes.Buffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -1983,7 +1983,7 @@ func TestHandleClaimedTurnRetriesCompleteThenSucceeds(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	stderr := &bytes.Buffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -2032,7 +2032,7 @@ func TestHandleClaimedTurnPersistentComplete503SavesReplyAndReleases(t *testing.
 	}))
 	t.Cleanup(srv.Close)
 	stderr := &bytes.Buffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -2088,7 +2088,7 @@ func TestHandleClaimedTurnFailAlso503ReleasesLease(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	stderr := &bytes.Buffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -2135,7 +2135,7 @@ func TestHandleClaimedTurnLeaseMismatchAlreadyCompletedDoesNotRerun(t *testing.T
 	}))
 	t.Cleanup(srv.Close)
 	stderr := &bytes.Buffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -2186,7 +2186,7 @@ func TestHandleClaimedTurnLeaseMismatchPendingRetriesOnNextClaim(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	stderr := &bytes.Buffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -2261,7 +2261,7 @@ func TestHandleClaimedTurnReclaimDeliversSavedReplyWithoutHarness(t *testing.T) 
 	}))
 	t.Cleanup(srv.Close)
 	stderr := &bytes.Buffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -2399,7 +2399,7 @@ func TestPMServePersistentLeaseMismatchCapsHarnessRuns(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	stderr := &lockedBuffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -2485,7 +2485,7 @@ func TestHandleClaimedTurnSavedReplyPersistent503DoesNotRunHarness(t *testing.T)
 	}))
 	t.Cleanup(srv.Close)
 	stderr := &bytes.Buffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -2533,7 +2533,7 @@ func TestHandleClaimedTurnSavedReplyDeletesWhenTurnDelivered(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	stderr := &bytes.Buffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -2628,7 +2628,7 @@ func TestPMServeMaxConcurrentClaimsTwoTurns(t *testing.T) {
 	})
 	defer restore()
 	stderr := &lockedBuffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -2709,7 +2709,7 @@ func TestPMServeCapacityClaimSleepsWithoutError(t *testing.T) {
 			}))
 			t.Cleanup(srv.Close)
 			stderr := &lockedBuffer{}
-			app := New()
+			app := newTestApp(t)
 			app.Stderr = stderr
 			app.Stdout = io.Discard
 			app.Getenv = func(string) string { return "" }
@@ -2804,7 +2804,7 @@ func TestHandleClaimedTurnPersistentComplete409FailsAfterThreeDeliveries(t *test
 	}))
 	t.Cleanup(srv.Close)
 	stderr := &bytes.Buffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -2867,7 +2867,7 @@ func TestHandleClaimedTurnTransientCompleteThenSucceeds(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	stderr := &bytes.Buffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -2902,7 +2902,7 @@ func TestHandleClaimedTurnFailRefusedAfterUndeliverableForgetsTurn(t *testing.T)
 	if err := os.WriteFile(turnReplyPath(dir, "turn-1"), []byte("Saved reply.\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = &bytes.Buffer{}
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -2971,7 +2971,7 @@ func TestHandleClaimedTurnHeartbeat409CancelsHarness(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	stderr := &lockedBuffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -3030,7 +3030,7 @@ func TestHandleClaimedTurnHeartbeat404Disables(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	stderr := &lockedBuffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -3102,7 +3102,7 @@ func TestHandleClaimedTurnHeartbeatRenewsWhileRunning(t *testing.T) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = io.Discard
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
@@ -3171,7 +3171,7 @@ func TestHandleClaimedTurnHeartbeat503RetriesThenSucceeds(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	stderr := &bytes.Buffer{}
-	app := New()
+	app := newTestApp(t)
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }

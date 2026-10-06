@@ -14,7 +14,7 @@ import (
 
 func TestSeriesUsageBeforeHostResolution(t *testing.T) {
 	for _, args := range [][]string{{"series", "push", "count", "1", "--unknown"}, {"series", "push", "count", "NaN"}, {"series", "push", "--from-command"}, {"series", "query", "x", "--adapter", "y"}, {"adapters", "declare"}, {"adapters", "revoke"}, {"series", "push", "x", "1", "--label", "x=a", "--label", "x=b"}} {
-		a := New()
+		a := newTestApp(t)
 		a.Getenv = func(string) string { return "" }
 		a.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
 		a.Stderr = &bytes.Buffer{}
@@ -83,7 +83,7 @@ func TestSeriesPushExchangesScopeAndCommandPayload(t *testing.T) {
 		w.WriteHeader(404)
 	}))
 	defer server.Close()
-	a := New()
+	a := newTestApp(t)
 	a.Stderr = &bytes.Buffer{}
 	_, _, err := a.runSeriesCommand(context.Background(), []string{"series", "push", "--from-command", "--label", "initiative=launch", "--", "printf", "%s", `{"series":"builds","value":7}`}, config.Resolved{BaseURL: server.URL, AccessToken: "owner", Timeout: time.Second * 10})
 	if err != nil {

@@ -45,7 +45,7 @@ func TestWorkUsageBeforeProfileResolution(t *testing.T) {
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
-			a := New()
+			a := newTestApp(t)
 			a.Stdout = &stdout
 			a.Stderr = &stderr
 			a.Stdin = strings.NewReader("")
@@ -75,7 +75,7 @@ func TestWorkHelpOffline(t *testing.T) {
 
 func TestWorkListBoardFlagShowsRepairCommandBeforeProfileResolution(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	a := New()
+	a := newTestApp(t)
 	a.Stdout = &stdout
 	a.Stderr = &stderr
 	a.Stdin = strings.NewReader("")
