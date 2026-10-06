@@ -4,6 +4,7 @@ HOST ?= 127.0.0.1
 PORT ?= 8000
 WORKSPACE_ROOT ?= $(CURDIR)/.anx-workspace
 SCHEMA_PATH ?= $(CURDIR)/../contracts/anx-schema.yaml
+GO_TEST_TIMEOUT ?= 13m
 
 # For offline/air-gapped environments (e.g., agent sandboxes), set GOTOOLCHAIN=local
 # to prevent Go from auto-downloading a toolchain version. Example:
@@ -77,7 +78,7 @@ check-linux-observation:
 # The expanded privacy matrix also needs a package budget above Go's 10m
 # default. Per-request and event checks keep their own bounded deadlines.
 test:
-	@go test -parallel=2 -timeout=13m ./...
+	@go test -parallel=2 -timeout=$(GO_TEST_TIMEOUT) ./...
 
 check: fmt vet test check-offline check-linux-observation
 
