@@ -1,0 +1,11 @@
+{
+  "role": "authority",
+  "directory": "principal",
+  "domain": "authority",
+  "title": "scope",
+  "projection": "scope",
+  "replay": "principal",
+  "register": "scope",
+  "alias": "scope",
+  "save_replay": "principal"
+}
