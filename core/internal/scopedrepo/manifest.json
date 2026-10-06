@@ -7,5 +7,6 @@
   "replay": "principal",
   "register": "scope",
   "alias": "scope",
-  "save_replay": "principal"
+  "save_replay": "principal",
+  "identity": "scope"
 }

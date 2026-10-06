@@ -18,6 +18,9 @@ type Projection struct {
 	Rank        string
 	Timestamp   int64
 	Deleted     bool
+	// SourceTruncated means Title/Text omit canonical source bytes. Search must
+	// retain this bit even if its own normalization fits the index budget.
+	SourceTruncated bool
 }
 
 // Change is consumed by B/C in the canonical mutation transaction. Integration

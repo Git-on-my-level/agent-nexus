@@ -85,3 +85,30 @@ CREATE TRIGGER IF NOT EXISTS scope_no_grants_delete
 BEFORE DELETE ON scope_domains
 WHEN OLD.state='inaccessible'
 BEGIN SELECT RAISE(ABORT,'scope identity remains reserved'); END;
+
+-- Private integer keys are never external handles. The insert trigger gives
+-- each new registry identity one globally unique RID in the same transaction.
+CREATE TABLE IF NOT EXISTS scope_resource_rids (
+ rid INTEGER PRIMARY KEY AUTOINCREMENT CHECK(rid > 0),
+ scope_id TEXT NOT NULL,
+ kind TEXT NOT NULL,
+ resource_id TEXT NOT NULL,
+ UNIQUE(scope_id,kind,resource_id),
+ FOREIGN KEY(scope_id,kind,resource_id) REFERENCES scope_resources(scope_id,kind,id)
+);
+CREATE TRIGGER IF NOT EXISTS scope_resource_rid_allocate
+AFTER INSERT ON scope_resources
+BEGIN INSERT INTO scope_resource_rids(scope_id,kind,resource_id) VALUES(NEW.scope_id,NEW.kind,NEW.id); END;
+CREATE TRIGGER IF NOT EXISTS scope_resource_rid_immutable
+BEFORE UPDATE ON scope_resource_rids
+BEGIN SELECT RAISE(ABORT,'resource RID is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS scope_resource_rid_reserved
+BEFORE DELETE ON scope_resource_rids
+BEGIN SELECT RAISE(ABORT,'resource RID remains reserved'); END;
+
+-- INSERT OR REPLACE otherwise bypasses delete triggers with recursive triggers off.
+CREATE TRIGGER IF NOT EXISTS scope_resource_rid_no_replace
+BEFORE INSERT ON scope_resource_rids
+WHEN EXISTS(SELECT 1 FROM scope_resource_rids WHERE rid=NEW.rid)
+ OR EXISTS(SELECT 1 FROM scope_resource_rids WHERE scope_id=NEW.scope_id AND kind=NEW.kind AND resource_id=NEW.resource_id)
+BEGIN SELECT RAISE(ABORT,'resource RID remains reserved'); END;
