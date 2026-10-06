@@ -3,6 +3,7 @@ package perfguard
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func TestCaptureIncludesTransactionsPreparedAndRawReads(t *testing.T) {
@@ -73,5 +74,31 @@ func TestPlanClassifier(t *testing.T) {
 		if got := len(Findings(tc.sql, tc.plan, map[string]bool{"events": true}, map[string]bool{"expensive": true})) > 0; got != tc.bad {
 			t.Errorf("%s: flagged=%v", tc.sql, got)
 		}
+	}
+}
+
+func TestCaptureAllowsNextRequestAfterCancellation(t *testing.T) {
+	db, _, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	defer cancel()
+	var n int64
+	err = db.QueryRowContext(ctx, "WITH RECURSIVE s(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM s WHERE n<1000000000) SELECT SUM(n) FROM s").Scan(&n)
+	if err == nil {
+		t.Fatal("unbounded query unexpectedly completed before cancellation")
+	}
+	if ctx.Err() != context.DeadlineExceeded {
+		t.Fatalf("query failed before deadline: %v", err)
+	}
+
+	if err = db.QueryRow("SELECT 1").Scan(&n); err != nil {
+		t.Fatalf("next request inherited canceled connection: %v", err)
+	}
+	if n != 1 {
+		t.Fatal(n)
 	}
 }

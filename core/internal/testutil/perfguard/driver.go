@@ -101,6 +101,21 @@ type captureConn struct {
 	capture *Capture
 }
 
+// Preserve the canonical driver's pool lifecycle: canceled SQLite connections
+// must be reset or discarded before another request borrows them.
+func (c *captureConn) ResetSession(ctx context.Context) error {
+	if r, ok := c.Conn.(driver.SessionResetter); ok {
+		return r.ResetSession(ctx)
+	}
+	return nil
+}
+func (c *captureConn) IsValid() bool {
+	if v, ok := c.Conn.(driver.Validator); ok {
+		return v.IsValid()
+	}
+	return true
+}
+
 func (c *captureConn) Prepare(q string) (driver.Stmt, error) {
 	s, e := c.Conn.Prepare(q)
 	if e != nil {
