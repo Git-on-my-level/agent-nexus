@@ -264,3 +264,80 @@ func TestShadowSchemaInventory(t *testing.T) {
 		}
 	}
 }
+
+func TestReaderWriterSelectionAndExpiry(t *testing.T) {
+	db, s := fixture(t)
+	ctx := context.Background()
+	must(t, exec(db, `INSERT INTO documents VALUES('public-doc','public title'),('private-doc','secret')`))
+	public, e := s.RegisterForMigration(ctx, "owner", "public", "doc", "public-doc", "public", "pub")
+	must(t, e)
+	private, e := s.RegisterForMigration(ctx, "owner", "private", "doc", "private-doc", "private", "priv")
+	must(t, e)
+	var saved scopedrepo.Reader
+	request := scopes.RequestSelection{Principal: "owner", ScopeIDs: []scopes.ID{"public"}}
+	must(t, s.Read(ctx, request, func(r scopedrepo.Reader) error {
+		saved = r
+		title, e := r.DocumentTitle("public", public)
+		if e != nil {
+			return e
+		}
+		if title != "public title" {
+			t.Fatal(title)
+		}
+		if _, e = r.DocumentTitle("private", private); !errors.Is(e, scopes.ErrDenied) {
+			t.Fatal("read outside selection", e)
+		}
+		ids, e := r.CoveredScopes()
+		if e != nil {
+			return e
+		}
+		ids[0] = "private"
+		if _, e = r.DocumentTitle("private", private); !errors.Is(e, scopes.ErrDenied) {
+			t.Fatal("selection mutation", e)
+		}
+		return nil
+	}))
+	if _, e = saved.DocumentTitle("public", public); !errors.Is(e, scopes.ErrClosed) {
+		t.Fatal(e)
+	}
+	must(t, s.Write(ctx, request, func(w scopedrepo.Writer) error {
+		v, e := w.Constant("scoped")
+		if e != nil {
+			return e
+		}
+		return w.Persist("public", "typed", v)
+	}))
+	request.ScopeIDs = append(request.ScopeIDs, "private")
+	if e = s.Write(ctx, request, func(scopedrepo.Writer) error { return nil }); !errors.Is(e, scopes.ErrBudget) {
+		t.Fatal("multi-scope writer", e)
+	}
+}
+
+func TestNoGrantsScopeCannotAcquireAudience(t *testing.T) {
+	db, s := fixture(t)
+	ctx := context.Background()
+	must(t, exec(db, `INSERT INTO scope_domains VALUES('lost','inaccessible',1)`))
+	if e := exec(db, `INSERT INTO scope_memberships VALUES('admin','lost','admin',1)`); e == nil {
+		t.Fatal("grant to inaccessible domain")
+	}
+	if e := exec(db, `UPDATE scope_memberships SET scope_id='lost' WHERE principal='owner' AND scope_id='private'`); e == nil {
+		t.Fatal("moved grant to inaccessible domain")
+	}
+	if e := exec(db, `UPDATE scope_domains SET state='inaccessible' WHERE id='private'`); e == nil {
+		t.Fatal("inaccessible domain retained grants")
+	}
+	for _, query := range []string{
+		`INSERT OR REPLACE INTO scope_domains VALUES('private','inaccessible',2)`,
+		`UPDATE scope_domains SET state='active' WHERE id='lost'`,
+		`INSERT OR REPLACE INTO scope_domains VALUES('lost','active',2)`,
+		`UPDATE scope_domains SET id='reused' WHERE id='lost'`,
+		`DELETE FROM scope_domains WHERE id='lost'`,
+	} {
+		if e := exec(db, query); e == nil {
+			t.Fatal("permanent no-grants invariant bypass", query)
+		}
+	}
+	if e := s.ValidateSelection(ctx, "admin", []scopes.ID{"lost"}); !errors.Is(e, scopes.ErrDenied) {
+		t.Fatal(e)
+	}
+}

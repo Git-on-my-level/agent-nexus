@@ -2,7 +2,7 @@
 -- migration number is allocated. All identities below are opaque external IDs.
 CREATE TABLE IF NOT EXISTS scope_domains (
  id TEXT PRIMARY KEY,
- state TEXT NOT NULL CHECK(state IN ('active','transitioning')),
+ state TEXT NOT NULL CHECK(state IN ('active','transitioning','inaccessible')),
  generation INTEGER NOT NULL CHECK(generation > 0)
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS scope_domains_state ON scope_domains(state,id);
@@ -49,3 +49,39 @@ CREATE TABLE IF NOT EXISTS scope_projection_values (
  PRIMARY KEY(scope_id,projection_key),
  FOREIGN KEY(scope_id) REFERENCES scope_domains(id)
 ) WITHOUT ROWID;
+
+-- No-grants legacy exceptions stay out of the all-active-scopes PM directory.
+-- Indexed EXISTS checks examine at most one membership candidate.
+CREATE INDEX IF NOT EXISTS scope_memberships_by_scope ON scope_memberships(scope_id,principal);
+CREATE TRIGGER IF NOT EXISTS scope_no_grants_insert
+BEFORE INSERT ON scope_memberships
+WHEN EXISTS(SELECT 1 FROM scope_domains WHERE id=NEW.scope_id AND state='inaccessible')
+BEGIN SELECT RAISE(ABORT,'scope does not admit grants'); END;
+CREATE TRIGGER IF NOT EXISTS scope_no_grants_update
+BEFORE UPDATE OF scope_id ON scope_memberships
+WHEN EXISTS(SELECT 1 FROM scope_domains WHERE id=NEW.scope_id AND state='inaccessible')
+BEGIN SELECT RAISE(ABORT,'scope does not admit grants'); END;
+CREATE TRIGGER IF NOT EXISTS scope_no_grants_state
+BEFORE UPDATE OF state ON scope_domains
+WHEN NEW.state='inaccessible' AND EXISTS(SELECT 1 FROM scope_memberships WHERE scope_id=NEW.id)
+BEGIN SELECT RAISE(ABORT,'scope still has grants'); END;
+CREATE TRIGGER IF NOT EXISTS scope_no_grants_create
+BEFORE INSERT ON scope_domains
+WHEN NEW.state='inaccessible' AND EXISTS(SELECT 1 FROM scope_memberships WHERE scope_id=NEW.id)
+BEGIN SELECT RAISE(ABORT,'scope still has grants'); END;
+CREATE TRIGGER IF NOT EXISTS scope_no_grants_reactivate
+BEFORE UPDATE OF state ON scope_domains
+WHEN OLD.state='inaccessible' AND NEW.state!='inaccessible'
+BEGIN SELECT RAISE(ABORT,'scope is permanently inaccessible'); END;
+CREATE TRIGGER IF NOT EXISTS scope_no_grants_replace
+BEFORE INSERT ON scope_domains
+WHEN NEW.state!='inaccessible' AND EXISTS(SELECT 1 FROM scope_domains WHERE id=NEW.id AND state='inaccessible')
+BEGIN SELECT RAISE(ABORT,'scope is permanently inaccessible'); END;
+CREATE TRIGGER IF NOT EXISTS scope_identity_immutable
+BEFORE UPDATE OF id ON scope_domains
+WHEN NEW.id!=OLD.id
+BEGIN SELECT RAISE(ABORT,'scope identity is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS scope_no_grants_delete
+BEFORE DELETE ON scope_domains
+WHEN OLD.state='inaccessible'
+BEGIN SELECT RAISE(ABORT,'scope identity remains reserved'); END;

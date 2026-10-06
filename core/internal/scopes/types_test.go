@@ -22,3 +22,14 @@ func TestStreamBudgets(t *testing.T) {
 		t.Fatal(e)
 	}
 }
+
+func TestChangeBounds(t *testing.T) {
+	c := Change{ScopeID: "private", Kind: "doc", ResourceID: "opaque", CanonicalVersion: 1, Family: "search", Audience: "all", After: &Projection{Title: "title"}}
+	if e := c.Validate(); e != nil {
+		t.Fatal(e)
+	}
+	c.Before = &Projection{Text: string(make([]byte, MaxValueBytes+1))}
+	if e := c.Validate(); e != ErrBudget {
+		t.Fatal(e)
+	}
+}

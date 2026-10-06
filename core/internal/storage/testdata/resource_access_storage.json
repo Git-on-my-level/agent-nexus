@@ -1521,6 +1521,8 @@
     "../router/router.go:*Service:runOnce": "66ad616508903f96efc5a1548f0943faf3d7c0544daf0acb525684a7eba49e01",
     "../router/state.go:*StateStore:SetLastEventCursor": "f24bb2087b76d53f47214565b05820c215e995029bfc98576d28c33ecc3c9606",
     "../router/state.go:*StateStore:SetLastEventID": "522bf7913309c1aa37f401c4bf3d673d138f1104e4470d597976ea7b4ece8784",
+    "../scopedrepo/capabilities.go:*Store:Read": "0ce4bdb3e53537674d50bac50b2400ac8e4acf048c8e835569cc00cd0c1fba92",
+    "../scopedrepo/capabilities.go:*Store:Write": "f25c8e65d46978699af897840f60d11779cafb90244cbeb5b71fc07f0575739d",
     "../scopedrepo/queries_gen.go:query_alias": "c95bc4185e3d20eafb2f7940f2eae3c4e441e79b2c97053e0f6671f8f04af9e2",
     "../scopedrepo/store.go:*Store:CanPublish": "ef65489fd033a85545858748fea65b0390db8e572d4f26f0ad0cc434db8e369b",
     "../scopedrepo/store.go:*Store:Compute": "c48c7e2f440cc002b6f6e3a3aea5c3ec28888f74493c8469922eaf07b8c6732d",

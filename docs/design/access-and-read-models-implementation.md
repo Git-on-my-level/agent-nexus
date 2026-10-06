@@ -78,9 +78,8 @@ handle escapes into HTTP handlers.
   verification budgets, declared coverage and generation-bound continuation.
 - `scopemigrate.Step`: bounded keyset chunk plus durable checkpoint, source epoch
   and DB fencing token; failures advance no success watermark. No blob backend
-  is needed to place historical metadata. A row-level audience expansion under
-  the creator/admin fallback prevents semantic cutover pending its explicit
-  compatibility resolution; other construction/backfill work can continue.
+  is needed to place historical metadata. An expanding creator/admin fallback uses the restricting owner when safe,
+  otherwise a no-grants scope. Report exception counts; these do not block cutover.
 
 ## Concurrent PRs and hard gates
 
@@ -97,3 +96,21 @@ readers only after SCA-661 scale/budget/query-plan checks pass. Cutover addition
 needs synthetic personal-size and 10x migration interruption runs, actual cold
 readiness, real crash/lease/ENOSPC coverage and compatible forward recovery. The
 morning target does not waive any gate; incomplete phases remain disabled.
+
+## Frozen foundation interfaces
+
+The first implementation lives in `core/internal/scopes` and
+`core/internal/scopedrepo`; the repository README is the concrete API reference.
+`scopes.RequestSelection`, `scopes.Change`, `scopedrepo.Reader` and
+`scopedrepo.Writer` are now Go types, not pseudocode. Reader/Writer callbacks expire
+at transaction exit; selection validation alone grants no reusable authority.
+The foundation remains unwired pending reviewed integration.
+
+B defines its `Item` and `type Page = scopes.Page[Item]`, using `scopes.Coverage`.
+C implements `scopes.StreamTicker`: `Tick(context.Context, scopes.TickRequest)
+(scopes.TickResult, error)`. D implements `scopes.MigrationStepper`:
+`Step(context.Context, scopes.StepRequest) (scopes.StepResult, error)`.
+These shared types contain the exact fields; worker checkpoint cursors remain
+D-owned durable state and are not caller-supplied. Changes enter B/C only through
+the lead-owned canonical transaction hook. The interface types do not themselves
+confer authority or enable routes.

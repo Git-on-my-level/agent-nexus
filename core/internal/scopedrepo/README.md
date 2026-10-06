@@ -9,7 +9,10 @@ The reviewed shadow DDL is `schema.sql`; `Initialize(context.Context)` creates o
 empty tables. It is deliberately not registered in `storage/migrations.go` until
 the migration owner rebases after #275 and coordinates the next free version.
 The new table/column manifest below must join the live storage inventory at that
-point. Existing writer fingerprints already cover this implementation.
+point. Existing writer fingerprints already cover this implementation. Permanent
+no-grants legacy exceptions use `inaccessible` domains; SQL triggers reject
+membership grants, and the PM active-scope directory must exclude them. This
+adds no inspection/recovery workflow.
 
 | Relation                                                                     | Authority / data classification                              |
 | ---------------------------------------------------------------------------- | ------------------------------------------------------------ |
@@ -24,6 +27,15 @@ point. Existing writer fingerprints already cover this implementation.
 
 - `scopes.ID`, `Role`, `Stream`, `Binding`, `DirectoryPage`, fixed scope/stream/page
   budgets and typed errors are in `internal/scopes` (no database dependency).
+- `scopes.RequestSelection` and `scopes.Change` freeze dispatcher input and bounded
+  before/after deltas. `scopes.Page[T]`/`Coverage`, `StreamTicker` and
+  `MigrationStepper` freeze B/C/D response and worker signatures. They confer no
+  authority on their own.
+- `Read(ctx, scopes.RequestSelection, func(Reader) error)` authorizes every selected
+  scope in one transaction and expires the render-only Reader on return.
+  `Write(ctx, scopes.RequestSelection, func(Writer) error)` accepts exactly one
+  scope and exposes opaque derived values. Complete dispatcher separation remains
+  an integration gate; business code cannot be given both factories.
 - Trusted setup only: `scopedrepo.New(*sql.DB) *Store`, then
   `Initialize(context.Context) error` on the shadow generation.
 - `Directory(ctx, principal string, after scopes.ID, limit int)` returns
