@@ -461,7 +461,7 @@ func logReadPlans(t *testing.T, db *sql.DB, statements []testsql.Statement) {
 	t.Helper()
 	for _, statement := range statements {
 		closedProbe := strings.Contains(statement.SQL, "column_key IN ('done','cancelled')")
-		placementSnapshot := strings.Contains(statement.SQL, "JOIN ref_edges placement ON placement.id=")
+		placementSnapshot := strings.Contains(statement.SQL, "_decision_placements AS MATERIALIZED")
 		if !closedProbe && !placementSnapshot && !strings.Contains(statement.SQL, "_work_candidates") && !strings.Contains(statement.SQL, "pm_records") && !strings.Contains(statement.SQL, " FROM host_keys ") && !strings.Contains(statement.SQL, " FROM documents ") && !strings.Contains(statement.SQL, "handle = ? AND handle IS NOT NULL") && !strings.Contains(statement.SQL, "idx_agents_admin_page") {
 			continue
 		}

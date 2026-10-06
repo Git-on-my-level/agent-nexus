@@ -3,6 +3,7 @@ package primitives
 import (
 	"agent-nexus-core/internal/resourceaccess"
 	"context"
+	"database/sql"
 	"sync"
 )
 
@@ -16,12 +17,54 @@ type denialRequestState struct {
 }
 type denialRequestKey struct{}
 
+type denialCacheKey struct {
+	db    *sql.DB
+	scope AccessScope
+	epoch int64
+}
+
+// Hold at most 32 immutable closures and 8 MiB of encoded rows, evicting oldest
+// insertions. DB identity separates
+// workspaces even when their epochs and principal names happen to coincide.
+var readDenials = struct {
+	sync.Mutex
+	keys  []denialCacheKey
+	rows  map[denialCacheKey]*denialSnapshot
+	bytes int
+}{rows: make(map[denialCacheKey]*denialSnapshot)}
+
+func cachedReadDenial(db *sql.DB, scope AccessScope, epoch int64) *denialSnapshot {
+	readDenials.Lock()
+	defer readDenials.Unlock()
+	return readDenials.rows[denialCacheKey{db, scope, epoch}]
+}
+
+func rememberReadDenial(db *sql.DB, scope AccessScope, snapshot *denialSnapshot) {
+	if db == nil || len(snapshot.rows) > 8<<20 {
+		return
+	}
+	key := denialCacheKey{db, scope, snapshot.epoch}
+	readDenials.Lock()
+	defer readDenials.Unlock()
+	if readDenials.rows[key] != nil {
+		return
+	}
+	for len(readDenials.keys) >= 32 || readDenials.bytes+len(snapshot.rows) > 8<<20 {
+		old := readDenials.keys[0]
+		readDenials.keys = readDenials.keys[1:]
+		readDenials.bytes -= len(readDenials.rows[old].rows)
+		delete(readDenials.rows, old)
+	}
+	readDenials.keys = append(readDenials.keys, key)
+	readDenials.rows[key] = snapshot
+	readDenials.bytes += len(snapshot.rows)
+}
+
 // WithRequestAccessScope caches the denial closure for a regular read request.
 // Every consuming statement validates the authorization epoch IN its own SQL
 // snapshot and falls back to the canonical graph if any ownership write occurred.
-// Business transactions and streams evaluate the canonical graph directly. The
-// reader-only Overview visit can opt into an epoch-guarded check in its own write
-// transaction, falling back to that transaction's graph on any epoch mismatch.
+// Business transactions, visit writes and streams evaluate the canonical graph
+// directly. Shared read snapshots are bounded and isolated by DB, scope and epoch.
 func WithRequestAccessScope(ctx context.Context, scope AccessScope) context.Context {
 	ctx = WithAccessScope(ctx, scope)
 	state := &denialRequestState{}
@@ -34,10 +77,20 @@ func WithRequestAccessScope(ctx context.Context, scope AccessScope) context.Cont
 		}
 		state.Lock()
 		if state.snapshot == nil {
-			candidate := &denialSnapshot{}
-			sql := `WITH RECURSIVE ` + ownershipClosure("_anx_denied", deniedRootSQL(scope), false) + ` SELECT (SELECT version FROM main.resource_access_epoch WHERE singleton=1),COALESCE((SELECT json_group_array(json_array(kind,id)) FROM _anx_denied),'[]')`
-			if err := db.QueryRowContext(c, sql).Scan(&candidate.epoch, &candidate.rows); err == nil {
-				state.snapshot = candidate
+			// Lookup only on ordinary DB reads. Transactions continue to use
+			// their current graph (or the visit's existing request snapshot).
+			raw, _ := db.(*sql.DB)
+			var epoch int64
+			if raw != nil && db.QueryRowContext(c, `SELECT version FROM main.resource_access_epoch WHERE singleton=1`).Scan(&epoch) == nil {
+				state.snapshot = cachedReadDenial(raw, scope, epoch)
+			}
+			if state.snapshot == nil {
+				candidate := &denialSnapshot{}
+				sql := `WITH RECURSIVE ` + ownershipClosure("_anx_denied", deniedRootSQL(scope), false) + ` SELECT (SELECT version FROM main.resource_access_epoch WHERE singleton=1),COALESCE((SELECT json_group_array(json_array(kind,id)) FROM _anx_denied),'[]')`
+				if err := db.QueryRowContext(c, sql).Scan(&candidate.epoch, &candidate.rows); err == nil {
+					state.snapshot = candidate
+					rememberReadDenial(raw, scope, candidate)
+				}
 			}
 		}
 		state.Unlock()

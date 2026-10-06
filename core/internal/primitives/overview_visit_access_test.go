@@ -12,7 +12,7 @@ import (
 	"agent-nexus-core/internal/testsql"
 )
 
-func TestOverviewVisitPreparedDenialUsesWriteTransactionEpoch(t *testing.T) {
+func TestOverviewVisitValidationUsesFreshWriteGraph(t *testing.T) {
 	ctx := context.Background()
 	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
 	if err != nil {
@@ -53,17 +53,17 @@ func TestOverviewVisitPreparedDenialUsesWriteTransactionEpoch(t *testing.T) {
 	if err = s.RecordOverviewVisit(request, "human:reader", []map[string]any{work}, now); err != nil {
 		t.Fatal(err)
 	}
-	guarded := false
+	fresh := false
 	for _, statement := range counter.Statements() {
 		if strings.Contains(statement.SQL, "json_group_array(json_array(kind,id))") {
 			t.Fatal("visit rebuilt the prepared denial")
 		}
 		if strings.Contains(statement.SQL, "anx_resource_json_refs") {
-			guarded = strings.Contains(statement.SQL, "main.resource_access_epoch") && strings.Contains(statement.SQL, "_anx_fresh_denied") && len(statement.Args) == 2 && statement.Args[0] == snapshot.rows
+			fresh = strings.Contains(statement.SQL, "main.threads") && !strings.Contains(statement.SQL, "_anx_fresh_denied") && len(statement.Args) == 1
 		}
 	}
-	if !guarded {
-		t.Fatal("visit validation did not bind the epoch-guarded denial")
+	if !fresh {
+		t.Fatal("visit validation did not read the current transaction graph")
 	}
 	// A different connection makes work private after the read. The write must
 	// use its own transaction epoch and reject the now-inaccessible snapshot.
@@ -86,8 +86,7 @@ func TestOverviewVisitPreparedDenialUsesWriteTransactionEpoch(t *testing.T) {
 	if denialSnapshotFrom(request) != snapshot {
 		t.Fatal("visit replaced the immutable request snapshot")
 	}
-	// The special policy is local to the visit INSERT. Business writes retain
-	// their ordinary transaction validation, including on the original context.
+	// Business writes also retain ordinary transaction validation.
 	if _, err = s.CreateArtifact(request, "reader", map[string]any{"kind": "note", "refs": []string{anyStringValue(work["ref"])}}, "body", "text"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("visit policy escaped into business mutation: %v", err)
 	}

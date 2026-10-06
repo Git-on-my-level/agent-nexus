@@ -263,11 +263,9 @@ func requireAccessibleValues(ctx context.Context, q queryRower, values any) erro
  SELECT 1 FROM json_each(anx_resource_json_refs(CAST(? AS BLOB))) j JOIN _anx_denied_atoms d
  ON j.value=d.ref COLLATE NOCASE OR d.typed AND ` + resourceaccess.TextReferenceMatchSQL("j.value", "d.ref") + `)`
 	args := []any{string(encoded)}
-	_, visitSnapshot := ctx.Value(overviewVisitWriteKey{}).(struct{})
-	if policy, ok := resourceaccess.PolicyFrom(ctx); (!mutation || visitSnapshot) && ok && policy.ReadOnDB != nil {
+	if policy, ok := resourceaccess.PolicyFrom(ctx); !mutation && ok && policy.ReadOnDB != nil {
 		// Read selector checks share the request closure, still validating its
-		// epoch inside this statement. A visit check runs on the write transaction
-		// connection, so an epoch mismatch uses that transaction's current graph.
+		// epoch inside this statement. All writes use their current graph.
 		query, args = policy.ReadOnDB(ctx, q, query, args)
 	} else {
 		query = `WITH RECURSIVE ` + accessCTEs(scope, "") + ` ` + query
