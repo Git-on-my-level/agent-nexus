@@ -56,8 +56,12 @@ func textHasReference(atom, target string) bool {
 }
 
 // The LIKE range selects only prose candidates from the indexed atom ledger.
+func TextReferenceCandidateSQL(atom string) string {
+	return atom + " LIKE '" + textReferencePrefix + "%'"
+}
+
 func TextReferenceMatchSQL(atom, target string) string {
-	return "(" + atom + " LIKE '" + textReferencePrefix + "%' AND anx_resource_text_has_ref(" + atom + "," + target + "))"
+	return "(" + TextReferenceCandidateSQL(atom) + " AND anx_resource_text_has_ref(" + atom + "," + target + "))"
 }
 
 var embeddedURL = regexp.MustCompile(`(?i)https?://[^\s\p{Z}\x{85}\x{0B}<>()\[\]{}"'` + "`" + `]+`)

@@ -1133,7 +1133,7 @@
     "../primitives/access_scope.go:*Store:CanAccessResource": "ec3094ddca5451f80f0d469dfa8f35708f092c9e7ee9e6a523f7ce68638644c2",
     "../primitives/access_scope.go:WithAccessScope": "09c1ab9d64a7b9d506ce2c6a2ce291ceb73aa15807de11bf7f13a7924ecce20b",
     "../primitives/access_scope.go:preservePurgedAccess": "8f3f807ed8693b854a4efe638e90db7f762b74026a133e741b8f44dd1bac2bbc",
-    "../primitives/access_scope.go:requireAccessibleValues": "852e03ec65e4433792844fba9acf9fcf806d2d93781b4c8cd0befdf398678f85",
+    "../primitives/access_scope.go:requireAccessibleValues": "bf611f827350c4eaee1770a42614cc6a2a4287269bb2f4ae8b47671825e38bf0",
     "../primitives/agent_wakeups.go:*Store:ClaimAgentWakeup": "53669a9695ffaf5bf522bf99c5dae45e6d6a515b3d6b7dc3c7f715048b814a38",
     "../primitives/agent_wakeups.go:*Store:CompleteAgentWakeup": "ef6b26c325d599190cbb8f6035e973f41b75c5274e0be6a559f0a02aed9424dc",
     "../primitives/agent_wakeups.go:*Store:FailAgentWakeup": "9bd5deffccecbfd8de31f277868abedd6d678c81bcc32ddd56848082989efe71",

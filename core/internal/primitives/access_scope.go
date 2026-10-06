@@ -58,7 +58,7 @@ func accessCTEs(scope AccessScope, query string) string {
 		return "NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind='" + kind + "' AND id=" + id + ")"
 	}
 	cleanJSON := func(column string) string {
-		return "NOT EXISTS (SELECT 1 FROM json_each(" + resourceaccess.ReferenceSQLAtoms(column, strings.HasSuffix(column, "_json") || column == "_row.body" || column == "_row.labels") + ") j WHERE j.value COLLATE NOCASE IN (SELECT ref FROM _anx_denied_refs) OR j.value COLLATE NOCASE IN (SELECT id FROM _anx_denied WHERE kind<>'plan') OR EXISTS (SELECT 1 FROM _anx_denied_refs d WHERE " + resourceaccess.TextReferenceMatchSQL("j.value", "d.ref") + "))"
+		return "NOT EXISTS (SELECT 1 FROM json_each(" + resourceaccess.ReferenceSQLAtoms(column, strings.HasSuffix(column, "_json") || column == "_row.body" || column == "_row.labels") + ") j JOIN _anx_denied_atoms d ON j.value=d.ref COLLATE NOCASE OR d.typed AND " + resourceaccess.TextReferenceMatchSQL("j.value", "d.ref") + ")"
 	}
 	add := func(table, where string) {
 		if !needed[table] {
@@ -108,7 +108,7 @@ func accessCTEs(scope AccessScope, query string) string {
 	// A rollup must not expose a private contributor through counts or last
 	// values. Remove the whole label stream before admission, buckets or limits.
 	if needed["series_adapters"] || needed["series_labels"] || needed["series_points"] || needed["series_daily"] || needed["series_live_daily"] {
-		graph += ", _anx_private_series(series,labels) AS MATERIALIZED (SELECT series,labels FROM main.resource_access_series_refs r WHERE target_ref COLLATE NOCASE IN (SELECT ref FROM _anx_denied_refs) OR target_ref COLLATE NOCASE IN (SELECT id FROM _anx_denied WHERE kind<>'plan') OR EXISTS (SELECT 1 FROM _anx_denied_refs d WHERE " + resourceaccess.TextReferenceMatchSQL("r.target_ref", "d.ref") + ") UNION SELECT series,labels FROM main.resource_access_series_unknown WHERE EXISTS (SELECT 1 FROM _anx_denied))"
+		graph += ", _anx_private_series(series,labels) AS MATERIALIZED (SELECT series,labels FROM main.resource_access_series_refs r JOIN _anx_denied_atoms d ON r.target_ref=d.ref COLLATE NOCASE OR d.typed AND " + resourceaccess.TextReferenceMatchSQL("r.target_ref", "d.ref") + " UNION SELECT series,labels FROM main.resource_access_series_unknown WHERE EXISTS (SELECT 1 FROM _anx_denied))"
 		if needed["series_adapters"] {
 			graph += ", series_adapters AS (SELECT name,description,agent_id,host_id,expected_interval,created_at,revoked_at,deleted_at,CASE WHEN EXISTS (SELECT 1 FROM main.series_definitions def LEFT JOIN _anx_private_series p ON p.series=def.name WHERE def.adapter=_row.name AND (p.series IS NOT NULL OR NOT (" + cleanJSON("def.unit") + "))) THEN NULL ELSE last_push END AS last_push FROM main.series_adapters _row WHERE " + cleanJSON("_row.description") + ")"
 		}
@@ -127,7 +127,7 @@ func accessCTEs(scope AccessScope, query string) string {
 	}
 	return ownershipClosure("_anx_denied", deniedRootSQL(scope), false) +
 		", " + ownershipRefs("_anx_resource_refs", "_anx_denied") +
-		", _anx_denied_refs(ref) AS MATERIALIZED (SELECT CASE WHEN kind='card' AND (ref LIKE 'http://%' OR ref LIKE 'https://%') THEN ref ELSE kind||':'||ref END FROM _anx_resource_refs UNION SELECT 'doc:'||ref FROM _anx_resource_refs WHERE kind='document')" + graph
+		", _anx_denied_refs(ref) AS MATERIALIZED (SELECT CASE WHEN kind='card' AND (ref LIKE 'http://%' OR ref LIKE 'https://%') THEN ref ELSE kind||':'||ref END FROM _anx_resource_refs UNION SELECT 'doc:'||ref FROM _anx_resource_refs WHERE kind='document'), _anx_denied_atoms(ref,typed) AS MATERIALIZED (SELECT ref,1 FROM _anx_denied_refs UNION SELECT id,0 FROM _anx_denied WHERE kind<>'plan')" + graph
 }
 
 // Apply relation visibility before limits, aggregates and cursors. SQLite
@@ -217,10 +217,8 @@ func requireAccessibleValues(ctx context.Context, q queryRower, values any) erro
 	}
 	var denied bool
 	query := `WITH RECURSIVE ` + accessCTEs(scope, "") + ` SELECT EXISTS (
- SELECT 1 FROM json_each(anx_resource_json_refs(?)) j WHERE (
- j.value COLLATE NOCASE IN (SELECT id FROM _anx_denied WHERE kind<>'plan') OR
- j.value COLLATE NOCASE IN (SELECT ref FROM _anx_denied_refs) OR
- EXISTS (SELECT 1 FROM _anx_denied_refs d WHERE ` + resourceaccess.TextReferenceMatchSQL("j.value", "d.ref") + `)))`
+ SELECT 1 FROM json_each(anx_resource_json_refs(?)) j JOIN _anx_denied_atoms d
+ ON j.value=d.ref COLLATE NOCASE OR d.typed AND ` + resourceaccess.TextReferenceMatchSQL("j.value", "d.ref") + `)`
 	if err = q.QueryRowContext(ctx, query, string(encoded)).Scan(&denied); err != nil {
 		return err
 	}

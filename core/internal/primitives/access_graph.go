@@ -52,7 +52,7 @@ func ownershipClosure(name, roots string, owner bool) string {
 	terms = append(terms, "SELECT 'document',r.id"+carry+" FROM "+name+" d JOIN main.events e ON d.kind='event' AND e.id=d.id JOIN main.documents r ON r.thread_id=e.thread_id WHERE e.type='message_posted' AND COALESCE(e.thread_id,'')<>''")
 	refs := func(join, ref string) {
 		terms = append(terms, "SELECT e.source_type,e.source_id"+carry+" FROM "+name+" d "+join+" JOIN main.ref_edges e ON e.target_type=d.kind AND e.target_id="+ref+" COLLATE NOCASE AND e.edge_type='ref'")
-		terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d "+join+" JOIN main.resource_access_edges e ON e.target_ref=(d.kind||':'||"+ref+") COLLATE NOCASE OR "+resourceaccess.TextReferenceMatchSQL("e.target_ref", "(d.kind||':'||"+ref+")"))
+		terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d "+join+" JOIN main.resource_access_edges e ON e.target_ref=(d.kind||':'||"+ref+") COLLATE NOCASE")
 	}
 	refs("", "d.id")
 	refs("JOIN main.runs r ON d.kind='run' AND r.id=d.id", "r.handle")
@@ -66,6 +66,18 @@ func ownershipClosure(name, roots string, owner bool) string {
 	}
 	refs("JOIN main.resource_handle_aliases r ON r.resource_type=d.kind AND r.resource_id=d.id", "r.alias_handle")
 	refs("JOIN main.resource_access_tombstones r ON r.kind=d.kind AND r.id=d.id", "r.ref")
+	// Keep exact edge probes indexable. A separate recursive term handles prose
+	// candidates against all identities of the current resource; putting this
+	// predicate in every indexed join's OR greatly increases SQLite planning.
+	proseRefs := []string{"SELECT d.id AS ref", "SELECT r.handle FROM main.runs r WHERE d.kind='run' AND r.id=d.id"}
+	for _, kind := range []string{"thread", "board", "card", "topic", "document", "event", "artifact"} {
+		proseRefs = append(proseRefs, "SELECT r.handle FROM main."+resourceTables[kind]+" r WHERE d.kind='"+kind+"' AND r.id=d.id")
+	}
+	for _, kind := range []string{"card", "document"} {
+		proseRefs = append(proseRefs, "SELECT COALESCE(NULLIF(p.handle,''),p.id)||'-r'||r.revision_number FROM main."+kind+"_revisions r JOIN main."+resourceTables[kind]+" p ON p.id=r."+kind+"_id WHERE d.kind='"+kind+"_revision' AND r.revision_id=d.id")
+	}
+	proseRefs = append(proseRefs, "SELECT r.alias_handle FROM main.resource_handle_aliases r WHERE r.resource_type=d.kind AND r.resource_id=d.id", "SELECT r.ref FROM main.resource_access_tombstones r WHERE r.kind=d.kind AND r.id=d.id")
+	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_edges e ON "+resourceaccess.TextReferenceCandidateSQL("e.target_ref")+" AND EXISTS (SELECT 1 FROM ("+strings.Join(proseRefs, " UNION ALL ")+") p WHERE "+resourceaccess.TextReferenceMatchSQL("e.target_ref", "(d.kind||':'||p.ref)")+")")
 	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_tombstones r ON r.kind=d.kind AND r.id=d.id JOIN main.resource_access_edges e ON e.target_ref=r.ref COLLATE NOCASE WHERE r.ref LIKE 'http://%' OR r.ref LIKE 'https://%'")
 	for _, ref := range []string{"d.id", "r.handle"} {
 		join := ""
