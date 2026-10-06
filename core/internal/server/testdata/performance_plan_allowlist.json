@@ -233,21 +233,6 @@
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
   },
   {
-    "sql_sha256": "0a9c85d4fbc97f75e71c8362f1ee3ab85c3d5215496359688fafad41d88ade8f",
-    "plan_sha256": "c79c3eb4558e8f460b0edb5e4656e1d7504e217a9513a430003e1c45d7b832e9",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
-      "SEARCH _anx_denied USING AUTOMATIC PARTIAL COVERING INDEX (kind=? AND id=?)"
-    ],
-    "reason": "Existing main e637014e, observed via POST /reports/preview (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: ter/%'), boards AS (SELECT * FROM main.boards AS _row WHERE NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind='board' AND id=_row.id)) SELECT id, handle FROM boards WHERE handle = ?",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
     "sql_sha256": "0b6229e7ea6de84f5625c0b7ce92a611fc77ceb5d980b460f79cbc5df4ef4cdc",
     "plan_sha256": "716d004cc95e4111d82f1a23dbe10d60ebbc0331d460500e781bbe8858e4959e",
     "findings": [
@@ -441,38 +426,6 @@
       "custom SQL function in WHERE over a large relation"
     ],
     "reason": "Existing main e637014e, observed via GET /series/{name} (unauthorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix:  g LEFT JOIN series_points p ON p.series=? AND p.labels=? AND p.ts=g.last_ts LEFT JOIN series_daily d ON d.series=? AND d.labels=? AND d.day=(g.last_ts/?)*? ORDER BY g.ts LIMIT 200",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
-    "sql_sha256": "197c162ebf4d1e137e7d90ef1f6ee157c6d4a5a4d3b5d463543bc1d4cb2c24f9",
-    "plan_sha256": "5f5bf1c3d3e85cfe98105abbb2268102d3d0e18c21dae8fecc903ff6b2d15c85",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
-      "SEARCH _anx_resource_refs USING AUTOMATIC PARTIAL COVERING INDEX (kind=?)",
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "Existing main e637014e, observed via GET /ref-edges (unauthorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: ource_id, target_type, target_id, edge_type, created_at, metadata_json FROM ref_edges WHERE source_type = ? AND source_id = ? ORDER BY edge_type ASC, target_type ASC, target_id ASC",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
-    "sql_sha256": "19da0f19a5d4bf5097937d1a028a575d446ca42b375233b296999f10209330a3",
-    "plan_sha256": "c79c3eb4558e8f460b0edb5e4656e1d7504e217a9513a430003e1c45d7b832e9",
-    "findings": [
-      "SCAN _row",
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
-      "SEARCH _anx_denied USING AUTOMATIC PARTIAL COVERING INDEX (kind=? AND id=?)"
-    ],
-    "reason": "Existing main e637014e, observed via POST /reports/preview (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: 'filter/%'), cards AS (SELECT * FROM main.cards AS _row WHERE NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind='card' AND id=_row.id)) SELECT id, handle FROM cards WHERE handle = ?",
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
   },
@@ -1009,20 +962,6 @@
     "issue_url": "mention://issue/01a10ea6-8aa4-75ca-94d5-507d789ead44"
   },
   {
-    "sql_sha256": "35a0b2fd780080c94bc4f8ba54fcc1b9cab6177815ab1ab451410558df0b0774",
-    "plan_sha256": "a35ce82b645089bc7786e3870e42775c76dbf1dad3737b222f36ee8b28cc3244",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created"
-    ],
-    "reason": "Existing main e637014e, observed via POST /reports/preview (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: IKE 'filter/%'), cards AS (SELECT * FROM main.cards AS _row WHERE NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind='card' AND id=_row.id)) SELECT id, handle FROM cards WHERE id = ?",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
     "sql_sha256": "377bbce5f3f9580df6e9998e019861e9da7879dc558eb70be43ace3ac33ee279",
     "plan_sha256": "b788a23bddbd3ab6b43b9fd0d081f533107184ea6f50e325438e480d16cf21c4",
     "findings": [
@@ -1159,23 +1098,6 @@
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
   },
   {
-    "sql_sha256": "3e27357747605f7b3b5756a9f5b7031116e27adb79f19f3a4b50b1ccc585b497",
-    "plan_sha256": "59f21456682efa7728b40b6845638c67a761e1aef52848bea238022a4b1e709d",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
-      "SEARCH _anx_denied USING AUTOMATIC PARTIAL COVERING INDEX (kind=? AND id=?)",
-      "SEARCH _anx_resource_refs USING AUTOMATIC PARTIAL COVERING INDEX (kind=?)",
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "Existing main e637014e, observed via POST /reports/preview (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: f_edges re LEFT JOIN boards b ON b.id = re.source_id JOIN cards c ON c.id = re.target_id WHERE re.source_type = 'board' AND re.edge_type = ? AND re.target_id = ? ) AS ordered_cards",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
     "sql_sha256": "3fd30aa12a768b45485796b2273b7a20d0517305bffc017172f6abcf95914221",
     "plan_sha256": "20b52ec97734cada6721d964e616046e4163c665b42424d2f02ea1565f3f5e54",
     "findings": [
@@ -1217,22 +1139,6 @@
       "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created"
     ],
     "reason": "Existing main e637014e, observed via POST /secrets/reveal-batch (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: T * FROM main.secrets AS _row WHERE NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind='filter/secrets' AND id=_row.id)) SELECT name, ciphertext, nonce FROM secrets WHERE name IN (?)",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
-    "sql_sha256": "42bd6bce9ee2ca33096dd0265af36cbfe2ee6359af123d4d8965776764c618f1",
-    "plan_sha256": "5f5bf1c3d3e85cfe98105abbb2268102d3d0e18c21dae8fecc903ff6b2d15c85",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
-      "SEARCH _anx_resource_refs USING AUTOMATIC PARTIAL COVERING INDEX (kind=?)",
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "Existing main e637014e, observed via GET /ref-edges (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: ource_id, target_type, target_id, edge_type, created_at, metadata_json FROM ref_edges WHERE source_type = ? AND source_id = ? ORDER BY edge_type ASC, target_type ASC, target_id ASC",
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
   },
@@ -1340,21 +1246,6 @@
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
   },
   {
-    "sql_sha256": "46b91a019532822b18845ab028f634a1a64093bf63f7eeb48286e7db5c888c1e",
-    "plan_sha256": "5ddfd993b3bdc8bd2e1c22fb70278ffd737675e85fcc8395db1eb8b93eaa3339",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
-      "SEARCH _anx_denied USING AUTOMATIC PARTIAL COVERING INDEX (kind=? AND id=?)"
-    ],
-    "reason": "Existing main e637014e, observed via GET /boards (unauthorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason FROM boards WHERE 1=1 AND ((archived_at IS NULL AND trashed_at IS NULL)) ORDER BY updated_at DESC, id ASC",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
     "sql_sha256": "47141be7b013a165cba9992f30ec95174a170226461b7f0608cd63af588b7e8c",
     "plan_sha256": "34bc8cfe743ef385a2b19b384c2e1bc0dca790a0d9bea3a1617e26cbc6479307",
     "findings": [
@@ -1445,21 +1336,6 @@
       "SEARCH _anx_denied USING AUTOMATIC PARTIAL COVERING INDEX (kind=? AND id=?)"
     ],
     "reason": "Existing main e637014e, observed via GET /series/{name} (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: slug,h.id,d.agent_id,d.expected_interval,d.last_push,d.revoked_at FROM series_definitions s JOIN series_adapters d ON d.name=s.adapter JOIN hosts h ON h.id=d.host_id WHERE s.name=?",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
-    "sql_sha256": "4aeaa05f994269aee4c738be5b29928469d3977ad051ce89989c9f0000ddcef6",
-    "plan_sha256": "0f7ed041b8396bb294a80f22ddc2a06d81a828928da8327aa2306807ba47eee9",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
-      "SEARCH _anx_denied USING AUTOMATIC PARTIAL COVERING INDEX (kind=? AND id=?)"
-    ],
-    "reason": "Existing main e637014e, observed via POST /reports/preview (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: ' AND id=_row.id)) SELECT ha.name,ha.identity_kind,a.id,a.actor_id,a.username,a.revoked_at FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? ORDER BY ha.name",
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
   },
@@ -1655,39 +1531,6 @@
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
   },
   {
-    "sql_sha256": "550b43d9d07362927e5505c84b0e927a00c35f04b7ef897bb6b6efcf55c0b2e8",
-    "plan_sha256": "26927b3e939baf2e6861da019fb716819f847eab39e3f460dbe8e4ce47963120",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
-      "SEARCH _anx_denied USING AUTOMATIC PARTIAL COVERING INDEX (kind=? AND id=?)",
-      "SEARCH _anx_resource_refs USING AUTOMATIC PARTIAL COVERING INDEX (kind=?)",
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "Existing main e637014e, observed via GET /boards (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix:  CASE column_key WHEN 'backlog' THEN 0 WHEN 'ready' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'blocked' THEN 3 WHEN 'review' THEN 4 WHEN 'done' THEN 5 ELSE 6 END, rank ASC, card_id ASC",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
-    "sql_sha256": "553cb2296dd080b6f790744ccb4288e2e7f4b053c875455290db766d98314519",
-    "plan_sha256": "1467e61d8796415fca857744e3858af6d167135c5b35874d4551cb4e731ec1e6",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
-      "SEARCH _anx_resource_refs USING AUTOMATIC PARTIAL COVERING INDEX (kind=?)",
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "Existing main e637014e, observed via GET /boards (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: :' || _row.target_id)) SELECT source_id, target_id FROM ref_edges WHERE source_type = 'board' AND edge_type = ? AND source_id IN (?,?,?,?,?,?,?,?,?,?) ORDER BY source_id, target_id",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
     "sql_sha256": "55802f6b232eb79711d0054aea107cd604f7408d1165c6a4a54e2c3d70eb2a33",
     "plan_sha256": "a35ce82b645089bc7786e3870e42775c76dbf1dad3737b222f36ee8b28cc3244",
     "findings": [
@@ -1837,38 +1680,6 @@
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
   },
   {
-    "sql_sha256": "5ed3776d94f0492970ec373f012e103e446a2a47d2ba00f26a590bdb5fee36d8",
-    "plan_sha256": "1bebb90e9cc3fbe33e96b54d1c13847df4a66db9655c977050ae183e96d89bdf",
-    "findings": [
-      "SCAN _row",
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
-      "SEARCH _anx_denied USING AUTOMATIC PARTIAL COVERING INDEX (kind=? AND id=?)"
-    ],
-    "reason": "Existing main e637014e, observed via POST /reports/preview (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix:  a.created_at ), a.updated_at, a.revoked_at, a.metadata_json, COALESCE(json_extract(a.metadata_json, '$.auth_admin'), 0) FROM agents a ORDER BY a.created_at DESC, a.id DESC LIMIT ?",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
-    "sql_sha256": "5ee8613eae818039f9e00afe52c4472b133fd720396ef4ab883e97c52e54fd3b",
-    "plan_sha256": "3fc94bce84c89cb63945781126300291ce25f3d83623380d589645a0714631c3",
-    "findings": [
-      "SCAN d",
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
-      "SEARCH _anx_denied USING AUTOMATIC PARTIAL COVERING INDEX (kind=? AND id=?)"
-    ],
-    "reason": "Existing main e637014e, observed via POST /reports/preview (unauthorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: AND (?='' OR r.actor_id=?)) SELECT record_rowid,created,body FROM records WHERE (?=0 OR created<? OR (created=? AND record_rowid<?)) ORDER BY created DESC,record_rowid DESC LIMIT ?",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
     "sql_sha256": "5f3597674c6a417ec84c7ce7ca49fd3019998f06632da93f29bd4c01afb0be6b",
     "plan_sha256": "3927917b9b83eee18ed4b0b45d3e15851f0a5e45b0de4df76e17bd426618d51a",
     "findings": [
@@ -1898,6 +1709,20 @@
     "reason": "Existing main e637014e, observed via GET /ops/usage-summary (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: E kind='artifact' AND id=_row.id)) SELECT COALESCE(SUM(size_bytes),0),COUNT(*) FROM blob_usage_ledger l WHERE EXISTS (SELECT 1 FROM artifacts a WHERE a.content_hash=l.content_hash)",
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
+  },
+  {
+    "sql_sha256": "6184aaa2d4423709bc3b413c69a3d93bfaa4d7b3523a49ff4dddd1b902da6180",
+    "plan_sha256": "258335295214f1b5eb8b25f492374539f3837db26b44fe7be828fdaa65bd7435",
+    "issue": "SCA-665",
+    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
+    "reason": "Existing main e637014e, observed via GET /overview (unauthorized). Source-reviewed returning-visit answered-ask/new-decision or thread-context target-ref query retains epoch-guarded cold closure scans, existing JSON/text ref filtering or automatic indexes. SCA-665 owns these bounded-template/closure repairs. Exact SQL shape and full ordered plan only; no runtime source was changed. Business SQL suffix: ) AND (it.id IS NULL OR (it.trashed_at IS NULL AND it.archived_at IS NULL)) AND julianday(e.ts)>=julianday(?) AND julianday(e.ts)<=julianday(?) ORDER BY e.ts DESC,e.id DESC LIMIT ?",
+    "findings": [
+      "SCAN m USING INDEX idx_work_source_identity",
+      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
+      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
+      "SCAN r",
+      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created"
+    ]
   },
   {
     "sql_sha256": "61d536d4dbfaef32f9c672cf819c4b46462acb1b8a375603c18fdd652357f09c",
@@ -2036,20 +1861,6 @@
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
   },
   {
-    "sql_sha256": "676bd62448bd9502d8f682b7e2286b65eacc6413cbfcf75c2f1afe9b91519e46",
-    "plan_sha256": "abc05c11d4d8a978567b003801390ee28c4e4f353f6a9dc90fc09a11729da907",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created"
-    ],
-    "reason": "Existing main e637014e, observed via POST /reports/preview (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: n, thread_id, refs_json, column_schema_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason FROM boards WHERE id = ?",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
     "sql_sha256": "6a4c5e085fd8988c1470fdf450e00af1c79ed294950bdba2c05db567afab5e2a",
     "plan_sha256": "c79c3eb4558e8f460b0edb5e4656e1d7504e217a9513a430003e1c45d7b832e9",
     "findings": [
@@ -2064,21 +1875,6 @@
     "reason": "Existing main e637014e, observed via GET /stream/inbox (unauthorized). Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: ow WHERE NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind='thread' AND id=_row.id)) SELECT id, '', id FROM threads WHERE COALESCE(archived_at,'')<>'' OR COALESCE(trashed_at,'')<>''",
     "issue": "SCA-652",
     "issue_url": "mention://issue/01a10ea6-8aa4-75ca-94d5-507d789ead44"
-  },
-  {
-    "sql_sha256": "6abb9aab9c7602746b8e4ac03aeae254351b59b0debbd66dc0d2ff16508273b5",
-    "plan_sha256": "731f79fb64f72fe24cc89fbad85a0e4d3423488a474a3746cc60055cbc0d1be9",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
-      "SEARCH _anx_denied USING AUTOMATIC PARTIAL COVERING INDEX (kind=? AND id=?)"
-    ],
-    "reason": "Existing main e637014e, observed via POST /reports/preview (unauthorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix:  archived_at, archived_by, trashed_at, trashed_by, trash_reason FROM events WHERE COALESCE(trashed_at, '') = '' AND type IN (?,?,?,?,?,?) ORDER BY ts DESC, id DESC LIMIT ? OFFSET ?",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
   },
   {
     "sql_sha256": "6b06624036b87cb43ddf91b2c6fa1428799611e42a1283ffc2762fd15ae64df3",
@@ -2304,24 +2100,6 @@
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
   },
   {
-    "sql_sha256": "78fa6182c2a993600ceeaa2b588788703b6f83ff965779a364578221387f6428",
-    "plan_sha256": "ea8f7078fd15a21f0829be8111efe353e96ff1e8a976cdbc31af68566405b61e",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
-      "SEARCH _anx_denied USING AUTOMATIC PARTIAL COVERING INDEX (kind=? AND id=?)",
-      "SEARCH _anx_resource_refs USING AUTOMATIC PARTIAL COVERING INDEX (kind=?)",
-      "SEARCH d USING AUTOMATIC PARTIAL COVERING INDEX (kind=?)",
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "Existing main e637014e, observed via GET /boards (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: nt, decision_count, artifact_count, open_card_count, document_count, generated_at, data_json, source_hash FROM derived_topic_views WHERE thread_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
     "sql_sha256": "794d0355d0ff0d553b27df9577cb7bee42da7ca738ad9a4cc0b6a186577fd328",
     "plan_sha256": "617107b01d161859c6cdfead7a115522f237d19874457bc7ab692b9ed6dfb2f2",
     "findings": [
@@ -2364,36 +2142,6 @@
       "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created"
     ],
     "reason": "Existing main e637014e, observed via GET /threads/{thread_id}/context (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: kind='card_revision' AND id=_row.revision_id)) SELECT COALESCE(c.handle, c.id), cr.revision_number FROM card_revisions cr JOIN cards c ON c.id = cr.card_id WHERE cr.revision_id = ?",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
-    "sql_sha256": "7ac4842747f40e2945c7b65bae80a19e8c2bcbefc1a679d566e107ef6413e758",
-    "plan_sha256": "98ecff4e8d1e5cf49581b0d335fcbd48bc7358f19764a97b0e1b6802acf41f97",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created"
-    ],
-    "reason": "Existing main e637014e, observed via POST /reports/preview (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: ERE kind='card' AND id=_row.card_id)) SELECT metadata_json,version,COALESCE(latest_observation_id,''),COALESCE(latest_attempt_id,''),refresh_json FROM work_metadata WHERE card_id=?",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
-    "sql_sha256": "7b8ccb36500e46fd63278bb12b408ee7bd00bb4639d6d4ff4ea61f85250a5089",
-    "plan_sha256": "1b50ae42a0c1d2af27c829fdf99c8c784226925d0aa0599522d8fca8c0b33620",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
-      "SEARCH _anx_resource_refs USING AUTOMATIC PARTIAL COVERING INDEX (kind=?)",
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "Existing main e637014e, observed via POST /reports/preview (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: w.target_type || ':' || _row.target_id)) SELECT source_id, target_id FROM ref_edges WHERE source_type = 'board' AND edge_type = ? AND source_id IN (?) ORDER BY source_id, target_id",
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
   },
@@ -2625,20 +2373,6 @@
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
   },
   {
-    "sql_sha256": "8a9c8127b37f09f761637fca55f65a819a5100615631464c21c12443f9c5d6a6",
-    "plan_sha256": "abc05c11d4d8a978567b003801390ee28c4e4f353f6a9dc90fc09a11729da907",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created"
-    ],
-    "reason": "Existing main e637014e, observed via POST /reports/preview (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: IKE 'filter/%'), boards AS (SELECT * FROM main.boards AS _row WHERE NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind='board' AND id=_row.id)) SELECT handle FROM boards WHERE id = ?",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
     "sql_sha256": "8ab24f66738a22bcd4b20b31fb59a4380795db287340ad5e7739b42dff1ad9ba",
     "plan_sha256": "8dea3942dca5866190ce5ab5406c89b6808c47b399e39fa0247082ad00604e79",
     "findings": [
@@ -2650,21 +2384,6 @@
       "SEARCH _anx_denied USING AUTOMATIC PARTIAL COVERING INDEX (kind=? AND id=?)"
     ],
     "reason": "Existing main e637014e, observed via GET /home/unread (unauthorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: _anx_denied WHERE kind='board' AND id=_row.id)) SELECT id, COALESCE(handle, ''), title, thread_id FROM boards WHERE COALESCE(trashed_at, '') = '' AND COALESCE(archived_at, '') = ''",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
-    "sql_sha256": "8b098735167195fbab67ca6ad00fe55d625960dbf408670864515523bd3cea22",
-    "plan_sha256": "5ddfd993b3bdc8bd2e1c22fb70278ffd737675e85fcc8395db1eb8b93eaa3339",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
-      "SEARCH _anx_denied USING AUTOMATIC PARTIAL COVERING INDEX (kind=? AND id=?)"
-    ],
-    "reason": "Existing main e637014e, observed via GET /boards (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason FROM boards WHERE 1=1 AND ((archived_at IS NULL AND trashed_at IS NULL)) ORDER BY updated_at DESC, id ASC",
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
   },
@@ -3322,20 +3041,6 @@
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
   },
   {
-    "sql_sha256": "ac03cd9998f077437ed407ab3971b769191afc51238d96ea69997cfc33d16beb",
-    "plan_sha256": "c7d60565630bc3f8e3a34f441f238345496676d6e03d5b544ca326b1a3b98fc8",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created"
-    ],
-    "reason": "Existing main e637014e, observed via POST /reports/preview (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: at, COALESCE( (SELECT MAX(t.created_at) FROM auth_access_tokens t WHERE t.agent_id = a.id), a.created_at ), a.updated_at, a.revoked_at, a.metadata_json FROM agents a WHERE a.id = ?",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
     "sql_sha256": "ac70a53e62c97743d46aa8c6f49b5500aec2b516b457ec56d84b52ad1ef383cc",
     "plan_sha256": "44ceea50abbd6bbe700766c06bf22ffdc33e0fbac8ad54b1c994af8fd780984f",
     "findings": [
@@ -3490,6 +3195,21 @@
   },
   {
     "sql_sha256": "b7df500986c083d9294ab8f1271d0b4b9b69b1a1d4bfab54084fcbe3a9c404cd",
+    "plan_sha256": "0a5cd05bdd623d04ae6e06e96640f62016d8809348c1164b1d2c1d1a00b5232b",
+    "issue": "SCA-665",
+    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
+    "reason": "Existing main e637014e, observed via GET /threads/{thread_id}/context (authorized). Source-reviewed returning-visit answered-ask/new-decision or thread-context target-ref query retains epoch-guarded cold closure scans, existing JSON/text ref filtering or automatic indexes. SCA-665 owns these bounded-template/closure repairs. Exact SQL shape and full ordered plan only; no runtime source was changed. Business SQL suffix: ype, target_id, edge_type, created_at, metadata_json FROM ref_edges WHERE target_type = ? AND target_id = ? AND edge_type = ? ORDER BY source_type ASC, source_id ASC, edge_type ASC",
+    "findings": [
+      "SCAN m USING INDEX idx_work_source_identity",
+      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
+      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
+      "SCAN r",
+      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
+      "custom SQL function in WHERE over a large relation"
+    ]
+  },
+  {
+    "sql_sha256": "b7df500986c083d9294ab8f1271d0b4b9b69b1a1d4bfab54084fcbe3a9c404cd",
     "plan_sha256": "1df5a384090962e7feacb2bffc79a833c9759a08b871b543779f50b7fbf4ff98",
     "findings": [
       "SCAN m USING INDEX idx_work_source_identity",
@@ -3594,37 +3314,6 @@
     "reason": "Existing main e637014e, observed via GET /stream/events (unauthorized). Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: json, archived_at, archived_by, trashed_at, trashed_by, trash_reason FROM events WHERE COALESCE(trashed_at, '') = '' AND thread_id IN (?) ORDER BY ts DESC, id DESC LIMIT ? OFFSET ?",
     "issue": "SCA-652",
     "issue_url": "mention://issue/01a10ea6-8aa4-75ca-94d5-507d789ead44"
-  },
-  {
-    "sql_sha256": "bb6ded5cd769a27fe10b5f95be885e9291ba4725dc8e42efedeecb07f183a8a0",
-    "plan_sha256": "8dea3942dca5866190ce5ab5406c89b6808c47b399e39fa0247082ad00604e79",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
-      "SEARCH _anx_denied USING AUTOMATIC PARTIAL COVERING INDEX (kind=? AND id=?)"
-    ],
-    "reason": "Existing main e637014e, observed via GET /ref-edges (unauthorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: ter/%'), boards AS (SELECT * FROM main.boards AS _row WHERE NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind='board' AND id=_row.id)) SELECT id, handle FROM boards WHERE handle = ?",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
-    "sql_sha256": "bc29adc113e986576516a9a1b2ad10289611fcdae063c2044f753f6ba8224317",
-    "plan_sha256": "3fc94bce84c89cb63945781126300291ce25f3d83623380d589645a0714631c3",
-    "findings": [
-      "SCAN d",
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
-      "SEARCH _anx_denied USING AUTOMATIC PARTIAL COVERING INDEX (kind=? AND id=?)"
-    ],
-    "reason": "Existing main e637014e, observed via POST /reports/preview (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: AND (?='' OR r.actor_id=?)) SELECT record_rowid,created,body FROM records WHERE (?=0 OR created<? OR (created=? AND record_rowid<?)) ORDER BY created DESC,record_rowid DESC LIMIT ?",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
   },
   {
     "sql_sha256": "bc82a89c7e5aa297464a66542d655245ff73ece4f4e7f51d90bb3141af189025",
@@ -3809,22 +3498,6 @@
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
   },
   {
-    "sql_sha256": "c621e2cf0424b72ef77baa3b7491a7b4f1975e7618709d372e50ad6b4aaf78b6",
-    "plan_sha256": "1467e61d8796415fca857744e3858af6d167135c5b35874d4551cb4e731ec1e6",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
-      "SEARCH _anx_resource_refs USING AUTOMATIC PARTIAL COVERING INDEX (kind=?)",
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "Existing main e637014e, observed via GET /boards (unauthorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: w.target_type || ':' || _row.target_id)) SELECT source_id, target_id FROM ref_edges WHERE source_type = 'board' AND edge_type = ? AND source_id IN (?) ORDER BY source_id, target_id",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
     "sql_sha256": "c8e5915684de8f388d81d905fcce9e45c0e777e9e57eb04744cf0f5fa10457b8",
     "plan_sha256": "c8417ac91f592ad0849d401edd4fcdecd6856dcf233a427fc4b94f07f421e4ba",
     "findings": [
@@ -3884,22 +3557,6 @@
     "issue_url": "mention://issue/01a10ea6-8aa4-75ca-94d5-507d789ead44"
   },
   {
-    "sql_sha256": "cc5cb2caf7cf640b3f3c766eb8a8d2edc565238318404473f057b49e534afdcc",
-    "plan_sha256": "77f4effc2aeb2b80208ea0eb13f0b142359b3bca500d2e32919decd6051de2ee",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
-      "SEARCH _anx_resource_refs USING AUTOMATIC PARTIAL COVERING INDEX (kind=?)",
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "Existing main e637014e, observed via GET /boards (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: ECT source_id, target_type, target_id FROM ref_edges WHERE source_type = 'board' AND edge_type = ? AND source_id IN (?,?,?,?,?,?,?,?,?,?) ORDER BY source_id, target_type, target_id",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
     "sql_sha256": "ccacf0f82fc58d975732acc179eb46edfb2808fa301903c94ce5c8973aaac19c",
     "plan_sha256": "2f3a7051db6bf18bed45c2357c8c2ba6d179cdea38717fff911b4427547e74f9",
     "findings": [
@@ -3926,22 +3583,6 @@
       "SEARCH _anx_denied USING AUTOMATIC PARTIAL COVERING INDEX (kind=? AND id=?)"
     ],
     "reason": "Existing main e637014e, observed via GET /pm/actions (unauthorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: AND (?='' OR r.actor_id=?)) SELECT record_rowid,created,body FROM records WHERE (?=0 OR created<? OR (created=? AND record_rowid<?)) ORDER BY created DESC,record_rowid DESC LIMIT ?",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
-    "sql_sha256": "cde7dd14c11e6f2fadf5aae965b36ba5fa3d91c021c8573967fe978148946ee5",
-    "plan_sha256": "c8417ac91f592ad0849d401edd4fcdecd6856dcf233a427fc4b94f07f421e4ba",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
-      "SEARCH _anx_resource_refs USING AUTOMATIC PARTIAL COVERING INDEX (kind=?)",
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "Existing main e637014e, observed via GET /boards (unauthorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: ow.target_id)) SELECT source_id, target_type, target_id FROM ref_edges WHERE source_type = 'board' AND edge_type = ? AND source_id IN (?) ORDER BY source_id, target_type, target_id",
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
   },
@@ -4006,6 +3647,21 @@
     "reason": "Existing main e637014e, observed via GET /docs/{document_id}/report (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: ter/%'), boards AS (SELECT * FROM main.boards AS _row WHERE NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind='board' AND id=_row.id)) SELECT id, handle FROM boards WHERE handle = ?",
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
+  },
+  {
+    "sql_sha256": "cff3f11bf6c87eba5cff9cebb84ac229473bb401dde8509f876cbf16f49c6512",
+    "plan_sha256": "7aadc911f5418b626c46e136dc4993ea401f137bf5cc0e6f9196adbcd4491f3b",
+    "issue": "SCA-665",
+    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
+    "reason": "Existing main e637014e, observed via GET /overview (unauthorized). Source-reviewed returning-visit answered-ask/new-decision or thread-context target-ref query retains epoch-guarded cold closure scans, existing JSON/text ref filtering or automatic indexes. SCA-665 owns these bounded-template/closure repairs. Exact SQL shape and full ordered plan only; no runtime source was changed. Business SQL suffix: sion' AND workspace_id=? AND julianday(json_extract(body,'$.created_at'))>=julianday(?) AND julianday(json_extract(body,'$.created_at'))<=julianday(?) ORDER BY rowid DESC LIMIT 201",
+    "findings": [
+      "SCAN m USING INDEX idx_work_source_identity",
+      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
+      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
+      "SCAN r",
+      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
+      "SEARCH _anx_denied USING AUTOMATIC PARTIAL COVERING INDEX (kind=? AND id=?)"
+    ]
   },
   {
     "sql_sha256": "d28bd6333d7c19e30628f2a2d12d54a7b9a063d58c776781fb9bb0eb0d08c0f7",
@@ -4289,20 +3945,6 @@
     "reason": "Existing main e637014e, observed via GET /artifacts (authorized). Document/event and revision-alias joins, history or owner enrichment still need indexed, bounded reads. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind='document_revision' AND id=_row.revision_id)) SELECT document_id, revision_id FROM document_revisions WHERE artifact_id = ? LIMIT 1",
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
-  },
-  {
-    "sql_sha256": "e24c4a755975b404910c01115e11eb2e32b014c866ecf1398f564c7dd65e10b9",
-    "plan_sha256": "e66f5d24ef91021e0010f744aa9401c022b0b6270c76fefa5927815df7e1902d",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created"
-    ],
-    "reason": "Existing main e637014e, observed via POST /reports/preview (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: json,h.created_at,h.revoked_at,h.bridge_expires_at,COALESCE((SELECT id FROM host_keys WHERE host_id=h.id ORDER BY created_at DESC LIMIT 1),'') FROM hosts h WHERE h.id=? OR h.slug=?",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
   },
   {
     "sql_sha256": "e258fcf0921654f492a1b5b56e2f8689916fdb45a8177c48899f960ca138169f",
@@ -4888,22 +4530,6 @@
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
   },
   {
-    "sql_sha256": "fcf9b1448c716b389f6d1da0b42544acb4d0255ecb90919f17a1b9cfd0c14dab",
-    "plan_sha256": "dcb6d8f53a152037fd74a176da35fb1e6adf87ae2908384d26c17d3d898e7968",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
-      "SEARCH _anx_resource_refs USING AUTOMATIC PARTIAL COVERING INDEX (kind=?)",
-      "custom SQL function in WHERE over a large relation"
-    ],
-    "reason": "Existing main e637014e, observed via POST /reports/preview (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: ow.target_id)) SELECT source_id, target_type, target_id FROM ref_edges WHERE source_type = 'board' AND edge_type = ? AND source_id IN (?) ORDER BY source_id, target_type, target_id",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
     "sql_sha256": "fd6b94bdc7949744442620b967c9229d54b380952e06aac72d373ca5aba02de0",
     "plan_sha256": "2ff0f6d93433f5a92df55cb35f948afaf4b5198cddef955add046167641360af",
     "findings": [
@@ -4928,21 +4554,6 @@
       "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created"
     ],
     "reason": "Existing main e637014e, observed via GET /boards/{board_id}/cards/{card_id} (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix: evisions cr JOIN cards c ON c.id = cr.card_id LEFT JOIN boards b ON b.id = c.board_id JOIN artifacts a ON a.id = cr.artifact_id WHERE cr.card_id = ? ORDER BY cr.revision_number ASC",
-    "issue": "SCA-665",
-    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
-  },
-  {
-    "sql_sha256": "fdc24e2f49c034e1667516702cf5929ba1df8bcbbd5cbce6754ed7e28ab28471",
-    "plan_sha256": "731f79fb64f72fe24cc89fbad85a0e4d3423488a474a3746cc60055cbc0d1be9",
-    "findings": [
-      "SCAN m USING INDEX idx_work_source_identity",
-      "SCAN main.artifacts USING INDEX idx_access_unknown_artifacts",
-      "SCAN main.threads USING COVERING INDEX idx_access_private_threads",
-      "SCAN r",
-      "SCAN r USING COVERING INDEX idx_agent_wakeups_thread_trigger_created",
-      "SEARCH _anx_denied USING AUTOMATIC PARTIAL COVERING INDEX (kind=? AND id=?)"
-    ],
-    "reason": "Existing main e637014e, observed via POST /reports/preview (authorized). Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. The full plan also contains epoch-guarded cold ownership fallback scans/automatic indexes; these are conservative EXPLAIN findings, not proof that every branch executes after snapshot reuse. Snapshot closure and ancillary work remain tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0). This exception covers only this SQL shape and full ordered plan, including duplicate nodes. Business SQL suffix:  archived_at, archived_by, trashed_at, trashed_by, trash_reason FROM events WHERE COALESCE(trashed_at, '') = '' AND type IN (?,?,?,?,?,?) ORDER BY ts DESC, id DESC LIMIT ? OFFSET ?",
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0"
   },

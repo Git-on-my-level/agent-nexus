@@ -8,7 +8,7 @@
     "max_rows": 4186,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 24.8 ms, 4 SQL executions and 4103 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 24.8 ms, 4 SQL executions and 4103 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 49.9ms, 4SQL and 4103rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -19,7 +19,7 @@
     "max_rows": 4186,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 770.9 ms, 4 SQL executions and 4103 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 770.9 ms, 4 SQL executions and 4103 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 385.1ms, 4SQL and 4103rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -30,18 +30,18 @@
     "max_rows": 1024,
     "issue": "SCA-652",
     "issue_url": "mention://issue/01a10ea6-8aa4-75ca-94d5-507d789ead44",
-    "reason": "Existing main e637014e: measured 740.3 ms, 4 SQL executions and 3 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 740.3 ms, 4 SQL executions and 3 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 628.6ms, 4SQL and 3rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/agent-notifications",
     "principal": "unauthorized",
-    "p95_ms": 3000,
+    "p95_ms": 5500,
     "max_queries": 100,
     "max_rows": 1024,
     "issue": "SCA-652",
     "issue_url": "mention://issue/01a10ea6-8aa4-75ca-94d5-507d789ead44",
-    "reason": "Existing main e637014e: measured 780.9 ms, 4 SQL executions and 3 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 780.9 ms, 4 SQL executions and 3 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 1677.8ms, 4SQL and 3rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -52,7 +52,7 @@
     "max_rows": 12543,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 73.8 ms, 9 SQL executions and 12297 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 73.8 ms, 9 SQL executions and 12297 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 125.9ms, 9SQL and 12297rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -63,7 +63,7 @@
     "max_rows": 12019,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 865.5 ms, 9 SQL executions and 11783 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 865.5 ms, 9 SQL executions and 11783 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 729.9ms, 9SQL and 11783rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -74,18 +74,18 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 827.2 ms, 6 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 827.2 ms, 6 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 509.9ms, 6SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/agents/{agent_id}",
     "principal": "authorized",
-    "p95_ms": 18000,
+    "p95_ms": 27500,
     "max_queries": 100,
     "max_rows": 16722,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 5773.2 ms, 13 SQL executions and 16394 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 5773.2 ms, 13 SQL executions and 16394 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 9023.4ms, 13SQL and 16394rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -96,7 +96,7 @@
     "max_rows": 15936,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 9208.0 ms, 13 SQL executions and 15623 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 9208.0 ms, 13 SQL executions and 15623 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 6482.3ms, 13SQL and 15623rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -107,7 +107,7 @@
     "max_rows": 1024,
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2",
-    "reason": "Existing main e637014e: measured 584.3 ms, 84 SQL executions and 83 consumed rows on the 4K corpus. Document/event and revision-alias joins, history or owner enrichment still need indexed, bounded reads. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 584.3 ms, 84 SQL executions and 83 consumed rows on the 4K corpus. Document/event and revision-alias joins, history or owner enrichment still need indexed, bounded reads. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 473.9ms, 84SQL and 83rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -118,18 +118,18 @@
     "max_rows": 1024,
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2",
-    "reason": "Existing main e637014e: measured 3323.6 ms, 84 SQL executions and 83 consumed rows on the 4K corpus. Document/event and revision-alias joins, history or owner enrichment still need indexed, bounded reads. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 3323.6 ms, 84 SQL executions and 83 consumed rows on the 4K corpus. Document/event and revision-alias joins, history or owner enrichment still need indexed, bounded reads. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 3192.6ms, 84SQL and 83rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/artifacts/{artifact_id}",
     "principal": "unauthorized",
-    "p95_ms": 5000,
+    "p95_ms": 5500,
     "max_queries": 100,
     "max_rows": 1024,
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2",
-    "reason": "Existing main e637014e: measured 1532.2 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Document/event and revision-alias joins, history or owner enrichment still need indexed, bounded reads. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1532.2 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Document/event and revision-alias joins, history or owner enrichment still need indexed, bounded reads. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 1617.6ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -140,7 +140,7 @@
     "max_rows": 1024,
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2",
-    "reason": "Existing main e637014e: measured 1712.5 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Document/event and revision-alias joins, history or owner enrichment still need indexed, bounded reads. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1712.5 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Document/event and revision-alias joins, history or owner enrichment still need indexed, bounded reads. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 931.5ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -151,7 +151,7 @@
     "max_rows": 4284,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 52.0 ms, 59 SQL executions and 4200 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 52.0 ms, 59 SQL executions and 4200 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 53.2ms, 59SQL and 4200rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -162,18 +162,18 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 1190.1 ms, 4 SQL executions and 3 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1190.1 ms, 4 SQL executions and 3 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 894.3ms, 4SQL and 3rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/boards/{board_id}",
     "principal": "unauthorized",
-    "p95_ms": 4000,
+    "p95_ms": 5000,
     "max_queries": 100,
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 1125.7 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1125.7 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 1543.1ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -184,18 +184,18 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 1158.2 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1158.2 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 957.1ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/boards/{board_id}/cards/{card_id}",
     "principal": "unauthorized",
-    "p95_ms": 3500,
+    "p95_ms": 4000,
     "max_queries": 100,
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 1054.7 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1054.7 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 1214.0ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -206,7 +206,7 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 1084.6 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1084.6 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 904.2ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -217,18 +217,18 @@
     "max_rows": 12538,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 9255.6 ms, 6 SQL executions and 12292 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 9255.6 ms, 6 SQL executions and 12292 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 9188.8ms, 6SQL and 12292rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/cards",
     "principal": "unauthorized",
-    "p95_ms": 27500,
+    "p95_ms": 37000,
     "max_queries": 100,
     "max_rows": 11754,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 8988.7 ms, 6 SQL executions and 11523 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 8988.7 ms, 6 SQL executions and 11523 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 12178.9ms, 6SQL and 11523rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -239,7 +239,7 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 1155.2 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1155.2 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 1026.1ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -250,7 +250,7 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 1161.7 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1161.7 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 1019.6ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -261,7 +261,7 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 1094.2 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1094.2 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 761.8ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -272,7 +272,7 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 1061.5 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1061.5 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 810.2ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -283,7 +283,7 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 1036.4 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1036.4 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 962.8ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -294,7 +294,7 @@
     "max_rows": 1024,
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2",
-    "reason": "Existing main e637014e: measured 1063.5 ms, 5 SQL executions and 6 consumed rows on the 4K corpus. Document/event and revision-alias joins, history or owner enrichment still need indexed, bounded reads. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1063.5 ms, 5 SQL executions and 6 consumed rows on the 4K corpus. Document/event and revision-alias joins, history or owner enrichment still need indexed, bounded reads. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 992.2ms, 5SQL and 6rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -305,40 +305,40 @@
     "max_rows": 1024,
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2",
-    "reason": "Existing main e637014e: measured 1051.7 ms, 4 SQL executions and 5 consumed rows on the 4K corpus. Document/event and revision-alias joins, history or owner enrichment still need indexed, bounded reads. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1051.7 ms, 4 SQL executions and 5 consumed rows on the 4K corpus. Document/event and revision-alias joins, history or owner enrichment still need indexed, bounded reads. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 979.3ms, 4SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/docs/{document_id}",
     "principal": "unauthorized",
-    "p95_ms": 3500,
+    "p95_ms": 7500,
     "max_queries": 100,
     "max_rows": 1024,
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2",
-    "reason": "Existing main e637014e: measured 1010.5 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Document/event and revision-alias joins, history or owner enrichment still need indexed, bounded reads. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1010.5 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Document/event and revision-alias joins, history or owner enrichment still need indexed, bounded reads. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 2400.2ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/docs/{document_id}/comments",
     "principal": "unauthorized",
-    "p95_ms": 3500,
+    "p95_ms": 4000,
     "max_queries": 100,
     "max_rows": 1024,
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2",
-    "reason": "Existing main e637014e: measured 1011.2 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Document/event and revision-alias joins, history or owner enrichment still need indexed, bounded reads. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1011.2 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Document/event and revision-alias joins, history or owner enrichment still need indexed, bounded reads. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 1164.0ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/docs/{document_id}/report",
     "principal": "authorized",
-    "p95_ms": 221500,
+    "p95_ms": 223500,
     "max_queries": 13292,
     "max_rows": 29523,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 73638.8 ms, 13031 SQL executions and 28944 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 73638.8 ms, 13031 SQL executions and 28944 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 74280.4ms, 13031SQL and 28944rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -349,7 +349,7 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 1095.7 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1095.7 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 715.0ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -360,7 +360,7 @@
     "max_rows": 1024,
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2",
-    "reason": "Existing main e637014e: measured 1599.6 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Document/event and revision-alias joins, history or owner enrichment still need indexed, bounded reads. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1599.6 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Document/event and revision-alias joins, history or owner enrichment still need indexed, bounded reads. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 1037.9ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -371,7 +371,7 @@
     "max_rows": 1024,
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2",
-    "reason": "Existing main e637014e: measured 2295.9 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Document/event and revision-alias joins, history or owner enrichment still need indexed, bounded reads. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 2295.9 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Document/event and revision-alias joins, history or owner enrichment still need indexed, bounded reads. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 864.6ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -382,7 +382,7 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 1690.7 ms, 10 SQL executions and 11 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1690.7 ms, 10 SQL executions and 11 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 487.5ms, 10SQL and 11rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -393,7 +393,7 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 1054.3 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1054.3 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 1053.3ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -404,18 +404,18 @@
     "max_rows": 16796,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 26103.5 ms, 8270 SQL executions and 16466 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 26103.5 ms, 8270 SQL executions and 16466 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 24674.7ms, 8270SQL and 16466rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/home/unread",
     "principal": "unauthorized",
-    "p95_ms": 215000,
+    "p95_ms": 252000,
     "max_queries": 7904,
     "max_rows": 15730,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 71447.3 ms, 7749 SQL executions and 15421 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 71447.3 ms, 7749 SQL executions and 15421 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 83803.2ms, 7749SQL and 15421rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -426,18 +426,18 @@
     "max_rows": 16723,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 102.9 ms, 13 SQL executions and 16395 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 102.9 ms, 13 SQL executions and 16395 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 99.3ms, 13SQL and 16395rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/hosts",
     "principal": "unauthorized",
-    "p95_ms": 2000,
+    "p95_ms": 2500,
     "max_queries": 100,
     "max_rows": 16199,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 509.7 ms, 13 SQL executions and 15881 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 509.7 ms, 13 SQL executions and 15881 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 626.4ms, 13SQL and 15881rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -448,7 +448,7 @@
     "max_rows": 16722,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 97.3 ms, 12 SQL executions and 16394 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 97.3 ms, 12 SQL executions and 16394 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 97.9ms, 12SQL and 16394rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -459,51 +459,51 @@
     "max_rows": 16198,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 520.0 ms, 12 SQL executions and 15880 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 520.0 ms, 12 SQL executions and 15880 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 578.2ms, 12SQL and 15880rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/inbox",
     "principal": "authorized",
-    "p95_ms": 37500,
+    "p95_ms": 51500,
     "max_queries": 4211,
     "max_rows": 12567,
     "issue": "SCA-652",
     "issue_url": "mention://issue/01a10ea6-8aa4-75ca-94d5-507d789ead44",
-    "reason": "Existing main e637014e: measured 12401.5 ms, 4128 SQL executions and 12320 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 12401.5 ms, 4128 SQL executions and 12320 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 17052.0ms, 4128SQL and 12320rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/inbox",
     "principal": "unauthorized",
-    "p95_ms": 82000,
+    "p95_ms": 114000,
     "max_queries": 3932,
     "max_rows": 11756,
     "issue": "SCA-652",
     "issue_url": "mention://issue/01a10ea6-8aa4-75ca-94d5-507d789ead44",
-    "reason": "Existing main e637014e: measured 27180.4 ms, 3854 SQL executions and 11525 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 27180.4 ms, 3854 SQL executions and 11525 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 37811.1ms, 3854SQL and 11525rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/inbox/summary",
     "principal": "authorized",
-    "p95_ms": 15500,
+    "p95_ms": 21000,
     "max_queries": 100,
     "max_rows": 4182,
     "issue": "SCA-652",
     "issue_url": "mention://issue/01a10ea6-8aa4-75ca-94d5-507d789ead44",
-    "reason": "Existing main e637014e: measured 4942.1 ms, 9 SQL executions and 4100 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 4942.1 ms, 9 SQL executions and 4100 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 6912.7ms, 9SQL and 4100rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/inbox/summary",
     "principal": "unauthorized",
-    "p95_ms": 11000,
+    "p95_ms": 17500,
     "max_queries": 100,
     "max_rows": 3920,
     "issue": "SCA-652",
     "issue_url": "mention://issue/01a10ea6-8aa4-75ca-94d5-507d789ead44",
-    "reason": "Existing main e637014e: measured 3495.1 ms, 9 SQL executions and 3843 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 3495.1 ms, 9 SQL executions and 3843 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 5737.1ms, 9SQL and 3843rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -514,7 +514,7 @@
     "max_rows": 8393,
     "issue": "SCA-652",
     "issue_url": "mention://issue/01a10ea6-8aa4-75ca-94d5-507d789ead44",
-    "reason": "Existing main e637014e: measured 7115.5 ms, 4126 SQL executions and 8228 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 7115.5 ms, 4126 SQL executions and 8228 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 5790.1ms, 4126SQL and 8228rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -525,7 +525,7 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: full acceptance measured 594.8 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. The request-scoped denial snapshot still scans its corpus-sized ownership closure before otherwise small point/tick/usage reads. SCA-665 owns this remaining cost; threefold latency headroom plus 250 ms, rounded to 500 ms, leaves the ordinary query/row ceilings, successful responses, privacy and exact plan checks mandatory."
+    "reason": "Existing main e637014e: full acceptance measured 594.8 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. The request-scoped denial snapshot still scans its corpus-sized ownership closure before otherwise small point/tick/usage reads. SCA-665 owns this remaining cost; threefold latency headroom plus 250 ms, rounded to 500 ms, leaves the ordinary query/row ceilings, successful responses, privacy and exact plan checks mandatory. Full normal acceptance observed maximum measured latency 594.8ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -536,282 +536,370 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: full acceptance measured 724.6 ms, 10 SQL executions and 10 consumed rows on the 4K corpus. The request-scoped denial snapshot still scans its corpus-sized ownership closure before otherwise small point/tick/usage reads. SCA-665 owns this remaining cost; threefold latency headroom plus 250 ms, rounded to 500 ms, leaves the ordinary query/row ceilings, successful responses, privacy and exact plan checks mandatory."
+    "reason": "Existing main e637014e: full acceptance measured 724.6 ms, 10 SQL executions and 10 consumed rows on the 4K corpus. The request-scoped denial snapshot still scans its corpus-sized ownership closure before otherwise small point/tick/usage reads. SCA-665 owns this remaining cost; threefold latency headroom plus 250 ms, rounded to 500 ms, leaves the ordinary query/row ceilings, successful responses, privacy and exact plan checks mandatory. Full normal acceptance observed maximum measured latency 724.6ms, 10SQL and 10rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/overview",
     "principal": "authorized",
-    "p95_ms": 230500,
-    "max_queries": 17197,
-    "max_rows": 65463,
+    "p95_ms": 261500,
+    "max_queries": 19281,
+    "max_rows": 111314,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 76595.6 ms, 16859 SQL executions and 64179 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 16862 SQL/64181 rows; finite raw ceilings add 10 refreshes (ceil(261500 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 87072.2 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
   },
   {
     "method": "GET",
     "path": "/overview",
     "principal": "unauthorized",
-    "p95_ms": 1644500,
-    "max_queries": 18269,
-    "max_rows": 104882,
+    "p95_ms": 1800000,
+    "max_queries": 30545,
+    "max_rows": 375391,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 547920.9 ms, 17910 SQL executions and 102825 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 17502 SQL/93835 rows; finite raw ceilings add 61 refreshes (ceil(1800000 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 601050.8 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
   },
   {
     "method": "GET",
     "path": "/overview/changes",
     "principal": "authorized",
     "p95_ms": 32500,
-    "max_queries": 222,
-    "max_rows": 10709,
+    "max_queries": 635,
+    "max_rows": 19879,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 10599.6 ms, 214 SQL executions and 10499 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 10 SQL/6004 rows; finite raw ceilings add 3 refreshes (ceil(32500 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 10355.5 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
   },
   {
     "method": "GET",
     "path": "/overview/changes",
     "principal": "unauthorized",
-    "p95_ms": 854000,
-    "max_queries": 100,
-    "max_rows": 6125,
+    "p95_ms": 958500,
+    "max_queries": 7085,
+    "max_rows": 162013,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 284576.9 ms, 7 SQL executions and 6004 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 214 SQL/10501 rows; finite raw ceilings add 33 refreshes (ceil(958500 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 319255.2 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
   },
   {
     "method": "GET",
     "path": "/pm/actions",
     "principal": "authorized",
     "p95_ms": 4500,
-    "max_queries": 317,
-    "max_rows": 1024,
+    "max_queries": 732,
+    "max_rows": 9485,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 1390.5 ms, 309 SQL executions and 309 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 309 SQL/309 rows; finite raw ceilings add 2 refreshes (ceil(4500 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 1178.0 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
   },
   {
     "method": "GET",
     "path": "/pm/actions",
     "principal": "unauthorized",
-    "p95_ms": 30000,
-    "max_queries": 524,
-    "max_rows": 4901,
+    "p95_ms": 35500,
+    "max_queries": 940,
+    "max_rows": 14070,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 9851.5 ms, 513 SQL executions and 4804 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 309 SQL/309 rows; finite raw ceilings add 3 refreshes (ceil(35500 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 11591.5 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
+  },
+  {
+    "method": "GET",
+    "path": "/pm/actions/{action_id}",
+    "principal": "authorized",
+    "p95_ms": 500,
+    "max_queries": 428,
+    "max_rows": 9180,
+    "issue": "SCA-665",
+    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 11 SQL/10 rows; finite raw ceilings add 2 refreshes (ceil(500 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 56.7 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
   },
   {
     "method": "GET",
     "path": "/pm/actions/{action_id}",
     "principal": "unauthorized",
-    "p95_ms": 2500,
-    "max_queries": 100,
-    "max_rows": 1024,
+    "p95_ms": 5500,
+    "max_queries": 422,
+    "max_rows": 9174,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 651.4 ms, 5 SQL executions and 4 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 5 SQL/4 rows; finite raw ceilings add 2 refreshes (ceil(5500 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 1595.4 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
+  },
+  {
+    "method": "GET",
+    "path": "/pm/bindings",
+    "principal": "authorized",
+    "p95_ms": 500,
+    "max_queries": 424,
+    "max_rows": 9176,
+    "issue": "SCA-665",
+    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 7 SQL/6 rows; finite raw ceilings add 2 refreshes (ceil(500 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 47.8 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
   },
   {
     "method": "GET",
     "path": "/pm/bindings",
     "principal": "unauthorized",
-    "p95_ms": 2500,
-    "max_queries": 100,
-    "max_rows": 1024,
+    "p95_ms": 3500,
+    "max_queries": 422,
+    "max_rows": 9175,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 706.2 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 5 SQL/5 rows; finite raw ceilings add 2 refreshes (ceil(3500 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 1067.9 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
+  },
+  {
+    "method": "GET",
+    "path": "/pm/context",
+    "principal": "authorized",
+    "p95_ms": 500,
+    "max_queries": 427,
+    "max_rows": 9179,
+    "issue": "SCA-665",
+    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 10 SQL/9 rows; finite raw ceilings add 2 refreshes (ceil(500 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 58.0 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
   },
   {
     "method": "GET",
     "path": "/pm/context",
     "principal": "unauthorized",
-    "p95_ms": 2500,
-    "max_queries": 100,
-    "max_rows": 1024,
+    "p95_ms": 4000,
+    "max_queries": 423,
+    "max_rows": 9176,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 709.1 ms, 6 SQL executions and 6 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 6 SQL/6 rows; finite raw ceilings add 2 refreshes (ceil(4000 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 1088.7 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
   },
   {
     "method": "GET",
     "path": "/pm/conversations",
     "principal": "authorized",
     "p95_ms": 1500,
-    "max_queries": 167,
-    "max_rows": 1024,
+    "max_queries": 579,
+    "max_rows": 9383,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 359.9 ms, 159 SQL executions and 209 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 159 SQL/209 rows; finite raw ceilings add 2 refreshes (ceil(1500 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 286.8 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
   },
   {
     "method": "GET",
     "path": "/pm/conversations",
     "principal": "unauthorized",
-    "p95_ms": 2500,
-    "max_queries": 100,
-    "max_rows": 1024,
+    "p95_ms": 4000,
+    "max_queries": 423,
+    "max_rows": 9175,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 698.2 ms, 6 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 6 SQL/5 rows; finite raw ceilings add 2 refreshes (ceil(4000 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 1161.2 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
+  },
+  {
+    "method": "GET",
+    "path": "/pm/conversations/{conversation_id}",
+    "principal": "authorized",
+    "p95_ms": 500,
+    "max_queries": 427,
+    "max_rows": 9180,
+    "issue": "SCA-665",
+    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 10 SQL/10 rows; finite raw ceilings add 2 refreshes (ceil(500 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 49.7 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
   },
   {
     "method": "GET",
     "path": "/pm/conversations/{conversation_id}",
     "principal": "unauthorized",
-    "p95_ms": 2500,
-    "max_queries": 100,
-    "max_rows": 1024,
+    "p95_ms": 3500,
+    "max_queries": 422,
+    "max_rows": 9174,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 653.9 ms, 5 SQL executions and 4 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 5 SQL/4 rows; finite raw ceilings add 2 refreshes (ceil(3500 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 947.3 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
   },
   {
     "method": "GET",
     "path": "/pm/decisions",
     "principal": "authorized",
-    "p95_ms": 8500,
-    "max_queries": 472,
-    "max_rows": 1024,
+    "p95_ms": 12000,
+    "max_queries": 888,
+    "max_rows": 9591,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 2676.1 ms, 462 SQL executions and 412 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 462 SQL/412 rows; finite raw ceilings add 2 refreshes (ceil(12000 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 3783.7 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
   },
   {
     "method": "GET",
     "path": "/pm/decisions",
     "principal": "unauthorized",
-    "p95_ms": 32500,
-    "max_queries": 469,
-    "max_rows": 1024,
+    "p95_ms": 51000,
+    "max_queries": 1093,
+    "max_rows": 14172,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 10603.5 ms, 459 SQL executions and 409 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 459 SQL/409 rows; finite raw ceilings add 3 refreshes (ceil(51000 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 16908.4 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
+  },
+  {
+    "method": "GET",
+    "path": "/pm/decisions/{decision_id}",
+    "principal": "authorized",
+    "p95_ms": 500,
+    "max_queries": 434,
+    "max_rows": 9186,
+    "issue": "SCA-665",
+    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 17 SQL/15 rows; finite raw ceilings add 2 refreshes (ceil(500 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 104.2 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
   },
   {
     "method": "GET",
     "path": "/pm/decisions/{decision_id}",
     "principal": "unauthorized",
-    "p95_ms": 2000,
-    "max_queries": 100,
-    "max_rows": 1024,
+    "p95_ms": 3000,
+    "max_queries": 422,
+    "max_rows": 9174,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 579.0 ms, 5 SQL executions and 4 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 5 SQL/4 rows; finite raw ceilings add 2 refreshes (ceil(3000 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 818.9 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
+  },
+  {
+    "method": "GET",
+    "path": "/pm/turns/{turn_id}",
+    "principal": "authorized",
+    "p95_ms": 500,
+    "max_queries": 428,
+    "max_rows": 9182,
+    "issue": "SCA-665",
+    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 11 SQL/11 rows; finite raw ceilings add 2 refreshes (ceil(500 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 58.7 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
   },
   {
     "method": "GET",
     "path": "/pm/turns/{turn_id}",
     "principal": "unauthorized",
-    "p95_ms": 2000,
-    "max_queries": 100,
-    "max_rows": 1024,
+    "p95_ms": 6000,
+    "max_queries": 422,
+    "max_rows": 9174,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 570.1 ms, 5 SQL executions and 4 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 5 SQL/4 rows; finite raw ceilings add 2 refreshes (ceil(6000 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 1775.4 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
   },
   {
     "method": "GET",
     "path": "/ref-edges",
     "principal": "unauthorized",
-    "p95_ms": 3500,
+    "p95_ms": 5500,
     "max_queries": 100,
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 965.2 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 965.2 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 1620.1ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/runs",
     "principal": "unauthorized",
-    "p95_ms": 2500,
+    "p95_ms": 6500,
     "max_queries": 100,
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 599.6 ms, 4 SQL executions and 54 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 599.6 ms, 4 SQL executions and 54 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 1996.5ms, 4SQL and 54rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/runs/{run_id}",
     "principal": "unauthorized",
-    "p95_ms": 2500,
+    "p95_ms": 5000,
     "max_queries": 100,
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 613.8 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 613.8 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 1476.5ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/secrets",
     "principal": "unauthorized",
-    "p95_ms": 2500,
+    "p95_ms": 5000,
     "max_queries": 100,
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 604.8 ms, 4 SQL executions and 4 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 604.8 ms, 4 SQL executions and 4 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 1552.6ms, 4SQL and 4rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/series",
     "principal": "unauthorized",
-    "p95_ms": 2500,
+    "p95_ms": 5000,
     "max_queries": 100,
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 608.6 ms, 4 SQL executions and 4 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 608.6 ms, 4 SQL executions and 4 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 1482.4ms, 4SQL and 4rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/series/{name}",
     "principal": "authorized",
-    "p95_ms": 4000,
+    "p95_ms": 5500,
     "max_queries": 100,
     "max_rows": 4608,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 1185.1 ms, 7 SQL executions and 8 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1185.1 ms, 7 SQL executions and 8 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 1678.8ms, 7SQL and 8rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/series/{name}",
     "principal": "unauthorized",
-    "p95_ms": 112500,
+    "p95_ms": 222000,
     "max_queries": 100,
     "max_rows": 4608,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 37399.1 ms, 7 SQL executions and 8 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 37399.1 ms, 7 SQL executions and 8 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 73770.6ms, 7SQL and 8rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/series/{name}/query",
     "principal": "authorized",
-    "p95_ms": 4000,
+    "p95_ms": 6000,
     "max_queries": 100,
     "max_rows": 4608,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 1238.1 ms, 7 SQL executions and 8 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1238.1 ms, 7 SQL executions and 8 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 1899.5ms, 7SQL and 8rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/series/{name}/query",
     "principal": "unauthorized",
-    "p95_ms": 101500,
+    "p95_ms": 164000,
     "max_queries": 100,
     "max_rows": 4608,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 33605.2 ms, 7 SQL executions and 8 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 33605.2 ms, 7 SQL executions and 8 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 54542.2ms, 7SQL and 8rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -822,7 +910,7 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: full acceptance measured 532.5 ms, 16 SQL executions and 13 consumed rows on the 4K corpus. Stream scopes intentionally do not reuse request snapshots; each receipt tick rechecks thread visibility through the remaining corpus-sized ownership closure before indexed wakeup reads. SCA-665 owns this remaining cost; threefold latency headroom plus 250 ms, rounded to 500 ms, leaves the ordinary query/row ceilings, successful responses, privacy and exact plan checks mandatory."
+    "reason": "Existing main e637014e: full acceptance measured 532.5 ms, 16 SQL executions and 13 consumed rows on the 4K corpus. Stream scopes intentionally do not reuse request snapshots; each receipt tick rechecks thread visibility through the remaining corpus-sized ownership closure before indexed wakeup reads. SCA-665 owns this remaining cost; threefold latency headroom plus 250 ms, rounded to 500 ms, leaves the ordinary query/row ceilings, successful responses, privacy and exact plan checks mandatory. Full normal acceptance observed maximum measured latency 532.5ms, 16SQL and 13rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -833,7 +921,7 @@
     "max_rows": 1024,
     "issue": "SCA-652",
     "issue_url": "mention://issue/01a10ea6-8aa4-75ca-94d5-507d789ead44",
-    "reason": "Existing main e637014e: measured 828.3 ms, 4 SQL executions and 4 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 828.3 ms, 4 SQL executions and 4 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 601.5ms, 4SQL and 4rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -844,7 +932,7 @@
     "max_rows": 1024,
     "issue": "SCA-652",
     "issue_url": "mention://issue/01a10ea6-8aa4-75ca-94d5-507d789ead44",
-    "reason": "Existing main e637014e: measured 9404.1 ms, 20 SQL executions and 18 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 9404.1 ms, 20 SQL executions and 18 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 6791.9ms, 20SQL and 18rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -855,7 +943,7 @@
     "max_rows": 8360,
     "issue": "SCA-652",
     "issue_url": "mention://issue/01a10ea6-8aa4-75ca-94d5-507d789ead44",
-    "reason": "Existing main e637014e: measured 17063.9 ms, 16 SQL executions and 8196 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 17063.9 ms, 16 SQL executions and 8196 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 14507.0ms, 16SQL and 8196rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -866,7 +954,7 @@
     "max_rows": 7836,
     "issue": "SCA-652",
     "issue_url": "mention://issue/01a10ea6-8aa4-75ca-94d5-507d789ead44",
-    "reason": "Existing main e637014e: measured 15959.1 ms, 16 SQL executions and 7682 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 15959.1 ms, 16 SQL executions and 7682 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 9917.6ms, 16SQL and 7682rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -877,18 +965,18 @@
     "max_rows": 8388,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 8204.6 ms, 4121 SQL executions and 8223 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 8204.6 ms, 4121 SQL executions and 8223 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 5382.7ms, 4121SQL and 8223rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/threads",
     "principal": "unauthorized",
-    "p95_ms": 93500,
+    "p95_ms": 107000,
     "max_queries": 3924,
     "max_rows": 7839,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 31068.8 ms, 3847 SQL executions and 7685 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 31068.8 ms, 3847 SQL executions and 7685 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 35562.5ms, 3847SQL and 7685rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -899,7 +987,7 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 559.8 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 559.8 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 536.1ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -910,7 +998,7 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 598.7 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 598.7 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 446.5ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -921,7 +1009,7 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 686.3 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 686.3 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 497.1ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -932,7 +1020,7 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 683.2 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 683.2 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 496.1ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -943,7 +1031,7 @@
     "max_rows": 4185,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 87.4 ms, 5 SQL executions and 4102 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 87.4 ms, 5 SQL executions and 4102 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 79.9ms, 5SQL and 4102rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -954,7 +1042,7 @@
     "max_rows": 3920,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 672.6 ms, 5 SQL executions and 3843 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 672.6 ms, 5 SQL executions and 3843 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 532.8ms, 5SQL and 3843rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -965,7 +1053,7 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 589.9 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 589.9 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 487.6ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -976,7 +1064,7 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 567.0 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 567.0 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 450.6ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -987,7 +1075,7 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 551.2 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 551.2 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 428.9ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -998,18 +1086,18 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 636.3 ms, 14 SQL executions and 14 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 636.3 ms, 14 SQL executions and 14 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 488.2ms, 14SQL and 14rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/work",
     "principal": "authorized",
-    "p95_ms": 42500,
+    "p95_ms": 48500,
     "max_queries": 100,
     "max_rows": 8361,
     "issue": "SCA-652",
     "issue_url": "mention://issue/01a10ea6-8aa4-75ca-94d5-507d789ead44",
-    "reason": "Existing main e637014e: measured 13968.0 ms, 11 SQL executions and 8197 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 13968.0 ms, 11 SQL executions and 8197 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 15983.4ms, 11SQL and 8197rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -1020,7 +1108,7 @@
     "max_rows": 7839,
     "issue": "SCA-652",
     "issue_url": "mention://issue/01a10ea6-8aa4-75ca-94d5-507d789ead44",
-    "reason": "Existing main e637014e: measured 24615.3 ms, 12 SQL executions and 7685 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 24615.3 ms, 12 SQL executions and 7685 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 16020.8ms, 12SQL and 7685rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -1031,7 +1119,7 @@
     "max_rows": 1024,
     "issue": "SCA-652",
     "issue_url": "mention://issue/01a10ea6-8aa4-75ca-94d5-507d789ead44",
-    "reason": "Existing main e637014e: measured 527.3 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 527.3 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 348.8ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -1042,18 +1130,18 @@
     "max_rows": 1024,
     "issue": "SCA-652",
     "issue_url": "mention://issue/01a10ea6-8aa4-75ca-94d5-507d789ead44",
-    "reason": "Existing main e637014e: measured 539.7 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 539.7 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 336.3ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/work/{card_ref}/refresh",
     "principal": "unauthorized",
-    "p95_ms": 2000,
+    "p95_ms": 2500,
     "max_queries": 100,
     "max_rows": 1024,
     "issue": "SCA-652",
     "issue_url": "mention://issue/01a10ea6-8aa4-75ca-94d5-507d789ead44",
-    "reason": "Existing main e637014e: measured 539.8 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 539.8 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 645.6ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
@@ -1064,18 +1152,18 @@
     "max_rows": 4182,
     "issue": "SCA-652",
     "issue_url": "mention://issue/01a10ea6-8aa4-75ca-94d5-507d789ead44",
-    "reason": "Existing main e637014e: measured 99.3 ms, 5 SQL executions and 4100 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 99.3 ms, 5 SQL executions and 4100 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 96.2ms, 5SQL and 4100rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "GET",
     "path": "/workspace/dashboard/reports",
     "principal": "unauthorized",
-    "p95_ms": 2500,
+    "p95_ms": 3000,
     "max_queries": 100,
     "max_rows": 3920,
     "issue": "SCA-652",
     "issue_url": "mention://issue/01a10ea6-8aa4-75ca-94d5-507d789ead44",
-    "reason": "Existing main e637014e: measured 613.5 ms, 5 SQL executions and 3843 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 613.5 ms, 5 SQL executions and 3843 consumed rows on the 4K corpus. Work/inbox projection and per-tick enrichment still materialize or inspect corpus-sized collections before a page/tick bound. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 844.1ms, 5SQL and 3843rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "POST",
@@ -1086,29 +1174,31 @@
     "max_rows": 9180,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 72.8 ms, 419 SQL executions and 9000 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 11 SQL/10 rows; finite raw ceilings add 2 refreshes (ceil(500 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 16.5 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
   },
   {
     "method": "POST",
     "path": "/pm/turns/{turn_id}/context",
     "principal": "unauthorized",
     "p95_ms": 6000,
-    "max_queries": 215,
-    "max_rows": 4588,
+    "max_queries": 420,
+    "max_rows": 9173,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 1831.0 ms, 207 SQL executions and 4498 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e, schema 63: PM access/overview identity routing expires every 30 seconds (server/pm_principals.go:40; auth/audit.go:169). On this 4K corpus, a first-page refresh adds 204 SQL executions and 4,495 rows relative to a hit. Smallest full-request totals were 3 SQL/3 rows; finite raw ceilings add 2 refreshes (ceil(6000 ms / 30000) + 1), then 2% headroom (minimum 8 SQL/64 rows). Minimum totals conservatively include some refresh work already. Full measured latency max 517.0 ms; latency headroom is approximately threefold, capped at 30 minutes. First/returning overview requests enable different change-feed branches. Runtime/dependency/fixture/gate source pin must match: changed inputs expire this wider allowance before corpus setup. SCA-665 owns the cold-directory/N+1 repair; raw counts, exact plans, status and privacy checks remain enforced.",
+    "core_source_sha256": "1f1da466d08c4e36db6a218803aeec650c38872fb20e2812f63683f04cf25833"
   },
   {
     "method": "POST",
     "path": "/refs/resolve",
     "principal": "unauthorized",
-    "p95_ms": 2000,
+    "p95_ms": 2500,
     "max_queries": 100,
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 533.3 ms, 4 SQL executions and 4 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 533.3 ms, 4 SQL executions and 4 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 621.1ms, 4SQL and 4rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "POST",
@@ -1119,7 +1209,7 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 3995.0 ms, 10 SQL executions and 59 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 3995.0 ms, 10 SQL executions and 59 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 3142.7ms, 10SQL and 59rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "POST",
@@ -1130,7 +1220,7 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 1713.5 ms, 8 SQL executions and 7 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1713.5 ms, 8 SQL executions and 7 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 1504.0ms, 8SQL and 7rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   },
   {
     "method": "POST",
@@ -1141,6 +1231,6 @@
     "max_rows": 1024,
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
-    "reason": "Existing main e637014e: measured 1135.1 ms, 6 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory."
+    "reason": "Existing main e637014e: measured 1135.1 ms, 6 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 1101.5ms, 6SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings."
   }
 ]

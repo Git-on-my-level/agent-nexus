@@ -116,8 +116,24 @@ harness to land while SCA-663/664/665 and the existing SCA-652 repairs proceed,
 not to authorize new O(workspace) work. The existing unrelated-reader overview
 currently takes over nine minutes and consumes over 100,000 rows locally; the
 separate job allows runner headroom for this baseline rather than marking a
-timeout successful. Baseline count ceilings have only 2% headroom (minimum eight
-statements/64 rows), while latency gets threefold contention headroom. Remove entries as those repairs land.
+timeout successful. Most baseline count ceilings have only 2% headroom (minimum eight
+statements/64 rows), while latency gets threefold contention headroom. Existing PM
+and overview reads have a separate clock-dependent cost: the identity-routing
+cache expires every 30 seconds, and refreshing its first directory page adds
+204 SQL executions and 4,495 rows relative to a hit on this corpus. Their raw
+ceilings conservatively add `(ceil(latency_budget_ms / 30000) + 1)` refreshes to
+the smallest observed request counts, then the same count headroom. First and
+returning overview visits are measured separately; the returning visit enables
+additional change-feed queries. These are finite existing-main allowances, not
+machine-independent query counts or permission to add repeated lookups.
+
+Those wider entries carry `core_source_sha256`: a fingerprint of core runtime
+Go, module dependencies, local replacement modules, fixture/performance-harness
+code, inventories and relevant text assets. Release-version metadata, unrelated
+tests and the self-referential budget manifest are excluded. A changed or added
+input expires the allowance in the short tier and before corpus construction;
+re-review the linked P1 instead of copying the hash automatically. All other
+routes retain their ordinary or narrowly measured count ceilings. Remove entries as those repairs land.
 A changed read must satisfy the ordinary budget; do not add a baseline for a new
 regression. Populate new large record families and high-fanout selectors when
 adding endpoints; empty tables and shallow histories are not scale evidence.
@@ -180,6 +196,7 @@ privacy, legacy data and response contracts:
 | P1       | `internal/primitives/docs_knowledge.go:327`, `:335`, `:372`                                                                  | Document search                              | Full matching-corpus ranking and correlated event scans, O(matches × E); private corpus statistics need privacy review too.                                                |
 | P1       | `internal/pm/store.go:83`, `internal/server/overview_handlers.go:163`                                                        | PM lists and overview                        | 200-row SQL windows are accumulated until exhaustion; O(PM records) memory/work before projection. Optional-filter ORs and JSON predicates need indexed selector analysis. |
 | P1       | `internal/auth/admins.go:90`, `internal/server/overview_handlers.go:84`, `:99`                                               | Auth admin directory and overview enrichment | Per-entry host lookup and repeated full actor/principal directories; cost grows with identity cardinality.                                                                 |
+| P1       | `internal/server/pm_principals.go:40`, `internal/auth/audit.go:169`                                                          | PM reads, overview and changes               | Thirty-second identity-cache expiry rehydrates a 201-principal page and a 4,096-agent host roster, even during a single long request.                                      |
 | P1       | `internal/storage/workspace.go:65`, `internal/storage/migrations.go:1018`, `:1020`, `internal/primitives/access_blobs.go:19` | Upgrade and store startup                    | Reconciliation/content backfills grow with corpus; scan plus per-blob updates occurs before readiness. Progress is now signalled, but runtime cost still needs repair.     |
 
 CLI `internal/app/daily_loop.go:86` requests `/work?limit=200`: the client makes a

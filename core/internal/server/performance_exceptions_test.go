@@ -2,24 +2,83 @@ package server
 
 import (
 	"agent-nexus-core/internal/testutil/perfguard"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"io/fs"
 	urlpkg "net/url"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
 
 type baselineBudget struct {
-	Method     string `json:"method"`
-	Path       string `json:"path"`
-	Principal  string `json:"principal"`
-	P95MS      int    `json:"p95_ms"`
-	MaxQueries int    `json:"max_queries"`
-	MaxRows    int    `json:"max_rows"`
-	Issue      string `json:"issue"`
-	IssueURL   string `json:"issue_url"`
-	Reason     string `json:"reason"`
+	Method         string `json:"method"`
+	Path           string `json:"path"`
+	Principal      string `json:"principal"`
+	P95MS          int    `json:"p95_ms"`
+	MaxQueries     int    `json:"max_queries"`
+	MaxRows        int    `json:"max_rows"`
+	Issue          string `json:"issue"`
+	IssueURL       string `json:"issue_url"`
+	Reason         string `json:"reason"`
+	CoreSourceHash string `json:"core_source_sha256,omitempty"`
+}
+
+// The wider, clock-dependent PM baselines must expire on runtime, dependency,
+// fixture or gate changes. Exclude only release metadata and unrelated tests;
+// include assets/module files and the local modules replaced by core/go.mod.
+func performanceRuntimeSourceHash(root string) (string, error) {
+	var paths []string
+	for _, dir := range []string{"core", "tests/channels", "contracts"} {
+		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, e fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if e.IsDir() {
+				if strings.HasPrefix(e.Name(), ".") {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			rel, err := filepath.Rel(root, path)
+			if err != nil {
+				return err
+			}
+			rel = filepath.ToSlash(rel)
+			if rel == "core/internal/buildinfo/version_generated.go" || rel == "core/internal/server/testdata/performance_budget_allowlist.json" {
+				return nil
+			}
+			name := e.Name()
+			fixtureHelper := rel == "core/internal/server/auth_integration_test.go" || rel == "core/internal/server/stream_privacy_integration_test.go" || rel == "core/internal/server/notifications_integration_test.go"
+			if strings.HasSuffix(name, "_test.go") && !fixtureHelper && !strings.HasPrefix(name, "performance_") && name != "resource_access_performance_test.go" && name != "resource_access_prepare_test.go" {
+				return nil
+			}
+			switch filepath.Ext(name) {
+			case ".go", ".mod", ".sum", ".json", ".yaml", ".yml", ".sql", ".html", ".js", ".css", ".tmpl":
+				paths = append(paths, rel)
+			}
+			return nil
+		})
+		if err != nil {
+			return "", err
+		}
+	}
+	sort.Strings(paths)
+	h := sha256.New()
+	for _, path := range paths {
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
+		if err != nil {
+			return "", err
+		}
+		sum := sha256.Sum256(data)
+		fmt.Fprintf(h, "%s\x00", path)
+		h.Write(sum[:])
+	}
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
 
 // Existing main hazards remain finite, per-route/principal baselines. New routes
@@ -36,18 +95,68 @@ func performanceBaselineBudgets(t *testing.T, routes []routeBudget) map[string]b
 		t.Fatal(err)
 	}
 	out := map[string]baselineBudget{}
+	sourceHash := ""
 	registered := map[string]bool{}
 	for _, b := range routes {
 		registered[b.Method+" "+b.Path] = true
 	}
 	for _, e := range entries {
 		key := e.Method + " " + e.Path + " " + e.Principal
-		if !registered[e.Method+" "+e.Path] || (e.Principal != "authorized" && e.Principal != "unauthorized") || e.P95MS <= 0 || e.P95MS > 1800000 || e.MaxQueries <= 0 || e.MaxQueries > 100000 || e.MaxRows <= 0 || e.MaxRows > 250000 || !reviewedPerformanceException(e.Issue, e.IssueURL, e.Reason) || out[key].Path != "" {
+		if !registered[e.Method+" "+e.Path] || (e.Principal != "authorized" && e.Principal != "unauthorized") || e.P95MS <= 0 || e.P95MS > 1800000 || e.MaxQueries <= 0 || e.MaxQueries > 100000 || e.MaxRows <= 0 || e.MaxRows > 500000 || (e.MaxRows > 250000 && e.CoreSourceHash == "") || !reviewedPerformanceException(e.Issue, e.IssueURL, e.Reason) || out[key].Path != "" {
 			t.Fatalf("invalid, duplicate or stale performance baseline %s", key)
+		}
+		if e.CoreSourceHash != "" {
+			if sourceHash == "" {
+				var err error
+				sourceHash, err = performanceRuntimeSourceHash("../../..")
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			if e.CoreSourceHash != sourceHash {
+				t.Fatalf("runtime/dependency/fixture changed: source-pinned existing-main baseline expired for %s; re-review its linked P1", key)
+			}
 		}
 		out[key] = e
 	}
 	return out
+}
+
+func TestPerformanceRuntimeSourcePin(t *testing.T) {
+	root := t.TempDir()
+	for _, dir := range []string{"core/internal/server", "core/internal/buildinfo", "tests/channels", "contracts/visualreport"} {
+		if err := os.MkdirAll(filepath.Join(root, dir), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write := func(path, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(root, path), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hash := func() string {
+		t.Helper()
+		h, err := performanceRuntimeSourceHash(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return h
+	}
+	write("core/main.go", "runtime")
+	before := hash()
+	write("core/internal/buildinfo/version_generated.go", "release")
+	write("core/internal/server/ordinary_test.go", "unrelated test")
+	if hash() != before {
+		t.Fatal("release metadata/unrelated tests expired runtime pin")
+	}
+	for _, path := range []string{"core/go.mod", "core/go.sum", "tests/channels/new.go", "contracts/visualreport/go.mod", "contracts/anx-schema.yaml", "core/internal/server/auth_integration_test.go", "core/internal/server/stream_privacy_integration_test.go", "core/internal/server/notifications_integration_test.go", "core/internal/server/performance_test.go", "core/internal/server/routes.json", "core/new.go"} {
+		before = hash()
+		write(path, "changed runtime input")
+		if hash() == before {
+			t.Fatalf("%s did not expire runtime pin", path)
+		}
+	}
 }
 
 func reviewedPerformanceException(issue, link, reason string) bool {

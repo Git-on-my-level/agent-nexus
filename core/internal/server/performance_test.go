@@ -299,7 +299,9 @@ func TestPerformanceRoutes(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	env := newPerformanceEnv(t) // cached once for every route, principal and sample
+	allowed := performancePlanExceptions(t)
+	baseline := performanceBaselineBudgets(t, budgets) // expire pins before the costly corpus
+	env := newPerformanceEnv(t)                        // cached once for every route, principal and sample
 	large, err := perfguard.LargeTables(context.Background(), env.db)
 	if err != nil {
 		t.Fatal(err)
@@ -308,8 +310,6 @@ func TestPerformanceRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	allowed := performancePlanExceptions(t)
-	baseline := performanceBaselineBudgets(t, budgets)
 	checked := map[string]bool{}
 	reported := map[string]bool{}
 	report := struct {
