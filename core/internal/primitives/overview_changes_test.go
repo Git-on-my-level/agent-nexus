@@ -94,8 +94,8 @@ func TestOverviewDigestNetTransitionsVisibilityAndBounds(t *testing.T) {
 		t.Fatal(err)
 	}
 	queries := counter.Count()
-	if queries != 6 {
-		t.Fatalf("queries=%d want 6", queries)
+	if queries != 7 {
+		t.Fatalf("queries=%d want 7", queries)
 	}
 	got := map[string]int{}
 	for _, item := range d.Items {

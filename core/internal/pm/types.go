@@ -363,6 +363,10 @@ type Dependencies struct {
 	// ResolveResolution must apply the requesting principal's resource visibility
 	// to any projected summary: decisions are workspace-readable while their
 	// evidence may not be.
+	// DecisionWorkBatch is read-only projection enrichment for a bounded page.
+	// Missing map entries mean work is no longer live. Authorization remains in
+	// the normal per-record permission checks, outside this optional batch.
+	DecisionWorkBatch func(context.Context, Principal, []string) (map[string]DecisionWork, error)
 	DecisionWork      func(context.Context, Principal, string) (DecisionWork, error)
 	ResolveResolution func(context.Context, Principal, string) (ResolutionRef, error)
 	Authorize         func(context.Context, Principal, string, string) error

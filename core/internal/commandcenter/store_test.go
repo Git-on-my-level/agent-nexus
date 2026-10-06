@@ -3,6 +3,7 @@ package commandcenter_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -300,5 +301,39 @@ func TestProvisionalPersonaAdapterResolvedByLauncher(t *testing.T) {
 	stored, e := s.GetRun(ctx, resolved.ID)
 	if e != nil || stored.Adapter != "codex" {
 		t.Fatalf("stored launcher adapter: %+v %v", stored, e)
+	}
+}
+
+func TestOverviewRosterCountsEveryAskWithoutStarvingAnotherAgent(t *testing.T) {
+	s := fixture(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	for _, id := range []string{"a", "b"} {
+		if _, err := s.DB.ExecContext(ctx, `INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) VALUES(?,?,?,'now','now','{"principal_kind":"agent"}')`, id, id, "actor-"+id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 151; i++ {
+		id, agent := "ask-"+fmt.Sprint(i), "a"
+		if i == 150 {
+			agent = "b"
+		}
+		payload := fmt.Sprintf(`{"payload":{"kind":"ask","title":"Approve","requester_agent_id":%q,"requester_actor_id":%q}}`, agent, "actor-"+agent)
+		if _, err := s.DB.ExecContext(ctx, `INSERT INTO events(id,type,ts,actor_id,refs_json,payload_json) VALUES(?,'human_attention_requested',?,'writer','[]',?)`, id, now.Format(time.RFC3339Nano), payload); err != nil {
+			t.Fatal(err)
+		}
+	}
+	roster, partial, err := s.OverviewRoster(ctx, now)
+	if err != nil || partial || len(roster) != 2 {
+		t.Fatalf("roster: %v %v %v", roster, partial, err)
+	}
+	for _, a := range roster {
+		want := 150
+		if a.ID == "b" {
+			want = 1
+		}
+		if a.OpenAsksCount != want || a.State != "waiting_on_human" || a.WaitingAsk == nil {
+			t.Errorf("agent %s count/state: %+v", a.ID, a)
+		}
 	}
 }

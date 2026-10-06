@@ -1412,7 +1412,9 @@ const cardVisibilityJoins = ` LEFT JOIN boards b ON b.id = c.board_id
 func cardLifecycleWhere(states []string) string {
 	topicHidden := func(field string) string {
 		return `EXISTS (SELECT 1 FROM topics pt WHERE
-          json_extract(wm.metadata_json, '$.project_ref') IN ('topic:' || pt.id, 'topic:' || pt.handle)
+          substr(json_extract(wm.metadata_json, '$.project_ref'),1,6)='topic:'
+          AND (pt.id=substr(json_extract(wm.metadata_json, '$.project_ref'),7)
+               OR (pt.handle=substr(json_extract(wm.metadata_json, '$.project_ref'),7) AND pt.handle IS NOT NULL AND trim(pt.handle)<>''))
           AND COALESCE(pt.` + field + `, '') <> '')`
 	}
 	boardActive := `(COALESCE(b.archived_at, '') = '' AND COALESCE(b.trashed_at, '') = '')`

@@ -4,6 +4,8 @@ import (
 	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"database/sql"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"strings"
 )
@@ -68,31 +70,70 @@ func authAdminHostScope(ctx context.Context, q interface {
 	return err
 }
 
+type AuthAdminPage struct {
+	Admins     []AuthAdmin `json:"admins"`
+	NextCursor string      `json:"next_cursor"`
+	HasMore    bool        `json:"has_more"`
+}
+
 func (s *Store) ListAuthAdmins(ctx context.Context) ([]AuthAdmin, error) {
-	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT id,actor_id,username FROM agents a WHERE `+principalKindExpr("a")+`='agent' AND revoked_at IS NULL AND COALESCE(json_extract(metadata_json,'$.auth_admin'),0)=1 ORDER BY username,id`)
+	out := []AuthAdmin{}
+	cursor := ""
+	for {
+		page, err := s.AuthAdminPage(ctx, 200, cursor)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, page.Admins...)
+		if !page.HasMore {
+			return out, nil
+		}
+		cursor = page.NextCursor
+	}
+}
+
+func (s *Store) AuthAdminPage(ctx context.Context, limit int, cursor string) (AuthAdminPage, error) {
+	out := AuthAdminPage{Admins: []AuthAdmin{}}
+	if limit < 1 || limit > 200 || len(cursor) > 2048 {
+		return out, ErrInvalidRequest
+	}
+	var before struct{ Username, ID string }
+	if cursor != "" {
+		raw, err := base64.RawURLEncoding.DecodeString(cursor)
+		if err != nil || json.Unmarshal(raw, &before) != nil || before.ID == "" {
+			return out, ErrInvalidRequest
+		}
+	}
+	query := `SELECT id,actor_id,username FROM agents a WHERE ` + principalKindExpr("a") + `='agent' AND revoked_at IS NULL AND COALESCE(json_extract(metadata_json,'$.auth_admin'),0)=1`
+	args := []any{}
+	if cursor != "" {
+		query += ` AND (username,id)>(?,?)`
+		args = append(args, before.Username, before.ID)
+	}
+	query += ` ORDER BY username,id LIMIT ?`
+	args = append(args, limit+1)
+	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT a.id,a.actor_id,a.username,COALESCE(h.id,''),COALESCE(h.slug,''),COALESCE(CASE WHEN h.id IS NOT NULL THEN ha.name END,'') FROM (`+query+`) a LEFT JOIN host_agents ha ON ha.agent_id=a.id LEFT JOIN hosts h ON h.id=ha.host_id ORDER BY a.username,a.id`, args...)
 	if err != nil {
-		return nil, err
+		return out, err
 	}
 	defer rows.Close()
-	out := []AuthAdmin{}
 	for rows.Next() {
 		var item AuthAdmin
-		if err := rows.Scan(&item.PrincipalID, &item.ActorID, &item.Username); err != nil {
-			return nil, err
+		if err = rows.Scan(&item.PrincipalID, &item.ActorID, &item.Username, &item.HostID, &item.HostSlug, &item.AgentName); err != nil {
+			return out, err
+		}
+		if len(out.Admins) == limit {
+			out.HasMore = true
+			last := out.Admins[len(out.Admins)-1]
+			before.Username, before.ID = last.Username, last.PrincipalID
+			raw, _ := json.Marshal(before)
+			out.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
+			break
 		}
 		item.AuthAdmin = true
-		out = append(out, item)
+		out.Admins = append(out.Admins, item)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	rows.Close()
-	for i := range out {
-		if err := authAdminHostScope(ctx, resourceaccess.NewDB(s.db), &out[i]); err != nil {
-			return nil, err
-		}
-	}
-	return out, nil
+	return out, rows.Err()
 }
 
 // SetAuthAdmin changes only an explicit agent grant, never human administration.

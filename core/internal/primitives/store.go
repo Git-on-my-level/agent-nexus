@@ -2644,37 +2644,45 @@ func (s *Store) ListEventsPage(ctx context.Context, filter EventListFilter) (Eve
 	}
 	defer rows.Close()
 
-	events := make([]map[string]any, 0)
+	stored := []storedEventRow{}
 	for rows.Next() {
-		var (
-			eventID     string
-			eventHandle string
-			typeValue   string
-			ts          string
-			actorID     string
-			thread      sql.NullString
-			refsJSON    string
-			payloadJSON string
-			archivedAt  sql.NullString
-			archivedBy  sql.NullString
-			trashedAt   sql.NullString
-			trashedBy   sql.NullString
-			trashReason sql.NullString
-		)
-		if err := rows.Scan(&eventID, &eventHandle, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
-			&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason); err != nil {
-			return EventPage{}, fmt.Errorf("scan event: %w", err)
+		var row storedEventRow
+		if err := rows.Scan(&row.id, &row.handle, &row.kind, &row.ts, &row.actor, &row.thread, &row.refs, &row.payload, &row.archivedAt, &row.archivedBy, &row.trashedAt, &row.trashedBy, &row.trashReason); err != nil {
+			rows.Close()
+			return EventPage{}, err
 		}
-
-		body, err := decodeEventBodyFromRow(ctx, s.db, eventID, eventHandle, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
+		stored = append(stored, row)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return EventPage{}, err
+	}
+	// Release the collection cursor before reference hydration (including on
+	// single-connection imports), then resolve only this page's reference IDs.
+	values := []any{}
+	for _, row := range stored {
+		var refs, payload any
+		if err := json.Unmarshal([]byte(row.refs), &refs); err != nil {
+			return EventPage{}, err
+		}
+		if err := json.Unmarshal([]byte(row.payload), &payload); err != nil {
+			return EventPage{}, err
+		}
+		values = append(values, map[string]any{"refs": refs, "thread_ref": "thread:" + row.thread.String, "payload": payload})
+	}
+	ctx, err = withBatchPublicRefs(ctx, s.db, values)
+	if err != nil {
+		return EventPage{}, err
+	}
+	events := make([]map[string]any, 0, len(stored))
+	for _, row := range stored {
+		body, err := decodeEventBodyFromRow(ctx, s.db, row.id, row.handle, row.kind, row.ts, row.actor, row.thread, row.refs, row.payload)
 		if err != nil {
 			return EventPage{}, err
 		}
-		overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
+		overlayEventLifecycleFromSQLColumns(body, row.archivedAt, row.archivedBy, row.trashedAt, row.trashedBy, row.trashReason)
 		events = append(events, body)
-	}
-	if err := rows.Err(); err != nil {
-		return EventPage{}, fmt.Errorf("iterate events: %w", err)
 	}
 
 	nextCursor := ""

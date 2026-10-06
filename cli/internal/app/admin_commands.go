@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,6 +28,9 @@ func init() {
 	for _, spec := range []subcommandSpec{authAdminsSubcommandSpec, hostEnrollmentsSubcommandSpec, hostTokensSubcommandSpec} {
 		for _, verb := range spec.valid {
 			flags := []localHelperFlag{}
+			if spec.command == "auth admins" && verb == "list" {
+				flags = []localHelperFlag{{Name: "--limit <1..200>", Description: "Page size; default 50."}, {Name: "--cursor <cursor>", Description: "Continue from next_cursor."}}
+			}
 			if spec.command == "host tokens" && verb == "create" {
 				flags = []localHelperFlag{{Name: "--label <label>", Description: "Audit label for this one-time token."}, {Name: "--expires-in <duration>", Description: "Lifetime from 10m to 24h; default 1h."}}
 			}
@@ -57,10 +61,11 @@ func (a *App) runAuthAdmins(ctx context.Context, args []string, cfg config.Resol
 	}
 	name += " " + args[0]
 	if args[0] == "list" {
-		if len(args) != 1 {
-			return nil, name, errnorm.Usage("invalid_args", "list takes no arguments")
+		query, err := parseAuthAdminList(args[1:])
+		if err != nil {
+			return nil, name, err
 		}
-		r, e := a.invokeRawJSON(ctx, cfg, name, "GET", "/auth/admins", nil)
+		r, e := a.invokeRawJSON(ctx, cfg, name, "GET", "/auth/admins?"+query.Encode(), nil)
 		return r, name, e
 	}
 	if args[0] != "grant" && args[0] != "revoke" {
@@ -159,4 +164,21 @@ func (a *App) runHostTokens(ctx context.Context, args []string, cfg config.Resol
 	default:
 		return nil, name, hostTokensSubcommandSpec.unknownError(args[0])
 	}
+}
+
+func parseAuthAdminList(args []string) (url.Values, error) {
+	fs := newSilentFlagSet("auth admins list")
+	limit := fs.Int("limit", 50, "Page size")
+	cursor := fs.String("cursor", "", "Page cursor")
+	if err := fs.Parse(args); err != nil {
+		return nil, errnorm.Usage("invalid_flags", err.Error())
+	}
+	if fs.NArg() != 0 || *limit < 1 || *limit > 200 {
+		return nil, errnorm.Usage("invalid_args", "limit must be 1..200; no positional arguments")
+	}
+	query := url.Values{"limit": {strconv.Itoa(*limit)}}
+	if *cursor != "" {
+		query.Set("cursor", *cursor)
+	}
+	return query, nil
 }

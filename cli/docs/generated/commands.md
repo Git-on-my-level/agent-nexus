@@ -443,7 +443,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Manage explicit workspace administration authority for agents.
 - Concepts: `auth`
-- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`
+- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `invalid_request`
 - Output: Returns `AuthAdminsResponse`.
 - Agent notes: Only a human can change a grant. No default grant is assigned to agents or hosts.
 
@@ -2151,7 +2151,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `cards`, `evidence`
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `not_found`, `invalid_request`, `unavailable`
 - Output: Returns `{ document_ref, revision_ref, observed_at, panels }`; every panel includes resolved live/authored provenance and authored review metadata.
-- Agent notes: Both text and structured version 1 visual reports are supported. Authored review metadata is returned for every static panel. Reading a pinned report checks deadlines and durably deduplicates author-only inbox reminders per panel and revision. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows after subject, related-ref, card and board authorization. Archived boards and their work are excluded. Private PM events remain private.
+- Agent notes: Both text and structured version 1 visual reports are supported. Authored review metadata is returned for every static panel. Reading a pinned report checks deadlines and durably deduplicates author-only inbox reminders per panel and revision. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Native work, event and decision candidates are bounded to 200 per request scope, with truncated marking additional candidates. Archived boards and their work are excluded. Private PM events remain private.
 
 ## `runs.get`
 
@@ -2695,7 +2695,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Defer selector-only report reads until the user or agent requests candidates.
 - Concepts: `home`, `documents`
-- Error codes: `auth_required`, `invalid_token`
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`
 - Output: Returns the dashboard report selector projection.
 - Agent notes: Overview returns its selected dashboard only. Use this read for other pin candidates.
 

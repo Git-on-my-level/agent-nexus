@@ -837,83 +837,98 @@ func (s *Store) ListHostInventory(ctx context.Context, hostLimit, agentLimit int
 	if err := resourceaccess.NewDB(s.db).QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(CASE WHEN revoked_at IS NULL THEN 1 ELSE 0 END),0) FROM hosts`).Scan(&total, &active); err != nil {
 		return nil, 0, 0, err
 	}
-	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT id FROM hosts ORDER BY created_at DESC,id LIMIT ?`, hostLimit)
+	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at,revoked_at,bridge_expires_at FROM hosts ORDER BY created_at DESC,id LIMIT ?`, hostLimit)
 	if err != nil {
 		return nil, 0, 0, err
 	}
+	entries := []HostInventoryEntry{}
 	ids := []string{}
+	positions := map[string]int{}
+	expiries := map[string]string{}
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
+		var entry HostInventoryEntry
+		h := &entry.Host
+		var adapters string
+		var revoked, expiry sql.NullString
+		if err = rows.Scan(&h.ID, &h.Slug, &h.DisplayName, &h.OSUser, &h.Hostname, &adapters, &h.CreatedAt, &revoked, &expiry); err != nil {
 			rows.Close()
 			return nil, 0, 0, err
 		}
-		ids = append(ids, id)
+		h.Ref, h.Handle = "host:"+h.ID, h.Slug
+		if revoked.Valid {
+			h.RevokedAt = &revoked.String
+		}
+		if err = json.Unmarshal([]byte(adapters), &h.DiscoveredAdapters); err != nil {
+			rows.Close()
+			return nil, 0, 0, err
+		}
+		if h.DiscoveredAdapters == nil {
+			h.DiscoveredAdapters = []string{}
+		}
+		h.ExcludedNames, h.Agents = []string{}, []HostAgent{}
+		positions[h.ID] = len(entries)
+		expiries[h.ID] = expiry.String
+		ids = append(ids, h.ID)
+		entries = append(entries, entry)
 	}
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
 		return nil, 0, 0, err
 	}
-	entries := make([]HostInventoryEntry, 0, len(ids))
-	for _, id := range ids {
-		entry, err := s.readHostInventoryEntry(ctx, id, agentLimit)
-		if err != nil {
+	if len(ids) == 0 {
+		return entries, total, active, nil
+	}
+	raw, _ := json.Marshal(ids)
+	rows, err = resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT host_id,COUNT(*) FROM host_agents WHERE host_id IN (SELECT value FROM json_each(?)) GROUP BY host_id`, string(raw))
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	for rows.Next() {
+		var id string
+		var count int
+		if err = rows.Scan(&id, &count); err != nil {
+			rows.Close()
 			return nil, 0, 0, err
 		}
-		entries = append(entries, entry)
+		entries[positions[id]].AgentCount = count
 	}
-	return entries, total, active, nil
-}
-
-func (s *Store) readHostInventoryEntry(ctx context.Context, id string, agentLimit int) (HostInventoryEntry, error) {
-	var entry HostInventoryEntry
-	h := &entry.Host
-	var adapters string
-	var revoked, bridgeExpiry sql.NullString
-	err := resourceaccess.NewDB(s.db).QueryRowContext(ctx, `SELECT h.id,h.slug,h.display_name,h.os_user,h.hostname,h.discovered_adapters_json,h.created_at,h.revoked_at,h.bridge_expires_at FROM hosts h WHERE h.id=?`, id).Scan(&h.ID, &h.Slug, &h.DisplayName, &h.OSUser, &h.Hostname, &adapters, &h.CreatedAt, &revoked, &bridgeExpiry)
+	err = rows.Err()
+	rows.Close()
 	if err != nil {
-		return entry, err
+		return nil, 0, 0, err
 	}
-	h.Ref = "host:" + h.ID
-	h.Handle = h.Slug
-	if revoked.Valid {
-		h.RevokedAt = &revoked.String
-	}
-	if err := json.Unmarshal([]byte(adapters), &h.DiscoveredAdapters); err != nil {
-		return entry, err
-	}
-	if h.DiscoveredAdapters == nil {
-		h.DiscoveredAdapters = []string{}
-	}
-	h.ExcludedNames = []string{}
-	h.Agents = []HostAgent{}
-	if err := resourceaccess.NewDB(s.db).QueryRowContext(ctx, `SELECT COUNT(*) FROM host_agents WHERE host_id=?`, h.ID).Scan(&entry.AgentCount); err != nil {
-		return entry, err
-	}
-	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT ha.name,ha.identity_kind,a.id,a.actor_id,a.username,a.revoked_at FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? ORDER BY ha.name LIMIT ?`, h.ID, agentLimit)
+	// Rank only selected hosts, then hydrate at most agentLimit per host. These
+	// are the same scoped relations used by the former per-host point reads.
+	rows, err = resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT host_id,name,identity_kind,id,actor_id,username,revoked_at FROM (
+ SELECT ha.host_id,ha.name,ha.identity_kind,a.id,a.actor_id,a.username,a.revoked_at,
+ row_number() OVER (PARTITION BY ha.host_id ORDER BY ha.name) AS position
+ FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id IN (SELECT value FROM json_each(?))) WHERE position<=? ORDER BY host_id,name`, string(raw), agentLimit)
 	if err != nil {
-		return entry, err
+		return nil, 0, 0, err
 	}
-	defer rows.Close()
 	for rows.Next() {
+		var id string
 		var agent HostAgent
-		var agentRevoked sql.NullString
-		if err := rows.Scan(&agent.Name, &agent.IdentityKind, &agent.ID, &agent.ActorID, &agent.Handle, &agentRevoked); err != nil {
-			return entry, err
+		var revoked sql.NullString
+		if err = rows.Scan(&id, &agent.Name, &agent.IdentityKind, &agent.ID, &agent.ActorID, &agent.Handle, &revoked); err != nil {
+			rows.Close()
+			return nil, 0, 0, err
 		}
+		h := &entries[positions[id]].Host
 		agent.Ref = "actor:" + agent.ActorID
-		agent.HostID = &h.ID
-		agent.HostSlug = &h.Slug
+		agent.HostID, agent.HostSlug = &h.ID, &h.Slug
 		agent.DisplayName = agent.Name + " on " + h.Slug
 		agent.State = "stale"
-		agent.BridgeOnline = bridgeExpiry.Valid && !expired(bridgeExpiry.String) && h.RevokedAt == nil
-		if agentRevoked.Valid {
-			agent.RevokedAt = &agentRevoked.String
+		agent.BridgeOnline = expiries[id] != "" && !expired(expiries[id]) && h.RevokedAt == nil
+		if revoked.Valid {
+			agent.RevokedAt = &revoked.String
 		}
 		h.Agents = append(h.Agents, agent)
 	}
-	return entry, rows.Err()
+	err = rows.Err()
+	rows.Close()
+	return entries, total, active, err
 }
 
 func (s *Store) VerifyHostProof(ctx context.Context, id, keyID, signedAt, signature, kind string, body []byte) error {

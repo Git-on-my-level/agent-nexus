@@ -251,6 +251,17 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		return pm.DecisionWork{Revision: primitives.WorkDecisionRevision(w), Phase: anyString(w["phase"]), SourceAuthority: anyString(workSourceMap(w)["authority"])}, nil
 	}
 
+	deps.DecisionWorkBatch = func(ctx context.Context, p pm.Principal, refs []string) (map[string]pm.DecisionWork, error) {
+		snapshots, err := store.LiveWorkSnapshots(ctx, refs)
+		if err != nil {
+			return nil, err
+		}
+		out := map[string]pm.DecisionWork{}
+		for ref, w := range snapshots {
+			out[ref] = pm.DecisionWork{Revision: primitives.WorkDecisionRevision(w), Phase: anyString(w["phase"]), SourceAuthority: anyString(workSourceMap(w)["authority"])}
+		}
+		return out, nil
+	}
 	// The registry is the single source of configured native execution paths.
 	nativeExecutors := map[string]func(context.Context, pm.Action) (pm.Receipt, error){
 		"work.phase": func(ctx context.Context, a pm.Action) (pm.Receipt, error) { return executeWorkPhase(ctx, store, a) },

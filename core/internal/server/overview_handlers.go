@@ -1,14 +1,14 @@
 package server
 
 import (
+	"agent-nexus-core/internal/primitives"
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
-	"agent-nexus-core/internal/actors"
-	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/pm"
 )
 
@@ -25,7 +25,19 @@ func handleListWorkspaceDashboardReports(w http.ResponseWriter, r *http.Request,
 		writeError(w, 503, "overview_unavailable", "overview store is not configured")
 		return
 	}
-	payload, err := store.DashboardReports(r.Context())
+	var payload map[string]any
+	var err error
+	if paged, ok := store.(interface {
+		DashboardReportsPage(context.Context, string) (map[string]any, error)
+	}); ok {
+		payload, err = paged.DashboardReportsPage(r.Context(), r.URL.Query().Get("cursor"))
+	} else {
+		payload, err = store.DashboardReports(r.Context())
+	}
+	if errors.Is(err, primitives.ErrInvalidCursor) {
+		writeError(w, 400, "invalid_request", "invalid dashboard cursor")
+		return
+	}
 	if err != nil {
 		writeError(w, 500, "internal_error", "dashboard reports could not be loaded")
 		return
@@ -79,40 +91,6 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	}
 	humanIDs := map[string]bool{}
 	agentNames := map[string]bool{}
-	labels := map[string]string{}
-	if opts.actorRegistry != nil {
-		directory, _, err := opts.actorRegistry.List(r.Context(), actors.ActorListFilter{})
-		if err != nil {
-			writeError(w, 500, "internal_error", "people could not be loaded")
-			return
-		}
-		for _, actor := range directory {
-			labels[actor.ID] = actor.DisplayName
-			for _, tag := range actor.Tags {
-				if strings.EqualFold(tag, "human") {
-					humanIDs[actor.ID] = true
-				}
-			}
-		}
-	}
-	if opts.authStore != nil {
-		principals, _, err := opts.authStore.ListPrincipals(r.Context(), auth.AuthPrincipalListFilter{})
-		if err != nil {
-			writeError(w, 500, "internal_error", "people could not be loaded")
-			return
-		}
-		for _, p := range principals {
-			if p.PrincipalKind == "human" {
-				humanIDs[p.ActorID] = true
-			} else {
-				for _, name := range []string{p.Username, labels[p.ActorID]} {
-					if name != "" {
-						agentNames[strings.ToLower(name)] = true
-					}
-				}
-			}
-		}
-	}
 	now := time.Now().UTC()
 	var payload map[string]any
 	var err error
@@ -147,8 +125,10 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	}
 	work["items"] = public
 	needs := payload["needs_you"].(map[string]any)
+	needs["truncated"] = work["truncated"] == true
 	rows := needs["rows"].([]map[string]any)
-	inbox, err := loadOpenInboxItems(r, opts)
+	inbox, inboxPartial, err := loadOverviewInboxItems(r, opts)
+	needs["truncated"] = needs["truncated"] == true || inboxPartial
 	if err != nil {
 		needs["status"] = "unavailable"
 		needs["message"] = "Needs you could not be loaded."
@@ -160,10 +140,26 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	if opts.pmRuntime != nil && opts.pmRuntime.Service != nil {
 		if principal, ok := cachedAuthenticatedPrincipal(r); ok {
 			p := pm.Principal{WorkspaceID: opts.pmRuntime.cfg.PM.WorkspaceID, ActorID: principal.ActorID, Human: principal.PrincipalKind == "human"}
-			decisions, e := opts.pmRuntime.Service.ListDecisions(r.Context(), p)
-			actions, ae := opts.pmRuntime.Service.ListActions(r.Context(), p)
-			hidden, he := store.HiddenSubjectRefs(r.Context())
-			if e != nil || ae != nil || he != nil {
+			decisions, actions, partial, e := opts.pmRuntime.Service.OverviewDecisions(r.Context(), p)
+			needs["truncated"] = needs["truncated"] == true || partial
+			hidden := map[string]bool{}
+			if resolver, ok := opts.primitiveStore.(planStore); ok && e == nil {
+				refs := []string{}
+				for _, d := range decisions {
+					refs = append(refs, d.WorkRef)
+				}
+				previews, err := resolver.ResolveRefs(r.Context(), refs, planVisibility(r, opts), now, planStalledAfter())
+				if err != nil {
+					e = err
+				} else {
+					for i, preview := range previews {
+						if !preview.Resolvable {
+							hidden[decisions[i].WorkRef] = true
+						}
+					}
+				}
+			}
+			if e != nil {
 				needs["status"] = "unavailable"
 				needs["message"] = "Decisions could not be loaded."
 			} else {
@@ -172,7 +168,7 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 						continue
 					}
 					actionable := d.Status == pm.AwaitingAnswer && d.CanAnswer
-					for _, a := range actions {
+					for _, a := range actions[d.ID] {
 						if a.DecisionID != d.ID || d.Status != pm.Answered {
 							continue
 						}
@@ -202,9 +198,9 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	needs["count"] = len(rows)
 	payload["agents"] = map[string]any{"status": "unavailable", "message": "Agents could not be loaded."}
 	if opts.runStore != nil {
-		roster, e := opts.runStore.Roster(r.Context(), time.Now().UTC())
+		roster, partial, e := opts.runStore.OverviewRoster(r.Context(), time.Now().UTC())
 		if e == nil {
-			payload["agents"] = map[string]any{"status": "ok", "items": roster}
+			payload["agents"] = map[string]any{"status": "ok", "items": roster, "truncated": partial}
 		}
 	}
 	if scoped && r.URL.Path == "/overview" {

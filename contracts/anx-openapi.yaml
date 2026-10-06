@@ -2983,8 +2983,7 @@ paths:
         Both text and structured version 1 visual reports are supported. Authored review metadata is returned for every static panel. Reading a pinned report checks deadlines and durably deduplicates author-only inbox reminders per panel and revision.
         Each live or series-bound panel is independently materialized with status ok, stale or unavailable,
         observation time, data and an explicit truncated flag. Never infer zero work
-        from an unavailable or truncated panel. Queries are bounded to 2000 source
-        rows after subject, related-ref, card and board authorization. Archived boards and their work are excluded. Private PM events remain private.
+        from an unavailable or truncated panel. Native work, event and decision candidates are bounded to 200 per request scope, with truncated marking additional candidates. Archived boards and their work are excluded. Private PM events remain private.
       parameters:
         - $ref: '#/components/parameters/DocumentID'
       responses:
@@ -4926,10 +4925,15 @@ paths:
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns the dashboard report selector projection."
-      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-error-codes: [auth_required, invalid_token, invalid_request]
       x-anx-concepts: [home, documents]
       x-anx-stability: beta
+      parameters:
+      - name: cursor
+        in: query
+        schema: {type: string}
       responses:
+        '400': {$ref: '#/components/responses/ErrorResponse'}
         '200':
           description: Validated report candidates, pinned first then newest first.
           content:
@@ -5655,7 +5659,7 @@ paths:
         - name: limit
           in: query
           required: false
-          description: Page size when status=completed (default 50, max 100).
+          description: Page size for open or completed inbox (default 50, max 100).
           schema:
             type: integer
             minimum: 1
@@ -5663,7 +5667,7 @@ paths:
         - name: cursor
           in: query
           required: false
-          description: Opaque pagination cursor returned as next_cursor from a prior completed page.
+          description: Opaque pagination cursor returned as next_cursor from a prior page of the same inbox status. Open rows order escalation, ask, review, then other categories; newest trigger first within each category.
           schema:
             type: string
         - name: window_days
@@ -7014,7 +7018,7 @@ paths:
     get:
       operationId: listAuthAdmins
       summary: List agent auth-admin grants
-      description: Human or auth-admin principal. Lists active explicitly granted agents only; humans retain their existing administration rights.
+      description: Human or auth-admin principal. Lists active explicitly granted agents only, ordered by username and id in pages of at most 200; humans retain their existing administration rights.
       tags: [auth]
       x-anx-surface: utility
       x-anx-command-id: auth.admins.list
@@ -7023,12 +7027,20 @@ paths:
       x-anx-input-mode: none
       x-anx-streaming: {mode: none}
       x-anx-output-envelope: Returns `AuthAdminsResponse`.
-      x-anx-error-codes: [auth_required, invalid_token, auth_admin_required]
+      x-anx-error-codes: [auth_required, invalid_token, auth_admin_required, invalid_request]
       x-anx-concepts: [auth]
       x-anx-stability: beta
       x-anx-agent-notes: Only a human can change a grant. No default grant is assigned to agents or hosts.
+      parameters:
+      - name: limit
+        in: query
+        schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+      - name: cursor
+        in: query
+        schema: {type: string}
       responses:
         '200': {description: Administration grants, content: {application/json: {schema: {$ref: '#/components/schemas/AuthAdminsResponse'}}}}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
         '401': {$ref: '#/components/responses/ErrorResponse'}
         '403': {$ref: '#/components/responses/ErrorResponse'}
 
@@ -8355,6 +8367,8 @@ components:
       required: [admins]
       properties:
         admins: {type: array, items: {$ref: '#/components/schemas/AuthAdmin'}}
+        next_cursor: {type: string}
+        has_more: {type: boolean}
     HostPatchRequest:
       type: object
       additionalProperties: false
@@ -11877,7 +11891,7 @@ components:
             human_count: { type: integer }
             items: { type: array, items: { $ref: '#/components/schemas/Work' } }
             truncated: { type: boolean }
-          description: Active work from at most 2000 accessible candidates. Card and board access is applied before candidate limits and truncation; counts describe the bounded visible set.
+          description: Visible active work from at most 100 open and 100 closed visit candidates, prioritizing open work; counts describe the bounded visible set. Use /work to page through further initiatives.
         initiatives:
           type: object
           required: [status, count, items]
@@ -11895,8 +11909,9 @@ components:
             count: { type: integer }
             href: { type: string }
             message: { type: string }
+            truncated: { type: boolean }
             rows: { type: array, items: { $ref: '#/components/schemas/OverviewAttentionRow' } }
-          description: Open asks, blocked work, human next actors and actionable PM decisions, respecting the reader's existing permissions.
+          description: Open asks, blocked work, human next actors and at most 100 actionable PM decision candidates, respecting the reader's existing permissions. truncated flags additional candidates; use the inbox and PM lists for further items.
         dashboard: { $ref: '#/components/schemas/OverviewDashboard' }
         agents:
           type: object
@@ -11912,11 +11927,12 @@ components:
       properties:
         status: { type: string, enum: [ok, unavailable] }
         has_more: { type: boolean, description: Unread candidate documents may contain more reports. }
+        next_cursor: { type: string, description: Cursor for the next report candidate page. }
         pinned_ref: { type: string, nullable: true }
         warning: { type: string }
         message: { type: string }
         reports: { type: array, items: { $ref: '#/components/schemas/OverviewReport' } }
-      description: Fully validated active report, pinned first or newest valid fallback. Overview loads only the selected report; selector candidates load separately.
+      description: Fully validated active report, pinned first or newest valid fallback from at most 100 recent document candidates. has_more flags unread candidates. Overview loads only the selected report; selector candidates load separately.
 
     OverviewInitiative:
       type: object
@@ -12129,16 +12145,17 @@ components:
             oneOf:
               - $ref: '#/components/schemas/InboxItem'
               - $ref: '#/components/schemas/CompletedInboxItem'
+        has_more: {type: boolean, description: Open inbox has additional candidate rows.}
         next_cursor:
           type: string
           nullable: true
-          description: Present when status=completed and another page exists.
+          description: Present when another page of the selected inbox status exists.
         generated_at:
           type: string
         projection_freshness:
           type: object
           additionalProperties: true
-          description: Present for status=open materialized projections when applicable. Thread identities, metadata, counts and aggregate status include only accessible backing threads, inheriting containing card and board access.
+          description: Present for status=open materialized projections when applicable. Thread identities, metadata, counts and aggregate status include only accessible backing threads, inheriting containing card and board access. Workspace status and thread_count remain complete; threads contains at most 100 details, and truncated signals additional threads.
       required: [items]
 
     RespondInboxItemResponse:
