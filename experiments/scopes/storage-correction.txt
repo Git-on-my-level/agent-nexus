@@ -1,0 +1,6 @@
+The original timed run missed idx_resource_access_edges_target in access-byte accounting.
+Full corrected storage-only 1x run is scope-storage-1x.txt.
+The 10x snapshot was taken after fixture construction and before timed writes.
+Corrected SQL: SELECT coalesce(sum(pgsize),0) FROM dbstat WHERE name IN (SELECT name FROM sqlite_master WHERE tbl_name LIKE 'resource_access_%')
+10x access_bytes=2347954176
+Original 10x access_bytes=1824112640; excluded index=523857920 bytes.

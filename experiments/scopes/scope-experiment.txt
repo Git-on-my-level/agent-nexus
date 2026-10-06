@@ -1,0 +1,36 @@
+=== RUN   TestScopeDesignExperiment
+=== RUN   TestScopeDesignExperiment/1
+    scope_design_experiment_test.go:152: BASE scale=1 logical_bytes=166772736 access_bytes=111222784 edges=118509
+    scope_design_experiment_test.go:165: journal=wal synchronous=2
+    scope_design_experiment_test.go:208: PROPOSAL scale=1 logical_bytes=8814592 derived_and_scope_index_bytes=319488
+    scope_design_experiment_test.go:229: HTTP scale=1 path=/inbox samples=25 p95=1.597869625s
+    scope_design_experiment_test.go:229: HTTP scale=1 path=/overview samples=25 p95=714.869708ms
+    scope_design_experiment_test.go:229: HTTP scale=1 path=/work?limit=20 samples=25 p95=142.421125ms
+    scope_design_experiment_test.go:275: KERNEL scale=1 kind=inbox samples=25 p95=41.458µs
+    scope_design_experiment_test.go:282: PLAN SEARCH feed USING PRIMARY KEY (scope=? AND kind=?)
+    scope_design_experiment_test.go:275: KERNEL scale=1 kind=overview samples=25 p95=74.333µs
+    scope_design_experiment_test.go:282: PLAN SEARCH feed USING PRIMARY KEY (scope=? AND kind=?)
+    scope_design_experiment_test.go:275: KERNEL scale=1 kind=work samples=25 p95=51.792µs
+    scope_design_experiment_test.go:282: PLAN SEARCH feed USING PRIMARY KEY (scope=? AND kind=?)
+    scope_design_experiment_test.go:313: WRITE scale=1 mode=baseline samples=25 p95=1.965208ms
+    scope_design_experiment_test.go:313: WRITE scale=1 mode=proposal samples=25 p95=283.292µs
+=== RUN   TestScopeDesignExperiment/10
+    scope_design_experiment_test.go:152: BASE scale=10 logical_bytes=2450599936 access_bytes=1824112640 edges=2552998
+    scope_design_experiment_test.go:165: journal=wal synchronous=2
+    scope_design_experiment_test.go:208: PROPOSAL scale=10 logical_bytes=88055808 derived_and_scope_index_bytes=3366912
+    scope_design_experiment_test.go:229: HTTP scale=10 path=/inbox samples=25 p95=26.624418958s
+    scope_design_experiment_test.go:229: HTTP scale=10 path=/overview samples=25 p95=2.432128209s
+    scope_design_experiment_test.go:229: HTTP scale=10 path=/work?limit=20 samples=25 p95=354.944375ms
+    scope_design_experiment_test.go:275: KERNEL scale=10 kind=inbox samples=25 p95=43.625µs
+    scope_design_experiment_test.go:282: PLAN SEARCH feed USING PRIMARY KEY (scope=? AND kind=?)
+    scope_design_experiment_test.go:275: KERNEL scale=10 kind=overview samples=25 p95=61.375µs
+    scope_design_experiment_test.go:282: PLAN SEARCH feed USING PRIMARY KEY (scope=? AND kind=?)
+    scope_design_experiment_test.go:275: KERNEL scale=10 kind=work samples=25 p95=35.875µs
+    scope_design_experiment_test.go:282: PLAN SEARCH feed USING PRIMARY KEY (scope=? AND kind=?)
+    scope_design_experiment_test.go:313: WRITE scale=10 mode=baseline samples=25 p95=1.217458ms
+    scope_design_experiment_test.go:313: WRITE scale=10 mode=proposal samples=25 p95=178.166µs
+--- PASS: TestScopeDesignExperiment (1421.33s)
+    --- PASS: TestScopeDesignExperiment/1 (82.59s)
+    --- PASS: TestScopeDesignExperiment/10 (1338.74s)
+PASS
+ok  	agent-nexus-core/internal/server	1421.832s

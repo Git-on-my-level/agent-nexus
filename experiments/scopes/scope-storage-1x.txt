@@ -1,0 +1,7 @@
+=== RUN   TestScopeDesignExperiment
+=== RUN   TestScopeDesignExperiment/1
+    scope_design_experiment_test.go:153: BASE scale=1 logical_bytes=167383040 access_bytes=156073984 edges=118509
+--- PASS: TestScopeDesignExperiment (21.12s)
+    --- PASS: TestScopeDesignExperiment/1 (21.12s)
+PASS
+ok  	agent-nexus-core/internal/server	21.696s

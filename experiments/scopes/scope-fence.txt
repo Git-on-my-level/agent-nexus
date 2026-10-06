@@ -1,0 +1,6 @@
+=== RUN   TestScopeDesignDowngradeFence
+    scope_design_fence_test.go:63: baseline initializer correctly refused: query schema_migrations: SQL logic error: no such function: anx_requires_scope_format_v1 (1)
+    scope_design_fence_test.go:63: baseline initializer correctly refused: query schema_migrations: SQL logic error: no such function: anx_requires_scope_format_v1 (1)
+--- PASS: TestScopeDesignDowngradeFence (0.45s)
+PASS
+ok  	agent-nexus-core/internal/server	1.112s
