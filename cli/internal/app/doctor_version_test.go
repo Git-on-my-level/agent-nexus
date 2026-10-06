@@ -44,7 +44,7 @@ func TestDoctorCLIVersionAgainstHandshake(t *testing.T) {
 			t.Cleanup(server.Close)
 
 			stdout := &strings.Builder{}
-			cli := New()
+			cli := newTestApp(t)
 			cli.Stdout = stdout
 			cli.Stderr = &strings.Builder{}
 			cli.Getenv = func(string) string { return "" }
@@ -124,7 +124,7 @@ func TestBareInvocationUsesSingleEnrolledHostBaseURL(t *testing.T) {
 		t.Fatal(err)
 	}
 	stdout := &strings.Builder{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = &strings.Builder{}
 	cli.Getenv = func(key string) string {
@@ -186,7 +186,7 @@ func TestBareInvocationFailsWhenSeveralHostsAreEnrolled(t *testing.T) {
 		}
 	}
 	stdout := &strings.Builder{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = &strings.Builder{}
 	cli.Getenv = func(key string) string {

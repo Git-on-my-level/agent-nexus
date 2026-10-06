@@ -30,7 +30,7 @@ func TestHostIdentityErrorsOfferNextActions(t *testing.T) {
 		{name: "unenrolled", args: []string{"--json", "--as", "codex", "auth", "whoami"}, code: "host_not_enrolled", command: "enroll"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			a := New()
+			a := newTestApp(t)
 			home := t.TempDir()
 			a.UserHomeDir = func() (string, error) { return home, nil }
 			a.Getenv = func(key string) string {
@@ -77,7 +77,7 @@ func TestIdentityResolutionOrder(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			a := New()
+			a := newTestApp(t)
 			// This table covers the direct fallback independently of locally installed providers.
 			a.runtimeIdentity = nil
 			a.hasOMPAncestor = func() bool { return true }
@@ -130,7 +130,7 @@ func TestHostEnrollmentAdoptsOrExcludesLocalProfile(t *testing.T) {
 			if err := profile.Save(path, profile.Profile{Agent: "reviewer", AgentID: "agent-1", KeyID: "key-old", BaseURL: server.URL, PrivateKeyPath: keyPath}); err != nil {
 				t.Fatal(err)
 			}
-			a := New()
+			a := newTestApp(t)
 			a.UserHomeDir = func() (string, error) { return home, nil }
 			cfg := config.Resolved{BaseURL: server.URL, Timeout: 10_000_000_000}
 			args := []string{"--name", "testhost", "--token", "headless"}

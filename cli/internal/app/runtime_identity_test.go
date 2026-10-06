@@ -45,7 +45,7 @@ func TestRuntimeIdentityVersionedProjection(t *testing.T) {
 }
 
 func TestRuntimeIdentityDoesNotOverrideExplicitPrincipal(t *testing.T) {
-	a := New()
+	a := newTestApp(t)
 	a.runtimeIdentity = func() (*runtimeIdentityReport, error) {
 		t.Fatal("explicit identity must not probe runtime")
 		return nil, nil
@@ -57,7 +57,7 @@ func TestRuntimeIdentityDoesNotOverrideExplicitPrincipal(t *testing.T) {
 }
 
 func TestRuntimeIdentityIsOptionalAndUsesProviderEvidence(t *testing.T) {
-	a := New()
+	a := newTestApp(t)
 	a.Getenv = func(key string) string {
 		if key == "CODEX_THREAD_ID" {
 			return "parent-thread"
@@ -78,7 +78,7 @@ func TestRuntimeIdentityIsOptionalAndUsesProviderEvidence(t *testing.T) {
 
 func TestHostDiscoverIsLocalAndNeverRegisters(t *testing.T) {
 	for _, available := range []bool{true, false} {
-		a := New()
+		a := newTestApp(t)
 		a.Getenv = func(string) string { return "" }
 		a.UserHomeDir = func() (string, error) { return "", errors.New("no home") }
 		a.runtimeIdentity = func() (*runtimeIdentityReport, error) {
@@ -104,7 +104,7 @@ func TestHostDiscoverIsLocalAndNeverRegisters(t *testing.T) {
 
 func TestManagedIdentityNeverFallsBackToInheritedParent(t *testing.T) {
 	for _, key := range []string{"AGENTCTL_EXECUTION_ID", "AGENTCTL_ADAPTER", "AGENTCTL_AUTHORITY"} {
-		a := New()
+		a := newTestApp(t)
 		a.runtimeIdentity = func() (*runtimeIdentityReport, error) { return nil, errors.New("old provider") }
 		a.Getenv = func(k string) string {
 			if k == key {
@@ -119,7 +119,7 @@ func TestManagedIdentityNeverFallsBackToInheritedParent(t *testing.T) {
 			t.Fatalf("%s inherited parent identity: %q %v", key, name, err)
 		}
 	}
-	a := New()
+	a := newTestApp(t)
 	a.Getenv = func(k string) string {
 		if k == "CODEX_THREAD_ID" {
 			return "parent-thread"
@@ -140,7 +140,7 @@ func TestManagedIdentityNeverFallsBackToInheritedParent(t *testing.T) {
 
 func TestAmbiguousNativeMarkersRequireExplicitIdentity(t *testing.T) {
 	for _, providerAvailable := range []bool{true, false} {
-		a := New()
+		a := newTestApp(t)
 		a.Getenv = func(k string) string {
 			if k == "CLAUDECODE" {
 				return "1"
@@ -171,7 +171,7 @@ func TestAmbiguousNativeMarkersRequireExplicitIdentity(t *testing.T) {
 
 func TestProviderSuppressionDoesNotResurrectManagedContext(t *testing.T) {
 	for _, available := range []bool{true, false} {
-		a := New()
+		a := newTestApp(t)
 		a.Getenv = func(k string) string {
 			switch k {
 			case "AGENTCTL_EXECUTION_ID":

@@ -47,7 +47,7 @@ func TestMoveTopicDryRunAndResumesPartialCopy(t *testing.T) {
 	t.Cleanup(destinationServer.Close)
 	sourceCfg := moveTestConfig(sourceServer.URL, "source-token")
 	destCfg := moveTestConfig(destinationServer.URL, "destination-token")
-	app := New()
+	app := newTestApp(t)
 
 	connectionMaps := map[string]string{"gh-main": "gh-dest"}
 	preview, err := app.moveTopic(ctx, sourceCfg, destCfg, "topic:launch", true, connectionMaps)
@@ -162,7 +162,7 @@ func TestMoveCardCopiesCuratedAndResyncsSourceBacked(t *testing.T) {
 			destinationServer := httptest.NewServer(destination)
 			t.Cleanup(destinationServer.Close)
 			source.workspacesSetupSingleCard("card:source-card", tc.source)
-			app := New()
+			app := newTestApp(t)
 			mappings := map[string]string{}
 			if tc.want == "archive" {
 				mappings["gh-main"] = "gh-dest"
@@ -200,7 +200,7 @@ func TestMoveCardResumesAfterDestinationCommitWithoutReply(t *testing.T) {
 	destination.dropReplyAfterCardCreate = true
 	destinationServer := httptest.NewServer(destination)
 	t.Cleanup(destinationServer.Close)
-	app := New()
+	app := newTestApp(t)
 	sourceCfg, destCfg := moveTestConfig(sourceServer.URL, "source-token"), moveTestConfig(destinationServer.URL, "destination-token")
 
 	if _, err := app.moveCard(context.Background(), sourceCfg, destCfg, "card:source-card", false, nil); err == nil {
@@ -231,7 +231,7 @@ func TestMoveCardCopiesCanonicalPlanAndRewritesSelfReference(t *testing.T) {
 	destinationServer := httptest.NewServer(destination)
 	t.Cleanup(destinationServer.Close)
 
-	if _, err := New().moveCard(context.Background(), moveTestConfig(sourceServer.URL, "source-token"), moveTestConfig(destinationServer.URL, "destination-token"), "card:source-card", false, nil); err != nil {
+	if _, err := newTestApp(t).moveCard(context.Background(), moveTestConfig(sourceServer.URL, "source-token"), moveTestConfig(destinationServer.URL, "destination-token"), "card:source-card", false, nil); err != nil {
 		t.Fatalf("move card with canonical plan: %v", err)
 	}
 	destinationRef := moveFieldString(asMap(source.works["card:source-card"]["workspace_move"]), "destination_ref")
@@ -257,7 +257,7 @@ func TestMoveCardRejectsConflictingDestinationSourceIdentity(t *testing.T) {
 	destinationServer := httptest.NewServer(destination)
 	t.Cleanup(destinationServer.Close)
 
-	_, err := New().moveCard(context.Background(), moveTestConfig(sourceServer.URL, "source-token"), moveTestConfig(destinationServer.URL, "destination-token"), "card:source-card", false, map[string]string{"gh-main": "gh-dest"})
+	_, err := newTestApp(t).moveCard(context.Background(), moveTestConfig(sourceServer.URL, "source-token"), moveTestConfig(destinationServer.URL, "destination-token"), "card:source-card", false, map[string]string{"gh-main": "gh-dest"})
 	if err == nil || moveState(source.works["card:source-card"]) == "archived" || source.mutationCount() != 0 || destination.createCount["card"] != 0 {
 		t.Fatalf("conflicting destination identity was not rejected before source transition: err=%v source=%#v destination=%#v", err, source.works["card:source-card"], destination.works)
 	}
@@ -279,7 +279,7 @@ func TestMoveCardFencesSourceEditDuringTransfer(t *testing.T) {
 	destinationServer := httptest.NewServer(destination)
 	t.Cleanup(destinationServer.Close)
 
-	_, err := New().moveCard(context.Background(), moveTestConfig(sourceServer.URL, "source-token"), moveTestConfig(destinationServer.URL, "destination-token"), "card:source-card", false, nil)
+	_, err := newTestApp(t).moveCard(context.Background(), moveTestConfig(sourceServer.URL, "source-token"), moveTestConfig(destinationServer.URL, "destination-token"), "card:source-card", false, nil)
 	if err == nil || moveState(source.works["card:source-card"]) == "archived" || moveFieldString(asMap(source.works["card:source-card"]["workspace_move"]), "phase") != "snapshot" {
 		t.Fatalf("source edit was silently dropped or tombstoned instead of leaving a resumable snapshot: err=%v source=%#v", err, source.works["card:source-card"])
 	}
@@ -295,7 +295,7 @@ func TestMoveCardVerifiesDestinationBeforeSourceTransition(t *testing.T) {
 	destinationServer := httptest.NewServer(destination)
 	t.Cleanup(destinationServer.Close)
 
-	_, err := New().moveCard(context.Background(), moveTestConfig(sourceServer.URL, "source-token"), moveTestConfig(destinationServer.URL, "destination-token"), "card:source-card", false, nil)
+	_, err := newTestApp(t).moveCard(context.Background(), moveTestConfig(sourceServer.URL, "source-token"), moveTestConfig(destinationServer.URL, "destination-token"), "card:source-card", false, nil)
 	if err == nil || moveState(source.works["card:source-card"]) == "archived" || moveFieldString(asMap(source.works["card:source-card"]["workspace_move"]), "phase") != "snapshot" {
 		t.Fatalf("source transitioned before destination verification instead of retaining a pending snapshot: err=%v source=%#v", err, source.works["card:source-card"])
 	}
@@ -311,7 +311,7 @@ func TestMoveCardMissingDestinationGrantLeavesSourceUntouched(t *testing.T) {
 	destinationServer := httptest.NewServer(destination)
 	t.Cleanup(destinationServer.Close)
 
-	_, err := New().moveCard(context.Background(), moveTestConfig(sourceServer.URL, "source-token"), moveTestConfig(destinationServer.URL, "destination-token"), "card:source-card", false, nil)
+	_, err := newTestApp(t).moveCard(context.Background(), moveTestConfig(sourceServer.URL, "source-token"), moveTestConfig(destinationServer.URL, "destination-token"), "card:source-card", false, nil)
 	if err == nil || moveState(source.works["card:source-card"]) == "archived" || moveFieldString(asMap(source.works["card:source-card"]["workspace_move"]), "phase") != "snapshot" || destination.createCount["card"] != 0 {
 		t.Fatalf("missing destination grant caused a source transition or a destination write: err=%v source=%#v", err, source.works["card:source-card"])
 	}
@@ -327,7 +327,7 @@ func TestMoveTopicListsAndBlocksInaccessibleDocuments(t *testing.T) {
 			t.Cleanup(sourceServer.Close)
 			destinationServer := httptest.NewServer(destination)
 			t.Cleanup(destinationServer.Close)
-			result, err := New().moveTopic(context.Background(), moveTestConfig(sourceServer.URL, "source-token"), moveTestConfig(destinationServer.URL, "destination-token"), "topic:launch", dryRun, map[string]string{"gh-main": "gh-dest"})
+			result, err := newTestApp(t).moveTopic(context.Background(), moveTestConfig(sourceServer.URL, "source-token"), moveTestConfig(destinationServer.URL, "destination-token"), "topic:launch", dryRun, map[string]string{"gh-main": "gh-dest"})
 			if dryRun {
 				if err != nil {
 					t.Fatalf("dry run with inaccessible document: %v", err)

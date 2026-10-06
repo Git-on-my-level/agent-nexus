@@ -2538,7 +2538,7 @@ func TestCommitmentsGetTextOutputIsRemoved(t *testing.T) {
 	home := t.TempDir()
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -5891,15 +5891,18 @@ func TestEventsStreamFallbackPayloadForNonWrapperJSON(t *testing.T) {
 
 func TestTypedCommandUsageFailures(t *testing.T) {
 	t.Parallel()
+	runTypedCommandUsageFailures(t, t.TempDir())
+}
 
-	cli := New()
+func runTypedCommandUsageFailures(t *testing.T, home string) {
+	t.Helper()
+	cli := newTestAppWithHome(home)
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
 	cli.StdinIsTTY = func() bool { return true }
-	cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
 	cli.ReadFile = func(path string) ([]byte, error) {
 		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
 	}

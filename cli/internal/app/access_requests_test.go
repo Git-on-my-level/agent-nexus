@@ -21,7 +21,7 @@ func TestAccessRequestUsageErrorsBeforeHostEnrollment(t *testing.T) {
 		{"inbox", "summary", "extra"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
-			app := New()
+			app := newTestApp(t)
 			home := t.TempDir()
 			app.UserHomeDir = func() (string, error) { return home, nil }
 			app.Getenv = func(string) string { return "" }

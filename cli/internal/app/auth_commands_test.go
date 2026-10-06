@@ -93,7 +93,7 @@ func runCLIForTest(t *testing.T, home string, env map[string]string, stdin io.Re
 	}
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestAppWithHome(home)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = stdin

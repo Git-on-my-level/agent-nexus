@@ -61,7 +61,7 @@ func TestAdminCLICommands(t *testing.T) {
 				_, _ = w.Write([]byte(`{"ok":true}`))
 			}))
 			defer server.Close()
-			a := New()
+			a := newTestApp(t)
 			home := t.TempDir()
 			a.UserHomeDir = func() (string, error) { return home, nil }
 			a.Getenv = func(k string) string {

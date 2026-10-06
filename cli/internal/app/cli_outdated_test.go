@@ -33,7 +33,7 @@ func TestCLIOutdatedRecoveryPolicies(t *testing.T) {
 			if tc.managed {
 				app, cfg, _ = managedUpdateFixture(t)
 			} else {
-				app = New()
+				app = newTestApp(t)
 				home := t.TempDir()
 				app.UserHomeDir = func() (string, error) { return home, nil }
 				app.Getenv = func(string) string { return "" }
@@ -283,7 +283,7 @@ func TestSecretCreateFromStdinDoesNotReplayEmpty(t *testing.T) {
 }
 
 func TestReadStdinBodyMarksConsumed(t *testing.T) {
-	app := New()
+	app := newTestApp(t)
 	app.Stdin = strings.NewReader("important document body")
 	app.StdinIsTTY = func() bool { return false }
 	data, err := app.readStdinBody()

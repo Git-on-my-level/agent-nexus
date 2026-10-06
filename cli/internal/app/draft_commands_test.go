@@ -161,15 +161,18 @@ func TestDraftCreateResolvesCLITokensToCommandID(t *testing.T) {
 
 func TestDraftCreateHelpWithCommandShowsTargetSchema(t *testing.T) {
 	t.Parallel()
+	runDraftCreateHelpWithCommand(t, t.TempDir())
+}
 
+func runDraftCreateHelpWithCommand(t *testing.T, home string) {
+	t.Helper()
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestAppWithHome(home)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
 	cli.StdinIsTTY = func() bool { return true }
-	cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
 	cli.ReadFile = func(path string) ([]byte, error) {
 		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
 	}

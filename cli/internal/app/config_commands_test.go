@@ -11,7 +11,7 @@ func runCLIForTestJSONError(t *testing.T, home string, env map[string]string, ar
 	t.Helper()
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")

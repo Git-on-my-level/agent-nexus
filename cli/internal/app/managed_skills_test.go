@@ -42,7 +42,7 @@ func assertSkillState(t *testing.T, path string, skill skills.Skill, want string
 }
 func skillCommand(t *testing.T, args ...string) (int, map[string]any) {
 	t.Helper()
-	a := New()
+	a := newTestApp(t)
 	out := new(bytes.Buffer)
 	a.Stdout = out
 	a.Stderr = new(bytes.Buffer)

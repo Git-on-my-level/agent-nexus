@@ -11,14 +11,60 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"agent-nexus-cli/internal/config"
 )
+
+func newTestApp(t *testing.T) *App {
+	t.Helper()
+	return newTestAppWithHome(t.TempDir())
+}
+
+func newTestAppWithHome(home string) *App {
+	app := New()
+	env := map[string]string{"HOME": home}
+	app.Getenv = func(key string) string { return env[key] }
+	app.UserHomeDir = func() (string, error) { return home, nil }
+	app.runtimeIdentity = func() (*runtimeIdentityReport, error) { return nil, nil }
+	return app
+}
+
+func TestDefaultTestAppIsIsolatedFromAgentEnvironment(t *testing.T) {
+	for key, value := range map[string]string{
+		"CLAUDECODE":            "1",
+		"CODEX_THREAD_ID":       "x",
+		"AGENTCTL_EXECUTION_ID": "y",
+	} {
+		t.Setenv(key, value)
+	}
+
+	home := t.TempDir()
+	app := newTestAppWithHome(home)
+	for _, key := range []string{"CLAUDECODE", "CODEX_THREAD_ID", "AGENTCTL_EXECUTION_ID"} {
+		if got := app.Getenv(key); got != "" {
+			t.Fatalf("test app inherited %s=%q", key, got)
+		}
+	}
+	if got := app.Getenv("HOME"); got != home {
+		t.Fatalf("test app HOME = %q, want isolated home %q", got, home)
+	}
+	if got, err := app.UserHomeDir(); err != nil || got != home {
+		t.Fatalf("test app home = %q, err=%v; want %q", got, err, home)
+	}
+	if got, err := app.configDir(config.Resolved{}); err != nil || got != filepath.Join(home, ".config", "anx") {
+		t.Fatalf("test app config/cache dir = %q, err=%v; want isolated home cache", got, err)
+	}
+
+	runTypedCommandUsageFailures(t, home)
+	runDraftCreateHelpWithCommand(t, home)
+}
 
 func TestRunVersionJSON(t *testing.T) {
 	t.Parallel()
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -49,7 +95,7 @@ func TestRunVersionFlag(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -73,7 +119,7 @@ func TestRunVersionFlagFalseShowsRootHelp(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -100,7 +146,7 @@ func TestRunVersionAcceptsTrailingJSONFlag(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -141,7 +187,7 @@ func TestRunMetaDocsIsConfigLenient(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -178,7 +224,7 @@ func TestRunSubcommandTrailingHelpIsConfigLenientWithMultipleProfiles(t *testing
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -246,7 +292,7 @@ func TestRunTrailingGlobalBaseURLIsAccepted(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -287,7 +333,7 @@ func TestRunTrailingGlobalBaseURLPreservesJSONMode(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -319,7 +365,7 @@ func TestRunTrailingFlagParseErrorsPreserveJSONMode(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -405,7 +451,7 @@ func TestRunDoctorJSON(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -478,7 +524,7 @@ func TestRunAPICallJSONWithStdinBody(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader(`{"hello":"world"}`)
@@ -531,7 +577,7 @@ func TestRunAPICallJSONWithFromFileBody(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -567,7 +613,7 @@ func TestRunAPICallTextProjection(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -591,7 +637,7 @@ func TestRunAPICallUsageFailureExitCode2(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")
@@ -619,7 +665,7 @@ func TestAPICallHelpRunsWithoutResolvableConfig(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	cli := New()
+	cli := newTestApp(t)
 	cli.Stdout = stdout
 	cli.Stderr = stderr
 	cli.Stdin = strings.NewReader("")

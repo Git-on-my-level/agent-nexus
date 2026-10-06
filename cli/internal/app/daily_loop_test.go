@@ -16,7 +16,7 @@ func dailyTestApp(t *testing.T, serverURL string) (*App, *bytes.Buffer) {
 	writeDerivedAgentFixture(t, home, "worker", `{"agent_id":"agent-1","actor_id":"actor-1","username":"worker.host","access_token":"test-token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 	_ = runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--base-url", serverURL, "--as", "worker", "version"})
 	out := &bytes.Buffer{}
-	a := New()
+	a := newTestApp(t)
 	a.Stdout = out
 	a.Stderr = &bytes.Buffer{}
 	a.UserHomeDir = func() (string, error) { return home, nil }

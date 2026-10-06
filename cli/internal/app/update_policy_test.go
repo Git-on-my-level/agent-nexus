@@ -40,7 +40,7 @@ func managedUpdateFixture(t *testing.T) (*App, config.Resolved, string) {
 		t.Fatal(err)
 	}
 	updateExecutablePath = func() (string, error) { return path, nil }
-	a := New()
+	a := newTestApp(t)
 	a.UserHomeDir = func() (string, error) { return home, nil }
 	a.Getenv = func(string) string { return "" }
 	a.now = func() time.Time { return time.Date(2026, 10, 5, 23, 59, 0, 0, time.FixedZone("east", 3600)) }
