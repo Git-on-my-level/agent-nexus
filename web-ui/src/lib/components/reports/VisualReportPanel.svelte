@@ -1,10 +1,11 @@
 <script>
   import SeriesReportPanel from "./SeriesReportPanel.svelte";
   import LiveReportPanel from "./LiveReportPanel.svelte";
+  import ProvenanceChip from "$lib/components/ProvenanceChip.svelte";
   import { isLivePanel } from "$lib/liveReports.js";
+  import { panelProvenance } from "$lib/reportProvenance.js";
   import ReportChart from "./ReportChart.svelte";
   import ReportDetails from "./ReportDetails.svelte";
-  import ActorLabel from "$lib/components/ActorLabel.svelte";
   import RefText from "$lib/components/RefText.svelte";
   import UnavailableValue from "$lib/components/UnavailableValue.svelte";
   import { metricValue } from "$lib/unavailableValue.js";
@@ -15,6 +16,8 @@
     panel,
     sources = [],
     freshness,
+    /** Reference time, so the header's relative age ticks with the report. */
+    now = Date.now(),
     evidenceOpen = false,
     oninspect,
     /**
@@ -41,6 +44,10 @@
     "live-work-mix": "Open work",
     "live-activity": "Recent activity",
     "live-fleet-health": "Fleet health",
+    // Core lands these separately; naming them here means they arrive with a
+    // heading rather than a blank eyebrow above the rows.
+    "live-cards": "Work",
+    "live-timeline": "Timeline",
     chart: "Visualization",
     "metric-strip": "Measures",
     metric: "Measure",
@@ -54,9 +61,17 @@
     "metric-chart": "Metric",
     "artifact-preview": "Artifact",
   };
+  /**
+   * Freshness, which is a different question from provenance.
+   *
+   * The provenance line says when the panel was *written*. This says how old
+   * the evidence it cites is — a note typed this morning can cite an
+   * observation from September, and the reader needs both facts. It is
+   * suppressed once the provenance line reads "May be stale", which already
+   * tells the reader to stop.
+   */
   const stateLabels = {
-    current: "Current snapshot",
-    stale: "Stale snapshot",
+    stale: "Stale evidence",
     unknown: "Freshness unknown",
     unavailable: "Unavailable",
   };
@@ -65,6 +80,7 @@
     verified: "Source-backed",
     illustrative: "Illustrative example",
   };
+  let provenance = $derived(panelProvenance(panel, freshness, now));
   let linkedSources = $derived(
     sources.filter((source) => panel.source_ids.includes(source.id)),
   );
@@ -108,25 +124,41 @@
   data-report-panel={panel.id}
   data-appearance={panel.appearance ?? "outlined"}
   data-density={panel.density ?? "comfortable"}
+  data-provenance-class={provenance.class}
+  data-provenance-state={provenance.state}
 >
   <header class="report-panel-header">
     <div class="min-w-0">
-      <p class="report-eyebrow">{typeLabels[panel.type]}</p>
+      <p class="report-eyebrow">{typeLabels[panel.type] ?? "Panel"}</p>
       <h3 class="mt-1 text-meta font-semibold text-fg">{panel.title}</h3>
     </div>
-    {#if freshness !== "current" && !isLivePanel(panel)}
-      <!-- Current is the expected state; only call out evidence that needs care. -->
-      <span class="report-state" class:report-state-warn={freshness === "stale"}
-        >{stateLabels[freshness]}</span
-      >
-    {/if}
+    <div class="report-panel-marks">
+      <!--
+        Every panel says what it is, in every context: the Overview's compact
+        embed carries no footer, and before this it was the context where a
+        nine-day-old snapshot was least distinguishable from a live read.
+      -->
+      <ProvenanceChip {panel} {freshness} {now} />
+      {#if stateLabels[freshness] && provenance.class !== "live" && provenance.state !== "due-for-review"}
+        <!--
+          Never for a live panel — a read in flight arrives as `unavailable`
+          here, and the line beside this already says it is still reading. And
+          never beside "May be stale", which would be the same warning twice.
+        -->
+        <span
+          class="report-state"
+          class:report-state-warn={freshness === "stale"}
+          >{stateLabels[freshness]}</span
+        >
+      {/if}
+    </div>
   </header>
 
   <div class="report-panel-body">
     {#if panel.source}
-      <SeriesReportPanel {panel} {freshness} />
+      <SeriesReportPanel {panel} {freshness} {now} />
     {:else if isLivePanel(panel)}
-      <LiveReportPanel {panel} {...refProps()} />
+      <LiveReportPanel {panel} {now} {...refProps()} />
     {:else if freshness === "unavailable"}
       <div class="report-unavailable">
         <span class="text-title text-fg-muted" aria-hidden="true">∅</span>
@@ -137,7 +169,14 @@
         </p>
       </div>
     {:else}
-      {#if freshness === "stale"}
+      {#if provenance.state === "due-for-review"}
+        <!--
+          Only once the panel is actually overdue. Tied to the 24-hour evidence
+          window, this amber line argued with the quiet "Written by claude · 3d
+          ago" beside it: one of them said the panel was fine and the other
+          said to stop. The header owns that verdict now; this says what to do
+          about it.
+        -->
         <p class="mb-3 text-micro text-warn-text">
           Historical evidence. Refresh the source before acting.
         </p>
@@ -309,12 +348,8 @@
   {#if !compact && !isLivePanel(panel)}
     <footer class="report-panel-footer">
       <div class="report-provenance">
-        <ActorLabel
-          label={panel.author}
-          seed={panel.author}
-          size="xs"
-          nameClass="text-micro text-fg-muted"
-        />
+        <!-- Who wrote it is in the header now. This line is the other axis:
+             how well the claim is evidenced, and when it was observed. -->
         <span class="report-provenance-tag" data-provenance={panel.provenance}
           >{provenanceLabels[panel.provenance]}</span
         >
@@ -411,6 +446,43 @@
     background: var(--bg-soft);
     border-color: var(--line-subtle);
   }
+  /*
+   * Live panels sit forward, hand-written ones recede.
+   *
+   * The difference is the container, not the text: dropping the body to a
+   * muted colour would have made a hand-written table harder to read in
+   * exchange for a signal the header already gives in words. A panel the
+   * reader cannot read is not quieter, it is broken.
+   *
+   * `plain` opts out of its own frame, so it keeps opting out here.
+   */
+  .report-panel:not(
+      [data-appearance="plain"]
+    )[data-provenance-class="authored"] {
+    background: var(--bg-soft);
+    border-color: var(--line-subtle);
+  }
+  .report-panel[data-provenance-class="authored"] .report-panel-header,
+  .report-panel[data-provenance-class="authored"] .report-panel-footer {
+    border-color: var(--line-subtle);
+  }
+  /*
+   * Past its review date: an amber edge down the whole panel, so the doubt
+   * belongs to the panel rather than to the chip in its corner. Subtle on
+   * purpose — the reader should distrust it at a glance without the page
+   * turning into an alert.
+   */
+  .report-panel[data-provenance-state="due-for-review"],
+  .report-panel[data-provenance-state="live-stale"] {
+    border-color: var(--line);
+    box-shadow: inset 3px 0 0 var(--warn);
+  }
+  /*
+   * No `opacity` on the body. Fading it to 0.82 took `--fg-subtle` text —
+   * a chart's row-count hint, a unit label — from 4.97:1 to 3.75:1 against
+   * `--bg-soft`, under the 4.5:1 floor. The amber edge and the header line
+   * carry the doubt; the content stays as readable as any other panel's.
+   */
   .report-panel[data-density="compact"] .report-panel-header,
   .report-panel[data-density="compact"] .report-panel-body,
   .report-panel[data-density="compact"] .report-panel-footer {
@@ -432,6 +504,18 @@
     text-transform: uppercase;
     font-weight: 600;
   }
+  .report-panel-marks {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    min-width: 0;
+  }
+  .report-state-warn {
+    color: var(--warn-text);
+    border-color: var(--warn);
+  }
   .report-state {
     border: 1px solid var(--line-strong);
     border-radius: 4px;
@@ -440,10 +524,6 @@
     line-height: 1.4;
     color: var(--fg-muted);
     white-space: nowrap;
-  }
-  .report-state-warn {
-    color: var(--warn-text);
-    border-color: var(--warn);
   }
   .report-panel-body {
     padding: 16px;

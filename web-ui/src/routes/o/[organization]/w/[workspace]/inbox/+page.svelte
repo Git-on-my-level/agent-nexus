@@ -38,6 +38,7 @@
     buildInboxRows,
     filterMailbox,
     formatWait,
+    inboxItemIsReminder,
     inboxItemNeedsResponse,
     inboxRowBadge,
     rowMatchesWorkRef,
@@ -1301,6 +1302,7 @@
               </div>
             {:else if selected?.kind === "inbox"}
               {@const needsResponse = inboxItemNeedsResponse(selected.item)}
+              {@const reminder = inboxItemIsReminder(selected.item)}
               {@const wait = needsResponse ? waitFor(selected) : null}
               <div class="space-y-4 p-4 sm:p-5">
                 <div
@@ -1332,7 +1334,10 @@
                           data-inbox-blocked-for>{wait.text}</span
                         >{:else}is waiting on you{/if}</span
                     >
-                  {:else}
+                  {:else if !reminder}
+                    <!-- A reminder has no requester. `InboxActorName` renders
+                         the word "someone" for an empty one, which asserted a
+                         person who is not waiting on anything. -->
                     <span class="min-w-0 [overflow-wrap:anywhere]"
                       >from <InboxActorName
                         name={selected.requester?.name}
@@ -1393,6 +1398,39 @@
                       >
                     {/snippet}
                   </InboxRespondPanel>
+                {:else if reminder}
+                  <!--
+                    Nobody answers a review reminder. Core drops it from every
+                    inbox read once the report is revised, archived, trashed
+                    or unpinned, so refreshing the panel is what closes it —
+                    Reply and Acknowledge had nothing to act on.
+                  -->
+                  <div
+                    class="space-y-3 rounded-md border border-line-subtle bg-bg-soft px-3 py-3"
+                    data-inbox-reminder
+                  >
+                    <p class="text-meta text-fg-muted">
+                      This closes itself when the panel is refreshed or
+                      converted to a live one. There is nothing to answer.
+                    </p>
+                    <div class="flex flex-wrap gap-2">
+                      {#if subjectHref(selected.subject)}
+                        <a
+                          class="ui-btn-primary"
+                          href={subjectHref(selected.subject)}
+                          data-inbox-shortcut="open">Open dashboard</a
+                        >
+                      {/if}
+                      <!-- Every other branch offers this; without it the item
+                           page is reachable only by typing its URL. -->
+                      <a
+                        class="ui-btn-secondary"
+                        href={workspaceHref(
+                          `/inbox/${encodeURIComponent(selected.item.id)}`,
+                        )}>Open item</a
+                      >
+                    </div>
+                  </div>
                 {:else}
                   <div
                     class="space-y-1 rounded-md border border-line-subtle bg-bg-soft px-3 py-2"

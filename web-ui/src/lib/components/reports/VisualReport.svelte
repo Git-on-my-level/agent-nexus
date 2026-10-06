@@ -1,9 +1,15 @@
 <script>
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { coreClient } from "$lib/coreClient";
   import { isLivePanel, withLiveObservation } from "$lib/liveReports.js";
+  import {
+    nextReviewDeadline,
+    reviewReadPending,
+    withRenderedProvenance,
+    withReportDefaults,
+  } from "$lib/reportProvenance.js";
   import { getPanelFreshness } from "$lib/visualReports.js";
   import VisualReportPanel from "./VisualReportPanel.svelte";
   import AnxRefPreview from "$lib/components/AnxRefPreview.svelte";
@@ -29,7 +35,13 @@
   let hasLive = $derived(report.panels.some(isLivePanel));
   let observedPanels = $derived(
     report.panels.map((panel) =>
-      withLiveObservation(panel, liveObservations.get(panel.id)),
+      withLiveObservation(
+        withRenderedProvenance(
+          withReportDefaults(panel, report),
+          liveObservations.get(panel.id),
+        ),
+        liveObservations.get(panel.id),
+      ),
     ),
   );
   let now = $state(Date.now());
@@ -184,7 +196,13 @@
     const expectedRevision = revisionRef;
     const livePanels = report.panels.filter(isLivePanel);
     liveObservations = new Map();
-    if (!livePanels.length) return;
+    // Every report is read once: core resolves each authored panel's class and
+    // review deadline against its own clock and returns them here, so a
+    // dashboard of hand-written notes still gets a true "written 9d ago,
+    // overdue" rather than this reader's arithmetic on their own clock.
+    // Only live panels are worth polling for, though — an authored panel's
+    // provenance does not change while it is on screen.
+    if (!report.panels.length) return;
     if (Array.isArray(previewObservations)) {
       liveObservations = new Map(
         previewObservations.map((panel) => [panel.id, panel]),
@@ -193,6 +211,16 @@
     }
     let disposed = false;
     let inFlight = false;
+    let reviewTimer = 0;
+    // Reads that should have told core about a deadline and did not. Backed
+    // off rather than repeated at a fixed minute: five minutes only covers
+    // five minutes of clock disagreement, and a machine without NTP can be out
+    // by much more. Eight tries reach about three hours and then stop, so a
+    // document that has gone for good is not asked about for ever.
+    let reviewAttempts = 0;
+    const REVIEW_ATTEMPTS = 8;
+    const reviewRetryWait = (attempt) =>
+      Math.min(60_000 * 2 ** attempt, 60 * 60_000);
     async function refresh() {
       if (inFlight || disposed) return;
       inFlight = true;
@@ -215,22 +243,107 @@
             });
         }
       } catch {
-        results = new Map(
-          livePanels.map((panel) => [
-            panel.id,
-            {
-              status: "unavailable",
-              message:
-                "Live data unavailable. Reload the document or check your access.",
-              data: {},
-            },
-          ]),
-        );
+        // Only live panels lose anything. An authored panel keeps whatever the
+        // last good read resolved — the absolute deadline, whether it was
+        // defaulted, the principal core corrected the author to — because a
+        // failed request is not news about a hand-written panel, and starting
+        // over from the document would quietly contradict what core said.
+        // Untracked: a document id that is missing throws before the first
+        // await, so this runs inside the effect that writes the same state.
+        results = new Map(untrack(() => liveObservations));
+        for (const panel of livePanels)
+          results.set(panel.id, {
+            status: "unavailable",
+            message:
+              "Live data unavailable. Reload the document or check your access.",
+            data: {},
+          });
       }
-      if (!disposed) liveObservations = results;
+      if (!disposed) {
+        liveObservations = results;
+        armReviewDeadline();
+      }
       inFlight = false;
     }
+    /**
+     * Read once more when the soonest authored panel falls due.
+     *
+     * The provenance line already turns amber on its own as the clock ticks,
+     * but the read is also what tells core to remind the author — so a
+     * dashboard left open on a wall display should take itself past the
+     * deadline rather than wait for someone to reload it. One timer, re-armed
+     * on each read, and clamped because `setTimeout` silently fires at once
+     * past about 24 days.
+     */
+    function armReviewDeadline() {
+      window.clearTimeout(reviewTimer);
+      // Untracked: this runs inside the effect that writes `liveObservations`,
+      // and a synchronous failure path would otherwise make the derived a
+      // dependency of the effect that feeds it.
+      const panels = untrack(() => observedPanels);
+      const at = Date.now();
+      const pending = reviewReadPending(panels, at);
+      if (!pending) reviewAttempts = 0;
+      // The two are independent. A panel core will never confirm must not
+      // silence the next panel's deadline, and running out of tries for one
+      // must not stop the report reading for another.
+      const retryAt =
+        pending && reviewAttempts < REVIEW_ATTEMPTS
+          ? at + reviewRetryWait(reviewAttempts)
+          : null;
+      const deadlineAt = nextReviewDeadline(panels, at);
+      // Which of the two this wake is for. The callback cannot work it out
+      // afterwards — a deadline that has just arrived is "pending" by
+      // definition — and the budget must bound re-asking about one deadline,
+      // never asking about the next.
+      const forDeadline =
+        retryAt === null || (deadlineAt !== null && deadlineAt < retryAt);
+      const target = forDeadline ? deadlineAt : retryAt;
+      if (target === null) return;
+      // `setTimeout` fires immediately past about 24 days, so a deadline
+      // further out than the cap waits in hops. Only the hop that reaches the
+      // deadline reads: a dashboard open for a month should not re-read the
+      // report every six hours on the way there.
+      const wait = Math.max(Math.min(target - at + 1000, 21_600_000), 1000);
+      reviewTimer = window.setTimeout(() => {
+        if (disposed) return;
+        now = Date.now();
+        if (forDeadline) {
+          // A hop on the way to a distant deadline, not the deadline itself.
+          if (Date.now() < target) {
+            armReviewDeadline();
+            return;
+          }
+          // A deadline of its own gets a fresh budget: three hours spent on a
+          // panel core will never confirm must not cost the next panel its
+          // one read.
+          reviewAttempts = 0;
+          void refresh();
+          return;
+        }
+        if (
+          reviewReadPending(
+            untrack(() => observedPanels),
+            Date.now(),
+          ) &&
+          reviewAttempts < REVIEW_ATTEMPTS
+        ) {
+          // A read already running will re-arm when it lands; do not spend a
+          // try on a call that returns without asking core anything.
+          if (!inFlight) reviewAttempts += 1;
+          void refresh();
+        } else armReviewDeadline();
+      }, wait);
+    }
     void refresh();
+    // A report with nothing live is read once. The teardown is still returned:
+    // without it a response that lands after navigation would write into the
+    // next document's observations.
+    if (!livePanels.length)
+      return () => {
+        disposed = true;
+        window.clearTimeout(reviewTimer);
+      };
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") void refresh();
     }, 30_000);
@@ -241,6 +354,7 @@
     return () => {
       disposed = true;
       window.clearInterval(timer);
+      window.clearTimeout(reviewTimer);
       document.removeEventListener("visibilitychange", resume);
     };
   });
@@ -345,6 +459,7 @@
           <VisualReportPanel
             {compact}
             {panel}
+            {now}
             sources={report.sources}
             freshness={getPanelFreshness(panel, now)}
             evidenceOpen={evidence === panel.id}

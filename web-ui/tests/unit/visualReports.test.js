@@ -7,9 +7,12 @@ import {
   filterReportPanels,
   getPanelFreshness,
   parseVisualReport,
+  reviewDeadlineMillis,
+  reviewDeadlineNanos,
   safeReportUrl,
   visualReportContentText,
 } from "../../src/lib/visualReports.js";
+import { seriesRangeSeconds } from "../../src/lib/seriesReports.js";
 import {
   VISUAL_REPORT_EXAMPLE_OBSERVED_AT,
   visualReportExample,
@@ -628,5 +631,127 @@ describe("visual report freshness and project filtering", () => {
       ),
     ).toBe(true);
     expect(visualReportExampleContent).toContain("example-runtime v0.13.0");
+  });
+});
+
+/**
+ * The resolver `contracts/visualreport/review.go` defines, kept honest here as
+ * well as in the shared conformance corpus: these are the rules a reader of
+ * this module needs, stated once in a form that names them.
+ */
+describe("review deadlines", () => {
+  const written = Date.parse("2026-10-06T12:00:00Z");
+  const nanos = (iso) => BigInt(Date.parse(iso)) * 1000000n;
+
+  it("reads a plain date as midnight UTC, wherever the reader is", () => {
+    expect(reviewDeadlineMillis("2026-12-01", written)).toBe(
+      Date.parse("2026-12-01T00:00:00Z"),
+    );
+  });
+
+  it("measures a duration from the writing", () => {
+    for (const form of ["7d", "168h", "10080m", "604800s"])
+      expect(reviewDeadlineMillis(form, written)).toBe(written + 7 * 86400000);
+    // A duration with nothing to measure from is not a deadline.
+    expect(reviewDeadlineMillis("7d", NaN)).toBeNull();
+  });
+
+  it("bounds the duration the way the series range is bounded", () => {
+    expect(seriesRangeSeconds("3650d")).toBe(3650 * 86400);
+    for (const bad of ["0d", "3651d", "-7d", "7D", "7days", " 7d", ""])
+      expect(seriesRangeSeconds(bad)).toBeNull();
+  });
+
+  it("accepts the instants Go's time.Parse accepts, not fewer", () => {
+    // Core writes resolved deadlines back with nanosecond precision, and an
+    // offset hour of 24 is legal. Rejecting either would take a whole stored
+    // report down over a field core had already accepted.
+    expect(reviewDeadlineNanos("2026-06-02T00:00:00.123456789Z", null)).toBe(
+      nanos("2026-06-02T00:00:00Z") + 123456789n,
+    );
+    // Beyond nanoseconds is truncated, not rounded.
+    expect(reviewDeadlineNanos("2026-06-02T00:00:00.1234567890Z", null)).toBe(
+      nanos("2026-06-02T00:00:00Z") + 123456789n,
+    );
+    expect(reviewDeadlineNanos("2026-06-02T00:00:00+24:00", null)).toBe(
+      nanos("2026-06-01T00:00:00Z"),
+    );
+    expect(reviewDeadlineNanos("2026-06-02T00:00:00+25:00", null)).toBeNull();
+  });
+
+  it("does not map years below 0100 into the twentieth century", () => {
+    // `Date.UTC(51, …)` is 1951. A deadline in year 51 is before a panel
+    // written in 1950, and the mapped one is after it — the validator and the
+    // chip would both have agreed with the wrong one.
+    expect(reviewDeadlineMillis("0051-01-01", NaN)).toBe(
+      Date.parse("0051-01-01T00:00:00Z"),
+    );
+    expect(reviewDeadlineNanos("0001-01-01T00:00:00Z", null)).toBe(
+      BigInt(Date.parse("0001-01-01T00:00:00Z")) * 1000000n,
+    );
+  });
+
+  it("accepts the offset minutes Go accepts", () => {
+    // Go's reader allows an offset minute of 60 as well as an hour of 24.
+    for (const offset of ["+00:60", "+23:60", "+24:60", "-24:60"])
+      expect(
+        reviewDeadlineNanos(`2026-06-02T00:00:00${offset}`, null),
+      ).not.toBeNull();
+    for (const offset of ["+00:99", "-25:00"])
+      expect(
+        reviewDeadlineNanos(`2026-06-02T00:00:00${offset}`, null),
+      ).toBeNull();
+  });
+
+  it("rejects calendar values that do not exist", () => {
+    for (const bad of [
+      "2026-13-02T00:00:00Z",
+      "2026-02-31T00:00:00Z",
+      "2026-02-29T00:00:00Z",
+      "2026-12-02T24:00:00Z",
+      "next sprint",
+      "",
+    ])
+      expect(reviewDeadlineNanos(bad, null)).toBeNull();
+    // 2028 is a leap year.
+    expect(reviewDeadlineNanos("2028-02-29T00:00:00Z", null)).not.toBeNull();
+  });
+
+  it("sees a deadline half a millisecond after the writing", () => {
+    // `review.go` compares `time.Time`, so this is after. Comparing in
+    // milliseconds would call it equal and reject the report.
+    const base = "2026-01-01T00:00:00Z";
+    expect(
+      reviewDeadlineNanos("2026-01-01T00:00:00.0005Z", null) >
+        reviewDeadlineNanos(base, null),
+    ).toBe(true);
+  });
+
+  it("requires a review date once a panel dates itself", () => {
+    const report = copy();
+    const panel = report.panels[0];
+    panel.authored_at = report.generated_at;
+    expect(parseVisualReport(JSON.stringify(report)).errors).toContain(
+      "panels[0].review_by: is required for authored panels with authored_at",
+    );
+    panel.review_by = "7d";
+    expect(parseVisualReport(JSON.stringify(report)).errors).toEqual([]);
+    panel.review_by = "2020-01-01";
+    expect(parseVisualReport(JSON.stringify(report)).errors).toContain(
+      "panels[0].review_by: must be after authored_at",
+    );
+  });
+
+  it("asks nothing of a live panel that dates itself", () => {
+    const report = copy();
+    report.panels[0] = {
+      ...report.panels[0],
+      type: "live-cards",
+      data: { limit: 5 },
+      authored_at: report.generated_at,
+      source_ids: [],
+      provenance: "reported",
+    };
+    expect(parseVisualReport(JSON.stringify(report)).errors).toEqual([]);
   });
 });

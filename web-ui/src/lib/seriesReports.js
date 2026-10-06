@@ -1,4 +1,7 @@
 export const seriesPanelTypes = [
+  // A timeline is a series binding, not a query: an adapter publishes the
+  // events and the panel shows them one by one rather than binned.
+  "live-timeline",
   "chart",
   "metric",
   "metric-strip",
@@ -6,6 +9,16 @@ export const seriesPanelTypes = [
   "metric-chart",
   "evidence-table",
 ];
+const SERIES_RANGE = /^([1-9][0-9]{0,5})(s|m|h|d)$/;
+const RANGE_UNITS = { s: 1, m: 60, h: 3600, d: 86400 };
+
+/** A bounded series duration in seconds, or `null`. Mirrors `SeriesRange`. */
+export function seriesRangeSeconds(value) {
+  const match = typeof value === "string" && value.match(SERIES_RANGE);
+  if (!match) return null;
+  const seconds = Number(match[1]) * RANGE_UNITS[match[2]];
+  return seconds > 3650 * 86400 ? null : seconds;
+}
 const name = /^[a-z][a-z0-9_.-]{0,79}$/;
 export function validateSeriesBinding(panel) {
   const errors = [];
@@ -22,15 +35,18 @@ export function validateSeriesBinding(panel) {
     errors.push("source contains unsupported fields");
   if (typeof source.series !== "string" || !name.test(source.series))
     errors.push("source must name a series");
-  if (source.range !== undefined) {
-    const m =
-      typeof source.range === "string" &&
-      source.range.match(/^([1-9][0-9]{0,5})(s|m|h|d)$/);
-    if (
-      !m ||
-      Number(m[1]) * { s: 1, m: 60, h: 3600, d: 86400 }[m[2]] > 3650 * 86400
-    )
-      errors.push("range must be a bounded duration");
+  const range = seriesRangeSeconds(source.range);
+  if (source.range !== undefined && range === null)
+    errors.push("range must be a bounded duration");
+  if (panel.type === "live-timeline") {
+    // A timeline keeps every observation, so it is bounded by range alone and
+    // has nothing to aggregate.
+    if (source.agg !== undefined)
+      errors.push(
+        "live-timeline preserves observations and does not accept aggregation",
+      );
+    if (range !== null && range > 90 * 86400)
+      errors.push("live-timeline range must not exceed 90d");
   }
   if (
     source.agg !== undefined &&
@@ -60,6 +76,10 @@ export function validateSeriesBinding(panel) {
     errors.push(
       "bound panels use empty data and timestamped fallback snapshots",
     );
+  // A timeline has no authored snapshot to fall back to: a hand-written list
+  // of events is the hand-maintained status this panel type exists to replace.
+  if (panel.type === "live-timeline" && panel.fallback !== undefined)
+    errors.push("live-timeline does not accept a static fallback");
   return errors;
 }
 

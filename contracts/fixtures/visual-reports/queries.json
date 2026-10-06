@@ -222,5 +222,83 @@
  {"name":"integral exponent limit", "type":"live-activity", "data":{"limit":1e1}, "valid":true},
  {"name":"integral decimal answer window", "type":"live-asks", "data":{"answered_within_hours":168.0}, "valid":true},
  {"name":"empty fleet health query", "type":"live-fleet-health", "data":{}, "valid":true},
- {"name":"fleet health query rejects workspace scope", "type":"live-fleet-health", "data":{"project_ref":"topic:launch"}, "valid":false}
+ {"name":"fleet health query rejects workspace scope", "type":"live-fleet-health", "data":{"project_ref":"topic:launch"}, "valid":false},
+  {
+    "name": "cards empty",
+    "type": "live-cards",
+    "data": {},
+    "valid": true
+  },
+  {
+    "name": "cards filters",
+    "type": "live-cards",
+    "data": {"label": "release", "role": "design", "status": "in_progress", "limit": 5, "sort": "updated"},
+    "valid": true
+  },
+  {
+    "name": "cards board scope",
+    "type": "live-cards",
+    "data": {"board_refs": ["board:launch"], "card_ref": "card:launch"},
+    "valid": true
+  },
+  {
+    "name": "cards label at 128 bytes",
+    "type": "live-cards",
+    "data": {"label": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+    "valid": true
+  },
+  {
+    "name": "cards label over 128 bytes",
+    "type": "live-cards",
+    "data": {"label": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+    "valid": false
+  },
+  {
+    "name": "cards label 128 bytes of accents",
+    "type": "live-cards",
+    "data": {"label": "\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc"},
+    "valid": true
+  },
+  {
+    "name": "cards label 140 bytes of accents",
+    "type": "live-cards",
+    "data": {"label": "\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc\u00fc"},
+    "valid": false
+  },
+  {
+    "name": "cards label blank",
+    "type": "live-cards",
+    "data": {"label": "   "},
+    "valid": false
+  },
+  {
+    "name": "cards role blank",
+    "type": "live-cards",
+    "data": {"role": ""},
+    "valid": false
+  },
+  {
+    "name": "cards status not a string",
+    "type": "live-cards",
+    "data": {"status": 7},
+    "valid": false
+  },
+  {
+    "name": "cards unsupported field",
+    "type": "live-cards",
+    "data": {"group_by": "phase"},
+    "valid": false
+  },
+  {
+    "name": "cards sort invalid",
+    "type": "live-cards",
+    "data": {"sort": "age"},
+    "valid": false
+  },
+  {
+    "name": "cards limit out of range",
+    "type": "live-cards",
+    "data": {"limit": 101},
+    "valid": false
+  }
 ]

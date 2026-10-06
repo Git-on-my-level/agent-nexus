@@ -27,60 +27,6 @@
     },
     {
       "data": {
-        "buckets": [
-          {
-            "count": 1,
-            "key": "in_progress",
-            "label": "In progress"
-          }
-        ],
-        "group_by": "phase",
-        "total": 1
-      },
-      "id": "work-mix",
-      "observed_at": "2026-10-05T00:00:00Z",
-      "status": "ok",
-      "truncated": false,
-      "type": "live-work-mix"
-    },
-    {
-      "data": {
-        "option": {
-          "series": [
-            {
-              "data": [
-                [
-                  1791158400000,
-                  3
-                ]
-              ],
-              "name": "github-prs initiative=launch status=merged",
-              "type": "line"
-            }
-          ],
-          "xAxis": {
-            "type": "time"
-          },
-          "yAxis": {
-            "name": "PRs",
-            "type": "value"
-          }
-        }
-      },
-      "id": "throughput",
-      "observed_at": "2026-10-05T00:00:00Z",
-      "provenance": {
-        "adapter": "github",
-        "host": "collector",
-        "last_push": "2026-10-05T00:00:00Z",
-        "resolution": "raw"
-      },
-      "status": "ok",
-      "truncated": false,
-      "type": "chart"
-    },
-    {
-      "data": {
         "items": [
           {
             "summary": "Launch checklist updated",
@@ -93,6 +39,16 @@
       "status": "ok",
       "truncated": false,
       "type": "live-activity"
+    },
+    {
+      "id": "asks",
+      "type": "live-asks",
+      "status": "ok",
+      "observed_at": "2026-10-05T00:00:00Z",
+      "truncated": false,
+      "data": {
+        "items": []
+      }
     }
   ],
   "report": {
@@ -118,37 +74,16 @@
       {
         "author": "Agent Nexus template",
         "data": {
-          "group_by": "phase",
-          "project_ref": "topic:launch"
+          "limit": 8
         },
         "freshness": "unknown",
-        "id": "work-mix",
+        "id": "asks",
         "observed_at": null,
         "project_id": "workspace",
         "provenance": "reported",
         "source_ids": [],
-        "title": "Work by phase",
-        "type": "live-work-mix"
-      },
-      {
-        "author": "Agent Nexus template",
-        "data": {},
-        "freshness": "unknown",
-        "id": "throughput",
-        "observed_at": null,
-        "project_id": "workspace",
-        "provenance": "reported",
-        "source": {
-          "agg": "sum",
-          "labels": {
-            "status": "merged"
-          },
-          "range": "84d",
-          "series": "github-prs"
-        },
-        "source_ids": [],
-        "title": "Merged PR throughput",
-        "type": "chart"
+        "title": "Open asks",
+        "type": "live-asks"
       },
       {
         "author": "Agent Nexus template",

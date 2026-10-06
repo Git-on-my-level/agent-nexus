@@ -5,7 +5,7 @@ description: Help an explicitly designated existing agent discover permitted con
 
 # ANX project coordination
 
-Skill contract: anx.pm.v3. Load anx-participant alongside this skill. Installing this file neither designates a PM nor proves that a session loaded it.
+Skill contract: anx.pm.v4. Load anx-participant alongside this skill. Installing this file neither designates a PM nor proves that a session loaded it.
 
 ## Designation and boundaries
 
@@ -37,3 +37,18 @@ Reconcile native Nexus commitments and externally authoritative tasks without re
 - Ask only for decisions genuinely owned by the human (direction, money, risk or irreversible choices), recommend one answer, offer at most 2–3 alternatives and batch related decisions. Do not also block a card with the human as `next_actor` for the same question; that duplicates the Inbox item. Keep `next_actor` on the agent and use the response event as evidence when advancing or resolving the card.
 - Keep updates tied to explicit task/project refs with evidence and next steps. Avoid repeated unchanged notices, hidden claiming or task-state writes from reads.
 - Prefer fresh-context handoffs with objective, decisions, evidence, remaining work, authority boundaries and uncertainty. Cite prior sessions only as supported recovery clues. Do not promise universal resume/history access.
+
+## Live-first reports
+
+Start dashboards with `anx report init`: the default contains only live asks,
+initiatives and activity. Use `live-cards` for filtered work and `live-timeline`
+for adapter-fed series observations. Prefer computed panels and source syncing;
+never hand-maintain milestone timelines, state tables or status callouts. If an
+important fact cannot be shown live, file the missing sync work.
+
+Hand-write only unavoidable narrative. Every authored panel must identify its
+`author` principal and carry `authored_at` plus `review_by` (UTC date, zoned
+timestamp, or duration such as `7d` relative to `authored_at`). Validate before
+publishing. Status-like authored panels warn with a live alternative; expired
+explicit deadlines are rejected on writes. Legacy panels default to seven days,
+and pinned dashboard review reminders remain scoped to the author.

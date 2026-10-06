@@ -54,7 +54,7 @@ func init() {
 			Composition: "Pure local helper. Start with a template, add narrative, then preview before sharing.",
 			Examples:    []string{"anx report init --template workspace-overview > dashboard.json", "anx report init --template initiative --card card:launch > initiative.json"},
 			Flags: []localHelperFlag{
-				{Name: "--template <name>", Description: "One of workspace-overview, initiative, weekly-review, release-readiness, incident-review, fleet-health."},
+				{Name: "--template <name>", Description: "Defaults to workspace-overview. One of workspace-overview, initiative, weekly-review, release-readiness, incident-review, fleet-health."},
 				{Name: "--topic <ref>", Description: "Scope project-based live queries to a topic."},
 				{Name: "--card <ref>", Description: "Scope a card-centered template to an initiative card."},
 			},
@@ -119,9 +119,9 @@ func reportSchema() map[string]any {
 			"projects": []any{map[string]any{"id": "project-a", "title": "Project A", "summary": "No operational evidence has been collected.", "outcome": "Qualification unknown"}},
 			"sources":  []any{},
 			"panels": []any{map[string]any{
-				"id": "qualification", "project_id": "project-a", "type": "explanation", "title": "Evidence still needed",
+				"id": "asks", "project_id": "project-a", "type": "live-asks", "title": "Open asks",
 				"author": "unknown", "provenance": "reported", "observed_at": nil, "freshness": "unavailable", "source_ids": []any{},
-				"data": map[string]any{"text": "No observation is available. This does not establish health or completion."},
+				"data": map[string]any{"limit": 8},
 			}},
 		},
 	}
@@ -216,7 +216,7 @@ func (a *App) runReportValidate(args []string) (*commandResult, error) {
 		return nil, err
 	}
 	report, _ := result.Report.(map[string]any)
-	return &commandResult{Text: fmt.Sprintf("Visual report is valid (%d panels).", len(asSlice(report["panels"]))), Data: map[string]any{"recognized": true, "valid": true, "errors": []string{}, "panel_count": len(asSlice(report["panels"]))}}, nil
+	return &commandResult{Warnings: reportContentWarning(content), Text: fmt.Sprintf("Visual report is valid (%d panels).", len(asSlice(report["panels"]))), Data: map[string]any{"recognized": true, "valid": true, "errors": []string{}, "panel_count": len(asSlice(report["panels"]))}}, nil
 }
 
 func visualReportContentError(content any) error {
@@ -255,6 +255,8 @@ func reportContentWarning(content any) []output.Warning {
 	}
 	var bytes []byte
 	switch value := content.(type) {
+	case []byte:
+		bytes = value
 	case string:
 		bytes = []byte(value)
 	default:
@@ -265,8 +267,15 @@ func reportContentWarning(content any) []output.Warning {
 		}
 	}
 	result := visualreport.Validate(bytes)
-	if !result.Recognized || result.Valid {
+	if !result.Recognized {
 		return nil
+	}
+	if result.Valid {
+		warnings := []output.Warning{}
+		for _, message := range visualreport.Warnings(bytes) {
+			warnings = append(warnings, output.Warning{Code: "authored_status_panel", Message: message})
+		}
+		return warnings
 	}
 	first := result.Errors
 	if len(first) > 3 {

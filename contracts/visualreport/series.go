@@ -30,14 +30,16 @@ func SeriesRange(raw string) (time.Duration, error) {
 	}
 	n, _ := strconv.Atoi(m[1])
 	units := map[string]time.Duration{"s": time.Second, "m": time.Minute, "h": time.Hour, "d": 24 * time.Hour}
-	d := time.Duration(n) * units[m[2]]
-	if d > 3650*24*time.Hour {
+	unit := units[m[2]]
+	// Bound the integer before multiplication: overflowing time.Duration can
+	// otherwise turn a huge positive range into a short or negative duration.
+	if time.Duration(n) > (3650*24*time.Hour)/unit {
 		return 0, fmt.Errorf("range exceeds 3650d")
 	}
-	return d, nil
+	return time.Duration(n) * unit, nil
 }
 func (v *validator) seriesBinding(panel map[string]any, path string, panelSources map[string]bool, reference func(any, string, map[string]bool)) {
-	supported := map[string]bool{"chart": true, "metric": true, "metric-strip": true, "table": true, "metric-chart": true, "evidence-table": true}
+	supported := map[string]bool{"live-timeline": true, "chart": true, "metric": true, "metric-strip": true, "table": true, "metric-chart": true, "evidence-table": true}
 	if !supported[fmt.Sprint(panel["type"])] {
 		v.add(path+".source", "only charts, metrics, metric-strips and tables bind series")
 	}
@@ -50,6 +52,16 @@ func (v *validator) seriesBinding(panel map[string]any, path string, panelSource
 			s, ok := raw.(string)
 			if _, err := SeriesRange(s); !ok || err != nil {
 				v.add(path+".source.range", "must be a bounded duration")
+			}
+		}
+		if panel["type"] == "live-timeline" {
+			if _, exists := source["agg"]; exists {
+				v.add(path+".source.agg", "live-timeline preserves observations and does not accept aggregation")
+			}
+			if raw, exists := source["range"].(string); exists {
+				if d, err := SeriesRange(raw); err == nil && d > 90*24*time.Hour {
+					v.add(path+".source.range", "live-timeline range must not exceed 90d")
+				}
 			}
 		}
 		if raw, exists := source["agg"]; exists {
@@ -73,6 +85,10 @@ func (v *validator) seriesBinding(panel map[string]any, path string, panelSource
 		v.add(path+".data", "bound panels use an empty data object; put snapshots in fallback")
 	}
 	if raw, exists := panel["fallback"]; exists {
+		if panel["type"] == "live-timeline" {
+			v.add(path+".fallback", "live-timeline does not accept a static fallback")
+			return
+		}
 		f, ok := object(raw, path+".fallback", []string{"as_of", "data"}, nil, v.add)
 		if ok {
 			v.timestamp(f["as_of"], path+".fallback.as_of", false)

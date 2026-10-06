@@ -76,7 +76,7 @@ func TestReportTemplatesValidateAndKeepQueriesBounded(t *testing.T) {
 			if liveCount == 0 {
 				t.Fatal("template has no live query")
 			}
-			if (template.name == "workspace-overview") != (seriesCount == 1) {
+			if seriesCount != 0 {
 				t.Fatalf("%s has %d declared series panels, want throughput only on workspace-overview", template.name, seriesCount)
 			}
 			if template.name == "fleet-health" && (len(panels) != 1 || panels[0]["type"] != "live-fleet-health") {
@@ -152,5 +152,36 @@ func TestReportInitRequiresCardForInitiativeTemplate(t *testing.T) {
 	parsed, err := parseReportInitArgs([]string{"--template", "initiative", "--card", "card:launch", "--topic", "topic:release"})
 	if err != nil || parsed.card != "card:launch" || parsed.topic != "topic:release" {
 		t.Fatalf("parsed=%#v err=%v", parsed, err)
+	}
+}
+
+func TestReportInitDefaultsToLiveOnlyDashboard(t *testing.T) {
+	initialized := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "report", "init"}))
+	report := asMap(asMap(initialized["result"])["report"])
+	panels := asSlice(report["panels"])
+	if len(panels) != 3 {
+		t.Fatalf("default panels: %#v", panels)
+	}
+	seen := map[string]bool{}
+	for _, raw := range panels {
+		panel := asMap(raw)
+		seen[anyStringValue(panel["type"])] = true
+	}
+	for _, kind := range []string{"live-asks", "live-initiatives", "live-activity"} {
+		if !seen[kind] {
+			t.Fatalf("missing %s", kind)
+		}
+	}
+	for _, template := range reportTemplates {
+		result, err := (&App{}).runReportInit([]string{"--template", template.name, "--card", "card:launch"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, raw := range asSlice(asMap(result.Data)["report"].(map[string]any)["panels"]) {
+			panel := asMap(raw)
+			if !visualreport.IsLive(anyStringValue(panel["type"])) && panel["source"] == nil {
+				t.Fatalf("authored template panel: %#v", panel)
+			}
+		}
 	}
 }

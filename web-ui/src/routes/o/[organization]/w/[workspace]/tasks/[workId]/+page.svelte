@@ -28,6 +28,7 @@
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import PanelToggle from "$lib/components/layout/PanelToggle.svelte";
   import PlanView from "$lib/components/PlanView.svelte";
+  import ProvenanceChip from "$lib/components/ProvenanceChip.svelte";
   import EvidenceHandoff from "$lib/components/participation/EvidenceHandoff.svelte";
   import TaskParticipation from "$lib/components/participation/TaskParticipation.svelte";
   import {
@@ -57,6 +58,7 @@
     planHealthModel,
     planStatusMismatch,
   } from "$lib/planHealth.js";
+  import { authoredProvenance, liveProvenance } from "$lib/reportProvenance.js";
   import {
     panelAutoCollapsed,
     panelCollapsed,
@@ -87,7 +89,17 @@
     plan = $state(null),
     planState = $state(null),
     planRefs = $state(new Map()),
+    /**
+     * When this page last read the computed plan.
+     *
+     * Core recomputes progress, health and the critical path on every read, so
+     * the plan is live data — and the honest age to show a reader is the age of
+     * the read, which only the client knows.
+     */
+    planReadAt = $state(""),
     planError = $state("");
+  /** Ticks so a relative age on screen does not go quietly out of date. */
+  let now = $state(Date.now());
   let requestId = 0;
   let refPreview = $state();
 
@@ -160,6 +172,7 @@
     plan = null;
     planState = null;
     planRefs = new Map();
+    planReadAt = "";
     planError = "";
     let steps = [];
     try {
@@ -169,6 +182,7 @@
       if (steps.length) {
         plan = result.plan;
         planState = result.plan_state ?? null;
+        planReadAt = new Date().toISOString();
       }
     } catch {
       // A card without a plan is the common case, not a failure worth shouting
@@ -267,6 +281,7 @@
     plan = null;
     planState = null;
     planRefs = new Map();
+    planReadAt = "";
     planError = "";
     const results = await Promise.allSettled([
       coreClient.getWork(id),
@@ -422,10 +437,14 @@
         error = errorMessage(err);
         loading = false;
       });
+    const clock = window.setInterval(() => {
+      now = Date.now();
+    }, 60_000);
     return () => {
       disposed = true;
       requestId++;
       stopLive();
+      window.clearInterval(clock);
     };
   });
 </script>
@@ -495,7 +514,16 @@
           <section data-initiative-plan>
             <div class="flex flex-wrap items-baseline justify-between gap-2">
               <h2 class="ui-label">Plan</h2>
-              <span class="flex items-center gap-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <!-- Computed on every read, not maintained by hand. Saying so
+                     here is what distinguishes it from the card body below. -->
+                <ProvenanceChip
+                  model={liveProvenance(
+                    planReadAt,
+                    { status: planReadAt ? "ok" : "loading" },
+                    now,
+                  )}
+                />
                 <HealthBadge health={planHealth} variant="pill" />
                 {#if planProgress}
                   <span class="text-micro text-fg-muted" data-plan-progress
@@ -505,7 +533,7 @@
                 {#if planState?.last_movement_at}
                   <AgeBadge at={planState.last_movement_at} verb="moved" />
                 {/if}
-              </span>
+              </div>
             </div>
             {#if statusMismatch}
               <!-- A note, not an alert: a card and its plan can legitimately
@@ -897,7 +925,21 @@
         </section>
         {#if plan && work.summary}
           <section data-initiative-body>
-            <h2 class="ui-label">Card body</h2>
+            <div class="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 class="ui-label">Card body</h2>
+              <!--
+                Hand-written prose, next to a plan that is computed.
+                
+                No date and no review deadline. `work.updated_at` is the card's
+                concurrency token — a phase move or a plan write bumps it
+                without anyone touching this prose — so dating the body with it
+                would claim a rewrite that never happened. And a card body is
+                narrative: amber a week later would be noise, not news.
+              -->
+              <ProvenanceChip
+                model={authoredProvenance({ reviewable: false })}
+              />
+            </div>
             <MarkdownRenderer
               source={work.summary}
               class="mt-2 text-meta text-fg [overflow-wrap:anywhere]"

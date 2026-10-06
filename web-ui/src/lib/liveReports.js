@@ -6,9 +6,43 @@ export const LIVE_REPORT_TYPES = Object.freeze([
   "live-work-mix",
   "live-activity",
   "live-fleet-health",
+  "live-cards",
+  // Bound to a series rather than a query: its data comes from `source`, so it
+  // is here for the panel-type list and never reaches `validateLiveQuery`.
+  "live-timeline",
 ]);
+
+/** The live types that carry a query. `live-timeline` binds a series instead. */
+export const LIVE_QUERY_TYPES = Object.freeze(
+  LIVE_REPORT_TYPES.filter((type) => type !== "live-timeline"),
+);
+/**
+ * Whether this panel is computed at read time.
+ *
+ * Prefix rather than list membership, deliberately: `LIVE_REPORT_TYPES` is the
+ * validation gate and only core can widen it, so a type this build has never
+ * heard of cannot reach a renderer anyway. But the moment core does add one —
+ * `live-cards`, `live-timeline` — an older UI treats it as live data with a
+ * live provenance line instead of rendering an authored panel with no body.
+ */
 export const isLivePanel = (panel) =>
-  !!panel?.source || LIVE_REPORT_TYPES.includes(panel?.type);
+  !!panel?.source ||
+  (typeof panel?.type === "string" && panel.type.startsWith("live-"));
+
+const UTF8 = new TextEncoder();
+/** Byte length, the way a Go `len(string)` counts it. */
+const utf8Length = (value) => UTF8.encode(value).length;
+
+/**
+ * `strings.TrimSpace`, not `String.prototype.trim`.
+ *
+ * The two sets disagree at both ends — Go trims U+0085 and JS does not, JS
+ * trims U+FEFF and Go does not — which is enough to make one side call a
+ * filter empty while the other reads it as a value.
+ */
+const GO_SPACE =
+  /^[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+|[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$/g;
+const goTrimSpace = (value) => value.replace(GO_SPACE, "");
 
 /** Query validation mirrors the canonical LiveReportQuery contract. */
 export function validateLiveQuery(type, data) {
@@ -18,6 +52,16 @@ export function validateLiveQuery(type, data) {
       "board_refs",
       "project_ref",
       "card_ref",
+      "limit",
+      "sort",
+    ],
+    "live-cards": [
+      "board_refs",
+      "project_ref",
+      "card_ref",
+      "label",
+      "role",
+      "status",
       "limit",
       "sort",
     ],
@@ -75,6 +119,19 @@ export function validateLiveQuery(type, data) {
     !["phase", "board"].includes(data.group_by)
   )
     errors.push("group_by must be phase or board");
+  // Exact-match card filters: a nonempty string of at most 128 bytes.
+  //
+  // Bytes, and Go's whitespace set, because core measures both that way. A
+  // label of seventy accented characters is 140 bytes: counting UTF-16 units
+  // here would call it valid and leave the write gate to reject it.
+  for (const key of ["label", "role", "status"])
+    if (
+      data[key] !== undefined &&
+      (typeof data[key] !== "string" ||
+        !goTrimSpace(data[key]) ||
+        utf8Length(data[key]) > 128)
+    )
+      errors.push("invalid card filter");
   if (
     data.include_answered !== undefined &&
     typeof data.include_answered !== "boolean"

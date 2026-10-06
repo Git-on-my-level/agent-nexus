@@ -788,14 +788,17 @@ derived:
     description: >
       Human attention queue item derived from explicit human_attention_requested
       events, closed by human_attention_responded events, or withdrawn by its requester.
+      Pinned authored-report review reminders are derived without an attention event
+      and are visible only to their recipient with current subject access.
     fields:
       id: { type: string, required: true }
-      kind: { type: string, required: true, description: "Open classifier; v1 known values are ask, review, and escalate." }
+      kind: { type: string, required: true, description: "Open classifier; v1 known values are ask, review, escalate and report_review. report_review is an author-only deadline reminder." }
       response_proposals:
         type: "list<string>"
         required: true
         description: >
-          Ordered response suggestions from the requesting agent. Minimum 1 and maximum 6
+          Ordered response suggestions from the requesting agent. report_review returns
+          an empty list; attention request kinds require minimum 1 and maximum 6
           entries after trimming, dropping empty strings, and exact-string deduplication
           (first occurrence wins). Each entry is at most 240 Unicode characters. The first
           entry is the recommended response for operator UI.
@@ -806,6 +809,10 @@ derived:
       title: { type: string, required: true }
       body: { type: string, required: false }
       related_refs: { type: "list<typed_ref>", required: true }
+      recipient_actor_id: {type: string, required: false, description: Principal-specific visibility; current subject privacy still applies.}
+      panel_id: {type: string, required: false}
+      revision_ref: {type: typed_ref, required: false}
+      subtype: {type: string, required: false}
       requester_actor_id: { type: string, required: false }
       requester_agent_id: { type: string, required: false }
       requester_label: { type: string, required: false }
@@ -893,7 +900,7 @@ work_tracking:
   observation_status: [reported, verified, uncertain, error]
   refresh_error: [policy_denied, rate_limited, permission, unavailable, not_found, configuration, invalid_output, resource_limit, isolation_unavailable]
   remote_verification: reported
-  local_annotations: [project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions]
+  local_annotations: [labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions]
   invariants:
     - External workflow fields can only be projected from attributed observations.
     - Observation timestamps do not imply source activity or meaningful progress.
@@ -1031,7 +1038,7 @@ session_participation:
 # Additive presentation format carried in existing document revisions.
 visual_report_live_panels:
   schema_version: 1
-  types: [live-initiatives, live-asks, live-work-mix, live-activity, live-fleet-health]
+  types: [live-initiatives, live-asks, live-work-mix, live-activity, live-fleet-health, live-cards, live-timeline]
   query_schema: anx-openapi.yaml#/components/schemas/LiveReportQuery
   materialized_schema: anx-openapi.yaml#/components/schemas/LiveReportResponse
   rules:
@@ -1152,3 +1159,19 @@ access_requests:
     - The existing Inbox respond flow accepts approved or rejected for access requests; answered and acknowledged return 400 invalid_request without any response event or mutation.
     - Pending counts include requests and unexpired host enrollments awaiting completion (pending or approved).
     - Inbox correlation is server-owned in the persisted access-request row. Generic attention-event payload fields never authorize grants or choose their target.
+
+visual_report_review:
+  provenance_classes: [live, authored]
+  panel_fields:
+    authored_at: {type: timestamp, required: false}
+    review_by: {type: string, required: false, description: UTC date, zoned timestamp or positive s/m/h/d duration of at most 3650d from authored_at.}
+  rules:
+    - Live query panels and series bindings resolve as live; all other panels resolve as authored.
+    - New authored panels carry author, authored_at and review_by. authored_at requires review_by; legacy panels missing both remain valid.
+    - Legacy authored_at falls back to report.generated_at; missing review_by defaults to authored_at plus 7 days, exposed as review_by_defaulted.
+    - Explicit review_by must resolve after authored_at. Newly introduced or changed deadlines must not be in the past at document write time. Revisions may retain an expired deadline for the same panel, author and authored_at when its resolved deadline is unchanged.
+    - Status-like authored panels warn with a live alternative, without invalidating the report.
+    - Pinned-dashboard read checks create at most 32 review reminders, deduplicated durably per panel and revision; identity resolution is independent of reader-visible actor profiles, and recipients must have current subject access.
+    - report_review reminders are informational, with no reply, acknowledge or dismiss mutation; clients may open the dashboard. Revising or unpinning the dashboard hides obsolete reminders.
+    - live-cards filters bounded card candidates by board_refs, label, role and status; closed phases are included only for this panel type.
+    - live-timeline binds an existing state or numeric series through source; core never fetches external events.

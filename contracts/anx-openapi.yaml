@@ -615,7 +615,7 @@ paths:
                 $ref: '#/components/schemas/PMDecisionListResponse'
     post:
       operationId: pmDecisionsCreate
-      description: Proposals require live work; missing, trashed, or archived work returns 404 not_found after principal authorization. For work.annotate, instruction must be a nonempty JSON object containing only project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form <type>:<handle-or-id> (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values.
+      description: Proposals require live work; missing, trashed, or archived work returns 404 not_found after principal authorization. For work.annotate, instruction must be a nonempty JSON object containing only labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form <type>:<handle-or-id> (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Labels and roles accept arrays of at most 16 nonempty strings of at most 128 characters (or null to clear). Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values.
       summary: Propose a scoped PM decision
       tags:
       - pm
@@ -1425,7 +1425,7 @@ paths:
   /pm/turns/{turn_id}/decisions:
     post:
       operationId: pmTurnsDecisionsCreate
-      description: For work.annotate, instruction must be a nonempty JSON object containing only project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form <type>:<handle-or-id> (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values. Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.
+      description: For work.annotate, instruction must be a nonempty JSON object containing only labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form <type>:<handle-or-id> (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Labels and roles accept arrays of at most 16 nonempty strings of at most 128 characters (or null to clear). Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values. Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.
       summary: Record a selected PM agent proposal
       tags:
       - pm
@@ -2975,12 +2975,12 @@ paths:
       x-anx-why: Read the same live dashboard data shown to a workspace reader.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ document_ref, revision_ref, observed_at, panels }`; static panels are omitted."
+      x-anx-output-envelope: "Returns `{ document_ref, revision_ref, observed_at, panels }`; every panel includes resolved live/authored provenance and authored review metadata."
       x-anx-error-codes: [auth_required, invalid_token, forbidden, not_found, invalid_request, unavailable]
       x-anx-concepts: [docs, cards, evidence]
       x-anx-stability: beta
       x-anx-agent-notes: >
-        Read-only. Both text and structured version 1 visual reports are supported.
+        Both text and structured version 1 visual reports are supported. Authored review metadata is returned for every static panel. Reading a pinned report checks deadlines and durably deduplicates author-only inbox reminders per panel and revision.
         Each live or series-bound panel is independently materialized with status ok, stale or unavailable,
         observation time, data and an explicit truncated flag. Never infer zero work
         from an unavailable or truncated panel. Queries are bounded to 2000 source
@@ -8053,14 +8053,20 @@ components:
             $ref: '#/components/schemas/LiveReportPanel'
     LiveReportPanel:
       type: object
-      required: [id, type, status, observed_at, truncated, data]
+      required: [id, type, status, observed_at, truncated, data, provenance_class]
       properties:
         id: {type: string}
-        type: {type: string, enum: [live-initiatives, live-asks, live-work-mix, live-activity, live-fleet-health, chart, metric, metric-strip, table, metric-chart, evidence-table]}
+        type: {type: string, enum: [live-initiatives, live-asks, live-work-mix, live-activity, live-fleet-health, live-cards, live-timeline, explanation, milestone-timeline, dependency-diagram, artifact-preview, callout, comparison, chart, metric, metric-strip, table, metric-chart, evidence-table]}
         status: {type: string, enum: [ok, stale, unavailable]}
         observed_at: {type: string, format: date-time, nullable: true}
         truncated: {type: boolean}
         message: {type: string}
+        provenance_class: {type: string, enum: [live, authored], description: Computed from the panel type and source binding, never claimed by the report author.}
+        author: {type: string, description: Authored panel author from the report definition.}
+        authored_at: {type: string, format: date-time}
+        review_by: {type: string, format: date-time, description: Resolved review deadline; dates mean midnight UTC and durations are relative to authored_at.}
+        review_by_defaulted: {type: boolean, description: True when a legacy authored panel uses the seven-day default.}
+        review_due: {type: boolean}
         stale_since: {type: string, description: When the selected series became stale; empty when never observed.}
         fresh_until: {type: string, format: date-time, description: Earliest freshness deadline of the selected label sets.}
         provenance:
@@ -8097,7 +8103,7 @@ components:
         limit. live-fleet-health accepts an empty query and reads declared fleet.*
         series plus native host and authorized enrollment inventory. card_ref filters initiative rows and asks to one visible card.
         answered_only returns answered asks only and implies include_answered.
-        No other field is allowed for that panel type.
+        live-cards allows board_refs, project_ref, card_ref, label, role, status, limit and sort (priority, updated, title). Its items use the initiative card shape without plan enrichment. live-timeline uses a series source binding with a range of at most 90d and no agg or fallback; it returns individual items (at, label, value), newest first, capped at 100. Authored panels are also returned with review metadata and their static data. No other field is allowed for that panel type.
       properties:
         board_refs:
           type: array
@@ -8112,6 +8118,9 @@ components:
         answered_within_hours: {type: integer, minimum: 1, maximum: 720, default: 168}
         sort: {type: string, enum: [priority, updated, title], default: priority}
         group_by: {type: string, enum: [phase, board], default: phase}
+        label: {type: string, maxLength: 128, description: Exact match in work labels.}
+        role: {type: string, maxLength: 128, description: Exact match in work roles.}
+        status: {type: string, maxLength: 128, description: Exact card phase.}
     HumanInviteCreateRequest:
       type: object
       additionalProperties: false
@@ -9617,6 +9626,8 @@ components:
           type: string
         summary:
           type: string
+        labels: {type: array, maxItems: 16, items: {type: string, minLength: 1, maxLength: 128}}
+        roles: {type: array, maxItems: 16, items: {type: string, maxLength: 128}}
         owner:
           type: string
         created_at:
@@ -9730,6 +9741,8 @@ components:
           type: string
           description: Optional board to place the card on (`board:<handle-or-id>`). When omitted, the server uses the
             workspace's oldest active board, creating a default Tasks board if none exists.
+        labels: {type: array, maxItems: 16, nullable: true, items: {type: string, minLength: 1, maxLength: 128}}
+        roles: {type: array, maxItems: 16, nullable: true, items: {type: string, maxLength: 128}}
         title:
           type: string
         summary:
@@ -9780,6 +9793,8 @@ components:
           type: object
           additionalProperties: true
           properties:
+            labels: {type: array, maxItems: 16, nullable: true, items: {type: string, minLength: 1, maxLength: 128}}
+            roles: {type: array, maxItems: 16, nullable: true, items: {type: string, minLength: 1, maxLength: 128}}
             project_ref: *id002
             priority: *id003
             next_actor: *id004
@@ -10464,14 +10479,14 @@ components:
         id: { type: string }
         kind:
           type: string
-          description: Open classifier; v1 known values are ask, review, and escalate.
+          description: Open classifier; v1 known values are ask, review, escalate and report_review. report_review is a nonactionable author-only deadline reminder.
         response_proposals:
           type: array
           description: >
             Ordered agent-provided response suggestions; index 0 is the recommended response
-            (highlighted in the respond UI). Min 1, max 6 strings of max length 240 after
+            (highlighted in the respond UI). Attention requests require 1–6 suggestions; report_review returns an empty list. Strings have max length 240 after
             server normalization (trim, drop empty, exact dedupe).
-          minItems: 1
+          minItems: 0
           maxItems: 6
           items:
             type: string
@@ -10487,6 +10502,10 @@ components:
         related_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
+        recipient_actor_id: {type: string, description: When present this inbox item is visible only to that principal and current subject access still applies.}
+        panel_id: {type: string}
+        revision_ref: {type: string}
+        subtype: {type: string}
         requester_actor_id: { type: string }
         requester_agent_id: { type: string }
         requester_label: { type: string }

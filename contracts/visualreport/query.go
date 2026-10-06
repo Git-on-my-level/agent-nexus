@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -26,6 +27,9 @@ type Query struct {
 	CardRef             string   `json:"card_ref,omitempty"`
 	Limit               int      `json:"limit,omitempty"`
 	Sort                string   `json:"sort,omitempty"`
+	Label               string   `json:"label,omitempty"`
+	Role                string   `json:"role,omitempty"`
+	Status              string   `json:"status,omitempty"`
 	GroupBy             string   `json:"group_by,omitempty"`
 	IncludeAnswered     bool     `json:"include_answered,omitempty"`
 	AnsweredOnly        bool     `json:"answered_only,omitempty"`
@@ -33,11 +37,16 @@ type Query struct {
 }
 
 type Panel struct {
-	ID       string          `json:"id"`
-	Type     string          `json:"type"`
-	Query    Query           `json:"data"`
-	Source   *SeriesSource   `json:"source,omitempty"`
-	Fallback *SeriesFallback `json:"fallback,omitempty"`
+	ID                string          `json:"id"`
+	Type              string          `json:"type"`
+	Author            string          `json:"author"`
+	AuthoredAt        string          `json:"authored_at,omitempty"`
+	ReviewBy          string          `json:"review_by,omitempty"`
+	ReviewByDefaulted bool            `json:"review_by_defaulted,omitempty"`
+	StaticData        map[string]any  `json:"-"`
+	Query             Query           `json:"data"`
+	Source            *SeriesSource   `json:"source,omitempty"`
+	Fallback          *SeriesFallback `json:"fallback,omitempty"`
 }
 
 var identifier = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$`)
@@ -47,13 +56,26 @@ var cardRef = regexp.MustCompile(`^card:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 func IsLive(kind string) bool {
 	switch kind {
-	case "live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health":
+	case "live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "live-cards", "live-timeline":
 		return true
 	}
 	return false
 }
 
 func Parse(content any) ([]Panel, error) {
+	panels, err := ParseAll(content)
+	out := []Panel{}
+	for _, panel := range panels {
+		if IsLive(panel.Type) || panel.Source != nil {
+			out = append(out, panel)
+		}
+	}
+	return out, err
+}
+
+// ParseAll includes authored panels so readers receive resolved provenance for
+// the complete report, rather than inferring freshness from missing results.
+func ParseAll(content any) ([]Panel, error) {
 	var raw []byte
 	if text, ok := content.(string); ok {
 		raw = []byte(text)
@@ -69,7 +91,8 @@ func Parse(content any) ([]Panel, error) {
 		return nil, fmt.Errorf("invalid visual report: %s", strings.Join(result.Errors, "; "))
 	}
 	var report struct {
-		Panels []json.RawMessage `json:"panels"`
+		Panels      []json.RawMessage `json:"panels"`
+		GeneratedAt string            `json:"generated_at"`
 	}
 	if err := json.Unmarshal(raw, &report); err != nil {
 		return nil, err
@@ -78,11 +101,14 @@ func Parse(content any) ([]Panel, error) {
 	seen := map[string]bool{}
 	for _, rawPanel := range report.Panels {
 		var p struct {
-			ID       string          `json:"id"`
-			Type     string          `json:"type"`
-			Data     json.RawMessage `json:"data"`
-			Source   *SeriesSource   `json:"source"`
-			Fallback *SeriesFallback `json:"fallback"`
+			Author     string          `json:"author"`
+			AuthoredAt string          `json:"authored_at"`
+			ReviewBy   string          `json:"review_by"`
+			ID         string          `json:"id"`
+			Type       string          `json:"type"`
+			Data       json.RawMessage `json:"data"`
+			Source     *SeriesSource   `json:"source"`
+			Fallback   *SeriesFallback `json:"fallback"`
 		}
 		if json.Unmarshal(rawPanel, &p) != nil || !identifier.MatchString(p.ID) || seen[p.ID] {
 			return nil, fmt.Errorf("panel ids must be valid and unique")
@@ -93,6 +119,18 @@ func Parse(content any) ([]Panel, error) {
 			continue
 		}
 		if !IsLive(p.Type) {
+			authored := p.AuthoredAt
+			if authored == "" {
+				authored = report.GeneratedAt
+			}
+			base, _ := time.Parse(time.RFC3339Nano, authored)
+			deadline := base.Add(7 * 24 * time.Hour)
+			if p.ReviewBy != "" {
+				deadline, _ = ReviewDeadline(p.ReviewBy, base)
+			}
+			var data map[string]any
+			_ = json.Unmarshal(p.Data, &data)
+			out = append(out, Panel{ID: p.ID, Type: p.Type, Author: p.Author, AuthoredAt: authored, ReviewBy: deadline.UTC().Format(time.RFC3339Nano), ReviewByDefaulted: p.ReviewBy == "", StaticData: data})
 			continue
 		}
 		query, err := ParseQuery(p.Type, p.Data)
@@ -112,6 +150,8 @@ func ParseQuery(kind string, raw []byte) (Query, error) {
 	}
 	allowed := map[string]bool{}
 	switch kind {
+	case "live-cards":
+		allowed = map[string]bool{"board_refs": true, "project_ref": true, "card_ref": true, "label": true, "role": true, "status": true, "limit": true, "sort": true}
 	case "live-initiatives":
 		allowed = map[string]bool{"board_refs": true, "project_ref": true, "card_ref": true, "limit": true, "sort": true}
 	case "live-asks":
@@ -164,6 +204,11 @@ func ParseQuery(kind string, raw []byte) (Query, error) {
 	}
 	if _, present := fields["card_ref"]; present && !cardRef.MatchString(q.CardRef) {
 		return q, fmt.Errorf("card_ref must be a card ref")
+	}
+	for key, value := range map[string]string{"label": q.Label, "role": q.Role, "status": q.Status} {
+		if _, present := fields[key]; present && (strings.TrimSpace(value) == "" || len(value) > 128) {
+			return q, fmt.Errorf("invalid card filter")
+		}
 	}
 	if q.AnsweredOnly {
 		q.IncludeAnswered = true

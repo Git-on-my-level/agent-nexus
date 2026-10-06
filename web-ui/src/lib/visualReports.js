@@ -1,7 +1,8 @@
-import { validateSeriesBinding } from "./seriesReports.js";
+import { seriesRangeSeconds, validateSeriesBinding } from "./seriesReports.js";
 import { validateReportLayout } from "./visualReportLayout.js";
 import { validateReportChart } from "./visualReportCharts.js";
 import {
+  LIVE_QUERY_TYPES,
   LIVE_REPORT_TYPES,
   isLivePanel,
   validateLiveQuery,
@@ -125,6 +126,101 @@ export function safeReportUrl(value) {
   }
 }
 
+const RFC3339 =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:Z|([+-])(\d{2}):(\d{2}))$/;
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+/**
+ * An RFC 3339 instant in epoch nanoseconds, or `null`.
+ *
+ * Deliberately not the shared `TIMESTAMP` check, which is the *document's*
+ * timestamp rule. A review deadline goes through Go's `time.Parse` instead,
+ * which is laxer in ways that matter here: core writes resolved deadlines back
+ * with nanosecond precision, and an offset hour of 24 is legal. Rejecting
+ * either would take a whole stored report down to its text fallback over a
+ * field core had already accepted.
+ *
+ * Nanoseconds because `review.go` compares `time.Time`: a deadline half a
+ * millisecond after the writing is after it, and `Date.parse` cannot see that.
+ */
+function rfc3339Nanos(value) {
+  const m = typeof value === "string" && value.match(RFC3339);
+  if (!m) return null;
+  const [, y, mo, d, h, mi, sec, frac, sign, oh, om] = m;
+  const year = Number(y);
+  const month = Number(mo);
+  const day = Number(d);
+  const hour = Number(h);
+  const minute = Number(mi);
+  const second = Number(sec);
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const days = month === 2 && leap ? 29 : DAYS_IN_MONTH[month - 1];
+  if (
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > days ||
+    hour > 23 ||
+    minute > 59 ||
+    second > 59
+  )
+    return null;
+  // Go's reader accepts an offset hour up to 24 and a minute up to 60,
+  // rejecting 25 and 99. The arithmetic below handles minute 60 as an hour.
+  const offsetHour = sign ? Number(oh) : 0;
+  const offsetMinute = sign ? Number(om) : 0;
+  if (offsetHour > 24 || offsetMinute > 60) return null;
+  // Not `Date.UTC(year, …)`: that maps years 0 to 99 to 1900 + year, which
+  // would read `0051-01-01` as 1951 and call a deadline in year 51 valid
+  // against a panel written in 1950.
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  date.setUTCHours(hour, minute, second, 0);
+  const ms = date.getTime();
+  if (!Number.isFinite(ms)) return null;
+  const offsetMs =
+    (sign === "-" ? 1 : -1) * (offsetHour * 3600 + offsetMinute * 60) * 1000;
+  // Go truncates beyond nanoseconds rather than rounding.
+  const nanos = BigInt(((frac ?? "") + "000000000").slice(0, 9));
+  return BigInt(ms + offsetMs) * 1000000n + nanos;
+}
+
+/**
+ * A review deadline in epoch nanoseconds, or `null` when it cannot be read.
+ *
+ * `2026-12-01` is midnight UTC on that date, an RFC 3339 instant is itself,
+ * and `7d` is that long after the panel was written. Resolution never uses the
+ * reader's clock, so two readers in different timezones see the same deadline.
+ *
+ * Keep in conformance with `ReviewDeadline` in
+ * `contracts/visualreport/review.go`.
+ */
+export function reviewDeadlineNanos(value, writtenNanos) {
+  if (typeof value !== "string" || !value) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value))
+    return rfc3339Nanos(`${value}T00:00:00Z`);
+  const instant = rfc3339Nanos(value);
+  if (instant !== null) return instant;
+  const seconds = seriesRangeSeconds(value);
+  if (seconds === null || writtenNanos === null || writtenNanos === undefined)
+    return null;
+  return writtenNanos + BigInt(seconds) * 1000000000n;
+}
+
+/** The same deadline in milliseconds, for a renderer that works in `Date`. */
+export function reviewDeadlineMillis(value, authoredAt) {
+  const authored = Number.isFinite(authoredAt)
+    ? BigInt(Math.trunc(authoredAt)) * 1000000n
+    : null;
+  const nanos = reviewDeadlineNanos(value, authored);
+  return nanos === null ? null : Number(nanos / 1000000n);
+}
+
+/** An authored instant in nanoseconds, for comparing against a deadline. */
+export function authoredNanos(value) {
+  return rfc3339Nanos(value);
+}
+
 /** Freshness describes observation age, never completion, availability, or health. */
 export function getPanelFreshness(panel, now = Date.now()) {
   if (!isRecord(panel)) return "unknown";
@@ -241,6 +337,46 @@ function validateReport(report) {
         `must be an ISO 8601 timestamp with a timezone${nullable ? " or null" : ""}`,
       );
   };
+  /**
+   * When an authored panel was written, and when someone promised to look at
+   * it again.
+   *
+   * Mirrors `contracts/visualreport/review.go`. A deadline is an instant, a
+   * calendar date (midnight UTC), or a bounded duration measured from the
+   * writing — `7d`, `168h` — so an author can say "a week from whenever this
+   * was written" without doing the arithmetic. Required once a panel dates
+   * itself, because an authored panel that says when it was written and not
+   * when to revisit it is the hand-maintained status this format is trying to
+   * stop producing.
+   */
+  const reviewDeadline = (panel, path, generatedAt) => {
+    if (Object.hasOwn(panel, "authored_at"))
+      timestamp(panel.authored_at, `${path}.authored_at`);
+    const live = LIVE_REPORT_TYPES.includes(panel.type) || panel.source;
+    if (!Object.hasOwn(panel, "review_by")) {
+      if (
+        !live &&
+        panel.authored_at !== undefined &&
+        panel.authored_at !== null
+      )
+        add(
+          `${path}.review_by`,
+          "is required for authored panels with authored_at",
+        );
+      return;
+    }
+    const written = authoredNanos(panel.authored_at ?? generatedAt);
+    const due = reviewDeadlineNanos(panel.review_by, written);
+    if (due === null) {
+      add(
+        `${path}.review_by`,
+        "must be a UTC date, zoned timestamp or positive bounded duration",
+      );
+      return;
+    }
+    if (written !== null && due <= written)
+      add(`${path}.review_by`, "must be after authored_at");
+  };
   const unique = (items, path) => {
     const ids = new Set();
     items.forEach((item, index) => {
@@ -350,7 +486,14 @@ function validateReport(report) {
           "source_ids",
           "data",
         ],
-        ["appearance", "density", "source", "fallback"],
+        [
+          "appearance",
+          "density",
+          "source",
+          "fallback",
+          "authored_at",
+          "review_by",
+        ],
       )
     )
       return;
@@ -366,6 +509,7 @@ function validateReport(report) {
       enumeration(panel.density, `${path}.density`, ["compact", "comfortable"]);
     string(panel.title, `${path}.title`);
     string(panel.author, `${path}.author`);
+    reviewDeadline(panel, path, report.generated_at);
     enumeration(panel.type, `${path}.type`, VISUAL_REPORT_TYPES);
     enumeration(panel.provenance, `${path}.provenance`, PROVENANCE);
     enumeration(panel.freshness, `${path}.freshness`, FRESHNESS);
@@ -388,7 +532,11 @@ function validateReport(report) {
     if (panel.source !== undefined) {
       for (const error of validateSeriesBinding(panel))
         add(`${path}.source`, error);
-      if (panel.fallback === undefined) return;
+      // A bound timeline has nothing else to check: it takes no fallback, and
+      // falling through would tell an author their bound panel "requires a
+      // series source" while pointing at the source it has.
+      if (panel.type === "live-timeline" || panel.fallback === undefined)
+        return;
       if (!record(panel.fallback, `${path}.fallback`, ["as_of", "data"]))
         return;
       timestamp(panel.fallback.as_of, `${path}.fallback.as_of`);
@@ -396,9 +544,15 @@ function validateReport(report) {
     } else if (panel.fallback !== undefined)
       add(`${path}.fallback`, "requires a series source");
     const dataPath = `${path}.data`;
-    if (LIVE_REPORT_TYPES.includes(panel.type)) {
+    if (LIVE_QUERY_TYPES.includes(panel.type)) {
       for (const error of validateLiveQuery(panel.type, data))
         add(dataPath, error);
+      return;
+    }
+    if (panel.type === "live-timeline") {
+      // Reached only when the panel has no `source`; a bound one is validated
+      // as a series binding above.
+      add(`${path}.source`, "live-timeline requires a series source");
       return;
     }
     switch (panel.type) {

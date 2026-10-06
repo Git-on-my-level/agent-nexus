@@ -15,7 +15,8 @@ import (
 )
 
 type DerivedInboxListFilter struct {
-	ThreadID string
+	RecipientActorID string
+	ThreadID         string
 }
 
 type DerivedInboxItem struct {
@@ -100,7 +101,7 @@ func (s *Store) ReplaceDerivedInboxItems(ctx context.Context, threadID string, i
 		}
 	}()
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM derived_inbox_items WHERE thread_id = ?`, threadID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM derived_inbox_items WHERE thread_id = ? AND COALESCE(json_extract(data_json,'$.subtype'),'') <> 'report_review_due'`, threadID); err != nil {
 		return fmt.Errorf("delete derived inbox items: %w", err)
 	}
 
@@ -167,8 +168,8 @@ func (s *Store) ListDerivedInboxItems(ctx context.Context, filter DerivedInboxLi
 
 	query := `SELECT id, thread_id, category, trigger_at, due_at, has_due_at, source_event_id, source_card_id, generated_at, data_json, source_hash
 		FROM derived_inbox_items`
-	args := make([]any, 0, 1)
-	clauses := make([]string, 0, 1)
+	args := []any{filter.RecipientActorID}
+	clauses := []string{"(COALESCE(json_extract(data_json,'$.recipient_actor_id'),'')='' OR json_extract(data_json,'$.recipient_actor_id')=?)", currentReportReviewSQL}
 	if threadID := strings.TrimSpace(filter.ThreadID); threadID != "" {
 		clauses = append(clauses, "thread_id = ?")
 		args = append(args, threadID)
@@ -221,7 +222,7 @@ func (s *Store) GetDerivedInboxItem(ctx context.Context, id string) (DerivedInbo
 	row := s.db.QueryRowContext(
 		ctx,
 		`SELECT id, thread_id, category, trigger_at, due_at, has_due_at, source_event_id, source_card_id, generated_at, data_json, source_hash
-		 FROM derived_inbox_items WHERE id = ?`,
+		 FROM derived_inbox_items WHERE id = ? AND `+currentReportReviewSQL,
 		strings.TrimSpace(id),
 	)
 	item, err := scanDerivedInboxItem(row)

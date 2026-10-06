@@ -116,10 +116,30 @@ const LOUD_SEVERITIES = new Map([
   ["high", { label: "High", tone: "warn" }],
 ]);
 
+/**
+ * A report review reminder: core telling an author that a hand-written panel
+ * has passed its review date.
+ *
+ * Nobody answers it. It carries no response proposals, and core drops it from
+ * every inbox read as soon as the report is revised, archived, trashed or
+ * unpinned — so refreshing the panel is what closes it, and there is nothing
+ * for a reply or an acknowledgement to do.
+ */
+export function inboxItemIsReminder(item) {
+  return String(item?.kind ?? "").toLowerCase() === "report_review";
+}
+
+/** Whether core has closed this item, however it was closed. */
+function inboxItemIsDone(item) {
+  if (String(item?.status ?? "").toLowerCase() === "completed") return true;
+  return Boolean(item?.completed_at || item?.responded_at);
+}
+
 export function inboxItemNeedsResponse(item) {
-  const status = String(item?.status ?? "").toLowerCase();
-  if (status === "completed") return false;
-  if (item?.completed_at || item?.responded_at) return false;
+  if (inboxItemIsDone(item)) return false;
+  // Offering Reply and Acknowledge on a reminder offered two buttons that
+  // fail: there is no requester waiting and nothing to acknowledge to.
+  if (inboxItemIsReminder(item)) return false;
   return true;
 }
 
@@ -175,6 +195,16 @@ export function classifyInboxRow(row, now = Date.now()) {
   }
   if (row.kind === "update") return "watching";
   if (row.kind === "inbox") {
+    // A reminder needs no response and still belongs in front of its author:
+    // the panel it names is theirs to refresh. Filing it under Handled would
+    // mean "we never looked at it".
+    //
+    // Core does not close these — a reminder simply stops being returned once
+    // the report is revised, archived, trashed or unpinned. The closed arm is
+    // there so a closed one would not sit in Needs you for ever if that
+    // changes.
+    if (inboxItemIsReminder(row.item))
+      return inboxItemIsDone(row.item) ? "handled" : "needs-you";
     return inboxItemNeedsResponse(row.item) ? "needs-you" : "handled";
   }
   return "handled";

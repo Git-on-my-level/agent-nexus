@@ -158,6 +158,18 @@ test("initiative page leads with the plan, and the card body follows", async ({
     page.locator(".plan-node [data-anx-ref='card:contracts']"),
   ).toContainText("Shared report contracts");
 
+  // Computed beside hand-written: the plan says it was read just now, and the
+  // prose below it says a person wrote it. Before this, a reader had no way to
+  // tell which of the two they were looking at.
+  await expect(planSection.locator("[data-anx-provenance]")).toHaveText(
+    /^Live · updated just now$/,
+  );
+  // No date on the body: `work.updated_at` is the card's concurrency token, so
+  // a phase move would otherwise claim the prose had just been rewritten.
+  await expect(
+    page.locator("[data-initiative-body] [data-anx-provenance]"),
+  ).toHaveText(/^Hand-written$/);
+
   // The card body is present, and below the plan.
   const order = await page
     .locator("[data-initiative-plan], [data-initiative-body]")

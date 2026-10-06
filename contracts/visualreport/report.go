@@ -26,7 +26,7 @@ const (
 var panelTypes = []string{
 	"explanation", "evidence-table", "milestone-timeline", "dependency-diagram",
 	"metric-chart", "artifact-preview", "chart", "metric-strip", "callout", "comparison",
-	"live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "metric", "table",
+	"live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "live-cards", "live-timeline", "metric", "table",
 }
 
 // PanelTypes returns the panel types accepted by the shared visual-report contract.
@@ -405,7 +405,7 @@ func (v *validator) report(r map[string]any) {
 	}
 	for i, raw := range panels {
 		p := fmt.Sprintf("panels[%d]", i)
-		item, ok := object(raw, p, []string{"id", "project_id", "type", "title", "author", "provenance", "observed_at", "freshness", "source_ids", "data"}, []string{"appearance", "density", "source", "fallback"}, v.add)
+		item, ok := object(raw, p, []string{"id", "project_id", "type", "title", "author", "provenance", "observed_at", "freshness", "source_ids", "data"}, []string{"appearance", "density", "source", "fallback", "authored_at", "review_by"}, v.add)
 		if !ok {
 			continue
 		}
@@ -420,6 +420,7 @@ func (v *validator) report(r map[string]any) {
 		}
 		v.text(item["title"], p+".title", 200, false)
 		v.text(item["author"], p+".author", 200, false)
+		v.review(item, p, root["generated_at"])
 		v.enum(item["type"], p+".type", panelTypes...)
 		v.enum(item["provenance"], p+".provenance", "reported", "verified", "illustrative")
 		v.enum(item["freshness"], p+".freshness", "current", "stale", "unknown", "unavailable")
@@ -455,11 +456,13 @@ func (v *validator) report(r map[string]any) {
 func (v *validator) panelData(panel map[string]any, path string, panelSources map[string]bool, reference func(any, string, map[string]bool)) {
 	data, dp := panel["data"], path+".data"
 	switch panel["type"] {
-	case "live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health":
+	case "live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "live-cards":
 		raw, _ := json.Marshal(data)
 		if _, err := ParseQuery(panel["type"].(string), raw); err != nil {
 			v.add(dp, err.Error())
 		}
+	case "live-timeline":
+		v.add(path+".source", "live-timeline requires a series source")
 	case "metric":
 		v.metric(data, dp)
 	case "chart":

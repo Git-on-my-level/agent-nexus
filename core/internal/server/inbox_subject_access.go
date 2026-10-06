@@ -12,8 +12,22 @@ import (
 // The canonical request scope checks all inherited references together. The
 // fallback supports alternate stores without a canonical database policy.
 func inboxItemAccessible(r *http.Request, opts handlerOptions, threadID string, item map[string]any) bool {
+	if recipient := anyString(item["recipient_actor_id"]); recipient != "" {
+		principal, ok := cachedAuthenticatedPrincipal(r)
+		if !ok || principal == nil || principal.ActorID != recipient {
+			return false
+		}
+	}
 	if check, ok := r.Context().Value(resourceAccessCheckKey{}).(func(context.Context, any) error); ok {
-		return check(r.Context(), []any{"thread:" + threadID, item}) == nil
+		if check(r.Context(), []any{"thread:" + threadID, item}) != nil {
+			return false
+		}
+		// Ordinary inbox rows already use the canonical policy. Reports retain
+		// their legacy backing-thread owner check without adding per-row queries
+		// to unrelated inbox streams.
+		if item != nil && anyString(item["kind"]) != "report_review" {
+			return true
+		}
 	}
 	if strings.TrimSpace(threadID) != "" && !inboxSubjectRefAccessible(r, opts, "thread:"+threadID) {
 		return false

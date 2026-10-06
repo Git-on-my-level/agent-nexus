@@ -15,6 +15,7 @@ external truth.
 2. Start with `anx report templates`, then generate a live report skeleton:
 
    ```sh
+   anx report init
    anx report init --template workspace-overview --topic topic:YOUR-TOPIC > report.json
    anx report init --template initiative --card card:YOUR-INITIATIVE > initiative.json
    ```
@@ -91,13 +92,13 @@ replaces freshness and observation time with the authorized materialization.
 The panel’s `project_id` groups presentation; use `data.project_ref` to scope a
 query to an actual workspace project (a topic).
 
-| Type               | Query fields                                                                      | Default                                                                                |
-| ------------------ | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `live-initiatives` | `board_refs`, `project_ref`, `card_ref`, `limit`, `sort`                          | All active boards; 10 rows; priority then newest update                                |
-| `live-asks`        | `limit`, `include_answered`, `answered_only`, `answered_within_hours`, `card_ref` | 10 oldest open asks; recent answers are optional, and `answered_only` returns answers only |
-| `live-work-mix`    | `board_refs`, `project_ref`, `card_ref`, `group_by`                               | Open work by phase; `group_by: "board"` also supported                                 |
-| `live-activity`    | `limit`                                                                           | 10 newest meaningful events, with same-actor board edits collapsed within five minutes |
-| `live-fleet-health` | none                                                                               | Declared `fleet.*` series and native host inventory; enrollment requests require human or auth-admin access |
+| Type                | Query fields                                                                      | Default                                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `live-initiatives`  | `board_refs`, `project_ref`, `card_ref`, `limit`, `sort`                          | All active boards; 10 rows; priority then newest update                                                     |
+| `live-asks`         | `limit`, `include_answered`, `answered_only`, `answered_within_hours`, `card_ref` | 10 oldest open asks; recent answers are optional, and `answered_only` returns answers only                  |
+| `live-work-mix`     | `board_refs`, `project_ref`, `card_ref`, `group_by`                               | Open work by phase; `group_by: "board"` also supported                                                      |
+| `live-activity`     | `limit`                                                                           | 10 newest meaningful events, with same-actor board edits collapsed within five minutes                      |
+| `live-fleet-health` | none                                                                              | Declared `fleet.*` series and native host inventory; enrollment requests require human or auth-admin access |
 
 Limits are 1–100 displayed rows, at most 16 unique `board:<handle>` refs, and
 1–720 hours for recent answers (168 by default). Sort is `priority`, `updated`,
@@ -108,8 +109,9 @@ code; no checklist means unknown progress, not zero completed work. The first
 nonempty prose line and every `Needs <human>:` line remain visible.
 
 The UI refreshes every 30 seconds while visible and immediately on returning to
-the tab. Every live panel shows **Live as of** with the actual read time. Failed
-refreshes remove previous successful values. Readers without access see an
+the tab. Every live panel's header shows **Live · updated 2m ago** with the
+actual read time, and the exact instant on hover. Failed refreshes remove
+previous successful values. Readers without access see an
 unavailable panel; other live panels and authored snapshots remain usable.
 Work materialization is bounded to 2,000 candidates per board/project scope;
 event and decision reads each have a 2,000-row source cap. A displayed-row
@@ -299,6 +301,80 @@ Row and milestone `source_ids` must also occur in their containing panel's
 `source_ids`, so every cited source is available in the panel's evidence inspector.
 Do not promote publication, installation, or a successful static check into a
 stronger claim about deployed behavior or operational qualification.
+
+### Provenance: live or authored
+
+Every panel resolves to one of two provenance classes, stated in its header so a
+reader can tell a computed panel from a hand-written one before reading it:
+
+- **live** — a live query panel (including `live-cards`) or a bound series
+  (including `live-timeline`). Its header reads
+  **Live · updated 2m ago**: the age of the read, not of the document. A read
+  that is still running says so; a read that failed says so instead of showing
+  the last age it had. A bound series whose publisher has missed its interval
+  turns amber.
+- **authored** — static content. Its header reads
+  **Written by \<principal\> · 3d ago**, and the panel body is a step quieter
+  than a live panel's.
+
+An authored panel carries a review deadline. Past it, the header reads
+**May be stale · written 9d ago** in amber, with an amber edge down the whole
+panel. `review_by` is a calendar date (midnight UTC), a zoned instant, or a
+duration measured from the writing (`7d`, `168h`), and a panel that does not
+declare one is reviewed seven days after `authored_at`, with the tooltip saying
+the deadline was defaulted. A panel with no writing time at all asks for no
+review: a deadline anchored to nothing would read as a fact.
+
+The rendered report is the authority on all of this. Core resolves each panel's
+class, its absolute `review_by` and whether it is `review_due` against its own
+clock — the same clock that decides when the author is reminded — so a reader
+whose clock is a day out never disagrees with a reminder that was already sent.
+The document's own fields are read directly only before the report has been
+rendered.
+
+Provenance is always conveyed in text. Colour repeats the words, never replaces
+them, so the signal survives greyscale and a colour-blind reader.
+
+An authored panel is also overdue the moment its document declares
+`freshness: "stale"`. That is the author warning a reader deliberately, and it
+is a stronger statement than a review date nobody has reached yet. Being merely
+older than the 24-hour evidence window is not: that drives the freshness filter,
+not this line.
+
+A bound series falling back to its authored snapshot is authored, not live: it
+is showing the document's own numbers with their original as-of time, and it is
+always overdue, because the binding did not answer. While the first read is
+still in flight the panel stays live rather than flipping class on every load. A
+series that has missed its expected publishing interval reads **May be stale ·
+last read 3d ago**.
+
+`panelProvenance(panel, freshness, now)` in `src/lib/reportProvenance.js` is the
+single place this is decided, and the Overview embed, the document report view
+and the initiative page all render it through `ProvenanceChip`. The class is read
+from `provenance_class` when the rendered report supplies it, and derived from
+the panel's shape otherwise, so a live type this build has never heard of still
+renders as live data rather than as an authored panel with no body.
+
+`src/lib/visualReports.js` validates `authored_at` and `review_by` against the
+same rules as `contracts/visualreport/report.go` and `review.go`, including the
+duration form and the "required once a panel dates itself" rule. A review
+deadline is parsed by its own RFC 3339 reader rather than the document
+timestamp rule, because `review.go` goes through Go's `time.Parse`: nanosecond
+precision and an offset hour of 24 are both legal there, and core writes
+resolved deadlines back with nanoseconds. The comparison against `authored_at`
+is made in nanoseconds for the same reason. Filter strings are measured in
+bytes and trimmed with Go's whitespace set, not JavaScript's.
+
+None of that is self-evident, so it is pinned:
+`scripts/check-visual-report-conformance.mjs` runs both validators over
+`contracts/fixtures/visual-reports/reports.json` and compares verdicts. Add a
+fixture there for every rule either side adds — a rule with no fixture is a
+rule the two sides are free to disagree about.
+
+Because core returns resolved provenance for authored panels too, the UI reads
+the rendered report once for **every** report, not only one with a live panel.
+Only live panels are polled afterwards: an authored panel's provenance does not
+change while it is on screen.
 
 ### Freshness and incomplete observations
 
@@ -588,3 +664,40 @@ The Overview uses compact rendering: report title and panels. Project filters,
 counts, freshness controls and provenance details are available through its
 **Open document** link. The reusable `LiveInitiatives.svelte` expects the shared
 `progress.done/total` and `needs[]` projection for the Overview initiatives section.
+
+## Live first and review deadlines
+
+Dashboards default to live asks, initiatives and activity. Use `live-cards` with
+`board_refs`, `label`, `role`, `status`, `limit` and `sort` to query work. Labels
+and roles are optional bounded work annotations set on create or annotate;
+status matches the card phase, including closed work. Query results remain
+permission-filtered and expose truncation when the candidate cap is reached.
+
+A `live-timeline` binds an adapter-fed series through `source` like other series
+panels, with `data: {}`. It returns the newest individual observations as
+`items: [{at, label, value}]`, capped at 100, with source freshness and provenance.
+Timeline range is limited to the existing 90-day raw retention. Core fetches no
+external URLs; adapters publish the underlying release or deployment events.
+
+Hand-write only unavoidable narrative. Set `author` to the owning principal's
+actor ID, `authored_at` to a zoned timestamp and `review_by` to a UTC date,
+zoned timestamp or positive duration such as `7d`. Dates mean midnight UTC;
+durations start at `authored_at`. Explicit expired deadlines are rejected when
+creating or revising documents, while expired saved reports remain readable.
+Existing panels missing the new fields remain valid: `authored_at` falls back to
+`generated_at`, and `review_by` defaults to seven days later. The response marks
+that default with `review_by_defaulted: true`.
+
+Report reads and previews return every panel with `provenance_class: live` or
+`authored`. Authored results include `author`, resolved `authored_at`, `review_by`
+and `review_due`. Existing evidence provenance retains its original meaning.
+Validation and document CLI writes warn for authored milestone timelines,
+state/status tables and status callouts, naming their live alternatives. If an
+important fact cannot be shown live, file sync work instead of a manual panel.
+
+Reading a pinned dashboard checks deadlines and durably deduplicates one inbox
+reminder per panel and revision. A known author actor receives it; legacy display
+names fall back to the revision's writer. The recipient must have current access
+to the subject and its containing resources. Reminders leave the visible inbox
+when the document is revised, unpinned, archived or trashed, while their dedupe
+receipts survive projection rebuilds. Preview never writes reminders.

@@ -913,6 +913,24 @@ function liveObservation() {
         },
       },
       {
+        id: "owned",
+        type: "live-cards",
+        data: {
+          items: [
+            {
+              ref: "card:onboarding-copy",
+              title: "Onboarding copy pass",
+              summary: "Rewrite the empty states.",
+              priority: "p2",
+              phase: "in_progress",
+              board_ref: "board:launch",
+              updated_at: OBSERVED_AT,
+              needs: [],
+            },
+          ],
+        },
+      },
+      {
         id: "activity",
         type: "live-activity",
         data: {
@@ -1002,7 +1020,17 @@ for (const viewport of [
     );
     await expect(report).toContainText("7 open tasks");
     await expect(report).toContainText("This note is an authored snapshot.");
-    await expect(report.getByText(/Live as of/)).toHaveCount(4);
+    // The read time is a header chip now, in relative time: every live panel
+    // says so where the reader looks before reading it.
+    await expect(report.locator("[data-anx-provenance='live']")).toHaveCount(5);
+    await expect(
+      report.locator("[data-anx-provenance='live']").first(),
+    ).toContainText("Live · updated just now");
+    await expect(report).not.toContainText("Live as of");
+    // And the authored note beside them says who wrote it, and when.
+    await expect(
+      report.locator("[data-anx-provenance^='authored']"),
+    ).toContainText("Written by");
     await expect(report).not.toContainText("No automatic source refresh");
     await expect(
       report.getByRole("progressbar", { name: "Launch readiness checklist" }),
@@ -1074,7 +1102,7 @@ test("live panels refresh without changing the saved report and fail safely", as
   await expect(report).toContainText("Partial view.");
   state.liveFailure = true;
   await page.clock.fastForward(31_000);
-  await expect(report.getByText(/Live data unavailable/)).toHaveCount(4);
+  await expect(report.getByText(/Live data unavailable/)).toHaveCount(5);
   await expect(report).not.toContainText("4/7");
   await expect(report).toContainText("This note is an authored snapshot.");
   expect(state.liveReads).toBeGreaterThanOrEqual(3);
@@ -1091,7 +1119,7 @@ test("live query data is withheld when the report head changed", async ({
   await expect(report).toContainText("3/7");
   state.live.revision_ref = "document_revision:dashboard-r2";
   await page.clock.fastForward(31_000);
-  await expect(report.getByText(/Live data unavailable/)).toHaveCount(4);
+  await expect(report.getByText(/Live data unavailable/)).toHaveCount(5);
   await expect(report).not.toContainText("3/7");
   expectReadOnly(state);
 });

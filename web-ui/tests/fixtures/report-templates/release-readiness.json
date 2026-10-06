@@ -87,21 +87,6 @@
         "source_ids": [],
         "title": "Open blockers and decisions",
         "type": "live-asks"
-      },
-      {
-        "author": "Agent Nexus template",
-        "data": {
-          "text": "Add the release outcome, evidence boundaries, and remaining human decisions.",
-          "tone": "info"
-        },
-        "freshness": "unknown",
-        "id": "release-notes",
-        "observed_at": null,
-        "project_id": "workspace",
-        "provenance": "reported",
-        "source_ids": [],
-        "title": "Release narrative",
-        "type": "callout"
       }
     ],
     "projects": [

@@ -65,20 +65,6 @@
       {
         "author": "Agent Nexus template",
         "data": {
-          "items": []
-        },
-        "freshness": "unknown",
-        "id": "timeline",
-        "observed_at": null,
-        "project_id": "workspace",
-        "provenance": "reported",
-        "source_ids": [],
-        "title": "Incident timeline",
-        "type": "milestone-timeline"
-      },
-      {
-        "author": "Agent Nexus template",
-        "data": {
           "limit": 12
         },
         "freshness": "unknown",

@@ -22,3 +22,5 @@ func IsLive(kind string) bool { return shared.IsLive(kind) }
 func ParseQuery(kind string, content []byte) (Query, error) {
 	return shared.ParseQuery(kind, content)
 }
+
+func Warnings(content []byte) []string { return shared.Warnings(content) }

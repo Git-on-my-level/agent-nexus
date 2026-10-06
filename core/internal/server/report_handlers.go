@@ -35,15 +35,20 @@ func handleRenderReport(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		}
 		return
 	}
-	if !requireAccessibleThreadID(w, r, opts, documentBackingThreadID(doc), "document") {
+	if !inboxItemAccessible(r, opts, documentBackingThreadID(doc), nil) {
+		denyPMNotFound(w, "document")
 		return
 	}
-	panels, err := reports.Parse(revision["content"])
+	panels, err := reports.ParseAll(revision["content"])
 	if err != nil {
 		writeError(w, 400, "invalid_request", err.Error())
 		return
 	}
 	observedAt, results := materializeReportPanels(r, opts, panels)
+	if err := checkReportReviews(r, opts, doc, revision, panels); err != nil {
+		writeError(w, 503, "unavailable", "report review reminders are unavailable")
+		return
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, 200, map[string]any{"document_ref": doc["ref"], "revision_ref": revision["ref"], "observed_at": observedAt, "panels": results})
 }
@@ -66,7 +71,7 @@ func handlePreviewReport(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		writeError(w, http.StatusBadRequest, "invalid_request", "report must be valid JSON")
 		return
 	}
-	panels, err := reports.Parse(content)
+	panels, err := reports.ParseAll(content)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
@@ -81,12 +86,19 @@ func materializeReportPanels(r *http.Request, opts handlerOptions, panels []repo
 	reader := reportReader{r: r, opts: opts, now: now, visibility: map[string]bool{}}
 	results := []map[string]any{}
 	for _, panel := range panels {
+		if !reports.IsLive(panel.Type) && panel.Source == nil {
+			due, _ := time.Parse(time.RFC3339Nano, panel.ReviewBy)
+			results = append(results, map[string]any{"id": panel.ID, "type": panel.Type, "status": "ok", "observed_at": panel.AuthoredAt, "truncated": false, "data": panel.StaticData, "provenance_class": "authored", "author": panel.Author, "authored_at": panel.AuthoredAt, "review_by": panel.ReviewBy, "review_by_defaulted": panel.ReviewByDefaulted, "review_due": !now.Before(due)})
+			continue
+		}
 		if panel.Source != nil {
-			results = append(results, reader.materializeSeries(panel))
+			result := reader.materializeSeries(panel)
+			result["provenance_class"] = "live"
+			results = append(results, result)
 			continue
 		}
 		data, truncated, err := reader.materialize(panel)
-		result := map[string]any{"id": panel.ID, "type": panel.Type, "status": "ok", "observed_at": now.Format(time.RFC3339Nano), "truncated": truncated, "data": data}
+		result := map[string]any{"id": panel.ID, "type": panel.Type, "status": "ok", "observed_at": now.Format(time.RFC3339Nano), "truncated": truncated, "data": data, "provenance_class": "live"}
 		if err != nil {
 			result["status"] = "unavailable"
 			result["data"] = map[string]any{}
@@ -168,7 +180,7 @@ func (reader *reportReader) loadWork(filter primitives.ReportWorkFilter) {
 				continue
 			}
 			phase := anyString(work["phase"])
-			if phase == "done" || phase == "cancelled" {
+			if !filter.IncludeClosed && (phase == "done" || phase == "cancelled") {
 				continue
 			}
 			reader.work = append(reader.work, work)
@@ -180,8 +192,8 @@ func (reader *reportReader) loadWork(filter primitives.ReportWorkFilter) {
 	reader.workScopes[key] = reportWorkRead{reader.work, reader.workPartial, reader.workErr}
 }
 
-func (reader *reportReader) scopedWork(q reports.Query) ([]map[string]any, error) {
-	filter := primitives.ReportWorkFilter{Limit: reports.MaxRows}
+func (reader *reportReader) scopedWork(q reports.Query, includeClosed bool) ([]map[string]any, error) {
+	filter := primitives.ReportWorkFilter{Limit: reports.MaxRows, IncludeClosed: includeClosed}
 	selected := map[string]bool{}
 	for _, ref := range q.BoardRefs {
 		resolved, err := reader.opts.primitiveStore.ResolveResourceRef(reader.r.Context(), primitives.ResourceRefInput{Type: "board", Ref: ref})
@@ -244,8 +256,8 @@ func (reader *reportReader) scopedWork(q reports.Query) ([]map[string]any, error
 func (reader *reportReader) materialize(panel reports.Panel) (map[string]any, bool, error) {
 	q := panel.Query
 	switch panel.Type {
-	case "live-initiatives", "live-work-mix":
-		work, err := reader.scopedWork(q)
+	case "live-initiatives", "live-work-mix", "live-cards":
+		work, err := reader.scopedWork(q, panel.Type == "live-cards")
 		if err != nil {
 			return nil, false, err
 		}
@@ -276,7 +288,23 @@ func (reader *reportReader) materialize(panel reports.Panel) (map[string]any, bo
 			}
 			return map[string]any{"group_by": q.GroupBy, "total": len(work), "buckets": buckets}, reader.workPartial, nil
 		}
-		if store, ok := reader.opts.primitiveStore.(planStore); ok {
+		if panel.Type == "live-cards" {
+			filtered := make([]map[string]any, 0, len(work))
+			for _, row := range work {
+				if q.Status != "" && anyString(row["phase"]) != q.Status {
+					continue
+				}
+				if q.Label != "" && !reportHasValue(row, q.Label, "labels") {
+					continue
+				}
+				if q.Role != "" && !reportHasValue(row, q.Role, "roles") {
+					continue
+				}
+				filtered = append(filtered, row)
+			}
+			work = filtered
+		}
+		if store, ok := reader.opts.primitiveStore.(planStore); ok && panel.Type == "live-initiatives" {
 			if err := store.EnrichCardPlans(reader.r.Context(), work, planVisibility(reader.r, reader.opts), reader.now, planStalledAfter()); err != nil {
 				return nil, false, err
 			}
@@ -656,4 +684,22 @@ func (reader *reportReader) readDecisionActivity() ([]map[string]any, bool, erro
 		}
 	}
 	return items, cursor != "", nil
+}
+
+func reportHasValue(row map[string]any, value string, keys ...string) bool {
+	for _, key := range keys {
+		for _, candidate := range stringSliceAny(row[key]) {
+			if candidate == value {
+				return true
+			}
+		}
+		if object, ok := row[key].(map[string]any); ok {
+			for _, candidate := range object {
+				if anyString(candidate) == value {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }

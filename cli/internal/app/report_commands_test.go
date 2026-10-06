@@ -26,7 +26,7 @@ func TestReportSchemaAndValidateAreLocalCommands(t *testing.T) {
 		t.Fatalf("unexpected schema kind %q", got)
 	}
 	panelTypes, panelTypesOK := asStringList(result["panel_types"])
-	if !panelTypesOK || len(panelTypes) != 17 || asMap(result["example"]) == nil {
+	if !panelTypesOK || len(panelTypes) != 19 || asMap(result["example"]) == nil {
 		t.Fatalf("schema omitted panel types or minimal example: %#v", result)
 	}
 	for _, liveType := range []string{"live-initiatives", "live-asks", "live-work-mix", "live-activity", "live-fleet-health", "metric", "table"} {
@@ -618,4 +618,42 @@ func TestDocsCreateValidatesVisualReportBeforeWrite(t *testing.T) {
 	if posts = 0; assertEnvelopeOK(t, create(minimalVisualReport)) == nil || posts != 1 {
 		t.Fatalf("valid create posts=%d", posts)
 	}
+}
+
+func TestReportStatusWarningsValidateCreateAndRevise(t *testing.T) {
+	var report map[string]any
+	if err := json.Unmarshal([]byte(minimalVisualReport), &report); err != nil {
+		t.Fatal(err)
+	}
+	panel := asMap(asSlice(report["panels"])[0])
+	panel["type"] = "evidence-table"
+	panel["data"] = map[string]any{"columns": []any{"Status"}, "rows": []any{}}
+	raw, _ := json.Marshal(report)
+	home := t.TempDir()
+	valid := assertEnvelopeOK(t, runCLIForTest(t, home, nil, strings.NewReader(string(raw)), []string{"--json", "report", "validate", "-"}))
+	assertWarning := func(payload map[string]any) {
+		t.Helper()
+		warnings := asSlice(payload["warnings"])
+		if len(warnings) != 1 || !strings.Contains(anyString(asMap(warnings[0])["message"]), "live-cards") {
+			t.Fatalf("missing live alternative: %#v", payload)
+		}
+	}
+	assertWarning(valid)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && (r.URL.Path == "/docs" || r.URL.Path == "/docs/doc_1/revisions"):
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"document":{"id":"doc_1"},"revision":{"revision_id":"rev_1"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	body, _ := json.Marshal(map[string]any{"document": map[string]any{"title": "Status"}, "content": string(raw), "content_type": "text"})
+	created := assertEnvelopeOK(t, runCLIForTest(t, home, nil, strings.NewReader(string(body)), []string{"--json", "--base-url", server.URL, "docs", "create"}))
+	assertWarning(created)
+	body, _ = json.Marshal(map[string]any{"content": string(raw), "content_type": "text", "if_base_revision": "rev_1", "actor_id": "actor_test"})
+	revised := assertEnvelopeOK(t, runCLIForTest(t, home, nil, strings.NewReader(string(body)), []string{"--json", "--base-url", server.URL, "docs", "revise", "doc_1", "--apply"}))
+	assertWarning(revised)
 }

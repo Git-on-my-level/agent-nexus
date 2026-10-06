@@ -5,7 +5,7 @@ description: Keep substantive Agent Nexus work visible with explicit task refs, 
 
 # ANX participant
 
-Skill contract: anx.participant.v13. Installation does not prove that a session loaded this version.
+Skill contract: anx.participant.v14. Installation does not prove that a session loaded this version.
 
 Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence.
 
@@ -68,3 +68,18 @@ Bind panels through `source: {series, labels?, range?, agg?}` and put any static
 fallback in `{as_of, data}`. Expose adapter, host, last push, stale state and the
 fallback's original as-of time. Source scripts and schedules live in
 `adapters/series/`; the full guide is `docs/live-series.md`.
+
+## Live-first reports
+
+Start dashboards with `anx report init`: the default contains only live asks,
+initiatives and activity. Use `live-cards` for filtered work and `live-timeline`
+for adapter-fed series observations. Prefer computed panels and source syncing;
+never hand-maintain milestone timelines, state tables or status callouts. If an
+important fact cannot be shown live, file the missing sync work.
+
+Hand-write only unavoidable narrative. Every authored panel must identify its
+`author` principal and carry `authored_at` plus `review_by` (UTC date, zoned
+timestamp, or duration such as `7d` relative to `authored_at`). Validate before
+publishing. Status-like authored panels warn with a live alternative; expired
+explicit deadlines are rejected on writes. Legacy panels default to seven days,
+and pinned dashboard review reminders remain scoped to the author.
