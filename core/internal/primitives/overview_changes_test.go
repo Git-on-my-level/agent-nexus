@@ -94,8 +94,10 @@ func TestOverviewDigestNetTransitionsVisibilityAndBounds(t *testing.T) {
 		t.Fatal(err)
 	}
 	queries := counter.Count()
-	if queries != 7 {
-		t.Fatalf("queries=%d want 7", queries)
+	// A nonempty closed page selects bounded IDs before hydration; an empty
+	// page skips that projection. The larger corpus below must not add reads.
+	if queries != 8 {
+		t.Fatalf("queries=%d want 8", queries)
 	}
 	got := map[string]int{}
 	for _, item := range d.Items {

@@ -631,6 +631,10 @@ func projectedWorkStringSQL(key, canonical string) string {
 }
 
 func reportWorkQuery(ctx context.Context, filter ReportWorkFilter) (string, []any) {
+	return reportWorkSQL(filter, false)
+}
+
+func reportWorkSQL(filter ReportWorkFilter, candidatesOnly bool) (string, []any) {
 	limit := filter.Limit
 	if limit < 1 || limit > 2000 {
 		limit = 2000
@@ -677,6 +681,7 @@ func reportWorkQuery(ctx context.Context, filter ReportWorkFilter) (string, []an
 	if !filter.IncludeClosed {
 		where += ` AND (` + projectedWorkStringSQL("phase", "c.column_key") + `) NOT IN ('done','cancelled')`
 	}
+	beforeClosedWhere := where
 	if filter.OverviewClosed != nil {
 		where += ` AND (` + projectedWorkStringSQL("phase", "c.column_key") + ` IN ('done','cancelled'))=?`
 		args = append(args, *filter.OverviewClosed)
@@ -717,6 +722,27 @@ func reportWorkQuery(ctx context.Context, filter ReportWorkFilter) (string, []an
 		placementColumns = `c.column_key,c.rank`
 	}
 	prefix := `WITH _work_candidates AS MATERIALIZED (SELECT c.id FROM ` + candidateFrom + ` WHERE ` + where + ordering + ` LIMIT ?) `
+	if filter.OverviewClosed != nil && *filter.OverviewClosed && filter.IncludeClosed && filter.WorkList == nil {
+		// Native closed work can seek by its canonical phase. External phases
+		// still use the full projection rule, but start from sparse metadata so
+		// an empty closed-history page does not scan every active native card.
+		native := func(phase string) string {
+			nativeFrom := strings.SplitN(candidateFrom, ` LEFT JOIN work_observations`, 2)[0]
+			return `SELECT c.id,anx_timestamp_key(c.updated_at) AS updated FROM ` + nativeFrom + ` WHERE ` + beforeClosedWhere + ` AND c.column_key='` + phase + `' AND anx_unicode_trim(COALESCE(m.authority,'nexus'))='nexus'` + ordering + ` LIMIT ?`
+		}
+		externalFrom := strings.Replace(candidateFrom, `cards c LEFT JOIN boards b ON b.id=c.board_id LEFT JOIN work_metadata m ON m.card_id=c.id`, `_external_work m CROSS JOIN cards c ON c.id=m.card_id LEFT JOIN boards b ON b.id=c.board_id`, 1)
+		externalFrom = strings.Replace(externalFrom, `work_metadata m INDEXED BY idx_work_metadata_project`, `_external_work m`, 1)
+		external := `SELECT c.id,anx_timestamp_key(c.updated_at) AS updated FROM ` + externalFrom + ` WHERE ` + where + ` AND anx_unicode_trim(COALESCE(m.authority,'nexus'))<>'nexus'` + ordering + ` LIMIT ?`
+		prefix = `WITH _external_work AS MATERIALIZED (SELECT * FROM work_metadata WHERE anx_unicode_trim(COALESCE(authority,'nexus'))<>'nexus'), _work_candidates AS MATERIALIZED (SELECT id FROM (SELECT * FROM (` + native("done") + `) UNION ALL SELECT * FROM (` + native("cancelled") + `) UNION ALL SELECT * FROM (` + external + `)) ORDER BY updated DESC,id DESC LIMIT ?) `
+		externalArgs := append([]any{}, args...)
+		// Native selectors replace the projected-phase boolean with an indexed
+		// canonical phase, so they do not bind the closed-phase parameter.
+		nativeArgs := append(append([]any{}, args[:len(args)-2]...), limit+1)
+		args = append(append(append(nativeArgs, nativeArgs...), externalArgs...), limit+1)
+	}
+	if candidatesOnly {
+		return prefix + `SELECT id FROM _work_candidates`, args
+	}
 	from = `_work_candidates selected CROSS JOIN ` + from
 	return prefix + `SELECT COALESCE(b.id,''),b.handle,c.id,c.handle,` + placementColumns + `,
 	 c.title,c.summary,c.version,c.head_revision_id,c.head_revision_number,c.thread_id,c.parent_thread_id,c.due_at,c.definition_of_done_json,
@@ -728,6 +754,45 @@ func reportWorkQuery(ctx context.Context, filter ReportWorkFilter) (string, []an
 }
 
 func (s *Store) ListReportWork(ctx context.Context, filter ReportWorkFilter) (ReportWorkPage, error) {
+	if filter.OverviewClosed != nil && *filter.OverviewClosed && filter.IncludeClosed && filter.WorkList == nil {
+		// Avoid preparing the wide projection (and its reference/identity
+		// predicates) for an empty closed-history page. The selector still
+		// applies canonical visibility and lifecycle before its bounded limit.
+		query, args := reportWorkSQL(filter, true)
+		rows, err := s.db.QueryContext(ctx, query, args...)
+		if err != nil {
+			return ReportWorkPage{}, err
+		}
+		ids := []string{}
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return ReportWorkPage{}, err
+			}
+			ids = append(ids, id)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return ReportWorkPage{}, err
+		}
+		if len(ids) == 0 {
+			return ReportWorkPage{Work: []map[string]any{}, Boards: map[string]ReportWorkBoard{}, PrivateOwners: map[string]string{}}, nil
+		}
+		limit := filter.Limit
+		if limit < 1 || limit > 2000 {
+			limit = 2000
+		}
+		truncated := len(ids) > limit
+		if truncated {
+			ids = ids[:limit]
+		}
+		filter.CardIDs, filter.OverviewClosed = ids, nil
+		page, err := s.ListReportWork(ctx, filter)
+		page.Truncated = page.Truncated || truncated
+		return page, err
+	}
 	query, args := reportWorkQuery(ctx, filter)
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -1570,7 +1635,7 @@ func WorkDecisionRevision(w map[string]any) string {
 
 // LiveWorkSnapshots batches PM projection enrichment, retaining scoped SQL.
 func (s *Store) LiveWorkSnapshots(ctx context.Context, refs []string) (map[string]map[string]any, error) {
-	return s.workSnapshots(ctx, refs, true)
+	return s.decisionWorkSnapshots(ctx, refs)
 }
 
 // ReportWorkSnapshots also excludes archived boards and project topics.
