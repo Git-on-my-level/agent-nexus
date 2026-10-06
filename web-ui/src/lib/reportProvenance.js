@@ -267,7 +267,10 @@ export function authoredProvenance(written = {}, now = Date.now()) {
   const dueForReview =
     written.stale === true ||
     written.reviewDue === true ||
-    (review.at !== null && now > review.at);
+    // Inclusive, as `review.go` is: `!now.Before(due)`. At the instant the
+    // deadline arrives the panel is due, and a strict comparison left the
+    // chip reading "authored" on exactly the tick the scheduler woke for.
+    (review.at !== null && now >= review.at);
   const written_by = author ? `Written by ${author}` : "Written";
   const lead = dueForReview
     ? age
@@ -281,13 +284,14 @@ export function authoredProvenance(written = {}, now = Date.now()) {
   // The lead split around the author, so a renderer can let a long principal
   // label truncate without taking "Written by" or the age with it:
   // `leadBefore + authorLabel + leadAfter === lead`, always.
-  const authorLabel = lead.includes(author) && author ? author : "";
-  const [leadBefore, leadAfter] = authorLabel
-    ? [
-        lead.slice(0, lead.indexOf(authorLabel)),
-        lead.slice(lead.indexOf(authorLabel) + authorLabel.length),
-      ]
-    : [lead, ""];
+  //
+  // Built from how the lead was assembled, never searched for: an author
+  // called "W" or "Written" matches inside the words around it, and the clamp
+  // would have landed on a slice of "Written by" instead of on the name.
+  const named = Boolean(author) && !dueForReview;
+  const leadBefore = named ? "Written by " : lead;
+  const authorLabel = named ? author : "";
+  const leadAfter = named ? lead.slice(leadBefore.length + author.length) : "";
   return {
     class: "authored",
     state: dueForReview ? "due-for-review" : "authored",
@@ -441,21 +445,57 @@ function authoredTitle(author, authoredAt, review, now) {
 }
 
 /**
- * The earliest review deadline among these panels that has not passed, or
- * `null`.
+ * How far ahead a deadline is still worth holding a timer for.
+ *
+ * Past this the page will have been reloaded long before the deadline, and
+ * re-arming a timer every six hours for a year buys nothing.
+ */
+const REVIEW_SCHEDULE_HORIZON_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Authored panels only, with whatever deadline they resolve to. */
+function* authoredDeadlines(panels, now) {
+  for (const panel of panels ?? []) {
+    if (panelProvenanceClass(panel) !== "authored") continue;
+    yield {
+      panel,
+      at: panelReviewDeadline(panel).at,
+      due: panelProvenance(panel, "", now).dueForReview,
+    };
+  }
+}
+
+/**
+ * The soonest review deadline still ahead of these panels, or `null`.
  *
  * A report is read once when it opens, and that read is what tells core an
  * author is due a reminder. With nothing live to poll, a dashboard left open
  * would never reach its own deadline: this is the instant worth reading again
- * at, and only that one — a second deadline is another read away.
+ * at. Panels this reader already shows as due are skipped — they need a read
+ * now, not a timer (see `reviewReadPending`).
  */
 export function nextReviewDeadline(panels, now = Date.now()) {
   let soonest = null;
-  for (const panel of panels ?? []) {
-    if (panelProvenanceClass(panel) !== "authored") continue;
-    const { at } = panelReviewDeadline(panel);
-    if (at === null || at <= now) continue;
+  for (const { at, due } of authoredDeadlines(panels, now)) {
+    if (at === null || at <= now || due) continue;
+    if (at - now > REVIEW_SCHEDULE_HORIZON_MS) continue;
     if (soonest === null || at < soonest) soonest = at;
   }
   return soonest;
+}
+
+/**
+ * Whether a panel has passed its deadline without core having said so.
+ *
+ * The reader's clock reaching the deadline turns the line amber on its own,
+ * but only a read tells core to remind the author — and core decides with its
+ * own clock, so a reader running fast can read early and be told "not yet".
+ * While that is true the report is worth reading again: this is what says so,
+ * and what stops saying so once core agrees.
+ */
+export function reviewReadPending(panels, now = Date.now()) {
+  for (const { panel, at, due } of authoredDeadlines(panels, now)) {
+    if (panel?.review_due === true) continue;
+    if (due || (at !== null && at <= now)) return true;
+  }
+  return false;
 }

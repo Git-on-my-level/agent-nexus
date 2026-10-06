@@ -46,7 +46,11 @@
     inboxShortcutList,
     otherDialogOpen,
   } from "$lib/inboxShortcuts.js";
-  import { decodeInboxItemId, inboxItemMailboxId } from "$lib/inboxUtils";
+  import {
+    INBOX_CATEGORY_LABELS,
+    decodeInboxItemId,
+    inboxItemMailboxId,
+  } from "$lib/inboxUtils";
   import { formatShortcut } from "$lib/keyboardHints.js";
   import { label as phaseLabel, sentenceCase } from "$lib/pm/presentation.js";
   import { buildPrimitiveRefRoutes, resolveRefLink } from "$lib/refLinkModel";
@@ -88,11 +92,9 @@
   let context = $state(null);
   let contextLoading = $state(false);
 
-  const KIND_LABELS = {
-    ask: "Ask",
-    review: "Review",
-    escalate: "Escalation",
-  };
+  // One map, shared with the Inbox pane: two copies meant the same item read
+  // "Review due" in the list and "REPORT_REVIEW" on its own page.
+  const KIND_LABELS = INBOX_CATEGORY_LABELS;
 
   let proposalStrings = $derived(
     Array.isArray(item?.response_proposals)
@@ -138,6 +140,16 @@
   );
   let isCompleted = $derived(String(item?.status ?? "").trim() === "completed");
   let isReminder = $derived(inboxItemIsReminder(item));
+  /**
+   * The dashboard a reminder is about.
+   *
+   * Read from `subject_ref` on the item rather than from the loaded
+   * `subject`, which arrives on a later request: a reminder always names its
+   * document, and the one action it offers should not wait on a round trip.
+   */
+  let reminderHref = $derived(
+    isReminder ? subjectHref(inboxItemSubject(item, {})) : "",
+  );
   let workspaceHref = $derived(
     bindWorkspaceHref(organizationSlug, workspaceSlug),
   );
@@ -701,9 +713,14 @@
                 : 'ui-badge--warn'}">{sentenceCase(item.severity)}</span
             >
           {/if}
-          <span class="min-w-0 [overflow-wrap:anywhere]">
-            from <InboxActorName name={requesterName()} id={requesterId()} />
-          </span>
+          {#if !isReminder}
+            <!-- A reminder has no requester. `InboxActorName` renders the word
+                 "someone" for an empty one, which asserted a person who is not
+                 waiting on anything. -->
+            <span class="min-w-0 [overflow-wrap:anywhere]">
+              from <InboxActorName name={requesterName()} id={requesterId()} />
+            </span>
+          {/if}
         </div>
         <!--
           Subjects are written by the asking agent and routinely carry a bare
@@ -817,9 +834,11 @@
             This closes itself when the panel is refreshed or converted to a
             live one. There is nothing to answer.
           </p>
-          {#if subjectHref(subject)}
-            <Button variant="primary" size="compact" href={subjectHref(subject)}
-              >Open dashboard</Button
+          {#if reminderHref}
+            <!-- A real link, as the Inbox pane renders it: this is navigation,
+                 and it should open in a new tab like any other. -->
+            <a class="ui-btn-primary inline-flex" href={reminderHref}
+              >Open dashboard</a
             >
           {/if}
         </div>

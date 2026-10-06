@@ -129,10 +129,14 @@ export function inboxItemIsReminder(item) {
   return String(item?.kind ?? "").toLowerCase() === "report_review";
 }
 
+/** Whether core has closed this item, however it was closed. */
+function inboxItemIsDone(item) {
+  if (String(item?.status ?? "").toLowerCase() === "completed") return true;
+  return Boolean(item?.completed_at || item?.responded_at);
+}
+
 export function inboxItemNeedsResponse(item) {
-  const status = String(item?.status ?? "").toLowerCase();
-  if (status === "completed") return false;
-  if (item?.completed_at || item?.responded_at) return false;
+  if (inboxItemIsDone(item)) return false;
   // Offering Reply and Acknowledge on a reminder offered two buttons that
   // fail: there is no requester waiting and nothing to acknowledge to.
   if (inboxItemIsReminder(item)) return false;
@@ -194,10 +198,13 @@ export function classifyInboxRow(row, now = Date.now()) {
     // A reminder needs no response and still belongs in front of its author:
     // the panel it names is theirs to refresh. Filing it under Handled would
     // mean "we never looked at it".
+    //
+    // Core does not close these — a reminder simply stops being returned once
+    // the report is revised, archived, trashed or unpinned. The closed arm is
+    // there so a closed one would not sit in Needs you for ever if that
+    // changes.
     if (inboxItemIsReminder(row.item))
-      return row.item?.completed_at || row.item?.responded_at
-        ? "handled"
-        : "needs-you";
+      return inboxItemIsDone(row.item) ? "handled" : "needs-you";
     return inboxItemNeedsResponse(row.item) ? "needs-you" : "handled";
   }
   return "handled";

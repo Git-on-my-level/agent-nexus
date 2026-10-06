@@ -525,14 +525,21 @@ test("a review reminder offers the dashboard, not a reply it cannot send", async
 }) => {
   test.setTimeout(120_000);
   await installDashboard(page);
-  await page.route("**/inbox*", (route) => {
-    if (!["fetch", "xhr"].includes(route.request().resourceType()))
+  await page.route("**/inbox**", (route) => {
+    const request = route.request();
+    if (!["fetch", "xhr"].includes(request.resourceType()))
       return route.fallback();
-    return route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ items: [REMINDER], total: 1 }),
-    });
+    const path = decodeURIComponent(new URL(request.url()).pathname);
+    const json = (body) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(body),
+      });
+    // The list projection, and the single item the detail page reads.
+    if (/\/inbox$/.test(path)) return json({ items: [REMINDER], total: 1 });
+    if (/\/inbox\//.test(path)) return json({ item: REMINDER });
+    return route.fallback();
   });
   await page.goto(`${WORKSPACE}/inbox`);
 
@@ -556,6 +563,25 @@ test("a review reminder offers the dashboard, not a reply it cannot send", async
   await expect(page.getByRole("button", { name: "Acknowledge" })).toHaveCount(
     0,
   );
+  await expect(page.getByLabel("Your response")).toHaveCount(0);
+
+  // And no phantom requester: nobody is waiting on a reminder, and an empty
+  // actor used to render as the word "someone".
+  await expect(page.getByText("from someone")).toHaveCount(0);
+  await expect(page.getByText("REVIEW DUE").first()).toBeVisible();
+
+  // The item page is still one click away, and says the same things there.
+  await reminder.getByRole("link", { name: "Open item" }).click();
+  const detail = page.getByTestId("inbox-reminder-detail");
+  await expect(detail).toBeVisible();
+  await expect(detail).toContainText("There is nothing to answer");
+  await expect(
+    detail.getByRole("link", { name: "Open dashboard" }),
+  ).toHaveAttribute("href", new RegExp(`/docs/${DOC_ID}$`));
+  // The shared label, not the raw kind, and still no requester or composer.
+  await expect(page.getByText("REVIEW DUE").first()).toBeVisible();
+  await expect(page.getByText("REPORT_REVIEW")).toHaveCount(0);
+  await expect(page.getByText("from someone")).toHaveCount(0);
   await expect(page.getByLabel("Your response")).toHaveCount(0);
 });
 

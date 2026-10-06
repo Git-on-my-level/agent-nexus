@@ -1334,7 +1334,10 @@
                           data-inbox-blocked-for>{wait.text}</span
                         >{:else}is waiting on you{/if}</span
                     >
-                  {:else}
+                  {:else if !reminder}
+                    <!-- A reminder has no requester. `InboxActorName` renders
+                         the word "someone" for an empty one, which asserted a
+                         person who is not waiting on anything. -->
                     <span class="min-w-0 [overflow-wrap:anywhere]"
                       >from <InboxActorName
                         name={selected.requester?.name}
@@ -1410,13 +1413,23 @@
                       This closes itself when the panel is refreshed or
                       converted to a live one. There is nothing to answer.
                     </p>
-                    {#if subjectHref(selected.subject)}
+                    <div class="flex flex-wrap gap-2">
+                      {#if subjectHref(selected.subject)}
+                        <a
+                          class="ui-btn-primary"
+                          href={subjectHref(selected.subject)}
+                          data-inbox-shortcut="open">Open dashboard</a
+                        >
+                      {/if}
+                      <!-- Every other branch offers this; without it the item
+                           page is reachable only by typing its URL. -->
                       <a
-                        class="ui-btn-primary inline-flex"
-                        href={subjectHref(selected.subject)}
-                        data-inbox-shortcut="open">Open dashboard</a
+                        class="ui-btn-secondary"
+                        href={workspaceHref(
+                          `/inbox/${encodeURIComponent(selected.item.id)}`,
+                        )}>Open item</a
                       >
-                    {/if}
+                    </div>
                   </div>
                 {:else}
                   <div

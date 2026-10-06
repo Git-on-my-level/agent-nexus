@@ -8,6 +8,7 @@ import {
   panelProvenance,
   nextReviewDeadline,
   panelProvenanceClass,
+  reviewReadPending,
   panelReviewDeadline,
   relativeAge,
   withRenderedProvenance,
@@ -333,6 +334,95 @@ describe("authored panels", () => {
 });
 
 describe("the line a renderer draws", () => {
+  it("splits again around the author, so only the name can be clamped", () => {
+    // A long principal label has to truncate without taking "Written by" or
+    // the age with it. Built from how the lead was assembled, never searched
+    // for: an author called "W" or "Written" matches inside the words around
+    // it, and the clamp would land on a slice of "Written by".
+    for (const author of ["claude", "W", "Written", "Written by", "", "  "]) {
+      const model = panelProvenance(
+        authored({ author, authored_at: ago(3 * DAY), review_by: "30d" }),
+        "current",
+        NOW,
+      );
+      expect(model.leadBefore + model.authorLabel + model.leadAfter).toBe(
+        model.lead,
+      );
+      if (author.trim())
+        expect([model.leadBefore, model.authorLabel]).toEqual([
+          "Written by ",
+          author.trim(),
+        ]);
+    }
+    // Every state carries the three parts, including the live ones and the
+    // overdue line, which names no principal.
+    for (const model of [
+      panelProvenance(live(), "current", NOW),
+      panelProvenance(authored({ authored_at: ago(9 * DAY) }), "stale", NOW),
+      liveProvenance(null, { status: "loading" }, NOW),
+      liveProvenance(null, { status: "unavailable" }, NOW),
+      authoredProvenance({}, NOW),
+    ])
+      expect(model.leadBefore + model.authorLabel + model.leadAfter).toBe(
+        model.lead,
+      );
+  });
+
+  it("calls a panel due at the instant its deadline arrives", () => {
+    // `review.go` compares with `!now.Before(due)`. A strict comparison here
+    // left the chip reading "authored" on exactly the tick the scheduler woke
+    // for, which is the one tick it exists to catch.
+    const panel = authored({ authored_at: ago(2 * DAY), review_by: "2d" });
+    const at = panelReviewDeadline(panel).at;
+    expect(panelProvenance(panel, "current", at).state).toBe("due-for-review");
+    expect(panelProvenance(panel, "current", at - 1).state).toBe("authored");
+  });
+
+  it("schedules nothing for a panel it already shows as due", () => {
+    // `nextReviewDeadline` and `panelProvenance` have to agree, or a dashboard
+    // arms a timer for a panel that has been amber since it loaded.
+    const confirmed = authored({
+      authored_at: ago(DAY),
+      review_by: "30d",
+      review_due: true,
+    });
+    const declared = authored({
+      authored_at: ago(DAY),
+      review_by: "30d",
+      freshness: "stale",
+    });
+    for (const panel of [confirmed, declared]) {
+      expect(panelProvenance(panel, "stale", NOW).state).toBe("due-for-review");
+      expect(nextReviewDeadline([panel], NOW)).toBeNull();
+      expect(reviewReadPending([panel], NOW)).toBe(panel === declared);
+    }
+    // And nothing at all for a deadline past the horizon a tab survives.
+    expect(
+      nextReviewDeadline(
+        [authored({ authored_at: ago(DAY), review_by: "9999-12-31" })],
+        NOW,
+      ),
+    ).toBeNull();
+  });
+
+  it("keeps asking until core agrees a deadline passed", () => {
+    // Only a read tells core to remind the author, and core decides with its
+    // own clock: a reader running fast can read early and be told "not yet".
+    const passed = authored({ authored_at: ago(9 * DAY), review_by: "7d" });
+    expect(reviewReadPending([passed], NOW)).toBe(true);
+    expect(reviewReadPending([{ ...passed, review_due: true }], NOW)).toBe(
+      false,
+    );
+    // A live panel is nobody's deadline, and neither is a future one.
+    expect(reviewReadPending([live()], NOW)).toBe(false);
+    expect(
+      reviewReadPending(
+        [authored({ authored_at: ago(DAY), review_by: "30d" })],
+        NOW,
+      ),
+    ).toBe(false);
+  });
+
   it("splits exactly where the <time> element starts", () => {
     for (const model of [
       panelProvenance(live(), "current", NOW),

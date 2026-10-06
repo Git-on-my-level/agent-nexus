@@ -1,11 +1,12 @@
 <script>
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { coreClient } from "$lib/coreClient";
   import { isLivePanel, withLiveObservation } from "$lib/liveReports.js";
   import {
     nextReviewDeadline,
+    reviewReadPending,
     withRenderedProvenance,
     withReportDefaults,
   } from "$lib/reportProvenance.js";
@@ -211,6 +212,11 @@
     let disposed = false;
     let inFlight = false;
     let reviewTimer = 0;
+    // A read that should have told core about a deadline, and did not. Bounded
+    // so a document that has gone for good stops being asked about.
+    let reviewAttempts = 0;
+    const REVIEW_ATTEMPTS = 5;
+    const REVIEW_RETRY_MS = 60_000;
     async function refresh() {
       if (inFlight || disposed) return;
       inFlight = true;
@@ -233,20 +239,21 @@
             });
         }
       } catch {
-        // Only live panels lose their data. An authored panel that core could
-        // not be asked about keeps the document's own provenance rather than
-        // being told its hand-written content is unavailable.
-        results = new Map(
-          livePanels.map((panel) => [
-            panel.id,
-            {
-              status: "unavailable",
-              message:
-                "Live data unavailable. Reload the document or check your access.",
-              data: {},
-            },
-          ]),
-        );
+        // Only live panels lose anything. An authored panel keeps whatever the
+        // last good read resolved — the absolute deadline, whether it was
+        // defaulted, the principal core corrected the author to — because a
+        // failed request is not news about a hand-written panel, and starting
+        // over from the document would quietly contradict what core said.
+        // Untracked: a document id that is missing throws before the first
+        // await, so this runs inside the effect that writes the same state.
+        results = new Map(untrack(() => liveObservations));
+        for (const panel of livePanels)
+          results.set(panel.id, {
+            status: "unavailable",
+            message:
+              "Live data unavailable. Reload the document or check your access.",
+            data: {},
+          });
       }
       if (!disposed) {
         liveObservations = results;
@@ -266,19 +273,41 @@
      */
     function armReviewDeadline() {
       window.clearTimeout(reviewTimer);
-      const due = nextReviewDeadline(observedPanels, Date.now());
-      if (due === null) return;
+      // Untracked: this runs inside the effect that writes `liveObservations`,
+      // and a synchronous failure path would otherwise make the derived a
+      // dependency of the effect that feeds it.
+      const panels = untrack(() => observedPanels);
+      const pending = reviewReadPending(panels, Date.now());
+      if (!pending) reviewAttempts = 0;
+      else if (reviewAttempts >= REVIEW_ATTEMPTS) return;
+      // Still waiting for core to agree the deadline passed — a read that
+      // collided with one already in flight, a read that failed, or this
+      // reader's clock running ahead of core's. Ask again shortly rather than
+      // treating the deadline as spent: nothing else will tell the author.
+      const target = pending
+        ? Date.now() + REVIEW_RETRY_MS
+        : nextReviewDeadline(panels, Date.now());
+      if (target === null) return;
       // `setTimeout` fires immediately past about 24 days, so a deadline
       // further out than the cap waits in hops. Only the hop that reaches the
       // deadline reads: a dashboard open for a week should not re-read the
       // report every six hours on the way there.
-      const remaining = due - Date.now() + 1000;
-      const wait = Math.max(Math.min(remaining, 21_600_000), 1000);
+      const wait = Math.max(
+        Math.min(target - Date.now() + 1000, 21_600_000),
+        1000,
+      );
       reviewTimer = window.setTimeout(() => {
         if (disposed) return;
         now = Date.now();
-        if (Date.now() >= due) void refresh();
-        else armReviewDeadline();
+        if (
+          reviewReadPending(
+            untrack(() => observedPanels),
+            Date.now(),
+          )
+        ) {
+          reviewAttempts += 1;
+          void refresh();
+        } else armReviewDeadline();
       }, wait);
     }
     void refresh();
