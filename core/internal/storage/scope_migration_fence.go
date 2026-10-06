@@ -142,17 +142,22 @@ func applyWorkspaceMigrations(ctx context.Context, db *sql.DB) error {
 		if applied[m.Version] {
 			continue
 		}
-		for _, statement := range m.Statements {
-			if _, err := tx.ExecContext(ctx, statement); err != nil {
-				return fmt.Errorf("scope migration %d: %w", m.Version, err)
+		if err := func() error {
+			finish := reportMigrationProgress(ctx, m.Version)
+			defer finish()
+			for _, statement := range m.Statements {
+				if _, err := tx.ExecContext(ctx, statement); err != nil {
+					return fmt.Errorf("scope migration %d: %w", m.Version, err)
+				}
 			}
-		}
-		if m.AfterApply != nil {
-			if err := m.AfterApply(ctx, tx); err != nil {
-				return fmt.Errorf("scope migration %d hook: %w", m.Version, err)
+			if m.AfterApply != nil {
+				if err := m.AfterApply(ctx, tx); err != nil {
+					return fmt.Errorf("scope migration %d hook: %w", m.Version, err)
+				}
 			}
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO scope_schema_migrations VALUES(?,CURRENT_TIMESTAMP)`, m.Version); err != nil {
+			_, err := tx.ExecContext(ctx, `INSERT INTO scope_schema_migrations VALUES(?,CURRENT_TIMESTAMP)`, m.Version)
+			return err
+		}(); err != nil {
 			return err
 		}
 	}

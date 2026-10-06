@@ -6,10 +6,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -43,6 +45,66 @@ func TestMigrationProgressSignalsBeforeAndDuringWork(t *testing.T) {
 	finish()
 	if len(messages) < 3 || !strings.HasPrefix(messages[0], "migration_started") || !strings.HasPrefix(messages[len(messages)-1], "migration_finished") {
 		t.Fatalf("unexpected progress signals: %v", messages)
+	}
+}
+
+type migrationLogWriter func([]byte) (int, error)
+
+func (w migrationLogWriter) Write(p []byte) (int, error) { return w(p) }
+
+func TestFencedMigrationSignalsProgressBeforeReadiness(t *testing.T) {
+	w := scopeFixture(t)
+	root := w.Layout().RootDir
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	scopeMust(t, w.InstallScopeFormatFence(ctx))
+	scopeMust(t, w.Close())
+	progress := make(chan struct{}, 1)
+	var mu sync.Mutex
+	var messages strings.Builder
+	originalOutput := log.Writer()
+	log.SetOutput(migrationLogWriter(func(p []byte) (int, error) {
+		mu.Lock()
+		messages.Write(p)
+		mu.Unlock()
+		if strings.Contains(string(p), "migration_progress version=10000") {
+			select {
+			case progress <- struct{}{}:
+			default:
+			}
+		}
+		return len(p), nil
+	}))
+	defer log.SetOutput(originalOutput)
+	originalMigrations := migrations
+	defer func() { migrations = originalMigrations }()
+	migrations = append(append([]migration(nil), migrations...), migration{
+		Version:    10000,
+		Statements: []string{`CREATE TABLE performance_fenced_progress(id INTEGER PRIMARY KEY)`},
+		AfterApply: func(ctx context.Context, tx *sql.Tx) error {
+			select {
+			case <-progress:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		},
+	})
+	reopened, err := InitializeWorkspace(ctx, root)
+	scopeMust(t, err)
+	defer reopened.Close()
+	mu.Lock()
+	captured := messages.String()
+	mu.Unlock()
+	for _, signal := range []string{"migration_started", "migration_progress", "migration_finished"} {
+		if !strings.Contains(captured, signal+" version=10000") {
+			t.Fatalf("readiness returned without %s: %s", signal, captured)
+		}
+	}
+	var recorded int
+	scopeMust(t, reopened.DB().QueryRowContext(ctx, `SELECT count(*) FROM scope_schema_migrations WHERE version=10000`).Scan(&recorded))
+	if recorded != 1 {
+		t.Fatal("fenced migration did not commit its ledger entry")
 	}
 }
 
@@ -129,8 +191,9 @@ func TestPerformanceStartupAndMigrations(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Construct a genuine schema-58 database, not a current schema with ledger
-	// rows deleted. This exercises both reconciliation and blob backfills on
-	// upgrade. New migrations automatically join the measured upgrade path.
+	// rows deleted. This exercises production reconciliation on upgrade. New
+	// migrations automatically join the measured upgrade path. Historical blob
+	// maintenance is explicit and is not part of production readiness.
 	for _, m := range migrations {
 		if m.Version > 58 {
 			break
@@ -161,10 +224,7 @@ func TestPerformanceStartupAndMigrations(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer w.Close()
-			store := primitives.NewStore(w.DB(), blob.NewFilesystemBackend(layout.ArtifactContentDir), layout.ArtifactContentDir)
-			if err := store.BackfillArtifactAccess(ctx); err != nil {
-				t.Fatal(err)
-			}
+			_ = primitives.NewStore(w.DB(), blob.NewFilesystemBackend(layout.ArtifactContentDir), layout.ArtifactContentDir)
 			if err := w.Ping(ctx); err != nil {
 				t.Fatal(err)
 			}
