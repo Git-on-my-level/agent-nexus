@@ -146,3 +146,36 @@ it("still badges a stored panel whose evidence the report calls unavailable", ()
   const section = container.querySelector("[data-report-panel='standing']");
   expect(section.textContent).toContain("Unavailable");
 });
+
+it("separates when a note was written from how old its evidence is", () => {
+  // A note typed this morning can cite an observation from September. The
+  // provenance line answers the first question and the freshness badge the
+  // second; neither can answer the other.
+  const { container } = render(VisualReportPanel, {
+    compact: true,
+    panel: panel({ authored_at: new Date(NOW - 3_600_000).toISOString() }),
+    freshness: "stale",
+    now: NOW,
+    oninspect: () => {},
+  });
+  const section = container.querySelector("[data-report-panel='standing']");
+  expect(section.querySelector("[data-anx-provenance]").textContent).toContain(
+    "Written by claude · 1h ago",
+  );
+  expect(section.querySelector(".report-state").textContent).toContain(
+    "Stale evidence",
+  );
+});
+
+it("does not warn twice on a panel that is already overdue", () => {
+  const { container } = render(VisualReportPanel, {
+    compact: true,
+    panel: panel({ authored_at: ago(9) }),
+    freshness: "stale",
+    now: NOW,
+    oninspect: () => {},
+  });
+  const section = container.querySelector("[data-report-panel='standing']");
+  expect(section.textContent).toContain("May be stale");
+  expect(section.querySelector(".report-state")).toBeNull();
+});

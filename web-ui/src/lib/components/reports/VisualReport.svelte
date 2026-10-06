@@ -4,7 +4,10 @@
   import { onMount } from "svelte";
   import { coreClient } from "$lib/coreClient";
   import { isLivePanel, withLiveObservation } from "$lib/liveReports.js";
-  import { withRenderedProvenance } from "$lib/reportProvenance.js";
+  import {
+    withRenderedProvenance,
+    withReportDefaults,
+  } from "$lib/reportProvenance.js";
   import { getPanelFreshness } from "$lib/visualReports.js";
   import VisualReportPanel from "./VisualReportPanel.svelte";
   import AnxRefPreview from "$lib/components/AnxRefPreview.svelte";
@@ -31,7 +34,10 @@
   let observedPanels = $derived(
     report.panels.map((panel) =>
       withLiveObservation(
-        withRenderedProvenance(panel, liveObservations.get(panel.id)),
+        withRenderedProvenance(
+          withReportDefaults(panel, report),
+          liveObservations.get(panel.id),
+        ),
         liveObservations.get(panel.id),
       ),
     ),
@@ -188,11 +194,13 @@
     const expectedRevision = revisionRef;
     const livePanels = report.panels.filter(isLivePanel);
     liveObservations = new Map();
-    // No live panel, no read. Core is adding resolved provenance to this same
-    // response for authored panels; when it lands, this gate has to widen to
-    // "the report has panels" — one read, without the 30s poll below, since
-    // an authored panel's provenance does not change while it is on screen.
-    if (!livePanels.length) return;
+    // Every report is read once: core resolves each authored panel's class and
+    // review deadline against its own clock and returns them here, so a
+    // dashboard of hand-written notes still gets a true "written 9d ago,
+    // overdue" rather than this reader's arithmetic on their own clock.
+    // Only live panels are worth polling for, though — an authored panel's
+    // provenance does not change while it is on screen.
+    if (!report.panels.length) return;
     if (Array.isArray(previewObservations)) {
       liveObservations = new Map(
         previewObservations.map((panel) => [panel.id, panel]),
@@ -223,6 +231,9 @@
             });
         }
       } catch {
+        // Only live panels lose their data. An authored panel that core could
+        // not be asked about keeps the document's own provenance rather than
+        // being told its hand-written content is unavailable.
         results = new Map(
           livePanels.map((panel) => [
             panel.id,
@@ -239,6 +250,13 @@
       inFlight = false;
     }
     void refresh();
+    // A report with nothing live is read once. The teardown is still returned:
+    // without it a response that lands after navigation would write into the
+    // next document's observations.
+    if (!livePanels.length)
+      return () => {
+        disposed = true;
+      };
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") void refresh();
     }, 30_000);

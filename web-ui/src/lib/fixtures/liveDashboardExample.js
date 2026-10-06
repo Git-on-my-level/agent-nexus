@@ -38,6 +38,14 @@ export const liveDashboardExample = {
     }),
     panel("mix", "live-work-mix", "Work by phase", { group_by: "phase" }),
     panel("activity", "live-activity", "Recent changes", { limit: 5 }),
+    // Cards matching a filter rather than whole initiatives: the live answer
+    // to a hand-maintained "who owns what, and where is it" table.
+    panel("owned", "live-cards", "Owned by design", {
+      role: "design",
+      status: "in_progress",
+      limit: 5,
+      sort: "updated",
+    }),
     panel("context", "callout", "This week’s focus", {
       tone: "info",
       text: "Ship the launch, then measure adoption. This note is an authored snapshot.",
@@ -62,6 +70,7 @@ export const liveDashboardExample = {
           { type: "panel", panel_id: "activity" },
         ],
       },
+      { type: "panel", panel_id: "owned" },
       { type: "panel", panel_id: "context" },
     ],
   },

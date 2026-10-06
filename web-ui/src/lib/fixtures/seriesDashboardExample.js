@@ -51,6 +51,13 @@ export const seriesDashboardExample = {
       series: "builds",
       range: "1h",
     }),
+    // Events as published, newest first: the live answer to a hand-written
+    // release or deploy log. No aggregation, and no authored fallback — a
+    // typed list of past releases is exactly what it replaces.
+    panel("releases", "live-timeline", "Releases", {
+      series: "releases",
+      range: "30d",
+    }),
     {
       id: "fleet",
       type: "live-fleet-health",

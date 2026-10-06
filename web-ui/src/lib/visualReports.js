@@ -1,7 +1,8 @@
-import { validateSeriesBinding } from "./seriesReports.js";
+import { seriesRangeSeconds, validateSeriesBinding } from "./seriesReports.js";
 import { validateReportLayout } from "./visualReportLayout.js";
 import { validateReportChart } from "./visualReportCharts.js";
 import {
+  LIVE_QUERY_TYPES,
   LIVE_REPORT_TYPES,
   isLivePanel,
   validateLiveQuery,
@@ -125,6 +126,29 @@ export function safeReportUrl(value) {
   }
 }
 
+/**
+ * A review deadline in millis, or `null` when it cannot be read.
+ *
+ * `2026-12-01` is midnight UTC on that date, an RFC 3339 instant is itself,
+ * and `7d` is that long after the panel was written. Resolution never uses the
+ * reader's clock, so two readers in different timezones see the same deadline.
+ *
+ * Keep in conformance with `ReviewDeadline` in
+ * `contracts/visualreport/review.go`.
+ */
+export function reviewDeadlineMillis(value, authoredAt) {
+  if (typeof value !== "string" || !value) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const at = Date.parse(`${value}T00:00:00Z`);
+    return Number.isFinite(at) ? at : null;
+  }
+  const instant = timestampMillis(value);
+  if (Number.isFinite(instant)) return instant;
+  const seconds = seriesRangeSeconds(value);
+  if (seconds === null || !Number.isFinite(authoredAt)) return null;
+  return authoredAt + seconds * 1000;
+}
+
 /** Freshness describes observation age, never completion, availability, or health. */
 export function getPanelFreshness(panel, now = Date.now()) {
   if (!isRecord(panel)) return "unknown";
@@ -241,6 +265,46 @@ function validateReport(report) {
         `must be an ISO 8601 timestamp with a timezone${nullable ? " or null" : ""}`,
       );
   };
+  /**
+   * When an authored panel was written, and when someone promised to look at
+   * it again.
+   *
+   * Mirrors `contracts/visualreport/review.go`. A deadline is an instant, a
+   * calendar date (midnight UTC), or a bounded duration measured from the
+   * writing — `7d`, `168h` — so an author can say "a week from whenever this
+   * was written" without doing the arithmetic. Required once a panel dates
+   * itself, because an authored panel that says when it was written and not
+   * when to revisit it is the hand-maintained status this format is trying to
+   * stop producing.
+   */
+  const reviewDeadline = (panel, path, generatedAt) => {
+    if (Object.hasOwn(panel, "authored_at"))
+      timestamp(panel.authored_at, `${path}.authored_at`);
+    const live = LIVE_REPORT_TYPES.includes(panel.type) || panel.source;
+    if (!Object.hasOwn(panel, "review_by")) {
+      if (
+        !live &&
+        panel.authored_at !== undefined &&
+        panel.authored_at !== null
+      )
+        add(
+          `${path}.review_by`,
+          "is required for authored panels with authored_at",
+        );
+      return;
+    }
+    const written = timestampMillis(panel.authored_at ?? generatedAt);
+    const due = reviewDeadlineMillis(panel.review_by, written);
+    if (due === null) {
+      add(
+        `${path}.review_by`,
+        "must be a UTC date, zoned timestamp or positive bounded duration",
+      );
+      return;
+    }
+    if (Number.isFinite(written) && due <= written)
+      add(`${path}.review_by`, "must be after authored_at");
+  };
   const unique = (items, path) => {
     const ids = new Set();
     items.forEach((item, index) => {
@@ -350,7 +414,14 @@ function validateReport(report) {
           "source_ids",
           "data",
         ],
-        ["appearance", "density", "source", "fallback"],
+        [
+          "appearance",
+          "density",
+          "source",
+          "fallback",
+          "authored_at",
+          "review_by",
+        ],
       )
     )
       return;
@@ -366,6 +437,7 @@ function validateReport(report) {
       enumeration(panel.density, `${path}.density`, ["compact", "comfortable"]);
     string(panel.title, `${path}.title`);
     string(panel.author, `${path}.author`);
+    reviewDeadline(panel, path, report.generated_at);
     enumeration(panel.type, `${path}.type`, VISUAL_REPORT_TYPES);
     enumeration(panel.provenance, `${path}.provenance`, PROVENANCE);
     enumeration(panel.freshness, `${path}.freshness`, FRESHNESS);
@@ -396,9 +468,15 @@ function validateReport(report) {
     } else if (panel.fallback !== undefined)
       add(`${path}.fallback`, "requires a series source");
     const dataPath = `${path}.data`;
-    if (LIVE_REPORT_TYPES.includes(panel.type)) {
+    if (LIVE_QUERY_TYPES.includes(panel.type)) {
       for (const error of validateLiveQuery(panel.type, data))
         add(dataPath, error);
+      return;
+    }
+    if (panel.type === "live-timeline") {
+      // Reached only when the panel has no `source`; a bound one is validated
+      // as a series binding above.
+      add(`${path}.source`, "live-timeline requires a series source");
       return;
     }
     switch (panel.type) {

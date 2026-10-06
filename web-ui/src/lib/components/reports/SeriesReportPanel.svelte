@@ -1,7 +1,10 @@
 <script>
+  import { ageTitle, formatAge } from "$lib/ageBadge.js";
   import ReportChart from "./ReportChart.svelte";
   import ReportDetails from "./ReportDetails.svelte";
-  let { panel, freshness } = $props();
+  let { panel, freshness, now = Date.now() } = $props();
+  /** Newest first, as core returns them. */
+  let timeline = $derived(panel.data?.items ?? []);
   let observation = $derived(panel.seriesObservation);
   let showData = $derived(panel.seriesFallback || observation?.status === "ok");
   let provenance = $derived(observation?.provenance);
@@ -24,7 +27,36 @@
   </p>
 {/if}
 {#if showData}
-  {#if panel.type === "chart"}
+  {#if panel.type === "live-timeline"}
+    <!--
+      Every observation an adapter published, newest first — a release, a
+      deploy. Deliberately not binned: a timeline that averaged two deploys in
+      the same hour into one row would be hiding the thing it exists to show.
+    -->
+    {#if timeline.length}
+      <ol class="grid gap-2 text-meta">
+        {#each timeline as item, index (`${item.at}-${item.label}-${index}`)}
+          <li
+            class="grid grid-cols-[2.5rem_minmax(0,1fr)] items-baseline gap-x-3 border-b border-line-subtle pb-2 last:border-0 last:pb-0"
+          >
+            <time
+              class="text-micro tabular-nums text-fg-muted"
+              datetime={item.at}
+              title={ageTitle(item.at, "observed", now)}
+              >{formatAge(item.at, now)}</time
+            >
+            <span class="min-w-0 [overflow-wrap:anywhere]"
+              >{item.value}{#if item.label}<span class="text-fg-muted">
+                  · {item.label}</span
+                >{/if}</span
+            >
+          </li>
+        {/each}
+      </ol>
+    {:else}
+      <p class="text-fg-muted">No observations in this range.</p>
+    {/if}
+  {:else if panel.type === "chart"}
     <ReportChart data={panel.data} title={panel.title} />
   {:else if panel.type === "metric"}
     <p class="text-title font-semibold">

@@ -62,13 +62,16 @@
     "artifact-preview": "Artifact",
   };
   /**
-   * Only the states the header's provenance line does not already carry.
+   * Freshness, which is a different question from provenance.
    *
-   * `current` is the expected state, and `stale` is now the provenance line's
-   * own job: "May be stale · written 9d ago" says more than "Stale snapshot"
-   * and says it in the same place a reader looks for the panel's age.
+   * The provenance line says when the panel was *written*. This says how old
+   * the evidence it cites is — a note typed this morning can cite an
+   * observation from September, and the reader needs both facts. It is
+   * suppressed once the provenance line reads "May be stale", which already
+   * tells the reader to stop.
    */
   const stateLabels = {
+    stale: "Stale evidence",
     unknown: "Freshness unknown",
     unavailable: "Unavailable",
   };
@@ -136,23 +139,26 @@
         nine-day-old snapshot was least distinguishable from a live read.
       -->
       <ProvenanceChip {panel} {freshness} {now} />
-      {#if stateLabels[freshness] && provenance.class !== "live"}
+      {#if stateLabels[freshness] && provenance.class !== "live" && provenance.state !== "due-for-review"}
         <!--
-          Freshness the provenance line cannot speak to: a stored panel with no
-          observation at all, or evidence the report itself calls unavailable.
           Never for a live panel — a read in flight arrives as `unavailable`
-          here, and the line beside this already says it is still reading.
+          here, and the line beside this already says it is still reading. And
+          never beside "May be stale", which would be the same warning twice.
         -->
-        <span class="report-state">{stateLabels[freshness]}</span>
+        <span
+          class="report-state"
+          class:report-state-warn={freshness === "stale"}
+          >{stateLabels[freshness]}</span
+        >
       {/if}
     </div>
   </header>
 
   <div class="report-panel-body">
     {#if panel.source}
-      <SeriesReportPanel {panel} {freshness} />
+      <SeriesReportPanel {panel} {freshness} {now} />
     {:else if isLivePanel(panel)}
-      <LiveReportPanel {panel} {...refProps()} />
+      <LiveReportPanel {panel} {now} {...refProps()} />
     {:else if freshness === "unavailable"}
       <div class="report-unavailable">
         <span class="text-title text-fg-muted" aria-hidden="true">∅</span>
@@ -505,6 +511,10 @@
     justify-content: flex-end;
     gap: 6px;
     min-width: 0;
+  }
+  .report-state-warn {
+    color: var(--warn-text);
+    border-color: var(--warn);
   }
   .report-state {
     border: 1px solid var(--line-strong);

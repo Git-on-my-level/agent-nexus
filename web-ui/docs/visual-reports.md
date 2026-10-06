@@ -307,7 +307,8 @@ stronger claim about deployed behavior or operational qualification.
 Every panel resolves to one of two provenance classes, stated in its header so a
 reader can tell a computed panel from a hand-written one before reading it:
 
-- **live** — a live query panel or a bound series. Its header reads
+- **live** — a live query panel (including `live-cards`) or a bound series
+  (including `live-timeline`). Its header reads
   **Live · updated 2m ago**: the age of the read, not of the document. A read
   that is still running says so; a read that failed says so instead of showing
   the last age it had. A bound series whose publisher has missed its interval
@@ -318,10 +319,18 @@ reader can tell a computed panel from a hand-written one before reading it:
 
 An authored panel carries a review deadline. Past it, the header reads
 **May be stale · written 9d ago** in amber, with an amber edge down the whole
-panel. A panel that does not declare `review_by` is reviewed seven days after it
-was written, and the tooltip says the deadline was defaulted. A panel with no
-writing time at all asks for no review: a deadline anchored to nothing would
-read as a fact.
+panel. `review_by` is a calendar date (midnight UTC), a zoned instant, or a
+duration measured from the writing (`7d`, `168h`), and a panel that does not
+declare one is reviewed seven days after `authored_at`, with the tooltip saying
+the deadline was defaulted. A panel with no writing time at all asks for no
+review: a deadline anchored to nothing would read as a fact.
+
+The rendered report is the authority on all of this. Core resolves each panel's
+class, its absolute `review_by` and whether it is `review_due` against its own
+clock — the same clock that decides when the author is reminded — so a reader
+whose clock is a day out never disagrees with a reminder that was already sent.
+The document's own fields are read directly only before the report has been
+rendered.
 
 Provenance is always conveyed in text. Colour repeats the words, never replaces
 them, so the signal survives greyscale and a colour-blind reader.
@@ -342,22 +351,21 @@ last read 3d ago**.
 `panelProvenance(panel, freshness, now)` in `src/lib/reportProvenance.js` is the
 single place this is decided, and the Overview embed, the document report view
 and the initiative page all render it through `ProvenanceChip`. The class is read
-from `provenance_class` when the panel declares it, and derived from the panel's
-shape otherwise, so a live type this build has never heard of still renders as
-live data rather than as an authored panel with no body.
+from `provenance_class` when the rendered report supplies it, and derived from
+the panel's shape otherwise, so a live type this build has never heard of still
+renders as live data rather than as an authored panel with no body.
 
-`provenance_class`, `authored_at` and `review_by` are read wherever they appear,
-but the report schema still gates them: `parseVisualReport` rejects a panel
-field it does not know, and one rejected field drops the whole report to its
-text fallback. A stored document can therefore only carry them once
-`visualReports.js` and `contracts/visualreport/report.go` accept them together.
-The same applies to a new `live-` panel type. Until then these fields reach the
-UI only through the rendered report response, which is not schema-validated.
+`src/lib/visualReports.js` validates `authored_at` and `review_by` exactly as
+`contracts/visualreport/report.go` and `review.go` do, including the duration
+form and the "required once a panel dates itself" rule. The two validators are
+checked against each other by `scripts/check-visual-report-conformance.mjs`;
+keep a fixture in `contracts/fixtures/visual-reports/reports.json` for every
+rule either side adds.
 
-Mind the asymmetry while that is true: the Overview renders its pinned report
-from the `/overview` snapshot without validating it, so a stored document
-carrying `authored_at` renders normally there and drops to a text fallback on
-the document view.
+Because core returns resolved provenance for authored panels too, the UI reads
+the rendered report once for **every** report, not only one with a live panel.
+Only live panels are polled afterwards: an authored panel's provenance does not
+change while it is on screen.
 
 ### Freshness and incomplete observations
 

@@ -3,9 +3,12 @@
   import UnavailableValue from "$lib/components/UnavailableValue.svelte";
   import { inboxItemMailboxId } from "$lib/inboxUtils.js";
   import { LIVE_REPORT_TYPES, formatLiveAge } from "$lib/liveReports.js";
+  import { formatAge } from "$lib/ageBadge.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   let {
     panel,
+    /** Reference time, so a row's age ticks with the rest of the report. */
+    now = Date.now(),
     resolved = new Map(),
     organizationSlug = "",
     workspaceSlug = "",
@@ -80,6 +83,39 @@
         {/each}
       </ul>
     {:else}<p class="muted">No asks in this view.</p>{/if}
+  {:else if panel.type === "live-cards"}
+    <!--
+      Cards matching a filter, not initiatives: no plan, no health, no
+      progress bar. One line of what it is and where it stands, so a reader
+      scanning ten rows is reading ten facts rather than ten summaries.
+    -->
+    {#if items.length}
+      <ul class="rows">
+        {#each items as item (item.ref)}
+          <li>
+            {#if canNavigate}<a
+                href={workspaceHref(`/tasks/${encodeURIComponent(item.ref)}`)}
+                >{item.title}</a
+              >{:else}<strong class="row-title">{item.title}</strong>{/if}
+            <p class="muted">
+              {[
+                String(item.phase ?? "").replaceAll("_", " "),
+                item.priority ? item.priority.toUpperCase() : "",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+              {#if date(item.updated_at)}<span
+                  >· updated <time datetime={item.updated_at}
+                    >{formatAge(item.updated_at, now)}</time
+                  ></span
+                >{/if}
+            </p>
+            {#if item.summary}<p>{item.summary}</p>{/if}
+            {#each item.needs ?? [] as need}<p class="partial">{need}</p>{/each}
+          </li>
+        {/each}
+      </ul>
+    {:else}<p class="muted">No cards match this filter.</p>{/if}
   {:else if panel.type === "live-work-mix"}
     <p class="muted">{live.data.total} open tasks · by {live.data.group_by}</p>
     {#if buckets.length}

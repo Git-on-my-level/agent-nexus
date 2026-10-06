@@ -10,6 +10,7 @@ import {
   panelReviewDeadline,
   relativeAge,
   withRenderedProvenance,
+  withReportDefaults,
 } from "../../src/lib/reportProvenance.js";
 
 const NOW = Date.parse("2026-10-06T12:00:00Z");
@@ -389,5 +390,111 @@ describe("provenance core resolved", () => {
     expect(withRenderedProvenance(panel, { review_by: null, author: "" })).toBe(
       panel,
     );
+  });
+});
+
+describe("the deadline the contract defines", () => {
+  // `contracts/visualreport/review.go`: a date is midnight UTC, an instant is
+  // itself, and a duration is measured from the writing.
+  it("reads a review_by written as a duration from the writing", () => {
+    for (const reviewBy of ["7d", "168h"]) {
+      const panel = authored({
+        authored_at: ago(2 * DAY),
+        review_by: reviewBy,
+      });
+      expect(panelReviewDeadline(panel).at).toBe(
+        Date.parse(ago(2 * DAY)) + 7 * DAY,
+      );
+      expect(panelProvenance(panel, "current", NOW).state).toBe("authored");
+    }
+    // Two days written, three days ago: already overdue.
+    const overdue = authored({ authored_at: ago(3 * DAY), review_by: "2d" });
+    expect(panelProvenance(overdue, "current", NOW).state).toBe(
+      "due-for-review",
+    );
+  });
+
+  it("reads a plain date as midnight UTC, not as the reader's midnight", () => {
+    const panel = authored({
+      authored_at: ago(9 * DAY),
+      review_by: "2026-10-06",
+    });
+    expect(panelReviewDeadline(panel).at).toBe(
+      Date.parse("2026-10-06T00:00:00Z"),
+    );
+  });
+
+  it("takes core's verdict over its own arithmetic", () => {
+    // Core resolves the deadline against its clock and reminds the author on
+    // that basis. A reader whose clock is a day out must not disagree with the
+    // reminder that was already sent.
+    const panel = authored({
+      authored_at: ago(2 * DAY),
+      review_by: ago(DAY),
+      review_due: false,
+    });
+    expect(panelProvenance(panel, "current", NOW).state).toBe("authored");
+    const due = panelProvenance(
+      authored({ authored_at: ago(DAY), review_by: "30d", review_due: true }),
+      "current",
+      NOW,
+    );
+    expect(due.state).toBe("due-for-review");
+    expect(due.label).toBe("May be stale · written 1d ago");
+  });
+
+  it("repeats core's own word on whether a deadline was defaulted", () => {
+    const panel = authored({
+      authored_at: ago(2 * DAY),
+      review_by: new Date(Date.parse(ago(2 * DAY)) + 7 * DAY).toISOString(),
+      review_by_defaulted: true,
+    });
+    expect(panelReviewDeadline(panel).defaulted).toBe(true);
+    expect(panelProvenance(panel, "current", NOW).title).toContain(
+      "defaulted to 7 days after writing",
+    );
+  });
+
+  it("dates an undated panel by the report that contains it", () => {
+    // Core's rule: `authored_at` falls back to the report's `generated_at`.
+    // Reaching for `observed_at` instead would resolve a different deadline
+    // from the same document.
+    const panel = withReportDefaults(
+      { type: "explanation", author: "claude", observed_at: ago(DAY) },
+      { generated_at: ago(9 * DAY) },
+    );
+    expect(panelAuthoredAt(panel)).toBe(ago(9 * DAY));
+    expect(panelProvenance(panel, "current", NOW).state).toBe("due-for-review");
+  });
+
+  it("carries every field core resolved, and only those", () => {
+    const merged = withRenderedProvenance(authored(), {
+      id: "standing",
+      type: "explanation",
+      status: "ok",
+      provenance_class: "authored",
+      authored_at: ago(9 * DAY),
+      review_by: ago(2 * DAY),
+      review_by_defaulted: true,
+      review_due: true,
+      data: { text: "the rendered copy of the body" },
+    });
+    expect(merged.review_due).toBe(true);
+    expect(merged.review_by_defaulted).toBe(true);
+    // The document still owns the body.
+    expect(merged.data.text).toBe("Release B is in review.");
+    expect(panelProvenance(merged, "current", NOW).state).toBe(
+      "due-for-review",
+    );
+  });
+
+  it("calls the new live types live, as core computes them", () => {
+    // `provenance_class` is computed from the type and source binding, never
+    // claimed by the author.
+    for (const type of ["live-cards", "live-timeline"])
+      expect(panelProvenanceClass({ type })).toBe("live");
+    expect(
+      panelProvenanceClass({ type: "live-timeline", provenance_class: "live" }),
+    ).toBe("live");
   });
 });

@@ -6,7 +6,16 @@ export const LIVE_REPORT_TYPES = Object.freeze([
   "live-work-mix",
   "live-activity",
   "live-fleet-health",
+  "live-cards",
+  // Bound to a series rather than a query: its data comes from `source`, so it
+  // is here for the panel-type list and never reaches `validateLiveQuery`.
+  "live-timeline",
 ]);
+
+/** The live types that carry a query. `live-timeline` binds a series instead. */
+export const LIVE_QUERY_TYPES = Object.freeze(
+  LIVE_REPORT_TYPES.filter((type) => type !== "live-timeline"),
+);
 /**
  * Whether this panel is computed at read time.
  *
@@ -28,6 +37,16 @@ export function validateLiveQuery(type, data) {
       "board_refs",
       "project_ref",
       "card_ref",
+      "limit",
+      "sort",
+    ],
+    "live-cards": [
+      "board_refs",
+      "project_ref",
+      "card_ref",
+      "label",
+      "role",
+      "status",
       "limit",
       "sort",
     ],
@@ -85,6 +104,15 @@ export function validateLiveQuery(type, data) {
     !["phase", "board"].includes(data.group_by)
   )
     errors.push("group_by must be phase or board");
+  // Exact-match card filters: a nonempty string of at most 128 characters.
+  for (const key of ["label", "role", "status"])
+    if (
+      data[key] !== undefined &&
+      (typeof data[key] !== "string" ||
+        !data[key].trim() ||
+        data[key].length > 128)
+    )
+      errors.push("invalid card filter");
   if (
     data.include_answered !== undefined &&
     typeof data.include_answered !== "boolean"

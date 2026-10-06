@@ -18,19 +18,19 @@
  * Both classes are stated in text. Colour is a second signal, never the only
  * one: "May be stale" says so in words whether or not the amber renders.
  *
- * Core is adding `provenance_class`, `authored_at` and `review_by` to report
- * panels. This module prefers those fields and derives the same answer from
- * the panel's shape without them, so the UI side does not have to land second
- * — but the report schema still gates them: `parseVisualReport` rejects a
- * panel field it does not know, so a document can only carry them once
- * `visualReports.js` and `contracts/visualreport/report.go` accept them
- * together. Until core lands that, these fields reach the UI only through the
- * rendered report response, never through a stored document.
+ * Two sources, one answer. A stored panel carries `authored_at` and
+ * `review_by`; the rendered report resolves both — and the class itself —
+ * against core's clock, returning `provenance_class`, an absolute `review_by`,
+ * `review_by_defaulted` and `review_due`. Core's answer wins where it exists,
+ * because a deadline must not depend on the reader's clock or timezone. The
+ * document answers when the report has not been rendered yet, and the panel's
+ * own shape answers when neither does.
  */
 
 import { formatAge, ageTitle } from "./ageBadge.js";
 import { formatAbsoluteDateTime } from "./formatDate.js";
 import { isLivePanel } from "./liveReports.js";
+import { reviewDeadlineMillis } from "./visualReports.js";
 
 export const PROVENANCE_CLASSES = Object.freeze(["live", "authored"]);
 
@@ -45,11 +45,13 @@ export const PROVENANCE_CLASSES = Object.freeze(["live", "authored"]);
  */
 export const DEFAULT_REVIEW_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** Panel fields this module reads beyond the ones the report schema requires. */
+/** What the rendered report resolves, and this module reads back. */
 export const PROVENANCE_PANEL_FIELDS = Object.freeze([
   "provenance_class",
   "authored_at",
   "review_by",
+  "review_by_defaulted",
+  "review_due",
 ]);
 
 /**
@@ -80,7 +82,29 @@ function instant(value) {
  * only one older reports carry.
  */
 export function panelAuthoredAt(panel) {
-  return panel?.authored_at ?? panel?.observed_at ?? null;
+  // `report_generated_at` is the report's own `generated_at`, attached by
+  // `withReportDefaults`. Core dates an undated panel by exactly that, and a
+  // UI that reached for `observed_at` instead would resolve a different
+  // deadline from the same document.
+  return (
+    panel?.authored_at ??
+    panel?.report_generated_at ??
+    panel?.observed_at ??
+    null
+  );
+}
+
+/**
+ * The report's own `generated_at`, carried onto each panel.
+ *
+ * An authored panel that does not date itself is dated by the report that
+ * contains it — core's rule — and a panel on its own cannot see that.
+ */
+export function withReportDefaults(panel, report) {
+  const generatedAt = report?.generated_at;
+  if (!panel || !generatedAt || panel.report_generated_at === generatedAt)
+    return panel;
+  return { ...panel, report_generated_at: generatedAt };
 }
 
 /**
@@ -90,7 +114,11 @@ export function panelAuthoredAt(panel) {
  * no deadline at all: a guess anchored to nothing would read as a fact.
  */
 export function panelReviewDeadline(panel) {
-  return reviewDeadline(panel?.review_by, panelAuthoredAt(panel));
+  return reviewDeadline(
+    panel?.review_by,
+    panelAuthoredAt(panel),
+    panel?.review_by_defaulted,
+  );
 }
 
 /**
@@ -99,13 +127,16 @@ export function panelReviewDeadline(panel) {
  * the default window, but only the first is the author's omission, and the
  * tooltip must not accuse them of the wrong one.
  */
-function reviewDeadline(reviewBy, authoredAt) {
-  const declared = instant(reviewBy);
+function reviewDeadline(reviewBy, authoredAt, defaulted) {
+  const authored = instant(authoredAt);
+  // `review_by` is a calendar date, a zoned instant, or a duration measured
+  // from the writing — `7d`, `168h`. Resolving it is the schema's job, so the
+  // UI reads the same deadline the validator and core resolve.
+  const declared = reviewDeadlineMillis(reviewBy, authored);
   if (declared !== null)
-    return { at: declared, defaulted: false, unreadable: false };
+    return { at: declared, defaulted: defaulted === true, unreadable: false };
   const unreadable =
     reviewBy !== null && reviewBy !== undefined && reviewBy !== "";
-  const authored = instant(authoredAt);
   if (authored === null) return { at: null, defaulted: false, unreadable };
   return {
     at: authored + DEFAULT_REVIEW_AFTER_MS,
@@ -201,8 +232,12 @@ export function liveProvenance(observedAt, state = {}, now = Date.now()) {
  * the panel stale, or a snapshot standing in for a live read that failed.
  * `note` is one more sentence for the tooltip, saying which.
  *
+ * `reviewDue` is core's own verdict on the deadline, which wins over this
+ * reader's clock when the report has been rendered.
+ *
  * @param {{ author?: string, authoredAt?: string|null, reviewBy?: string|null,
- *   reviewable?: boolean, stale?: boolean, note?: string }} written
+ *   reviewable?: boolean, stale?: boolean, note?: string, reviewDue?: boolean,
+ *   reviewDefaulted?: boolean }} written
  * @param {number} [now]
  */
 export function authoredProvenance(written = {}, now = Date.now()) {
@@ -213,9 +248,12 @@ export function authoredProvenance(written = {}, now = Date.now()) {
   const review =
     written.reviewable === false
       ? { at: null, defaulted: false, unreadable: false }
-      : reviewDeadline(written.reviewBy, authoredAt);
+      : reviewDeadline(written.reviewBy, authoredAt, written.reviewDefaulted);
   const dueForReview =
-    written.stale === true || (review.at !== null && now > review.at);
+    written.stale === true ||
+    (typeof written.reviewDue === "boolean"
+      ? written.reviewDue
+      : review.at !== null && now > review.at);
   const written_by = author ? `Written by ${author}` : "Written";
   const lead = dueForReview
     ? age
@@ -293,6 +331,17 @@ export function panelProvenance(panel, freshness = "", now = Date.now()) {
       author: panel?.author,
       authoredAt: panelAuthoredAt(panel),
       reviewBy: panel?.review_by,
+      // An author who writes `freshness: "stale"` into the document is warning
+      // the reader deliberately. That is a stronger statement than a review
+      // date nobody has reached yet, and dropping it would leave the report's
+      // own stale counter and filter pointing at panels that present as
+      // ordinary notes.
+      // Core resolves the deadline against its own clock and says whether it
+      // has passed. That answer wins: a reader whose clock is off by a day
+      // must not see a different verdict from the one core acted on when it
+      // reminded the author.
+      reviewDue: panel?.review_due,
+      reviewDefaulted: panel?.review_by_defaulted,
       // An author who writes `freshness: "stale"` into the document is warning
       // the reader deliberately. That is a stronger statement than a review
       // date nobody has reached yet, and dropping it would leave the report's

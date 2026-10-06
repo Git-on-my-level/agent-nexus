@@ -83,6 +83,11 @@ const REPORT = {
       author: "claude",
       provenance: "reported",
       observed_at: RECENT,
+      // The contract's own fields: when it was written, and when someone
+      // undertook to look at it again. A duration is measured from the
+      // writing, so this one is good for another four weeks.
+      authored_at: RECENT,
+      review_by: "30d",
       // Not declared stale: an author who writes that into the document is
       // warning the reader, and the panel says so. This one is simply older
       // than the 24-hour evidence window, which is not the same claim.
@@ -101,10 +106,37 @@ const REPORT = {
       author: LONG_AUTHOR,
       provenance: "reported",
       observed_at: ago(2),
+      authored_at: ago(2),
+      review_by: "90d",
       freshness: "current",
       title: "Background",
       source_ids: [],
       data: { text: "Why this programme exists. Nobody has revisited it." },
+    },
+    {
+      id: "cards",
+      project_id: "delivery",
+      type: "live-cards",
+      title: "In review",
+      author: "claude",
+      provenance: "reported",
+      observed_at: NOW,
+      freshness: "current",
+      source_ids: [],
+      data: { status: "in_review", role: "design", limit: 5, sort: "updated" },
+    },
+    {
+      id: "releases",
+      project_id: "delivery",
+      type: "live-timeline",
+      title: "Releases",
+      author: "claude",
+      provenance: "reported",
+      observed_at: NOW,
+      freshness: "current",
+      source_ids: [],
+      data: {},
+      source: { series: "releases", range: "30d" },
     },
     {
       id: "milestones",
@@ -114,6 +146,9 @@ const REPORT = {
       author: "claude",
       provenance: "reported",
       observed_at: OVERDUE,
+      authored_at: OVERDUE,
+      // Seven days after writing, nine days ago: overdue, and core says so.
+      review_by: "7d",
       freshness: "stale",
       source_ids: [],
       data: {
@@ -167,7 +202,27 @@ const REVISION = {
   content: JSON.stringify(REPORT),
 };
 
-/** One ask, read now: the live panel's own observation. */
+/**
+ * The rendered report, as core answers it now: every panel, not only the live
+ * ones. Core resolves each authored panel's class and deadline against its own
+ * clock and returns `review_due`, so the reader's clock never decides whether
+ * an author has been reminded.
+ */
+const authoredPanel = (id, type, authoredAt, reviewBy, due, data) => ({
+  id,
+  type,
+  status: "ok",
+  observed_at: authoredAt,
+  truncated: false,
+  data,
+  provenance_class: "authored",
+  author: id === "legacy" ? LONG_AUTHOR : "claude",
+  authored_at: authoredAt,
+  review_by: reviewBy,
+  review_by_defaulted: false,
+  review_due: due,
+});
+
 const RENDERED = {
   document_ref: DOCUMENT.ref,
   revision_ref: DOCUMENT.revision_ref,
@@ -178,6 +233,8 @@ const RENDERED = {
       type: "live-asks",
       status: "ok",
       observed_at: NOW,
+      truncated: false,
+      provenance_class: "live",
       data: {
         items: [
           {
@@ -189,6 +246,57 @@ const RENDERED = {
         ],
       },
     },
+    {
+      id: "cards",
+      type: "live-cards",
+      status: "ok",
+      observed_at: NOW,
+      truncated: false,
+      provenance_class: "live",
+      data: {
+        items: [
+          {
+            ref: "card:provenance",
+            title: "Provenance badges",
+            summary: "Say which panels are computed.",
+            priority: "p1",
+            phase: "in_review",
+            board_ref: "board:delivery",
+            updated_at: ago(1),
+            needs: [],
+          },
+        ],
+      },
+    },
+    {
+      id: "releases",
+      type: "live-timeline",
+      status: "ok",
+      observed_at: NOW,
+      truncated: false,
+      provenance_class: "live",
+      data: {
+        items: [
+          { at: ago(1), label: "channel=stable", value: "v0.12.13" },
+          { at: ago(4), label: "channel=stable", value: "v0.12.12" },
+        ],
+      },
+      provenance: {
+        adapter: "releases",
+        host: "builder",
+        last_push: ago(1),
+        resolution: "raw",
+      },
+    },
+    authoredPanel("standing", "explanation", RECENT, ago(-27), false, {
+      text: "Release B is in review. The adapter contract is still open.",
+    }),
+    authoredPanel("legacy", "explanation", ago(2), ago(-88), false, {
+      text: "Why this programme exists. Nobody has revisited it.",
+    }),
+    authoredPanel("milestones", "milestone-timeline", OVERDUE, ago(2), true, {
+      items: [],
+    }),
   ],
 };
 
@@ -284,6 +392,19 @@ for (const [surface, path] of [
 
     // The read time is in the header now, not a line under the panel body.
     await expect(report).not.toContainText("Live as of");
+
+    // The two panel types core added land with live styling and a live line,
+    // and the timeline shows each published event rather than a binned chart.
+    await expect(chip(report, "cards")).toHaveText(/^Live · updated just now$/);
+    await expect(report.locator('[data-report-panel="cards"]')).toContainText(
+      "Provenance badges",
+    );
+    await expect(chip(report, "releases")).toHaveText(
+      /^Live · updated just now$/,
+    );
+    const releases = report.locator('[data-report-panel="releases"]');
+    await expect(releases).toContainText("v0.12.13");
+    await expect(releases).toContainText("v0.12.12");
   });
 }
 
@@ -300,8 +421,9 @@ test("the exact instant is one hover away, and reaches a screen reader", async (
   await expect(authored).toHaveAttribute("datetime", OVERDUE);
   const label = await authored.getAttribute("aria-label");
   expect(label).toContain("Written");
-  // A default deadline says it is a default rather than the author's promise.
-  expect(label).toContain("defaulted to 7 days after writing");
+  // The author set this deadline, so the tooltip must not claim it defaulted.
+  expect(label).toContain("Review was due");
+  expect(label).not.toContain("defaulted to 7 days");
 });
 
 test("a live panel whose read fails says so, and is not also badged", async ({
