@@ -98,3 +98,51 @@ func TestResourceAccessProseGraphIdentityForms(t *testing.T) {
 		})
 	}
 }
+
+func TestResourceAccessProseRevisionRenameAndDuplicateIdentity(t *testing.T) {
+	ctx := context.Background()
+	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	doc, _, err := s.CreateDocument(ctx, "owner", map[string]any{"title": "source"}, "source", "text", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := doc["id"].(string)
+	if _, err := s.PatchThread(ctx, "owner", doc["thread_id"].(string), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	copy, _, err := s.CreateDocument(ctx, "owner", map[string]any{"title": "copy"}, "See **document_revision:renamed-source-r1**", "text", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := WithAccessScope(ctx, AccessScope{ActorID: "stranger"})
+	if !s.CanAccessResource(scope, "document", copy["id"].(string)) {
+		t.Fatal("unresolved revision handle should be visible")
+	}
+	if _, err := ws.DB().ExecContext(ctx, `UPDATE documents SET handle='renamed-source' WHERE id=?`, id); err != nil {
+		t.Fatal(err)
+	}
+	if s.CanAccessResource(scope, "document", copy["id"].(string)) {
+		t.Fatal("revision handle rename missed old prose")
+	}
+	artifact, err := s.CreateArtifact(ctx, "owner", map[string]any{"kind": "note", "refs": []string{}}, "See _document:duplicate_", "text")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`INSERT INTO resource_handle_aliases(resource_type,alias_handle,resource_id,canonical_handle,created_at) VALUES('document','duplicate',?,'renamed-source','now')`,
+		`INSERT INTO resource_access_tombstones(kind,id,ref,owner) VALUES('document',?,'duplicate','owner')`,
+		`DELETE FROM resource_handle_aliases WHERE resource_type='document' AND resource_id=? AND alias_handle='duplicate'`,
+	} {
+		if _, err := ws.DB().ExecContext(ctx, q, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if s.CanAccessResource(scope, "artifact", artifact["id"].(string)) {
+		t.Fatal("deleting alias erased remaining tombstone provenance")
+	}
+}

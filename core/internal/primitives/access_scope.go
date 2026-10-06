@@ -3,6 +3,7 @@ package primitives
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -16,6 +17,8 @@ type accessScopeKey struct{}
 
 func WithAccessScope(ctx context.Context, scope AccessScope) context.Context {
 	ctx = context.WithValue(ctx, accessScopeKey{}, scope)
+	// Rebinding either principal or selected PM starts a new policy boundary.
+	ctx = context.WithValue(ctx, denialRequestKey{}, struct{}{})
 	return resourceaccess.WithPolicy(ctx, resourceaccess.Policy{
 		Read: func(q string) string { return scopeRead(ctx, q) },
 		Check: func(c context.Context, q resourceaccess.QueryRower, v any) error {
@@ -48,6 +51,9 @@ var sqlIdentifiers = regexp.MustCompile(`[A-Za-z_][A-Za-z_0-9]*`)
 // but never omits a named relation. Ownership recursion still uses canonical
 // main tables and is evaluated within every statement's snapshot.
 func accessCTEs(scope AccessScope, query string) string {
+	return accessCTEsWithSnapshot(scope, query, nil)
+}
+func accessCTEsWithSnapshot(scope AccessScope, query string, snapshot *denialSnapshot) string {
 	needed := map[string]bool{}
 	for _, token := range sqlIdentifiers.FindAllString(query, -1) {
 		needed[strings.ToLower(token)] = true
@@ -90,9 +96,9 @@ func accessCTEs(scope AccessScope, query string) string {
 	add("agent_presence", cleanJSON("_row.note")+" AND NOT EXISTS (SELECT 1 FROM _anx_denied_refs WHERE ref="+resourceaccess.ReferenceSQL("_row.current_card_ref")+" COLLATE NOCASE)")
 	add("agent_progress_notes", cleanJSON("_row.text")+" AND NOT EXISTS (SELECT 1 FROM _anx_denied_refs WHERE ref="+resourceaccess.ReferenceSQL("_row.card_ref")+" COLLATE NOCASE)")
 	if needed["pm_records"] {
-		graph += ", _anx_private_pm(id) AS (SELECT id FROM main.pm_records AS _row WHERE NOT (" + cleanJSON("_row.body") + `) UNION SELECT r.id FROM main.pm_records r JOIN json_tree(r.body) j JOIN _anx_private_pm p ON j.atom=p.id), pm_records AS (SELECT rowid,* FROM main.pm_records WHERE id NOT IN (SELECT id FROM _anx_private_pm))`
+		graph += ", pm_records AS (SELECT rowid,* FROM main.pm_records AS _row WHERE " + denied("pm", "_row.id") + ")"
 	}
-	add("derived_inbox_items", denied("thread", "_row.thread_id")+" AND "+denied("card", "_row.source_card_id")+" AND "+denied("event", "_row.source_event_id")+" AND "+cleanJSON("_row.data_json"))
+	add("derived_inbox_items", denied("inbox", "_row.id"))
 	add("workspace_dashboard", denied("document", "_row.document_id"))
 	add("idempotency_replays", cleanJSON("_row.response_json"))
 	for table, columns := range resourceaccess.FilterSources {
@@ -108,7 +114,7 @@ func accessCTEs(scope AccessScope, query string) string {
 	// A rollup must not expose a private contributor through counts or last
 	// values. Remove the whole label stream before admission, buckets or limits.
 	if needed["series_adapters"] || needed["series_labels"] || needed["series_points"] || needed["series_daily"] || needed["series_live_daily"] {
-		graph += ", _anx_private_series(series,labels) AS MATERIALIZED (SELECT series,labels FROM main.resource_access_series_refs r JOIN _anx_denied_atoms d ON r.target_ref=d.ref COLLATE NOCASE OR d.typed AND " + resourceaccess.TextReferenceMatchSQL("r.target_ref", "d.ref") + " UNION SELECT series,labels FROM main.resource_access_series_unknown WHERE EXISTS (SELECT 1 FROM _anx_denied))"
+		graph += ", _anx_private_series(series,labels) AS MATERIALIZED (SELECT json_extract(id,'$[0]'),json_extract(id,'$[1]') FROM _anx_denied WHERE kind='series' UNION SELECT series,labels FROM main.resource_access_series_unknown WHERE EXISTS (SELECT 1 FROM _anx_denied))"
 		if needed["series_adapters"] {
 			graph += ", series_adapters AS (SELECT name,description,agent_id,host_id,expected_interval,created_at,revoked_at,deleted_at,CASE WHEN EXISTS (SELECT 1 FROM main.series_definitions def LEFT JOIN _anx_private_series p ON p.series=def.name WHERE def.adapter=_row.name AND (p.series IS NOT NULL OR NOT (" + cleanJSON("def.unit") + "))) THEN NULL ELSE last_push END AS last_push FROM main.series_adapters _row WHERE " + cleanJSON("_row.description") + ")"
 		}
@@ -125,7 +131,15 @@ func accessCTEs(scope AccessScope, query string) string {
 	if !needsGraph {
 		return ""
 	}
-	return ownershipClosure("_anx_denied", deniedRootSQL(scope), false) +
+	deniedGraph := ownershipClosure("_anx_denied", deniedRootSQL(scope), false)
+	if snapshot != nil {
+		epoch := fmt.Sprint(snapshot.epoch)
+		current := "COALESCE((SELECT version FROM main.resource_access_epoch WHERE singleton=1),-1)"
+		roots := "SELECT * FROM (" + deniedRootSQL(scope) + ") WHERE " + current + "<>" + epoch
+		cached := "'" + strings.ReplaceAll(snapshot.rows, "'", "''") + "'"
+		deniedGraph = ownershipClosure("_anx_fresh_denied", roots, false) + ", _anx_denied(kind,id) AS MATERIALIZED (SELECT kind,id FROM _anx_fresh_denied UNION SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]') FROM json_each(" + cached + ") WHERE " + current + "=" + epoch + ")"
+	}
+	return deniedGraph +
 		", " + ownershipRefs("_anx_resource_refs", "_anx_denied") +
 		", _anx_denied_refs(ref) AS MATERIALIZED (SELECT CASE WHEN kind='card' AND (ref LIKE 'http://%' OR ref LIKE 'https://%') THEN ref ELSE kind||':'||ref END FROM _anx_resource_refs UNION SELECT 'doc:'||ref FROM _anx_resource_refs WHERE kind='document'), _anx_denied_atoms(ref,typed) AS MATERIALIZED (SELECT ref,1 FROM _anx_denied_refs UNION SELECT id,0 FROM _anx_denied WHERE kind<>'plan')" + graph
 }
@@ -141,7 +155,7 @@ func scopeRead(ctx context.Context, query string) string {
 	}
 	q := strings.ReplaceAll(strings.TrimSpace(query), " INDEXED BY idx_work_metadata_project", "")
 	upper := strings.ToUpper(q)
-	graph := accessCTEs(scope, q)
+	graph := accessCTEsWithSnapshot(scope, q, denialSnapshotFrom(ctx))
 	prefix := "WITH RECURSIVE " + graph
 	if fields := strings.Fields(upper); len(fields) > 0 {
 		switch fields[0] {
@@ -181,6 +195,41 @@ func requireAccessibleValues(ctx context.Context, q queryRower, values any) erro
 	if !ok {
 		return nil
 	}
+	// A structured SQL column contributes JSON atoms, while a scalar identity
+	// contributes its original spelling even when it happens to be valid JSON.
+	if sqlValues, ok := values.(resourceaccess.SQLValues); ok {
+		structured := resourceaccess.StructuredSQLArguments(sqlValues.Query)
+		decoded := make([]any, len(sqlValues.Args))
+		for i, arg := range sqlValues.Args {
+			decoded[i] = arg
+			var raw []byte
+			switch v := arg.(type) {
+			case string:
+				raw = []byte(v)
+			case resourceaccess.ReferenceManifest:
+				raw = []byte(v)
+			case []byte:
+				raw = v
+				decoded[i] = string(v)
+			}
+			if structured[i] && len(raw) > 0 {
+				var nested any
+				if json.Unmarshal(raw, &nested) == nil {
+					decoded[i] = nested
+				}
+			}
+		}
+		values = decoded
+	}
+	encoded, err := json.Marshal(values)
+	if err != nil {
+		return err
+	}
+	// Requests with no reference atoms (health, identity and collection reads)
+	// cannot reference private resources. Avoid even opening the denial graph.
+	if resourceaccess.ContentReferenceAtomsJSON(string(encoded), "structured") == "[]" {
+		return nil
+	}
 	// This check uses the mutation's own transaction snapshot. Without denied
 	// roots there can be no denied descendants; skip constructing the expensive
 	// closure, never cache this answer across statements or requests.
@@ -190,30 +239,6 @@ func requireAccessibleValues(ctx context.Context, q queryRower, values any) erro
 	}
 	if !hasDeniedRoot {
 		return nil
-	}
-	// SQL JSON columns arrive as encoded strings/bytes. Decode before walking,
-	// otherwise json_tree would see just an opaque string (or base64 bytes).
-	if args, ok := values.([]any); ok {
-		decoded := make([]any, len(args))
-		for i, arg := range args {
-			decoded[i] = arg
-			var raw []byte
-			switch v := arg.(type) {
-			case string:
-				raw = []byte(v)
-			case []byte:
-				raw = v
-			}
-			var nested any
-			if len(raw) > 0 && json.Unmarshal(raw, &nested) == nil {
-				decoded[i] = nested
-			}
-		}
-		values = decoded
-	}
-	encoded, err := json.Marshal(values)
-	if err != nil {
-		return err
 	}
 	var denied bool
 	query := `WITH RECURSIVE ` + accessCTEs(scope, "") + ` SELECT EXISTS (

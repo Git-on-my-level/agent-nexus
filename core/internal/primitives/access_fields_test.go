@@ -135,6 +135,10 @@ func TestResourceAccessEveryOwnershipField(t *testing.T) {
 			fixtures["artifacts"] = artifact
 		}
 	}
+	if _, err = ws.DB().Exec(`INSERT INTO derived_inbox_items(id,thread_id,category,trigger_at,generated_at,data_json) VALUES('field-inbox',?,'ask','now','now','{}')`, public["thread_id"]); err != nil {
+		t.Fatal(err)
+	}
+	fixtures["derived_inbox_items"] = "field-inbox"
 	for _, source := range resourceaccess.OwnershipSources {
 		rowID, ok := fixtures[source.Table]
 		if !ok || rowID == "" {

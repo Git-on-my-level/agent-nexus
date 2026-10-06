@@ -11,8 +11,9 @@ type QueryRower interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 type Policy struct {
-	Read  func(string) string
-	Check func(context.Context, QueryRower, any) error
+	Read     func(string) string
+	ReadOnDB func(context.Context, QueryRower, string) string
+	Check    func(context.Context, QueryRower, any) error
 }
 type policyKey struct{}
 
@@ -33,6 +34,13 @@ func ReadQuery(ctx context.Context, q string) string {
 	return q
 }
 
+func readOnDB(ctx context.Context, q QueryRower, query string) string {
+	if p, ok := PolicyFrom(ctx); ok && p.ReadOnDB != nil {
+		return p.ReadOnDB(ctx, q, query)
+	}
+	return ReadQuery(ctx, query)
+}
+
 type DB struct{ raw *sql.DB }
 type Tx struct{ raw *sql.Tx }
 
@@ -43,10 +51,10 @@ func NewDB(raw *sql.DB) *DB {
 	return &DB{raw: raw}
 }
 func (d *DB) QueryContext(ctx context.Context, q string, args ...any) (*sql.Rows, error) {
-	return d.raw.QueryContext(ctx, ReadQuery(ctx, q), args...)
+	return d.raw.QueryContext(ctx, readOnDB(ctx, d.raw, q), args...)
 }
 func (d *DB) QueryRowContext(ctx context.Context, q string, args ...any) *sql.Row {
-	return d.raw.QueryRowContext(ctx, ReadQuery(ctx, q), args...)
+	return d.raw.QueryRowContext(ctx, readOnDB(ctx, d.raw, q), args...)
 }
 func (d *DB) CheckValues(ctx context.Context, values any) error {
 	if err := ValidateText(values); err != nil {
@@ -102,7 +110,7 @@ func (t *Tx) ExecContext(ctx context.Context, q string, args ...any) (sql.Result
 		return nil, err
 	}
 	if p, ok := PolicyFrom(ctx); ok {
-		if err := p.Check(ctx, t.raw, args); err != nil {
+		if err := p.Check(ctx, t.raw, SQLValues{Query: q, Args: args}); err != nil {
 			return nil, err
 		}
 	}

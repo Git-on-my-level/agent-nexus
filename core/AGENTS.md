@@ -117,9 +117,21 @@ when they parse as JSON. Binary manifests still scan every byte for ownership.
 Reference matching treats controls and invalid UTF-8 as boundaries on both sides;
 only identifier continuations suppress a boundary (with paired Markdown wrappers).
 `resourceaccess.OwnershipSources` drives atomic triggers; `ReferenceAtoms` scans
-nested JSON values/keys and typed refs in text with shared normalization. Prose
-candidates retain the original text so legacy IDs containing punctuation or
-internal whitespace can match complete denied identities at read time.
+nested JSON values/keys and typed refs in text with shared normalization. Prose candidates retain the original text so legacy IDs containing punctuation
+or internal whitespace can match complete identities. Migration 61 resolves prose
+inheritance at write time and on identity/alias/revision changes, including targets
+created after the prose. Reads traverse materialized mention edges and fixed-size
+exact-atom keys. Regular GET requests reuse an immutable denial snapshot only when
+the authorization epoch still matches within the consuming statement; a mismatch
+falls back to the canonical graph. Rebinding a scope clears its cache. Streams and
+transactional reads never use that request cache.
+Migration 62 backfills PM and inbox provenance and repairs virtual revision
+identities when a parent arrives after its revisions. PM initialization installs
+its body-reference triggers atomically with the table; retain separate `(kind,id)`
+contributors even though inherited privacy follows PM IDs across kinds. Inbox
+parent columns contribute both raw atoms and typed refs, including legacy aliases.
+Canonical inbox collections use their indexed SQL visibility and batch metadata
+hydration; avoid rebuilding authorization for every already-filtered ordinary row.
 Use the registered SQLite driver so the reference scalar functions are available
 to imports. Structured JSON contributes atoms, not whole container serialization;
 scalar text preserves even JSON-shaped IDs. Keep this distinction in new fields.

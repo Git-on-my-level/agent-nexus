@@ -326,12 +326,27 @@ func loadVisibleInboxItems(r *http.Request, opts handlerOptions, notifications b
 	if err != nil {
 		return nil, err
 	}
+	accessRequests := map[string]primitives.AccessRequest{}
+	if store, ok := opts.primitiveStore.(*primitives.Store); notifications && ok {
+		var ids []string
+		for _, item := range projected {
+			if item.SourceEventID != "" {
+				ids = append(ids, item.SourceEventID)
+			}
+		}
+		accessRequests, err = store.AccessRequestsForEvents(r.Context(), ids)
+		if err != nil {
+			return nil, err
+		}
+	}
 	payloadItems := make([]map[string]any, 0, len(projected))
 	for _, item := range projected {
 		payload := payloadFromDerivedInboxItem(item)
 		if notifications {
 			enrichHumanAttentionNotificationStatus(r.Context(), opts, payload)
-			enrichAccessRequestInboxItem(r.Context(), opts, payload)
+			if request, ok := accessRequests["event:"+item.SourceEventID]; ok {
+				applyAccessRequestInboxMetadata(payload, request)
+			}
 		}
 		payloadItems = append(payloadItems, payload)
 	}

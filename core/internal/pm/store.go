@@ -24,12 +24,23 @@ func NewStore(db *sql.DB) (*Store, error) {
 	if db == nil {
 		return nil, ErrInvalid
 	}
-	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS pm_records (
+	tx, err := db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	_, err = tx.Exec(`CREATE TABLE IF NOT EXISTS pm_records (
  kind TEXT NOT NULL, id TEXT NOT NULL, workspace_id TEXT NOT NULL, actor_id TEXT NOT NULL,
  parent_id TEXT NOT NULL DEFAULT '', revision INTEGER NOT NULL, body BLOB NOT NULL,
  PRIMARY KEY(kind,id));
  CREATE INDEX IF NOT EXISTS pm_records_scope ON pm_records(kind,workspace_id,actor_id,parent_id);`)
 	if err != nil {
+		return nil, err
+	}
+	if err := resourceaccess.InstallPMAccess(context.Background(), tx, false); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return &Store{db: db}, nil
