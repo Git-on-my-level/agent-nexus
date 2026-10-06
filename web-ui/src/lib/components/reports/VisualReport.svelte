@@ -212,11 +212,15 @@
     let disposed = false;
     let inFlight = false;
     let reviewTimer = 0;
-    // A read that should have told core about a deadline, and did not. Bounded
-    // so a document that has gone for good stops being asked about.
+    // Reads that should have told core about a deadline and did not. Backed
+    // off rather than repeated at a fixed minute: five minutes only covers
+    // five minutes of clock disagreement, and a machine without NTP can be out
+    // by much more. Eight tries reach about three hours and then stop, so a
+    // document that has gone for good is not asked about for ever.
     let reviewAttempts = 0;
-    const REVIEW_ATTEMPTS = 5;
-    const REVIEW_RETRY_MS = 60_000;
+    const REVIEW_ATTEMPTS = 8;
+    const reviewRetryWait = (attempt) =>
+      Math.min(60_000 * 2 ** attempt, 60 * 60_000);
     async function refresh() {
       if (inFlight || disposed) return;
       inFlight = true;
@@ -277,35 +281,38 @@
       // and a synchronous failure path would otherwise make the derived a
       // dependency of the effect that feeds it.
       const panels = untrack(() => observedPanels);
-      const pending = reviewReadPending(panels, Date.now());
+      const at = Date.now();
+      const pending = reviewReadPending(panels, at);
       if (!pending) reviewAttempts = 0;
-      else if (reviewAttempts >= REVIEW_ATTEMPTS) return;
-      // Still waiting for core to agree the deadline passed — a read that
-      // collided with one already in flight, a read that failed, or this
-      // reader's clock running ahead of core's. Ask again shortly rather than
-      // treating the deadline as spent: nothing else will tell the author.
-      const target = pending
-        ? Date.now() + REVIEW_RETRY_MS
-        : nextReviewDeadline(panels, Date.now());
+      // The two are independent. A panel core will never confirm must not
+      // silence the next panel's deadline, and running out of tries for one
+      // must not stop the report reading for another.
+      const retryAt =
+        pending && reviewAttempts < REVIEW_ATTEMPTS
+          ? at + reviewRetryWait(reviewAttempts)
+          : null;
+      const deadlineAt = nextReviewDeadline(panels, at);
+      const target =
+        retryAt === null || (deadlineAt !== null && deadlineAt < retryAt)
+          ? deadlineAt
+          : retryAt;
       if (target === null) return;
       // `setTimeout` fires immediately past about 24 days, so a deadline
       // further out than the cap waits in hops. Only the hop that reaches the
-      // deadline reads: a dashboard open for a week should not re-read the
+      // deadline reads: a dashboard open for a month should not re-read the
       // report every six hours on the way there.
-      const wait = Math.max(
-        Math.min(target - Date.now() + 1000, 21_600_000),
-        1000,
-      );
+      const wait = Math.max(Math.min(target - at + 1000, 21_600_000), 1000);
       reviewTimer = window.setTimeout(() => {
         if (disposed) return;
         now = Date.now();
-        if (
-          reviewReadPending(
-            untrack(() => observedPanels),
-            Date.now(),
-          )
-        ) {
-          reviewAttempts += 1;
+        const stillPending = reviewReadPending(
+          untrack(() => observedPanels),
+          Date.now(),
+        );
+        if (stillPending && reviewAttempts < REVIEW_ATTEMPTS) {
+          // A read already running will re-arm when it lands; do not spend a
+          // try on a call that returns without asking core anything.
+          if (!inFlight) reviewAttempts += 1;
           void refresh();
         } else armReviewDeadline();
       }, wait);

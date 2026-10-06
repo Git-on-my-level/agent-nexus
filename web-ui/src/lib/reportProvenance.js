@@ -433,7 +433,11 @@ function authoredTitle(author, authoredAt, review, now) {
   );
   if (review.at !== null) {
     const due = formatAbsoluteDateTime(new Date(review.at).toISOString());
-    parts.push(now > review.at ? `Review was due ${due}` : `Review due ${due}`);
+    // Inclusive, as the state is: at the instant the deadline arrives the chip
+    // reads "May be stale", and its tooltip must not still say "Review due".
+    parts.push(
+      now >= review.at ? `Review was due ${due}` : `Review due ${due}`,
+    );
     if (review.defaulted)
       parts.push(
         review.unreadable
@@ -444,23 +448,11 @@ function authoredTitle(author, authoredAt, review, now) {
   return parts.filter(Boolean).join(" · ");
 }
 
-/**
- * How far ahead a deadline is still worth holding a timer for.
- *
- * Past this the page will have been reloaded long before the deadline, and
- * re-arming a timer every six hours for a year buys nothing.
- */
-const REVIEW_SCHEDULE_HORIZON_MS = 7 * 24 * 60 * 60 * 1000;
-
 /** Authored panels only, with whatever deadline they resolve to. */
-function* authoredDeadlines(panels, now) {
+function* authoredDeadlines(panels) {
   for (const panel of panels ?? []) {
     if (panelProvenanceClass(panel) !== "authored") continue;
-    yield {
-      panel,
-      at: panelReviewDeadline(panel).at,
-      due: panelProvenance(panel, "", now).dueForReview,
-    };
+    yield { panel, at: panelReviewDeadline(panel).at };
   }
 }
 
@@ -470,14 +462,17 @@ function* authoredDeadlines(panels, now) {
  * A report is read once when it opens, and that read is what tells core an
  * author is due a reminder. With nothing live to poll, a dashboard left open
  * would never reach its own deadline: this is the instant worth reading again
- * at. Panels this reader already shows as due are skipped — they need a read
+ * at. Panels whose deadline has already passed are skipped — they need a read
  * now, not a timer (see `reviewReadPending`).
+ *
+ * Deliberately unbounded: a dashboard with a thirty-day review window is the
+ * case this exists for, and a timer that re-arms costs nothing. Clamping the
+ * wait is the caller's job.
  */
 export function nextReviewDeadline(panels, now = Date.now()) {
   let soonest = null;
-  for (const { at, due } of authoredDeadlines(panels, now)) {
-    if (at === null || at <= now || due) continue;
-    if (at - now > REVIEW_SCHEDULE_HORIZON_MS) continue;
+  for (const { at } of authoredDeadlines(panels)) {
+    if (at === null || at <= now) continue;
     if (soonest === null || at < soonest) soonest = at;
   }
   return soonest;
@@ -491,11 +486,17 @@ export function nextReviewDeadline(panels, now = Date.now()) {
  * own clock, so a reader running fast can read early and be told "not yet".
  * While that is true the report is worth reading again: this is what says so,
  * and what stops saying so once core agrees.
+ *
+ * Deliberately narrower than "shows as due". A panel whose document declares
+ * `freshness: "stale"`, or a series standing in with its snapshot, is amber
+ * for reasons that have nothing to do with a deadline — and core will never
+ * answer `review_due` for one, so treating it as pending made every report
+ * containing one retry for ever and starved its other panels.
  */
 export function reviewReadPending(panels, now = Date.now()) {
-  for (const { panel, at, due } of authoredDeadlines(panels, now)) {
+  for (const { panel, at } of authoredDeadlines(panels)) {
     if (panel?.review_due === true) continue;
-    if (due || (at !== null && at <= now)) return true;
+    if (at !== null && at <= now) return true;
   }
   return false;
 }

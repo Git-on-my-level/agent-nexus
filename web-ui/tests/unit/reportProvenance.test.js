@@ -378,34 +378,36 @@ describe("the line a renderer draws", () => {
     expect(panelProvenance(panel, "current", at - 1).state).toBe("authored");
   });
 
-  it("schedules nothing for a panel it already shows as due", () => {
-    // `nextReviewDeadline` and `panelProvenance` have to agree, or a dashboard
-    // arms a timer for a panel that has been amber since it loaded.
-    const confirmed = authored({
+  it("waits for a deadline it can still reach, however far out", () => {
+    // A dashboard with a thirty-day review window is the case the timer
+    // exists for. Bounding what gets scheduled quietly turned it off.
+    const soon = authored({
+      id: "soon",
+      authored_at: ago(DAY),
+      review_by: "2d",
+    });
+    const far = authored({
+      id: "far",
       authored_at: ago(DAY),
       review_by: "30d",
-      review_due: true,
     });
-    const declared = authored({
-      authored_at: ago(DAY),
-      review_by: "30d",
-      freshness: "stale",
-    });
-    for (const panel of [confirmed, declared]) {
-      expect(panelProvenance(panel, "stale", NOW).state).toBe("due-for-review");
-      expect(nextReviewDeadline([panel], NOW)).toBeNull();
-      expect(reviewReadPending([panel], NOW)).toBe(panel === declared);
-    }
-    // And nothing at all for a deadline past the horizon a tab survives.
+    expect(nextReviewDeadline([far, soon], NOW)).toBe(
+      Date.parse(ago(DAY)) + 2 * DAY,
+    );
+    expect(nextReviewDeadline([far], NOW)).toBe(
+      Date.parse(ago(DAY)) + 30 * DAY,
+    );
+    // A deadline already behind us needs a read, not a timer.
     expect(
       nextReviewDeadline(
-        [authored({ authored_at: ago(DAY), review_by: "9999-12-31" })],
+        [authored({ authored_at: ago(9 * DAY), review_by: "7d" })],
         NOW,
       ),
     ).toBeNull();
+    expect(nextReviewDeadline([live()], NOW)).toBeNull();
   });
 
-  it("keeps asking until core agrees a deadline passed", () => {
+  it("asks only about deadlines, not about everything showing as amber", () => {
     // Only a read tells core to remind the author, and core decides with its
     // own clock: a reader running fast can read early and be told "not yet".
     const passed = authored({ authored_at: ago(9 * DAY), review_by: "7d" });
@@ -413,14 +415,34 @@ describe("the line a renderer draws", () => {
     expect(reviewReadPending([{ ...passed, review_due: true }], NOW)).toBe(
       false,
     );
+
+    // A panel whose document declares it stale, and a series standing in with
+    // its snapshot, are amber for reasons that are not a deadline. Core will
+    // never answer `review_due` for one, so treating them as pending made
+    // every report containing one retry for ever — and starved the deadline
+    // of every other panel beside it.
+    const declared = authored({
+      id: "declared",
+      authored_at: ago(DAY),
+      review_by: "30d",
+      freshness: "stale",
+    });
+    expect(panelProvenance(declared, "stale", NOW).state).toBe(
+      "due-for-review",
+    );
+    expect(reviewReadPending([declared], NOW)).toBe(false);
+    const soon = authored({
+      id: "soon",
+      authored_at: ago(DAY),
+      review_by: "2d",
+    });
+    expect(nextReviewDeadline([declared, soon], NOW)).toBe(
+      Date.parse(ago(DAY)) + 2 * DAY,
+    );
+
     // A live panel is nobody's deadline, and neither is a future one.
     expect(reviewReadPending([live()], NOW)).toBe(false);
-    expect(
-      reviewReadPending(
-        [authored({ authored_at: ago(DAY), review_by: "30d" })],
-        NOW,
-      ),
-    ).toBe(false);
+    expect(reviewReadPending([soon], NOW)).toBe(false);
   });
 
   it("splits exactly where the <time> element starts", () => {

@@ -138,27 +138,80 @@ it("turns amber on the clock even if the read never lands", async () => {
   expect(chip(container)).toBe("due-for-review");
 });
 
-it("asks again when core will not confirm, and gives up rather than polling", async () => {
+it("asks again when core will not confirm, backing off and then stopping", async () => {
   // A read that failed, or a reader's clock running ahead of core's: the
-  // deadline is not spent until core agrees it passed.
-  coreClientMock.renderReport.mockResolvedValue(rendered(false));
+  // deadline is not spent until core agrees it passed. A fixed minute only
+  // covers a minute of clock disagreement, and a machine without NTP can be
+  // out by much more, so each wait doubles until it caps.
+  const readAt = [];
+  coreClientMock.renderReport.mockImplementation(async () => {
+    readAt.push(Date.now());
+    return rendered(false);
+  });
   open();
   await settled();
   await vi.advanceTimersByTimeAsync(DUE_AT - Date.now() + 2000);
   await settled();
-  const atDeadline = coreClientMock.renderReport.mock.calls.length;
-  expect(atDeadline).toBe(2);
+  expect(readAt).toHaveLength(2);
 
-  await vi.advanceTimersByTimeAsync(5 * 61_000);
+  // Four hours is past the whole ladder.
+  await vi.advanceTimersByTimeAsync(4 * 60 * 60_000);
   await settled();
-  const afterRetries = coreClientMock.renderReport.mock.calls.length;
-  expect(afterRetries).toBeGreaterThan(atDeadline);
-  expect(afterRetries).toBeLessThanOrEqual(atDeadline + 5);
 
-  // Bounded: a document that has gone for good stops being asked about.
-  await vi.advanceTimersByTimeAsync(60 * 60_000);
+  // Bounded: eight tries after the one at load, then silence.
+  expect(readAt).toHaveLength(9);
+  const gaps = readAt.slice(2).map((at, i) => at - readAt[i + 1]);
+  // Each wait is at least a minute, never shrinks, and caps at an hour.
+  expect(Math.min(...gaps)).toBeGreaterThanOrEqual(60_000);
+  expect(Math.max(...gaps)).toBeLessThanOrEqual(60 * 60_000 + 2000);
+  expect(gaps).toEqual([...gaps].sort((a, b) => a - b));
+  expect(gaps.at(-1)).toBeGreaterThan(gaps[0]);
+  // And the ladder reaches hours, not minutes: a clock out by half an hour is
+  // still caught.
+  expect(readAt.at(-1) - readAt[1]).toBeGreaterThan(2 * 60 * 60_000);
+
+  await vi.advanceTimersByTimeAsync(6 * 60 * 60_000);
   await settled();
-  expect(coreClientMock.renderReport).toHaveBeenCalledTimes(afterRetries);
+  expect(readAt).toHaveLength(9);
+});
+
+it("keeps waiting for one deadline while another will never be confirmed", async () => {
+  // A panel the document declares stale is amber for a reason that is not a
+  // deadline, and core will never answer `review_due` for it. Treating it as
+  // an unconfirmed deadline made it retry for ever and silenced the panel
+  // beside it, whose deadline nobody then read.
+  const twoPanels = structuredClone(report);
+  twoPanels.panels.push({
+    ...report.panels[0],
+    id: "declared",
+    title: "Declared stale",
+    review_by: "30d",
+    freshness: "stale",
+  });
+  const answer = rendered(false);
+  answer.panels.push({
+    ...answer.panels[0],
+    id: "declared",
+    review_by: new Date(Date.parse(WRITTEN) + 30 * DAY).toISOString(),
+  });
+  coreClientMock.renderReport.mockResolvedValue(answer);
+  render(VisualReport, {
+    report: twoPanels,
+    documentId: "dashboard",
+    revisionRef: "document_revision:dashboard-r1",
+  });
+  await settled();
+  expect(coreClientMock.renderReport).toHaveBeenCalledTimes(1);
+
+  // No retry storm in the first ten minutes...
+  await vi.advanceTimersByTimeAsync(10 * 60_000);
+  await settled();
+  expect(coreClientMock.renderReport).toHaveBeenCalledTimes(1);
+
+  // ...and the other panel's deadline is still read when it arrives.
+  await vi.advanceTimersByTimeAsync(DUE_AT - Date.now() + 2000);
+  await settled();
+  expect(coreClientMock.renderReport).toHaveBeenCalledTimes(2);
 });
 
 it("keeps what core resolved when a later read fails", async () => {
@@ -182,11 +235,16 @@ it("keeps what core resolved when a later read fails", async () => {
   );
 });
 
-it("stops its timer when the report goes away", async () => {
+it("clears its timer when the report goes away", async () => {
   coreClientMock.renderReport.mockResolvedValue(rendered(false));
   const { unmount } = open();
   await settled();
+  const armed = vi.getTimerCount();
+  expect(armed).toBeGreaterThan(0);
   unmount();
+  // Cleared, not merely guarded: a timer left armed on every navigation
+  // accumulates for as long as the tab lives.
+  expect(vi.getTimerCount()).toBeLessThan(armed);
   await vi.advanceTimersByTimeAsync(DUE_AT - Date.now() + 10 * 60_000);
   await settled();
   expect(coreClientMock.renderReport).toHaveBeenCalledTimes(1);
