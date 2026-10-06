@@ -926,6 +926,17 @@
   {
     "method": "GET",
     "path": "/stream/events",
+    "principal": "authorized",
+    "p95_ms": 2500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "issue": "SCA-665",
+    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
+    "reason": "Existing main 1b57953e (schema65); these production paths match main. Stream scopes deliberately bypass request-snapshot reuse (server/resource_access.go:20), and event filtering repeats visibility checks on both measured data ticks (server/stream_handlers.go:205). Actual captured plans retain the already reviewed private-thread/artifact denial scans, recursive ownership closure and custom WHERE checks; SCA-665 owns that remaining corpus cost. CI run 37531789369 measured p95 618.766120ms over three full measured samples, each with 20 SQL executions and 18 consumed rows and expected200. Allow only this method/path/authorized principal 2500ms (threefold latency headroom plus250ms rounded up to500ms); ordinary100-query and1024-row ceilings remain unchanged. Status, positive fixtures, privacy, exact ordered plans and, where applicable, two SSE data ticks remain mandatory. No new SQL/plan pair appeared among all204 cases/756samples."
+  },
+  {
+    "method": "GET",
+    "path": "/stream/events",
     "principal": "unauthorized",
     "p95_ms": 28500,
     "max_queries": 100,
@@ -992,6 +1003,17 @@
   {
     "method": "GET",
     "path": "/threads/{thread_id}/context",
+    "principal": "authorized",
+    "p95_ms": 2000,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "issue": "SCA-665",
+    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
+    "reason": "Existing main 1b57953e (schema65); these production paths match main. Context resolution and payload enrichment retain request-scoped denial closure work before otherwise bounded thread/event/artifact reads (server/threads_handlers.go:280; server/thread_workspace_handlers.go:112). Actual captured plans retain the already reviewed private-thread/artifact denial scans, recursive ownership closure and custom WHERE checks; SCA-665 owns that remaining corpus cost. CI run 37531789369 measured p95 512.870888ms over three full measured samples, each with 60 SQL executions and 62 consumed rows and expected200. Allow only this method/path/authorized principal 2000ms (threefold latency headroom plus250ms rounded up to500ms); ordinary100-query and1024-row ceilings remain unchanged. Status, positive fixtures, privacy, exact ordered plans and, where applicable, two SSE data ticks remain mandatory. No new SQL/plan pair appeared among all204 cases/756samples."
+  },
+  {
+    "method": "GET",
+    "path": "/threads/{thread_id}/context",
     "principal": "unauthorized",
     "p95_ms": 2500,
     "max_queries": 100,
@@ -1010,6 +1032,17 @@
     "issue": "SCA-665",
     "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
     "reason": "Existing main e637014e: measured 686.3 ms, 5 SQL executions and 5 consumed rows on the 4K corpus. Directory, PM, report/overview or ancillary projection still inherits corpus-sized reads/enrichment and the remaining per-request denial snapshot cost. Threefold latency headroom; count overruns have only 2% headroom (minimum 8 SQL / 64 rows). Remaining denial graph work is tracked by SCA-665 (mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0); success, privacy and exact plan checks stay mandatory. Full normal acceptance observed maximum measured latency 497.1ms, 5SQL and 5rows; the finite allowance preserves threefold latency headroom and narrow count ceilings. Revalidated on main e448ea5b (schema65): fresh normal requests measured maximum 384.488ms, 5SQL and 5rows within these finite ceilings."
+  },
+  {
+    "method": "GET",
+    "path": "/threads/{thread_id}/workspace",
+    "principal": "authorized",
+    "p95_ms": 2000,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "issue": "SCA-665",
+    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
+    "reason": "Existing main 1b57953e (schema65); these production paths match main. Workspace resolution and composed context retain request-scoped denial closure work before the selected thread payload (server/thread_workspace_handlers.go:83, :107). Actual captured plans retain the already reviewed private-thread/artifact denial scans, recursive ownership closure and custom WHERE checks; SCA-665 owns that remaining corpus cost. CI run 37531789369 measured p95 578.343505ms over three full measured samples, each with 69 SQL executions and 67 consumed rows and expected200. Allow only this method/path/authorized principal 2000ms (threefold latency headroom plus250ms rounded up to500ms); ordinary100-query and1024-row ceilings remain unchanged. Status, positive fixtures, privacy, exact ordered plans and, where applicable, two SSE data ticks remain mandatory. No new SQL/plan pair appeared among all204 cases/756samples."
   },
   {
     "method": "GET",
