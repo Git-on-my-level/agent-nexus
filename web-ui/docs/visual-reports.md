@@ -355,12 +355,21 @@ from `provenance_class` when the rendered report supplies it, and derived from
 the panel's shape otherwise, so a live type this build has never heard of still
 renders as live data rather than as an authored panel with no body.
 
-`src/lib/visualReports.js` validates `authored_at` and `review_by` exactly as
-`contracts/visualreport/report.go` and `review.go` do, including the duration
-form and the "required once a panel dates itself" rule. The two validators are
-checked against each other by `scripts/check-visual-report-conformance.mjs`;
-keep a fixture in `contracts/fixtures/visual-reports/reports.json` for every
-rule either side adds.
+`src/lib/visualReports.js` validates `authored_at` and `review_by` against the
+same rules as `contracts/visualreport/report.go` and `review.go`, including the
+duration form and the "required once a panel dates itself" rule. A review
+deadline is parsed by its own RFC 3339 reader rather than the document
+timestamp rule, because `review.go` goes through Go's `time.Parse`: nanosecond
+precision and an offset hour of 24 are both legal there, and core writes
+resolved deadlines back with nanoseconds. The comparison against `authored_at`
+is made in nanoseconds for the same reason. Filter strings are measured in
+bytes and trimmed with Go's whitespace set, not JavaScript's.
+
+None of that is self-evident, so it is pinned:
+`scripts/check-visual-report-conformance.mjs` runs both validators over
+`contracts/fixtures/visual-reports/reports.json` and compares verdicts. Add a
+fixture there for every rule either side adds — a rule with no fixture is a
+rule the two sides are free to disagree about.
 
 Because core returns resolved provenance for authored panels too, the UI reads
 the rendered report once for **every** report, not only one with a live panel.

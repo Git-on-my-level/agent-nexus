@@ -126,8 +126,60 @@ export function safeReportUrl(value) {
   }
 }
 
+const RFC3339 =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:Z|([+-])(\d{2}):(\d{2}))$/;
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
 /**
- * A review deadline in millis, or `null` when it cannot be read.
+ * An RFC 3339 instant in epoch nanoseconds, or `null`.
+ *
+ * Deliberately not the shared `TIMESTAMP` check, which is the *document's*
+ * timestamp rule. A review deadline goes through Go's `time.Parse` instead,
+ * which is laxer in ways that matter here: core writes resolved deadlines back
+ * with nanosecond precision, and an offset hour of 24 is legal. Rejecting
+ * either would take a whole stored report down to its text fallback over a
+ * field core had already accepted.
+ *
+ * Nanoseconds because `review.go` compares `time.Time`: a deadline half a
+ * millisecond after the writing is after it, and `Date.parse` cannot see that.
+ */
+function rfc3339Nanos(value) {
+  const m = typeof value === "string" && value.match(RFC3339);
+  if (!m) return null;
+  const [, y, mo, d, h, mi, sec, frac, sign, oh, om] = m;
+  const year = Number(y);
+  const month = Number(mo);
+  const day = Number(d);
+  const hour = Number(h);
+  const minute = Number(mi);
+  const second = Number(sec);
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const days = month === 2 && leap ? 29 : DAYS_IN_MONTH[month - 1];
+  if (
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > days ||
+    hour > 23 ||
+    minute > 59 ||
+    second > 59
+  )
+    return null;
+  // Go accepts an offset hour up to 24, and rejects 25.
+  const offsetHour = sign ? Number(oh) : 0;
+  const offsetMinute = sign ? Number(om) : 0;
+  if (offsetHour > 24 || offsetMinute > 59) return null;
+  const ms = Date.UTC(year, month - 1, day, hour, minute, second);
+  if (!Number.isFinite(ms)) return null;
+  const offsetMs =
+    (sign === "-" ? 1 : -1) * (offsetHour * 3600 + offsetMinute * 60) * 1000;
+  // Go truncates beyond nanoseconds rather than rounding.
+  const nanos = BigInt(((frac ?? "") + "000000000").slice(0, 9));
+  return BigInt(ms + offsetMs) * 1000000n + nanos;
+}
+
+/**
+ * A review deadline in epoch nanoseconds, or `null` when it cannot be read.
  *
  * `2026-12-01` is midnight UTC on that date, an RFC 3339 instant is itself,
  * and `7d` is that long after the panel was written. Resolution never uses the
@@ -136,17 +188,29 @@ export function safeReportUrl(value) {
  * Keep in conformance with `ReviewDeadline` in
  * `contracts/visualreport/review.go`.
  */
-export function reviewDeadlineMillis(value, authoredAt) {
+export function reviewDeadlineNanos(value, authoredNanos) {
   if (typeof value !== "string" || !value) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    const at = Date.parse(`${value}T00:00:00Z`);
-    return Number.isFinite(at) ? at : null;
-  }
-  const instant = timestampMillis(value);
-  if (Number.isFinite(instant)) return instant;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value))
+    return rfc3339Nanos(`${value}T00:00:00Z`);
+  const instant = rfc3339Nanos(value);
+  if (instant !== null) return instant;
   const seconds = seriesRangeSeconds(value);
-  if (seconds === null || !Number.isFinite(authoredAt)) return null;
-  return authoredAt + seconds * 1000;
+  if (seconds === null || authoredNanos === null) return null;
+  return authoredNanos + BigInt(seconds) * 1000000000n;
+}
+
+/** The same deadline in milliseconds, for a renderer that works in `Date`. */
+export function reviewDeadlineMillis(value, authoredAt) {
+  const authored = Number.isFinite(authoredAt)
+    ? BigInt(Math.trunc(authoredAt)) * 1000000n
+    : null;
+  const nanos = reviewDeadlineNanos(value, authored);
+  return nanos === null ? null : Number(nanos / 1000000n);
+}
+
+/** An authored instant in nanoseconds, for comparing against a deadline. */
+export function authoredNanos(value) {
+  return rfc3339Nanos(value);
 }
 
 /** Freshness describes observation age, never completion, availability, or health. */
@@ -293,8 +357,8 @@ function validateReport(report) {
         );
       return;
     }
-    const written = timestampMillis(panel.authored_at ?? generatedAt);
-    const due = reviewDeadlineMillis(panel.review_by, written);
+    const written = authoredNanos(panel.authored_at ?? generatedAt);
+    const due = reviewDeadlineNanos(panel.review_by, written);
     if (due === null) {
       add(
         `${path}.review_by`,
@@ -302,7 +366,7 @@ function validateReport(report) {
       );
       return;
     }
-    if (Number.isFinite(written) && due <= written)
+    if (written !== null && due <= written)
       add(`${path}.review_by`, "must be after authored_at");
   };
   const unique = (items, path) => {
@@ -460,7 +524,11 @@ function validateReport(report) {
     if (panel.source !== undefined) {
       for (const error of validateSeriesBinding(panel))
         add(`${path}.source`, error);
-      if (panel.fallback === undefined) return;
+      // A bound timeline has nothing else to check: it takes no fallback, and
+      // falling through would tell an author their bound panel "requires a
+      // series source" while pointing at the source it has.
+      if (panel.type === "live-timeline" || panel.fallback === undefined)
+        return;
       if (!record(panel.fallback, `${path}.fallback`, ["as_of", "data"]))
         return;
       timestamp(panel.fallback.as_of, `${path}.fallback.as_of`);

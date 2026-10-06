@@ -29,6 +29,21 @@ export const isLivePanel = (panel) =>
   !!panel?.source ||
   (typeof panel?.type === "string" && panel.type.startsWith("live-"));
 
+const UTF8 = new TextEncoder();
+/** Byte length, the way a Go `len(string)` counts it. */
+const utf8Length = (value) => UTF8.encode(value).length;
+
+/**
+ * `strings.TrimSpace`, not `String.prototype.trim`.
+ *
+ * The two sets disagree at both ends — Go trims U+0085 and JS does not, JS
+ * trims U+FEFF and Go does not — which is enough to make one side call a
+ * filter empty while the other reads it as a value.
+ */
+const GO_SPACE =
+  /^[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+|[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$/g;
+const goTrimSpace = (value) => value.replace(GO_SPACE, "");
+
 /** Query validation mirrors the canonical LiveReportQuery contract. */
 export function validateLiveQuery(type, data) {
   const errors = [];
@@ -104,13 +119,17 @@ export function validateLiveQuery(type, data) {
     !["phase", "board"].includes(data.group_by)
   )
     errors.push("group_by must be phase or board");
-  // Exact-match card filters: a nonempty string of at most 128 characters.
+  // Exact-match card filters: a nonempty string of at most 128 bytes.
+  //
+  // Bytes, and Go's whitespace set, because core measures both that way. A
+  // label of seventy accented characters is 140 bytes: counting UTF-16 units
+  // here would call it valid and leave the write gate to reject it.
   for (const key of ["label", "role", "status"])
     if (
       data[key] !== undefined &&
       (typeof data[key] !== "string" ||
-        !data[key].trim() ||
-        data[key].length > 128)
+        !goTrimSpace(data[key]) ||
+        utf8Length(data[key]) > 128)
     )
       errors.push("invalid card filter");
   if (

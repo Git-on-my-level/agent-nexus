@@ -91,7 +91,7 @@
     -->
     {#if items.length}
       <ul class="rows">
-        {#each items as item (item.ref)}
+        {#each items as item, index (item.ref ?? index)}
           <li>
             {#if canNavigate}<a
                 href={workspaceHref(`/tasks/${encodeURIComponent(item.ref)}`)}
@@ -104,7 +104,9 @@
               ]
                 .filter(Boolean)
                 .join(" · ")}
-              {#if date(item.updated_at)}<span
+              <!-- `date(null)` is the epoch, which is finite; the age is the
+                   honest test, and it is empty for a row with no instant. -->
+              {#if formatAge(item.updated_at, now)}<span
                   >· updated <time datetime={item.updated_at}
                     >{formatAge(item.updated_at, now)}</time
                   ></span

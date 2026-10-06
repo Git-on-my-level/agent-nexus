@@ -179,3 +179,37 @@ it("does not warn twice on a panel that is already overdue", () => {
   expect(section.textContent).toContain("May be stale");
   expect(section.querySelector(".report-state")).toBeNull();
 });
+
+it("keeps showing a release timeline that has gone quiet", () => {
+  // An irregular stream — releases, deploys — is stale between events by
+  // definition: core computes staleness from the adapter's expected interval.
+  // Core still returns the events it has, and blanking the panel exactly when
+  // the last release matters would be the opposite of the point.
+  const { container } = render(VisualReportPanel, {
+    compact: true,
+    panel: {
+      ...panel({ id: "releases", type: "live-timeline", title: "Releases" }),
+      source: { series: "releases", range: "30d" },
+      data: {},
+      freshness: "stale",
+      seriesFallback: false,
+      seriesObservation: {
+        status: "stale",
+        observed_at: ago(4),
+        data: {
+          items: [
+            { at: ago(4), label: "channel=stable", value: "v0.12.12" },
+            { at: ago(9), label: "channel=stable", value: "v0.12.11" },
+          ],
+        },
+      },
+    },
+    freshness: "stale",
+    now: NOW,
+    oninspect: () => {},
+  });
+  const section = container.querySelector("[data-report-panel='releases']");
+  expect(section.textContent).toContain("v0.12.12");
+  expect(section.textContent).toContain("v0.12.11");
+  expect(section.dataset.provenanceClass).toBe("live");
+});

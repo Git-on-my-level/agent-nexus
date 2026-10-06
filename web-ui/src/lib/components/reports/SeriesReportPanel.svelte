@@ -3,11 +3,22 @@
   import ReportChart from "./ReportChart.svelte";
   import ReportDetails from "./ReportDetails.svelte";
   let { panel, freshness, now = Date.now() } = $props();
-  /** Newest first, as core returns them. */
-  let timeline = $derived(panel.data?.items ?? []);
+  /**
+   * Newest first, as core returns them.
+   *
+   * Read from the observation rather than from `panel.data`, which
+   * `withSeriesObservation` empties for any status but `ok`. A timeline takes
+   * no authored fallback, and an irregular stream — releases, deploys — is
+   * `stale` between events by definition: core still returns the events it
+   * has, and blanking the panel exactly when the last release matters would
+   * be the opposite of the point.
+   */
   let observation = $derived(panel.seriesObservation);
   let showData = $derived(panel.seriesFallback || observation?.status === "ok");
   let provenance = $derived(observation?.provenance);
+  let timeline = $derived(
+    observation?.data?.items ?? (showData ? (panel.data?.items ?? []) : []),
+  );
 </script>
 
 {#if panel.seriesFallback}
@@ -26,7 +37,7 @@
       : "Live series unavailable"}
   </p>
 {/if}
-{#if showData}
+{#if showData || (panel.type === "live-timeline" && timeline.length)}
   {#if panel.type === "live-timeline"}
     <!--
       Every observation an adapter published, newest first — a release, a
@@ -35,7 +46,7 @@
     -->
     {#if timeline.length}
       <ol class="grid gap-2 text-meta">
-        {#each timeline as item, index (`${item.at}-${item.label}-${index}`)}
+        {#each timeline as item, index (index)}
           <li
             class="grid grid-cols-[2.5rem_minmax(0,1fr)] items-baseline gap-x-3 border-b border-line-subtle pb-2 last:border-0 last:pb-0"
           >
