@@ -128,9 +128,17 @@ func TestReportPartialAndUnavailablePanels(t *testing.T) {
 	if reportPanelByType(t, response, "live-initiatives")["status"] != "unavailable" || reportPanelByType(t, response, "live-activity")["status"] != "ok" {
 		t.Fatalf("%#v", response)
 	}
+	first, err := h.primitiveStore.(*primitives.Store).CreateWork(context.Background(), "actor-1", "", map[string]any{"title": "First"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := h.primitiveStore.(*primitives.Store).CreateWork(context.Background(), "actor-1", "", map[string]any{"title": "Second"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	reader := reportReader{r: req, opts: handlerOptions{primitiveStore: h.primitiveStore}, now: time.Now(), work: []map[string]any{
-		{"ref": "card:first", "phase": "ready", "board_ref": "board:b", "plan_state": map[string]any{"shape": "chain", "health": "on_track", "steps": []any{map[string]any{"id": "design", "title": "Design", "status": "done"}}}, "assignee_refs": []string{"actor:one"}},
-		{"ref": "card:second", "phase": "ready", "board_ref": "board:b"},
+		{"id": first["id"], "ref": "card:first", "phase": "ready", "board_ref": "board:b", "plan_state": map[string]any{"shape": "chain", "health": "on_track", "steps": []any{map[string]any{"id": "design", "title": "Design", "status": "done"}}}, "assignee_refs": []string{"actor:one"}},
+		{"id": second["id"], "ref": "card:second", "phase": "ready", "board_ref": "board:b"},
 	}, boards: map[string]map[string]any{"board:b": {"title": "Work"}}}
 	cacheKey, _ := json.Marshal(primitives.ReportWorkFilter{Limit: reports.MaxRows})
 	reader.workScopes = map[string]reportWorkRead{string(cacheKey): {work: reader.work}}

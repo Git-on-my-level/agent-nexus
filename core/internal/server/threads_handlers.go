@@ -158,7 +158,7 @@ func expandThreadTimeline(ctx context.Context, opts handlerOptions, threadID str
 	if err != nil {
 		return out, err
 	}
-	receipts, err := deriveAgentNotificationReceiptsByEvent(ctx, opts, threadID)
+	receipts, err := deriveAgentNotificationReceiptsByEvent(ctx, opts, threadID, events)
 	if err != nil {
 		return out, err
 	}

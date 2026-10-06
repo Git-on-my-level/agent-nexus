@@ -69,6 +69,8 @@ type PrimitiveStore interface {
 	GetIdempotencyReplay(ctx context.Context, scope string, actorID string, requestKey string) (primitives.IdempotencyReplay, error)
 	PutIdempotencyReplay(ctx context.Context, scope string, actorID string, requestKey string, requestHash string, status int, response map[string]any) error
 	ListDerivedInboxItems(ctx context.Context, filter primitives.DerivedInboxListFilter) ([]primitives.DerivedInboxItem, error)
+	ReadInbox(ctx context.Context, options primitives.InboxReadOptions) ([]primitives.DerivedInboxItem, int, error)
+	ListInboxThreadIDs(ctx context.Context) ([]string, error)
 	GetDerivedInboxItem(ctx context.Context, id string) (primitives.DerivedInboxItem, error)
 	ReplaceDerivedInboxItems(ctx context.Context, threadID string, items []primitives.DerivedInboxItem) error
 	GetDerivedTopicProjection(ctx context.Context, threadID string) (primitives.DerivedTopicProjection, error)
@@ -172,6 +174,7 @@ type HandlerOption func(*handlerOptions)
 
 type handlerOptions struct {
 	routeObserver                  func(string, routeAccessClassifier)
+	readVisibility                 func(string, string) bool // Request-scoped access for composed resource reads.
 	observationRuntime             *ObservationRuntime
 	pmRuntime                      *PMRuntime
 	pmHandler                      http.Handler

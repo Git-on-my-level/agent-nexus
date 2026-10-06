@@ -6,6 +6,42 @@ import (
 	"testing"
 )
 
+func TestReferenceAtomsIncludeNormalizedHandlesWithoutLosingLegacyIDs(t *testing.T) {
+	for _, kind := range []string{"card", "thread", "event", "card_revision", "document_revision"} {
+		raw := kind + ":CONFIDENTIAL._/PAYLOAD._/HANDLE"
+		got := ReferenceAtoms(raw)
+		if !slices.Contains(got, raw) || !slices.Contains(got, kind+":confidential-payload-handle") {
+			t.Fatalf("lost exact/normalized identity: %v", got)
+		}
+	}
+	long := "card_revision:" + strings.Repeat("z", 64) + "-r1"
+	if !slices.Contains(ReferenceAtoms(long), long) {
+		t.Fatal("truncated a canonical virtual revision identity")
+	}
+	if slices.Contains(ReferenceAtoms("source:EXTERNAL._/IDENTITY"), "source:external-identity") {
+		t.Fatal("normalized an opaque external identity")
+	}
+}
+
+func TestExactModernReferencesUseIndexedAtomsAndLegacyProseKeepsCandidates(t *testing.T) {
+	for _, text := range []string{"card:private-card", " event : 01234567-89ab-cdef-0123-456789abcdef ", "card_revision:long-handle-r1"} {
+		for _, atom := range ReferenceAtoms(text) {
+			if strings.HasPrefix(atom, textReferencePrefix) {
+				t.Fatalf("exact ref became an unindexed prose candidate: %q", atom)
+			}
+		}
+	}
+	for _, text := range []string{"See card:private-card", "doc:legacy document with spaces!", "doc:legacy?punctuation", "card:private\x00after"} {
+		found := false
+		for _, atom := range ReferenceAtoms(text) {
+			found = found || strings.HasPrefix(atom, textReferencePrefix)
+		}
+		if !found {
+			t.Fatalf("lost legacy/prose reference candidate: %q", text)
+		}
+	}
+}
+
 func TestReferenceAtomsNestedTextAndMalformedUTF8(t *testing.T) {
 	for _, input := range []string{
 		`{"evidence":[{"ref":" CARD :\u00a0private ","title":"secret"}]}`,

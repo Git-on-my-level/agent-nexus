@@ -2768,6 +2768,10 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
+                    "name": "board.role",
+                    "type": "string"
+                },
+                {
                     "name": "board.summary",
                     "type": "string"
                 },
@@ -2941,6 +2945,10 @@ export const commandRegistry = [
                 {
                     "name": "patch.provenance.sources",
                     "type": "list\u003cstring\u003e"
+                },
+                {
+                    "name": "patch.role",
+                    "type": "string"
                 },
                 {
                     "name": "patch.summary",
@@ -7088,6 +7096,7 @@ export const commandRegistry = [
         "path": "/inbox/{inbox_id}",
         "operation_id": "getInboxItem",
         "summary": "Get one inbox item",
+        "description": "Authorizes the inbox subject, related refs, backing card and board before returning the item.",
         "why": "Side-effect free read of one materialized inbox row.",
         "input_mode": "none",
         "streaming": {
@@ -9797,7 +9806,7 @@ export const commandRegistry = [
         ],
         "stability": "beta",
         "surface": "projection",
-        "agent_notes": "Both text and structured version 1 visual reports are supported. Authored review metadata is returned for every static panel. Reading a pinned report checks deadlines and durably deduplicates author-only inbox reminders per panel and revision. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows. Archived boards and their work are excluded. Private PM events remain private.",
+        "agent_notes": "Both text and structured version 1 visual reports are supported. Authored review metadata is returned for every static panel. Reading a pinned report checks deadlines and durably deduplicates author-only inbox reminders per panel and revision. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows after subject, related-ref, card and board authorization. Archived boards and their work are excluded. Private PM events remain private.",
         "path_params": [
             "document_id"
         ],
@@ -11613,12 +11622,24 @@ export const commandRegistry = [
                     "type": "list\u003cstring\u003e"
                 },
                 {
+                    "name": "source.aliases",
+                    "type": "list\u003cstring\u003e"
+                },
+                {
                     "name": "source.authority",
                     "type": "string"
                 },
                 {
                     "name": "source.connection_id",
                     "type": "string"
+                },
+                {
+                    "name": "source.identifier",
+                    "type": "string"
+                },
+                {
+                    "name": "source.identifier_aliases",
+                    "type": "list\u003cstring\u003e"
                 },
                 {
                     "name": "source.native_id",
@@ -11635,6 +11656,10 @@ export const commandRegistry = [
                 {
                     "name": "source.url",
                     "type": "string"
+                },
+                {
+                    "name": "source_refs",
+                    "type": "list\u003cany\u003e"
                 },
                 {
                     "name": "start_at",
@@ -12162,6 +12187,10 @@ export const commandRegistry = [
                 {
                     "name": "patch.roles",
                     "type": "list\u003cstring\u003e"
+                },
+                {
+                    "name": "patch.source_refs",
+                    "type": "list\u003cany\u003e"
                 },
                 {
                     "name": "patch.start_at",

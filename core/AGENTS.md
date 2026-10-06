@@ -168,6 +168,15 @@ Ancillary actor/auth/host/series/secrets readers and transactional response
 loaders must retain scoped handles too. Durable authentication/grant invariants
 may read canonical authority without returning profile or business content.
 
+Migrations 64/65 add board roles and the bounded evidence projection after main's
+authorization history. Evidence records and alias keys are registered ownership
+sources, inherit their card, and constrain that card when they reference private
+resources. Their tables and views use scoped relations before lookup limits.
+`source_refs` and metadata plans inherit through `work_metadata.metadata_json`;
+card plans inherit through `card_plans.body_json`. Inbox summary counts and pages
+the scoped `derived_inbox_items` relation in SQL. Do not add independent payload
+authorization or bypass scoped handles for these projections.
+
 `internal/storage/testdata/resource_access_storage.json` classifies every live
 column (including PM/investigation schemas, generated columns and views) and
 fingerprints persistence writers plus transitive helper callers in internal/cmd.
@@ -200,7 +209,10 @@ classify each exact method/path in the generated contract route inventory.
 Mounted-route checks also compare actual registration and authentication
 classifiers; direct mux additions cannot bypass the inventory. Exemptions are
 restricted to reviewed service boundaries and exercised for data disclosure.
-Every record/collection/reference-write/stream entry is exercised against a
+Every record/collection/reference-read/reference-write/stream entry is exercised against a
 private board with a public card thread, using both a stranger and an unauthorized
 agent. Identity/transport-only exemptions require an explicit rationale. Extend
 the fixture and the scoped store/SSE regressions when adding a resource relation.
+Reference-read batches authorize each candidate through scoped loaders and may
+echo requested identities without metadata. Their JSON decoding retains text,
+size and syntax validation; reference writes retain whole-body ownership checks.

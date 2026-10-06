@@ -9,7 +9,7 @@
       "step_id": "step"
     },
     {
-      "kind": "initiative_stalled",
+      "kind": "initiative_stalled", "kind_v2": "initiative_stale",
       "ref": "card:stall",
       "title": "stall"
     },

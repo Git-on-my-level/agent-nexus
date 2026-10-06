@@ -53,7 +53,7 @@ serially with per-reader deadlines. Persisted leases fence stale workers; retry
 backoff and rate-limit hints survive service recreation. Failure retains the
 last good evidence. Unconfigured targets remain queued and visibly unexecuted.
 
-Example using a public GitHub issue and a credential *handle*, not a secret.
+Example using a public GitHub issue and a credential _handle_, not a secret.
 `make serve` sets `ANX_OBSERVATION_CONFIG` to `core/dev/observation.serve.json`
 when that file exists: a builtin GitHub reader plus a JIT C transform against
 `Git-on-my-level/agent-nexus#208`. `core/scripts/dogfood-jit.sh` compiles
@@ -63,23 +63,25 @@ cross-compiles `./internal/observation` with `GOOS=linux`.
 
 ```json
 {
-  "targets": [{
-    "work_ref": "card:release-review",
-    "source_native_id": "example/project#42",
-    "target": {
-      "connection_id": "github-main",
-      "source": "github",
-      "kind": "issue",
-      "native_id": "42",
-      "repository": "example/project"
-    },
-    "base_url": "https://api.github.com",
-    "credential_env": "ANX_GITHUB_READ_TOKEN",
-    "interval_seconds": 300,
-    "stale_after_seconds": 900,
-    "timeout_seconds": 30,
-    "max_backoff_seconds": 3600
-  }]
+  "targets": [
+    {
+      "work_ref": "card:release-review",
+      "source_native_id": "example/project#42",
+      "target": {
+        "connection_id": "github-main",
+        "source": "github",
+        "kind": "issue",
+        "native_id": "42",
+        "repository": "example/project"
+      },
+      "base_url": "https://api.github.com",
+      "credential_env": "ANX_GITHUB_READ_TOKEN",
+      "interval_seconds": 300,
+      "stale_after_seconds": 900,
+      "timeout_seconds": 30,
+      "max_backoff_seconds": 3600
+    }
+  ]
 }
 ```
 

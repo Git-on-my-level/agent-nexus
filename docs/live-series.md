@@ -120,11 +120,26 @@ for bound panels and put a static snapshot in `fallback`:
 
 ```json
 {
-  "id": "builds", "project_id": "launch", "type": "metric", "title": "Builds",
-  "author": "collector", "provenance": "reported", "observed_at": null,
-  "freshness": "unavailable", "source_ids": [], "data": {},
-  "source": {"series": "builds", "labels": {"initiative": "launch"}, "range": "24h", "agg": "last"},
-  "fallback": {"as_of": "2026-10-05T00:00:00Z", "data": {"value": 12, "unit": "builds"}}
+  "id": "builds",
+  "project_id": "launch",
+  "type": "metric",
+  "title": "Builds",
+  "author": "collector",
+  "provenance": "reported",
+  "observed_at": null,
+  "freshness": "unavailable",
+  "source_ids": [],
+  "data": {},
+  "source": {
+    "series": "builds",
+    "labels": { "initiative": "launch" },
+    "range": "24h",
+    "agg": "last"
+  },
+  "fallback": {
+    "as_of": "2026-10-05T00:00:00Z",
+    "data": { "value": 12, "unit": "builds" }
+  }
 }
 ```
 

@@ -25,8 +25,9 @@ import (
 )
 
 type accessInventory struct {
-	Tables  map[string]map[string]string `json:"tables"`
-	Writers map[string]string            `json:"writers"`
+	Tables                  map[string]map[string]string `json:"tables"`
+	Writers                 map[string]string            `json:"writers"`
+	ExternalKeyPublications map[string][]string          `json:"external_key_publications"`
 }
 
 func validStorageClassification(policy string) bool {
@@ -292,6 +293,7 @@ func TestResourceAccessStorageInventory(t *testing.T) {
 			}
 		}
 		inventory.Writers = writers
+		inventory.ExternalKeyPublications = resourceaccess.ExternalKeyPublications
 		data, err = json.MarshalIndent(inventory, "", "  ")
 		if err != nil {
 			t.Fatal(err)
@@ -307,6 +309,9 @@ func TestResourceAccessStorageInventory(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantColumns := map[string][]string{}
+	if !reflect.DeepEqual(inventory.ExternalKeyPublications, resourceaccess.ExternalKeyPublications) {
+		t.Error("external publication/reference field inventory changed; classify and refresh deliberately")
+	}
 	for table, fields := range inventory.Tables {
 		for col, policy := range fields {
 			if !validStorageClassification(policy) {
