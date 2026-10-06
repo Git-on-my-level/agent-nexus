@@ -1,0 +1,50 @@
+=== RUN   TestLifecycleFence
+=== RUN   TestLifecycleFence/1000
+    model_test.go:80: descendants=1000 archive_writes=3 worker_slices=17 page_examined=1 count=1
+=== RUN   TestLifecycleFence/10000
+    model_test.go:80: descendants=10000 archive_writes=3 worker_slices=158 page_examined=1 count=1
+--- PASS: TestLifecycleFence (0.35s)
+    --- PASS: TestLifecycleFence/1000 (0.03s)
+    --- PASS: TestLifecycleFence/10000 (0.31s)
+=== RUN   TestAudienceStreams64Scopes
+    model_test.go:114: scopes=64 wrong_audience_changes=64000 examined=64
+    model_test.go:151: sealed_grants=10000 directory_examined=65; idle_tick_examined=0
+--- PASS: TestAudienceStreams64Scopes (0.52s)
+=== RUN   TestIdentityAllocationDifferential
+    model_test.go:213: hidden_alias_and_tombstone=false status=success alias=report opaque_id_bytes=16
+    model_test.go:213: hidden_alias_and_tombstone=true status=success alias=report opaque_id_bytes=16
+--- PASS: TestIdentityAllocationDifferential (0.01s)
+=== RUN   TestDerivationRejectsPrivilegedCopy
+    model_test.go:241: owner/PM reads private and writes public: direct, rebound and scope-pinned constants rejected; same-scope positive passes
+--- PASS: TestDerivationRejectsPrivilegedCopy (0.00s)
+=== RUN   TestBoundedOrderingAndCommentWrites
+    model_test.go:271: column=10000 successor_examined=1; exhausted gap refuses; thread_history=10000 comment_write_rows=4
+--- PASS: TestBoundedOrderingAndCommentWrites (0.08s)
+=== RUN   TestOversizedSearchProgress
+    model_test.go:290: oversized candidate coverage=65536 bytes; later match explicitly outside coverage; next candidate reached; stale generation restarts
+--- PASS: TestOversizedSearchProgress (0.00s)
+=== RUN   TestColdBridgeSlowUnavailableRecovery
+=== RUN   TestColdBridgeSlowUnavailableRecovery/100
+    startup_test.go:184: cold readiness=8.280375ms startup_blob_reads=0
+    startup_test.go:226: cold readiness=6.087709ms startup_blob_reads=0
+    startup_test.go:261: compatible recovery subprocess: === RUN   TestCompatibleRecoveryChild
+            startup_test.go:303: new process: forward ledger readable; readyz=200; unknown blob denied; no startup blob I/O
+        --- PASS: TestCompatibleRecoveryChild (0.02s)
+        PASS
+    startup_test.go:263: blobs=100 checkpoint=blob-0015 low_disk_and_failure_preserve_jobs=true compatible_recovery_ready=true
+=== RUN   TestColdBridgeSlowUnavailableRecovery/1000
+    startup_test.go:184: cold readiness=7.128625ms startup_blob_reads=0
+    startup_test.go:226: cold readiness=6.069667ms startup_blob_reads=0
+    startup_test.go:261: compatible recovery subprocess: === RUN   TestCompatibleRecoveryChild
+            startup_test.go:303: new process: forward ledger readable; readyz=200; unknown blob denied; no startup blob I/O
+        --- PASS: TestCompatibleRecoveryChild (0.11s)
+        PASS
+    startup_test.go:263: blobs=1000 checkpoint=blob-0015 low_disk_and_failure_preserve_jobs=true compatible_recovery_ready=true
+--- PASS: TestColdBridgeSlowUnavailableRecovery (1.37s)
+    --- PASS: TestColdBridgeSlowUnavailableRecovery/100 (0.47s)
+    --- PASS: TestColdBridgeSlowUnavailableRecovery/1000 (0.90s)
+=== RUN   TestCompatibleRecoveryChild
+    startup_test.go:272: subprocess only
+--- SKIP: TestCompatibleRecoveryChild (0.00s)
+PASS
+ok  	agent-nexus-core/experiments/scopeboundary	2.855s

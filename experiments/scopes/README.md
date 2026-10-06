@@ -54,3 +54,27 @@ table. This is a proof of that fence mechanism, not a full migration/crash test 
 proof against every historical release binary.
 
 Read the design PR's evidence note for measured results and remaining gates.
+
+## Hard-boundary revision
+
+```sh
+GOMAXPROCS=1 go -C core test ./experiments/scopeboundary \
+  -v -count=1 -timeout=3m
+```
+
+`scope-boundaries.txt` records the additional lifecycle, 64-scope/audience,
+allocation, derivation, ordering/history, search-progress and actual HTTP startup
+probes. They use small isolated schemas except startup, which opens the real
+schema-63 storage and serves the core HTTP handler. The experimental constructor
+defers legacy blob I/O; it is deliberately not wired into the shipped CLI.
+
+Lifecycle uses one-level ancestry and a whole-scope fence. Streams support exact
+personal and broadcast audiences, with 64 scopes, four streams per scope and
+256 streams overall. SQL candidate instrumentation does not count B-tree steps.
+The derivation handle carries no plaintext; the production package/call-graph
+analyzer remains required. Search tests the declared 64 KiB coverage boundary,
+not a complete search index. Cold start does not flush OS caches; low disk and
+worker failure are injected, not filesystem exhaustion or process kills. Recovery
+uses a fresh test executable and renamed ledger, not the full CLI bootstrap.
+Lease takeover, role binding, wire cursors, concurrent revocation, migration hash
+validation, full HTTP/storage equivalence and 1-CPU capacity remain cutover gates.

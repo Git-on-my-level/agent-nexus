@@ -1382,6 +1382,7 @@
     "../primitives/resource_helpers.go:resolvePublicResourceRef": "56af654599ec5040803d5a88fc5b569d6567442b4e223e26eb43740ec2f54fe4",
     "../primitives/resource_helpers.go:resolveResourceByTypedValue": "b3f9e67632972009bc870f746fbe29e2ad7afc46da631d550bc7eff7bf70cb82",
     "../primitives/resource_helpers.go:resolvedTypedRefEdgeTargets": "a315722556d0aa2c1c7e1fe1a13c40a7d84831dc8ebf2f920d1b8b8a4d8688bf",
+    "../primitives/scope_experiment_bridge.go:NewScopeExperimentBridgeStore": "92056cca6a0d2d02e58eb27a217060f19fbaa229541caa6817ad9612447122f1",
     "../primitives/sessions_store.go:*Store:GetSession": "9076a74946de52d3e5379a1f89a3be6884e5de9db719419617cfc7a2c278f8fc",
     "../primitives/sessions_store.go:*Store:ListWorkParticipants": "a6f84bbed3eeeaa75dbd52d28213bd81a8e1335238e3fa74f46b778623c82b6c",
     "../primitives/sessions_store.go:*Store:UpsertSession": "76761f4b2688c2d8a3d4e9341d26ad1059201abe34b881a81f69b96261b6ab5e",
