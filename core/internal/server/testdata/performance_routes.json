@@ -1,0 +1,1062 @@
+[
+  {
+    "method": "GET",
+    "path": "/actors",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/adapters",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/agent-inbox/asks",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "authorized_as": "agent"
+  },
+  {
+    "method": "GET",
+    "path": "/agent-notifications",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "authorized_as": "agent"
+  },
+  {
+    "method": "GET",
+    "path": "/agents",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/agents/me",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/agents/{agent_id}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/artifacts",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/artifacts/{artifact_id}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/artifacts/{artifact_id}/content",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/auth/access-requests",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 403,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/auth/access/summary",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/auth/admins",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 403,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/auth/audit",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 403,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/auth/bootstrap/status",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/auth/hosts/enrollment-tokens",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 403,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/auth/hosts/enrollments/pending",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 403,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/auth/hosts/enrollments/{enrollment_id}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 401,
+    "reason": "Point enrollment lookup uses its independent enrollment poll token; normal principal access does not grant that token.",
+    "must_contain": "scale-target-enrollment"
+  },
+  {
+    "method": "GET",
+    "path": "/auth/invites",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 403,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/auth/principals",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 403,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/boards",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/boards/{board_id}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/boards/{board_id}/cards",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/boards/{board_id}/cards/{card_id}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/boards/{board_id}/workspace",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/cards",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/cards/{card_id}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/cards/{card_id}/plan",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/cards/{card_id}/revisions",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/cards/{card_id}/revisions/{revision_id}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/cards/{card_id}/timeline",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/docs",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "query": "limit=1",
+    "must_contain": "{document_id}"
+  },
+  {
+    "method": "GET",
+    "path": "/docs/search",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "query": "q=Synthetic&limit=1"
+  },
+  {
+    "method": "GET",
+    "path": "/docs/{document_id}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/docs/{document_id}/comments",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/docs/{document_id}/report",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "must_contain": "activity"
+  },
+  {
+    "method": "GET",
+    "path": "/docs/{document_id}/revisions",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/docs/{document_id}/revisions/{revision_id}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/events",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "query": "limit=1&type=message_posted",
+    "must_contain": "{event_id}"
+  },
+  {
+    "method": "GET",
+    "path": "/events/{event_id}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/health",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/home/unread",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/hosts",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/hosts/{host_id}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/inbox",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/inbox/summary",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/inbox/{inbox_id}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/livez",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/meta/commands",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/meta/commands/{command_id}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/meta/concepts",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/meta/concepts/{concept_name}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/meta/handshake",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/ops/health",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/ops/usage-summary",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/overview",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/overview/changes",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/pm/actions",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 403,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/pm/actions/{action_id}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/pm/bindings",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 403,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/pm/context",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 403,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "query": "work_ref={card_ref}&limit=1"
+  },
+  {
+    "method": "GET",
+    "path": "/pm/conversations",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 403,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/pm/conversations/{conversation_id}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/pm/decisions",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 403,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/pm/decisions/{decision_id}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/pm/turns/{turn_id}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/readyz",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/ref-edges",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "query": "source_ref=board:scale-board-0"
+  },
+  {
+    "method": "GET",
+    "path": "/runs",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/runs/{run_id}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "must_contain": "scale-target-run"
+  },
+  {
+    "method": "GET",
+    "path": "/secrets",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/series",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/series/{name}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 4608,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Series raw reads have a hard 4096-observation cap; metadata and auth fit the remaining 512 rows.",
+    "query": "range=24h&step=1h",
+    "must_contain": "4095"
+  },
+  {
+    "method": "GET",
+    "path": "/series/{name}/query",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 4608,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Series raw reads have a hard 4096-observation cap; metadata and auth fit the remaining 512 rows.",
+    "query": "range=24h&step=1h&agg=last",
+    "must_contain": "4095"
+  },
+  {
+    "method": "GET",
+    "path": "/sessions/{session_id}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "must_contain": "{session_id}"
+  },
+  {
+    "method": "GET",
+    "path": "/stream/agent-notification-receipts",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "query": "thread_id={thread_id}"
+  },
+  {
+    "method": "GET",
+    "path": "/stream/agents",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/stream/events",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/stream/inbox",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/threads",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/threads/{thread_id}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/threads/{thread_id}/context",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/threads/{thread_id}/timeline",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/threads/{thread_id}/workspace",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/topics",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/topics/{topic_id}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/topics/{topic_id}/timeline",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/topics/{topic_id}/workspace",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/v1/usage/summary",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/version",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/work",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "query": "limit=1",
+    "must_contain": "{card_id}"
+  },
+  {
+    "method": "GET",
+    "path": "/work/capabilities",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/work/{card_ref}",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/work/{card_ref}/observations",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/work/{card_ref}/participants",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/work/{card_ref}/refresh",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "GET",
+    "path": "/workspace/dashboard/reports",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+  },
+  {
+    "method": "POST",
+    "path": "/refs/resolve",
+    "body": {
+      "refs": ["{card_ref}"]
+    },
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read-only POST; request payload and context limit bound work."
+  },
+  {
+    "method": "POST",
+    "path": "/reports/preview",
+    "body": {
+      "report": {
+        "kind": "anx.visual-report",
+        "schema_version": 1,
+        "title": "Scale report",
+        "summary": "Scale evidence",
+        "generated_at": "2026-01-01T00:00:00Z",
+        "sources": [],
+        "projects": [
+          {
+            "id": "workspace",
+            "title": "Workspace",
+            "summary": "Synthetic",
+            "outcome": "Evidence"
+          }
+        ],
+        "panels": [
+          {
+            "id": "activity",
+            "type": "live-activity",
+            "title": "Activity",
+            "project_id": "workspace",
+            "data": {},
+            "author": "ANX",
+            "provenance": "reported",
+            "observed_at": null,
+            "freshness": "unavailable",
+            "source_ids": []
+          }
+        ]
+      }
+    },
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read-only POST; request payload and context limit bound work."
+  },
+  {
+    "method": "POST",
+    "path": "/pm/turns/{turn_id}/context",
+    "body": {
+      "limit": 1,
+      "lease_token": "synthetic-lease"
+    },
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 403,
+    "reason": "Read-only POST; request payload and context limit bound work.",
+    "authorized_as": "agent"
+  }
+]

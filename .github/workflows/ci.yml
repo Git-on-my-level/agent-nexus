@@ -160,6 +160,27 @@ jobs:
       - name: Verify route inventory matches the router
         run: make route-inventory-check
 
+  core-performance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: changes
+    if: needs.changes.outputs.core == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.go_shared == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+
+      - name: Scale route, query-plan and startup budgets
+        working-directory: core
+        env:
+          ANX_PERFORMANCE_TEST: "1"
+        run: go test -p=1 -parallel=1 -timeout=20m -count=1 -v ./internal/server ./internal/storage ./internal/testutil/perfguard -run TestPerformance
+
   mcp-checks:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -424,6 +445,7 @@ jobs:
       - workflow-checks
       - contracts-check
       - core-checks
+      - core-performance
       - mcp-checks
       - cli-checks
       - web-ui-static-check
