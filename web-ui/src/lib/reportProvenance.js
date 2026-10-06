@@ -312,20 +312,28 @@ export function panelProvenance(panel, freshness = "", now = Date.now()) {
       },
       now,
     );
-  if (panelProvenanceClass(panel) === "live")
+  if (panelProvenanceClass(panel) === "live") {
+    // A series that answered `stale` answered: it has a read time and rows.
+    // `withSeriesObservation` drops that observation time when there is no
+    // fallback to date, so the observation itself is the honest source.
+    const status =
+      panel?.live?.status ??
+      panel?.seriesObservation?.status ??
+      (panel?.observed_at ? "ok" : "loading");
     return liveProvenance(
-      panel?.live?.observed_at ?? panel?.observed_at ?? null,
+      panel?.live?.observed_at ??
+        panel?.observed_at ??
+        panel?.seriesObservation?.observed_at ??
+        null,
       {
         // A live panel the report has not asked about yet has no observation
         // and no failure either: it is still being read.
-        status:
-          panel?.live?.status ??
-          panel?.seriesObservation?.status ??
-          (panel?.observed_at ? "ok" : "loading"),
-        stale: freshness === "stale",
+        status: status === "stale" ? "ok" : status,
+        stale: freshness === "stale" || status === "stale",
       },
       now,
     );
+  }
   return authoredProvenance(
     {
       author: panel?.author,

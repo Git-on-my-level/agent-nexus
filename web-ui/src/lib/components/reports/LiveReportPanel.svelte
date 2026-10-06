@@ -30,6 +30,9 @@
   let maxCount = $derived(Math.max(1, ...buckets.map((item) => item.count)));
   /** An instant, or `""` so the caller can render the dash. */
   const date = (value) => {
+    // `new Date(null)` is the epoch, which is finite: without this guard a row
+    // with no instant renders "1970-01-01 00:00 UTC" as if it were a reading.
+    if (value === null || value === undefined || value === "") return "";
     const at = new Date(value);
     return Number.isFinite(at.getTime())
       ? at.toISOString().slice(0, 16).replace("T", " ") + " UTC"

@@ -165,11 +165,18 @@ function rfc3339Nanos(value) {
     second > 59
   )
     return null;
-  // Go accepts an offset hour up to 24, and rejects 25.
+  // Go's reader accepts an offset hour up to 24 and a minute up to 60,
+  // rejecting 25 and 99. The arithmetic below handles minute 60 as an hour.
   const offsetHour = sign ? Number(oh) : 0;
   const offsetMinute = sign ? Number(om) : 0;
-  if (offsetHour > 24 || offsetMinute > 59) return null;
-  const ms = Date.UTC(year, month - 1, day, hour, minute, second);
+  if (offsetHour > 24 || offsetMinute > 60) return null;
+  // Not `Date.UTC(year, …)`: that maps years 0 to 99 to 1900 + year, which
+  // would read `0051-01-01` as 1951 and call a deadline in year 51 valid
+  // against a panel written in 1950.
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  date.setUTCHours(hour, minute, second, 0);
+  const ms = date.getTime();
   if (!Number.isFinite(ms)) return null;
   const offsetMs =
     (sign === "-" ? 1 : -1) * (offsetHour * 3600 + offsetMinute * 60) * 1000;
@@ -188,15 +195,16 @@ function rfc3339Nanos(value) {
  * Keep in conformance with `ReviewDeadline` in
  * `contracts/visualreport/review.go`.
  */
-export function reviewDeadlineNanos(value, authoredNanos) {
+export function reviewDeadlineNanos(value, writtenNanos) {
   if (typeof value !== "string" || !value) return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(value))
     return rfc3339Nanos(`${value}T00:00:00Z`);
   const instant = rfc3339Nanos(value);
   if (instant !== null) return instant;
   const seconds = seriesRangeSeconds(value);
-  if (seconds === null || authoredNanos === null) return null;
-  return authoredNanos + BigInt(seconds) * 1000000000n;
+  if (seconds === null || writtenNanos === null || writtenNanos === undefined)
+    return null;
+  return writtenNanos + BigInt(seconds) * 1000000000n;
 }
 
 /** The same deadline in milliseconds, for a renderer that works in `Date`. */

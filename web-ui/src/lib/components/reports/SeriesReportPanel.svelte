@@ -17,7 +17,11 @@
   let showData = $derived(panel.seriesFallback || observation?.status === "ok");
   let provenance = $derived(observation?.provenance);
   let timeline = $derived(
-    observation?.data?.items ?? (showData ? (panel.data?.items ?? []) : []),
+    observation?.status === "stale"
+      ? (observation.data?.items ?? [])
+      : showData
+        ? (panel.data?.items ?? [])
+        : [],
   );
 </script>
 

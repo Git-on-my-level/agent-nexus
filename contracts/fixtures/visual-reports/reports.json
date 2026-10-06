@@ -7562,5 +7562,77 @@
     "recognized": true,
     "valid": true,
     "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"live-timeline\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{},\"source\":{\"series\":\"a.b\"}}]}"
+  },
+  {
+    "name": "provenance review_by offset +00:60",
+    "recognized": true,
+    "valid": true,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"text\":\"A hand-written note.\"},\"authored_at\":\"2026-10-01T00:00:00Z\",\"review_by\":\"2026-12-02T00:00:00+00:60\"}]}"
+  },
+  {
+    "name": "provenance review_by offset +23:60",
+    "recognized": true,
+    "valid": true,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"text\":\"A hand-written note.\"},\"authored_at\":\"2026-10-01T00:00:00Z\",\"review_by\":\"2026-12-02T00:00:00+23:60\"}]}"
+  },
+  {
+    "name": "provenance review_by offset +24:60",
+    "recognized": true,
+    "valid": true,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"text\":\"A hand-written note.\"},\"authored_at\":\"2026-10-01T00:00:00Z\",\"review_by\":\"2026-12-02T00:00:00+24:60\"}]}"
+  },
+  {
+    "name": "provenance review_by offset -00:60",
+    "recognized": true,
+    "valid": true,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"text\":\"A hand-written note.\"},\"authored_at\":\"2026-10-01T00:00:00Z\",\"review_by\":\"2026-12-02T00:00:00-00:60\"}]}"
+  },
+  {
+    "name": "provenance review_by offset -24:60",
+    "recognized": true,
+    "valid": true,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"text\":\"A hand-written note.\"},\"authored_at\":\"2026-10-01T00:00:00Z\",\"review_by\":\"2026-12-02T00:00:00-24:60\"}]}"
+  },
+  {
+    "name": "provenance review_by offset +00:99",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"text\":\"A hand-written note.\"},\"authored_at\":\"2026-10-01T00:00:00Z\",\"review_by\":\"2026-12-02T00:00:00+00:99\"}]}"
+  },
+  {
+    "name": "provenance review_by offset -25:00",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"text\":\"A hand-written note.\"},\"authored_at\":\"2026-10-01T00:00:00Z\",\"review_by\":\"2026-12-02T00:00:00-25:00\"}]}"
+  },
+  {
+    "name": "provenance review_by year 0051",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"text\":\"A hand-written note.\"},\"authored_at\":\"1950-01-01T00:00:00Z\",\"review_by\":\"0051-01-01\"}]}"
+  },
+  {
+    "name": "provenance review_by year 1000 after year 1",
+    "recognized": true,
+    "valid": true,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"text\":\"A hand-written note.\"},\"authored_at\":\"0001-01-01T00:00:00Z\",\"review_by\":\"1000-01-01\"}]}"
+  },
+  {
+    "name": "provenance review_by year 0100 after 0099",
+    "recognized": true,
+    "valid": true,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"text\":\"A hand-written note.\"},\"authored_at\":\"0099-12-31T23:00:00Z\",\"review_by\":\"0100-01-01\"}]}"
+  },
+  {
+    "name": "provenance review_by year 9999",
+    "recognized": true,
+    "valid": true,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"text\":\"A hand-written note.\"},\"authored_at\":\"2026-10-01T00:00:00Z\",\"review_by\":\"9999-12-31T23:59:59Z\"}]}"
+  },
+  {
+    "name": "provenance authored_at year 0001",
+    "recognized": true,
+    "valid": true,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"text\":\"A hand-written note.\"},\"authored_at\":\"0001-01-01T00:00:00Z\",\"review_by\":\"7d\"}]}"
   }
 ]

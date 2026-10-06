@@ -190,7 +190,10 @@ it("keeps showing a release timeline that has gone quiet", () => {
     panel: {
       ...panel({ id: "releases", type: "live-timeline", title: "Releases" }),
       source: { series: "releases", range: "30d" },
+      // As `withSeriesObservation` leaves it for a stale read with no
+      // fallback to date: empty data, and no observation time on the panel.
       data: {},
+      observed_at: null,
       freshness: "stale",
       seriesFallback: false,
       seriesObservation: {
@@ -212,4 +215,11 @@ it("keeps showing a release timeline that has gone quiet", () => {
   expect(section.textContent).toContain("v0.12.12");
   expect(section.textContent).toContain("v0.12.11");
   expect(section.dataset.provenanceClass).toBe("live");
+  // And the header agrees with the rows beside it. A series that answered
+  // `stale` answered; saying "read failed" over two visible releases is the
+  // contradiction this line exists to remove.
+  expect(section.querySelector("[data-anx-provenance]").textContent).toContain(
+    "May be stale · last read 4d ago",
+  );
+  expect(section.dataset.provenanceState).toBe("live-stale");
 });

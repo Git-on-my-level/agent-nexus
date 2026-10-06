@@ -679,6 +679,30 @@ describe("review deadlines", () => {
     expect(reviewDeadlineNanos("2026-06-02T00:00:00+25:00", null)).toBeNull();
   });
 
+  it("does not map years below 0100 into the twentieth century", () => {
+    // `Date.UTC(51, …)` is 1951. A deadline in year 51 is before a panel
+    // written in 1950, and the mapped one is after it — the validator and the
+    // chip would both have agreed with the wrong one.
+    expect(reviewDeadlineMillis("0051-01-01", NaN)).toBe(
+      Date.parse("0051-01-01T00:00:00Z"),
+    );
+    expect(reviewDeadlineNanos("0001-01-01T00:00:00Z", null)).toBe(
+      BigInt(Date.parse("0001-01-01T00:00:00Z")) * 1000000n,
+    );
+  });
+
+  it("accepts the offset minutes Go accepts", () => {
+    // Go's reader allows an offset minute of 60 as well as an hour of 24.
+    for (const offset of ["+00:60", "+23:60", "+24:60", "-24:60"])
+      expect(
+        reviewDeadlineNanos(`2026-06-02T00:00:00${offset}`, null),
+      ).not.toBeNull();
+    for (const offset of ["+00:99", "-25:00"])
+      expect(
+        reviewDeadlineNanos(`2026-06-02T00:00:00${offset}`, null),
+      ).toBeNull();
+  });
+
   it("rejects calendar values that do not exist", () => {
     for (const bad of [
       "2026-13-02T00:00:00Z",
