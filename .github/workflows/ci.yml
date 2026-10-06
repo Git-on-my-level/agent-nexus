@@ -136,7 +136,7 @@ jobs:
 
   core-checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     needs: changes
     if: needs.changes.outputs.core == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.go_shared == 'true'
     steps:
@@ -150,8 +150,12 @@ jobs:
           cache-dependency-path: core/go.sum
 
       - name: Run core check
-        # Leave setup and inventory checks room outside the full package budget.
-        run: make -C core check-ci GO_TEST_TIMEOUT=20m
+        # Match local validation's CPU/package concurrency for SQL-backed
+        # fixtures. Leave setup and inventory room beyond the package budget.
+        env:
+          GOMAXPROCS: "2"
+          GOFLAGS: "-p=1"
+        run: make -C core check-ci GO_TEST_TIMEOUT=25m
 
       - name: Verify route inventory matches the router
         run: make route-inventory-check
