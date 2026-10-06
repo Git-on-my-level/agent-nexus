@@ -66,6 +66,19 @@ func TestReportReviewAuthorPrivacyDedupeAndRetirement(t *testing.T) {
 	if item.Data["recipient_actor_id"] != "author" {
 		t.Fatal("writer stole author's reminder")
 	}
+	privateDoc, _, err := store.CreateDocument(ctx, "reader", map[string]any{"title": "Private evidence"}, "Confidential", "text", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.PatchThread(ctx, "reader", anyString(privateDoc["thread_id"]), map[string]any{"pm_actor_id": "reader"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	subjectRead := req.Clone(ctx)
+	cacheAuthenticatedPrincipal(subjectRead, &auth.Principal{ActorID: "author"})
+	attachResourceAccessScope(subjectRead, opts)
+	if inboxItemAccessible(subjectRead, opts, item.ThreadID, map[string]any{"recipient_actor_id": "author", "related_refs": []string{"document:" + anyString(privateDoc["id"])}}) {
+		t.Fatal("legacy fallback bypassed canonical private document evidence")
+	}
 	for _, filter := range []primitives.DerivedInboxListFilter{{}, {ThreadID: anyString(doc["thread_id"])}, {RecipientActorID: "writer"}} {
 		rows, err := store.ListDerivedInboxItems(ctx, filter)
 		if err != nil || len(rows) != 0 {

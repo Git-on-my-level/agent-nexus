@@ -1,6 +1,7 @@
 package series
 
 import (
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -21,7 +22,7 @@ func (s Store) Timeline(ctx context.Context, name string, labels map[string]stri
 	if _, err := Labels(labels); err != nil {
 		return result, false, err
 	}
-	tx, err := s.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := resourceaccess.NewDB(s.DB).BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return result, false, err
 	}

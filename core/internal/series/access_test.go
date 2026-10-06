@@ -35,6 +35,14 @@ func TestSeriesScopedQueriesRetainPrivateContributors(t *testing.T) {
 		return prefix + q
 	}}
 	scoped := resourceaccess.WithPolicy(ctx, policy)
+	timeline, _, err := s.Timeline(scoped, "health", nil, 2*time.Hour, now)
+	if err != nil || len(timeline.Streams) != 1 || timeline.Streams[0].Labels["stream"] != "public" {
+		t.Fatalf("timeline leaked private contributors: %#v %v", timeline.Streams, err)
+	}
+	ownerTimeline, _, err := s.Timeline(ctx, "health", nil, 2*time.Hour, now)
+	if err != nil || len(ownerTimeline.Streams) != 3 {
+		t.Fatalf("authorized timeline streams=%d: %v", len(ownerTimeline.Streams), err)
+	}
 	raw, err := s.Query(scoped, "health", nil, 2*time.Hour, time.Minute, "last", now)
 	if err != nil {
 		t.Fatal(err)

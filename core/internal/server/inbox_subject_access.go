@@ -19,7 +19,9 @@ func inboxItemAccessible(r *http.Request, opts handlerOptions, threadID string, 
 		}
 	}
 	if check, ok := r.Context().Value(resourceAccessCheckKey{}).(func(context.Context, any) error); ok {
-		return check(r.Context(), []any{"thread:" + threadID, item}) == nil
+		if check(r.Context(), []any{"thread:" + threadID, item}) != nil {
+			return false
+		}
 	}
 	if strings.TrimSpace(threadID) != "" && !inboxSubjectRefAccessible(r, opts, "thread:"+threadID) {
 		return false
