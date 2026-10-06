@@ -6,7 +6,7 @@ import {
   CALLBACK_CODES_WITH_TABLE_COPY,
   CALLBACK_COPY,
 } from "$lib/workspaceCallbackErrorCopy.js";
-import { sanitizeReturnPath } from "$lib/workspaceLaunchFlow.js";
+import { confineWorkspaceReturnPath } from "$lib/workspaceLaunchFlow.js";
 import {
   clearRetryableWorkspaceAuthFailureCount,
   writeWorkspaceAccessToken,
@@ -22,7 +22,6 @@ import {
 } from "$lib/server/hostedWorkspaceCore.js";
 import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
 import { resolveWorkspaceInRoute } from "$lib/server/workspaceResolver.js";
-import { workspacePath } from "$lib/workspacePaths.js";
 
 function wantsJson(request) {
   return request.headers.get("accept")?.includes("application/json") ?? false;
@@ -306,14 +305,16 @@ export async function runWorkspaceAuthCallbackPost(
 
   const exchangeToken = String(form.get("exchange_token") ?? "").trim();
   const state = String(form.get("state") ?? "").trim();
-  const returnPath = sanitizeReturnPath(form.get("return_path") ?? "/");
+  const returnPath = confineWorkspaceReturnPath({
+    origin: event.url?.origin,
+    organizationSlug: resolvedOrganizationSlug,
+    workspaceSlug,
+    returnPath: form.get("return_path") ?? "/",
+  });
   // A deployment adapter owns session identity. Never import an older launch's
   // credential into the current login scope; activation establishes it afresh.
   if (event.locals?.sessionAdapter) {
-    throw redirect(
-      303,
-      workspacePath(resolvedOrganizationSlug, workspaceSlug, returnPath),
-    );
+    throw redirect(303, returnPath);
   }
 
   if (!exchangeToken || !state) {
@@ -516,8 +517,6 @@ export async function runWorkspaceAuthCallbackPost(
     return_path: returnPath,
   });
 
-  throw redirect(
-    303,
-    workspacePath(resolvedOrganizationSlug, workspaceSlug, returnPath),
-  );
+  // Already confined to this workspace when it was read from the form.
+  throw redirect(303, returnPath);
 }

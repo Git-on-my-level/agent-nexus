@@ -1,7 +1,10 @@
 import { env as privateEnv } from "$env/dynamic/private";
 import { redirect } from "@sveltejs/kit";
 
-import { sanitizeReturnPath } from "$lib/workspaceLaunchFlow.js";
+import {
+  confineWorkspaceReturnPath,
+  sanitizeReturnPath,
+} from "$lib/workspaceLaunchFlow.js";
 import { loadWorkspaceAuthenticatedAgent } from "$lib/server/authSession";
 import {
   hostedWorkspaceCoreBaseUrl,
@@ -10,7 +13,6 @@ import {
 import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
 import { handleLaunchInstruction } from "$lib/server/outOfWorkspace/launchSession.js";
 import { resolveWorkspaceInRoute } from "$lib/server/workspaceResolver";
-import { workspacePath } from "$lib/workspacePaths";
 
 export async function load(event) {
   const provider =
@@ -52,18 +54,17 @@ export async function load(event) {
   }
 
   if (agent?.agent_id) {
-    const returnTo = sanitizeReturnPath(
-      event.url.searchParams.get("return_to") ??
-        event.url.searchParams.get("return_path") ??
-        "/",
-    );
     throw redirect(
       307,
-      workspacePath(
-        resolved.organizationSlug,
-        resolved.workspaceSlug,
-        returnTo,
-      ),
+      confineWorkspaceReturnPath({
+        origin: event.url?.origin,
+        organizationSlug: resolved.organizationSlug,
+        workspaceSlug: resolved.workspaceSlug,
+        returnPath:
+          event.url.searchParams.get("return_to") ??
+          event.url.searchParams.get("return_path") ??
+          "/",
+      }),
     );
   }
 
