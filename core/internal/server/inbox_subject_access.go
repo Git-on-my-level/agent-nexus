@@ -22,6 +22,12 @@ func inboxItemAccessible(r *http.Request, opts handlerOptions, threadID string, 
 		if check(r.Context(), []any{"thread:" + threadID, item}) != nil {
 			return false
 		}
+		// Ordinary inbox rows already use the canonical policy. Reports retain
+		// their legacy backing-thread owner check without adding per-row queries
+		// to unrelated inbox streams.
+		if item != nil && anyString(item["kind"]) != "report_review" {
+			return true
+		}
 	}
 	if strings.TrimSpace(threadID) != "" && !inboxSubjectRefAccessible(r, opts, "thread:"+threadID) {
 		return false

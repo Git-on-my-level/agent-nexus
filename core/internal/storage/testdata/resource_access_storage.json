@@ -1706,7 +1706,7 @@
     "../server/inbox_handlers.go:loadOpenInbox": "cc6e766111231ba338814d09afcbd48adde70e7ffc17fb3c9504cb25b58f895a",
     "../server/inbox_handlers.go:loadOpenInboxItems": "666e99e361953608a95a7d6779a0bf27575188ef7c4abe780870afec5ef496ff",
     "../server/inbox_handlers.go:loadVisibleInboxItems": "1725d8e0d66f3656cd1b60f4d25acd0e11843975bf5d54a11305b9e3c5cc14b1",
-    "../server/inbox_subject_access.go:inboxItemAccessible": "53b33c38e3c87061a8675213b060fc60964058c8c3d0b8b9e633ae7ebd1da878",
+    "../server/inbox_subject_access.go:inboxItemAccessible": "513570a3fdb1b97d6db0227b7c94dbd6a5a166027f3596099051fbec3bba4a8f",
     "../server/inbox_subject_access.go:inboxSubjectRefAccessible": "d713a8a05f395131ec81334bdb4ad3bdaa93d8c9fe0e2f3cbad404768d5f69e3",
     "../server/inbox_summary_handlers.go:handleGetInboxSummary": "d26a070245431f7d7c34a37e58e80e83e50eea370328f80f38d9c090b175707e",
     "../server/markdown_hygiene.go:*markdownHygieneCollector:normalizeField": "97b553603a974434b6ee033a9ec6adfe62a2a1879fadbf3b201b3bbf6cf6f960",
