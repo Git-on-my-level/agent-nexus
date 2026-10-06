@@ -50,6 +50,66 @@ func TestReviewMetadataLegacyAndWriteClock(t *testing.T) {
 	}
 }
 
+func TestRevisionRetainsExpiredDeadlines(t *testing.T) {
+	now := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
+	previous := reviewFixture(t, map[string]any{"authored_at": "2026-10-01T00:00:00Z", "review_by": "2d"})
+	if !ValidateWrite(previous, now.Add(-5*24*time.Hour)).Valid {
+		t.Fatal("fixture could not originally have been created")
+	}
+	for _, tc := range []struct {
+		name  string
+		edit  func(map[string]any, map[string]any)
+		valid bool
+	}{
+		{"unchanged", func(_, _ map[string]any) {}, true},
+		{"summary", func(root, _ map[string]any) { root["summary"] = "Other work changed" }, true},
+		{"other panel content", func(_, panel map[string]any) { panel["data"] = map[string]any{"text": "Revised context"} }, true},
+		{"equivalent date", func(_, panel map[string]any) { panel["review_by"] = "2026-10-03" }, true},
+		{"new expired date", func(_, panel map[string]any) { panel["review_by"] = "2026-10-04" }, false},
+		{"new panel", func(_, panel map[string]any) { panel["id"] = "new-note" }, false},
+		{"new author", func(_, panel map[string]any) { panel["author"] = "different-author" }, false},
+		{"new authored time", func(_, panel map[string]any) { panel["authored_at"] = "2026-10-02T00:00:00Z" }, false},
+		{"renewed", func(_, panel map[string]any) { panel["review_by"] = "2026-10-08" }, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var root map[string]any
+			if err := json.Unmarshal(previous, &root); err != nil {
+				t.Fatal(err)
+			}
+			tc.edit(root, root["panels"].([]any)[0].(map[string]any))
+			content, _ := json.Marshal(root)
+			if result := ValidateRevision(content, previous, now); result.Valid != tc.valid {
+				t.Fatalf("revision: %#v", result)
+			}
+		})
+	}
+	if ValidateRevision(previous, []byte("ordinary document"), now).Valid {
+		t.Fatal("non-report predecessor exempted a newly introduced past deadline")
+	}
+	implicitBase := reviewFixture(t, map[string]any{"review_by": "2d"})
+	changedBase := []byte(strings.Replace(string(implicitBase), "2026-10-01T00:00:00Z", "2026-10-02T00:00:00Z", 1))
+	if ValidateRevision(changedBase, implicitBase, now).Valid {
+		t.Fatal("changed generated timestamp introduced a new expired relative deadline")
+	}
+}
+
+func TestReviewDurationCannotOverflow(t *testing.T) {
+	base := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	for _, value := range []string{"106752d", "213504d", "320256d", "999999d", "3651d", "87601h"} {
+		if _, err := SeriesRange(value); err == nil {
+			t.Errorf("oversized series duration accepted: %s", value)
+		}
+		if _, err := ReviewDeadline(value, base); err == nil {
+			t.Errorf("oversized review duration accepted: %s", value)
+		}
+	}
+	for _, value := range []string{"3650d", "87600h", "999999m", "999999s"} {
+		if due, err := ReviewDeadline(value, base); err != nil || !due.After(base) {
+			t.Errorf("bounded duration rejected: %s: %v", value, err)
+		}
+	}
+}
+
 func TestAuthoredStatusWarningsAndLiveAlternatives(t *testing.T) {
 	for _, tc := range []struct {
 		kind        string

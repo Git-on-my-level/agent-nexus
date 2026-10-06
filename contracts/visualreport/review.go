@@ -49,18 +49,29 @@ func (v *validator) review(panel map[string]any, path string, generated any) {
 	}
 }
 
-// ValidateWrite preserves read compatibility for expired reports while rejecting
-// explicitly expired deadlines when a new revision is submitted.
+// ValidateWrite rejects explicitly expired deadlines on newly created reports.
 func ValidateWrite(content []byte, now time.Time) Result {
-	result := Validate(content)
+	return validateWrite(content, nil, now)
+}
+
+// ValidateRevision permits retaining an existing expired deadline. The panel's
+// identity and authorship, and its resolved deadline, must remain unchanged.
+// Content elsewhere in the report can be revised without renewing every panel.
+func ValidateRevision(content, previous []byte, now time.Time) Result {
+	return validateWrite(content, previous, now)
+}
+
+type reviewDeadlineKey struct{ Author, AuthoredAt, ReviewBy string }
+
+func explicitDeadlines(result Result) map[string]reviewDeadlineKey {
+	deadlines := map[string]reviewDeadlineKey{}
 	if !result.Valid {
-		return result
+		return deadlines
 	}
 	root := result.Report.(map[string]any)
-	for i, raw := range root["panels"].([]any) {
+	for _, raw := range root["panels"].([]any) {
 		panel := raw.(map[string]any)
-		value, exists := panel["review_by"].(string)
-		if !exists {
+		if _, explicit := panel["review_by"].(string); !explicit {
 			continue
 		}
 		authored, _ := panel["authored_at"].(string)
@@ -68,7 +79,33 @@ func ValidateWrite(content []byte, now time.Time) Result {
 			authored, _ = root["generated_at"].(string)
 		}
 		base, _ := time.Parse(time.RFC3339Nano, authored)
-		due, _ := ReviewDeadline(value, base)
+		due, _ := ReviewDeadline(panel["review_by"].(string), base)
+		id, _ := panel["id"].(string)
+		author, _ := panel["author"].(string)
+		deadlines[id] = reviewDeadlineKey{Author: author, AuthoredAt: base.UTC().Format(time.RFC3339Nano), ReviewBy: due.UTC().Format(time.RFC3339Nano)}
+	}
+	return deadlines
+}
+
+func validateWrite(content, previous []byte, now time.Time) Result {
+	result := Validate(content)
+	if !result.Valid {
+		return result
+	}
+	root := result.Report.(map[string]any)
+	existing := explicitDeadlines(Validate(previous))
+	deadlines := explicitDeadlines(result)
+	for i, raw := range root["panels"].([]any) {
+		panel := raw.(map[string]any)
+		if _, exists := panel["review_by"].(string); !exists {
+			continue
+		}
+		id, _ := panel["id"].(string)
+		deadline := deadlines[id]
+		if old, exists := existing[id]; exists && old == deadline {
+			continue
+		}
+		due, _ := time.Parse(time.RFC3339Nano, deadline.ReviewBy)
 		if due.Before(now) && len(result.Errors) < MaxErrors {
 			result.Errors = append(result.Errors, fmt.Sprintf("panels[%d].review_by: must not be in the past at write time", i))
 		}

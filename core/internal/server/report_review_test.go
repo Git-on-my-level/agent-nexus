@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -43,6 +44,23 @@ func TestReportReviewAuthorPrivacyDedupeAndRetirement(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
 	cacheAuthenticatedPrincipal(req, &auth.Principal{ActorID: "writer"})
 	attachResourceAccessScope(req, opts)
+	privateProfileEvidence, _, err := store.CreateDocument(ctx, "author", map[string]any{"title": "Author's private evidence"}, "Private profile context", "text", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.PatchThread(ctx, "author", anyString(privateProfileEvidence["thread_id"]), map[string]any{"pm_actor_id": "author"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	tags, _ := json.Marshal([]string{"document:" + anyString(privateProfileEvidence["id"])})
+	if _, err := ws.DB().Exec(`UPDATE actors SET tags_json=? WHERE id='author'`, string(tags)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.Get(req.Context(), "author"); !errors.Is(err, actors.ErrActorNotFound) {
+		t.Fatalf("fixture did not hide author's profile from the writer: %v", err)
+	}
+	if visible, err := registry.Exists(req.Context(), "author"); err != nil || visible {
+		t.Fatalf("fixture did not hide actor existence in profile scope: %v", err)
+	}
 	if err := checkReportReviews(req, opts, doc, rev, panels); err != nil {
 		t.Fatal(err)
 	}

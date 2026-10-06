@@ -1,10 +1,9 @@
 package server
 
 import (
-	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -38,13 +37,14 @@ func checkReportReviews(r *http.Request, opts handlerOptions, doc, revision map[
 			continue
 		}
 		recipient := panel.Author
-		actor, err := opts.actorRegistry.Get(r.Context(), recipient)
-		if errors.Is(err, actors.ErrActorNotFound) {
-			recipient = writer
-		} else if err != nil {
+		// This internal identity decision reads only existence, never profile
+		// fields. Profile evidence visibility must not change the recipient.
+		exists, err := opts.actorRegistry.Exists(resourceaccess.WithoutPolicy(r.Context()), recipient)
+		if err != nil {
 			return err
-		} else {
-			recipient = actor.ID
+		}
+		if !exists {
+			recipient = writer
 		}
 		if recipient == "" {
 			continue

@@ -1164,13 +1164,14 @@ visual_report_review:
   provenance_classes: [live, authored]
   panel_fields:
     authored_at: {type: timestamp, required: false}
-    review_by: {type: string, required: false, description: UTC date, zoned timestamp or positive s/m/h/d duration from authored_at.}
+    review_by: {type: string, required: false, description: UTC date, zoned timestamp or positive s/m/h/d duration of at most 3650d from authored_at.}
   rules:
     - Live query panels and series bindings resolve as live; all other panels resolve as authored.
     - New authored panels carry author, authored_at and review_by. authored_at requires review_by; legacy panels missing both remain valid.
     - Legacy authored_at falls back to report.generated_at; missing review_by defaults to authored_at plus 7 days, exposed as review_by_defaulted.
-    - Explicit review_by must resolve after authored_at and must not be in the past at document write time. Expired stored reports remain readable.
+    - Explicit review_by must resolve after authored_at. Newly introduced or changed deadlines must not be in the past at document write time. Revisions may retain an expired deadline for the same panel, author and authored_at when its resolved deadline is unchanged.
     - Status-like authored panels warn with a live alternative, without invalidating the report.
-    - Pinned-dashboard read checks create at most 32 review reminders, deduplicated durably per panel and revision; recipients must have current subject access.
+    - Pinned-dashboard read checks create at most 32 review reminders, deduplicated durably per panel and revision; identity resolution is independent of reader-visible actor profiles, and recipients must have current subject access.
+    - report_review reminders are informational, with no reply, acknowledge or dismiss mutation; clients may open the dashboard. Revising or unpinning the dashboard hides obsolete reminders.
     - live-cards filters bounded card candidates by board_refs, label, role and status; closed phases are included only for this panel type.
     - live-timeline binds an existing state or numeric series through source; core never fetches external events.

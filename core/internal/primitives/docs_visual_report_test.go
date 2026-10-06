@@ -2,6 +2,7 @@ package primitives_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -132,5 +133,58 @@ func TestDocumentReviewDeadlineRejectedAtCreateAndRevise(t *testing.T) {
 	_, current, err := store.GetDocument(ctx, anyString(doc["id"]))
 	if err != nil || current["revision_id"] != rev["revision_id"] {
 		t.Fatal("failed deadline write changed head")
+	}
+}
+
+func TestDocumentRevisionRetainsExpiredPanelDeadline(t *testing.T) {
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer workspace.Close()
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+	due := time.Now().UTC().Add(2 * time.Second)
+	content := strings.Replace(validVisualReport, `"author":"Test"`, fmt.Sprintf(`"author":"Test","authored_at":%q,"review_by":%q`, due.Add(-24*time.Hour).Format(time.RFC3339Nano), due.Format(time.RFC3339Nano)), 1)
+	doc, revision, err := store.CreateDocument(ctx, "actor", map[string]any{"title": "Report"}, content, "text", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Exercise the actual create->expire->revise lifecycle without changing stored
+	// bytes or bypassing validation to construct an already expired revision.
+	time.Sleep(time.Until(due) + time.Millisecond)
+	doc, revision, err = store.UpdateDocument(ctx, "actor", anyString(doc["id"]), map[string]any{"summary": "Unrelated metadata"}, anyString(revision["revision_id"]), content, "text", nil, nil)
+	if err != nil {
+		t.Fatalf("unchanged expired panel blocked metadata revision: %v", err)
+	}
+	content = strings.Replace(content, `"summary":"Seven initiatives"`, `"summary":"Other work changed"`, 1)
+	_, revision, err = store.UpdateDocument(ctx, "actor", anyString(doc["id"]), nil, anyString(revision["revision_id"]), content, "text", nil, nil)
+	if err != nil {
+		t.Fatalf("unchanged expired panel blocked report summary revision: %v", err)
+	}
+	var root map[string]any
+	if err := json.Unmarshal([]byte(content), &root); err != nil {
+		t.Fatal(err)
+	}
+	panel := root["panels"].([]any)[0].(map[string]any)
+	panel["review_by"] = due.Add(-time.Second).Format(time.RFC3339Nano)
+	changedDeadline, _ := json.Marshal(root)
+	if _, _, err := store.UpdateDocument(ctx, "actor", anyString(doc["id"]), nil, anyString(revision["revision_id"]), string(changedDeadline), "text", nil, nil); err == nil {
+		t.Fatal("changed past deadline accepted")
+	}
+	panel["review_by"] = due.Format(time.RFC3339Nano)
+	added := make(map[string]any, len(panel))
+	for key, value := range panel {
+		added[key] = value
+	}
+	added["id"] = "new-note"
+	root["panels"] = append(root["panels"].([]any), added)
+	newExpiredPanel, _ := json.Marshal(root)
+	if _, _, err := store.UpdateDocument(ctx, "actor", anyString(doc["id"]), nil, anyString(revision["revision_id"]), string(newExpiredPanel), "text", nil, nil); err == nil {
+		t.Fatal("new panel inherited another panel's expired deadline exemption")
+	}
+	_, current, err := store.GetDocument(ctx, anyString(doc["id"]))
+	if err != nil || current["revision_id"] != revision["revision_id"] {
+		t.Fatal("rejected deadline revision changed the head")
 	}
 }

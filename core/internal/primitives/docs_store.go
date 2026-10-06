@@ -1086,7 +1086,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	if err != nil {
 		return nil, nil, invalidDocumentRequestError(err)
 	}
-	if err := rejectInvalidVisualReport(encodedContent); err != nil {
+	if err := s.rejectInvalidVisualReportRevision(ctx, documentID, doc.HeadRevisionID, encodedContent); err != nil {
 		return nil, nil, err
 	}
 	nextTagsJSON, err := json.Marshal(nextTags)
@@ -2738,6 +2738,31 @@ func rejectInvalidVisualReport(content []byte) error {
 	// GET /docs/{id}/report and `anx report validate` use, including the size limit.
 	result := visualreport.ValidateWrite(content, time.Now().UTC())
 	if !result.Recognized || result.Valid {
+		return nil
+	}
+	return &VisualReportValidationError{Errors: append([]string(nil), result.Errors...)}
+}
+
+func (s *Store) rejectInvalidVisualReportRevision(ctx context.Context, documentID, revisionID string, content []byte) error {
+	now := time.Now().UTC()
+	result := visualreport.ValidateWrite(content, now)
+	if !result.Recognized || result.Valid {
+		return nil
+	}
+	// Only an otherwise valid report with an expired deadline needs its prior
+	// content. Keep ordinary writes and malformed reports on the existing path.
+	if visualreport.Validate(content).Valid {
+		previous, err := s.loadDocumentRevision(ctx, documentID, revisionID, true)
+		if err != nil {
+			return err
+		}
+		previousContent, err := encodeContent(previous["content"], anyStringValue(previous["content_type"]))
+		if err != nil {
+			return err
+		}
+		result = visualreport.ValidateRevision(content, previousContent, now)
+	}
+	if result.Valid {
 		return nil
 	}
 	return &VisualReportValidationError{Errors: append([]string(nil), result.Errors...)}

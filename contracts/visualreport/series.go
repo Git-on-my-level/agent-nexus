@@ -30,11 +30,13 @@ func SeriesRange(raw string) (time.Duration, error) {
 	}
 	n, _ := strconv.Atoi(m[1])
 	units := map[string]time.Duration{"s": time.Second, "m": time.Minute, "h": time.Hour, "d": 24 * time.Hour}
-	d := time.Duration(n) * units[m[2]]
-	if d > 3650*24*time.Hour {
+	unit := units[m[2]]
+	// Bound the integer before multiplication: overflowing time.Duration can
+	// otherwise turn a huge positive range into a short or negative duration.
+	if time.Duration(n) > (3650*24*time.Hour)/unit {
 		return 0, fmt.Errorf("range exceeds 3650d")
 	}
-	return d, nil
+	return time.Duration(n) * unit, nil
 }
 func (v *validator) seriesBinding(panel map[string]any, path string, panelSources map[string]bool, reference func(any, string, map[string]bool)) {
 	supported := map[string]bool{"live-timeline": true, "chart": true, "metric": true, "metric-strip": true, "table": true, "metric-chart": true, "evidence-table": true}

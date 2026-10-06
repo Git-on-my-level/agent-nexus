@@ -7634,5 +7634,113 @@
     "recognized": true,
     "valid": true,
     "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Workspace dashboard\",\"summary\":\"What is in flight, what needs a decision, and what changed.\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current priorities\",\"outcome\":\"Keep the launch moving\"}],\"sources\":[],\"panels\":[{\"id\":\"p1\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Note\",\"author\":\"claude\",\"provenance\":\"reported\",\"observed_at\":\"2026-10-01T00:00:00Z\",\"freshness\":\"current\",\"source_ids\":[],\"data\":{\"text\":\"A hand-written note.\"},\"authored_at\":\"0001-01-01T00:00:00Z\",\"review_by\":\"7d\"}]}"
+  },
+  {
+    "name": "review duration multiplication bounds 106752d",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Review bounds\",\"summary\":\"Duration conformance\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current\",\"outcome\":\"Ship\"}],\"sources\":[],\"panels\":[{\"id\":\"note\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"actor-author\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{\"text\":\"Context\"},\"authored_at\":\"2026-10-01T00:00:00Z\",\"review_by\":\"106752d\"}]}"
+  },
+  {
+    "name": "series duration multiplication bounds 106752d",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Review bounds\",\"summary\":\"Duration conformance\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current\",\"outcome\":\"Ship\"}],\"sources\":[],\"panels\":[{\"id\":\"note\",\"project_id\":\"workspace\",\"type\":\"chart\",\"title\":\"Context\",\"author\":\"actor-author\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"series\":\"releases\",\"range\":\"106752d\"}}]}"
+  },
+  {
+    "name": "timeline duration multiplication bounds 106752d",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Review bounds\",\"summary\":\"Duration conformance\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current\",\"outcome\":\"Ship\"}],\"sources\":[],\"panels\":[{\"id\":\"note\",\"project_id\":\"workspace\",\"type\":\"live-timeline\",\"title\":\"Context\",\"author\":\"actor-author\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"series\":\"releases\",\"range\":\"106752d\"}}]}"
+  },
+  {
+    "name": "review duration multiplication bounds 213504d",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Review bounds\",\"summary\":\"Duration conformance\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current\",\"outcome\":\"Ship\"}],\"sources\":[],\"panels\":[{\"id\":\"note\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"actor-author\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{\"text\":\"Context\"},\"authored_at\":\"2026-10-01T00:00:00Z\",\"review_by\":\"213504d\"}]}"
+  },
+  {
+    "name": "series duration multiplication bounds 213504d",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Review bounds\",\"summary\":\"Duration conformance\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current\",\"outcome\":\"Ship\"}],\"sources\":[],\"panels\":[{\"id\":\"note\",\"project_id\":\"workspace\",\"type\":\"chart\",\"title\":\"Context\",\"author\":\"actor-author\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"series\":\"releases\",\"range\":\"213504d\"}}]}"
+  },
+  {
+    "name": "timeline duration multiplication bounds 213504d",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Review bounds\",\"summary\":\"Duration conformance\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current\",\"outcome\":\"Ship\"}],\"sources\":[],\"panels\":[{\"id\":\"note\",\"project_id\":\"workspace\",\"type\":\"live-timeline\",\"title\":\"Context\",\"author\":\"actor-author\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"series\":\"releases\",\"range\":\"213504d\"}}]}"
+  },
+  {
+    "name": "review duration multiplication bounds 320256d",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Review bounds\",\"summary\":\"Duration conformance\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current\",\"outcome\":\"Ship\"}],\"sources\":[],\"panels\":[{\"id\":\"note\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"actor-author\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{\"text\":\"Context\"},\"authored_at\":\"2026-10-01T00:00:00Z\",\"review_by\":\"320256d\"}]}"
+  },
+  {
+    "name": "series duration multiplication bounds 320256d",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Review bounds\",\"summary\":\"Duration conformance\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current\",\"outcome\":\"Ship\"}],\"sources\":[],\"panels\":[{\"id\":\"note\",\"project_id\":\"workspace\",\"type\":\"chart\",\"title\":\"Context\",\"author\":\"actor-author\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"series\":\"releases\",\"range\":\"320256d\"}}]}"
+  },
+  {
+    "name": "timeline duration multiplication bounds 320256d",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Review bounds\",\"summary\":\"Duration conformance\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current\",\"outcome\":\"Ship\"}],\"sources\":[],\"panels\":[{\"id\":\"note\",\"project_id\":\"workspace\",\"type\":\"live-timeline\",\"title\":\"Context\",\"author\":\"actor-author\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"series\":\"releases\",\"range\":\"320256d\"}}]}"
+  },
+  {
+    "name": "review duration multiplication bounds 999999d",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Review bounds\",\"summary\":\"Duration conformance\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current\",\"outcome\":\"Ship\"}],\"sources\":[],\"panels\":[{\"id\":\"note\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"actor-author\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{\"text\":\"Context\"},\"authored_at\":\"2026-10-01T00:00:00Z\",\"review_by\":\"999999d\"}]}"
+  },
+  {
+    "name": "series duration multiplication bounds 999999d",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Review bounds\",\"summary\":\"Duration conformance\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current\",\"outcome\":\"Ship\"}],\"sources\":[],\"panels\":[{\"id\":\"note\",\"project_id\":\"workspace\",\"type\":\"chart\",\"title\":\"Context\",\"author\":\"actor-author\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"series\":\"releases\",\"range\":\"999999d\"}}]}"
+  },
+  {
+    "name": "timeline duration multiplication bounds 999999d",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Review bounds\",\"summary\":\"Duration conformance\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current\",\"outcome\":\"Ship\"}],\"sources\":[],\"panels\":[{\"id\":\"note\",\"project_id\":\"workspace\",\"type\":\"live-timeline\",\"title\":\"Context\",\"author\":\"actor-author\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"series\":\"releases\",\"range\":\"999999d\"}}]}"
+  },
+  {
+    "name": "review duration multiplication bounds 3650d",
+    "recognized": true,
+    "valid": true,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Review bounds\",\"summary\":\"Duration conformance\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current\",\"outcome\":\"Ship\"}],\"sources\":[],\"panels\":[{\"id\":\"note\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"actor-author\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{\"text\":\"Context\"},\"authored_at\":\"2026-10-01T00:00:00Z\",\"review_by\":\"3650d\"}]}"
+  },
+  {
+    "name": "series duration multiplication bounds 3650d",
+    "recognized": true,
+    "valid": true,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Review bounds\",\"summary\":\"Duration conformance\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current\",\"outcome\":\"Ship\"}],\"sources\":[],\"panels\":[{\"id\":\"note\",\"project_id\":\"workspace\",\"type\":\"chart\",\"title\":\"Context\",\"author\":\"actor-author\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"series\":\"releases\",\"range\":\"3650d\"}}]}"
+  },
+  {
+    "name": "timeline duration multiplication bounds 3650d",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Review bounds\",\"summary\":\"Duration conformance\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current\",\"outcome\":\"Ship\"}],\"sources\":[],\"panels\":[{\"id\":\"note\",\"project_id\":\"workspace\",\"type\":\"live-timeline\",\"title\":\"Context\",\"author\":\"actor-author\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"series\":\"releases\",\"range\":\"3650d\"}}]}"
+  },
+  {
+    "name": "review duration multiplication bounds 3651d",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Review bounds\",\"summary\":\"Duration conformance\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current\",\"outcome\":\"Ship\"}],\"sources\":[],\"panels\":[{\"id\":\"note\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"actor-author\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{\"text\":\"Context\"},\"authored_at\":\"2026-10-01T00:00:00Z\",\"review_by\":\"3651d\"}]}"
+  },
+  {
+    "name": "series duration multiplication bounds 3651d",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Review bounds\",\"summary\":\"Duration conformance\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current\",\"outcome\":\"Ship\"}],\"sources\":[],\"panels\":[{\"id\":\"note\",\"project_id\":\"workspace\",\"type\":\"chart\",\"title\":\"Context\",\"author\":\"actor-author\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"series\":\"releases\",\"range\":\"3651d\"}}]}"
+  },
+  {
+    "name": "timeline duration multiplication bounds 3651d",
+    "recognized": true,
+    "valid": false,
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Review bounds\",\"summary\":\"Duration conformance\",\"generated_at\":\"2026-10-01T00:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Current\",\"outcome\":\"Ship\"}],\"sources\":[],\"panels\":[{\"id\":\"note\",\"project_id\":\"workspace\",\"type\":\"live-timeline\",\"title\":\"Context\",\"author\":\"actor-author\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unknown\",\"source_ids\":[],\"data\":{},\"source\":{\"series\":\"releases\",\"range\":\"3651d\"}}]}"
   }
 ]
