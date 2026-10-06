@@ -30,7 +30,7 @@ func TestEvidenceIndexMigrationBackfillsAndObservationUpdates(t *testing.T) {
 	if _, err = ws.DB().Exec(`UPDATE work_metadata SET metadata_json=json_set(metadata_json,'$.source.identifier_aliases','old-extension') WHERE card_id=?`, bad["id"]); err != nil {
 		t.Fatal(err)
 	}
-	for _, q := range []string{`DROP TRIGGER work_evidence_metadata_insert`, `DROP TRIGGER work_evidence_metadata_update`, `DROP TRIGGER work_evidence_metadata_delete`, `DROP VIEW work_evidence_keys`, `DROP VIEW work_evidence_entries`, `DROP TABLE work_evidence_index`, `DELETE FROM schema_migrations WHERE version=62`} {
+	for _, q := range []string{`DROP TRIGGER work_evidence_metadata_insert`, `DROP TRIGGER work_evidence_metadata_update`, `DROP TRIGGER work_evidence_metadata_delete`, `DROP VIEW work_evidence_keys`, `DROP VIEW work_evidence_entries`, `DROP TABLE work_evidence_index`, `DELETE FROM schema_migrations WHERE version=65`} {
 		if _, err = ws.DB().Exec(q); err != nil {
 			t.Fatal(err)
 		}
@@ -58,8 +58,8 @@ func TestEvidenceIndexMigrationBackfillsAndObservationUpdates(t *testing.T) {
 }
 
 // Main can contain legacy extension arrays beyond the new write caps. Migration
-// 62 bounds their projection while preserving canonical evidence bytes.
-func TestEvidenceIndex62BoundsLegacyAliasBackfill(t *testing.T) {
+// 65 bounds their projection while preserving canonical evidence bytes.
+func TestEvidenceIndex65BoundsLegacyAliasBackfill(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
 	ws, err := storage.InitializeWorkspace(ctx, root)
@@ -80,7 +80,7 @@ func TestEvidenceIndex62BoundsLegacyAliasBackfill(t *testing.T) {
 	if _, err = ws.DB().Exec(`UPDATE work_metadata SET metadata_json=json_set(metadata_json,'$.source_refs',json(?)) WHERE card_id=?`, string(raw), card["id"]); err != nil {
 		t.Fatal(err)
 	}
-	for _, q := range []string{`DROP TRIGGER work_evidence_metadata_insert`, `DROP TRIGGER work_evidence_metadata_update`, `DROP TRIGGER work_evidence_metadata_delete`, `DROP VIEW work_evidence_keys`, `DROP VIEW work_evidence_entries`, `DROP TABLE work_evidence_index`, `DROP TABLE work_evidence_records`, `DELETE FROM schema_migrations WHERE version=62`} {
+	for _, q := range []string{`DROP TRIGGER work_evidence_metadata_insert`, `DROP TRIGGER work_evidence_metadata_update`, `DROP TRIGGER work_evidence_metadata_delete`, `DROP VIEW work_evidence_keys`, `DROP VIEW work_evidence_entries`, `DROP TABLE work_evidence_index`, `DROP TABLE work_evidence_records`, `DELETE FROM schema_migrations WHERE version=65`} {
 		if _, err = ws.DB().Exec(q); err != nil {
 			t.Fatal(err)
 		}

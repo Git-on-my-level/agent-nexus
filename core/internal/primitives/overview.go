@@ -203,17 +203,21 @@ func (s *Store) Overview(ctx context.Context, humanIDs map[string]bool, agentNam
 }
 
 // overviewWork shares the bounded report projection and its joined privacy context.
-func (s *Store) overviewWork(ctx context.Context, visible func(string, string) bool, now time.Time, threshold time.Duration, includeClosed bool) ([]map[string]any, bool, error) {
+func (s *Store) overviewWork(ctx context.Context, visible func(string, string) bool, now time.Time, threshold time.Duration, includeClosed bool) ([]map[string]any, bool, map[string]bool, error) {
 	page, err := s.ListReportWork(ctx, ReportWorkFilter{Limit: 2000, IncludeClosed: includeClosed})
 	if err != nil {
-		return nil, false, err
+		return nil, false, nil, err
 	}
 	work := []map[string]any{}
+	initiativeBoards := map[string]bool{}
 	for _, w := range page.Work {
 		b := page.Boards[anyStringValue(w["board_ref"])]
 		thread := firstNonEmptyString(anyStringValue(w["thread_id"]), anyStringValue(w["parent_thread_id"]))
 		if visible == nil || (visible(b.ThreadID, b.PrivateOwner) && visible(thread, page.PrivateOwners[anyStringValue(w["id"])])) {
 			work = append(work, w)
+			if b.Role == "initiatives" {
+				initiativeBoards[anyStringValue(w["board_ref"])] = true
+			}
 		}
 	}
 	sort.Slice(work, func(i, j int) bool {
@@ -224,38 +228,23 @@ func (s *Store) overviewWork(ctx context.Context, visible func(string, string) b
 		return a > b
 	})
 	if err = s.EnrichCardPlans(ctx, work, visible, now, threshold); err != nil {
-		return nil, false, err
+		return nil, false, nil, err
 	}
-	return work, page.Truncated, nil
+	return work, page.Truncated, initiativeBoards, nil
 }
 
 func (s *Store) OverviewVisible(ctx context.Context, humanIDs, agentNames map[string]bool, visible func(string, string) bool, now time.Time, threshold time.Duration) (map[string]any, error) {
 	result := map[string]any{"generated_at": now.Format(time.RFC3339Nano)}
-	work, truncated, err := s.overviewWork(ctx, visible, now, threshold, true)
+	work, truncated, initiativeBoards, err := s.overviewWork(ctx, visible, now, threshold, true)
 	if err != nil {
 		return nil, err
 	}
-	initiativeBoards := map[string]bool{}
-	rows, err := s.db.QueryContext(ctx, `SELECT id, COALESCE(handle,'') FROM boards WHERE role='initiatives'`)
-	if err != nil {
+	// A single indexed existence probe preserves explicit selection even when
+	// an accessible designated board has no work in the bounded visit snapshot.
+	var designated bool
+	if err = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM boards WHERE role='initiatives' LIMIT 1)`).Scan(&designated); err != nil {
 		return nil, err
 	}
-	for rows.Next() {
-		var id, handle string
-		if err := rows.Scan(&id, &handle); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		initiativeBoards["board:"+id] = true
-		if handle != "" {
-			initiativeBoards["board:"+handle] = true
-		}
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return nil, err
-	}
-	rows.Close()
 	result["_visit_work"] = work
 	activeWork := []map[string]any{}
 	initiatives := []map[string]any{}
@@ -289,7 +278,7 @@ func (s *Store) OverviewVisible(ctx context.Context, humanIDs, agentNames map[st
 			initiative["progress"] = state.Progress
 			initiative["geometry"] = plans.TileGeometry(w["plan"].(plans.Plan), state)
 		}
-		if len(initiativeBoards) == 0 || initiativeBoards[anyStringValue(w["board_ref"])] {
+		if !designated || initiativeBoards[anyStringValue(w["board_ref"])] {
 			initiatives = append(initiatives, initiative)
 		}
 		if human {
@@ -301,7 +290,7 @@ func (s *Store) OverviewVisible(ctx context.Context, humanIDs, agentNames map[st
 	}
 	result["work"] = map[string]any{"status": "ok", "total": len(activeWork), "human_count": humanCount, "items": activeWork, "truncated": truncated}
 	result["initiatives"] = map[string]any{"status": "ok", "count": len(initiatives), "items": initiatives, "truncated": truncated}
-	if len(initiativeBoards) == 0 {
+	if !designated {
 		result["initiatives"].(map[string]any)["hint"] = "Set a board role with anx boards patch <board> --role initiatives to select Overview initiatives."
 	}
 	result["needs_you"] = map[string]any{"status": "ok", "count": len(needs), "rows": needs, "href": "/inbox?mailbox=needs-you"}

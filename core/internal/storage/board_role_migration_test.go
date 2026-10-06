@@ -17,10 +17,15 @@ func TestBoardRoleMigrationPreservesLegacyBoards(t *testing.T) {
 	if _, err = db.ExecContext(ctx, `INSERT INTO boards(id,title,summary,owners_json,thread_id,refs_json,column_schema_json,created_at,created_by,updated_at,updated_by) VALUES('legacy','Legacy','','[]','legacy','[]','{}','2026-10-01','actor','2026-10-01','actor')`); err != nil {
 		t.Fatal(err)
 	}
+	for _, q := range []string{`DROP INDEX idx_boards_role`, `DROP TRIGGER access_boards_insert`, `DROP TRIGGER access_boards_update`} {
+		if _, err = db.ExecContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if _, err = db.ExecContext(ctx, `ALTER TABLE boards DROP COLUMN role`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = db.ExecContext(ctx, `DELETE FROM schema_migrations WHERE version=61`); err != nil {
+	if _, err = db.ExecContext(ctx, `DELETE FROM schema_migrations WHERE version=64`); err != nil {
 		t.Fatal(err)
 	}
 	if err = ws.Close(); err != nil {

@@ -168,7 +168,7 @@ Ancillary actor/auth/host/series/secrets readers and transactional response
 loaders must retain scoped handles too. Durable authentication/grant invariants
 may read canonical authority without returning profile or business content.
 
-Migrations 61/62 add board roles and the bounded evidence projection after main's
+Migrations 64/65 add board roles and the bounded evidence projection after main's
 authorization history. Evidence records and alias keys are registered ownership
 sources, inherit their card, and constrain that card when they reference private
 resources. Their tables and views use scoped relations before lookup limits.

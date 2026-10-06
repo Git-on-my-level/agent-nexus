@@ -604,7 +604,7 @@ type ReportWorkFilter struct {
 	IncludeClosed bool
 }
 type ReportWorkBoard struct {
-	Title, ThreadID, PrivateOwner string
+	Title, ThreadID, PrivateOwner, Role string
 }
 
 type ReportWorkPage struct {
@@ -664,7 +664,7 @@ func reportWorkQuery(ctx context.Context, filter ReportWorkFilter) (string, []an
 	 c.pinned_document_id,c.assignee,c.risk,c.resolution,c.resolution_refs_json,c.refs_json,c.created_at,c.created_by,c.updated_at,c.updated_by,c.provenance_json,
 	 c.archived_at,c.archived_by,c.trashed_at,c.trashed_by,c.trash_reason,
 	 COALESCE(m.metadata_json,'{"source":{"authority":"nexus"}}'),COALESCE(m.version,0),COALESCE(m.refresh_json,'{"state":"idle"}'),o.body_json,a.body_json,
-	 b.title,COALESCE(b.thread_id,''),COALESCE(json_extract(bt.body_json,'$.pm_actor_id'),''),COALESCE(json_extract(ct.body_json,'$.pm_actor_id'),'')
+	 b.title,COALESCE(b.role,''),COALESCE(b.thread_id,''),COALESCE(json_extract(bt.body_json,'$.pm_actor_id'),''),COALESCE(json_extract(ct.body_json,'$.pm_actor_id'),'')
 	 FROM ` + from + ` WHERE ` + where + ordering + ` LIMIT ?`, args
 }
 
@@ -689,7 +689,7 @@ func (s *Store) ListReportWork(ctx context.Context, filter ReportWorkFilter) (Re
 		var latestJSON, attemptJSON sql.NullString
 		var version int64
 		var board ReportWorkBoard
-		row, err := scanBoardCardRow(rows, &metadataJSON, &version, &refreshJSON, &latestJSON, &attemptJSON, &board.Title, &board.ThreadID, &board.PrivateOwner, &privateOwner)
+		row, err := scanBoardCardRow(rows, &metadataJSON, &version, &refreshJSON, &latestJSON, &attemptJSON, &board.Title, &board.Role, &board.ThreadID, &board.PrivateOwner, &privateOwner)
 		if err != nil {
 			return ReportWorkPage{}, err
 		}

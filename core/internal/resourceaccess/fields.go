@@ -15,7 +15,7 @@ var OwnershipSources = []OwnershipSource{
 	{"events", "event", "id", []string{"refs_json", "payload_json", "trash_reason"}},
 	{"threads", "thread", "id", []string{"body_json", "provenance_json", "trash_reason"}},
 	{"topics", "topic", "id", []string{"title", "summary", "provenance_json", "extensions_json", "trash_reason"}},
-	{"boards", "board", "id", []string{"title", "summary", "owners_json", "refs_json", "column_schema_json", "trash_reason"}},
+	{"boards", "board", "id", []string{"title", "summary", "owners_json", "refs_json", "column_schema_json", "role", "trash_reason"}},
 	{"cards", "card", "id", []string{"title", "summary", "definition_of_done_json", "resolution_refs_json", "refs_json", "provenance_json", "pinned_document_id", "trash_reason"}},
 	{"documents", "document", "id", []string{"title", "summary", "source", "search_text", "supersedes_json", "refs_json", "provenance_json", "tags_json", "hosts_json", "trash_reason"}},
 	{"document_revisions", "document_revision", "revision_id", []string{"refs_json", "artifact_id", "prev_revision_id"}},

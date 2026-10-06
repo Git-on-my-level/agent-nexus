@@ -12,7 +12,7 @@ import (
 
 // The index is a rebuildable projection, updated in the canonical write's
 // transaction. Reads look up exact keys; no workspace metadata scan is needed.
-func applyMigration62EvidenceIndex(ctx context.Context, tx *sql.Tx) error {
+func applyMigration65EvidenceIndex(ctx context.Context, tx *sql.Tx) error {
 	exists, err := sqliteTableExists(ctx, tx, "work_metadata")
 	if err != nil || !exists {
 		return err
@@ -124,7 +124,17 @@ func applyMigration62EvidenceIndex(ctx context.Context, tx *sql.Tx) error {
 	if err = installResourceAccessEdges(ctx, tx); err != nil {
 		return err
 	}
-	return installExternalKeyReferenceEdges(ctx, tx)
+	if err = installExternalKeyReferenceEdges(ctx, tx); err != nil {
+		return err
+	}
+	// Main's mention/epoch migration ran before the new projection tables existed.
+	// Rebuild at upgrade time, register their epoch triggers, and retain numeric
+	// projection IDs as internal nodes rather than resource identities.
+	if err = installResourceAccessMentions(ctx, tx); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_access_identity_key ON resource_access_identities(kind,anx_resource_atom_key(CAST(ref AS BLOB)),resource_id)`)
+	return err
 }
 
 // External keys distinguish publication fields from references using the same
@@ -133,8 +143,8 @@ func applyMigration62EvidenceIndex(ctx context.Context, tx *sql.Tx) error {
 func installExternalKeyReferenceEdges(ctx context.Context, tx *sql.Tx) error {
 	for _, q := range []string{
 		`DROP TABLE IF EXISTS resource_access_external_edges;`,
-		`CREATE TABLE IF NOT EXISTS resource_access_external_edges(source_kind TEXT NOT NULL,source_id TEXT NOT NULL,target_ref TEXT NOT NULL COLLATE NOCASE,PRIMARY KEY(source_kind,source_id,target_ref));`,
-		`CREATE INDEX IF NOT EXISTS idx_resource_access_external_target ON resource_access_external_edges(target_ref,source_kind,source_id);`,
+		`CREATE TABLE IF NOT EXISTS resource_access_external_edges(source_kind TEXT NOT NULL,source_id TEXT NOT NULL,target_key TEXT NOT NULL CHECK(length(target_key)=64),PRIMARY KEY(source_kind,source_id,target_key));`,
+		`CREATE INDEX IF NOT EXISTS idx_resource_access_external_target ON resource_access_external_edges(target_key,source_kind,source_id);`,
 	} {
 		if _, err := tx.ExecContext(ctx, q); err != nil {
 			return err
@@ -165,7 +175,7 @@ func installExternalKeyReferenceEdges(ctx context.Context, tx *sql.Tx) error {
 			continue
 		}
 		insert := func(prefix, from, where string) string {
-			return `INSERT INTO resource_access_external_edges(source_kind,source_id,target_ref) SELECT '` + source.Kind + `',` + prefix + source.ID + `,j.value FROM ` + from + `json_each(` + resourceaccess.ExternalKeyReferenceExpression(source, columns, prefix) + `) j WHERE j.value<>''` + where + ` ON CONFLICT(source_kind,source_id,target_ref) DO NOTHING;`
+			return `INSERT INTO resource_access_external_edges(source_kind,source_id,target_key) SELECT '` + source.Kind + `',` + prefix + source.ID + `,anx_resource_atom_key(CAST(j.value AS BLOB)) FROM ` + from + `json_each(` + resourceaccess.ExternalKeyReferenceExpression(source, columns, prefix) + `) j WHERE j.value<>''` + where + ` ON CONFLICT(source_kind,source_id,target_key) DO NOTHING;`
 		}
 		clear := `DELETE FROM resource_access_external_edges WHERE source_kind='` + source.Kind + `' AND source_id=OLD.` + source.ID + `;`
 		for _, q := range []string{

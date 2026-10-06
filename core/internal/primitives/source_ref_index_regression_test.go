@@ -143,7 +143,7 @@ func TestSourceRefIndexBackfillsExistingMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, sql := range []string{"DROP TRIGGER work_evidence_metadata_insert", "DROP TRIGGER work_evidence_metadata_update", "DROP TRIGGER work_evidence_metadata_delete", "DROP VIEW work_evidence_keys", "DROP VIEW work_evidence_entries", "DROP TABLE work_evidence_index", "DELETE FROM schema_migrations WHERE version=62"} {
+	for _, sql := range []string{"DROP TRIGGER work_evidence_metadata_insert", "DROP TRIGGER work_evidence_metadata_update", "DROP TRIGGER work_evidence_metadata_delete", "DROP VIEW work_evidence_keys", "DROP VIEW work_evidence_entries", "DROP TABLE work_evidence_index", "DELETE FROM schema_migrations WHERE version=65"} {
 		if _, err = ws.DB().ExecContext(ctx, sql); err != nil {
 			t.Fatal(err)
 		}

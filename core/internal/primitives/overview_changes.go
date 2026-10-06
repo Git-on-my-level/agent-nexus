@@ -261,7 +261,7 @@ func digestSubjectRef(ref string) bool {
 }
 
 func (s *Store) LoadOverviewChanges(ctx context.Context, principal string, visible func(string, string) bool, now time.Time, threshold time.Duration) (OverviewChanges, error) {
-	work, truncated, err := s.overviewWork(ctx, visible, now, threshold, true)
+	work, truncated, _, err := s.overviewWork(ctx, visible, now, threshold, true)
 	if err != nil {
 		return OverviewChanges{}, err
 	}

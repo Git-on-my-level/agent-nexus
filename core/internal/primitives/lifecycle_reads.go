@@ -3,6 +3,8 @@ package primitives
 import (
 	"context"
 	"strings"
+
+	"agent-nexus-core/internal/resourceaccess"
 )
 
 // quoteSQLText escapes the sole dynamic value in these internal SQL predicates.
@@ -96,8 +98,8 @@ func nativeReferenceLifecycleSQL(ctx context.Context, ref string, active bool) s
 				allow += ` AND NOT EXISTS (SELECT 1 FROM boards revision_board WHERE revision_board.id=revision_parent.board_id AND (COALESCE(revision_board.archived_at,'')<>'' OR COALESCE(revision_board.trashed_at,'')<>''))`
 			}
 		}
-		canonicalHandle := `lower(COALESCE(` + parent + `.handle,` + parent + `.id)||'-r'||access_revision.revision_number)`
-		parts = append(parts, `NOT EXISTS (SELECT 1 FROM `+kind+`_revisions access_revision JOIN `+kind+`s `+parent+` ON `+parent+`.id=access_revision.`+kind+`_id WHERE `+prefix+`=`+quoteSQLText(kind+"_revision")+` AND (access_revision.revision_id=`+value+` OR `+canonicalHandle+`=lower(`+value+`) OR `+canonicalHandle+`=`+handle+`) AND NOT (`+allow+`))`)
+		identity := `SELECT resource_id FROM resource_access_identities INDEXED BY idx_access_identity_key WHERE kind=` + quoteSQLText(kind+"_revision") + ` AND anx_resource_atom_key(CAST(ref AS BLOB)) IN (` + resourceaccess.AtomKeySQL(value) + `,` + resourceaccess.AtomKeySQL(handle) + `)`
+		parts = append(parts, `NOT EXISTS (SELECT 1 FROM `+kind+`_revisions access_revision JOIN `+kind+`s `+parent+` ON `+parent+`.id=access_revision.`+kind+`_id WHERE `+prefix+`=`+quoteSQLText(kind+"_revision")+` AND (access_revision.revision_id IN (`+identity+`)) AND NOT (`+allow+`))`)
 	}
 	return "(" + strings.Join(parts, " AND ") + ")"
 }

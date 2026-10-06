@@ -48,8 +48,8 @@ func mainHistoryDatabase(t *testing.T, root string, version int) *sql.DB {
 	return db
 }
 
-func TestFeatureUpgradeFromReleased54AndMain60(t *testing.T) {
-	for _, version := range []int{54, 60} {
+func TestFeatureUpgradeFromReleased54AndMain60And63(t *testing.T) {
+	for _, version := range []int{54, 60, 63} {
 		t.Run(fmt.Sprintf("main-%d", version), func(t *testing.T) {
 			ctx := context.Background()
 			root := t.TempDir()
@@ -112,8 +112,14 @@ func TestFeatureUpgradeFromReleased54AndMain60(t *testing.T) {
 				if err = db.QueryRow(`SELECT count(*) FROM schema_migrations WHERE version<=? AND applied_at<>'historical-main'`, version).Scan(&count); err != nil || count != 0 {
 					t.Fatalf("main ledger changed: %d %v", count, err)
 				}
-				if err = db.QueryRow(`SELECT count(*) FROM schema_migrations WHERE version IN (61,62)`).Scan(&count); err != nil || count != 2 {
+				if err = db.QueryRow(`SELECT count(*) FROM schema_migrations WHERE version IN (64,65)`).Scan(&count); err != nil || count != 2 {
 					t.Fatalf("feature ledger: %d %v", count, err)
+				}
+				if err = db.QueryRow(`SELECT count(*) FROM sqlite_schema WHERE type='trigger' AND name IN ('access_epoch_work_evidence_records_update','access_epoch_work_evidence_index_update','access_epoch_resource_access_external_edges_update')`).Scan(&count); err != nil || count != 3 {
+					t.Fatalf("evidence snapshot invalidation triggers: %d %v", count, err)
+				}
+				if err = db.QueryRow(`SELECT count(*) FROM resource_access_identities WHERE kind IN ('work_evidence_record','work_evidence_alias')`).Scan(&count); err != nil || count != 0 {
+					t.Fatalf("internal evidence IDs became public identities: %d %v", count, err)
 				}
 				if err = db.QueryRow(`SELECT count(*) FROM work_evidence_index WHERE lookup_key IN ('main-alias','observation-alias')`).Scan(&count); err != nil || count != 2 {
 					t.Fatalf("backfill=%d err=%v", count, err)
@@ -124,10 +130,10 @@ func TestFeatureUpgradeFromReleased54AndMain60(t *testing.T) {
 				if err = db.QueryRow(`SELECT count(*) FROM resource_access_edges WHERE source_kind='work_metadata' AND target_ref='card:private-card'`).Scan(&count); err != nil || count != 1 {
 					t.Fatalf("normalized canonical ownership backfill=%d err=%v", count, err)
 				}
-				if err = db.QueryRow(`SELECT count(*) FROM resource_access_external_edges WHERE source_kind='work_metadata' AND target_ref='card:private-card'`).Scan(&count); err != nil || count != 1 {
+				if err = db.QueryRow(`SELECT count(*) FROM resource_access_external_edges WHERE source_kind='work_metadata' AND target_key=anx_resource_atom_key(CAST('card:private-card' AS BLOB))`).Scan(&count); err != nil || count != 1 {
 					t.Fatalf("external-reference backfill=%d err=%v", count, err)
 				}
-				if err = db.QueryRow(`SELECT count(*) FROM resource_access_external_edges WHERE target_ref IN ('main-alias','observation-alias')`).Scan(&count); err != nil || count != 0 {
+				if err = db.QueryRow(`SELECT count(*) FROM resource_access_external_edges WHERE target_key IN (anx_resource_atom_key(CAST('main-alias' AS BLOB)),anx_resource_atom_key(CAST('observation-alias' AS BLOB)))`).Scan(&count); err != nil || count != 0 {
 					t.Fatalf("publication fields became references=%d err=%v", count, err)
 				}
 				if open == 0 {
@@ -137,14 +143,14 @@ func TestFeatureUpgradeFromReleased54AndMain60(t *testing.T) {
 					if _, err = db.Exec(`UPDATE work_evidence_records SET evidence_json=json_set(evidence_json,'$.reopen_marker',true)`); err != nil {
 						t.Fatal(err)
 					}
-					if _, err = db.Exec(`INSERT INTO resource_access_external_edges VALUES('work_metadata','source-card','external-reopen-marker')`); err != nil {
+					if _, err = db.Exec(`INSERT INTO resource_access_external_edges VALUES('work_metadata','source-card',anx_resource_atom_key(CAST('external-reopen-marker' AS BLOB)))`); err != nil {
 						t.Fatal(err)
 					}
 				} else {
 					if err = db.QueryRow(`SELECT count(*) FROM work_evidence_records WHERE json_extract(evidence_json,'$.reopen_marker')=1`).Scan(&count); err != nil || count != 2 {
 						t.Fatalf("reopen rebuilt evidence: %d %v", count, err)
 					}
-					if err = db.QueryRow(`SELECT count(*) FROM resource_access_external_edges WHERE target_ref='external-reopen-marker'`).Scan(&count); err != nil || count != 1 {
+					if err = db.QueryRow(`SELECT count(*) FROM resource_access_external_edges WHERE target_key=anx_resource_atom_key(CAST('external-reopen-marker' AS BLOB))`).Scan(&count); err != nil || count != 1 {
 						t.Fatalf("reopen rebuilt external ownership: %d %v", count, err)
 					}
 				}
