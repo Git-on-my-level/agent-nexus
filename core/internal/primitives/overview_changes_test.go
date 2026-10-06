@@ -94,8 +94,8 @@ func TestOverviewDigestNetTransitionsVisibilityAndBounds(t *testing.T) {
 		t.Fatal(err)
 	}
 	queries := counter.Count()
-	// A nonempty closed page selects bounded IDs before hydration; an empty
-	// page skips that projection. The larger corpus below must not add reads.
+	// The bounded work page and answer existence probe use eight reads in
+	// this fixture. The larger corpus below must not add reads.
 	if queries != 8 {
 		t.Fatalf("queries=%d want 8", queries)
 	}

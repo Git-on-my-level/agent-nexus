@@ -37,6 +37,7 @@ func TestResourceAccessCommonReadPerformance(t *testing.T) {
 		t.Fatal(err)
 	}
 	stranger := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "perf-reader", "perf-reader-actor", "perf-reader", "perf-reader-token")
+	privateRefs := []string{}
 	for i := 0; i < 10; i++ {
 		board, err := s.CreateBoard(ctx, "private-owner", map[string]any{"title": fmt.Sprintf("private-%d", i)})
 		if err != nil {
@@ -45,9 +46,11 @@ func TestResourceAccessCommonReadPerformance(t *testing.T) {
 		if _, err = s.PatchThread(ctx, "private-owner", anyString(board["thread_id"]), map[string]any{"pm_actor_id": "private-owner"}, nil); err != nil {
 			t.Fatal(err)
 		}
-		if _, err = s.CreateBoardCard(ctx, "private-owner", anyString(board["id"]), primitives.AddBoardCardInput{Title: "PrivatePerformanceSecret", Body: "secret", ColumnKey: "ready"}); err != nil {
+		private, err := s.CreateBoardCard(ctx, "private-owner", anyString(board["id"]), primitives.AddBoardCardInput{Title: "PrivatePerformanceSecret", Body: "secret", ColumnKey: "ready"})
+		if err != nil {
 			t.Fatal(err)
 		}
+		privateRefs = append(privateRefs, anyString(private.Card["ref"]))
 	}
 	publicBoard, err := s.CreateBoard(ctx, "public-writer", map[string]any{"title": "public fixture"})
 	if err != nil {
@@ -153,6 +156,22 @@ func TestResourceAccessCommonReadPerformance(t *testing.T) {
 	}
 	if err = bulk.Commit(); err != nil {
 		t.Fatal(err)
+	}
+	// Populated actionable PM window: 101 distinct public subjects plus decisions
+	// owned by the reader that inherit ten unrelated private roots.
+	for i := 0; i < 101+len(privateRefs); i++ {
+		ref, instruction, revision := fmt.Sprintf("card:%08x-row-4", i), "Review public work", "0.1"
+		if i >= 101 {
+			ref, instruction, revision = privateRefs[i-101], "PrivatePerformanceSecret", "1.1"
+		}
+		d := pm.Decision{ID: fmt.Sprintf("perf-awaiting-%d", i), WorkspaceID: "ws_main", ActorID: stranger.ActorID, WorkRef: ref, Status: pm.AwaitingAnswer, TargetRevision: revision, Scope: "work.annotate", Instruction: instruction, CreatedAt: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)}
+		body, err := json.Marshal(d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = env.workspace.DB().Exec(`INSERT INTO pm_records VALUES('decision',?,'ws_main',?,'',1,?)`, d.ID, stranger.ActorID, body); err != nil {
+			t.Fatal(err)
+		}
 	}
 	// Real directories and administrator host/key fanout. No hosted content.
 	for _, q := range []string{
@@ -314,6 +333,16 @@ func TestResourceAccessCommonReadPerformance(t *testing.T) {
 					if err := json.Unmarshal(body, &overview); err != nil {
 						t.Fatal(err)
 					}
+					needs := overview["needs_you"].(map[string]any)
+					decisions := 0
+					for _, raw := range needs["rows"].([]any) {
+						if strings.HasPrefix(raw.(map[string]any)["id"].(string), "decision:perf-awaiting-") {
+							decisions++
+						}
+					}
+					if decisions != 100 || needs["truncated"] != true {
+						t.Fatalf("populated PM window missing: decisions=%d needs=%v", decisions, needs)
+					}
 					for _, section := range []string{"work", "needs_you", "agents"} {
 						if overview[section].(map[string]any)["status"] != "ok" {
 							t.Fatalf("overview %s unavailable: %v", section, overview[section])
@@ -336,8 +365,8 @@ func TestResourceAccessCommonReadPerformance(t *testing.T) {
 					t.Fatal("private content leaked")
 				}
 				statementBudget := int64(70)
-				// PM performs fresh authorization for every candidate. Keep that
-				// boundary: the bound scales with the requested page, never history.
+				// PM preserves fresh authority while batching candidate visibility;
+				// the bound scales with the requested page, never history.
 				if strings.HasPrefix(path, "/pm/") {
 					statementBudget = 150
 				}
@@ -373,13 +402,26 @@ func TestResourceAccessCommonReadPerformance(t *testing.T) {
 					t.Logf("cold app/connection request=%s statements=%d returned_rows=%d", time.Since(start), counter.Count(), counter.ReturnedRows())
 					for _, q := range counter.Statements() {
 						if q.Elapsed > 25*time.Millisecond {
-							t.Logf("slow read rows=%d elapsed=%s", q.Rows, q.Elapsed)
+							query := q.SQL
+							if len(query) > 600 {
+								query = query[len(query)-600:]
+							}
+							t.Logf("slow read rows=%d elapsed=%s SQL=%s", q.Rows, q.Elapsed, query)
 						}
 					}
 					logReadPlans(t, counted, counter.Statements())
 				}
 				if i == 2 {
-					t.Logf("warm statements=%d returned_rows=%d", counter.Count(), counter.ReturnedRows())
+					t.Logf("warm statements=%d returned_rows=%d duration=%s", counter.Count(), counter.ReturnedRows(), time.Since(start))
+					for _, q := range counter.Statements() {
+						if q.Elapsed > 25*time.Millisecond {
+							query := q.SQL
+							if len(query) > 600 {
+								query = query[len(query)-600:]
+							}
+							t.Logf("warm slow rows=%d elapsed=%s SQL=%s", q.Rows, q.Elapsed, query)
+						}
+					}
 				}
 				if i >= 2 || path == "/reports/preview" && i >= 1 {
 					samples = append(samples, time.Since(start))

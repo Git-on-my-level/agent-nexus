@@ -138,6 +138,18 @@ func (s *Store) OverviewChanges(ctx context.Context, principal string, work []ma
 // answer and a safe navigation ref. Inbox subject refs are folded into the same
 // batch and both the event and inbox backing threads must be readable.
 func (s *Store) overviewAnsweredAsks(ctx context.Context, out *OverviewChanges, visible func(string, string) bool, now time.Time) error {
+	// Most visits have no new answers. Avoid preparing the wide lifecycle/ref
+	// projection in that case. This scoped probe is a superset of its predicates;
+	// nonempty histories retain all filtering before their original limit.
+	var anyAnswers bool
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM events
+ WHERE type='human_attention_responded' AND trashed_at IS NULL AND archived_at IS NULL
+ AND julianday(ts)>=julianday(?) AND julianday(ts)<=julianday(?) LIMIT 1)`, *out.Since, now.Format(time.RFC3339Nano)).Scan(&anyAnswers); err != nil {
+		return err
+	}
+	if !anyAnswers {
+		return nil
+	}
 	rows, err := s.db.QueryContext(ctx, `SELECT e.id,e.ts,e.refs_json,COALESCE(t.id,''),COALESCE(json_extract(t.body_json,'$.pm_actor_id'),''),
  COALESCE(i.thread_id,''),COALESCE(json_extract(it.body_json,'$.pm_actor_id'),''),COALESCE(json_extract(i.data_json,'$.related_refs'),json_extract(i.data_json,'$.refs'),'[]')
  FROM events e LEFT JOIN threads t ON t.id=COALESCE(NULLIF(e.thread_id,''),(SELECT substr(value,8) FROM json_each(e.refs_json) WHERE value LIKE 'thread:%' LIMIT 1))

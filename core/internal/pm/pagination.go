@@ -27,7 +27,7 @@ func pageParams(r *http.Request) (int, string, error) {
 	}
 	return n, r.URL.Query().Get("cursor"), nil
 }
-func recordPage[T any](ctx context.Context, s *Service, p Principal, kind string, limit int, cursor string, allowed func(T) bool) (Page[T], error) {
+func recordPage[T any](ctx context.Context, s *Service, p Principal, kind string, limit int, cursor string, workRef func(T) string) (Page[T], error) {
 	out := Page[T]{Items: make([]T, 0)}
 	if err := s.authorize(ctx, p, "pm.read", ""); err != nil {
 		return out, err
@@ -124,9 +124,20 @@ func recordPage[T any](ctx context.Context, s *Service, p Principal, kind string
 		if err != nil {
 			return out, err
 		}
+		readable := map[string]bool{}
+		if workRef != nil {
+			refs := make([]string, 0, len(records))
+			for _, v := range records {
+				refs = append(refs, workRef(v.value))
+			}
+			readable, err = s.authorizeReadBatch(ctx, p, "pm.read", refs)
+			if err != nil {
+				return out, err
+			}
+		}
 		for _, v := range records {
 			before.Scope, before.Created, before.Row = scope, v.created, v.row
-			if !allowed(v.value) {
+			if workRef != nil && !readable[workRef(v.value)] {
 				continue
 			}
 			if len(out.Items) == limit {
@@ -151,17 +162,17 @@ func recordPage[T any](ctx context.Context, s *Service, p Principal, kind string
 }
 
 func (s *Service) ConversationPage(ctx context.Context, p Principal, limit int, cursor string) (Page[Conversation], error) {
-	return recordPage(ctx, s, p, "conversation", limit, cursor, func(c Conversation) bool { return s.authorize(ctx, p, "pm.read", c.WorkRef) == nil })
+	return recordPage(ctx, s, p, "conversation", limit, cursor, func(c Conversation) string { return c.WorkRef })
 }
 func (s *Service) DecisionPage(ctx context.Context, p Principal, limit int, cursor string) (Page[Decision], error) {
-	page, err := recordPage(ctx, s, p, "decision", limit, cursor, func(d Decision) bool { return s.authorize(ctx, p, "pm.read", d.WorkRef) == nil })
+	page, err := recordPage(ctx, s, p, "decision", limit, cursor, func(d Decision) string { return d.WorkRef })
 	if err == nil {
 		page.Items, err = s.decisionsForReader(ctx, p, page.Items)
 	}
 	return page, err
 }
 func (s *Service) ActionPage(ctx context.Context, p Principal, limit int, cursor string) (Page[Action], error) {
-	page, err := recordPage(ctx, s, p, "action", limit, cursor, func(a Action) bool { return s.authorize(ctx, p, "pm.read", a.WorkRef) == nil })
+	page, err := recordPage(ctx, s, p, "action", limit, cursor, func(a Action) string { return a.WorkRef })
 	for i, a := range page.Items {
 		page.Items[i] = s.actionForReader(ctx, a)
 	}
@@ -171,7 +182,7 @@ func (s *Service) BindingPage(ctx context.Context, p Principal, limit int, curso
 	if err := s.authorize(ctx, p, "pm.bind", ""); err != nil {
 		return Page[Binding]{}, err
 	}
-	return recordPage(ctx, s, p, "binding", limit, cursor, func(Binding) bool { return true })
+	return recordPage[Binding](ctx, s, p, "binding", limit, cursor, nil)
 }
 
 // ConversationHistory reads newest history by default, in chronological display

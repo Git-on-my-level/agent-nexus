@@ -39,6 +39,7 @@ func NewStore(db *sql.DB) (*Store, error) {
  CREATE INDEX IF NOT EXISTS pm_records_status ON pm_records(kind,workspace_id,json_extract(body,'$.status'));
  CREATE INDEX IF NOT EXISTS pm_records_legacy_actions ON pm_records(kind,workspace_id,parent_id) WHERE kind='action' AND json_extract(body,'$.created_at') IS NULL;
  CREATE INDEX IF NOT EXISTS pm_records_changes ON pm_records(kind,workspace_id,julianday(json_extract(body,'$.created_at')));
+ CREATE INDEX IF NOT EXISTS pm_records_overview_owner ON pm_records(kind,workspace_id,actor_id,json_extract(body,'$.status'));
  CREATE INDEX IF NOT EXISTS pm_records_parent_status ON pm_records(kind,workspace_id,parent_id,json_extract(body,'$.status'));`)
 	if err != nil {
 		return nil, err

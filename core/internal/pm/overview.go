@@ -12,12 +12,12 @@ func (s *Service) OverviewDecisions(ctx context.Context, p Principal) ([]Decisio
 		return nil, nil, false, err
 	}
 	rows, err := s.store.database().QueryContext(ctx, `SELECT body FROM (
- SELECT d.body,d.rowid AS position FROM pm_records d
- WHERE d.kind='decision' AND d.workspace_id=? AND json_extract(d.body,'$.status')='awaiting_answer' AND d.actor_id=?
+ SELECT * FROM (SELECT d.body,d.rowid AS position FROM pm_records d
+ WHERE d.kind='decision' AND d.workspace_id=? AND json_extract(d.body,'$.status')='awaiting_answer' AND d.actor_id=? ORDER BY d.rowid DESC LIMIT 101)
  UNION ALL
- SELECT d.body,d.rowid AS position FROM pm_records d
+ SELECT * FROM (SELECT d.body,d.rowid AS position FROM pm_records d
  WHERE d.kind='decision' AND d.workspace_id=? AND json_extract(d.body,'$.status')='answered'
- AND EXISTS(SELECT 1 FROM pm_records a WHERE a.kind='action' AND a.workspace_id=d.workspace_id AND a.parent_id=d.id AND (json_extract(a.body,'$.status')='failed' OR (a.actor_id=? AND json_extract(a.body,'$.status') IN ('pending_delivery','pending'))))
+ AND EXISTS(SELECT 1 FROM pm_records a WHERE a.kind='action' AND a.workspace_id=d.workspace_id AND a.parent_id=d.id AND (json_extract(a.body,'$.status')='failed' OR (a.actor_id=? AND json_extract(a.body,'$.status') IN ('pending_delivery','pending')))) ORDER BY d.rowid DESC LIMIT 101)
  ) ORDER BY position DESC LIMIT 101`, p.WorkspaceID, p.ActorID, p.WorkspaceID, p.ActorID)
 	if err != nil {
 		return nil, nil, false, err
@@ -31,9 +31,17 @@ func (s *Service) OverviewDecisions(ctx context.Context, p Principal) ([]Decisio
 		ds = ds[:100]
 	}
 	ids := []string{}
+	refs := []string{}
+	for _, d := range ds {
+		refs = append(refs, d.WorkRef)
+	}
+	readable, err := s.authorizeReadBatch(ctx, p, "pm.read", refs)
+	if err != nil {
+		return nil, nil, false, err
+	}
 	out := []Decision{}
 	for _, d := range ds {
-		if s.authorize(ctx, p, "pm.read", d.WorkRef) == nil {
+		if readable[d.WorkRef] {
 			out = append(out, d)
 			ids = append(ids, d.ID)
 		}
@@ -58,9 +66,17 @@ func (s *Service) OverviewDecisions(ctx context.Context, p Principal) ([]Decisio
 		truncated = true
 		actions = actions[:200]
 	}
+	refs = nil
+	for _, a := range actions {
+		refs = append(refs, a.WorkRef)
+	}
+	readable, err = s.authorizeReadBatch(ctx, p, "pm.read", refs)
+	if err != nil {
+		return nil, nil, false, err
+	}
 	byDecision := map[string][]Action{}
 	for _, a := range actions {
-		if s.authorize(ctx, p, "pm.read", a.WorkRef) == nil {
+		if readable[a.WorkRef] {
 			byDecision[a.DecisionID] = append(byDecision[a.DecisionID], s.actionForReader(ctx, a))
 		}
 	}

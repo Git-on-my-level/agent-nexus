@@ -474,6 +474,7 @@ export async function loadOverview(client, { now = Date.now() } = {}) {
                 waiting: summary.waiting_on_human,
                 stale: summary.stale,
                 href: "/agents",
+                truncated: snapshot.agents.truncated === true,
               };
             })(),
           }
@@ -496,5 +497,21 @@ export async function loadOverview(client, { now = Date.now() } = {}) {
       },
       freshness: freshnessBuckets(records, now),
     },
+  };
+}
+
+// Preserve loaded choices while advancing through the API's candidate windows.
+export function mergeDashboardReports(current, next) {
+  const reports = new Map();
+  for (const entry of [...(current?.reports || []), ...(next?.reports || [])]) {
+    const parsed = parseVisualReport(JSON.stringify(entry.report));
+    if (parsed.report)
+      reports.set(entry.id, { ...entry, report: parsed.report });
+  }
+  return {
+    ...current,
+    ...next,
+    pinned_ref: current?.pinned_ref ?? next?.pinned_ref ?? null,
+    reports: [...reports.values()],
   };
 }

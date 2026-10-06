@@ -102,7 +102,10 @@ const dashboard = {
   revision: { content: JSON.stringify(report), content_type: "text" },
 };
 
-async function installOverview(page, { gate = null, failure = false } = {}) {
+async function installOverview(
+  page,
+  { gate = null, failure = false, paged = false, truncatedAgents = false } = {},
+) {
   await installWorkspaceApi(page, {
     actors: [{ id: "operator", display_name: "Alex", tags: ["human"] }],
     principals: [{ actor_id: "operator", principal_kind: "human" }],
@@ -125,7 +128,7 @@ async function installOverview(page, { gate = null, failure = false } = {}) {
     })),
     documents: [dashboard.document],
   });
-  const state = { pinned: null, writes: [], selectorReads: 0 };
+  const state = { pinned: null, writes: [], selectorReads: 0, cursors: [] };
   const snapshot = () => ({
     generated_at: NOW,
     work: { status: "ok", total: active.length, human_count: 0, items: active },
@@ -167,13 +170,15 @@ async function installOverview(page, { gate = null, failure = false } = {}) {
       status: "ok",
       pinned_ref: state.pinned,
       has_more: true,
+      next_cursor: paged ? "page-two" : undefined,
       reports: [{ ...dashboard.document, segment: "demo-dashboard", report }],
     },
     agents: {
       status: "ok",
+      truncated: truncatedAgents,
       items: Array.from({ length: 3 }, (_, index) => ({
         id: `agent-${index}`,
-        state: "stale",
+        state: truncatedAgents ? "idle" : "stale",
       })),
     },
   });
@@ -200,6 +205,10 @@ async function installOverview(page, { gate = null, failure = false } = {}) {
     }
     if (path === "/workspace/dashboard/reports") {
       state.selectorReads++;
+      const cursor = new URL(request.url()).searchParams.get("cursor") || "";
+      state.cursors.push(cursor);
+      if (paged && !cursor)
+        return route.fulfill({ json: snapshot().dashboard });
       return route.fulfill({
         json: {
           ...snapshot().dashboard,
@@ -424,4 +433,36 @@ test("compact dashboard ignores document filter state", async ({ page }) => {
   await expect(
     page.getByText("No panels match these filters", { exact: true }),
   ).toHaveCount(0);
+});
+
+test("bookmarked report follows cursors and retains earlier choices", async ({
+  page,
+}) => {
+  const state = await installOverview(page, { paged: true });
+  await page.goto(`${OVERVIEW}?dashboard=older-dashboard`);
+  await expect(
+    page.getByRole("heading", { name: "Earlier dashboard", exact: true }),
+  ).toBeVisible();
+  const selector = page.getByRole("combobox", { name: "Report" });
+  await expect(selector).toHaveValue("older-dashboard");
+  expect(state.cursors).toEqual(["", "page-two"]);
+  await expect(selector.locator("option[value='demo-dashboard']")).toHaveCount(
+    1,
+  );
+  await selector.selectOption("demo-dashboard");
+  await expect(
+    page.getByRole("heading", { name: "Demo dashboard", exact: true }),
+  ).toBeVisible();
+});
+
+test("truncated idle agent sample visibly qualifies zero counts", async ({
+  page,
+}) => {
+  await installOverview(page, { truncatedAgents: true });
+  await page.goto(OVERVIEW);
+  await page.locator("[data-overview-detail] > summary").click();
+  await expect(page.getByText("Partial counts", { exact: true })).toBeVisible();
+  await expect(page.locator("[data-overview-agents='working']")).toContainText(
+    "0+",
+  );
 });

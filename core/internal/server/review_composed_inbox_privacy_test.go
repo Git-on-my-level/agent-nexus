@@ -243,7 +243,10 @@ func TestOverviewAndChangesBatchMoreThan200DigestSubjects(t *testing.T) {
 				count++
 			}
 		}
-		if count != 2 || body["truncated"] != false {
+		// Both answers must resolve all 201 subjects across batches. The work
+		// snapshot is independently capped at 100 open candidates, so the
+		// combined digest must still disclose its incomplete work coverage.
+		if count != 2 || body["truncated"] != true {
 			t.Fatalf("digest batching failed for %s: %+v", path, body)
 		}
 	}

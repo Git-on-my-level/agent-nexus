@@ -40,6 +40,12 @@ func TestBoundedWorkFiltersMatchProjectionAndCursorOrder(t *testing.T) {
 	if err != nil || len(second.Work) != 1 || second.Work[0]["id"] != "work-2" || second.NextCursor != "" {
 		t.Fatalf("second page: %+v %v", second, err)
 	}
+	filter.Cursor, filter.Limit = "", 20
+	filter.Visible = func(string, string) bool { return false }
+	hidden, err := s.ListWork(ctx, filter)
+	if err != nil || len(hidden.Work) != 0 || hidden.NextCursor != "" {
+		t.Fatalf("visibility callback exposed a row or cursor: %+v %v", hidden, err)
+	}
 	b, err := s.CreateBoard(ctx, "actor", map[string]any{"title": "Board"})
 	if err != nil {
 		t.Fatal(err)
@@ -102,7 +108,7 @@ func TestClosedWorkSelectorsPreserveExternalOverrides(t *testing.T) {
 	if err != nil || len(page.Work) != 2 || page.Work[0]["id"] != "native-closed" || page.Work[1]["id"] != "external-closed" {
 		t.Fatalf("closed native/external projection: %+v %v", page.Work, err)
 	}
-	query, args := reportWorkQuery(filter)
+	query, args := reportWorkQuery(ctx, filter)
 	plan := explainQueryPlan(t, ws.DB(), query, args...)
 	assertPlanUsesIndex(t, "closed native candidates", plan, "idx_cards_closed_work_page")
 	assertPlanUsesIndex(t, "external candidates", plan, "idx_work_metadata_external")

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/resourceaccess"
 )
 
 type overviewStore interface {
@@ -145,16 +146,28 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			hidden := map[string]bool{}
 			if resolver, ok := opts.primitiveStore.(planStore); ok && e == nil {
 				refs := []string{}
+				_, canonical := opts.primitiveStore.(*primitives.Store)
 				for _, d := range decisions {
-					refs = append(refs, d.WorkRef)
+					// Awaiting decisions already carry the scoped live snapshot
+					// used by PM presentation. Only historical action context
+					// needs the broader archived-but-readable ref projection.
+					if !canonical || d.Status != pm.AwaitingAnswer {
+						refs = append(refs, d.WorkRef)
+					}
 				}
-				previews, err := resolver.ResolveRefs(r.Context(), refs, planVisibility(r, opts), now, planStalledAfter())
+				visible := planVisibility(r, opts)
+				if _, canonical := opts.primitiveStore.(*primitives.Store); canonical {
+					if _, scoped := resourceaccess.PolicyFrom(r.Context()); scoped {
+						visible = nil
+					}
+				}
+				previews, err := resolver.ResolveRefs(r.Context(), refs, visible, now, planStalledAfter())
 				if err != nil {
 					e = err
 				} else {
 					for i, preview := range previews {
 						if !preview.Resolvable {
-							hidden[decisions[i].WorkRef] = true
+							hidden[refs[i]] = true
 						}
 					}
 				}

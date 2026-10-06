@@ -861,6 +861,12 @@ func (s *Store) ListWork(ctx context.Context, f WorkListFilter) (WorkPage, error
 	if err != nil {
 		return page, err
 	}
+	if f.Visible != nil {
+		candidates.Work, err = s.FilterCardAccess(ctx, candidates.Work, f.Visible)
+		if err != nil {
+			return page, err
+		}
+	}
 	page.Work = candidates.Work
 	if candidates.Truncated && len(page.Work) > 0 {
 		last := page.Work[len(page.Work)-1]

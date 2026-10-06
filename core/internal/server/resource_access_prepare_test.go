@@ -161,6 +161,9 @@ func TestResourceAccessLargeDenialPrepareAndPMRoutes(t *testing.T) {
 				if !json.Valid(body) {
 					t.Fatal("invalid response")
 				}
+				if i == 0 {
+					t.Logf("cold HTTP=%s", time.Since(start))
+				}
 				if i >= 2 {
 					samples = append(samples, time.Since(start))
 				}
