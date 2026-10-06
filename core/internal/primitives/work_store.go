@@ -673,6 +673,13 @@ func reportWorkSQL(filter ReportWorkFilter, candidatesOnly bool) (string, []any)
 	from += ` LEFT JOIN work_observations o ON o.id=m.latest_observation_id
 	 LEFT JOIN work_observations a ON a.id=m.latest_attempt_id`
 	candidateFrom := from
+	carryObservation := true
+	if f := filter.WorkList; filter.IncludeClosed && filter.OverviewClosed == nil && f != nil && f.Owner == "" && f.Phase == "" && f.Query == "" && f.Freshness == "" {
+		// These selectors depend only on canonical cards and metadata. Hydrate
+		// observation bodies after LIMIT instead of joining every candidate.
+		carryObservation = false
+		candidateFrom = strings.Replace(candidateFrom, ` LEFT JOIN work_observations o ON o.id=m.latest_observation_id`, "", 1)
+	}
 	if filter.WorkList == nil || filter.WorkList.Freshness == "" {
 		// Only the freshness selector needs attempt data before LIMIT.
 		candidateFrom = strings.Replace(candidateFrom, ` LEFT JOIN work_observations a ON a.id=m.latest_attempt_id`, "", 1)
@@ -733,6 +740,9 @@ func reportWorkSQL(filter ReportWorkFilter, candidatesOnly bool) (string, []any)
 	}
 	contextColumns := `,b.id AS board_id,b.handle AS board_handle,b.title AS board_title,b.role AS board_role,b.thread_id AS board_thread,
  m.metadata_json AS metadata_json,m.version AS metadata_version,m.refresh_json AS refresh_json,m.latest_attempt_id AS latest_attempt_id,o.body_json AS observation_json`
+	if !carryObservation {
+		contextColumns = strings.Replace(contextColumns, `o.body_json AS observation_json`, `m.latest_observation_id AS latest_observation_id`, 1)
+	}
 	prefix := `WITH _work_candidates AS MATERIALIZED (SELECT c.id` + contextColumns + ` FROM ` + candidateFrom + ` WHERE ` + where + ordering + ` LIMIT ?) `
 	carryContext := true
 	if filter.OverviewClosed != nil && *filter.OverviewClosed && filter.IncludeClosed && filter.WorkList == nil {
@@ -772,6 +782,9 @@ func reportWorkSQL(filter ReportWorkFilter, candidatesOnly bool) (string, []any)
 		// These relations were already scoped and read in the candidate
 		// statement snapshot. Reuse their bounded context during enrichment.
 		for _, join := range []string{` LEFT JOIN boards b ON b.id=c.board_id`, ` LEFT JOIN work_metadata m ON m.card_id=c.id`, ` LEFT JOIN work_observations o ON o.id=m.latest_observation_id`} {
+			if !carryObservation && strings.Contains(join, "work_observations") {
+				continue
+			}
 			from = strings.Replace(from, join, "", 1)
 		}
 	}
@@ -783,7 +796,12 @@ func reportWorkSQL(filter ReportWorkFilter, candidatesOnly bool) (string, []any)
 	 COALESCE(b.title,''),COALESCE(b.role,''),COALESCE(b.thread_id,''),` + ownerColumns + `
 	 FROM ` + from + ` WHERE ` + projectionWhere + ordering + projectionLimit
 	if carryContext {
-		projection = strings.NewReplacer("b.id", "selected.board_id", "b.handle", "selected.board_handle", "b.title", "selected.board_title", "b.role", "selected.board_role", "b.thread_id", "selected.board_thread", "m.metadata_json", "selected.metadata_json", "m.version", "selected.metadata_version", "m.refresh_json", "selected.refresh_json", "m.latest_attempt_id", "selected.latest_attempt_id", "o.body_json", "selected.observation_json").Replace(projection)
+		projection = strings.NewReplacer("b.id", "selected.board_id", "b.handle", "selected.board_handle", "b.title", "selected.board_title", "b.role", "selected.board_role", "b.thread_id", "selected.board_thread", "m.metadata_json", "selected.metadata_json", "m.version", "selected.metadata_version", "m.refresh_json", "selected.refresh_json", "m.latest_attempt_id", "selected.latest_attempt_id").Replace(projection)
+		if carryObservation {
+			projection = strings.ReplaceAll(projection, "o.body_json", "selected.observation_json")
+		} else {
+			projection = strings.ReplaceAll(projection, "m.latest_observation_id", "selected.latest_observation_id")
+		}
 	}
 	return prefix + projection, args
 }

@@ -127,6 +127,11 @@ func TestBulkWorkMatchesIndividualProjectionAndPagination(t *testing.T) {
 		if len(page.Work) != 1 || page.Work[0]["ref"] != all[count]["ref"] {
 			t.Fatal(page)
 		}
+		paged, _ := json.Marshal(page.Work[0])
+		expected, _ := json.Marshal(all[count])
+		if string(paged) != string(expected) {
+			t.Fatalf("paged observation projection diverged:\n%s\n%s", paged, expected)
+		}
 		count++
 		cursor = page.NextCursor
 		if cursor == "" {
