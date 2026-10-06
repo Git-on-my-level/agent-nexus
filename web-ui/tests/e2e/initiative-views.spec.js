@@ -121,7 +121,6 @@ async function installInitiativePage(page) {
             "Tiles answer state and progress in ten seconds",
           ],
           next_action: "Wire the Overview tiles",
-          updated_at: "2026-10-03T12:00:00Z",
           source: { authority: "nexus" },
         },
       });
@@ -165,9 +164,11 @@ test("initiative page leads with the plan, and the card body follows", async ({
   await expect(planSection.locator("[data-anx-provenance]")).toHaveText(
     /^Live · updated just now$/,
   );
+  // No date on the body: `work.updated_at` is the card's concurrency token, so
+  // a phase move would otherwise claim the prose had just been rewritten.
   await expect(
     page.locator("[data-initiative-body] [data-anx-provenance]"),
-  ).toHaveText(/^Written · 1d ago$/);
+  ).toHaveText(/^Hand-written$/);
 
   // The card body is present, and below the plan.
   const order = await page

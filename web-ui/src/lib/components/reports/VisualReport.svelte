@@ -188,6 +188,10 @@
     const expectedRevision = revisionRef;
     const livePanels = report.panels.filter(isLivePanel);
     liveObservations = new Map();
+    // No live panel, no read. Core is adding resolved provenance to this same
+    // response for authored panels; when it lands, this gate has to widen to
+    // "the report has panels" — one read, without the 30s poll below, since
+    // an authored panel's provenance does not change while it is on screen.
     if (!livePanels.length) return;
     if (Array.isArray(previewObservations)) {
       liveObservations = new Map(

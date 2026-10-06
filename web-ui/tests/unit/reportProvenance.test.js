@@ -109,14 +109,53 @@ describe("live panels", () => {
     expect(model.label).toBe("Live · read failed");
   });
 
-  it("warns when a bound series has stopped being published", () => {
+  it("warns in words when a bound series has stopped being published", () => {
     const model = panelProvenance(
       { type: "metric", source: { stream: "a" }, observed_at: ago(3 * DAY) },
       "stale",
       NOW,
     );
     expect(model.state).toBe("live-stale");
-    expect(model.label).toBe("Live · updated 3d ago");
+    // Not "Live · updated 3d ago": that is word-for-word what a healthy
+    // series says, leaving the amber as the only signal.
+    expect(model.label).toBe("May be stale · last read 3d ago");
+    expect(model.title).toContain("expected interval");
+  });
+
+  it("calls a series showing its authored snapshot hand-written", () => {
+    // `withSeriesObservation` falls back to the document's own numbers with
+    // their original as-of time. Labelling that "Live" is the confusion this
+    // line exists to remove.
+    const model = panelProvenance(
+      {
+        type: "metric",
+        author: "claude",
+        source: { stream: "a" },
+        fallback: { as_of: ago(9 * DAY), data: { value: "94%" } },
+        observed_at: ago(9 * DAY),
+        seriesFallback: true,
+        seriesObservation: { status: "unavailable" },
+      },
+      "stale",
+      NOW,
+    );
+    expect(model.class).toBe("authored");
+    expect(model.label).toBe("May be stale · written 9d ago");
+  });
+
+  it("says a series is still being read rather than that it failed", () => {
+    const model = panelProvenance(
+      {
+        type: "metric",
+        source: { stream: "a" },
+        observed_at: null,
+        seriesFallback: false,
+        seriesObservation: { status: "loading" },
+      },
+      "unavailable",
+      NOW,
+    );
+    expect(model.state).toBe("live-pending");
   });
 });
 
@@ -164,10 +203,24 @@ describe("authored panels", () => {
     expect(panelReviewDeadline(panel)).toEqual({
       at: Date.parse(ago(2 * DAY)) + DEFAULT_REVIEW_AFTER_MS,
       defaulted: true,
+      unreadable: false,
     });
     expect(panelProvenance(panel, "stale", NOW).title).toContain(
       "defaulted to 7 days after writing",
     );
+  });
+
+  it("does not blame the author for a review date it could not read", () => {
+    const panel = authored({
+      authored_at: ago(2 * DAY),
+      review_by: "next sprint",
+    });
+    const deadline = panelReviewDeadline(panel);
+    expect(deadline.defaulted).toBe(true);
+    expect(deadline.unreadable).toBe(true);
+    const title = panelProvenance(panel, "stale", NOW).title;
+    expect(title).toContain("could not be read");
+    expect(title).not.toContain("No review date set");
   });
 
   it("prefers authored_at over the observation time", () => {
@@ -177,7 +230,11 @@ describe("authored panels", () => {
 
   it("asks for no review at all when nothing dates the writing", () => {
     const panel = authored({ observed_at: null, freshness: "unknown" });
-    expect(panelReviewDeadline(panel)).toEqual({ at: null, defaulted: false });
+    expect(panelReviewDeadline(panel)).toEqual({
+      at: null,
+      defaulted: false,
+      unreadable: false,
+    });
     const model = panelProvenance(panel, "unknown", NOW);
     expect(model.state).toBe("authored");
     expect(model.label).toBe("Written by claude");

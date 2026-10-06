@@ -514,7 +514,7 @@
           <section data-initiative-plan>
             <div class="flex flex-wrap items-baseline justify-between gap-2">
               <h2 class="ui-label">Plan</h2>
-              <span class="flex flex-wrap items-center gap-2">
+              <div class="flex flex-wrap items-center gap-2">
                 <!-- Computed on every read, not maintained by hand. Saying so
                      here is what distinguishes it from the card body below. -->
                 <ProvenanceChip
@@ -533,7 +533,7 @@
                 {#if planState?.last_movement_at}
                   <AgeBadge at={planState.last_movement_at} verb="moved" />
                 {/if}
-              </span>
+              </div>
             </div>
             {#if statusMismatch}
               <!-- A note, not an alert: a card and its plan can legitimately
@@ -928,15 +928,16 @@
             <div class="flex flex-wrap items-baseline justify-between gap-2">
               <h2 class="ui-label">Card body</h2>
               <!--
-                Hand-written prose, next to a plan that is computed. No review
-                deadline: a card body is narrative, and amber a week later
-                would be noise rather than news.
+                Hand-written prose, next to a plan that is computed.
+                
+                No date and no review deadline. `work.updated_at` is the card's
+                concurrency token — a phase move or a plan write bumps it
+                without anyone touching this prose — so dating the body with it
+                would claim a rewrite that never happened. And a card body is
+                narrative: amber a week later would be noise, not news.
               -->
               <ProvenanceChip
-                model={authoredProvenance(
-                  { authoredAt: work.updated_at, reviewable: false },
-                  now,
-                )}
+                model={authoredProvenance({ reviewable: false })}
               />
             </div>
             <MarkdownRenderer

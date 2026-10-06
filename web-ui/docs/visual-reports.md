@@ -326,12 +326,25 @@ read as a fact.
 Provenance is always conveyed in text. Colour repeats the words, never replaces
 them, so the signal survives greyscale and a colour-blind reader.
 
+A bound series falling back to its authored snapshot is authored, not live: it
+is showing the document's own numbers with their original as-of time. A series
+that has missed its expected publishing interval reads **May be stale · last
+read 3d ago**.
+
 `panelProvenance(panel, freshness, now)` in `src/lib/reportProvenance.js` is the
 single place this is decided, and the Overview embed, the document report view
 and the initiative page all render it through `ProvenanceChip`. The class is read
 from `provenance_class` when the panel declares it, and derived from the panel's
-shape otherwise, so a live type a build has never heard of still renders as live
-data rather than as an authored panel with no body.
+shape otherwise, so a live type this build has never heard of still renders as
+live data rather than as an authored panel with no body.
+
+`provenance_class`, `authored_at` and `review_by` are read wherever they appear,
+but the report schema still gates them: `parseVisualReport` rejects a panel
+field it does not know, and one rejected field drops the whole report to its
+text fallback. A stored document can therefore only carry them once
+`visualReports.js` and `contracts/visualreport/report.go` accept them together.
+The same applies to a new `live-` panel type. Until then these fields reach the
+UI only through the rendered report response, which is not schema-validated.
 
 ### Freshness and incomplete observations
 

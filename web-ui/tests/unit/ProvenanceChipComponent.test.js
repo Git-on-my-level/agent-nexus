@@ -105,3 +105,42 @@ it("marks a hand-written panel in the compact embed, which has no footer", () =>
   // "Stale snapshot" said less, in a second chip beside this one.
   expect(section.textContent).not.toContain("Stale snapshot");
 });
+
+it("does not badge a live panel Unavailable while its read is in flight", () => {
+  // `withLiveObservation` reports `freshness: "unavailable"` for any status
+  // but `ok`, loading included. The freshness badge used to be suppressed for
+  // live panels; it has to stay suppressed, or every live panel header reads
+  // "Live · reading workspace… | Unavailable" until the read lands.
+  for (const status of ["loading", "unavailable"]) {
+    const { container, unmount } = render(VisualReportPanel, {
+      compact: true,
+      panel: {
+        ...panel({ id: "asks", type: "live-asks", data: { limit: 5 } }),
+        observed_at: null,
+        freshness: "unavailable",
+        live: { status, data: {} },
+      },
+      freshness: "unavailable",
+      now: NOW,
+      oninspect: () => {},
+    });
+    const section = container.querySelector("[data-report-panel='asks']");
+    expect(section.textContent).not.toContain("Unavailable");
+    expect(
+      section.querySelector("[data-anx-provenance]").dataset.anxProvenance,
+    ).toBe(status === "loading" ? "live-pending" : "live-unavailable");
+    unmount();
+  }
+});
+
+it("still badges a stored panel whose evidence the report calls unavailable", () => {
+  const { container } = render(VisualReportPanel, {
+    compact: true,
+    panel: panel({ freshness: "unavailable", observed_at: null }),
+    freshness: "unavailable",
+    now: NOW,
+    oninspect: () => {},
+  });
+  const section = container.querySelector("[data-report-panel='standing']");
+  expect(section.textContent).toContain("Unavailable");
+});

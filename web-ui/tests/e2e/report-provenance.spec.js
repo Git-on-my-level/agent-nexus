@@ -32,6 +32,16 @@ const NOW = "2026-10-06T12:00:00Z";
 const ago = (days) =>
   new Date(Date.parse(NOW) - days * 86_400_000).toISOString();
 
+/**
+ * An author label at the contract's 200-character limit: author is
+ * author-supplied text, and at 390px it has to wrap inside the header rather
+ * than run off the edge.
+ */
+const LONG_AUTHOR =
+  "A long principal label, the kind a report generator produces when it names " +
+  "a pipeline rather than a person, right up to the two hundred character " +
+  "limit the contract sets for an author";
+
 /** Written three days ago: hand-written, but inside its review window. */
 const RECENT = ago(3);
 /** Written nine days ago: past the seven-day default review deadline. */
@@ -78,6 +88,20 @@ const REPORT = {
       data: {
         text: "Release B is in review. The adapter contract is still open.",
       },
+    },
+    {
+      id: "legacy",
+      project_id: "delivery",
+      type: "explanation",
+      // The author label is an author-supplied string up to 200 characters.
+      // At 390px it has to wrap inside the header, not run off the edge.
+      author: LONG_AUTHOR,
+      provenance: "reported",
+      observed_at: ago(30),
+      freshness: "stale",
+      title: "Background",
+      source_ids: [],
+      data: { text: "Why this programme exists. Nobody has revisited it." },
     },
     {
       id: "milestones",
@@ -257,6 +281,12 @@ for (const [surface, path] of [
 
     // The read time is in the header now, not a line under the panel body.
     await expect(report).not.toContainText("Live as of");
+
+    // A live read in flight or failed is never also badged "Unavailable":
+    // the provenance line is the only thing that speaks for a live panel.
+    await expect(
+      report.locator('[data-report-panel="asks"] .report-state'),
+    ).toHaveCount(0);
   });
 }
 
@@ -310,6 +340,8 @@ for (const viewport of AUDIT_VIEWPORTS) {
     // A header that wraps is fine. A header that is cut off is not: the chip
     // is the one thing on the panel the reader must be able to finish reading.
     await expect(chip(page, "milestones")).toContainText("May be stale");
+    // A 200-character author wraps inside the header rather than being cut.
+    await expect(chip(page, "legacy")).toContainText("May be stale");
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth > window.innerWidth + 1,

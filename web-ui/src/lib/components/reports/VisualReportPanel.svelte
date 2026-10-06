@@ -136,9 +136,13 @@
         nine-day-old snapshot was least distinguishable from a live read.
       -->
       <ProvenanceChip {panel} {freshness} {now} />
-      {#if stateLabels[freshness]}
-        <!-- Freshness the provenance line cannot speak to: no observation at
-             all, or evidence the report itself calls unavailable. -->
+      {#if stateLabels[freshness] && provenance.class !== "live"}
+        <!--
+          Freshness the provenance line cannot speak to: a stored panel with no
+          observation at all, or evidence the report itself calls unavailable.
+          Never for a live panel — a read in flight arrives as `unavailable`
+          here, and the line beside this already says it is still reading.
+        -->
         <span class="report-state">{stateLabels[freshness]}</span>
       {/if}
     </div>
@@ -460,13 +464,12 @@
     border-color: var(--line);
     box-shadow: inset 3px 0 0 var(--warn);
   }
-  .report-panel[data-provenance-state="due-for-review"]
-    .report-panel-header
-    > .min-w-0,
-  .report-panel[data-provenance-state="due-for-review"] .report-panel-body {
-    /* Legible, but no longer the first thing the eye lands on. */
-    opacity: 0.82;
-  }
+  /*
+   * No `opacity` on the body. Fading it to 0.82 took `--fg-subtle` text —
+   * a chart's row-count hint, a unit label — from 4.97:1 to 3.75:1 against
+   * `--bg-soft`, under the 4.5:1 floor. The amber edge and the header line
+   * carry the doubt; the content stays as readable as any other panel's.
+   */
   .report-panel[data-density="compact"] .report-panel-header,
   .report-panel[data-density="compact"] .report-panel-body,
   .report-panel[data-density="compact"] .report-panel-footer {
