@@ -1,6 +1,7 @@
 package primitives
 
 import (
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"database/sql"
 	"encoding/base64"
@@ -477,7 +478,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		return nil, nil, invalidDocumentRequest("document.state is not writable on create; new documents start active")
 	}
 
-	encodedContent, err := encodeContent(content)
+	encodedContent, err := encodeContent(content, contentType)
 	if err != nil {
 		return nil, nil, invalidDocumentRequestError(err)
 	}
@@ -594,8 +595,8 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json, content_refs_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		artifactID,
 		artifactHandle,
 		"doc",
@@ -606,6 +607,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		contentHash,
 		string(refsJSON),
 		string(artifactMetadataJSON),
+		resourceaccess.ContentReferenceAtomsJSON(string(encodedContent), contentType),
 	); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -731,7 +733,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		return nil, nil, err
 	}
 
-	if err := upsertDocumentFTSTx(ctx, tx, documentID, title, string(encodedContent), docSummary, source, tags, threadID); err != nil {
+	if err := upsertDocumentFTSTx(ctx, tx, documentID, title, documentSearchBody(encodedContent, contentType), docSummary, source, tags, threadID); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
@@ -1080,7 +1082,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		return nil, nil, fmt.Errorf("marshal document resource refs: %w", err)
 	}
 
-	encodedContent, err := encodeContent(content)
+	encodedContent, err := encodeContent(content, contentType)
 	if err != nil {
 		return nil, nil, invalidDocumentRequestError(err)
 	}
@@ -1214,8 +1216,8 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json, content_refs_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		artifactID,
 		artifactHandle,
 		"doc",
@@ -1226,6 +1228,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		contentHash,
 		string(refsJSON),
 		string(artifactMetadataJSON),
+		resourceaccess.ContentReferenceAtomsJSON(string(encodedContent), contentType),
 	); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -1378,7 +1381,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		return nil, nil, err
 	}
 
-	if err := upsertDocumentFTSTx(ctx, tx, documentID, nextTitle, string(encodedContent), nextSummary, nextSource, nextTags, nextThreadID); err != nil {
+	if err := upsertDocumentFTSTx(ctx, tx, documentID, nextTitle, documentSearchBody(encodedContent, contentType), nextSummary, nextSource, nextTags, nextThreadID); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
@@ -1849,6 +1852,10 @@ func (s *Store) PurgeDocument(ctx context.Context, documentID string) error {
 		return fmt.Errorf("select trashed document: %w", err)
 	}
 
+	if err := preservePurgedAccess(ctx, tx, "document", documentID); err != nil {
+		return err
+	}
+
 	type ownedRevisionArtifact struct {
 		revisionID  string
 		artifactID  string
@@ -1929,7 +1936,7 @@ func (s *Store) PurgeDocument(ctx context.Context, documentID string) error {
 	blobsToDelete := make([]string, 0, len(hashes))
 	for contentHash := range hashes {
 		var cnt int
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM artifacts WHERE content_hash = ?`, contentHash).Scan(&cnt); err != nil {
+		if err := tx.QueryRowContext(CanonicalMaintenanceContext(ctx), `SELECT COUNT(*) FROM artifacts WHERE content_hash = ?`, contentHash).Scan(&cnt); err != nil {
 			return fmt.Errorf("count remaining artifact blob references: %w", err)
 		}
 		if cnt == 0 {
@@ -2370,7 +2377,7 @@ func normalizeDocumentBackingThreadID(documentID, threadID string) string {
 	return strings.TrimSpace(documentID)
 }
 
-func ensureDocumentBackingThreadTx(ctx context.Context, tx *sql.Tx, actorID, documentID, threadID, title, updatedAt string) (string, error) {
+func ensureDocumentBackingThreadTx(ctx context.Context, tx *accessTx, actorID, documentID, threadID, title, updatedAt string) (string, error) {
 	threadID = normalizeDocumentBackingThreadID(documentID, threadID)
 	if threadID == "" {
 		return "", invalidDocumentRequest("document.thread_id is required")
@@ -2464,7 +2471,7 @@ func ensureDocumentBackingThreadTx(ctx context.Context, tx *sql.Tx, actorID, doc
 	return threadID, nil
 }
 
-func clearDocumentBackingThreadSubjectTx(ctx context.Context, tx *sql.Tx, actorID, threadID, documentID, updatedAt string) error {
+func clearDocumentBackingThreadSubjectTx(ctx context.Context, tx *accessTx, actorID, threadID, documentID, updatedAt string) error {
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
 		return nil

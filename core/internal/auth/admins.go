@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"database/sql"
 	"errors"
@@ -21,11 +22,20 @@ type AuthAdmin struct {
 	AgentName   string `json:"agent_name,omitempty"`
 }
 
+// Transaction accepts either a raw auth transaction or a scoped business transaction.
+type Transaction interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
 // requireAdministrationTx reads durable authority inside the same transaction as
 // the mutation. Request-context principals are snapshots and cannot authorize a
 // write after a concurrent grant removal. SQLite serializes the read/write
 // transaction against grant changes (a stale read snapshot cannot be upgraded).
-func requireAdministrationTx(ctx context.Context, tx *sql.Tx, actor Principal, humanOnly bool) error {
+func requireAdministrationTx(ctx context.Context, tx Transaction, actor Principal, humanOnly bool) error {
+	// Durable authority is independent of resource visibility; no profile data escapes.
+	ctx = resourceaccess.WithoutPolicy(ctx)
 	denied := ErrAuthAdminRequired
 	if humanOnly {
 		denied = ErrHumanRequired
@@ -59,7 +69,7 @@ func authAdminHostScope(ctx context.Context, q interface {
 }
 
 func (s *Store) ListAuthAdmins(ctx context.Context) ([]AuthAdmin, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,actor_id,username FROM agents a WHERE `+principalKindExpr("a")+`='agent' AND revoked_at IS NULL AND COALESCE(json_extract(metadata_json,'$.auth_admin'),0)=1 ORDER BY username,id`)
+	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT id,actor_id,username FROM agents a WHERE `+principalKindExpr("a")+`='agent' AND revoked_at IS NULL AND COALESCE(json_extract(metadata_json,'$.auth_admin'),0)=1 ORDER BY username,id`)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +88,7 @@ func (s *Store) ListAuthAdmins(ctx context.Context) ([]AuthAdmin, error) {
 	}
 	rows.Close()
 	for i := range out {
-		if err := authAdminHostScope(ctx, s.db, &out[i]); err != nil {
+		if err := authAdminHostScope(ctx, resourceaccess.NewDB(s.db), &out[i]); err != nil {
 			return nil, err
 		}
 	}
@@ -88,7 +98,7 @@ func (s *Store) ListAuthAdmins(ctx context.Context) ([]AuthAdmin, error) {
 // SetAuthAdmin changes only an explicit agent grant, never human administration.
 // Metadata is read by AuthenticateAccessToken on every request, not cached in tokens.
 func (s *Store) SetAuthAdmin(ctx context.Context, target string, grant bool, actor Principal) (AuthAdmin, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return AuthAdmin{}, err
 	}
@@ -102,7 +112,12 @@ func (s *Store) SetAuthAdmin(ctx context.Context, target string, grant bool, act
 
 // SetAuthAdminTx shares the grant boundary with transactional access decisions.
 // It rechecks human authority and target liveness within the caller's transaction.
-func (s *Store) SetAuthAdminTx(ctx context.Context, tx *sql.Tx, target string, grant bool, actor Principal) (AuthAdmin, error) {
+func (s *Store) SetAuthAdminTx(ctx context.Context, tx Transaction, target string, grant bool, actor Principal) (AuthAdmin, error) {
+	return ApplyAuthAdminTx(ctx, tx, target, grant, actor)
+}
+
+// ApplyAuthAdminTx retains the caller's transaction and its resource scope.
+func ApplyAuthAdminTx(ctx context.Context, tx Transaction, target string, grant bool, actor Principal) (AuthAdmin, error) {
 	if err := requireAdministrationTx(ctx, tx, actor, true); err != nil {
 		return AuthAdmin{}, err
 	}
@@ -130,7 +145,7 @@ func (s *Store) SetAuthAdminTx(ctx context.Context, tx *sql.Tx, target string, g
 		if grant {
 			event = "auth_admin_granted"
 		}
-		if err = s.recordAuthAuditEventTx(ctx, tx, AuthAuditEventInput{EventType: event, ActorAgentID: actor.AgentID, ActorActorID: actor.ActorID, SubjectAgentID: out.PrincipalID, SubjectActorID: out.ActorID, Metadata: map[string]any{"host_id": out.HostID, "host_slug": out.HostSlug, "agent_name": out.AgentName}}); err != nil {
+		if err = recordAuthAuditEventTx(ctx, tx, AuthAuditEventInput{EventType: event, ActorAgentID: actor.AgentID, ActorActorID: actor.ActorID, SubjectAgentID: out.PrincipalID, SubjectActorID: out.ActorID, Metadata: map[string]any{"host_id": out.HostID, "host_slug": out.HostSlug, "agent_name": out.AgentName}}); err != nil {
 			return out, err
 		}
 	}
@@ -146,12 +161,12 @@ func boolJSON(value bool) string {
 }
 
 // RequireHumanTx rechecks durable human authority for an access decision.
-func RequireHumanTx(ctx context.Context, tx *sql.Tx, actor Principal) error {
+func RequireHumanTx(ctx context.Context, tx Transaction, actor Principal) error {
 	return requireAdministrationTx(ctx, tx, actor, true)
 }
 
 // RequireAgentTx permits only the active, authenticated agent itself.
-func RequireAgentTx(ctx context.Context, tx *sql.Tx, actor Principal) error {
+func RequireAgentTx(ctx context.Context, tx Transaction, actor Principal) error {
 	if actor.SeriesAdapter != "" || actor.PrincipalKind != string(PrincipalKindAgent) {
 		return ErrInvalidRequest
 	}

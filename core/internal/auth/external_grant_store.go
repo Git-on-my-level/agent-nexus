@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -34,7 +35,7 @@ func (s *Store) IssueTokenFromWorkspaceHumanGrant(ctx context.Context, identity 
 		return Agent{}, TokenBundle{}, err
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return Agent{}, TokenBundle{}, fmt.Errorf("begin workspace human grant transaction: %w", err)
 	}
@@ -161,7 +162,7 @@ func (s *Store) IssueTokenFromWorkspaceManagedAgentGrant(ctx context.Context, id
 		return Agent{}, TokenBundle{}, err
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return Agent{}, TokenBundle{}, fmt.Errorf("begin workspace managed agent grant transaction: %w", err)
 	}

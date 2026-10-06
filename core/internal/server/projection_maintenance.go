@@ -154,6 +154,7 @@ func (m *ProjectionMaintainer) Step(ctx context.Context, now time.Time) error {
 }
 
 func (m *ProjectionMaintainer) RunFullRebuild(ctx context.Context, now time.Time, actorID string) error {
+	ctx = primitives.CanonicalMaintenanceContext(ctx)
 	if m == nil || m.opts.primitiveStore == nil {
 		return nil
 	}
@@ -272,6 +273,9 @@ func (m *ProjectionMaintainer) Snapshot(ctx context.Context, now time.Time) Proj
 	defer m.stateMu.RUnlock()
 	if m.state.lastError != nil {
 		copy := *m.state.lastError
+		// This cache belongs to canonical maintenance, not the current reader.
+		// Keep detailed failures in maintenance logs; health exposes only status.
+		copy.Message = "projection maintenance failed"
 		snapshot.LastError = &copy
 	}
 	return snapshot

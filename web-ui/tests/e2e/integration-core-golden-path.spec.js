@@ -276,9 +276,21 @@ test("golden path integration runs against a real anx-core", async ({
   );
   const resolvedCardId = String(cardBody?.card?.id ?? cardLocalId).trim();
 
-  await page.goto(
-    `/o/local/w/local/tasks/${encodeURIComponent(`card:${resolvedCardId}`)}`,
-  );
+  // A full navigation reinitializes auth before the task read can start.
+  // Wait for that read separately from the rendered-heading assertion.
+  const [workResponse] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === "GET" &&
+        decodeURIComponent(new URL(response.url()).pathname) ===
+          `/work/card:${resolvedCardId}`,
+      { timeout: 30_000 },
+    ),
+    page.goto(
+      `/o/local/w/local/tasks/${encodeURIComponent(`card:${resolvedCardId}`)}`,
+    ),
+  ]);
+  expect(workResponse.status()).toBe(200);
   await expect(
     page.getByRole("heading", { name: "Golden path card", exact: true }),
   ).toBeVisible();
@@ -443,6 +455,9 @@ test("golden path integration runs against a real anx-core", async ({
   });
 
   await page.getByRole("link", { name: "Inbox", exact: true }).click();
+  // Svelte's client-side navigation resolves cold route imports after click
+  // returns. Wait for navigation before applying the content assertion budget.
+  await page.waitForURL("**/o/local/w/local/inbox", { timeout: 30_000 });
   await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
 
   // Open the ask we created rather than acknowledging another test's data.

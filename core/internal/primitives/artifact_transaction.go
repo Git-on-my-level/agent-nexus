@@ -1,8 +1,8 @@
 package primitives
 
 import (
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -18,6 +18,7 @@ import (
 // Promote happens before commit: a crash may leave an unreferenced blob, but
 // cannot leave a committed artifact row pointing at a missing blob.
 type preparedArtifactWrite struct {
+	encodedContent   []byte
 	actorID          string
 	kind             string
 	artifactID       string
@@ -47,7 +48,7 @@ func (s *Store) prepareArtifactWrite(ctx context.Context, actorID string, artifa
 	if err != nil {
 		return nil, fmt.Errorf("artifact.refs: %w", err)
 	}
-	encodedContent, err := encodeContent(content)
+	encodedContent, err := encodeContent(content, contentType)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +86,7 @@ func (s *Store) prepareArtifactWrite(ctx context.Context, actorID string, artifa
 		return nil, fmt.Errorf("stage artifact content: %w", err)
 	}
 	return &preparedArtifactWrite{
-		actorID: actorID, kind: kind, artifactID: artifactID,
+		encodedContent: encodedContent, actorID: actorID, kind: kind, artifactID: artifactID,
 		artifactThreadID: firstThreadRefValue(refs), contentType: contentType,
 		contentHash: contentHash, refs: refs, refsJSON: refsJSON,
 		metadata: metadata, metadataJSON: metadataJSON,
@@ -93,7 +94,7 @@ func (s *Store) prepareArtifactWrite(ctx context.Context, actorID string, artifa
 	}, nil
 }
 
-func (s *Store) insertPreparedArtifactTx(ctx context.Context, tx *sql.Tx, prepared *preparedArtifactWrite) error {
+func (s *Store) insertPreparedArtifactTx(ctx context.Context, tx *accessTx, prepared *preparedArtifactWrite) error {
 	handle, err := uniqueHandleTx(ctx, tx, "artifact", firstNonEmpty(anyStringValue(prepared.metadata["title"]), anyStringValue(prepared.metadata["summary"]), prepared.kind), "artifact-"+prepared.artifactID)
 	if err != nil {
 		return fmt.Errorf("allocate artifact handle: %w", err)
@@ -102,11 +103,11 @@ func (s *Store) insertPreparedArtifactTx(ctx context.Context, tx *sql.Tx, prepar
 	prepared.metadata["ref"] = "artifact:" + handle
 	prepared.metadata["refs"] = publicTypedRefs(ctx, tx, prepared.refs)
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json, content_refs_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		prepared.artifactID, handle, prepared.kind, nullableString(prepared.artifactThreadID),
 		prepared.metadata["created_at"], prepared.actorID, prepared.contentType, prepared.contentHash,
-		string(prepared.refsJSON), string(prepared.metadataJSON)); err != nil {
+		string(prepared.refsJSON), string(prepared.metadataJSON), resourceaccess.ContentReferenceAtomsJSON(string(prepared.encodedContent), prepared.contentType)); err != nil {
 		if isUniqueViolation(err) {
 			return ErrConflict
 		}

@@ -31,12 +31,8 @@ func TestInboxResponseRequiresCurrentResourceAccess(t *testing.T) {
 			request := map[string]any{"idempotency_key": "private-response", "response_text": "Approved", "outcome": "approved", "notify_mode": "none"}
 			for _, token := range []string{stranger.AccessToken, agent.AccessToken} {
 				getJSONExpectStatusWithAuth(t, endpoint, token, http.StatusNotFound).Body.Close()
-				wantStatus := http.StatusNotFound
-				if token == agent.AccessToken {
-					wantStatus = http.StatusForbidden
-				}
 				status, body := hostHTTP(t, http.MethodPost, endpoint+"/respond", token, request)
-				if status != wantStatus {
+				if status != http.StatusNotFound {
 					t.Fatalf("unauthorized response: %d %#v", status, body)
 				}
 			}
@@ -146,7 +142,12 @@ func TestInboxResponseAndReplayAuthorizeAddedRefsConsistently(t *testing.T) {
 	stranger := seedHumanPrincipalForLockoutTest(t, ctx, db, "evidence-stranger", "evidence-stranger-actor", "evidence-stranger", "evidence-stranger-token")
 	store := env.primitiveStore.(*primitives.Store)
 	ask, _ := seedInboxResponsePrivacyAsk(t, store, owner.ActorID, "board")
-	privateRefThread := seedStreamPrivacyThread(t, store, stranger.ActorID, true)
+	// This test changes the evidence thread's own policy. The private-stream
+	// fixture inherits a board policy that clearing this thread cannot remove.
+	privateRefThread := seedStreamPrivacyThread(t, store, stranger.ActorID, false)
+	if _, err := store.PatchThread(ctx, stranger.ActorID, privateRefThread, map[string]any{"pm_actor_id": stranger.ActorID}, nil); err != nil {
+		t.Fatal(err)
+	}
 	request := map[string]any{"idempotency_key": "evidence-response", "response_text": "Approved", "outcome": "approved", "notify_mode": "none", "related_refs": []string{"thread:" + privateRefThread}}
 	endpoint := env.server.URL + "/inbox/" + url.PathEscape(ask.ID) + "/respond"
 	status, body := hostHTTP(t, http.MethodPost, endpoint, owner.AccessToken, request)

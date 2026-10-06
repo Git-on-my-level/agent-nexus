@@ -428,7 +428,7 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
 		return false
 	}
-	return ensureJSONBodyEOF(w, decoder)
+	return ensureJSONBodyEOF(w, decoder) && authorizeResourceValues(w, r, dst)
 }
 
 func decodeJSONBodyAllowEmpty(w http.ResponseWriter, r *http.Request, dst any) bool {
@@ -446,7 +446,7 @@ func decodeJSONBodyAllowEmpty(w http.ResponseWriter, r *http.Request, dst any) b
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
 		return false
 	}
-	return ensureJSONBodyEOF(w, decoder)
+	return ensureJSONBodyEOF(w, decoder) && authorizeResourceValues(w, r, dst)
 }
 
 func ensureJSONBodyEOF(w http.ResponseWriter, decoder *json.Decoder) bool {

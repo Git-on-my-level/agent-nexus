@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"database/sql"
 	"errors"
@@ -33,7 +34,7 @@ func (s *Store) RequireSeriesCapability(ctx context.Context, actor Principal, ca
 
 // Follow the explicit grant pattern: durable identity and current authority are
 // checked within the mutation transaction, never trusted from a request snapshot.
-func RequireSeriesAdministratorTx(ctx context.Context, tx *sql.Tx, actor Principal) error {
+func RequireSeriesAdministratorTx(ctx context.Context, tx Transaction, actor Principal) error {
 	if actor.SeriesAdapter != "" {
 		return ErrSeriesForbidden
 	}
@@ -44,18 +45,18 @@ func RequireSeriesAdministratorTx(ctx context.Context, tx *sql.Tx, actor Princip
 	return err
 }
 
-func (s *Store) AuditSeriesTx(ctx context.Context, tx *sql.Tx, actor Principal, event, adapter string) error {
+func (s *Store) AuditSeriesTx(ctx context.Context, tx Transaction, actor Principal, event, adapter string) error {
 	var owner, ownerActor, hostID, hostSlug string
 	if err := tx.QueryRowContext(ctx, `SELECT a.id,a.actor_id,h.id,h.slug FROM series_adapters d JOIN agents a ON a.id=d.agent_id JOIN hosts h ON h.id=d.host_id WHERE d.name=?`, adapter).Scan(&owner, &ownerActor, &hostID, &hostSlug); err != nil {
 		return err
 	}
-	return s.recordAuthAuditEventTx(ctx, tx, AuthAuditEventInput{EventType: event, ActorAgentID: actor.AgentID, ActorActorID: actor.ActorID, SubjectAgentID: owner, SubjectActorID: ownerActor, Metadata: map[string]any{"adapter": adapter, "host_id": hostID, "host_slug": hostSlug}})
+	return recordAuthAuditEventTx(ctx, tx, AuthAuditEventInput{EventType: event, ActorAgentID: actor.AgentID, ActorActorID: actor.ActorID, SubjectAgentID: owner, SubjectActorID: ownerActor, Metadata: map[string]any{"adapter": adapter, "host_id": hostID, "host_slug": hostSlug}})
 }
 
 // Owner identity is authenticated through the existing access-token system.
 // The resulting token has no refresh credential and no general workspace access.
 func (s *Store) IssueSeriesToken(ctx context.Context, adapter string, actor Principal) (TokenBundle, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return TokenBundle{}, err
 	}
@@ -87,7 +88,7 @@ func (s *Store) IssueSeriesToken(ctx context.Context, adapter string, actor Prin
 	return TokenBundle{AccessToken: token, TokenType: "Bearer", ExpiresIn: int64(s.accessTokenTTL.Seconds())}, tx.Commit()
 }
 
-func RequireSeriesWriteTx(ctx context.Context, tx *sql.Tx, actor Principal, name string, now time.Time) error {
+func RequireSeriesWriteTx(ctx context.Context, tx Transaction, actor Principal, name string, now time.Time) error {
 	return requireSeriesWriter(ctx, tx, actor, name, now)
 }
 

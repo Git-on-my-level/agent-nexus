@@ -2039,6 +2039,13 @@ func TestLegacyContentPathIsStrippedFromArtifactAndRevisionResponses(t *testing.
 		t.Fatalf("insert legacy document revision row: %v", err)
 	}
 
+	// Legacy rows inserted after server startup are deliberately fail-closed.
+	// Run the same backend-aware manifest backfill used at upgrade/startup before
+	// checking that authorized legacy responses strip their old local path.
+	if err := h.primitiveStore.(*primitives.Store).BackfillArtifactAccess(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
 	artifactResp, err := http.Get(h.baseURL + "/artifacts/artifact-legacy-http")
 	if err != nil {
 		t.Fatalf("GET legacy artifact: %v", err)

@@ -180,7 +180,40 @@ type agentWakeupMutationRequest struct {
 	Error            string `json:"error"`
 }
 
+type authenticatedWakeupMutationKey struct{}
+
+// A signed host may act only as the wakeup's target agent. Resolve this identity
+// after verifying the proof, before installing resource scope or reading content
+// for the response. The cached request also prevents replaying a one-use proof.
+func authenticateAgentWakeupMutation(w http.ResponseWriter, r *http.Request, opts handlerOptions) bool {
+	principal, req, ok := authenticateAgentWakeupTarget(w, r, opts)
+	if !ok {
+		return false
+	}
+	cacheAuthenticatedPrincipal(r, principal)
+	*r = *r.WithContext(context.WithValue(r.Context(), authenticatedWakeupMutationKey{}, req))
+	return true
+}
+
 func decodeAgentWakeupMutation(w http.ResponseWriter, r *http.Request, opts handlerOptions) (*auth.Principal, agentWakeupMutationRequest, bool) {
+	req, ok := r.Context().Value(authenticatedWakeupMutationKey{}).(agentWakeupMutationRequest)
+	principal, authenticated := cachedAuthenticatedPrincipal(r)
+	if !ok || !authenticated {
+		writeError(w, http.StatusUnauthorized, "auth_required", "host proof required")
+		return nil, req, false
+	}
+	if _, err := opts.primitiveStore.GetAgentWakeup(r.Context(), req.WakeupID); err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "wakeup not found")
+		return nil, req, false
+	}
+	return principal, req, true
+}
+
+func authenticateAgentWakeupTarget(w http.ResponseWriter, r *http.Request, opts handlerOptions) (*auth.Principal, agentWakeupMutationRequest, bool) {
+	if opts.authStore == nil || opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "auth_unavailable", "wakeup authentication unavailable")
+		return nil, agentWakeupMutationRequest{}, false
+	}
 	raw, ok := hostRawBody(w, r)
 	if !ok {
 		return nil, agentWakeupMutationRequest{}, false
@@ -216,7 +249,7 @@ func decodeAgentWakeupMutation(w http.ResponseWriter, r *http.Request, opts hand
 		return nil, req, false
 	}
 	if !owns {
-		writeError(w, http.StatusForbidden, "forbidden", "wakeup belongs to another host")
+		writeError(w, http.StatusNotFound, "not_found", "wakeup not found")
 		return nil, req, false
 	}
 	return &auth.Principal{ActorID: wakeup.TargetActorID}, req, true

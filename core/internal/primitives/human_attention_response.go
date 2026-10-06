@@ -173,7 +173,21 @@ func (s *Store) SaveHumanAttentionResponseResult(ctx context.Context, sourceEven
 	if err != nil {
 		return err
 	}
-	result, err := s.db.ExecContext(ctx, `UPDATE human_attention_response_claims SET response_json=? WHERE request_event_id=?`, string(raw), sourceEventID)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// Authorize the existing response as well as the replacement. The request
+	// may be public while added evidence makes its stored response private.
+	var existing string
+	if err := tx.QueryRowContext(ctx, `SELECT request_event_id FROM human_attention_response_claims WHERE request_event_id=?`, sourceEventID).Scan(&existing); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE human_attention_response_claims SET response_json=? WHERE request_event_id=?`, string(raw), sourceEventID)
 	if err != nil {
 		return err
 	}
@@ -184,5 +198,5 @@ func (s *Store) SaveHumanAttentionResponseResult(ctx context.Context, sourceEven
 	if affected != 1 {
 		return fmt.Errorf("response claim missing for %s", sourceEventID)
 	}
-	return nil
+	return tx.Commit()
 }

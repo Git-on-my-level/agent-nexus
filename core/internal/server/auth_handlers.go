@@ -361,6 +361,7 @@ func authenticatePrincipalFromHeader(w http.ResponseWriter, r *http.Request, opt
 
 	principalCopy := principal
 	cacheAuthenticatedPrincipal(r, &principalCopy)
+	attachResourceAccessScope(r, opts)
 	return &principalCopy, true
 }
 

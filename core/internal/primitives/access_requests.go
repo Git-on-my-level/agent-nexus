@@ -139,7 +139,7 @@ func (s *Store) CreateAccessRequest(ctx context.Context, actor auth.Principal, g
 
 // applyAccessDecisionTx resolves by the server-owned source event, never by
 // caller-supplied attention payload metadata. It participates in response commit.
-func (s *Store) applyAccessDecisionTx(ctx context.Context, tx *sql.Tx, sourceEventID, actorID, outcome, at string) error {
+func (s *Store) applyAccessDecisionTx(ctx context.Context, tx *accessTx, sourceEventID, actorID, outcome, at string) error {
 	request, err := scanAccessRequest(tx.QueryRowContext(ctx, `SELECT `+accessRequestColumns+` FROM access_requests WHERE request_event_id=?`, sourceEventID))
 	if errors.Is(err, ErrNotFound) {
 		return nil
@@ -167,7 +167,7 @@ func (s *Store) applyAccessDecisionTx(ctx context.Context, tx *sql.Tx, sourceEve
 		if request.Grant != "auth-admin" {
 			return auth.ErrInvalidRequest
 		}
-		if _, err := auth.NewStore(s.db).SetAuthAdminTx(ctx, tx, request.PrincipalID, true, actor); err != nil {
+		if _, err := auth.ApplyAuthAdminTx(ctx, tx, request.PrincipalID, true, actor); err != nil {
 			return err
 		}
 		status = "approved"

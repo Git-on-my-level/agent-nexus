@@ -1,6 +1,7 @@
 package commandcenter
 
 import (
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -14,7 +15,7 @@ import (
 type SQLIdentities struct{ DB *sql.DB }
 
 func (s SQLIdentities) ListAgents(ctx context.Context) ([]Identity, error) {
-	rows, e := s.DB.QueryContext(ctx, `SELECT a.id,a.username,a.actor_id,a.metadata_json,
+	rows, e := resourceaccess.NewDB(s.DB).QueryContext(ctx, `SELECT a.id,a.username,a.actor_id,a.metadata_json,
 		COALESCE(x.display_name,a.username),COALESCE(a.revoked_at,''),
 		COALESCE(ha.name,''),COALESCE(ha.identity_kind,''),
 		COALESCE(h.id,''),COALESCE(h.slug,''),
@@ -163,7 +164,7 @@ func (s *Store) Roster(ctx context.Context, now time.Time) ([]Summary, error) {
 		index[v.AgentID] = i
 	}
 	// Each source is scanned once. No per-agent event query is performed.
-	rows, e := s.DB.QueryContext(ctx, `SELECT agent_id,current_card_ref,note,observed_at FROM agent_presence`)
+	rows, e := resourceaccess.NewDB(s.DB).QueryContext(ctx, `SELECT agent_id,current_card_ref,note,observed_at FROM agent_presence`)
 	if e != nil {
 		return nil, e
 	}
@@ -187,7 +188,7 @@ func (s *Store) Roster(ctx context.Context, now time.Time) ([]Summary, error) {
 	if e != nil {
 		return nil, e
 	}
-	runRows, e := s.DB.QueryContext(ctx, "SELECT "+runColumns+" FROM runs ORDER BY julianday(last_observed_at) DESC")
+	runRows, e := resourceaccess.NewDB(s.DB).QueryContext(ctx, "SELECT "+runColumns+" FROM runs ORDER BY julianday(last_observed_at) DESC")
 	if e != nil {
 		return nil, e
 	}
@@ -222,7 +223,7 @@ func (s *Store) Roster(ctx context.Context, now time.Time) ([]Summary, error) {
 	if e != nil {
 		return nil, e
 	}
-	rows, e = s.DB.QueryContext(ctx, `SELECT actor_id,ts FROM (SELECT actor_id,ts,ROW_NUMBER() OVER (PARTITION BY actor_id ORDER BY julianday(ts) DESC,id DESC) AS row_number FROM events) WHERE row_number=1`)
+	rows, e = resourceaccess.NewDB(s.DB).QueryContext(ctx, `SELECT actor_id,ts FROM (SELECT actor_id,ts,ROW_NUMBER() OVER (PARTITION BY actor_id ORDER BY julianday(ts) DESC,id DESC) AS row_number FROM events) WHERE row_number=1`)
 	if e != nil {
 		return nil, e
 	}
@@ -262,7 +263,7 @@ func (s *Store) Roster(ctx context.Context, now time.Time) ([]Summary, error) {
 			}
 		}
 	}
-	cardRows, e := s.DB.QueryContext(ctx, `SELECT id,handle,title FROM cards`)
+	cardRows, e := resourceaccess.NewDB(s.DB).QueryContext(ctx, `SELECT id,handle,title FROM cards`)
 	if e != nil {
 		return nil, e
 	}
@@ -318,7 +319,7 @@ func bridgeOnline(expires string, now time.Time) bool {
 	return err == nil && t.After(now) && t.Sub(now) <= BridgeFreshness
 }
 func (s *Store) openAsks(ctx context.Context) ([]OpenAsk, error) {
-	rows, e := s.DB.QueryContext(ctx, `SELECT req.id,req.ts,COALESCE(json_extract(req.payload_json,'$.summary'),''),req.payload_json,
+	rows, e := resourceaccess.NewDB(s.DB).QueryContext(ctx, `SELECT req.id,req.ts,COALESCE(json_extract(req.payload_json,'$.summary'),''),req.payload_json,
 		COALESCE((SELECT di.id FROM derived_inbox_items di WHERE di.source_event_id=req.id AND di.category IN ('ask','review','escalate') ORDER BY di.id LIMIT 1),''),
 		COALESCE((SELECT di.data_json FROM derived_inbox_items di WHERE di.source_event_id=req.id AND di.category IN ('ask','review','escalate') ORDER BY di.id LIMIT 1),'')
 		FROM events req WHERE req.type='human_attention_requested' AND req.trashed_at IS NULL AND NOT EXISTS (SELECT 1 FROM events resp WHERE resp.type='human_attention_responded' AND resp.trashed_at IS NULL AND (json_extract(resp.payload_json,'$.payload.request_event_id')=req.id OR json_extract(resp.payload_json,'$.payload.request_event_ref')='event:'||req.id OR json_extract(resp.payload_json,'$.payload.request_event_ref')='event:'||req.handle)) AND NOT EXISTS (SELECT 1 FROM events withdrawn WHERE withdrawn.type='human_attention_withdrawn' AND withdrawn.trashed_at IS NULL AND (json_extract(withdrawn.payload_json,'$.payload.request_event_id')=req.id OR json_extract(withdrawn.payload_json,'$.payload.request_event_ref')='event:'||req.id OR json_extract(withdrawn.payload_json,'$.payload.request_event_ref')='event:'||req.handle))
@@ -406,7 +407,7 @@ func (s *Store) AgentDetail(ctx context.Context, id string, now time.Time) (Deta
 			d.OpenAsks = append(d.OpenAsks, v)
 		}
 	}
-	rows, e := s.DB.QueryContext(ctx, `SELECT text,observed_at,card_ref FROM agent_progress_notes WHERE agent_id=? ORDER BY observed_at DESC LIMIT 50`, d.Agent.ID)
+	rows, e := resourceaccess.NewDB(s.DB).QueryContext(ctx, `SELECT text,observed_at,card_ref FROM agent_progress_notes WHERE agent_id=? ORDER BY observed_at DESC LIMIT 50`, d.Agent.ID)
 	if e != nil {
 		return d, e
 	}
@@ -426,7 +427,7 @@ func (s *Store) AgentDetail(ctx context.Context, id string, now time.Time) (Deta
 	}
 	if d.Agent.CurrentCardRef != nil {
 		var id, title, handle string
-		e = s.DB.QueryRowContext(ctx, `SELECT id,title,handle FROM cards WHERE handle=? OR id=?`, strings.TrimPrefix(*d.Agent.CurrentCardRef, "card:"), strings.TrimPrefix(*d.Agent.CurrentCardRef, "card:")).Scan(&id, &title, &handle)
+		e = resourceaccess.NewDB(s.DB).QueryRowContext(ctx, `SELECT id,title,handle FROM cards WHERE handle=? OR id=?`, strings.TrimPrefix(*d.Agent.CurrentCardRef, "card:"), strings.TrimPrefix(*d.Agent.CurrentCardRef, "card:")).Scan(&id, &title, &handle)
 		if e == nil {
 			d.RecentCards = append(d.RecentCards, map[string]any{"id": id, "ref": "card:" + handle, "handle": handle, "title": title})
 		} else if !errors.Is(e, sql.ErrNoRows) {

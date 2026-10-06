@@ -237,6 +237,8 @@ func rowExistsByID(ctx context.Context, q queryRower, table, id string) bool {
 }
 
 func uniqueHandleTx(ctx context.Context, q queryRower, typ, desired, fallbackSeed string) (string, error) {
+	ctx = CanonicalMaintenanceContext(ctx) // Namespace uniqueness includes inaccessible resources.
+
 	table := resourceTables[typ]
 	if table == "" {
 		return "", fmt.Errorf("unknown handle resource type %q", typ)
@@ -268,7 +270,11 @@ func uniqueHandleTx(ctx context.Context, q queryRower, typ, desired, fallbackSee
 		if err := q.QueryRowContext(ctx, `SELECT COUNT(1) FROM resource_handle_aliases WHERE resource_type = ? AND alias_handle = ?`, typ, candidate).Scan(&aliasN); err != nil {
 			return "", err
 		}
-		if n == 0 && idN == 0 && aliasN == 0 {
+		var retired int
+		if err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM resource_access_tombstones WHERE kind=? AND ref=? COLLATE NOCASE`, typ, candidate).Scan(&retired); err != nil {
+			return "", err
+		}
+		if n == 0 && idN == 0 && aliasN == 0 && retired == 0 {
 			return candidate, nil
 		}
 	}

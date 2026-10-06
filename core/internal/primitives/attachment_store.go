@@ -1,6 +1,8 @@
 package primitives
 
 import (
+	"agent-nexus-core/internal/resourceaccess"
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -234,7 +236,8 @@ func (s *Store) CreateArtifactAttachment(ctx context.Context, actorID string, ar
 	}
 	origName := sanitizeOriginalFilename(originalFilename)
 
-	contentHash, size, staged, err := s.blob.WriteStream(ctx, src, maxUploadBytes)
+	var captured bytes.Buffer
+	contentHash, size, staged, err := s.blob.WriteStream(ctx, io.TeeReader(src, &captured), maxUploadBytes)
 	if err != nil {
 		if errors.Is(err, blob.ErrUploadTooLarge) {
 			return nil, err
@@ -242,6 +245,9 @@ func (s *Store) CreateArtifactAttachment(ctx context.Context, actorID string, ar
 		return nil, fmt.Errorf("stage attachment content: %w", err)
 	}
 	defer func() { _ = staged.Cleanup() }()
+	if err := resourceaccess.ValidateContent(captured.Bytes(), mimeType); err != nil {
+		return nil, err
+	}
 
 	blobPlan, err := s.prepareBlobLedgerWritePlan(ctx, contentHash, size)
 	if err != nil {
@@ -286,8 +292,8 @@ func (s *Store) CreateArtifactAttachment(ctx context.Context, actorID string, ar
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json, content_refs_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		metadata["id"],
 		artifactHandle,
 		"attachment",
@@ -298,6 +304,7 @@ func (s *Store) CreateArtifactAttachment(ctx context.Context, actorID string, ar
 		contentHash,
 		string(refsJSON),
 		string(metadataJSON),
+		resourceaccess.ContentReferenceAtomsJSON(captured.String(), mimeType),
 	); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)

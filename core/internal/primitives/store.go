@@ -23,6 +23,7 @@ import (
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/commandcenter"
 	"agent-nexus-core/internal/handles"
+	"agent-nexus-core/internal/resourceaccess"
 	"agent-nexus-core/internal/schema"
 )
 
@@ -171,7 +172,7 @@ type EventCursor struct {
 }
 
 type Store struct {
-	db       *sql.DB
+	db       *accessDB
 	blob     blob.Backend
 	blobRoot string
 	dbPath   string
@@ -203,9 +204,16 @@ type ThreadMutationResult struct {
 }
 
 func NewStore(db *sql.DB, blobBackend blob.Backend, blobRoot string, options ...Option) *Store {
-	store := &Store{db: db, blob: blobBackend, blobRoot: blobRoot}
+	var scopedDB *accessDB
+	if db != nil {
+		scopedDB = resourceaccess.NewDB(db)
+	}
+	store := &Store{db: scopedDB, blob: blobBackend, blobRoot: blobRoot}
 	for _, option := range options {
 		option(store)
+	}
+	if err := store.BackfillArtifactAccess(context.Background()); err != nil {
+		log.Printf("artifact authorization backfill incomplete; unindexed content remains inaccessible: %v", err)
 	}
 	return store
 }
@@ -226,7 +234,15 @@ func (s *Store) AppendEvent(ctx context.Context, actorID string, event map[strin
 	if err := s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(len(prepared.PayloadJSON) + len(prepared.RefsJSON) + 512)}, blobLedgerWritePlan{}); err != nil {
 		return nil, err
 	}
-	if err := insertPreparedEvent(ctx, s.db, prepared); err != nil {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if err := insertPreparedEvent(ctx, tx, prepared); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 
@@ -378,7 +394,7 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 		return nil, fmt.Errorf("artifact.refs: %w", err)
 	}
 
-	encodedContent, err := encodeContent(content)
+	encodedContent, err := encodeContent(content, contentType)
 	if err != nil {
 		return nil, err
 	}
@@ -438,8 +454,8 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json, content_refs_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		metadata["id"],
 		artifactHandle,
 		kind,
@@ -450,6 +466,7 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 		contentHash,
 		string(refsJSON),
 		string(metadataJSON),
+		resourceaccess.ContentReferenceAtomsJSON(string(encodedContent), contentType),
 	); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -512,7 +529,7 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 		return nil, nil, fmt.Errorf("artifact.refs: %w", err)
 	}
 
-	encodedContent, err := encodeContent(content)
+	encodedContent, err := encodeContent(content, contentType)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -579,8 +596,8 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json, content_refs_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		metadata["id"],
 		artifactHandle,
 		kind,
@@ -591,6 +608,7 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 		contentHash,
 		string(artifactRefsJSON),
 		string(artifactMetadataJSON),
+		resourceaccess.ContentReferenceAtomsJSON(string(encodedContent), contentType),
 	); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -1610,6 +1628,10 @@ func (s *Store) PurgeTrashedArtifact(ctx context.Context, artifactID string) err
 		return fmt.Errorf("select trashed artifact: %w", err)
 	}
 
+	if err := preservePurgedAccess(ctx, tx, "artifact", artifactID); err != nil {
+		return err
+	}
+
 	if _, err := tx.ExecContext(ctx, `DELETE FROM artifacts WHERE id = ?`, artifactID); err != nil {
 		return fmt.Errorf("delete artifact: %w", err)
 	}
@@ -1618,7 +1640,7 @@ func (s *Store) PurgeTrashedArtifact(ctx context.Context, artifactID string) err
 	var shouldDeleteBlob bool
 	if contentHash != "" {
 		var cnt int
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM artifacts WHERE content_hash = ?`, contentHash).Scan(&cnt); err != nil {
+		if err := tx.QueryRowContext(CanonicalMaintenanceContext(ctx), `SELECT COUNT(*) FROM artifacts WHERE content_hash = ?`, contentHash).Scan(&cnt); err != nil {
 			return fmt.Errorf("count artifact blob references: %w", err)
 		}
 		if cnt == 0 {
@@ -2107,6 +2129,10 @@ func (s *Store) PurgeThread(ctx context.Context, threadID string) error {
 	}
 	if err != nil {
 		return fmt.Errorf("select trashed thread: %w", err)
+	}
+
+	if err := preservePurgedAccess(ctx, tx, "thread", threadID); err != nil {
+		return err
 	}
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM derived_topic_views WHERE thread_id = ?`, threadID); err != nil {
@@ -3486,7 +3512,10 @@ func StripThreadPlanningFieldsForAPI(m map[string]any) {
 	delete(m, "next_check_in_at")
 }
 
-func encodeContent(content any) ([]byte, error) {
+func encodeContent(content any, contentType string) ([]byte, error) {
+	if err := resourceaccess.ValidateContent(content, contentType); err != nil {
+		return nil, err
+	}
 	switch value := content.(type) {
 	case string:
 		return []byte(value), nil

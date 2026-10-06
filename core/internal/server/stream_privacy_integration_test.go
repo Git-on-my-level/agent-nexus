@@ -156,8 +156,20 @@ func seedStreamPrivacyThread(t *testing.T, store *primitives.Store, owner string
 	t.Helper()
 	data := map[string]any{"title": "Stream privacy test"}
 	if private {
-		data["pm_actor_id"] = owner
-		data["pm_conversation_id"] = "stream-private-conversation"
+		// Exercise inherited privacy: the card thread itself deliberately stays public.
+		ctx := context.Background()
+		board, err := store.CreateBoard(ctx, owner, map[string]any{"title": "Private stream board"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		card, err := store.CreateBoardCard(ctx, owner, anyString(board["id"]), primitives.AddBoardCardInput{Title: "Private stream card", ColumnKey: "ready"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = store.PatchThread(ctx, owner, anyString(board["thread_id"]), map[string]any{"pm_actor_id": owner}, nil); err != nil {
+			t.Fatal(err)
+		}
+		return anyString(card.Card["thread_id"])
 	}
 	created, err := store.CreateThread(context.Background(), owner, data)
 	if err != nil {
@@ -182,7 +194,9 @@ func seedStreamPrivacyInbox(t *testing.T, store *primitives.Store, thread string
 
 func openAuthenticatedPrivacyStream(t *testing.T, url, token, cursor string) *http.Response {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// SSE spans multiple mutations and list checks. Bound connection setup,
+	// not the entire response lifetime; each expected event has its own budget.
+	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -190,7 +204,10 @@ func openAuthenticatedPrivacyStream(t *testing.T, url, token, cursor string) *ht
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Last-Event-ID", cursor)
-	resp, err := http.DefaultClient.Do(req)
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ResponseHeaderTimeout = 10 * time.Second
+	t.Cleanup(transport.CloseIdleConnections)
+	resp, err := (&http.Client{Transport: transport}).Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +222,9 @@ func assertPrivacyInboxEvents(t *testing.T, reader <-chan sseEvent, want map[str
 	t.Helper()
 	seen := map[string]bool{}
 	for range want {
-		event := awaitSSEEvent(t, reader, 3*time.Second)
+		// An eight-subject archived snapshot traverses the ownership graph for
+		// each item. Keep a bounded delivery check without timing the whole test.
+		event := awaitSSEEvent(t, reader, 10*time.Second)
 		item, _ := event.Data["item"].(map[string]any)
 		id := anyString(item["id"])
 		body, ok := want[id]
@@ -222,7 +241,10 @@ func assertPrivacyInboxEvents(t *testing.T, reader <-chan sseEvent, want map[str
 		seen[id] = true
 	}
 	select {
-	case event := <-reader:
+	case event, ok := <-reader:
+		if !ok {
+			t.Fatal("sse stream closed while validating continued polling")
+		}
 		t.Fatalf("unexpected extra inbox event: %#v", event)
 	case <-time.After(150 * time.Millisecond):
 	}

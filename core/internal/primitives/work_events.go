@@ -2,18 +2,17 @@ package primitives
 
 import (
 	"context"
-	"database/sql"
 	"time"
 )
 
 // insertWorkEvent shares the work transaction: mutations cannot lose their
 // event history on restart. Routine unchanged polls deliberately do not call it.
-func insertWorkEvent(ctx context.Context, tx *sql.Tx, actor string, card map[string]any, eventType, summary string, payload map[string]any) error {
+func insertWorkEvent(ctx context.Context, tx *accessTx, actor string, card map[string]any, eventType, summary string, payload map[string]any) error {
 	_, err := insertWorkEventRef(ctx, tx, actor, card, eventType, summary, payload)
 	return err
 }
 
-func insertWorkEventRef(ctx context.Context, tx *sql.Tx, actor string, card map[string]any, eventType, summary string, payload map[string]any) (string, error) {
+func insertWorkEventRef(ctx context.Context, tx *accessTx, actor string, card map[string]any, eventType, summary string, payload map[string]any) (string, error) {
 	id := workString(card["id"])
 	threadID := workString(card["thread_id"])
 	boardID := workString(card["board_id"])

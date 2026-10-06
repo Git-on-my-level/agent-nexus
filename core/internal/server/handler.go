@@ -590,7 +590,12 @@ func enforceRouteAccess(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	}
 
 	switch requirement.bucket {
-	case routeAccessAlwaysPublic, routeAccessPublicAuthCeremony:
+	case routeAccessAlwaysPublic:
+		return true
+	case routeAccessPublicAuthCeremony:
+		if r.Method == http.MethodPost && (r.URL.Path == "/agent-wakeups/claim" || r.URL.Path == "/agent-wakeups/complete" || r.URL.Path == "/agent-wakeups/fail") {
+			return authenticateAgentWakeupMutation(w, r, opts)
+		}
 		return true
 	case routeAccessWorkspaceBusiness:
 		if isReadOnlyRequest(r.Method) && opts.enableDevActorMode {
@@ -682,6 +687,13 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			if !enforceRouteAccess(w, r, opts, requirement) {
 				return
 			}
+			_, authenticated := cachedAuthenticatedPrincipal(r)
+			if requirement.supported && requirement.bucket != routeAccessAlwaysPublic && (requirement.bucket != routeAccessPublicAuthCeremony || authenticated) {
+				attachResourceAccessScope(r, opts)
+				if !authorizeResourceSelectors(w, r) {
+					return
+				}
+			}
 			if !enforceWorkspaceWriteAccess(w, opts, requirement) {
 				return
 			}
@@ -713,6 +725,10 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		stream.Mount(mux, sub, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			requirement := enrichRouteMutationPolicy(r, classify(r))
 			if !enforceRouteAccess(w, r, opts, requirement) {
+				return
+			}
+			attachResourceAccessScope(r, opts)
+			if !authorizeResourceSelectors(w, r) {
 				return
 			}
 			if !enforceWorkspaceWriteAccess(w, opts, requirement) {
@@ -2106,6 +2122,10 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return routeAccessRequirement{}
 		}
 		switch {
+		case strings.HasSuffix(remainder, "/revisions"):
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: r.Method == http.MethodGet || r.Method == http.MethodPost}
+		case strings.Contains(remainder, "/revisions/"):
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: r.Method == http.MethodGet}
 		case strings.HasSuffix(remainder, "/plan"):
 			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: r.Method == http.MethodGet || r.Method == http.MethodPut}
 		case strings.HasSuffix(remainder, "/timeline"):

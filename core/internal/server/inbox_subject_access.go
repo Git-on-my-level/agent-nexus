@@ -9,11 +9,12 @@ import (
 	"agent-nexus-core/internal/primitives"
 )
 
-// Inbox retention follows the request lifecycle, but authorization still
-// follows its subject. Keep this local until the shared card read policy lands:
-// both the card's backing thread (including legacy parent_thread_id) and its
-// containing board's backing thread must be readable, regardless of archive.
+// The canonical request scope checks all inherited references together. The
+// fallback supports alternate stores without a canonical database policy.
 func inboxItemAccessible(r *http.Request, opts handlerOptions, threadID string, item map[string]any) bool {
+	if check, ok := r.Context().Value(resourceAccessCheckKey{}).(func(context.Context, any) error); ok {
+		return check(r.Context(), []any{"thread:" + threadID, item}) == nil
+	}
 	if strings.TrimSpace(threadID) != "" && !inboxSubjectRefAccessible(r, opts, "thread:"+threadID) {
 		return false
 	}

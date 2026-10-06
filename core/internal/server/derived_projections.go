@@ -14,6 +14,7 @@ import (
 const derivedProjectionMaxAge = time.Minute
 
 func refreshDerivedTopicProjection(ctx context.Context, opts handlerOptions, threadID string, now time.Time, actorID string) error {
+	ctx = primitives.CanonicalMaintenanceContext(ctx)
 	if opts.primitiveStore == nil {
 		return nil
 	}

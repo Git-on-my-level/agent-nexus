@@ -1,6 +1,7 @@
 package pm
 
 import (
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -16,6 +17,8 @@ import (
 // JSON bodies retain exact instructions/origins; indexed columns provide scope,
 // stable deduplication and compare-and-swap state transitions across processes.
 type Store struct{ db *sql.DB }
+
+func (s *Store) database() *resourceaccess.DB { return resourceaccess.NewDB(s.db) }
 
 func NewStore(db *sql.DB) (*Store, error) {
 	if db == nil {
@@ -38,7 +41,7 @@ func stableID(parts ...string) string {
 }
 func (s *Store) get(ctx context.Context, kind, id string, out any) error {
 	var b []byte
-	err := s.db.QueryRowContext(ctx, `SELECT body FROM pm_records WHERE kind=? AND id=?`, kind, id).Scan(&b)
+	err := s.database().QueryRowContext(ctx, `SELECT body FROM pm_records WHERE kind=? AND id=?`, kind, id).Scan(&b)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -52,7 +55,7 @@ func (s *Store) insert(ctx context.Context, kind, id, ws, actor, parent string, 
 	if err != nil {
 		return false, err
 	}
-	r, err := s.db.ExecContext(ctx, `INSERT INTO pm_records(kind,id,workspace_id,actor_id,parent_id,revision,body) VALUES(?,?,?,?,?,1,?) ON CONFLICT(kind,id) DO NOTHING`, kind, id, ws, actor, parent, b)
+	r, err := s.database().ExecContext(ctx, `INSERT INTO pm_records(kind,id,workspace_id,actor_id,parent_id,revision,body) VALUES(?,?,?,?,?,1,?) ON CONFLICT(kind,id) DO NOTHING`, kind, id, ws, actor, parent, b)
 	if err != nil {
 		return false, err
 	}
@@ -64,7 +67,7 @@ func (s *Store) cas(ctx context.Context, kind, id string, revision int, value an
 	if err != nil {
 		return err
 	}
-	r, err := s.db.ExecContext(ctx, `UPDATE pm_records SET revision=revision+1,body=? WHERE kind=? AND id=? AND revision=?`, b, kind, id, revision)
+	r, err := s.database().ExecContext(ctx, `UPDATE pm_records SET revision=revision+1,body=? WHERE kind=? AND id=? AND revision=?`, b, kind, id, revision)
 	if err != nil {
 		return err
 	}
@@ -81,7 +84,7 @@ func listRecords[T any](ctx context.Context, s *Store, kind, ws, actor, parent s
 	out := make([]T, 0)
 	var after int64
 	for {
-		rows, err := s.db.QueryContext(ctx, `SELECT rowid,body FROM pm_records WHERE kind=? AND workspace_id=? AND (?='' OR actor_id=?) AND (?='' OR parent_id=?) AND rowid>? ORDER BY rowid LIMIT 200`, kind, ws, actor, actor, parent, parent, after)
+		rows, err := s.database().QueryContext(ctx, `SELECT rowid,body FROM pm_records WHERE kind=? AND workspace_id=? AND (?='' OR actor_id=?) AND (?='' OR parent_id=?) AND rowid>? ORDER BY rowid LIMIT 200`, kind, ws, actor, actor, parent, parent, after)
 		if err != nil {
 			return nil, err
 		}
@@ -116,7 +119,7 @@ func listRecords[T any](ctx context.Context, s *Store, kind, ws, actor, parent s
 // bounded listRecords window. Claim and deadline expiry must see current work,
 // not the oldest 200 historical rows.
 func listOpenTurns(ctx context.Context, s *Store, ws string) ([]Turn, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT body FROM pm_records WHERE kind='turn' AND workspace_id=? AND json_extract(body,'$.status') IN ('pending_delivery','sending','unknown') ORDER BY rowid`, ws)
+	rows, err := s.database().QueryContext(ctx, `SELECT body FROM pm_records WHERE kind='turn' AND workspace_id=? AND json_extract(body,'$.status') IN ('pending_delivery','sending','unknown') ORDER BY rowid`, ws)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +145,7 @@ func scanBodies[T any](rows *sql.Rows) ([]T, error) {
 
 // answer commits exact approval and durable handoff intent in one transaction.
 func (s *Store) answer(ctx context.Context, d Decision, a *Action, expected int) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.database().BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -187,7 +190,7 @@ func (s *Store) insertTurn(ctx context.Context, t Turn, maxQueued int) (bool, er
 	if err != nil {
 		return false, err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.database().BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
 	}
@@ -235,7 +238,7 @@ func (s *Store) insertTurn(ctx context.Context, t Turn, maxQueued int) (bool, er
 // intent may supersede an awaiting decision, but non-human proposals cannot
 // displace pending human intent. All checks and replacement writes are atomic.
 func (s *Store) proposeDecision(ctx context.Context, d Decision, turnID, leaseToken string) (Decision, bool, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.database().BeginTx(ctx, nil)
 	if err != nil {
 		return Decision{}, false, err
 	}
@@ -362,7 +365,7 @@ func (s *Store) proposeDecision(ctx context.Context, d Decision, turnID, leaseTo
 // claimTurn recovers an owned lease before allocating under a SQLite write lock.
 // A runner identity must be used by only one serial worker at a time.
 func (s *Store) claimTurn(ctx context.Context, p Principal, runner string, now time.Time, capacity int, ttl time.Duration, maxOutput int) (Turn, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.database().BeginTx(ctx, nil)
 	if err != nil {
 		return Turn{}, err
 	}
@@ -427,7 +430,7 @@ func sameDecisionIntent(a, b Decision) bool {
 	return a.WorkspaceID == b.WorkspaceID && a.ActorID == b.ActorID && a.WorkRef == b.WorkRef && a.Scope == b.Scope && a.Instruction == b.Instruction && a.TargetRevision == b.TargetRevision && reflect.DeepEqual(a.Payload, b.Payload)
 }
 
-func rejectPendingHumanProposal(ctx context.Context, tx *sql.Tx, d Decision) error {
+func rejectPendingHumanProposal(ctx context.Context, tx *resourceaccess.Tx, d Decision) error {
 	if d.OriginKind == "human" {
 		return nil
 	}
@@ -445,7 +448,7 @@ func rejectPendingHumanProposal(ctx context.Context, tx *sql.Tx, d Decision) err
 // Renew under the same SQLite write lock as claim, so an expired owner can
 // never renew over a replacement lease or a terminal write.
 func (s *Store) heartbeatTurn(ctx context.Context, id, token string, ttl time.Duration) (Turn, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.database().BeginTx(ctx, nil)
 	if err != nil {
 		return Turn{}, err
 	}

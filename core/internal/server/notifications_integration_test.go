@@ -124,8 +124,10 @@ func TestNotificationsListReadAndDismissAreTargetScoped(t *testing.T) {
 		t.Fatalf("expected unread notification receipt, got %#v", receipts[0])
 	}
 
-	denied := postJSONExpectStatusWithAuth(t, env.server.URL+"/agent-wakeups/claim", map[string]any{"wakeup_id": wakeupID, "bridge_instance_id": "bridge-test-1"}, target.AccessToken, http.StatusUnauthorized)
-	denied.Body.Close()
+	for _, operation := range []string{"claim", "complete", "fail"} {
+		denied := postJSONExpectStatusWithAuth(t, env.server.URL+"/agent-wakeups/"+operation, map[string]any{"wakeup_id": wakeupID, "bridge_instance_id": "bridge-test-1"}, target.AccessToken, http.StatusUnauthorized)
+		denied.Body.Close()
+	}
 	postNotificationWakeup(t, env.server.URL, "claim", map[string]any{
 		"wakeup_id":          wakeupID,
 		"bridge_instance_id": "bridge-test-1",

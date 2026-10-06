@@ -1,6 +1,7 @@
 package series
 
 import (
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -74,7 +75,7 @@ ORDER BY g.ts LIMIT 200`
 
 // Count only budget+1 indexed rows; admission must not scan the oversized input
 // that it is intended to avoid. The budget is shared by all matching label sets.
-func overQueryBudget(ctx context.Context, tx *sql.Tx, name string, labels []string, since, end int64, daily bool) (bool, error) {
+func overQueryBudget(ctx context.Context, tx seriesTransaction, name string, labels []string, since, end int64, daily bool) (bool, error) {
 	encoded, err := json.Marshal(labels)
 	if err != nil {
 		return false, err
@@ -96,7 +97,7 @@ func overQueryBudget(ctx context.Context, tx *sql.Tx, name string, labels []stri
 }
 
 func (s Store) List(ctx context.Context) ([]Result, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT s.name,s.kind,s.unit,d.name,h.slug,h.id,d.agent_id,d.expected_interval,d.last_push,d.revoked_at FROM series_definitions s JOIN series_adapters d ON d.name=s.adapter JOIN hosts h ON h.id=d.host_id ORDER BY s.name LIMIT 1000`)
+	rows, err := resourceaccess.NewDB(s.DB).QueryContext(ctx, `SELECT s.name,s.kind,s.unit,d.name,h.slug,h.id,d.agent_id,d.expected_interval,d.last_push,d.revoked_at FROM series_definitions s JOIN series_adapters d ON d.name=s.adapter JOIN hosts h ON h.id=d.host_id ORDER BY s.name LIMIT 1000`)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +128,7 @@ func (s Store) Query(ctx context.Context, name string, labels map[string]string,
 	// ReadOnly makes modernc SQLite use BEGIN (a WAL read snapshot), overriding
 	// the workspace DSN's immediate mode for writes. Maintenance compacts data
 	// independently; this snapshot sees each point in raw or rolled-up form.
-	tx, err := s.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := resourceaccess.NewDB(s.DB).BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return out, err
 	}
@@ -218,7 +219,7 @@ func (s Store) Query(ctx context.Context, name string, labels map[string]string,
 	}
 	var raw *sql.Stmt
 	if !daily {
-		raw, err = tx.PrepareContext(ctx, bucketQuery)
+		raw, err = tx.PrepareReadContext(ctx, bucketQuery)
 		if err != nil {
 			return out, err
 		}

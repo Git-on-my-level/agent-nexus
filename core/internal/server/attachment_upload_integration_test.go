@@ -11,6 +11,15 @@ import (
 )
 
 func TestArtifactAttachmentMultipartUploadAndContentHeaders(t *testing.T) {
+	testArtifactAttachmentUploadAndContent(t, "hello.txt", "text/plain; charset=utf-8", "text/plain", "hello-attachment")
+}
+
+func TestArtifactAttachmentBinaryNULRoundTrip(t *testing.T) {
+	testArtifactAttachmentUploadAndContent(t, "pixel.png", "image/png", "image/png", "\x89PNG\r\n\x1a\n\x00binary")
+}
+
+func testArtifactAttachmentUploadAndContent(t *testing.T, filename, declaredMIME, expectedMIME, content string) {
+	t.Helper()
 	requireIntegrationTest(t)
 	t.Parallel()
 
@@ -23,13 +32,13 @@ func TestArtifactAttachmentMultipartUploadAndContentHeaders(t *testing.T) {
 	_ = mw.WriteField("actor_id", "actor-attach-it")
 	_ = mw.WriteField("refs", `["thread:thread-attach-case"]`)
 	hdr := textproto.MIMEHeader{}
-	hdr.Set("Content-Disposition", `form-data; name="file"; filename="hello.txt"`)
-	hdr.Set("Content-Type", "text/plain; charset=utf-8")
+	hdr.Set("Content-Disposition", `form-data; name="file"; filename="`+filename+`"`)
+	hdr.Set("Content-Type", declaredMIME)
 	part, err := mw.CreatePart(hdr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _ = part.Write([]byte("hello-attachment"))
+	_, _ = part.Write([]byte(content))
 	if err := mw.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +80,7 @@ func TestArtifactAttachmentMultipartUploadAndContentHeaders(t *testing.T) {
 		t.Fatalf("content status %d", contentResp.StatusCode)
 	}
 	ct := contentResp.Header.Get("Content-Type")
-	if !strings.HasPrefix(ct, "text/plain") {
+	if !strings.HasPrefix(ct, expectedMIME) {
 		t.Fatalf("content-type: %s", ct)
 	}
 	if contentResp.Header.Get("ETag") == "" {
@@ -84,7 +93,7 @@ func TestArtifactAttachmentMultipartUploadAndContentHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(raw) != "hello-attachment" {
+	if string(raw) != content {
 		t.Fatalf("body %q", raw)
 	}
 }

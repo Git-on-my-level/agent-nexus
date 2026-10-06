@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -96,7 +97,7 @@ func (s *Store) RegisterPasskeyAgent(ctx context.Context, input RegisterPasskeyA
 		return Agent{}, TokenBundle{}, fmt.Errorf("%w: %v", ErrInvalidRequest, err)
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return Agent{}, TokenBundle{}, fmt.Errorf("begin register passkey transaction: %w", err)
 	}
@@ -254,7 +255,7 @@ func (s *Store) IssueTokenForPasskey(ctx context.Context, agentID string, creden
 		return TokenBundle{}, ErrAgentNotFound
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return TokenBundle{}, fmt.Errorf("begin passkey token transaction: %w", err)
 	}
@@ -322,7 +323,7 @@ func (s *Store) getPasskeyIdentity(ctx context.Context, whereClause string, valu
 		return PasskeyIdentity{}, fmt.Errorf("auth store database is not initialized")
 	}
 
-	rows, err := s.db.QueryContext(
+	rows, err := resourceaccess.NewDB(s.db).QueryContext(
 		ctx,
 		fmt.Sprintf(
 			`SELECT
@@ -443,7 +444,7 @@ func (s *Store) GetPasskeyIdentityByDisplayName(ctx context.Context, displayName
 	if displayName == "" {
 		return PasskeyIdentity{}, ErrPasskeyNotFound
 	}
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, `
 		SELECT DISTINCT a.id
 		FROM agents a
 		INNER JOIN passkey_credentials pc ON pc.agent_id = a.id
@@ -477,7 +478,7 @@ func (s *Store) GetPasskeyIdentityByDisplayName(ctx context.Context, displayName
 
 // GetSolePasskeyIdentity returns the identity when exactly one non-revoked passkey principal exists.
 func (s *Store) GetSolePasskeyIdentity(ctx context.Context) (PasskeyIdentity, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, `
 		SELECT DISTINCT a.id
 		FROM agents a
 		INNER JOIN passkey_credentials pc ON pc.agent_id = a.id
@@ -508,7 +509,7 @@ func (s *Store) GetSolePasskeyIdentity(ctx context.Context) (PasskeyIdentity, er
 	}
 }
 
-func insertPasskeyCredentialTx(ctx context.Context, tx *sql.Tx, agentID string, userHandle []byte, credential webauthn.Credential, createdAt string) error {
+func insertPasskeyCredentialTx(ctx context.Context, tx Transaction, agentID string, userHandle []byte, credential webauthn.Credential, createdAt string) error {
 	credentialID := encodePasskeyID(credential.ID)
 	if credentialID == "" {
 		return fmt.Errorf("%w: credential id is required", ErrInvalidRequest)
@@ -552,7 +553,7 @@ func insertPasskeyCredentialTx(ctx context.Context, tx *sql.Tx, agentID string, 
 	return nil
 }
 
-func updatePasskeyCredentialTx(ctx context.Context, tx *sql.Tx, agentID string, credential webauthn.Credential) error {
+func updatePasskeyCredentialTx(ctx context.Context, tx Transaction, agentID string, credential webauthn.Credential) error {
 	result, err := tx.ExecContext(
 		ctx,
 		`UPDATE passkey_credentials

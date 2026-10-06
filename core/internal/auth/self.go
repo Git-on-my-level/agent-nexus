@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"database/sql"
 	"errors"
@@ -35,7 +36,7 @@ func (s *Store) GetSelfPrincipal(ctx context.Context, agentID string) (SelfPrinc
 		return SelfPrincipal{}, ErrAgentRevoked
 	}
 	var display string
-	if err := s.db.QueryRowContext(ctx, `SELECT display_name FROM actors WHERE id=?`, agent.ActorID).Scan(&display); err != nil {
+	if err := resourceaccess.NewDB(s.db).QueryRowContext(ctx, `SELECT display_name FROM actors WHERE id=?`, agent.ActorID).Scan(&display); err != nil {
 		return SelfPrincipal{}, err
 	}
 	kind, method := "", ""

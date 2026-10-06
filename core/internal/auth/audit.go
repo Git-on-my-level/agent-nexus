@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -119,7 +120,7 @@ func (s *Store) ListPrincipals(ctx context.Context, filter AuthPrincipalListFilt
 		}
 	}
 
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, "", fmt.Errorf("query auth principals: %w", err)
 	}
@@ -240,7 +241,7 @@ func (s *Store) ListAuditEvents(ctx context.Context, filter AuthAuditListFilter)
 		args = append(args, *filter.Limit+1)
 	}
 
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, "", fmt.Errorf("query auth audit events: %w", err)
 	}
@@ -309,7 +310,11 @@ func (s *Store) ListAuditEvents(ctx context.Context, filter AuthAuditListFilter)
 	return events, nextCursor, nil
 }
 
-func (s *Store) recordAuthAuditEventTx(ctx context.Context, tx *sql.Tx, input AuthAuditEventInput) error {
+func (s *Store) recordAuthAuditEventTx(ctx context.Context, tx Transaction, input AuthAuditEventInput) error {
+	return recordAuthAuditEventTx(ctx, tx, input)
+}
+
+func recordAuthAuditEventTx(ctx context.Context, tx Transaction, input AuthAuditEventInput) error {
 	if tx == nil {
 		return fmt.Errorf("auth audit transaction is required")
 	}
@@ -368,7 +373,7 @@ func (s *Store) RecordSecretAuditEvent(ctx context.Context, input AuthAuditEvent
 	if s == nil || s.db == nil {
 		return fmt.Errorf("auth store database is not initialized")
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin audit tx: %w", err)
 	}

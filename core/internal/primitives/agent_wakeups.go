@@ -73,7 +73,7 @@ func (s *Store) UpsertAgentWakeup(ctx context.Context, wakeup AgentWakeup) (Agen
 	return s.GetAgentWakeup(ctx, wakeup.WakeupID)
 }
 
-func upsertAgentWakeupTx(ctx context.Context, tx *sql.Tx, wakeup AgentWakeup) error {
+func upsertAgentWakeupTx(ctx context.Context, tx eventExec, wakeup AgentWakeup) error {
 	wakeup = normalizeAgentWakeup(wakeup)
 	if wakeup.WakeupID == "" || wakeup.TargetActorID == "" {
 		return fmt.Errorf("invalid agent wakeup")
