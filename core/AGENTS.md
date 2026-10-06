@@ -168,6 +168,15 @@ Ancillary actor/auth/host/series/secrets readers and transactional response
 loaders must retain scoped handles too. Durable authentication/grant invariants
 may read canonical authority without returning profile or business content.
 
+Migrations 61/62 add board roles and the bounded evidence projection after main's
+authorization history. Evidence records and alias keys are registered ownership
+sources, inherit their card, and constrain that card when they reference private
+resources. Their tables and views use scoped relations before lookup limits.
+`source_refs` and metadata plans inherit through `work_metadata.metadata_json`;
+card plans inherit through `card_plans.body_json`. Inbox summary counts and pages
+the scoped `derived_inbox_items` relation in SQL. Do not add independent payload
+authorization or bypass scoped handles for these projections.
+
 `internal/storage/testdata/resource_access_storage.json` classifies every live
 column (including PM/investigation schemas, generated columns and views) and
 fingerprints persistence writers plus transitive helper callers in internal/cmd.

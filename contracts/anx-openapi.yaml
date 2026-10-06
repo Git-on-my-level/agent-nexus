@@ -2984,7 +2984,7 @@ paths:
         Each live or series-bound panel is independently materialized with status ok, stale or unavailable,
         observation time, data and an explicit truncated flag. Never infer zero work
         from an unavailable or truncated panel. Queries are bounded to 2000 source
-        rows. Archived boards and their work are excluded. Private PM events remain private.
+        rows after subject, related-ref, card and board authorization. Archived boards and their work are excluded. Private PM events remain private.
       parameters:
         - $ref: '#/components/parameters/DocumentID'
       responses:
@@ -7411,6 +7411,7 @@ paths:
     get:
       operationId: getInboxItem
       summary: Get one inbox item
+      description: Authorizes the inbox subject, related refs, backing card and board before returning the item.
       tags: [inbox]
       x-anx-surface: projection
       x-anx-command-id: inbox.get
@@ -9414,7 +9415,20 @@ components:
           items:
             $ref: '#/components/schemas/WorkParticipant'
         next_cursor: {type: string}
+    IndexedAliases:
+      type: object
+      additionalProperties: true
+      description: All fields used by the evidence lookup index share these caps, including source, observation facts, evidence and source_refs. Limits on strings are UTF-8 byte limits enforced by core. Unknown non-indexed fields round-trip.
+      properties:
+        authority: {type: string, maxLength: 2048, nullable: true}
+        connection_id: {type: string, maxLength: 2048, nullable: true}
+        native_id: {type: string, maxLength: 2048, nullable: true}
+        identifier: {type: string, maxLength: 2048, nullable: true}
+        url: {type: string, maxLength: 2048, nullable: true}
+        identifier_aliases: {type: array, maxItems: 50, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 2048}}
+        aliases: {type: array, maxItems: 50, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 2048}}
     WorkSource:
+      allOf: [{ $ref: '#/components/schemas/IndexedAliases' }]
       type: object
       additionalProperties: true
       properties:
@@ -9473,12 +9487,15 @@ components:
           type: integer
           minimum: 0
         facts:
+          allOf: [{ $ref: '#/components/schemas/IndexedAliases' }]
           type: object
           additionalProperties: true
           properties: &id001 {}
         evidence:
           type: array
+          maxItems: 2000
           items:
+            allOf: [{ $ref: '#/components/schemas/IndexedAliases' }]
             type: object
             additionalProperties: true
             properties: *id001
@@ -9540,12 +9557,42 @@ components:
               type: string
       required:
       - state
+    SourceRef:
+      allOf: [{ $ref: '#/components/schemas/IndexedAliases' }]
+      type: object
+      additionalProperties: true
+      required: [authority, connection_id, native_id]
+      description: Generic structured source evidence attached to a card-backed work item. Any adapter may write it; core never parses adapter markdown. Unknown fields round-trip.
+      properties:
+        authority: {type: string, minLength: 1}
+        connection_id: {type: string, minLength: 1}
+        native_id: {type: string, minLength: 1}
+        identifier: {type: string, nullable: true, description: Legacy single alias; resolved generically without inferring authority.}
+        aliases: {type: array, maxItems: 50, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 2048}, description: Compatible spelling of exact adapter-published identifier_aliases.}
+        identifier_aliases: {type: array, maxItems: 50, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 2048}, description: Exact adapter-published aliases for this authority/connection/native identity.}
+        title: {type: string, nullable: true}
+        url: {type: string, nullable: true, description: Absolute HTTP(S) source URL without credentials.}
+        status: {type: string, nullable: true, description: Open source status; unknown values round-trip.}
+        phase: {type: string, nullable: true, description: Optional normalized phase for plan rollups.}
+        observed_at: {type: string, format: date-time, nullable: true}
+        source_activity_at: {type: string, format: date-time, nullable: true, description: Source activity, never the time of an unchanged poll.}
+    SourceRefs:
+      type: array
+      maxItems: 2000
+      items: { $ref: '#/components/schemas/SourceRef' }
+      description: Generic source evidence stored in card-backed work annotations. Write via work.create or work.patch with if_version. Full list replacement; omission preserves and [] clears. Identities authority/connection_id/native_id must be unique.
+
     Work:
       type: object
       additionalProperties: true
       properties:
+        source_refs: { $ref: '#/components/schemas/SourceRefs' }
         plan: { $ref: '#/components/schemas/InitiativePlan' }
         plan_state: { $ref: '#/components/schemas/PlanState' }
+        plan_resolution_truncated: {type: boolean, description: True when the shared 4000 distinct plan-ref budget was exceeded; omitted refs remain unknown.}
+        plan_health: { $ref: '#/components/schemas/PlanHealth' }
+        next_step: { $ref: '#/components/schemas/NextPlanStep' }
+        status_mismatch: {type: boolean, description: True when phase is backlog and at least one plan step is done. No automatic phase changes.}
         decision_revision:
           type: string
           readOnly: true
@@ -9732,6 +9779,7 @@ components:
       type: object
       additionalProperties: true
       properties:
+        source_refs: { $ref: '#/components/schemas/SourceRefs' }
         actor_id:
           type: string
         id:
@@ -9795,6 +9843,7 @@ components:
           properties:
             labels: {type: array, maxItems: 16, nullable: true, items: {type: string, minLength: 1, maxLength: 128}}
             roles: {type: array, maxItems: 16, nullable: true, items: {type: string, minLength: 1, maxLength: 128}}
+            source_refs: { $ref: '#/components/schemas/SourceRefs' }
             project_ref: *id002
             priority: *id003
             next_actor: *id004
@@ -10215,6 +10264,10 @@ components:
           allOf:
             - $ref: '#/components/schemas/InternalResourceUUID'
           description: Internal board UUID/debug id; use `ref` or `handle` for public lookup.
+        role:
+          type: string
+          maxLength: 64
+          description: Open board role. initiatives selects this board's eligible active cards for Overview initiatives. Empty clears; omission on patch preserves.
         title: { type: string }
         summary:
           type: string
@@ -10284,8 +10337,26 @@ components:
         critical_path: {type: array, items: {type: string}}
         next_steps: {type: array, items: {type: string}}
         shape: {type: string, enum: [chain, dag, lanes]}
-        health: {type: string, enum: [on_track, stalled, blocked]}
+        health: {type: string, enum: [on_track, stalled, blocked, no_plan, stale, at_risk, done], description: Legacy projection; richer states are in plan_health.state.}
+        health_state: {type: string, enum: [no_plan, stale, blocked, at_risk, on_track, done]}
         last_movement_at: {type: string, format: date-time}
+    PlanHealth:
+      type: object
+      required: [state, reason, since]
+      description: "Computed on read. Precedence is no_plan (recent absent or empty plan; stale once inactive for the threshold), done (all steps done), blocked (any unfinished blocked step), at_risk (card or unfinished step due within 24h or overdue), stale (no card/plan/step activity for 72h), on_track. ANX_PLAN_STALLED_AFTER overrides the workspace service threshold. since is the condition's reproducible anchor, not a stored transition timestamp: activity for done/blocked/on_track, due minus 24h for at_risk, last activity plus threshold for stale, creation for no_plan; null if unavailable."
+      properties:
+        state: {type: string, enum: [no_plan, stale, blocked, at_risk, on_track, done]}
+        reason: {type: string}
+        since: {type: string, format: date-time, nullable: true}
+    NextPlanStep:
+      type: object
+      nullable: true
+      required: [id, title, ref]
+      description: First ready unfinished unblocked step on the critical path, otherwise lexicographic ready step; unreadable linked resources are skipped. Null when none is ready.
+      properties:
+        id: {type: string}
+        title: {type: string}
+        ref: {type: string, description: Empty for unlinked steps.}
     CardPlanRequest:
       type: object
       required: [plan, if_updated_at]
@@ -10299,6 +10370,10 @@ components:
         card_ref: {type: string}
         plan: {type: object, nullable: true, allOf: [{ $ref: '#/components/schemas/InitiativePlan' }]}
         plan_state: {type: object, nullable: true, allOf: [{ $ref: '#/components/schemas/PlanState' }]}
+        plan_resolution_truncated: {type: boolean, description: True when the shared 4000 distinct plan-ref budget was exceeded; omitted refs remain unknown.}
+        plan_health: { $ref: '#/components/schemas/PlanHealth' }
+        next_step: { $ref: '#/components/schemas/NextPlanStep' }
+        status_mismatch: {type: boolean}
         if_updated_at: {type: string, format: date-time}
     ResolvedRef:
       type: object
@@ -10308,7 +10383,15 @@ components:
         resolvable: {type: boolean}
         kind: {type: string}
         title: {type: string}
-        status: {type: string}
+        status: {type: string, nullable: true, description: Source workflow status; null for parsed links with unknown status.}
+        authority: {type: string}
+        native_id: {type: string}
+        connection_id: {type: string, description: Ingested source connection when evidence is unambiguous.}
+        observed_at: {type: string, format: date-time}
+        source: {type: string, enum: [evidence, parsed]}
+        plan_resolution_truncated: {type: boolean, description: True when the shared 4000 distinct plan-ref budget was exceeded; omitted refs remain unknown.}
+        plan_health: { $ref: '#/components/schemas/PlanHealth' }
+        status_mismatch: {type: boolean}
         phase: {type: string}
         owner: {type: string}
         owner_display: {type: string}
@@ -10320,21 +10403,18 @@ components:
             title: {type: string}
         priority: {type: string}
         last_moved_at: {type: string, format: date-time}
-        next_step:
-          type: object
-          required: [title]
-          properties:
-            title: {type: string}
+        next_step: { $ref: '#/components/schemas/NextPlanStep' }
         progress:
           type: object
           properties:
             done: {type: integer}
             total: {type: integer}
-        url: {type: string, description: "Workspace-relative route; hosted clients prefix /o/<org>/w/<ws>. Absolute source URLs are used as-is."}
+        url: {type: string, nullable: true, description: "Null when source evidence has no URL. Workspace-relative route; hosted clients prefix /o/<org>/w/<ws>. Absolute source URLs are used as-is."}
 
     Card:
       type: object
       properties:
+        source_refs: { $ref: '#/components/schemas/SourceRefs' }
         ref: { $ref: '#/components/schemas/ResourceRef' }
         handle: { $ref: '#/components/schemas/ResourceHandle' }
         id:
@@ -10353,6 +10433,10 @@ components:
         summary: { type: string }
         plan: { $ref: '#/components/schemas/InitiativePlan' }
         plan_state: { $ref: '#/components/schemas/PlanState' }
+        plan_resolution_truncated: {type: boolean, description: True when the shared 4000 distinct plan-ref budget was exceeded; omitted refs remain unknown.}
+        plan_health: { $ref: '#/components/schemas/PlanHealth' }
+        next_step: { $ref: '#/components/schemas/NextPlanStep' }
+        status_mismatch: {type: boolean, description: True when phase is backlog and at least one plan step is done. No automatic phase changes.}
         column_key:
           type: string
           enum: [backlog, ready, in_progress, blocked, review, done]
@@ -10629,6 +10713,10 @@ components:
         thread_id:
           type: string
           description: Optional backing thread id for a replay-safe board copy.
+        role:
+          type: string
+          maxLength: 64
+          description: Open board role. initiatives selects this board's eligible active cards for Overview initiatives. Empty clears; omission on patch preserves.
         title: { type: string }
         summary:
           type: string
@@ -10654,6 +10742,10 @@ components:
     BoardPatchInput:
       type: object
       properties:
+        role:
+          type: string
+          maxLength: 64
+          description: Open board role. initiatives selects this board's eligible active cards for Overview initiatives. Empty clears; omission on patch preserves.
         title: { type: string }
         summary:
           type: string
@@ -11785,12 +11877,13 @@ components:
             human_count: { type: integer }
             items: { type: array, items: { $ref: '#/components/schemas/Work' } }
             truncated: { type: boolean }
-          description: Visible active work from at most 2000 candidates; counts describe the bounded visible set.
+          description: Active work from at most 2000 accessible candidates. Card and board access is applied before candidate limits and truncation; counts describe the bounded visible set.
         initiatives:
           type: object
           required: [status, count, items]
           properties:
             status: { type: string }
+            hint: { type: string, description: Suggests setting a board role when no initiatives board exists. }
             count: { type: integer }
             items: { type: array, items: { $ref: '#/components/schemas/OverviewInitiative' } }
             truncated: { type: boolean }
@@ -11830,6 +11923,10 @@ components:
       required: [ref, title, summary, progress, priority, needs, phase, board_ref, updated_at, plan_state, health, geometry]
       properties:
         plan_state: {type: object, nullable: true, allOf: [{ $ref: '#/components/schemas/PlanState' }]}
+        plan_resolution_truncated: {type: boolean, description: True when the shared 4000 distinct plan-ref budget was exceeded; omitted refs remain unknown.}
+        plan_health: { $ref: '#/components/schemas/PlanHealth' }
+        next_step: { $ref: '#/components/schemas/NextPlanStep' }
+        status_mismatch: {type: boolean}
         health: { $ref: '#/components/schemas/InitiativeHealth' }
         geometry: {type: object, nullable: true, allOf: [{ $ref: '#/components/schemas/InitiativeGeometry' }]}
         ref: { type: string }
@@ -11850,7 +11947,8 @@ components:
       type: object
       required: [status, reason]
       properties:
-        status: {type: string, enum: [on_track, stalled, blocked]}
+        status: {type: string, enum: [on_track, stalled, blocked, no_plan, stale, at_risk, done], description: Legacy projection for older clients; use plan_health.state for detailed health.}
+        state: {type: string, enum: [no_plan, stale, blocked, at_risk, on_track, done]}
         reason: {type: string}
     InitiativeGeometry:
       type: object
@@ -11872,6 +11970,7 @@ components:
               after: {type: array, items: {type: string}}
     OverviewChanges:
       type: object
+      description: At most 200 accessible answer-event candidates and 4000 distinct subject refs, resolved in batches of at most 200. Access is applied before budgets. Truncated is true when any event, subject-ref or output budget is exceeded; answers with omitted subjects are excluded.
       required: [since, generated_at, items, truncated]
       properties:
         since: {type: string, format: date-time, nullable: true}
@@ -11884,7 +11983,8 @@ components:
             type: object
             required: [kind, ref, title]
             properties:
-              kind: {type: string, enum: [step_completed, initiative_stalled, initiative_blocked, ask_answered, decision_created]}
+              kind: {type: string, enum: [step_completed, initiative_stalled, initiative_stale, initiative_blocked, ask_answered, decision_created], description: Legacy kind is emitted for v0.12.10 clients.}
+              kind_v2: {type: string, enum: [step_completed, initiative_stale, initiative_blocked, ask_answered, decision_created], description: Additive detailed vocabulary; stale transitions carry initiative_stale here and initiative_stalled in kind.}
               ref: {type: string}
               title: {type: string}
               step_id: {type: string}
@@ -12038,7 +12138,7 @@ components:
         projection_freshness:
           type: object
           additionalProperties: true
-          description: Present for status=open materialized projections when applicable.
+          description: Present for status=open materialized projections when applicable. Thread identities, metadata, counts and aggregate status include only accessible backing threads, inheriting containing card and board access.
       required: [items]
 
     RespondInboxItemResponse:

@@ -84,6 +84,7 @@ func handleThreadWorkspace(w http.ResponseWriter, r *http.Request, opts handlerO
 		return
 	}
 
+	opts.readVisibility = planVisibility(r, opts)
 	body, err := buildThreadWorkspacePayload(r.Context(), opts, resolvedID, options)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
@@ -98,6 +99,9 @@ func handleThreadWorkspace(w http.ResponseWriter, r *http.Request, opts handlerO
 }
 
 func buildThreadContextPayload(ctx context.Context, opts handlerOptions, threadID string, options threadContextOptions) (map[string]any, error) {
+	if !scopedThreadVisible(ctx, opts, threadID) {
+		return nil, primitives.ErrNotFound
+	}
 	thread, err := opts.primitiveStore.GetThread(ctx, threadID)
 	if err != nil {
 		return nil, err
@@ -161,6 +165,24 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 		return nil, err
 	}
 
+	if opts.readVisibility != nil {
+		memberships := boardMemberships[:0]
+		for _, membership := range boardMemberships {
+			cards, err := scopedCards(ctx, opts, []map[string]any{membership.Card})
+			if err != nil {
+				return nil, err
+			}
+			if len(cards) > 0 {
+				memberships = append(memberships, membership)
+			}
+		}
+		boardMemberships = memberships
+	}
+	// Canonical summaries remain complete in storage; exposed inbox counts
+	// must agree with the same authorized items as the composed inbox section.
+	workspaceSummary := cloneWorkspaceMap(projectionState.Projection.Data)
+	workspaceSummary["inbox_count"] = len(inboxItems)
+	workspaceSummary["pending_decision_count"] = len(pendingAttention)
 	contextSection := cloneWorkspaceMap(contextBody)
 	delete(contextSection, "thread")
 
@@ -180,7 +202,7 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 		"related_threads":             relatedThreadReview["related_threads"],
 		"total_review_items":          totalReviewItems,
 		"follow_up":                   buildThreadWorkspaceFollowUpHints(thread, threadID),
-		"workspace_summary":           cloneWorkspaceMap(projectionState.Projection.Data),
+		"workspace_summary":           workspaceSummary,
 		"projection_freshness":        cloneWorkspaceMap(projectionState.Freshness),
 		"workspace_summary_freshness": cloneWorkspaceMap(projectionState.Freshness),
 		"section_kinds": map[string]any{
@@ -214,9 +236,7 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 }
 
 func buildThreadWorkspaceInboxSection(ctx context.Context, opts handlerOptions, threadID string, now time.Time, projectionState topicProjectionState) (map[string]any, []map[string]any, error) {
-	items, err := opts.primitiveStore.ListDerivedInboxItems(ctx, primitives.DerivedInboxListFilter{
-		ThreadID: threadID,
-	})
+	items, err := opts.primitiveStore.ListDerivedInboxItems(ctx, primitives.DerivedInboxListFilter{ThreadID: threadID})
 	if err != nil {
 		return nil, nil, err
 	}

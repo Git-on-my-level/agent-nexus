@@ -40,6 +40,11 @@ func ownershipClosure(name, roots string, owner bool) string {
 		{"work_metadata", "card", "work_metadata", "card_id", "card_id"},
 		{"work_observation", "card", "work_observations", "id", "card_id"},
 		{"card", "work_observation", "work_observations", "card_id", "id"},
+		{"card", "work_evidence_record", "work_evidence_records", "card_id", "id"},
+		{"work_evidence_record", "card", "work_evidence_records", "id", "card_id"},
+		{"card", "work_evidence_alias", "work_evidence_index", "card_id", "id"},
+		{"work_evidence_alias", "card", "work_evidence_index", "id", "card_id"},
+		{"work_evidence_record", "work_evidence_alias", "work_evidence_index", "evidence_id", "id"},
 		{"artifact", "document_revision", "document_revisions", "artifact_id", "revision_id"},
 		{"artifact", "card_revision", "card_revisions", "artifact_id", "revision_id"},
 		{"document_revision", "document", "document_revisions", "revision_id", "document_id"},
@@ -56,7 +61,7 @@ func ownershipClosure(name, roots string, owner bool) string {
 	}
 	refs("", "d.id")
 	refs("JOIN main.runs r ON d.kind='run' AND r.id=d.id", "r.handle")
-	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_exact_edges e ON e.target_key="+resourceaccess.AtomKeySQL("d.id")+" WHERE d.kind<>'plan' AND d.kind NOT LIKE 'filter/%'")
+	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_exact_edges e ON e.target_key="+resourceaccess.AtomKeySQL("d.id")+" WHERE d.kind NOT IN ('plan','work_evidence_record','work_evidence_alias') AND d.kind NOT LIKE 'filter/%'")
 	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.work_metadata m ON d.kind='card' AND m.card_id=d.id JOIN main.resource_access_exact_edges e ON e.target_key="+resourceaccess.AtomKeySQL("json_extract(m.metadata_json,'$.source.url')")+" WHERE m.authority<>'nexus'")
 	for _, kind := range []string{"thread", "board", "card", "topic", "document", "event", "artifact"} {
 		refs("JOIN main."+resourceTables[kind]+" r ON d.kind='"+kind+"' AND r.id=d.id", "r.handle")
@@ -99,7 +104,7 @@ func ownershipRefs(name, relation string) string {
  LEFT JOIN main.resource_access_identities i ON i.kind=d.kind AND i.resource_id=d.id
  LEFT JOIN main.work_metadata m ON d.kind='card' AND m.card_id=d.id AND m.authority<>'nexus'
  JOIN json_each(json_array(d.id,i.ref,json_extract(m.metadata_json,'$.source.url'))) j
- WHERE d.kind NOT LIKE 'filter/%' AND j.value IS NOT NULL AND j.value<>'')`
+ WHERE d.kind NOT LIKE 'filter/%' AND d.kind NOT IN ('work_evidence_record','work_evidence_alias') AND j.value IS NOT NULL AND j.value<>'')`
 }
 
 func privateOwnershipGraph() string {

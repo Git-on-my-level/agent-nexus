@@ -23,6 +23,8 @@ var OwnershipSources = []OwnershipSource{
 	{"artifacts", "artifact", "id", []string{"refs_json", "metadata_json", "content_refs_json", "trash_reason"}},
 	{"work_metadata", "work_metadata", "card_id", []string{"metadata_json", "refresh_json"}},
 	{"work_observations", "work_observation", "id", []string{"body_json"}},
+	{"work_evidence_records", "work_evidence_record", "id", []string{"evidence_json"}},
+	{"work_evidence_index", "work_evidence_alias", "id", []string{"lookup_key"}},
 	{"work_participants", "participant", "id", []string{"request_json"}},
 	{"card_plans", "plan", "card_id", []string{"body_json"}},
 	{"agent_wakeups", "wakeup", "wakeup_id", []string{"refs_json", "trigger_text", "thread_title", "failure_reason"}},

@@ -43,7 +43,9 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 		}
 		counter.Reset()
 		out := httptest.NewRecorder()
-		handleGetOverview(out, httptest.NewRequest("GET", "/overview", nil), handlerOptions{primitiveStore: store})
+		req := httptest.NewRequest("GET", "/overview", nil)
+		attachResourceAccessScope(req, handlerOptions{primitiveStore: store})
+		handleGetOverview(out, req, handlerOptions{primitiveStore: store})
 		if out.Code != 200 {
 			t.Fatal(out.Body.String())
 		}
@@ -65,6 +67,11 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 		// resource identities and timestamps are kept outside this fixture.
 		state := item["plan_state"].(map[string]any)
 		state["last_movement_at"] = "2026-10-04T12:00:00Z"
+		health := item["plan_health"].(map[string]any)
+		if _, err = time.Parse(time.RFC3339Nano, health["since"].(string)); err != nil {
+			t.Fatal(err)
+		}
+		health["since"] = "2026-10-04T12:00:00Z"
 		item["ref"] = "card:initiative"
 		item["title"] = "Initiative"
 		item["updated_at"] = "2026-10-04T12:00:00Z"
@@ -86,12 +93,15 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 	}
 	counter.Reset()
 	out := httptest.NewRecorder()
-	handleGetOverview(out, httptest.NewRequest("GET", "/overview", nil), handlerOptions{primitiveStore: store})
+	req := httptest.NewRequest("GET", "/overview", nil)
+	attachResourceAccessScope(req, handlerOptions{primitiveStore: store})
+	handleGetOverview(out, req, handlerOptions{primitiveStore: store})
 	if out.Code != 200 || strings.Contains(out.Body.String(), "Initiative 0") || strings.Contains(out.Body.String(), "Initiative 39") {
 		t.Fatal(out.Body.String())
 	}
-	// No plans or ref facts are queried when all work is unreadable.
-	if counter.Count() != 9 {
+	// No plans or ref facts are queried when all work is unreadable. The shared
+	// inbox loader retains its four fixed notification-lifecycle reads.
+	if counter.Count() != 10 {
 		t.Fatalf("private query count %d", counter.Count())
 	}
 }
@@ -117,6 +127,7 @@ func TestOverviewDigestDecisionsRespectCurrentWorkVisibility(t *testing.T) {
 	req := httptest.NewRequest("GET", "/overview/changes", nil)
 	cacheAuthenticatedPrincipal(req, &auth.Principal{ActorID: owner.ActorID, AgentID: owner.AgentID, PrincipalKind: "human"})
 	opts := handlerOptions{primitiveStore: store, pmRuntime: runtime}
+	attachResourceAccessScope(req, opts)
 	d := primitives.OverviewChanges{Since: &since, Items: []primitives.OverviewChange{}}
 	if err = appendOverviewDecisions(req, opts, &d, time.Now().UTC()); err != nil || len(d.Items) != 1 {
 		t.Fatalf("%+v %v", d, err)
@@ -149,6 +160,7 @@ func TestOverviewDigestDistinctDecisionRefsQueryBudget(t *testing.T) {
 	req := httptest.NewRequest("GET", "/overview/changes", nil)
 	cacheAuthenticatedPrincipal(req, &auth.Principal{ActorID: owner.ActorID, AgentID: owner.AgentID, PrincipalKind: "human"})
 	opts := handlerOptions{primitiveStore: store, pmRuntime: runtime}
+	attachResourceAccessScope(req, opts)
 	for i := 1; i <= 200; i++ {
 		w, err := store.CreateWork(ctx, owner.ActorID, "", map[string]any{"title": fmt.Sprintf("Initiative %d", i)})
 		if err != nil {
@@ -174,8 +186,10 @@ func TestOverviewDigestDistinctDecisionRefsQueryBudget(t *testing.T) {
 			if len(d.Items) != min(i, 100) || d.Truncated != (i > 100) {
 				t.Fatalf("items=%d truncated=%v", len(d.Items), d.Truncated)
 			}
-			if got := counter.Count(); got != 5 {
-				t.Fatalf("%d distinct decision refs used %d queries; want 5", i, got)
+			// Each full 200-row page needs an empty-page check for previews and plan facts.
+			wantQueries := int64(5 + 2*(i/200))
+			if got := counter.Count(); got != wantQueries {
+				t.Fatalf("%d distinct decision refs used %d queries; want %d", i, got, wantQueries)
 			}
 		})
 	}

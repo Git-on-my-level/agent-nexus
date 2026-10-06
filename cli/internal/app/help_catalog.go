@@ -35,6 +35,10 @@ var (
 	runtimeHelpCatalogCache runtimeHelpCatalog
 )
 
+// Embedded metadata is immutable. Help rendering only reads this snapshot;
+// decoding it for each linked command makes full runtime docs quadratic.
+var runtimeHelpRegistry = sync.OnceValues(registry.LoadEmbedded)
+
 var runtimeHelpManualDocTopics = []runtimeHelpDocTopic{
 	{Path: "onboarding", Kind: "manual", Summary: "Offline quick-start mental model and first command flow."},
 	{Path: "concepts", Kind: "manual", Summary: "Quick guide to the core ANX primitives and when to use each."},
@@ -63,7 +67,7 @@ func runtimeHelpCatalogSnapshot() runtimeHelpCatalog {
 }
 
 func buildRuntimeHelpCatalog() runtimeHelpCatalog {
-	meta, err := registry.LoadEmbedded()
+	meta, err := runtimeHelpRegistry()
 	if err != nil {
 		return runtimeHelpCatalog{
 			SupportedCommandIDs: map[string]struct{}{},
@@ -149,7 +153,7 @@ func runtimeHelpDocTopics() []runtimeHelpDocTopic {
 			Summary: strings.TrimSpace(topic.Description),
 		})
 	}
-	meta, _ := registry.LoadEmbedded()
+	meta, _ := runtimeHelpRegistry()
 	for _, runtimePath := range runtimeGeneratedRegistryPaths() {
 		runtimePath = strings.Join(strings.Fields(strings.TrimSpace(runtimePath)), " ")
 		if runtimePath == "" {

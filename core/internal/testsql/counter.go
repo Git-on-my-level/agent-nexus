@@ -6,28 +6,61 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"sync"
 	"sync/atomic"
 
 	_ "modernc.org/sqlite"
 )
 
-type Counter struct{ queries atomic.Int64 }
+type ReadQuery struct {
+	SQL  string
+	Args []any
+}
+type Counter struct {
+	queries atomic.Int64
+	rows    atomic.Int64
+	mu      sync.Mutex
+	reads   []ReadQuery
+}
 
-func (c *Counter) Count() int64 { return c.queries.Load() }
-func (c *Counter) Reset()       { c.queries.Store(0) }
+func (c *Counter) Count() int64    { return c.queries.Load() }
+func (c *Counter) RowsRead() int64 { return c.rows.Load() }
+func (c *Counter) Reset() {
+	c.queries.Store(0)
+	c.rows.Store(0)
+	c.mu.Lock()
+	c.reads = nil
+	c.mu.Unlock()
+}
+func (c *Counter) Reads() []ReadQuery {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]ReadQuery{}, c.reads...)
+}
+func (c *Counter) record(q string, args []driver.NamedValue) {
+	c.queries.Add(1)
+	values := make([]any, len(args))
+	for i, arg := range args {
+		values[i] = arg.Value
+	}
+	c.mu.Lock()
+	c.reads = append(c.reads, ReadQuery{SQL: q, Args: values})
+	c.mu.Unlock()
+}
 
 // Open wraps each connection and prepared statement, counting QueryContext and
 // QueryRowContext alike. Each test gets its own counter and connection pool.
 func Open(dsn string) (*sql.DB, *Counter) {
 	counter := &Counter{}
-	// Use the registered driver, including production scalar functions.
-	registered, err := sql.Open("sqlite", dsn)
+	// Wrap the registered runtime driver, including its deterministic functions,
+	// instead of creating a bare driver that omits production query behavior.
+	runtimeDB, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		panic(err)
 	}
-	underlying := registered.Driver()
-	registered.Close()
-	db := sql.OpenDB(&connector{dsn: dsn, underlying: underlying, counter: counter})
+	runtimeDriver := runtimeDB.Driver()
+	_ = runtimeDB.Close()
+	db := sql.OpenDB(&connector{dsn: dsn, underlying: runtimeDriver, counter: counter})
 	db.SetMaxOpenConns(1)
 	return db, counter
 }
@@ -53,8 +86,25 @@ type countedConn struct {
 }
 
 func (c *countedConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
-	c.counter.queries.Add(1)
-	return c.Conn.(driver.QueryerContext).QueryContext(ctx, query, args)
+	c.counter.record(query, args)
+	rows, err := c.Conn.(driver.QueryerContext).QueryContext(ctx, query, args)
+	if err != nil {
+		return nil, err
+	}
+	return &countedRows{Rows: rows, counter: c.counter}, nil
+}
+
+type countedRows struct {
+	driver.Rows
+	counter *Counter
+}
+
+func (r *countedRows) Next(values []driver.Value) error {
+	err := r.Rows.Next(values)
+	if err == nil {
+		r.counter.rows.Add(1)
+	}
+	return err
 }
 
 func (c *countedConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {

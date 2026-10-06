@@ -588,6 +588,7 @@ resources:
       ref: { type: typed_ref, required: true, ref: identity_concepts.ResourceRef }
       handle: { type: string, required: true, ref: identity_concepts.ResourceHandle }
       id: { type: string, required: false, ref: identity_concepts.InternalResourceUUID }
+      role: { type: string, required: false, description: "Open board role; initiatives selects active board cards for Overview. Empty clears; patch omission preserves." }
       title: { type: string, required: true }
       summary:
         type: string
@@ -900,7 +901,7 @@ work_tracking:
   observation_status: [reported, verified, uncertain, error]
   refresh_error: [policy_denied, rate_limited, permission, unavailable, not_found, configuration, invalid_output, resource_limit, isolation_unavailable]
   remote_verification: reported
-  local_annotations: [labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions]
+  local_annotations: [labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions, source_refs]
   invariants:
     - External workflow fields can only be projected from attributed observations.
     - Observation timestamps do not imply source activity or meaningful progress.
@@ -1062,34 +1063,36 @@ initiative_plan:
     fields:
       id: {type: string, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', max_length: 64}
       title: {type: string, max_length: 500}
-      ref: {type: string, description: 'card:, doc:, document: or topic: ref, or absolute HTTP(S) URL. External URLs use existing source-backed work only; no network fetch.'}
+      ref: {type: string, description: 'card:, doc:, document: or topic: ref, or absolute HTTP(S) URL. External GitHub refs/URLs and opaque adapter-published identifier aliases use ingested observations or generic structured source_refs; no network fetch.'}
       after: {type: 'list<string>', description: Existing step ids; unique; graph must be acyclic.}
       due: {type: datetime, description: RFC3339 instant or YYYY-MM-DD date.}
       status: {type: string, values: [done, active, blocked, not_started], description: Fallback only when ref has no known workflow state.}
   computed:
-    fields: [steps, progress, critical_path, next_steps, shape, health, last_movement_at]
+    fields: [steps, progress, critical_path, next_steps, shape, health, health_state, last_movement_at]
     progress: {fields: [done, total]}
     shape: [chain, dag, lanes]
-    health: [on_track, stalled, blocked]
+    health: [on_track, stalled, blocked, no_plan, stale, at_risk, done]
     semantics:
       - A chain is a connected path (including an empty plan); lanes are multiple disconnected paths; all other graphs are dag.
       - Critical path maximizes unfinished steps through sink nodes; done steps have zero weight. Ties use lexicographic step ids.
-      - Health is blocked if a blocked step lies on any longest remaining path, else stalled after the threshold, else on_track. Complete and empty plans are on_track.
+      - Detailed health uses one vocabulary across plan_state.health_state, plan_health.state and Overview health.state. Legacy health badges project this into on_track, blocked, or stalled. No steps is no_plan until the stale threshold; completed plans are done; any unfinished blocked step is blocked; open due dates within 24 hours are at_risk; inactivity beyond the threshold is stale; otherwise on_track.
       - Next steps are unfinished, unblocked steps whose dependencies are all done.
-      - Known card/source workflow states override fallback status; context refs (docs/topics) have lifecycle state only and use fallback status; done/published/closed/resolved map to done, blocked to blocked, in_progress/active/review to active; other states map to not_started.
+      - Known card/source workflow states override fallback status; context refs (docs/topics) have lifecycle state only and use fallback status; done/published/closed/resolved map to done, blocked to blocked, in_progress/in_review/active/review/open to active; other states map to not_started.
       - Source activity and meaningful progress reset recency; unchanged observation timestamps do not. Plan edits reset recency.
-      - Default stall threshold is 432000 seconds (5 days), configurable with ANX_PLAN_STALLED_AFTER duration.
+      - Default stall threshold is 259200 seconds (72 hours), configurable with ANX_PLAN_STALLED_AFTER duration.
       - Plan writes require if_updated_at from cards get or plan show; edits and before/after plans are atomic card_updated events, visible in the card timeline.
       - Live initiatives keep the existing progress and needs array; a plan supplies computed progress, blocked step titles in needs, plan_state and health. Cards without plans keep the existing summary projection.
 
 batch_ref_resolve:
   max_refs: 200
+  aggregate_plan_ref_budget: 4000
+  evidence_candidates_per_key: 33
   input: {refs: 'list<string>'}
   output: {items: 'list<object>'}
-  fields: [ref, kind, title, phase, status, owner, owner_display, board, priority, last_moved_at, next_step, progress, url, resolvable]
+  fields: [ref, kind, title, phase, status, owner, owner_display, board, priority, last_moved_at, next_step, progress, url, resolvable, authority, native_id, connection_id, observed_at, source, plan_health, plan_resolution_truncated, status_mismatch]
   semantics:
-    - Preserve input order and duplicates, including unknown or inaccessible refs as resolvable false without metadata.
-    - Resolve card, doc/document, topic, and board refs by exact handle or internal id. External URLs resolve only through existing source-backed cards.
+    - Preserve input order and duplicates, including unknown or inaccessible native refs as resolvable false without metadata; valid parsed GitHub refs remain resolvable with unknown status.
+    - Resolve card, doc/document, topic, and board refs by exact handle or internal id. GitHub github:owner/repo#n, owner/repo#n and pull/issues URLs resolve from source observations or generic structured source_refs. Parsed GitHub refs remain valid links with null status when no visible evidence exists. Other identifiers resolve only from visible adapter-published identifier_aliases (or legacy identifier) with no inferred authority; unknown aliases remain unresolved.
     - URLs for native card/document entities are workspace-relative paths; topics and boards have no current UI detail surface and omit url. No caller-supplied origin is trusted.
     - Read access is checked for every resource and referenced plan step; unavailable refs never expose hidden state.
 
@@ -1125,11 +1128,12 @@ live_series:
 initiative_overview:
   max_initiatives: 2000
   geometry_max_nodes: 24
-  fields: [plan_state, health, geometry]
+  fields: [plan_state, plan_health, plan_resolution_truncated, next_step, status_mismatch, health, geometry]
   semantics:
+    - If any board has role initiatives, only its cards appear as initiatives. Other active cards remain in work. Without a designated board, Overview keeps the existing selection and returns initiatives.hint suggesting the role.
     - Overview uses the same principal-scoped batch plan computation as card reads and live reports, never one query per initiative.
-    - Planless initiatives return null plan_state and geometry; health uses the native phase with a reason. Summary progress is preserved.
-    - Health contains status (on_track, stalled, blocked) and a reason. Geometry contains shape, nodes (id, status, layer, after), total_nodes and collapsed_nodes.
+    - Planless initiatives return null plan_state and geometry, with no_plan health until the stale threshold and stale afterward. Summary progress is preserved.
+    - Health contains status (no_plan, stale, blocked, at_risk, on_track, done) and a reason. Geometry contains shape, nodes (id, status, layer, after), total_nodes and collapsed_nodes.
     - Geometry uses dependency depth as layer, topological order with lexicographic ties, and at most 24 nodes. Edges only name included nodes; collapsed_nodes counts omitted nodes.
     - Open initiatives are selected before closed history, newest update first; counts describe the visible bounded candidate set and truncated declares that additional candidates exist.
     - Ref preview owner_display resolves workspace actor names, falling back to the owner ref. Board metadata requires independent board visibility.
@@ -1143,10 +1147,49 @@ overview_changes:
     - GET /overview includes since_you_last_looked computed against the previous visit, then atomically records the current visit timestamp and bounded state snapshot. The changes endpoint reads without advancing the baseline.
     - A first visit or unauthenticated dev read has null since and no changes; no anonymous shared baseline is stored.
     - Steps completed and health transitions are net changes from previously visible plan step statuses and health; newly visible initiatives have no prior state and are not reported as transitions.
-    - Completed steps include now-closed initiatives. Newly blocked or stalled health is reported once relative to the saved baseline, including time-only stalling.
+    - Completed steps include now-closed initiatives. Newly blocked or stale health is reported once relative to the saved baseline, including time-only stale transitions.
     - Asks answered use canonical human_attention_responded events in (since, generated_at]; new decisions use permission-filtered PM records created in that interval.
     - Items expose only current readable refs and generic answer or decision labels, never private conversation text. Ref visibility is rechecked before publication.
     - Results are capped at 100; truncated covers candidate or output limits and bounded snapshots. Repeated digest reads do not change the baseline.
+
+initiative_plan_health:
+  fields: [state, reason, since]
+  states: [no_plan, stale, blocked, at_risk, on_track, done]
+  semantics:
+    - Added on card reads, lists, refs resolve, reports and initiative overview alongside existing plan_state and progress.
+    - Precedence is no_plan for recent absent/empty plans (stale after the inactivity threshold), done for all completed steps, blocked for any unfinished blocked step (including dependencies), at_risk for card/unfinished step due within 24 hours or overdue, stale after 72 hours without card/plan/step activity, then on_track.
+    - ANX_PLAN_STALLED_AFTER overrides the workspace service stale threshold. Observing unchanged source state does not count as activity.
+    - since is a reproducible condition anchor, not a historical transition record. Uses last activity for done/blocked/on_track, earliest relevant due minus 24 hours for at_risk, last activity plus threshold for stale, creation for no_plan; null when unknown.
+    - next_step contains id/title/ref of a ready unblocked unfinished step, preferring critical path then lexicographic id; unreadable linked resources are skipped. Null when none is ready.
+    - status_mismatch is true only for backlog cards with completed plan steps. Computation never changes phase.
+
+inbox_summary:
+  route: GET /inbox/summary
+  semantics:
+    - Workspace-local open human ask count and top N visible asks, priority then oldest first then id. Default 5, limit 0..50; zero returns only the count.
+    - Uses the caller's existing workspace permissions; excludes private threads and hidden subjects before counting. Shared workspace human asks are visible to every authorized human reader.
+    - Reads existing materialized inbox rows without workspace-wide freshness scan. No cross-workspace identity or aggregation in core.
+
+source_refs:
+  storage: Card-backed work annotation; writable by any adapter through work.create or version-fenced work.patch.
+  max_items: 2000
+  identity: [authority, connection_id, native_id]
+  fields: [authority, connection_id, native_id, identifier, identifier_aliases, aliases, title, url, status, phase, observed_at, source_activity_at]
+  semantics:
+    - Source identity fields are required nonempty strings; identities are unique within a list. Authority and status are open strings and unknown fields round-trip.
+    - URL is absolute HTTP(S) without credentials; observed_at and source_activity_at are optional RFC3339 timestamps. identifier_aliases contains at most 50 unique nonempty strings of at most 2048 bytes; legacy identifier is also read as an exact alias. These same caps apply to source, observation facts, and evidence; evidence contains at most 2000 objects. Every indexed string is at most 2048 UTF-8 bytes. Evidence is stored once with bounded lookup references; migration projects at most 2000 entries and 50 aliases per spelling from each legacy array. Core never recognizes provider-specific identifier prefixes.
+    - Omission preserves the list; an explicit array replaces it and an empty array clears it. Readers and ref resolution honor the card and board access scope.
+    - Core consumes only structured annotations, source identities and observations. Adapter markdown is never parsed, and unchanged source polls are not meaningful activity.
+
+health_compatibility:
+  semantics:
+    - plan_health.state is the detailed vocabulary. Legacy plan_state.health and initiative health.status emit stalled for stale, blocked for blocked, and on_track for all other detailed states. Old enum values remain readable.
+    - Digest kind emits initiative_stalled for stale transitions; additive kind_v2 emits initiative_stale on the same item, avoiding duplicate notifications. Consumers accept both kinds.
+    - Effective due_at uses an explicitly present work annotation (including clearing) before cards.due_at. Activity uses the same maximum of meaningful source activity/progress, plan edits and discussion for every health read; unchanged polls are excluded.
+    - Aggregated plan refs resolve in batches of at most 200; source evidence uses an indexed, transactionally maintained projection and candidate pages of at most 200.
+
+# Compatibility: aliases is an exact-key alternate spelling of identifier_aliases;
+# detailed health also appears in plan_state.health_state and initiative health.state.
 
 access_requests:
   grants: [auth-admin]

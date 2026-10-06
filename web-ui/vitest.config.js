@@ -40,6 +40,9 @@ export default defineConfig({
   test: {
     include: ["tests/unit/**/*.test.js", "src/**/__tests__/**/*.test.js"],
     environment: "node",
+    // Keep local jsdom/Go conformance workers within a shared machine's
+    // capacity rather than timing out while every CPU starts a cold module.
+    ...(!isCi ? { maxWorkers: 4, minWorkers: 1 } : {}),
     ...(isCi
       ? {
           pool: "forks",

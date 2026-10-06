@@ -361,6 +361,7 @@ func handleTopicLifecycleWithReason(w http.ResponseWriter, r *http.Request, opts
 }
 
 func handleGetTopicTimeline(w http.ResponseWriter, r *http.Request, opts handlerOptions, topicID string) {
+	opts.readVisibility = planVisibility(r, opts)
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
@@ -385,6 +386,7 @@ func handleGetTopicTimeline(w http.ResponseWriter, r *http.Request, opts handler
 }
 
 func handleGetTopicWorkspace(w http.ResponseWriter, r *http.Request, opts handlerOptions, topicID string) {
+	opts.readVisibility = planVisibility(r, opts)
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
@@ -428,7 +430,7 @@ func buildTopicTimelinePayload(ctx context.Context, opts handlerOptions, topicID
 	if err != nil {
 		return nil, err
 	}
-	receipts, err := deriveAgentNotificationReceiptsByEvent(ctx, opts, primaryThreadID)
+	receipts, err := deriveAgentNotificationReceiptsByEvent(ctx, opts, primaryThreadID, events)
 	if err != nil {
 		return nil, err
 	}
@@ -478,6 +480,9 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 		return topicResourceBundle{}, err
 	}
 
+	if !scopedThreadVisible(ctx, opts, primaryThreadID) {
+		return topicResourceBundle{}, primitives.ErrNotFound
+	}
 	projectionState, err := loadTopicProjectionState(ctx, opts, primaryThreadID)
 	if err != nil {
 		return topicResourceBundle{}, err
@@ -502,6 +507,13 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 	for _, cardID := range reverseIDs.Cards {
 		card, cardErr := opts.primitiveStore.GetBoardCard(ctx, "", cardID)
 		if cardErr == nil {
+			visible, err := scopedCards(ctx, opts, []map[string]any{card})
+			if err != nil {
+				return topicResourceBundle{}, err
+			}
+			if len(visible) == 0 {
+				continue
+			}
 			if boardID := strings.TrimSpace(anyString(card["board_id"])); boardID != "" {
 				boardIDs = append(boardIDs, boardID)
 			}
@@ -521,6 +533,13 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 		return topicResourceBundle{}, err
 	}
 	for _, membership := range boardMemberships {
+		visible, err := scopedCards(ctx, opts, []map[string]any{membership.Card})
+		if err != nil {
+			return topicResourceBundle{}, err
+		}
+		if len(visible) == 0 {
+			continue
+		}
 		boardIDs = append(boardIDs, anyString(membership.Board["id"]))
 		threadIDs = append(threadIDs, strings.TrimSpace(primaryRelatedThreadID(membership.Card)))
 		if pinnedDocumentID := pinnedDocumentIDFromCard(membership.Card); pinnedDocumentID != "" {
@@ -538,6 +557,9 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 		}
 		board, err := opts.primitiveStore.GetBoard(ctx, boardID)
 		if err == nil {
+			if !scopedThreadVisible(ctx, opts, anyString(board["thread_id"])) {
+				continue
+			}
 			boards = append(boards, board)
 			documentIDs = append(documentIDs, topicBoardDocumentIDs(board)...)
 		} else if !errors.Is(err, primitives.ErrNotFound) {
@@ -546,6 +568,10 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 
 		cards, err := opts.primitiveStore.ListBoardCards(ctx, boardID)
 		if err == nil {
+			cards, err = scopedCards(ctx, opts, cards)
+			if err != nil {
+				return topicResourceBundle{}, err
+			}
 			cardsByBoard[boardID] = append(cardsByBoard[boardID], cards)
 			for _, card := range cards {
 				threadIDs = append(threadIDs, strings.TrimSpace(anyString(card["thread_id"])))
@@ -560,6 +586,9 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 
 	threadIDs = uniqueTopicIDs(threadIDs)
 	for _, threadID := range threadIDs {
+		if !scopedThreadVisible(ctx, opts, threadID) {
+			continue
+		}
 		documentIDs = append(documentIDs, threadDocumentIDs(ctx, opts, threadID)...)
 	}
 	documentIDs = uniqueTopicIDs(documentIDs)
@@ -572,6 +601,9 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 		}
 		document, _, err := opts.primitiveStore.GetDocument(ctx, documentID)
 		if err == nil {
+			if !scopedThreadVisible(ctx, opts, documentBackingThreadID(document)) {
+				continue
+			}
 			documents = append(documents, document)
 		} else if !errors.Is(err, primitives.ErrNotFound) {
 			return topicResourceBundle{}, err
@@ -602,6 +634,9 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 		}
 		thread, err := opts.primitiveStore.GetThread(ctx, threadID)
 		if err == nil {
+			if !scopedThreadVisible(ctx, opts, threadID) {
+				continue
+			}
 			threads = append(threads, thread)
 		} else if !errors.Is(err, primitives.ErrNotFound) {
 			return topicResourceBundle{}, err

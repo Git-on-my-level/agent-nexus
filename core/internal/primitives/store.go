@@ -84,18 +84,20 @@ type TopicListFilter struct {
 }
 
 type EventListFilter struct {
-	Types        []string
-	BackingScope string
-	Preset       string
-	TopicID      string
-	TopicIDs     []string
-	ThreadID     string
-	ThreadIDs    []string
-	ActorID      string
-	ActorIDs     []string
-	ActorKind    string
-	Query        string
-	Since        string
+	// ReportSubjects filters payload subjects and related refs before report budgets.
+	ReportSubjects bool
+	Types          []string
+	BackingScope   string
+	Preset         string
+	TopicID        string
+	TopicIDs       []string
+	ThreadID       string
+	ThreadIDs      []string
+	ActorID        string
+	ActorIDs       []string
+	ActorKind      string
+	Query          string
+	Since          string
 	// SinceExclusiveID, when set together with Since, restricts to rows strictly after the (Since, SinceExclusiveID) tuple (ts DESC pagination / read-cursor lower bounds).
 	SinceExclusiveID string
 	Until            string
@@ -2514,6 +2516,9 @@ func (s *Store) ListEventsPage(ctx context.Context, filter EventListFilter) (Eve
 		archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		FROM events
 		WHERE COALESCE(trashed_at, '') = ''`
+	if filter.ReportSubjects {
+		query += ` AND ` + reportEventLifecycleSQL(ctx)
+	}
 	args := make([]any, 0)
 	filterTypes := filter.Types
 	explicitTypeFilter := len(dedupeStrings(filter.Types)) > 0

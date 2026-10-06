@@ -81,6 +81,10 @@ func accessCTEsWithSnapshot(scope AccessScope, query string, snapshot *denialSna
 	add("ref_edges", cleanJSON("_row.metadata_json")+" AND NOT EXISTS (SELECT 1 FROM _anx_denied_refs WHERE ref=_row.source_type || ':' || _row.source_id OR ref=_row.target_type || ':' || _row.target_id)")
 	add("work_metadata", denied("card", "_row.card_id"))
 	add("work_observations", denied("card", "_row.card_id")+" AND "+denied("work_observation", "_row.id"))
+	add("work_evidence_records", denied("card", "_row.card_id")+" AND "+denied("work_evidence_record", "_row.id"))
+	add("work_evidence_index", denied("card", "_row.card_id")+" AND "+denied("work_evidence_alias", "_row.id")+" AND "+denied("work_evidence_record", "_row.evidence_id"))
+	add("work_evidence_entries", denied("card", "_row.card_id")+" AND "+cleanJSON("_row.evidence_json"))
+	add("work_evidence_keys", denied("card", "_row.card_id")+" AND "+denied("work_evidence_record", "_row.evidence_id")+" AND "+cleanJSON("_row.lookup_key"))
 	add("work_participants", denied("card", "_row.card_id")+" AND "+denied("participant", "_row.id"))
 	add("card_plans", denied("plan", "_row.card_id"))
 	add("agent_wakeups", denied("wakeup", "_row.wakeup_id"))
@@ -136,7 +140,7 @@ func accessCTEsWithSnapshot(scope AccessScope, query string, snapshot *denialSna
 	}
 	return deniedGraph +
 		", " + ownershipRefs("_anx_resource_refs", "_anx_denied") +
-		", _anx_denied_refs(ref) AS MATERIALIZED (SELECT CASE WHEN kind='card' AND (ref LIKE 'http://%' OR ref LIKE 'https://%') THEN ref ELSE kind||':'||ref END FROM _anx_resource_refs UNION SELECT 'doc:'||ref FROM _anx_resource_refs WHERE kind='document'), _anx_denied_atoms(ref,typed) AS MATERIALIZED (SELECT ref,1 FROM _anx_denied_refs UNION SELECT id,0 FROM _anx_denied WHERE kind<>'plan' AND kind NOT LIKE 'filter/%')" + graph
+		", _anx_denied_refs(ref) AS MATERIALIZED (SELECT CASE WHEN kind='card' AND (ref LIKE 'http://%' OR ref LIKE 'https://%') THEN ref ELSE kind||':'||ref END FROM _anx_resource_refs UNION SELECT 'doc:'||ref FROM _anx_resource_refs WHERE kind='document'), _anx_denied_atoms(ref,typed) AS MATERIALIZED (SELECT ref,1 FROM _anx_denied_refs UNION SELECT id,0 FROM _anx_denied WHERE kind NOT IN ('plan','work_evidence_record','work_evidence_alias') AND kind NOT LIKE 'filter/%')" + graph
 }
 
 // Apply relation visibility before limits, aggregates and cursors. SQLite
@@ -152,7 +156,12 @@ func scopeReadWithSnapshot(ctx context.Context, query string, snapshot *denialSn
 	if !scoped {
 		return query
 	}
-	q := strings.ReplaceAll(strings.TrimSpace(query), " INDEXED BY idx_work_metadata_project", "")
+	q := strings.TrimSpace(query)
+	// Scoped relation shadows have no named physical indexes. The optimizer
+	// still pushes candidate keys into the indexed canonical relations.
+	for _, index := range []string{"idx_work_metadata_project", "idx_work_source_url", "idx_work_evidence_lookup", "idx_work_evidence_public_lookup", "idx_cards_handle_unique", "sqlite_autoindex_cards_1"} {
+		q = strings.ReplaceAll(q, " INDEXED BY "+index, "")
+	}
 	upper := strings.ToUpper(q)
 	graph := accessCTEsWithSnapshot(scope, q, snapshot)
 	prefix := "WITH RECURSIVE " + graph

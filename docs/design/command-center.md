@@ -90,7 +90,7 @@ Resolution order, first match wins:
 4. Otherwise: fail with a clear error and `next_actions` suggesting `--as <name>`.
 
 Explicit profile files per agent are no longer the identity mechanism. `--agent` /
-`ANX_AGENT` / `anx config use` are removed or repurposed to select the *workspace/host*
+`ANX_AGENT` / `anx config use` are removed or repurposed to select the _workspace/host_
 context, not an agent.
 
 ### Adoption and exclusion
@@ -143,9 +143,9 @@ optional short note.
 ## CLI contract (agentctl-style)
 
 - JSON envelope v2 on every command: `{ok, schema_version, command, result, warnings[],
-  next_actions[{label, argv[], mutates, side_effect_class}]}`; errors:
+next_actions[{label, argv[], mutates, side_effect_class}]}`; errors:
   `{ok:false, schema_version, error{code, message, retryable, exit_code, details,
-  next_actions}, warnings}`. `warnings` and `next_actions` are always present.
+next_actions}, warnings}`. `warnings` and `next_actions` are always present.
 - `side_effect_class`: `read_only`, `local_operational_write`,
   `remote_coordination_write`, `external_side_effect`. Shown in help and next actions.
 - Text mode: one fact per line, lead token then `key=value` pairs, `next <argv>` lines,
@@ -221,58 +221,58 @@ and new error meanings are in `contracts/anx-schema.yaml`. `GET /agents/me` rema
 derived agent's self-identification endpoint. Existing human passkey and human invite
 routes remain.
 
-| Route | Contract |
-| --- | --- |
-| `POST /auth/hosts/enrollments` | Public interactive start; returns code, optional full web UI verification URL, secret poll token, interval, expiry. |
-| `GET /auth/hosts/enrollments/{enrollment_id}` | Poll with `X-ANX-Enrollment-Token`. |
-| `POST /auth/hosts/enrollments/{enrollment_id}/complete` | Complete approved request with poll token and host-key signature; adopt proved agents atomically. |
-| `GET /auth/hosts/enrollments/pending` | Human auth-admin sees pending requests and requesting IP. |
-| `POST /auth/hosts/enrollments/{enrollment_id}/approve` | Human auth-admin approves and reserves slug. |
-| `POST /auth/hosts/enrollments/{enrollment_id}/deny` | Human auth-admin denies. |
-| `GET /auth/hosts/enrollment-tokens` | Human auth-admin lists headless token metadata, without secrets. |
-| `POST /auth/hosts/enrollment-tokens` | Human auth-admin creates one-time headless token. |
-| `POST /auth/hosts/enrollment-tokens/{token_id}/revoke` | Human auth-admin revokes unused headless token. |
-| `POST /auth/hosts/enrollments/headless` | Public one-shot enrollment with token, host-key signature, and adoption proofs. |
-| `GET /hosts` | Any workspace principal lists hosts. |
-| `GET /hosts/{host_id}` | Any workspace principal reads host, exclusions, and child agents. |
-| `PATCH /hosts/{host_id}` | Human auth-admin or signed host updates display name and exclusions. |
-| `DELETE /hosts/{host_id}` | Human auth-admin revokes host and all child credentials in one audited transaction. |
-| `POST /hosts/{host_id}/bridge/check-in` | Signed host bridge heartbeat for all enabled child handles. |
-| `GET /runs` | Any workspace principal filters runs by card, agent, host, state, or active. |
-| `POST /runs` | Derived agent upserts its run by `(launcher, host_id, external_id)` with monotonic state. |
-| `GET /runs/{run_id}` | Any workspace principal reads one run. |
-| `GET /agents` | Any workspace principal reads the derived-state roster. |
-| `GET /agents/{agent_id}` | Any workspace principal reads agent detail, recent work, runs, asks, and notes. |
-| `PATCH /agents/me/presence` | Derived agent sets current card and optional progress note. |
-| `POST /auth/agents/register` (removed) | No agent invite or public-key self-registration. |
-| `PATCH /agents/me` (removed) | Derived handles cannot be renamed independently of their hosts. |
-| `POST /agents/me/keys/rotate` (removed) | Derived agents have no independent signing keys. |
-| `POST /agents/me/revoke` (removed) | Human auth-admin revokes the host or principal through admin routes. |
-| `POST /agent-bridge/check-in` (removed) | Host-signed bridge check-in replaces per-agent bridge identity. |
+| Route                                                   | Contract                                                                                                            |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `POST /auth/hosts/enrollments`                          | Public interactive start; returns code, optional full web UI verification URL, secret poll token, interval, expiry. |
+| `GET /auth/hosts/enrollments/{enrollment_id}`           | Poll with `X-ANX-Enrollment-Token`.                                                                                 |
+| `POST /auth/hosts/enrollments/{enrollment_id}/complete` | Complete approved request with poll token and host-key signature; adopt proved agents atomically.                   |
+| `GET /auth/hosts/enrollments/pending`                   | Human auth-admin sees pending requests and requesting IP.                                                           |
+| `POST /auth/hosts/enrollments/{enrollment_id}/approve`  | Human auth-admin approves and reserves slug.                                                                        |
+| `POST /auth/hosts/enrollments/{enrollment_id}/deny`     | Human auth-admin denies.                                                                                            |
+| `GET /auth/hosts/enrollment-tokens`                     | Human auth-admin lists headless token metadata, without secrets.                                                    |
+| `POST /auth/hosts/enrollment-tokens`                    | Human auth-admin creates one-time headless token.                                                                   |
+| `POST /auth/hosts/enrollment-tokens/{token_id}/revoke`  | Human auth-admin revokes unused headless token.                                                                     |
+| `POST /auth/hosts/enrollments/headless`                 | Public one-shot enrollment with token, host-key signature, and adoption proofs.                                     |
+| `GET /hosts`                                            | Any workspace principal lists hosts.                                                                                |
+| `GET /hosts/{host_id}`                                  | Any workspace principal reads host, exclusions, and child agents.                                                   |
+| `PATCH /hosts/{host_id}`                                | Human auth-admin or signed host updates display name and exclusions.                                                |
+| `DELETE /hosts/{host_id}`                               | Human auth-admin revokes host and all child credentials in one audited transaction.                                 |
+| `POST /hosts/{host_id}/bridge/check-in`                 | Signed host bridge heartbeat for all enabled child handles.                                                         |
+| `GET /runs`                                             | Any workspace principal filters runs by card, agent, host, state, or active.                                        |
+| `POST /runs`                                            | Derived agent upserts its run by `(launcher, host_id, external_id)` with monotonic state.                           |
+| `GET /runs/{run_id}`                                    | Any workspace principal reads one run.                                                                              |
+| `GET /agents`                                           | Any workspace principal reads the derived-state roster.                                                             |
+| `GET /agents/{agent_id}`                                | Any workspace principal reads agent detail, recent work, runs, asks, and notes.                                     |
+| `PATCH /agents/me/presence`                             | Derived agent sets current card and optional progress note.                                                         |
+| `POST /auth/agents/register` (removed)                  | No agent invite or public-key self-registration.                                                                    |
+| `PATCH /agents/me` (removed)                            | Derived handles cannot be renamed independently of their hosts.                                                     |
+| `POST /agents/me/keys/rotate` (removed)                 | Derived agents have no independent signing keys.                                                                    |
+| `POST /agents/me/revoke` (removed)                      | Human auth-admin revokes the host or principal through admin routes.                                                |
+| `POST /agent-bridge/check-in` (removed)                 | Host-signed bridge check-in replaces per-agent bridge identity.                                                     |
 
-| Grant or header | Contract |
-| --- | --- |
-| `POST /auth/token` `host_assertion` | Host signs `anx-host-agent-token|host_id|key_id|agent_name|signed_at`; one-use, five-minute skew, short-lived derived-agent access token without refresh. |
-| `X-ANX-Enrollment-Token` | Secret interactive poll credential; sent as a header. |
-| `X-ANX-Host-Key-Id` | Active host key ID for host self-access. |
-| `X-ANX-Host-Signed-At` | RFC3339 timestamp for host self-access, at most five minutes skew. |
-| `X-ANX-Host-Signature` | Base64 Ed25519 request-bound signature for host self-access. |
-| `X-ANX-Run-Id` | Optional authenticated-write attribution `agentctl/<external_id>`; core resolves or creates a provisional run and records run, host, agent, adapter. |
+| Grant or header                     | Contract                                                                                                                                             |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------ | ---------- | ---------------------------------------------------------------------------------------------- |
+| `POST /auth/token` `host_assertion` | Host signs `anx-host-agent-token                                                                                                                     | host_id | key_id | agent_name | signed_at`; one-use, five-minute skew, short-lived derived-agent access token without refresh. |
+| `X-ANX-Enrollment-Token`            | Secret interactive poll credential; sent as a header.                                                                                                |
+| `X-ANX-Host-Key-Id`                 | Active host key ID for host self-access.                                                                                                             |
+| `X-ANX-Host-Signed-At`              | RFC3339 timestamp for host self-access, at most five minutes skew.                                                                                   |
+| `X-ANX-Host-Signature`              | Base64 Ed25519 request-bound signature for host self-access.                                                                                         |
+| `X-ANX-Run-Id`                      | Optional authenticated-write attribution `agentctl/<external_id>`; core resolves or creates a provisional run and records run, host, agent, adapter. |
 
-| New error code | Meaning |
-| --- | --- |
-| `host_slug_taken` | Host slug already enrolled or reserved. |
-| `adoption_proof_invalid` | Existing principal key or adoption signature is invalid. |
-| `adoption_conflict` | Principal or target host/name cannot be adopted. |
-| `enrollment_pending` | Completion preceded approval. |
-| `enrollment_denied` | Human denied the request. |
-| `enrollment_expired` | Interactive request expired. |
-| `enrollment_consumed` | Interactive request already finalized. |
-| `host_revoked` | Host or active key is revoked. |
-| `agent_excluded` | Host excludes requested agent name. |
-| `agent_handle_taken` | A standalone principal already owns the derived handle. |
-| `run_identity_conflict` | Existing run key belongs to another immutable identity. |
-| `run_state_regression` | Observation would regress run state. |
+| New error code            | Meaning                                                   |
+| ------------------------- | --------------------------------------------------------- |
+| `host_slug_taken`         | Host slug already enrolled or reserved.                   |
+| `adoption_proof_invalid`  | Existing principal key or adoption signature is invalid.  |
+| `adoption_conflict`       | Principal or target host/name cannot be adopted.          |
+| `enrollment_pending`      | Completion preceded approval.                             |
+| `enrollment_denied`       | Human denied the request.                                 |
+| `enrollment_expired`      | Interactive request expired.                              |
+| `enrollment_consumed`     | Interactive request already finalized.                    |
+| `host_revoked`            | Host or active key is revoked.                            |
+| `agent_excluded`          | Host excludes requested agent name.                       |
+| `agent_handle_taken`      | A standalone principal already owns the derived handle.   |
+| `run_identity_conflict`   | Existing run key belongs to another immutable identity.   |
+| `run_state_regression`    | Observation would regress run state.                      |
 | `run_attribution_invalid` | Run header is malformed or belongs to another agent/host. |
 
 ## Workstream decisions
@@ -391,6 +391,7 @@ routes remain.
   host-agent relation, independent of launcher adapter.
 - 2026-09-27, S2: SSE commands emit one envelope v2 per event, preserving the stream's event boundary while using the shared JSON/text projection. `cli/internal/app/resource_streaming.go`.
 - 2026-09-27, S2: Text projection uses dotted keys for nested result facts and shell quoting for values and next argv; response secrets are removed before either projection. This keeps text and JSON sourced from one document without a raw fallback. `cli/internal/output/envelope.go`, `cli/internal/app/app.go`, `cli/internal/app/output_contract.go`.
+
 ### 2026-09-27 · O2 web noise pass and ⌘K palette (`cc/web-noise`)
 
 - **Live list helper is `liveWorkspaceEvents`** (`web-ui/src/lib/liveWorkspaceEvents.js`):
@@ -511,7 +512,7 @@ routes remain.
 - 2026-09-27 (O3 follow-up, after core b40ab0a7): the UI follows `GET /stream/agents`
   through `liveAgentChanges` in `web-ui/src/lib/liveWorkspaceEvents.js` (same shared-hub
   pattern as `liveWorkspaceEvents`, keyed `agents`). The roster store refetches `GET
-  /agents` on every notification (core sends one on connect and after reconnects), on
+/agents` on every notification (core sends one on connect and after reconnects), on
   ask events from the workspace stream (asks move agents in and out of "waiting on you"
   without a roster notification), on visibility, and on a 2-minute fallback timer
   (was 30 s). Waiting rows use `waiting_ask` and the agent page uses `open_asks`

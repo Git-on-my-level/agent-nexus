@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"strings"
@@ -29,6 +30,33 @@ func planVisibility(r *http.Request, opts handlerOptions) func(string, string) b
 	return func(threadID, privateOwner string) bool {
 		return canAccessPMThread(r, opts, map[string]any{"id": threadID, "pm_actor_id": privateOwner})
 	}
+}
+
+func filterPlanCards(w http.ResponseWriter, r *http.Request, opts handlerOptions, cards []map[string]any) ([]map[string]any, bool) {
+	store, ok := opts.primitiveStore.(interface {
+		FilterCardAccess(context.Context, []map[string]any, func(string, string) bool) ([]map[string]any, error)
+	})
+	if !ok {
+		return cards, true
+	}
+	out, err := store.FilterCardAccess(r.Context(), cards, planVisibility(r, opts))
+	if err != nil {
+		workStoreError(w, r, err)
+		return nil, false
+	}
+	return out, true
+}
+
+func requirePlanCardAccess(w http.ResponseWriter, r *http.Request, opts handlerOptions, card map[string]any) bool {
+	cards, ok := filterPlanCards(w, r, opts, []map[string]any{card})
+	if !ok {
+		return false
+	}
+	if len(cards) == 0 {
+		denyPMNotFound(w, "card")
+		return false
+	}
+	return true
 }
 
 func enrichPlans(w http.ResponseWriter, r *http.Request, opts handlerOptions, cards []map[string]any) bool {
@@ -58,7 +86,7 @@ func handleCardPlan(w http.ResponseWriter, r *http.Request, opts handlerOptions,
 		workStoreError(w, r, err)
 		return
 	}
-	if !requireAccessibleThreadFilter(w, r, opts, anyString(card["thread_id"]), "card") {
+	if !requirePlanCardAccess(w, r, opts, card) {
 		return
 	}
 	if r.Method == http.MethodPut {
@@ -99,7 +127,7 @@ func handleCardPlan(w http.ResponseWriter, r *http.Request, opts handlerOptions,
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, 200, map[string]any{"card_ref": card["ref"], "if_updated_at": card["updated_at"], "plan": card["plan"], "plan_state": card["plan_state"]})
+	writeJSON(w, 200, map[string]any{"card_ref": card["ref"], "if_updated_at": card["updated_at"], "plan": card["plan"], "plan_state": card["plan_state"], "plan_health": card["plan_health"], "next_step": card["next_step"], "status_mismatch": card["status_mismatch"]})
 }
 
 func handleResolveRefs(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
@@ -127,4 +155,26 @@ func handleResolveRefs(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, 200, map[string]any{"items": items})
+}
+
+func scopedThreadVisible(ctx context.Context, opts handlerOptions, id string) bool {
+	if opts.readVisibility == nil || id == "" {
+		return true
+	}
+	thread, err := opts.primitiveStore.GetThread(ctx, id)
+	if err != nil {
+		return errors.Is(err, primitives.ErrNotFound)
+	}
+	return opts.readVisibility(id, anyString(thread["pm_actor_id"]))
+}
+func scopedCards(ctx context.Context, opts handlerOptions, cards []map[string]any) ([]map[string]any, error) {
+	if opts.readVisibility == nil {
+		return cards, nil
+	}
+	if store, ok := opts.primitiveStore.(interface {
+		FilterCardAccess(context.Context, []map[string]any, func(string, string) bool) ([]map[string]any, error)
+	}); ok {
+		return store.FilterCardAccess(ctx, cards, opts.readVisibility)
+	}
+	return cards, nil
 }

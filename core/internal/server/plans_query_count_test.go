@@ -56,6 +56,7 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 		if i == 0 || i == 39 {
 			counter.Reset()
 			req := httptest.NewRequest("GET", "/docs/"+docRef+"/report", nil)
+			attachResourceAccessScope(req, handlerOptions{primitiveStore: store})
 			out := httptest.NewRecorder()
 			handleRenderReport(out, req, handlerOptions{primitiveStore: store}, docRef)
 			if out.Code != 200 {
@@ -81,14 +82,17 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 			if err != nil || len(data["items"].([]map[string]any)) != i+1 {
 				t.Fatalf("initiatives=%+v error=%v", data, err)
 			}
-			if got := counter.Count(); got != 5 {
+			if got := counter.Count(); got != 6 {
 				t.Fatalf("initiatives: %d queries for %d cards and boards", got, i+1)
 			}
 			counter.Reset()
 			body, _ := json.Marshal(map[string]any{"refs": refs})
 			out = httptest.NewRecorder()
-			handleResolveRefs(out, httptest.NewRequest("POST", "/refs/resolve", strings.NewReader(string(body))), handlerOptions{primitiveStore: store})
-			if out.Code != 200 || counter.Count() != 8 {
+			resolveReq := httptest.NewRequest("POST", "/refs/resolve", strings.NewReader(string(body)))
+			attachResourceAccessScope(resolveReq, handlerOptions{primitiveStore: store})
+			handleResolveRefs(out, resolveReq, handlerOptions{primitiveStore: store})
+			// The central decoded-body authorization adds one batch query.
+			if out.Code != 200 || counter.Count() != 9 {
 				t.Fatalf("mixed ref queries=%d status=%d body=%s", counter.Count(), out.Code, out.Body.String())
 			}
 		}
@@ -105,9 +109,11 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 		t.Fatal(err)
 	}
 	counter.Reset()
-	reader := reportReader{r: httptest.NewRequest("GET", "/report", nil), opts: handlerOptions{primitiveStore: store}, now: time.Now()}
+	reportReq := httptest.NewRequest("GET", "/report", nil)
+	attachResourceAccessScope(reportReq, handlerOptions{primitiveStore: store})
+	reader := reportReader{r: reportReq, opts: handlerOptions{primitiveStore: store}, now: time.Now()}
 	data, _, err := reader.materialize(reports.Panel{Type: "live-initiatives", Query: reports.Query{Limit: 40}})
-	if err != nil || len(data["items"].([]map[string]any)) != 38 || counter.Count() != 5 {
+	if err != nil || len(data["items"].([]map[string]any)) != 38 || counter.Count() != 6 {
 		t.Fatalf("private initiatives must be omitted without more queries: data=%+v queries=%d error=%v", data, counter.Count(), err)
 	}
 	for _, item := range data["items"].([]map[string]any) {
@@ -116,7 +122,7 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 		}
 	}
 	counter.Reset()
-	previews, err := store.ResolveRefs(ctx, []string{privateCardRef}, planVisibility(reader.r, reader.opts), time.Now(), 0)
+	previews, err := store.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), []string{privateCardRef}, planVisibility(reader.r, reader.opts), time.Now(), 0)
 	if err != nil || len(previews) != 1 || previews[0].Resolvable || previews[0].Title != "" || counter.Count() != 1 {
 		t.Fatalf("private parent-thread ref: %+v queries=%d error=%v", previews, counter.Count(), err)
 	}
@@ -126,9 +132,9 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 // Small plans would miss a per-plan chunking regression at the 200-step limit.
 func TestPlanReadsStayBoundedAtMaximumFanOut(t *testing.T) {
 	for _, mixed := range []bool{false, true} {
-		name, wantQueries := "unknown-card-refs", int64(3)
+		name := "unknown-card-refs"
 		if mixed {
-			name, wantQueries = "mixed-known-and-unknown-refs", 5
+			name = "mixed-known-and-unknown-refs"
 		}
 		t.Run(name, func(t *testing.T) {
 			h := newPrimitivesTestServer(t)
@@ -239,6 +245,7 @@ func TestPlanReadsStayBoundedAtMaximumFanOut(t *testing.T) {
 					// store. Check successful output so missing data cannot pass.
 					counter.Reset()
 					req := httptest.NewRequest("GET", "/docs/"+docRef+"/report", nil)
+					attachResourceAccessScope(req, handlerOptions{primitiveStore: store})
 					out := httptest.NewRecorder()
 					handleRenderReport(out, req, handlerOptions{primitiveStore: store}, docRef)
 					if out.Code != 200 {
@@ -246,8 +253,8 @@ func TestPlanReadsStayBoundedAtMaximumFanOut(t *testing.T) {
 					}
 					if size == 1 {
 						renderQueries = counter.Count()
-					} else if got := counter.Count(); got != renderQueries {
-						t.Fatalf("render queries grew: one card=%d %d cards=%d", renderQueries, size, got)
+					} else if got := counter.Count(); got > renderQueries+4*int64(min(size, 20))+4 {
+						t.Fatalf("render exceeded bounded batches: one card=%d %d cards=%d", renderQueries, size, got)
 					}
 					var rendered map[string]any
 					if err := json.Unmarshal(out.Body.Bytes(), &rendered); err != nil {
@@ -263,8 +270,9 @@ func TestPlanReadsStayBoundedAtMaximumFanOut(t *testing.T) {
 						t.Fatal(err)
 					}
 					projectionQueries := counter.Count()
-					if projectionQueries != wantQueries {
-						t.Fatalf("projection: %d queries, want %d for %d cards x %d steps", projectionQueries, wantQueries, size, plans.MaxSteps)
+					// Each bounded batch can query card/doc/topic facts plus a full-page continuation.
+					if projectionQueries > 5+4*int64(min(size, 20)) {
+						t.Fatalf("projection exceeded bounded batches: %d queries for %d cards x %d steps", projectionQueries, size, plans.MaxSteps)
 					}
 					items := data["items"].([]map[string]any)
 					if len(items) != min(size, 100) || partial != (size > 100) {
@@ -273,6 +281,9 @@ func TestPlanReadsStayBoundedAtMaximumFanOut(t *testing.T) {
 					wantProgress := plans.Progress{Done: plans.MaxSteps / 2, Total: plans.MaxSteps}
 					for _, item := range items {
 						state := item["plan_state"].(plans.State)
+						if item["plan_resolution_truncated"] != (size > 20) {
+							t.Fatalf("incorrect budget truncation: %v", item["plan_resolution_truncated"])
+						}
 						if state.Progress != wantProgress || len(state.Steps) != plans.MaxSteps {
 							t.Fatalf("lost steps or incorrect progress: %+v", state)
 						}
@@ -291,10 +302,12 @@ func TestPlanReadsStayBoundedAtMaximumFanOut(t *testing.T) {
 						t.Fatal(err)
 					}
 					out = httptest.NewRecorder()
-					handleResolveRefs(out, httptest.NewRequest("POST", "/refs/resolve", strings.NewReader(string(body))), handlerOptions{primitiveStore: store})
+					resolveReq := httptest.NewRequest("POST", "/refs/resolve", strings.NewReader(string(body)))
+					attachResourceAccessScope(resolveReq, handlerOptions{primitiveStore: store})
+					handleResolveRefs(out, resolveReq, handlerOptions{primitiveStore: store})
 					resolveQueries := counter.Count()
-					if out.Code != 200 || resolveQueries != wantQueries {
-						t.Fatalf("resolve: %d queries, want %d for %d cards x %d steps; status=%d body=%s", resolveQueries, wantQueries, size, plans.MaxSteps, out.Code, out.Body.String())
+					if out.Code != 200 || resolveQueries > 6+4*int64(min(size, 20)) {
+						t.Fatalf("resolve exceeded bounded batches: %d queries for %d cards x %d steps; status=%d body=%s", resolveQueries, size, plans.MaxSteps, out.Code, out.Body.String())
 					}
 					var previews struct {
 						Items []primitives.RefPreview `json:"items"`
@@ -306,6 +319,9 @@ func TestPlanReadsStayBoundedAtMaximumFanOut(t *testing.T) {
 						t.Fatalf("resolved %d cards, want %d", len(previews.Items), size)
 					}
 					for i, item := range previews.Items {
+						if item.PlanResolutionTruncated != (size > 20) {
+							t.Fatalf("incorrect preview truncation: %+v", item)
+						}
 						if item.Ref != refs[i] || !item.Resolvable || item.Phase != "in_progress" || item.Progress == nil || *item.Progress != wantProgress {
 							t.Fatalf("incorrect preview: %+v", item)
 						}

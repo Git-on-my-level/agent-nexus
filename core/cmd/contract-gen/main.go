@@ -921,7 +921,11 @@ func collectOpenAPISchemaFields(
 		for _, candidate := range schema.AllOf {
 			collectOpenAPISchemaFields(doc, candidate, prefix, ancestorRequired, acc, seenRefs)
 		}
-		return
+		// allOf composes with sibling properties; dropping them removes existing
+		// CLI fields when a schema adopts a shared validation component.
+		if len(schema.Properties) == 0 {
+			return
+		}
 	}
 
 	if len(schema.Properties) > 0 || strings.TrimSpace(schema.Type) == "object" {

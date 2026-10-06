@@ -18,6 +18,8 @@
  * step occupies, where its edges run, and where today falls on a timeline.
  */
 
+import { healthState } from "./healthState.js";
+
 /** Step statuses, in the order a reader scans them. */
 export const PLAN_STEP_STATUSES = Object.freeze([
   "done",
@@ -28,7 +30,14 @@ export const PLAN_STEP_STATUSES = Object.freeze([
 
 export const PLAN_SHAPES = Object.freeze(["chain", "dag", "lanes"]);
 
-export const PLAN_HEALTH = Object.freeze(["on_track", "stalled", "blocked"]);
+export const PLAN_HEALTH = Object.freeze([
+  "no_plan",
+  "stale",
+  "blocked",
+  "at_risk",
+  "on_track",
+  "done",
+]);
 
 /**
  * The caps the plan contract states (`initiative_plan.max_steps`,
@@ -203,7 +212,7 @@ export function planComponents(steps) {
 function readPlanState(planState) {
   if (!planState || typeof planState !== "object") return null;
   const shape = asText(planState.shape);
-  const health = asText(planState.health);
+  const health = healthState({ plan_state: planState });
   const statusById = {};
   for (const step of Array.isArray(planState.steps) ? planState.steps : []) {
     const id = asText(step?.id);
