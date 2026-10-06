@@ -334,6 +334,10 @@ URLs, identifiers or aliases in workspace observations and structured
 from the published evidence. Adapters publish any provider spelling variants;
 core never parses provider identities, generates provider URLs or fetches
 external systems. Unknown, ambiguous or inaccessible keys remain unresolved.
+Resolution filters candidates in the caller's scope rather than denying the
+batch because an input key has an inaccessible publisher. A shared public/private
+key returns the visible evidence, retaining unknown entries and duplicates.
+Writing references still requires their inherited ownership checks.
 Distinct source connections are never silently combined. Adapters retain the
 observation anchor on unchanged source data; evidence without an observation
 time uses its containing card timestamp.

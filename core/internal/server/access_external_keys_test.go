@@ -2,13 +2,112 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"io"
+	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 
 	"agent-nexus-core/internal/plans"
 	"agent-nexus-core/internal/primitives"
 )
+
+func TestBatchResolutionKeepsVisibleSharedEvidenceAndInputEntries(t *testing.T) {
+	requireIntegrationTest(t)
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	ctx := context.Background()
+	owner := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "shared-owner", "shared-owner", "Owner", "shared-owner-token")
+	reader := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "shared-reader", "shared-reader", "Reader", "shared-reader-token")
+	agent := seedNotificationTestAgent(t, env, "shared.otherhost")
+	s := env.primitiveStore.(*primitives.Store)
+	private, err := s.CreateBoard(ctx, owner.ActorID, map[string]any{"title": "Confidential shared board"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.PatchThread(ctx, owner.ActorID, anyString(private["thread_id"]), map[string]any{"pm_actor_id": owner.ActorID}, nil); err != nil {
+		t.Fatal(err)
+	}
+	public, err := s.CreateBoard(ctx, owner.ActorID, map[string]any{"title": "Public shared board"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const shared = "SHARED-ROUND6"
+	var privateCard, publicCard map[string]any
+	for _, seed := range []struct {
+		board, identity, title, status string
+		aliases                        []string
+		dst                            *map[string]any
+	}{
+		{anyString(private["id"]), "confidential-source", "Confidential evidence", "done", []string{shared, "PRIVATE-ONLY"}, &privateCard},
+		{anyString(public["id"]), "public-source", "Visible evidence", "in_progress", []string{shared}, &publicCard},
+	} {
+		*seed.dst, err = s.CreateWork(ctx, owner.ActorID, seed.board, map[string]any{"title": seed.title, "source_refs": []any{map[string]any{"authority": "tracker", "connection_id": seed.identity, "native_id": seed.identity, "title": seed.title, "status": seed.status, "aliases": seed.aliases}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	refs := []string{shared, "UNKNOWN-ROUND6", shared, "PRIVATE-ONLY", anyString(privateCard["ref"]), anyString(publicCard["ref"])}
+	for _, principal := range []struct{ ActorID, AccessToken string }{{reader.ActorID, reader.AccessToken}, {agent.ActorID, agent.AccessToken}} {
+		t.Run(principal.ActorID, func(t *testing.T) {
+			getJSONExpectStatusWithAuth(t, env.server.URL+"/cards/"+anyString(privateCard["id"]), principal.AccessToken, 404).Body.Close()
+			resp := postJSONExpectStatusWithAuth(t, env.server.URL+"/refs/resolve", map[string]any{"refs": refs}, principal.AccessToken, 200)
+			raw, err := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			var result struct {
+				Items []map[string]any `json:"items"`
+			}
+			if err = json.Unmarshal(raw, &result); err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Items) != len(refs) {
+				t.Fatalf("batch entries lost: %s", raw)
+			}
+			for i, ref := range refs {
+				if result.Items[i]["ref"] != ref {
+					t.Fatalf("input order changed at %d: %s", i, raw)
+				}
+			}
+			item := result.Items[0]
+			if item["resolvable"] != true || item["authority"] != "tracker" || item["native_id"] != "public-source" || item["connection_id"] != "public-source" || item["title"] != "Visible evidence" || item["status"] != "in_progress" {
+				t.Fatalf("visible shared evidence missing: %s", raw)
+			}
+			if !reflect.DeepEqual(item, result.Items[2]) || result.Items[5]["resolvable"] != true {
+				t.Fatalf("duplicate or visible native entry lost: %s", raw)
+			}
+			for _, i := range []int{1, 3, 4} {
+				if !reflect.DeepEqual(result.Items[i], map[string]any{"ref": refs[i], "resolvable": false}) {
+					t.Fatalf("unknown/private entry %d exposed metadata: %s", i, raw)
+				}
+			}
+			round4NoSecrets(t, "shared evidence batch", string(raw), []string{"Confidential", "confidential-source", anyString(privateCard["thread_id"])})
+			// Resolution is a read; publishing a plan reference still requires
+			// every inherited owner, even when the same key has public evidence.
+			patch := map[string]any{"actor_id": principal.ActorID, "if_updated_at": publicCard["updated_at"], "plan": map[string]any{"steps": []any{map[string]any{"id": "private", "title": "attempt", "ref": shared}}}}
+			body, _ := json.Marshal(patch)
+			req, _ := http.NewRequest("PUT", env.server.URL+"/cards/"+anyString(publicCard["id"])+"/plan", strings.NewReader(string(body)))
+			req.Header.Set("Authorization", "Bearer "+principal.AccessToken)
+			req.Header.Set("Content-Type", "application/json")
+			write, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			write.Body.Close()
+			if write.StatusCode != 404 {
+				t.Fatalf("shared private ownership lost on write: %d", write.StatusCode)
+			}
+			postJSONExpectStatusWithAuth(t, env.server.URL+"/refs/resolve", map[string]any{"refs": []string{shared + "\x00"}}, principal.AccessToken, 400).Body.Close()
+		})
+	}
+	getJSONExpectStatusWithAuth(t, env.server.URL+"/cards/"+anyString(privateCard["id"]), owner.AccessToken, 200).Body.Close()
+	var plans int
+	if err = env.workspace.DB().QueryRow(`SELECT count(*) FROM card_plans WHERE card_id=?`, publicCard["id"]).Scan(&plans); err != nil || plans != 0 {
+		t.Fatalf("denied plan write persisted: plans=%d err=%v", plans, err)
+	}
+}
 
 func TestExternalEvidenceKeysProtectStoredPlansAcrossHTTPReaders(t *testing.T) {
 	if testing.Short() {

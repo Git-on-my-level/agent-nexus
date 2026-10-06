@@ -139,7 +139,7 @@ func handleResolveRefs(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	var req struct {
 		Refs []string `json:"refs"`
 	}
-	if !decodeJSONBody(w, r, &req) {
+	if !decodeJSONReadBody(w, r, &req) {
 		return
 	}
 	for _, ref := range req.Refs {

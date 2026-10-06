@@ -416,6 +416,17 @@ func routeRateLimitBucketForRequest(path string, method string, requirement rout
 }
 
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
+	return decodeJSONBodySyntax(w, r, dst) && authorizeResourceValues(w, r, dst)
+}
+
+// Read-side batches may include inaccessible or shared keys. Their scoped
+// loaders authorize each candidate, while writes retain whole-body ownership
+// checks. Text validation, body limits and single-document parsing still apply.
+func decodeJSONReadBody(w http.ResponseWriter, r *http.Request, dst any) bool {
+	return decodeJSONBodySyntax(w, r, dst) && validateResourceText(w, dst)
+}
+
+func decodeJSONBodySyntax(w http.ResponseWriter, r *http.Request, dst any) bool {
 	if r == nil || r.Body == nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
 		return false
@@ -428,7 +439,7 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
 		return false
 	}
-	return ensureJSONBodyEOF(w, decoder) && authorizeResourceValues(w, r, dst)
+	return ensureJSONBodyEOF(w, decoder)
 }
 
 func decodeJSONBodyAllowEmpty(w http.ResponseWriter, r *http.Request, dst any) bool {

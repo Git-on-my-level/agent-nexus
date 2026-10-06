@@ -209,7 +209,10 @@ classify each exact method/path in the generated contract route inventory.
 Mounted-route checks also compare actual registration and authentication
 classifiers; direct mux additions cannot bypass the inventory. Exemptions are
 restricted to reviewed service boundaries and exercised for data disclosure.
-Every record/collection/reference-write/stream entry is exercised against a
+Every record/collection/reference-read/reference-write/stream entry is exercised against a
 private board with a public card thread, using both a stranger and an unauthorized
 agent. Identity/transport-only exemptions require an explicit rationale. Extend
 the fixture and the scoped store/SSE regressions when adding a resource relation.
+Reference-read batches authorize each candidate through scoped loaders and may
+echo requested identities without metadata. Their JSON decoding retains text,
+size and syntax validation; reference writes retain whole-body ownership checks.

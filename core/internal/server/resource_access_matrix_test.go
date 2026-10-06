@@ -11,6 +11,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -54,7 +55,7 @@ func loadPrivacyRouteMatrix(t *testing.T) []privacyRoutePolicy {
 			t.Fatalf("duplicate privacy policy: %s", key)
 		}
 		switch p.Policy {
-		case "record", "collection", "reference-write", "stream", "independent", "maintenance":
+		case "record", "collection", "reference-read", "reference-write", "stream", "independent", "maintenance":
 		default:
 			t.Errorf("unimplemented privacy policy %q: %s", p.Policy, key)
 		}
@@ -201,7 +202,7 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 		seedStreamPrivacyInbox(t, store, publicThread, streamPrivacyInboxItem(publicThread, "public-control-ask", "Visible inbox control"))
 		t.Run(principal.ActorID, func(t *testing.T) {
 			for _, p := range policies {
-				if p.Policy != "record" && p.Policy != "collection" && p.Policy != "reference-write" && p.Policy != "stream" && p.Policy != "independent" && p.Policy != "maintenance" {
+				if p.Policy != "record" && p.Policy != "collection" && p.Policy != "reference-read" && p.Policy != "reference-write" && p.Policy != "stream" && p.Policy != "independent" && p.Policy != "maintenance" {
 					t.Fatalf("unimplemented policy %q for %s %s", p.Policy, p.Method, p.Path)
 				}
 				t.Run(p.Method+" "+p.Path, func(t *testing.T) {
@@ -220,6 +221,12 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 					}
 					if p.Policy == "reference-write" {
 						payload = privacyWritePayload(t, p.Path, principal.ActorID, boardID, cardID, threadID, anyString(document["id"]), anyString(event["id"]), agent.AgentID)
+					}
+					if p.Policy == "reference-read" {
+						if p.Path != "/refs/resolve" {
+							t.Fatalf("missing reference-read fixture: %s", p.Path)
+						}
+						payload["refs"] = []string{"card:" + cardID}
 					}
 					if p.Path == "/stream/agent-notification-receipts" {
 						path += "?thread_id=" + threadID
@@ -282,6 +289,12 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 						if resp.StatusCode >= 500 && resp.StatusCode != 503 {
 							t.Errorf("exempt route failed: %d %s", resp.StatusCode, out)
 						}
+					} else if p.Policy == "reference-read" {
+						var result map[string]any
+						want := map[string]any{"items": []any{map[string]any{"ref": "card:" + cardID, "resolvable": false}}}
+						if json.Unmarshal(out, &result) != nil || resp.StatusCode != 200 || !reflect.DeepEqual(result, want) {
+							t.Errorf("private reference read: %d %s", resp.StatusCode, out)
+						}
 					} else if p.Policy == "collection" || p.Policy == "maintenance" {
 						if resp.StatusCode != 200 && !(resp.StatusCode == 403 && (strings.HasPrefix(p.Path, "/agent-") || p.Path == "/agents/me" || p.Path == "/pm/bindings" || p.Path == "/hosts/{host_id}" || strings.HasPrefix(p.Path, "/auth/access"))) {
 							t.Errorf("collection status %d: %s", resp.StatusCode, out)
@@ -295,7 +308,12 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 					if p.Path == "/stream/inbox" && !bytes.Contains(out, []byte("Visible inbox control")) {
 						t.Errorf("public inbox control absent: %s", out)
 					}
+					// Reference reads echo the requested identity only; the exact
+					// response comparison above rejects every metadata field.
 					for _, needle := range hidden {
+						if p.Policy == "reference-read" {
+							continue
+						}
 						if needle != "" && bytes.Contains(out, []byte(needle)) {
 							t.Errorf("private data %q exposed: %s", needle, out)
 						}
@@ -355,8 +373,6 @@ func privacyWritePayload(t *testing.T, path, actor, board, card, thread, doc, ev
 		return map[string]any{"actor_id": actor, "document": map[string]any{"title": "attempt"}, "content": "attempt", "content_type": "text", "refs": refs}
 	case "/topics":
 		return map[string]any{"actor_id": actor, "topic": map[string]any{"title": "attempt", "summary": "attempt", "related_refs": refs}}
-	case "/refs/resolve":
-		return map[string]any{"refs": refs}
 	case "/home/read":
 		return map[string]any{"actor_id": actor, "group_ref": "thread:" + thread}
 	case "/workspace/dashboard":

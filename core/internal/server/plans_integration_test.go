@@ -83,8 +83,14 @@ func TestPlanAndBatchRefsRespectPrivateThreads(t *testing.T) {
 	opts := handlerOptions{primitiveStore: store}
 	attachResourceAccessScope(req, opts)
 	handleResolveRefs(out, req, opts)
-	if out.Code != 404 {
+	if out.Code != 200 {
 		t.Fatal(out.Body.String())
+	}
+	var batch struct {
+		Items []primitives.RefPreview `json:"items"`
+	}
+	if err = json.Unmarshal(out.Body.Bytes(), &batch); err != nil || len(batch.Items) != 1 || batch.Items[0].Resolvable || batch.Items[0].Title != "" {
+		t.Fatalf("private HTTP preview: %s error=%v", out.Body.String(), err)
 	}
 	previews, err := store.ResolveRefs(req.Context(), []string{anyString(hidden["ref"])}, planVisibility(req, opts), time.Now(), 0)
 	if err != nil || len(previews) != 1 || previews[0].Resolvable || previews[0].Title != "" {

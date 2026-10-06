@@ -91,8 +91,9 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 			resolveReq := httptest.NewRequest("POST", "/refs/resolve", strings.NewReader(string(body)))
 			attachResourceAccessScope(resolveReq, handlerOptions{primitiveStore: store})
 			handleResolveRefs(out, resolveReq, handlerOptions{primitiveStore: store})
-			// The central decoded-body authorization adds one batch query.
-			if out.Code != 200 || counter.Count() != 9 {
+			// Scoped candidates authorize the read without an additional
+			// whole-body ownership query, independent of workspace size.
+			if out.Code != 200 || counter.Count() != 8 {
 				t.Fatalf("mixed ref queries=%d status=%d body=%s", counter.Count(), out.Code, out.Body.String())
 			}
 		}
