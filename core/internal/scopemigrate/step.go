@@ -196,6 +196,13 @@ func (r *Runner) step(ctx context.Context, token int64, limit, maxBytes int, dur
 		}
 		return p, nil
 	}
+	if verifier, ok := r.Source.(interface {
+		VerifySink(context.Context, *sql.Tx, string) error
+	}); ok {
+		if err := verifier.VerifySink(ctx, tx, r.SealedScope); err != nil {
+			return Progress{}, err
+		}
+	}
 	batch, done, err := r.Source.Page(ctx, tx, p.Cursor, limit, maxBytes)
 	if err != nil {
 		return Progress{}, err
