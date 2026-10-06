@@ -234,4 +234,5 @@ For startup, retain zero-blob-I/O readiness and reopen checks, replacing success
 retry expectations with assertions that no automatic legacy retry is scheduled.
 No new production-readiness result is claimed by changing the decision document.
 Creator/admin placement must not be described as an audience-subset proof: the
-compatibility gate in the design explicitly records its counterexample.
+final resolution uses the restricting owner when safe, otherwise a no-grants
+scope, and reports exception counts without blocking cutover.
