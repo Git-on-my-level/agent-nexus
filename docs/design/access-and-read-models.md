@@ -126,7 +126,9 @@ Use three distinct operations, never one ambiguous `refs` interpretation:
   aggregate and then filter its inputs at response time.
 
 The safe initial rule for automatic computations is **same scope only** (public
-constants may contribute). No membership-subset inference, intersection scopes,
+constants may contribute). Here “public constants” means non-resource literals or
+explicitly published immutable values, not a mutable public record that might
+later be restricted. No membership-subset inference, intersection scopes,
 or automatic declassification. The source scope still owns a computation if it
 uses a public constant. A private source's later membership revocation therefore
 also revokes its derived content, without finding dependent rows. Scope identity
@@ -134,9 +136,17 @@ does not change merely because two scopes currently have identical members.
 
 Raw text/JSON has the destination's declared classification. Parse only the
 bounded incoming write, preserving scalar-versus-JSON semantics and existing NUL
-validation. Resolve at most the request's allowed reference count. Reject known
-private cross-scope atoms rather than accepting them and searching for a safe
-substring replacement. Structured nodes are the sole automatic redaction path.
+validation. Resolve at most the request's allowed reference count. For recognized
+typed references and designated reference fields, reject
+inaccessible and nonexistent targets with the same status, error and validation
+behavior; an author must not learn that a guessed private target exists. A
+reference authorized for the author but in another private scope requires a
+guarded node or explicit publication. Arbitrary untyped prose words/JSON keys
+are not looked up against private identities; their automatic taint semantics
+change prospectively. Legacy untyped selectors still use a typed API context.
+Do not accept a guessed nonexistent typed reference where an inaccessible one
+would fail. Use opaque guarded nodes for unresolved links instead. Structured
+nodes are the sole automatic redaction path.
 Binary content remains byte-preserving and scope-owned; it is never rewritten.
 Existing manifests still gate migration of old blobs. New binary uploads use a
 bounded full-byte reference validation pass before publication; no reader scans
@@ -202,6 +212,7 @@ CREATE TABLE search_postings (
   scope_id INTEGER NOT NULL, term TEXT NOT NULL, sort_key INTEGER NOT NULL,
   rid INTEGER NOT NULL, PRIMARY KEY(scope_id,term,sort_key,rid)
 ) WITHOUT ROWID;
+CREATE INDEX search_by_resource ON search_postings(rid,term);
 ```
 
 Use integer resource keys internally, durable typed external identities at the
@@ -265,7 +276,11 @@ then perform a heap merge and batch hydrate the final P rows. One bounded SQL
 batch may contain the per-scope subqueries; no query per returned row. For K
 scopes this intentionally admits at most `K(P+1)` candidates. The cursor contains
 the last total-order key, query identity, grant generation and projection version,
-authenticated by the server. It contains no hidden offsets or global event IDs.
+encrypted and authenticated by the server. A signature alone is insufficient:
+the internal global `rid` can expose allocation gaps between visible records.
+Never serialize integer allocation keys, query offsets, or global event IDs into
+API data or plaintext cursors. External resource identities are opaque,
+nonsequential keys; scope-local ordering is used for change streams.
 
 - **Work:** scope, supported filter, attention bucket, time key, rid form the
   index prefix/order. Avoid optional-filter OR clauses. Each supported sort/filter
@@ -286,7 +301,14 @@ authenticated by the server. It contains no hidden offsets or global event IDs.
 - **Search:** use scoped term postings and content-local ranking (e.g. term
   presence/local frequency then recency), never global BM25 statistics. At most T
   terms, K scopes and B posting candidates per stream are visited. AND/phrase
-  verification happens only in that bounded candidate window. Return continuation
+  verification happens only in that bounded candidate window, with an additional
+  aggregate cap C <= min(KTB, 4,096) candidate keys and V <= 4 MiB of candidate
+  verification bytes per request, including rejected hits. The executor fetches
+  candidates in bounded batches and stops at these aggregate limits; it cannot
+  hydrate KTB full bodies then apply the cap. Postings do not contain positions,
+  so phrase verification is charged to V, separately from returned snippets.
+  Continuation retains the last verified candidate; a body is never skipped as
+  nonmatching merely because the budget ended. Return continuation
   even for an underfilled/empty page when candidates remain; no “keep scanning
   until P matches.” No exact total, unbounded ranking, or hidden-corpus IDF.
   Snippets hydrate visible rows only. Prefix/fuzzy expansion has its own bound;
@@ -308,10 +330,13 @@ authenticated by the server. It contains no hidden offsets or global event IDs.
 
 Let N be indexed records, K the principal's selected/accessible scopes, P page
 size, H bounded hydrated refs per page, L input bytes, R input refs, Q fixed
-projection/counter updates and T/B search terms/candidates. Index operations cost
+projection/counter updates, Unew/Uold distinct indexed terms in the new/old head,
+T/B search terms/candidates, C aggregate candidates, V candidate-verification
+bytes and Ls per-hit snippet bytes. Index operations cost
 `O(log N)`; “bounded by the request” excludes an O(N) corpus term, not B-tree depth.
 Proposed technical limits: P <= 100, H <= 200, K <= 64 per request, R <= 200,
-T <= 8, B <= 4P, Q <= 16 and normal structured body <= 1 MiB. Blob uploads retain
+T <= 8, B <= 4P, Q <= 16, Unew/Uold <= 4,096 and normal structured body <= 1 MiB.
+Blob uploads retain
 their explicitly configured byte limit and use streaming validation. These are
 generic safety limits, not commercial tiers. They require contract review before
 implementation; current larger batch callers must split requests.
@@ -322,24 +347,34 @@ workspace-wide Overview across an unbounded set. Selected PM/all-scope readers
 use the same scope selection limits. Grant enumeration queries `LIMIT 65` to
 detect overflow without loading all memberships.
 
-| Route class                          | CPU / rows / SQL budget shape                                                         | Required index/access                                                        |
-| ------------------------------------ | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Point / revision / blob metadata     | O(log N + K + H log N); O(1+H) rows; fixed batch queries                              | `(kind,external_id)`, `(rid,version)`, grant PK; permission before blob open |
-| Lists / work / history / directories | O(K log N + KP + P log K + H log N); <= K(P+1)+H keys; fixed batches or <= K seeks    | Scope + exact selector + total order + rid                                   |
-| Inbox and summary                    | Page bound above; counters O(KQ); no projection rebuild                               | Scope/recipient/status/time/rid; counter PK                                  |
-| Overview                             | Fixed section count times page bound + O(KQ); bounded plan/label hydration            | Initiative role/attention scoped feed, counters, actor key                   |
-| Search / read-only search POST       | O(KT(log N+B) + KTB log(KT) + PL); L here is capped per-hit snippet bytes             | Scoped postings; no global FTS rank/statistics                               |
-| SSE tick                             | O(K log N + KP + P log K); idle O(K log N); cap response bytes                        | Scope-local change PK and grant generation                                   |
-| Normal mutation                      | O(L + (R+Q) log N); <= R lookups and Q derived writes plus bounded canonical children | Typed identity, same-scope parent, counters/feeds/change indexes             |
-| Grant add/revoke                     | O(log N), fixed authority/generation writes; no resource fanout                       | Grant PK, principal authority generation                                     |
-| Maintenance / reclassification       | Each job slice O(J log N + bounded bytes); total may be O(N+E)                        | Keyset checkpoints; never request-owned or startup work                      |
+| Route class                          | CPU / rows / SQL budget shape                                                                                                          | Required index/access                                                                                      |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Point / revision / blob metadata     | O(log N + K + H log N); O(1+H) rows; fixed batch queries                                                                               | `(kind,external_id)`, `(rid,version)`, grant PK; permission before blob open                               |
+| Lists / work / history / directories | O(K log N + KP + P log K + H log N); <= K(P+1)+H keys; fixed batches or <= K seeks                                                     | Scope + exact selector + total order + rid                                                                 |
+| Inbox and summary                    | Page bound above; counters O(KQ); no projection rebuild                                                                                | Scope/recipient/status/time/rid; counter PK                                                                |
+| Overview                             | Fixed section count times page bound + O(KQ); bounded plan/label hydration                                                             | Initiative role/attention scoped feed, counters, actor key                                                 |
+| Search / read-only search POST       | O(KT log N + C log(KT) + V + P Ls); C <= min(KTB,4096), V <= 4 MiB including rejected hits                                             | Scoped postings; no global FTS rank/statistics                                                             |
+| SSE tick                             | O(K log N + KP + P log K); idle O(K log N); cap response bytes                                                                         | Scope-local change PK and grant generation                                                                 |
+| Normal mutation                      | O(L + (R+Q+Unew+Uold) log N); <= R lookups, Q fixed projection writes and Unew+Uold posting operations plus bounded canonical children | Typed identity, same-scope parent, counters/feeds/change indexes and `(rid,term)` search maintenance index |
+| Grant add/revoke                     | O(log N), fixed authority/generation writes; no resource fanout                                                                        | Grant PK, principal authority generation                                                                   |
+| Maintenance / reclassification       | Each job slice O(J log N + bounded bytes); total may be O(N+E)                                                                         | Keyset checkpoints; never request-owned or startup work                                                    |
 
 The implementation must budget serialized bytes as well as row counts. Large
 single records/revisions are not a loophole. Supported endpoints with larger
 output become ranged/paginated or asynchronous through reviewed contracts.
 
 Ordinary writes update at most Q fixed views, independent of workspace size and
-recipient count. Plan edits bound steps and references; reverse dependency
+recipient count. Search maintenance is additional: index only the current head,
+cap its distinct terms at 4,096 and delete/update at most Uold+Unew postings in the
+same transaction. A `(rid,term)` maintenance index bounds old-posting deletion.
+A small PATCH may still replace a large old head, so Uold is explicit, never
+charged only to incoming L. Index a deterministic capped portion and expose
+search-coverage metadata when the text exceeds the token budget; binary bytes
+are not search text. Legacy over-limit indexes are rebuilt in the background
+before cutover. Historical-version search would need a separate reviewed budget.
+Purge removes the current searchable head synchronously and reclaims historical
+bytes in a job; it cannot leave stale postings for readers to skip indefinitely.
+Plan edits bound steps and references; reverse dependency
 recomputation is a deduplicated background queue, not synchronous fanout. Health
 may lag; authorization never does. Raw event history remains append-only, while
 scope counters are algebraic insert/update/delete deltas. Numeric series sums and
@@ -409,8 +444,27 @@ existing limitation must remain documented, never converted into proof of access
 Do not allocate migration 64: #275 currently owns 64 (board roles) and 65 (evidence
 projection/indexes). Allocate after the actual merge head. Preserve all released
 migration hashes and historical schemas. This is a forward-only feature epoch;
-older binaries must refuse the new epoch. Rollback means a later compatible
-binary choosing the retained old reader before cutover, never a schema downgrade.
+older binaries must refuse the new epoch. Schema 63 currently ignores unknown
+migration numbers, so a new `min_reader_version` row alone cannot enforce this.
+The proposed concrete fence is an atomic ledger-format transition: rename the
+real ledger to `scope_schema_migrations` and install a `schema_migrations` view
+whose SELECT requires a deliberately unavailable function,
+`anx_requires_scope_format_v1()`. The released loader's SELECT then fails before
+serving; the new loader recognizes the format and reads the renamed ledger
+explicitly. This compatibility fence is not business-query rewriting. Test the
+actual schema-63 initializer/executable and supported older releases against it;
+no graph retirement is allowed merely because new-code tests pass.
+
+Ship a bridge release first that understands both ledger formats, enforces a
+workspace writer/serving lease and contains the resumable migration machinery.
+Expansion keeps the old ledger and old semantics. Final format transition requires
+an exclusive maintenance interval with all pre-bridge server/store processes
+stopped and their connections closed; it is not an in-place upgrade beside an
+old serving process, which could skip startup checks. Backup/export/restore tools
+must understand the new ledger; restoring a complete old backup is a separate
+operator action, not downgrade support. Rollback means a later compatible binary
+choosing the retained old reader **before** semantic cutover, never reopening a
+cut-over database with old authority or a schema downgrade.
 
 1. **Expand, bounded startup.** Add empty shadow tables, feature/job checkpoint
    rows and bounded capture triggers; no table rebuild, text/blob scan or legacy
@@ -443,8 +497,12 @@ binary choosing the retained old reader before cutover, never a schema downgrade
    do not publish partial graph results. Shadow projections are built only from
    classified data; unresolved generations remain unreadable.
 5. **Atomic cutover.** Briefly fence business writers, record a high-water epoch,
-   drain the bounded remaining change log, validate counts/digests and the privacy
-   differential matrix, and atomically select the fully validated generation. If
+   drain the bounded remaining change log, compare precomputed generation
+   digests/high-water marks, and atomically select the fully validated generation.
+   Full counts, graph checks and the privacy differential matrix run **before**
+   the fence on a pinned source epoch. Any authority/identity change invalidates
+   those results. Do not run a workspace validation scan inside the fence. The
+   ledger-format transition and reader-generation selection commit together. If
    the tail does not fit the fence budget, release the fence and retry later.
    No union of old and new visible rows and no per-record fallback to unscoped
    legacy data. Cache/stream cursors invalidate at the feature epoch change.
@@ -518,7 +576,10 @@ hidden titles, documents, actors, inbox rows, PM history, series and events.
 Compare response bodies, ranks, totals, snippets, cursors, cache headers and SSE
 payloads. Exercise revocation between scope loading and statement execution,
 between ticks, before replay/cache return, and concurrent source/destination
-mutation. Verify guarded-reference redaction in JSON, HTML, reports, CLI and
+mutation. Compare write success/error outcomes for guessed missing and
+inaccessible references, including nested typed atoms. Interleave hidden inserts
+between visible rows and prove cursors reveal no global allocation gaps. Verify guarded-reference redaction in JSON, HTML,
+reports, CLI and
 download metadata, not only the UI label. Test all prior binary boundary cases.
 
 Use SCA-661's 4,096-row-per-family fixture and actual SQL capture. Its current
@@ -532,13 +593,16 @@ history and query selectivity. Count work even when SQLite returns only one row.
 
 EXPLAIN tests require scoped index SEARCH, no temp sort over unbounded matches,
 and no repeated graph preparation. Test page 1 and deep cursors, all supported
-filter combinations, empty searches with long postings, late alias resolution,
+filter combinations, empty phrase searches with long postings/large candidate
+bodies (assert V even when P returned is zero), late alias resolution,
 idle/second SSE ticks, expired health watermarks and a slow projection worker.
 Clock-driven changes and retention must not trigger request-owned rebuilds.
 
 Mutation gates measure reference-heavy inserts/updates, public/private writes,
 grant revocation, alias changes, deletes and high-fanout targets. Assert Q/R bounds
-and absence of synchronous dependency fanout. Verify atomic counter consistency
+and absence of synchronous dependency fanout. Count search posting insertions
+and old-head deletions, including a tiny PATCH/delete against a maximum-token
+head; Q does not include or hide those costs. Verify atomic counter consistency
 under retries, idempotent replay, cancellation and process death. Measure live
 authorization/projection bytes, WAL peaks and reclaimed pages independently.
 
