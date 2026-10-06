@@ -6,6 +6,7 @@ export const INBOX_CATEGORY_LABELS = {
   ask: "Ask",
   review: "Review",
   escalate: "Escalation",
+  report_review: "Review due",
 };
 
 export const INBOX_URGENCY_LEVELS = ["immediate", "high", "normal"];

@@ -499,6 +499,67 @@ for (const viewport of AUDIT_VIEWPORTS) {
 }
 
 /**
+ * The reminder core files when a panel passes its review date.
+ *
+ * It is an author-only nudge with no requester and no response proposals, and
+ * core drops it from every inbox read once the report is revised, archived,
+ * trashed or unpinned. Offering Reply and Acknowledge gave the author two
+ * buttons that could only fail.
+ */
+const REMINDER = {
+  id: "report-review:milestones",
+  kind: "report_review",
+  subtype: "report_review_due",
+  title: `Panel milestones on ${REPORT.title} is due for review: refresh it or convert it to live.`,
+  body: "Refresh it or convert it to a live panel.",
+  summary: "Panel milestones is due for review.",
+  response_proposals: [],
+  subject_ref: `document:${DOC_ID}`,
+  related_refs: [`document:${DOC_ID}`],
+  panel_id: "milestones",
+  revision_ref: DOCUMENT.revision_ref,
+};
+
+test("a review reminder offers the dashboard, not a reply it cannot send", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await installDashboard(page);
+  await page.route("**/inbox*", (route) => {
+    if (!["fetch", "xhr"].includes(route.request().resourceType()))
+      return route.fallback();
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ items: [REMINDER], total: 1 }),
+    });
+  });
+  await page.goto(`${WORKSPACE}/inbox`);
+
+  // It is the author's to act on, so it waits in Needs you rather than filing
+  // itself under Handled.
+  const row = page.getByText("is due for review", { exact: false }).first();
+  await expect(row).toBeVisible({ timeout: 60_000 });
+  await row.click();
+
+  const reminder = page.locator("[data-inbox-reminder]");
+  await expect(reminder).toBeVisible();
+  await expect(reminder).toContainText("There is nothing to answer");
+  await expect(
+    reminder.getByRole("link", { name: "Open dashboard" }),
+  ).toHaveAttribute("href", new RegExp(`/docs/${DOC_ID}$`));
+
+  // The two controls that could only fail are gone.
+  await expect(page.getByRole("button", { name: "Send response" })).toHaveCount(
+    0,
+  );
+  await expect(page.getByRole("button", { name: "Acknowledge" })).toHaveCount(
+    0,
+  );
+  await expect(page.getByLabel("Your response")).toHaveCount(0);
+});
+
+/**
  * Before / after for a review. Off unless `REVIEW_CAPTURES` is set — it
  * asserts nothing, so it has no place in a CI run. Output lands in the
  * gitignored `web-ui/.screenshots/review/`; review binaries are not committed.

@@ -38,6 +38,7 @@
     buildInboxRows,
     filterMailbox,
     formatWait,
+    inboxItemIsReminder,
     inboxItemNeedsResponse,
     inboxRowBadge,
     rowMatchesWorkRef,
@@ -1301,6 +1302,7 @@
               </div>
             {:else if selected?.kind === "inbox"}
               {@const needsResponse = inboxItemNeedsResponse(selected.item)}
+              {@const reminder = inboxItemIsReminder(selected.item)}
               {@const wait = needsResponse ? waitFor(selected) : null}
               <div class="space-y-4 p-4 sm:p-5">
                 <div
@@ -1393,6 +1395,29 @@
                       >
                     {/snippet}
                   </InboxRespondPanel>
+                {:else if reminder}
+                  <!--
+                    Nobody answers a review reminder. Core drops it from every
+                    inbox read once the report is revised, archived, trashed
+                    or unpinned, so refreshing the panel is what closes it —
+                    Reply and Acknowledge had nothing to act on.
+                  -->
+                  <div
+                    class="space-y-3 rounded-md border border-line-subtle bg-bg-soft px-3 py-3"
+                    data-inbox-reminder
+                  >
+                    <p class="text-meta text-fg-muted">
+                      This closes itself when the panel is refreshed or
+                      converted to a live one. There is nothing to answer.
+                    </p>
+                    {#if subjectHref(selected.subject)}
+                      <a
+                        class="ui-btn-primary inline-flex"
+                        href={subjectHref(selected.subject)}
+                        data-inbox-shortcut="open">Open dashboard</a
+                      >
+                    {/if}
+                  </div>
                 {:else}
                   <div
                     class="space-y-1 rounded-md border border-line-subtle bg-bg-soft px-3 py-2"

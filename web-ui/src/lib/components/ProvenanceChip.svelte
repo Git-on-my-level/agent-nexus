@@ -38,8 +38,11 @@
   data-anx-provenance-class={line.class}
   title={line.title}
 >
-  <span class="provenance-mark" aria-hidden="true"></span><span
-    >{line.lead}{#if line.age}<time
+  <span class="provenance-mark" aria-hidden="true"></span><span class="min-w-0"
+    >{line.leadBefore ?? line.lead}{#if line.authorLabel}<span
+        class="provenance-author"
+        title={line.authorLabel}>{line.authorLabel}</span
+      >{/if}{line.leadAfter ?? ""}{#if line.age}<time
         datetime={line.datetime}
         aria-label={line.title}>{line.age}</time
       >{/if}</span
@@ -99,6 +102,21 @@
   .provenance-chip[data-anx-provenance="authored"] .provenance-mark {
     background: transparent;
     border: 1px dashed var(--fg-subtle);
+  }
+  /*
+   * A principal label is author-supplied text up to 200 characters, and a
+   * report generator will happily put a sentence there. Clamp the name and
+   * nothing else: "Written by" and the age are the parts that make the line
+   * readable, and losing either to an ellipsis would cost more than the name
+   * does. The full label stays in the chip's own tooltip and in the name's.
+   */
+  .provenance-author {
+    display: inline-block;
+    max-width: 18ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
   }
   time {
     font-variant-numeric: tabular-nums;

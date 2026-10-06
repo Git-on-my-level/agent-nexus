@@ -6,6 +6,7 @@ import {
   liveProvenance,
   panelAuthoredAt,
   panelProvenance,
+  nextReviewDeadline,
   panelProvenanceClass,
   panelReviewDeadline,
   relativeAge,
@@ -424,16 +425,18 @@ describe("the deadline the contract defines", () => {
     );
   });
 
-  it("takes core's verdict over its own arithmetic", () => {
-    // Core resolves the deadline against its clock and reminds the author on
-    // that basis. A reader whose clock is a day out must not disagree with the
-    // reminder that was already sent.
-    const panel = authored({
+  it("treats core's verdict as a floor, not a ceiling", () => {
+    // `review_due` is computed once, when the report is read. A dashboard left
+    // open past its deadline would sit on that `false` until someone reloaded
+    // it — which is exactly the panel a reader most needs warning about.
+    const stale = authored({
       authored_at: ago(2 * DAY),
       review_by: ago(DAY),
       review_due: false,
     });
-    expect(panelProvenance(panel, "current", NOW).state).toBe("authored");
+    expect(panelProvenance(stale, "current", NOW).state).toBe("due-for-review");
+
+    // And core saying due keeps it due, whatever this reader's clock says.
     const due = panelProvenance(
       authored({ authored_at: ago(DAY), review_by: "30d", review_due: true }),
       "current",
@@ -441,6 +444,34 @@ describe("the deadline the contract defines", () => {
     );
     expect(due.state).toBe("due-for-review");
     expect(due.label).toBe("May be stale · written 1d ago");
+  });
+
+  it("names the instant a dashboard should read itself again at", () => {
+    const soon = authored({
+      id: "soon",
+      authored_at: ago(DAY),
+      review_by: "2d",
+    });
+    const later = authored({
+      id: "later",
+      authored_at: ago(DAY),
+      review_by: "30d",
+    });
+    const passed = authored({
+      id: "passed",
+      authored_at: ago(9 * DAY),
+      review_by: "7d",
+    });
+    const live = { id: "asks", type: "live-asks", observed_at: ago(0) };
+    // The soonest deadline still ahead, and only that one: a second deadline
+    // is another read away.
+    expect(nextReviewDeadline([later, soon, passed, live], NOW)).toBe(
+      Date.parse(ago(DAY)) + 2 * DAY,
+    );
+    // Nothing ahead means nothing to schedule.
+    expect(nextReviewDeadline([passed, live], NOW)).toBeNull();
+    expect(nextReviewDeadline([], NOW)).toBeNull();
+    expect(nextReviewDeadline(undefined, NOW)).toBeNull();
   });
 
   it("repeats core's own word on whether a deadline was defaulted", () => {

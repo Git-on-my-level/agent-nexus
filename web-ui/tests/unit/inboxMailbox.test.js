@@ -3,6 +3,8 @@ import {
   buildInboxRows,
   filterMailbox,
   formatWait,
+  inboxItemIsReminder,
+  inboxItemNeedsResponse,
   inboxItemSubject,
   inboxRowBadge,
   rowMatchesWorkRef,
@@ -676,5 +678,59 @@ describe("update rows", () => {
     expect(row.source).toBe("Leo moved 2 tasks to review · Nina commented");
     expect(row.source).not.toMatch(/Board updates|Thread updates/);
     expect(inboxRowBadge(row)).toBeNull();
+  });
+});
+
+describe("report review reminders", () => {
+  /** A reminder exactly as `AddReportReviewReminder` stores it. */
+  const reminder = (extra = {}) => ({
+    id: "report-review:abc",
+    kind: "report_review",
+    subtype: "report_review_due",
+    title:
+      "Panel milestones on Dashboard is due for review: refresh it or convert it to live.",
+    summary: "Panel milestones on Dashboard is due for review.",
+    response_proposals: [],
+    subject_ref: "document:dashboard",
+    related_refs: ["document:dashboard"],
+    panel_id: "milestones",
+    revision_ref: "document_revision:dashboard-r1",
+    ...extra,
+  });
+
+  it("asks nobody for a response", () => {
+    // Core sends no proposals and has no responder waiting: Reply and
+    // Acknowledge were two buttons that could only fail.
+    expect(inboxItemIsReminder(reminder())).toBe(true);
+    expect(inboxItemNeedsResponse(reminder())).toBe(false);
+    // An ordinary ask is untouched.
+    expect(inboxItemNeedsResponse({ id: "a", kind: "ask" })).toBe(true);
+  });
+
+  it("stays in front of its author rather than filing itself as handled", () => {
+    // Needing no response is not the same as being dealt with: the panel it
+    // names is still the author's to refresh.
+    const rows = buildInboxRows({ inboxItems: [reminder()] });
+    expect(filterMailbox(rows, "needs-you").map((row) => row.item.id)).toEqual([
+      "report-review:abc",
+    ]);
+    expect(filterMailbox(rows, "handled")).toEqual([]);
+  });
+
+  it("moves to Handled once core marks it complete", () => {
+    const rows = buildInboxRows({
+      inboxItems: [reminder({ completed_at: "2026-10-06T12:00:00Z" })],
+    });
+    expect(filterMailbox(rows, "needs-you")).toEqual([]);
+    expect(filterMailbox(rows, "handled").map((row) => row.item.id)).toEqual([
+      "report-review:abc",
+    ]);
+  });
+
+  it("points at the dashboard it is about", () => {
+    // "Open dashboard" needs a subject, and the reminder's is the document.
+    const subject = inboxItemSubject(reminder(), {});
+    expect(subject.kind).toBe("document");
+    expect(subject.ref).toBe("document:dashboard");
   });
 });

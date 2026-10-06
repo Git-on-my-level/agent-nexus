@@ -32,7 +32,7 @@
   import { threadTimelineEventHref } from "$lib/deepLinkTargets";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
   import { loadInboxContext } from "$lib/inboxContext.js";
-  import { inboxItemSubject } from "$lib/inboxMailbox.js";
+  import { inboxItemIsReminder, inboxItemSubject } from "$lib/inboxMailbox.js";
   import {
     defaultNotifyMode,
     flushInboxResponse,
@@ -137,6 +137,7 @@
     notifyTargetMenuOpen && notifyTargetResults.length > 0,
   );
   let isCompleted = $derived(String(item?.status ?? "").trim() === "completed");
+  let isReminder = $derived(inboxItemIsReminder(item));
   let workspaceHref = $derived(
     bindWorkspaceHref(organizationSlug, workspaceSlug),
   );
@@ -801,6 +802,26 @@
               View Handled
             </Button>
           </div>
+        </div>
+      {:else if isReminder}
+        <!--
+          A review reminder has no requester and no response. Core drops it
+          from every inbox read once the report is revised, archived, trashed
+          or unpinned, so refreshing the panel is what closes it.
+        -->
+        <div
+          class="space-y-3 rounded-md border border-line bg-bg-soft px-4 py-3 text-meta text-fg"
+          data-testid="inbox-reminder-detail"
+        >
+          <p class="text-fg-muted">
+            This closes itself when the panel is refreshed or converted to a
+            live one. There is nothing to answer.
+          </p>
+          {#if subjectHref(subject)}
+            <Button variant="primary" size="compact" href={subjectHref(subject)}
+              >Open dashboard</Button
+            >
+          {/if}
         </div>
       {:else}
         <InboxRespondPanel

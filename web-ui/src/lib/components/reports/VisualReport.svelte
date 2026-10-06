@@ -5,6 +5,7 @@
   import { coreClient } from "$lib/coreClient";
   import { isLivePanel, withLiveObservation } from "$lib/liveReports.js";
   import {
+    nextReviewDeadline,
     withRenderedProvenance,
     withReportDefaults,
   } from "$lib/reportProvenance.js";
@@ -209,6 +210,7 @@
     }
     let disposed = false;
     let inFlight = false;
+    let reviewTimer = 0;
     async function refresh() {
       if (inFlight || disposed) return;
       inFlight = true;
@@ -246,8 +248,38 @@
           ]),
         );
       }
-      if (!disposed) liveObservations = results;
+      if (!disposed) {
+        liveObservations = results;
+        armReviewDeadline();
+      }
       inFlight = false;
+    }
+    /**
+     * Read once more when the soonest authored panel falls due.
+     *
+     * The provenance line already turns amber on its own as the clock ticks,
+     * but the read is also what tells core to remind the author — so a
+     * dashboard left open on a wall display should take itself past the
+     * deadline rather than wait for someone to reload it. One timer, re-armed
+     * on each read, and clamped because `setTimeout` silently fires at once
+     * past about 24 days.
+     */
+    function armReviewDeadline() {
+      window.clearTimeout(reviewTimer);
+      const due = nextReviewDeadline(observedPanels, Date.now());
+      if (due === null) return;
+      // `setTimeout` fires immediately past about 24 days, so a deadline
+      // further out than the cap waits in hops. Only the hop that reaches the
+      // deadline reads: a dashboard open for a week should not re-read the
+      // report every six hours on the way there.
+      const remaining = due - Date.now() + 1000;
+      const wait = Math.max(Math.min(remaining, 21_600_000), 1000);
+      reviewTimer = window.setTimeout(() => {
+        if (disposed) return;
+        now = Date.now();
+        if (Date.now() >= due) void refresh();
+        else armReviewDeadline();
+      }, wait);
     }
     void refresh();
     // A report with nothing live is read once. The teardown is still returned:
@@ -256,6 +288,7 @@
     if (!livePanels.length)
       return () => {
         disposed = true;
+        window.clearTimeout(reviewTimer);
       };
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") void refresh();
@@ -267,6 +300,7 @@
     return () => {
       disposed = true;
       window.clearInterval(timer);
+      window.clearTimeout(reviewTimer);
       document.removeEventListener("visibilitychange", resume);
     };
   });

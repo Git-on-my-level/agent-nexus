@@ -223,3 +223,43 @@ it("keeps showing a release timeline that has gone quiet", () => {
   );
   expect(section.dataset.provenanceState).toBe("live-stale");
 });
+
+it("clamps a long principal label without losing the words around it", () => {
+  // `author` is author-supplied text up to 200 characters, and a report
+  // generator will put a sentence there. "Written by" and the age are what
+  // make the line readable; the name is the part that can be cut.
+  const long =
+    "A long principal label, the kind a report generator produces when it names a pipeline rather than a person";
+  const { container } = render(ProvenanceChip, {
+    panel: panel({ author: long, authored_at: ago(3) }),
+    freshness: "current",
+    now: NOW,
+  });
+  const chip = container.querySelector("[data-anx-provenance]");
+  const name = chip.querySelector(".provenance-author");
+  expect(name.textContent).toBe(long);
+  // Clamped by CSS, so the full label is still in the DOM and in a tooltip.
+  expect(name.getAttribute("title")).toBe(long);
+  expect(chip.textContent).toContain("Written by");
+  expect(chip.textContent).toContain("3d ago");
+  expect(chip.querySelector("time").textContent).toBe("3d ago");
+});
+
+it("stops trusting a stale review_due as the clock passes the deadline", () => {
+  // Core computes `review_due` once, when the report is read. A dashboard left
+  // open would otherwise sit on `false` past its own deadline.
+  const { container } = render(VisualReportPanel, {
+    compact: true,
+    panel: panel({
+      authored_at: ago(9),
+      review_by: ago(2),
+      review_due: false,
+    }),
+    freshness: "current",
+    now: NOW,
+    oninspect: () => {},
+  });
+  const section = container.querySelector("[data-report-panel='standing']");
+  expect(section.dataset.provenanceState).toBe("due-for-review");
+  expect(section.textContent).toContain("May be stale");
+});

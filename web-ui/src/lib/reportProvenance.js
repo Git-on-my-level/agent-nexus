@@ -190,6 +190,9 @@ export function liveProvenance(observedAt, state = {}, now = Date.now()) {
       state: "live-pending",
       label: "Live · reading workspace…",
       lead: "Live · reading workspace…",
+      leadBefore: "Live · reading workspace…",
+      authorLabel: "",
+      leadAfter: "",
       title: "Computed from workspace data at read time.",
     };
   if (!instant(observedAt) || (state.status && state.status !== "ok"))
@@ -198,6 +201,9 @@ export function liveProvenance(observedAt, state = {}, now = Date.now()) {
       state: "live-unavailable",
       label: "Live · read failed",
       lead: "Live · read failed",
+      leadBefore: "Live · read failed",
+      authorLabel: "",
+      leadAfter: "",
       title:
         "Computed from workspace data at read time. The last read did not complete.",
     };
@@ -211,6 +217,9 @@ export function liveProvenance(observedAt, state = {}, now = Date.now()) {
     state: state.stale ? "live-stale" : "live",
     label: `${lead}${age}`,
     lead,
+    leadBefore: lead,
+    authorLabel: "",
+    leadAfter: "",
     age,
     datetime: observedAt,
     title: `${ageTitle(observedAt, "read", now)} · ${
@@ -232,8 +241,8 @@ export function liveProvenance(observedAt, state = {}, now = Date.now()) {
  * the panel stale, or a snapshot standing in for a live read that failed.
  * `note` is one more sentence for the tooltip, saying which.
  *
- * `reviewDue` is core's own verdict on the deadline, which wins over this
- * reader's clock when the report has been rendered.
+ * `reviewDue` is core's verdict on the deadline as of the last read. It can
+ * only make a panel due, never keep one from becoming due as time passes.
  *
  * @param {{ author?: string, authoredAt?: string|null, reviewBy?: string|null,
  *   reviewable?: boolean, stale?: boolean, note?: string, reviewDue?: boolean,
@@ -249,11 +258,16 @@ export function authoredProvenance(written = {}, now = Date.now()) {
     written.reviewable === false
       ? { at: null, defaulted: false, unreadable: false }
       : reviewDeadline(written.reviewBy, authoredAt, written.reviewDefaulted);
+  // Core's `review_due` is a floor, not the whole answer. It is computed once,
+  // when the report is read, so a dashboard left open past its deadline would
+  // sit on `false` for as long as nobody reloaded it — which is exactly the
+  // panel a reader most needs warning about. The clock can only move the
+  // verdict toward caution: core saying due keeps it due, and this reader's
+  // clock running fast shows the warning early rather than hiding it.
   const dueForReview =
     written.stale === true ||
-    (typeof written.reviewDue === "boolean"
-      ? written.reviewDue
-      : review.at !== null && now > review.at);
+    written.reviewDue === true ||
+    (review.at !== null && now > review.at);
   const written_by = author ? `Written by ${author}` : "Written";
   const lead = dueForReview
     ? age
@@ -264,11 +278,24 @@ export function authoredProvenance(written = {}, now = Date.now()) {
       : author
         ? written_by
         : "Hand-written";
+  // The lead split around the author, so a renderer can let a long principal
+  // label truncate without taking "Written by" or the age with it:
+  // `leadBefore + authorLabel + leadAfter === lead`, always.
+  const authorLabel = lead.includes(author) && author ? author : "";
+  const [leadBefore, leadAfter] = authorLabel
+    ? [
+        lead.slice(0, lead.indexOf(authorLabel)),
+        lead.slice(lead.indexOf(authorLabel) + authorLabel.length),
+      ]
+    : [lead, ""];
   return {
     class: "authored",
     state: dueForReview ? "due-for-review" : "authored",
     label: `${lead}${age}`,
     lead,
+    leadBefore,
+    authorLabel,
+    leadAfter,
     age,
     title: [authoredTitle(author, authoredAt, review, now), written.note]
       .filter(Boolean)
@@ -411,4 +438,24 @@ function authoredTitle(author, authoredAt, review, now) {
       );
   }
   return parts.filter(Boolean).join(" · ");
+}
+
+/**
+ * The earliest review deadline among these panels that has not passed, or
+ * `null`.
+ *
+ * A report is read once when it opens, and that read is what tells core an
+ * author is due a reminder. With nothing live to poll, a dashboard left open
+ * would never reach its own deadline: this is the instant worth reading again
+ * at, and only that one — a second deadline is another read away.
+ */
+export function nextReviewDeadline(panels, now = Date.now()) {
+  let soonest = null;
+  for (const panel of panels ?? []) {
+    if (panelProvenanceClass(panel) !== "authored") continue;
+    const { at } = panelReviewDeadline(panel);
+    if (at === null || at <= now) continue;
+    if (soonest === null || at < soonest) soonest = at;
+  }
+  return soonest;
 }
