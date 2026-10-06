@@ -1,8 +1,9 @@
 # Explicit privacy domains and bounded read models
 
-Status: proposed; product decisions below require acceptance before implementation.
-This PR changes documentation only. The experiment is on a separate, non-merge
-branch. It neither changes production authorization nor authorizes a deployment.
+Status: direction accepted in principle; product decisions resolved on 2026-10-07.
+Implementation is authorized in independently deployable phases. This PR remains
+documentation-only; production changes require their own privacy/performance
+review and green CI before the coordinator merges and releases them.
 
 ## Recommendation and decisions
 
@@ -18,47 +19,51 @@ Private material and server-derived facts stay in their source scope. A link
 preview can cross scopes because it fetches its target under the reader's current
 authority; a copied title, excerpt, count or stored computation cannot.
 
-Product decisions for the owner, with recommendations:
+Resolved product decisions (2026-10-07):
 
-1. **Replace automatic prose-based inheritance prospectively.** Recommend explicit
-   containers, opaque guarded reference nodes, and explicit publication for copied
-   material. Reject known cross-private raw references on new writes; do not
-   silently redact arbitrary prose, JSON or binary bytes. Unknown future names
-   no longer retroactively reclassify old prose. Existing restricted data is never
-   made public by this change. This is a deliberate semantic change requiring
-   approval, not an optimization of the current rule.
-2. **Make privacy domains stable.** Recommend stable scope identity and mutable,
-   revocable membership. New private containers start private. Cross-scope copies
-   require source **publish** permission, destination write permission and an
-   explicit publication action; read/write authority alone is insufficient.
-   Ordinary edits cannot change scope. Bulk reclassification is deferred.
-   Previously disclosed public bytes cannot be recalled from clients.
-3. **Accept bounded surfaces and explicit freshness.** Recommend keyset pages,
-   per-scope counts, capped search work with continuation, and eventually updated
-   initiative health with an `as_of` marker. Never manufacture an exact total or
-   “on track” state from a truncated scan. Inbox answers and their counters remain
-   synchronous. This preserves the dense executive Overview without loading the
-   entire workspace. A PM authorized for 80 scopes gets at most 64 selected scopes
-   in one request: the other 16 are **not covered**, and no global total or complete
-   executive view is asserted. The UI must show the selection and incomplete
-   coverage, with scope-directory pagination. Inherited archive/trash may make an
-   entire affected scope temporarily unavailable while a background job runs;
-   archiving a large public board may temporarily block the workspace scope.
-   Recommend accepting these limits for v1, not hiding them behind stale counts.
-4. **Prefer unavailability, potentially permanent, over migration disclosure.** Recommend
-   retaining old readers during background conversion, and sealing ambiguous
-   legacy records until reviewed. Mixed-owner records, unreconstructable series,
-   unavailable blobs and unknown ancestry do not become workspace-visible.
-   Recovery is a bounded, separately authorized per-record operation. An auth-admin
-   or selected PM cannot inspect a sealed record merely by holding that role.
-   If a compacted series has unknown contributors and their owners cannot be
-   established, it may remain sealed **permanently**. Recommend requiring proven
-   source-owner authorization; no startup deadline justifies widening access.
-5. **Replace global caller-selected names.** Recommend server-generated opaque
-   global IDs, creator-scoped replay keys and scope-qualified human aliases. A
-   private `report` in another scope must not change creation success or cause a
-   public `report-2` suffix. Existing global refs remain readable under authority;
-   new writes must stop promising a globally unique human-selected handle.
+1. **Explicit container privacy going forward.** Use opaque guarded reference
+   nodes; labels/previews render under the reader's authority, with identical
+   unavailable treatment for missing and unauthorized targets. Reject known raw
+   cross-private references on new writes and offer a guarded reference instead.
+   Do not silently redact prose or retroactively reclassify it.
+2. **Stable scopes and explicit publication.** Scope identity is stable;
+   membership is mutable and revocable. Ordinary edits cannot change scope.
+   Publication requires destination write access **and owner or admin rights on
+   the source scope**, plus an explicit publish action. Read access alone never
+   authorizes it. Workspace authentication administration is not source-scope
+   administration. Bulk reclassification is out of v1.
+3. **Bounded surfaces and explicit coverage.** Keyset pages, per-scope counts,
+   bounded search and asynchronous health with `as_of` are accepted. Inbox
+   answers/counters stay synchronous. A PM with 80 scopes receives at most K=64
+   in one request, a continuation for the remaining 16 and an explicit
+   `more_scopes` marker. Overview reports `covered_scope_ids` and `as_of`; it
+   never labels a subtotal as an all-scopes total. Lifecycle fencing can return
+   a scope as temporarily unavailable, without falsely reporting zero.
+4. **Simple legacy placement, no sealed-record workflow.** Use the container's
+   scope when unambiguous. Mixed owners, unknown ancestry, mention-only
+   restrictions and unreconstructable series go to the creator's private scope;
+   absent creator goes to the workspace admins' private scope. The owner can
+   republish using the normal publish action. Missing blobs keep private metadata
+   with content unavailable and receive no automatic retries. Migration consumes
+   recorded ownership tables/manifests only; it does not rescan historical prose
+   or blob contents. No sealed-review queue, recovery warrant or content-recovery
+   archive is introduced. See the compatibility gate below: private placement
+   alone does not prove preservation of each existing reader's access.
+5. **Opaque global identities and scoped aliases.** Server-generated IDs,
+   creator-scoped replay keys and scope-qualified human aliases replace global
+   caller-selected handles. Hidden aliases/tombstones cannot change allocation.
+   This implementation choice is delegated to the technical lead.
+
+**Legacy compatibility gate:** the requested fallback is deterministic, but the
+claim “never more public than today” needs a narrower proof than “private.” A
+creator can be denied their own record today if it references another owner's
+private data; absent-creator fallback can likewise newly admit administrators.
+This revision does not silently authorize those disclosures. Stage the requested
+mapping and compare its audience against existing recorded authority; an expansion
+stops semantic cutover and keeps the old reader authoritative. No per-record sealed
+state or recovery workflow is restored. Resolving that conflict requires explicit
+acceptance of the creator/admin audience change, or a narrower fallback. This is
+an implementation compatibility exception, not reopening decisions 1–3.
 
 The v1 deliberately excludes bulk reclassification, fuzzy/prefix search and
 historical-version search. Repository generation expands a small ownership
@@ -67,27 +72,28 @@ DSL, dynamic query planner or general authorization expression language.
 
 ### Action and role matrix
 
-Roles are independent, scoped, explicit and revocable. Human and agent principals
-may hold ordinary reader/writer roles. The selected PM's existing blanket read
-capability does not imply publication, ownership, grant management or recovery.
+Roles are independent, scoped, explicit and revocable. Source-scope admin is a
+content role; workspace authentication admin is not an automatic grant to every
+private scope. The selected PM's blanket read capability grants no publication.
 
-| Action                       | Required authority                                                                                                                               | Administrative / PM shortcut                                                                                 |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| Read/render                  | Current source-scope read grant; active scope; audience binding                                                                                  | PM may read ordinary active scopes, within request limits; auth-admin has no business read shortcut          |
-| Author/edit                  | Destination writer; existing object scope immutable                                                                                              | Neither role alone grants write                                                                              |
-| Derive projection            | Scope-bound computation capability; all private inputs and output in that same scope                                                             | A PM with both source read and destination write still cannot cross scopes                                   |
-| Publish a copy               | Source publisher + source reader + destination writer; single-use intent bound to source version, output hash, destination and grant generations | Publisher is explicitly delegated by the human scope owner, never inferred from read/write, PM or auth-admin |
-| Grant/revoke scope access    | Scope owner; delegation of owner/publisher rights requires human owner authorization                                                             | Auth-admin administers authentication only; it cannot grant itself private-content authority                 |
-| Archive/trash/restore parent | Parent writer; start fenced lifecycle job                                                                                                        | No synchronous descendant fanout; no publication or scope change                                             |
-| Reclassify scope             | Unsupported in v1                                                                                                                                | No role can bypass this refusal                                                                              |
-| Recover/inspect sealed bytes | Separate record-bound recovery warrant, approved by every provable source owner; durable current read authority for all contributors             | Admin/PM alone cannot inspect. Unknown/missing owners mean no warrant and potentially permanent sealing      |
+| Action                | Required authority                                                                                                | Administrative / PM shortcut                                                |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Read/render           | Current source reader; active scope; audience binding                                                             | PM reads active scopes within K; content-unavailable bytes stay unavailable |
+| Author/edit           | Destination writer; existing scope immutable                                                                      | Neither PM nor auth-admin role alone grants write                           |
+| Derive projection     | One scope-bound computation; inputs/output in that scope                                                          | Source read plus destination write still cannot cross scopes                |
+| Publish a copy        | Source owner **or source-scope admin**, source read, and destination write; explicit version-bound publish intent | Read alone, PM alone or workspace auth-admin alone is insufficient          |
+| Grant/revoke          | Source scope owner/admin, under its membership policy                                                             | Auth-admin cannot grant itself arbitrary private-content access             |
+| Archive/trash/restore | Parent writer; fenced lifecycle transition                                                                        | No scope change or descendant fanout in foreground                          |
+| Reclassify            | Unsupported in v1                                                                                                 | No role bypass                                                              |
+| Legacy placement      | Migration worker assigns the accepted deterministic scope, subject to compatibility gate                          | No sealed inspection/recovery role; normal scope owner may republish        |
 
-A recovery worker may examine sealed bytes internally to prove provenance, under
-an audited maintenance identity with **no user serializer**. A reviewer sees only
-sanitized job state until a valid warrant exists. Recovery never assigns a record
-to workspace scope by default. Publication/recovery check source version and
-current authority at commit, consume their intent once, and audit the audience
-expansion. Possession of an ordinary HTTP bearer cannot manufacture these intents.
+Publication rechecks source version and current source/destination authority at
+commit, consumes its intent once and audits the audience expansion. A normal
+edit cannot manufacture a publish intent. The admins' fallback scope is an
+explicit content scope whose membership follows workspace administrator changes;
+that membership is relevant to the legacy compatibility gate, not a global read
+shortcut. Forward-compatible **binary** recovery remains necessary for crashes;
+it is distinct from the removed sealed-content recovery workflow.
 
 ## Evidence and scope of the problem
 
@@ -133,8 +139,8 @@ their present access through explicit grants. Changing the selected PM must
 revoke the old PM's access immediately: a single workspace PM authority row can
 provide a special all-active-scopes capability to the current selected PM, with
 indexed scope enumeration subject to the same scope/page limits. It is **not** an
-auth-admin privilege. PM processing still excludes sealed migration data and
-unindexed blobs. Human-only administrative actions remain human-only.
+auth-admin privilege. PM processing never returns unavailable blob content; staged migration
+generations remain invisible until cutover. Human-only administrative actions remain human-only.
 
 For each response, serialize only rows authorized in one read transaction.
 Capabilities carry a principal and grant generation, not a cached eternal list.
@@ -192,7 +198,7 @@ Do not accept a guessed nonexistent typed reference where an inaccessible one
 would fail. Use opaque guarded nodes for unresolved links instead. Structured
 nodes are the sole automatic redaction path.
 Binary content remains byte-preserving and scope-owned; it is never rewritten.
-Existing manifests still gate migration of old blobs. New binary uploads use a
+Existing manifests inform old-blob placement without fetching historical bytes. New binary uploads use a
 bounded full-byte reference validation pass before publication; no reader scans
 their bytes. Unresolvable arbitrary prose is not a durable taint graph.
 
@@ -241,7 +247,7 @@ necessarily repeat scope keys, with transactionally enforced consistency.
 ```sql
 CREATE TABLE visibility_scopes (
   id INTEGER PRIMARY KEY, kind TEXT NOT NULL,
-  state TEXT NOT NULL CHECK(state IN ('active','sealed','transitioning')),
+  state TEXT NOT NULL CHECK(state IN ('active','transitioning')),
   generation INTEGER NOT NULL
 );
 CREATE TABLE scope_grants (
@@ -297,14 +303,14 @@ Search postings are a retrieval index, not a second privacy graph. Canonical
 navigation edges remain useful where needed, but there is only one edge source;
 drop `resource_access_edges`, `resource_access_exact_edges`, mention buckets,
 mention resolutions and derived identities after cutover and retention checks.
-Keep canonical aliases, owner tombstones and unresolved legacy recovery evidence.
+Keep canonical aliases, owner tombstones and recorded ownership evidence through cutover.
 
 ## Enforced by construction
 
 SQLite has no native row-level security. A helper that developers may forget is
 insufficient. Make database access a closed boundary:
 
-1. Only `internal/scopedstore` and migration/maintenance packages may import
+1. Only `internal/scopedrepo` and migration/maintenance packages may import
    `database/sql`, obtain raw connections or prepare statements. Existing generic
    `QueryContext(string)` APIs disappear from business packages after porting.
    A Go analyzer rejects raw imports, raw-handle escapes, arbitrary SQL, alternate
@@ -410,7 +416,9 @@ nonsequential keys; stream-local ordering is used for changes.
   A bounded scheduler maintains time-dependent stale/due buckets. An expired
   scheduler watermark yields a visible “updating” state; reads do not repair by
   sweeping plans. Cross-scope health is composed transiently only for the visible
-  page, with bounded plan refs and explicit incomplete status.
+  page, with bounded plan refs and explicit incomplete status. Return covered scope
+  IDs, `more_scopes`, the scope-directory continuation and health `as_of` so the
+  next request can cover omitted scopes without implying complete totals.
 - **Search:** use scoped term postings with a fixed recency order, never global BM25
   statistics or dynamic cross-corpus ranking. At most T
   terms, K scopes and B posting candidates per stream are visited. AND/phrase
@@ -509,7 +517,7 @@ ORDER BY seq LIMIT ?; -- P+1
 ```
 
 An ordinary granted-but-unavailable slot reveals only the principal's own binding;
-a sealed record with no grant is never enumerated. Expired/revoked grant rows are
+a scope with no grant is never enumerated. Expired/revoked grant rows are
 removed or selected by an indexed authority state, never filtered after a long
 range scan. For SSE, no wrong-audience row enters a selected stream's key range.
 Idle ticks return the same opaque continuation if there is no visible stream change;
@@ -536,7 +544,7 @@ to fall back to old unbounded helpers.
 | Archive/trash/restore or cascade delete | Scope fence + parent state + durable job; O(1) foreground writes                                                                           | All descendant feed/search/counter changes in J-row chunks; totals unavailable until activation                                                                                    |
 | Grant / selected-PM change              | Authority PK updates and generation change; O(1)                                                                                           | No per-resource grant rewrite; selection bounded on next request                                                                                                                   |
 | Blob append / series point / compaction | Explicit byte/token bounds; same-scope fixed aggregate deltas                                                                              | Legacy manifests, retention, history purge and compaction are checkpointed jobs                                                                                                    |
-| Publish / recover                       | Explicit action matrix, version-bound intent and bounded record output                                                                     | No implicit cross-scope copy; unknown-owner recovery refused                                                                                                                       |
+| Publish                                 | Explicit action matrix, version-bound intent and bounded record output                                                                     | No implicit cross-scope copy; source owner/admin and destination writer required                                                                                                   |
 
 ### Cost model and limits
 
@@ -615,36 +623,36 @@ is an optional maintenance operation with disk headroom, never a startup task.
 ## Privacy guarantee disposition
 
 “Kept” means a required implementation acceptance test, not a claim this document
-has implemented it. “Changed” requires the product decisions above. No existing
+has implemented it. “Changed” follows the resolved decisions above and the explicit compatibility gate. No existing
 restricted legacy content is released automatically. No privacy guarantee is
 silently dropped; the removed mechanisms are explicitly distinguished below.
 
-| Existing guarantee / source                                                                                                                           | Disposition                                                | Replacement and required coverage                                                                                                                                                                            |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| #288 private board/card/backing thread inheritance, owner and selected PM; unrelated human/agent/anonymous exclusion                                  | Kept                                                       | Same-scope structural ownership; explicit grants and selected-PM authority; positive and negative controls                                                                                                   |
-| #288 recursive evidence restrictions through canonical text, nested JSON keys/values, metadata, observations, participants, runs, plans and PM bodies | Changed prospectively                                      | Same-scope derivation; reject known raw cross-private refs; guarded nodes only for navigation; explicit publication. Legacy private closures preserved or sealed                                             |
-| #288 revisions/comments/artifact body constrain parent; unknown or unavailable blob denied                                                            | Kept for existing data; changed prospective containment    | Parent, revisions, comments and artifact metadata share one scope; cross-scope attachment rejected. Unknown old manifests remain sealed; bytes are never guessed public                                      |
-| #288 all binary byte boundaries, NUL/controls/invalid UTF-8, declared content type, scalar vs JSON, punctuation/Unicode/legacy IDs                    | Kept validation and byte preservation; changed inheritance | Keep parsers and NUL rejection for bounded incoming validation and legacy conversion; binary refs cannot evade cross-scope rejection; never scan on reads                                                    |
-| #288/#294 future-created targets, late aliases/parents and virtual revisions reclassify previous prose                                                | Changed for new prose                                      | No retrospective prose taint. Structured target reads check current authority; legacy records see frozen conservative closure, and late legacy dependencies during migration restart affected classification |
-| #288 filtering before limits/cursors/joins/aggregates/search; metadata/observations constrain whole work                                              | Kept                                                       | Scoped indexes and same-scope projections before page admission. Legacy mixed work stays restricted/sealed; no post-LIMIT privacy filter                                                                     |
-| #288 stored linked-plan titles/refs, notification triggers, inbox parents/data and access-request reasons                                             | Kept                                                       | Scope-owned raw fields; no hidden label is serialized via stored snapshots; guarded cross-scope plans expose only authorized target previews                                                                 |
-| #288 source event + navigation/ownership atomicity; denied response replacement; replay/claim/hash/conflict isolation                                 | Kept                                                       | One transaction for authority, canonical mutation, feed and replay scope. Replays are reauthorized, never keyed solely by idempotency token                                                                  |
-| #288 cache suppression with inaccessible contributors, count-only caches, report outputs                                                              | Kept information boundary; changed representation          | Per-scope caches only; no mixed-scope persisted cache. Scope/generation/principal keys; authorization before cache delivery; no reader-filtered state written canonically                                    |
-| #288 raw/daily/live series contributor restrictions survive compaction; unknown legacy rollups stay hidden; deletion/name reuse                       | Kept                                                       | Single-scope series streams/rollups; mixed or unknown legacy provenance sealed, immutable stream identity through reuse; compaction cannot clear restrictions                                                |
-| #288 adapter shared last_push suppressed for partial readers                                                                                          | Kept privacy; changed projection                           | Expose only per-scope freshness computed from that scope. Never expose global last_push as the freshness of a visible subset                                                                                 |
-| #288 host/actor/agent/enrollment/invite/token/audit/profile/presence/progress/secret metadata is scoped; encrypted credentials opaque                 | Kept                                                       | Explicit scope on all user-authored metadata; authority-only tables cannot serialize business profiles; authority invariants remain canonical                                                                |
-| #288 signed wakeup host target checked first; foreign/nonexistent indistinguishable; card revision auth after authentication                          | Kept                                                       | Host capability + scope in same operation; standard point-denial behavior; exact route classifier regressions                                                                                                |
-| #288 selector checks only for route-defined fields; shared health/maintenance errors suppressed                                                       | Kept                                                       | Typed generated selectors; constant sanitized maintenance errors; no incidental parameter existence oracle                                                                                                   |
-| #288 purge preserves ownership/tombstones; no handle reuse; unindexed blobs denied                                                                    | Kept                                                       | Scope tombstones and reserved stable identities survive payload purge; attachment cache never bypasses blob metadata authorization                                                                           |
-| #288 canonical quota/blob accounting separate from reader totals; maintenance never returns business content                                          | Kept                                                       | Separate authority-only maintenance capability; scoped usage/error DTOs; retain existing physical-byte semantics                                                                                             |
-| #288 exact route/mount/classifier inventory, field/writer inventories and human/agent coverage                                                        | Kept and strengthened                                      | Generated store boundary, bidirectional field checks, raw-handle analyzer, positive route controls, read-only POST and second SSE tick                                                                       |
-| #294 complete PM kinds with shared IDs, inbox raw/typed parent aliases, late revision parents, batch metadata hydration                               | Kept data privacy; replaced implementation                 | Typed immutable keys include kind; same-scope parent constraints, no ID-only contributor collision, indexed batched hydration                                                                                |
-| #294/#298 fresh transaction/stream authority and epoch-valid ordinary GET snapshots; rebind clears cache                                              | Kept                                                       | Durable grant/scope generations checked in each read/write transaction and SSE tick; reject stale cursor/cache generations                                                                                   |
-| #298 profile denials are leaves; PM cache protects routing only, never grants                                                                         | Kept isolation                                             | Profile scope cannot mutate unrelated resource authority; PM routing cache always rechecks durable selected-PM/grant authority                                                                               |
-| #298 bounded SQL preparation, bound denial data, correct named/numbered bindings, indexed selectors                                                   | Kept cost/injection guarantee; old machinery removed       | Fixed generated query shapes with bound values; no recursive SQL shadows, literal denial sets or caller SQL; cap K/P/R and inspect actual prepare plans                                                      |
-| SCA-652 global BM25 statistics can leak hidden corpus changes                                                                                         | Strengthened                                               | Content-local scoped ranking and visible-only snippets/cursors; differential add-private-doc test                                                                                                            |
-| SCA-652 inventory accepts wrong identity classification                                                                                               | Strengthened                                               | Executable field ownership and ref-name/path checks with deliberately mislabeled negative fixtures                                                                                                           |
-| SCA-652 preview57 false positives hide legitimate owner series                                                                                        | Availability limitation retained until proven repair       | Sealed recovery with reconstructed provenance/explicit publication; never erase ambiguous historical restrictions speculatively                                                                              |
+| Existing guarantee / source                                                                                                                           | Disposition                                                | Replacement and required coverage                                                                                                                                                                          |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #288 private board/card/backing thread inheritance, owner and selected PM; unrelated human/agent/anonymous exclusion                                  | Kept                                                       | Same-scope structural ownership; explicit grants and selected-PM authority; positive and negative controls                                                                                                 |
+| #288 recursive evidence restrictions through canonical text, nested JSON keys/values, metadata, observations, participants, runs, plans and PM bodies | Changed prospectively                                      | Same-scope derivation; reject known raw cross-private refs; guarded nodes only for navigation; explicit publication. Accepted creator/admin fallback, with audience-expansion cutover gate                 |
+| #288 revisions/comments/artifact body constrain parent; unknown or unavailable blob denied                                                            | Kept for existing data; changed prospective containment    | Parent, revisions, comments and artifact metadata share one scope; cross-scope attachment rejected. Unknown old content remains unavailable; metadata is private; no automatic retries                     |
+| #288 all binary byte boundaries, NUL/controls/invalid UTF-8, declared content type, scalar vs JSON, punctuation/Unicode/legacy IDs                    | Kept validation and byte preservation; changed inheritance | Keep parsers and NUL rejection for bounded incoming validation and legacy conversion; binary refs cannot evade cross-scope rejection; never scan on reads                                                  |
+| #288/#294 future-created targets, late aliases/parents and virtual revisions reclassify previous prose                                                | Changed for new prose                                      | No retrospective prose taint. Structured target reads check current authority; legacy placement consumes recorded ownership only; recorded authority changes invalidate staged classification              |
+| #288 filtering before limits/cursors/joins/aggregates/search; metadata/observations constrain whole work                                              | Kept                                                       | Scoped indexes and same-scope projections before page admission. Legacy mixed work uses private fallback subject to compatibility gate; no post-LIMIT privacy filter                                       |
+| #288 stored linked-plan titles/refs, notification triggers, inbox parents/data and access-request reasons                                             | Kept                                                       | Scope-owned raw fields; no hidden label is serialized via stored snapshots; guarded cross-scope plans expose only authorized target previews                                                               |
+| #288 source event + navigation/ownership atomicity; denied response replacement; replay/claim/hash/conflict isolation                                 | Kept                                                       | One transaction for authority, canonical mutation, feed and replay scope. Replays are reauthorized, never keyed solely by idempotency token                                                                |
+| #288 cache suppression with inaccessible contributors, count-only caches, report outputs                                                              | Kept information boundary; changed representation          | Per-scope caches only; no mixed-scope persisted cache. Scope/generation/principal keys; authorization before cache delivery; no reader-filtered state written canonically                                  |
+| #288 raw/daily/live series contributor restrictions survive compaction; unknown legacy rollups stay hidden; deletion/name reuse                       | Kept                                                       | Single-scope series streams/rollups; mixed or unknown legacy provenance uses private fallback subject to compatibility gate, immutable stream identity through reuse; compaction cannot clear restrictions |
+| #288 adapter shared last_push suppressed for partial readers                                                                                          | Kept privacy; changed projection                           | Expose only per-scope freshness computed from that scope. Never expose global last_push as the freshness of a visible subset                                                                               |
+| #288 host/actor/agent/enrollment/invite/token/audit/profile/presence/progress/secret metadata is scoped; encrypted credentials opaque                 | Kept                                                       | Explicit scope on all user-authored metadata; authority-only tables cannot serialize business profiles; authority invariants remain canonical                                                              |
+| #288 signed wakeup host target checked first; foreign/nonexistent indistinguishable; card revision auth after authentication                          | Kept                                                       | Host capability + scope in same operation; standard point-denial behavior; exact route classifier regressions                                                                                              |
+| #288 selector checks only for route-defined fields; shared health/maintenance errors suppressed                                                       | Kept                                                       | Typed generated selectors; constant sanitized maintenance errors; no incidental parameter existence oracle                                                                                                 |
+| #288 purge preserves ownership/tombstones; no handle reuse; unindexed blobs denied                                                                    | Kept                                                       | Scope tombstones and reserved stable identities survive payload purge; attachment cache never bypasses blob metadata authorization                                                                         |
+| #288 canonical quota/blob accounting separate from reader totals; maintenance never returns business content                                          | Kept                                                       | Separate authority-only maintenance capability; scoped usage/error DTOs; retain existing physical-byte semantics                                                                                           |
+| #288 exact route/mount/classifier inventory, field/writer inventories and human/agent coverage                                                        | Kept and strengthened                                      | Generated store boundary, bidirectional field checks, raw-handle analyzer, positive route controls, read-only POST and second SSE tick                                                                     |
+| #294 complete PM kinds with shared IDs, inbox raw/typed parent aliases, late revision parents, batch metadata hydration                               | Kept data privacy; replaced implementation                 | Typed immutable keys include kind; same-scope parent constraints, no ID-only contributor collision, indexed batched hydration                                                                              |
+| #294/#298 fresh transaction/stream authority and epoch-valid ordinary GET snapshots; rebind clears cache                                              | Kept                                                       | Durable grant/scope generations checked in each read/write transaction and SSE tick; reject stale cursor/cache generations                                                                                 |
+| #298 profile denials are leaves; PM cache protects routing only, never grants                                                                         | Kept isolation                                             | Profile scope cannot mutate unrelated resource authority; PM routing cache always rechecks durable selected-PM/grant authority                                                                             |
+| #298 bounded SQL preparation, bound denial data, correct named/numbered bindings, indexed selectors                                                   | Kept cost/injection guarantee; old machinery removed       | Fixed generated query shapes with bound values; no recursive SQL shadows, literal denial sets or caller SQL; cap K/P/R and inspect actual prepare plans                                                    |
+| SCA-652 global BM25 statistics can leak hidden corpus changes                                                                                         | Strengthened                                               | Content-local scoped ranking and visible-only snippets/cursors; differential add-private-doc test                                                                                                          |
+| SCA-652 inventory accepts wrong identity classification                                                                                               | Strengthened                                               | Executable field ownership and ref-name/path checks with deliberately mislabeled negative fixtures                                                                                                         |
+| SCA-652 preview57 false positives hide legitimate owner series                                                                                        | Changed legacy placement                                   | Creator/admin private placement; normal owner publication, no sealed recovery; expanding audience blocks cutover absent explicit acceptance                                                                |
 
 Additional prospective contract changes are explicit: globally caller-selected
 handle allocation is removed in favor of scoped aliases; comment search returns
@@ -685,45 +693,35 @@ operator action, not downgrade support. Rollback means a later compatible binary
 choosing the retained old reader **before** semantic cutover, never reopening a
 cut-over database with old authority or a schema downgrade.
 
-### Bridge prerequisites and durable state machine
+### Bridge prerequisites and migration checkpoints
 
-The current `primitives.NewStore` synchronously calls `BackfillArtifactAccess`,
-which gathers all unknown artifacts and reads every blob. Keeping that constructor
-would defeat readiness even with empty shadow tables. **Before any expansion**,
-the bridge must remove that call from the readiness path and install a supervised,
-checkpointed legacy-blob worker. Unknown manifests remain denied by the old reader.
+The current `primitives.NewStore` synchronously calls `BackfillArtifactAccess`.
+Remove that call before listening and do **not** replace it with a legacy blob
+retry worker. Existing unknown manifests remain denied by the retained reader.
+Migration keyset-pages artifact metadata with its other canonical rows; it does
+not fetch blobs. Missing/unverified historical content is marked unavailable in
+owner-private placement (creator/admin fallback where needed). No due queue,
+backoff or retries run on startup or later. A later explicitly authored replacement
+upload is a normal validated mutation; it is not a migration retry. New uploads
+continue to validate bytes and atomically publish manifests.
 
-Discovery keyset-pages the artifact PK without filtering `content_refs_json IS
-NULL` before LIMIT, visiting at most J candidates and inserting due jobs for the
-unknown ones. Discovery cursor and inserts commit together. New/changed canonical
-blob writes enqueue their version/hash in the same transaction. Retry work seeks
-`(next_attempt_at,id)`, bounds simultaneous fetches, bytes and deadline, persists
-backoff after failure and never restarts the whole unknown list on process open.
-OpenReadStream must honor cancellation and enforce a byte cap; an over-limit or
-unavailable blob stays denied. Worker exceptions, lack of disk headroom and queue
-backpressure pause conversion, not readiness and not authorization. Successful
-HTTP `/readyz` does not certify that legacy blob recovery is complete.
+Retain only the checkpoints needed for a safe online migration: selected reader,
+staged generation, source epoch and per-table keyset cursor. There is no sealed
+record state machine. The old reader stays ready during backfill/validation;
+worker failure or low disk preserves its committed cursor and pauses conversion.
+Successful `/readyz` means the selected reader is usable, not conversion complete.
+After validation at a stable epoch, a short exclusive transaction selects the new
+generation and installs the downgrade fence atomically. No half-converted reader
+is exposed. Compatible binary reopening uses the committed generation.
 
-| Durable state        | Reader / readiness                                                     | Exit condition / invalidation                                                                          |
-| -------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `legacy_ready`       | Old scoped reader, unknown blobs denied; no blob retries before listen | Bridge lease and worker tables available                                                               |
-| `discovering`        | Same reader; worker resumes PK cursor/due queue                        | Classified capture snapshot and bounded job slices                                                     |
-| `classifying(epoch)` | Same reader; shadow generation inaccessible                            | Complete closure pass at pinned epoch; unknown roots sealed                                            |
-| `validating(epoch)`  | Same reader; validation outside write fence                            | Full privacy/count/digest checks pass for that exact generation                                        |
-| `eligible(epoch)`    | Same reader until atomic selection                                     | No intervening invalidating change, queue tail drained, sufficient disk, valid exclusive serving lease |
-| `cutover`            | Brief explicit business-unavailable interval                           | Ledger fence and generation selection commit atomically, or transaction aborts                         |
-| `new_ready`          | New reader, sealed data inaccessible                                   | Forward-compatible recovery may reopen; old binary refused                                             |
-| `paused(reason)`     | Last committed reader remains authoritative                            | Worker restart/disk recovery resumes durable checkpoint; no success watermark is advanced              |
-
-Conservatively invalidate a whole closure/validation pass on **any canonical
-reference-bearing field, identity/alias, parent, lifecycle, artifact hash/manifest,
-series provenance, grant, selected-PM or tombstone/purge change**. A single capture
-epoch increments inside each such transaction. Restart the pass from an empty
-shadow generation, never splice two closure epochs together. Blob progress that
-changes a manifest also invalidates a pass. This can defer cutover under sustained
-writes; the old reader stays ready. Pure non-authoritative job telemetry and reader
-cursors do not invalidate. A later optimization may narrow dependencies only with
-proof; this design does not assume one.
+Invalidate staged validation on canonical identity/alias, parent/lifecycle,
+recorded ownership, creator, manifest, grant/PM, tombstone or purge changes.
+Source writes increment a capture epoch in their transaction. Classification uses
+existing recorded edges/containment and fields, never a new scan of legacy text
+or blobs. Restart the staged pass on an invalidating epoch; under sustained churn
+keep serving the old reader and defer cutover. Checkpoint telemetry and reader
+cursors do not invalidate. This correctness baseline can later be optimized only
+with a proven narrower dependency set.
 
 Use a supervised process lease plus a DB fencing token on every worker commit.
 A stale process cannot commit after takeover. Pre-bridge binaries must be stopped
@@ -739,30 +737,32 @@ failures and demonstrates a fresh compatible process opening the fenced DB.
    rows and bounded capture triggers; no table rebuild, text/blob scan or legacy
    closure at startup. Adding an index to a populated old table is not “metadata
    only”; create indexes only on the empty shadow tables. Keep bridge-adjusted legacy readers
-   authoritative (including deferred blob retries). Readiness means the selected old reader and current migrations
+   authoritative (with automatic legacy blob retries removed). Readiness means the selected old reader and current migrations
    are usable, not that new backfill has finished. Target <5 s warm open and <90 s
    expansion at the SCA-661 scale fixture, with its progress signals retained.
 2. **Capture and classify in background.** Every canonical write transaction adds
    a monotonic dirty key/version. An in-process supervised worker persists its
    checkpoint and resumes after restart; no dependence on a task agent surviving.
    Use keyset chunks, e.g. <=256 records and <=4 MiB or 50 ms DB time, whichever
-   comes first. Reduce chunks on contention. A complete legacy graph compilation can consume
-   O(N+E) work per stable epoch in durable staging tables; it has no startup/read-path budget.
-   Cycles/SCCs and unknown/missing ownership are resolved conservatively. Do not
+   comes first. Reduce chunks on contention. Reading existing recorded ownership can consume O(N+E) work per stable epoch
+   in staging tables, outside startup/read budgets. No historical prose or blob
+   scanning is allowed; ambiguous ownership selects the accepted fallback. Do not
    invoke the old full closure once per record.
-3. **Preserve effective audiences.** Classify at a consistent source epoch. Public
-   legacy records with no restricted/unknown contributor may stay workspace-scoped.
-   A closure with one private audience can map to that stable owner scope only
-   after equality/subset verification against old access. Any multiple-owner
-   intersection, ambiguous series, unindexed blob or lost parent goes to a sealed
-   scope with zero ordinary grants. Never approximate an intersection by a union,
-   or assign the workspace scope because `scope_id` is missing. Preserve old
-   manifests and relevant provenance in a recovery archive until resolved.
+3. **Apply the accepted placement rule.** Unambiguous container scope first;
+   otherwise creator-private, then admins-private for absent creator. Existing
+   recorded restriction edges take precedence over a superficially public parent:
+   a mention-only restriction counts as ambiguous. Missing blobs retain private
+   rows with unavailable content and no retry work. Related legacy children whose
+   placement differs from their parent become guarded links; do not expose their
+   labels/counts through a broader parent. Validate the proposed audience against
+   old recorded authority. An expanding fallback prevents cutover under the
+   compatibility gate above; never represent creator-private as automatically
+   equivalent to the old intersection.
 4. **Catch up and validate.** Compare source versions when writing each shadow
    row. Dirty changes, alias/identity creation, grant/PM changes and source purges
    invalidate classification; the capture mechanism must include every old
    ownership source, not just the record body. An invalidating capture epoch change
-   restarts the whole staged graph pass as defined above. Under sustained churn defer cutover;
+   restarts the staged placement/validation pass as defined above. Under sustained churn defer cutover;
    do not publish partial graph results. Shadow projections are built only from
    classified data; unresolved generations remain unreadable.
 5. **Atomic cutover.** Briefly fence business writers, record a high-water epoch,
@@ -792,14 +792,15 @@ and privacy checks never fail open when backfill is delayed or unavailable.
 
 Bulk security reclassification is deferred. Its endpoint does not exist in v1,
 and ordinary scope-changing writes fail uniformly. Lifecycle archive/restore jobs
-do not grant authority to reclassify, publish or recover sealed content.
+do not grant authority to reclassify or publish content.
 
 ## Reviewable phases and concurrent work
 
-This design is one PR; the following are future phases, not permission to start
-implementation before acceptance. Prefer coherent changes over one PR per table.
+Implementation is authorized in phases; the concrete ownership/interface split
+is in [the implementation plan](access-and-read-models-implementation.md).
+Prefer coherent changes over one PR per table; coordinator review precedes release.
 
-1. **Contracts and closed storage boundary:** ratify semantics/limits, add scoped
+1. **Contracts and closed storage boundary:** encode the accepted semantics/limits, add scoped
    reviewed query templates, small ownership manifest, analyzer and negative tests; add expand-only migration
    and resumable job infrastructure. Keep old serving behavior. Contract changes
    land before consumers with `make contract-gen` and committed contract checks.
@@ -812,7 +813,7 @@ implementation before acceptance. Prefer coherent changes over one PR per table.
    must pass before enabling any new reader. Do not ship only fast top-level routes
    while retaining an O(N) nested label/context helper.
 4. **Migration and retirement:** full crash/fuzz/upgrade evidence, rehearsal on
-   synthetic old schemas, scope recovery and cutover; remove old graph only after
+   synthetic old schemas, deterministic placement and cutover; remove old graph only after
    route and field matrices pass. Reassess storage and write budgets on full data.
 
 SCA-665's bounded PM/history queries, normalized inbox columns and batched
@@ -905,4 +906,4 @@ refuse the new feature epoch, and test recovery with a forward-compatible build.
   typed repository contract without changing product privacy semantics.
 - **Big-bang startup rewrite or automatic legacy declassification.** Neither a
   startup timeout nor a small dataset is permission to weaken privacy. Use
-  resumable conversion, sealed ambiguous records and an atomic feature epoch.
+  resumable conversion, private legacy placement and an atomic feature epoch are required.

@@ -183,9 +183,10 @@ wire SSE framing, encrypted cursors and concurrent revocation remain gates.
 The constructor in `core/internal/primitives/scope_experiment_bridge.go` exists
 **only on the experiment branch**. It bypasses the old synchronous blob backfill
 by constructing without a backend, then attaches the backend. The experimental
-worker persists discovery/due jobs and tests bounded retries. The real bridge must
-wire a supervisor, enforce byte limits with `OpenReadStream`, capture every relevant
-write and implement fencing-token leases; the experiment's lease test proves only
+worker persists discovery/due jobs and tests bounded retries. That worker and its
+historical-blob `OpenReadStream` requirement are superseded by the resolved
+metadata-only, no-retry policy below. The real migration still needs a supervisor,
+capture of relevant writes and fencing-token leases; the experiment's lease test proves only
 single-slot exclusion, not takeover after process death. Low disk is injected
 before work, not a real full filesystem. The compatible recovery child verifies
 the renamed ledger and serves actual core HTTP, but does not validate all historical
@@ -203,8 +204,8 @@ GOMAXPROCS=1 go -C core test ./experiments/scopeboundary \
 The design now defers bulk reclassification, fuzzy/prefix and historical-version
 search. It limits generation to reviewed query templates and a small ownership
 manifest. Publication/recovery powers, incomplete PM coverage above 64 scopes,
-whole-scope lifecycle unavailability and potentially permanent sealing are explicit
-owner decisions, not inferred administrative privileges.
+whole-scope lifecycle unavailability were made explicit in that revision.
+The resolved product decisions below supersede its sealed-content proposal.
 
 Independent subagent re-review of this revision: **APPROVE**, with no remaining
 P1/P2 findings in the design/prototype scope. Review found and fixed a reflectable
@@ -215,3 +216,22 @@ that correction. Full analyzer/control-flow enforcement and production cutover
 gates remain open. The recorded additional suite passed in 2.855 s; cold HTTP
 readiness/reopen samples were 6.07–8.28 ms with zero startup blob reads on this
 shared host, without flushing filesystem caches.
+
+## Resolved product decisions and implementation handoff
+
+The 2026-10-07 decision removes sealed-content review/recovery and legacy blob
+retries. The earlier `13de5423` experiment is historical mechanism evidence:
+its retry queue, sealed-scope fixture and recovery terminology do not specify the
+current product. The updated design uses deterministic container/creator/admin
+placement, no historical blob/prose scans, and unavailable missing content.
+Forward-compatible **binary** reopening and lifecycle fencing remain required.
+The old grant-directory fixture still establishes candidate bounds for unavailable
+bindings; production tests should use transitioning/revoked scopes.
+
+The scope/mutation/stream/derivation probes remain applicable and will become
+real implementation tests under the ownership split in the implementation plan.
+For startup, retain zero-blob-I/O readiness and reopen checks, replacing successful
+retry expectations with assertions that no automatic legacy retry is scheduled.
+No new production-readiness result is claimed by changing the decision document.
+Creator/admin placement must not be described as an audience-subset proof: the
+compatibility gate in the design explicitly records its counterexample.
