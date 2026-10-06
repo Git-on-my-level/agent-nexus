@@ -158,8 +158,8 @@ it("asks again when core will not confirm, backing off and then stopping", async
   await vi.advanceTimersByTimeAsync(4 * 60 * 60_000);
   await settled();
 
-  // Bounded: eight tries after the one at load, then silence.
-  expect(readAt).toHaveLength(9);
+  // Bounded: the deadline read, eight tries, then silence.
+  expect(readAt).toHaveLength(10);
   const gaps = readAt.slice(2).map((at, i) => at - readAt[i + 1]);
   // Each wait is at least a minute, never shrinks, and caps at an hour.
   expect(Math.min(...gaps)).toBeGreaterThanOrEqual(60_000);
@@ -172,7 +172,7 @@ it("asks again when core will not confirm, backing off and then stopping", async
 
   await vi.advanceTimersByTimeAsync(6 * 60 * 60_000);
   await settled();
-  expect(readAt).toHaveLength(9);
+  expect(readAt).toHaveLength(10);
 });
 
 it("keeps waiting for one deadline while another will never be confirmed", async () => {
@@ -239,13 +239,62 @@ it("clears its timer when the report goes away", async () => {
   coreClientMock.renderReport.mockResolvedValue(rendered(false));
   const { unmount } = open();
   await settled();
-  const armed = vi.getTimerCount();
-  expect(armed).toBeGreaterThan(0);
+  expect(vi.getTimerCount()).toBeGreaterThan(0);
   unmount();
   // Cleared, not merely guarded: a timer left armed on every navigation
-  // accumulates for as long as the tab lives.
-  expect(vi.getTimerCount()).toBeLessThan(armed);
+  // accumulates for as long as the tab lives. Zero, because the component
+  // owns both the review timeout and the clock interval beside it.
+  expect(vi.getTimerCount()).toBe(0);
   await vi.advanceTimersByTimeAsync(DUE_AT - Date.now() + 10 * 60_000);
   await settled();
   expect(coreClientMock.renderReport).toHaveBeenCalledTimes(1);
+});
+
+it("spends its tries on one deadline without costing the next its read", async () => {
+  // A reader clock a day fast on a kiosk: the first panel is past its
+  // deadline as far as this browser is concerned, and core will keep saying
+  // "not yet" for a day. The second panel falls due five hours in, and its
+  // author must still be reminded — the budget bounds re-asking about one
+  // deadline, not asking about the next.
+  const later = structuredClone(report);
+  later.panels.push({
+    ...report.panels[0],
+    id: "later",
+    title: "Falls due later",
+    // Five hours after the first panel falls due: past its whole ladder.
+    review_by: new Date(DUE_AT + 5 * 3_600_000).toISOString(),
+  });
+  const answer = rendered(false);
+  answer.panels.push({
+    ...answer.panels[0],
+    id: "later",
+    review_by: later.panels[1].review_by,
+  });
+  const readAt = [];
+  coreClientMock.renderReport.mockImplementation(async () => {
+    readAt.push(Date.now());
+    return answer;
+  });
+  render(VisualReport, {
+    report: later,
+    documentId: "dashboard",
+    revisionRef: "document_revision:dashboard-r1",
+  });
+  await settled();
+
+  // The first deadline, then its retry ladder, which runs out after ~3h.
+  await vi.advanceTimersByTimeAsync(DUE_AT - Date.now() + 2000);
+  await settled();
+  await vi.advanceTimersByTimeAsync(4 * 3_600_000);
+  await settled();
+  const spent = readAt.length;
+  expect(spent).toBeGreaterThan(5);
+
+  // And the second deadline is still read when it arrives.
+  const laterDue = Date.parse(later.panels[1].review_by);
+  expect(Date.now()).toBeLessThan(laterDue);
+  await vi.advanceTimersByTimeAsync(laterDue - Date.now() + 2000);
+  await settled();
+  expect(readAt.length).toBeGreaterThan(spent);
+  expect(readAt.at(-1)).toBeGreaterThanOrEqual(laterDue);
 });

@@ -292,10 +292,13 @@
           ? at + reviewRetryWait(reviewAttempts)
           : null;
       const deadlineAt = nextReviewDeadline(panels, at);
-      const target =
-        retryAt === null || (deadlineAt !== null && deadlineAt < retryAt)
-          ? deadlineAt
-          : retryAt;
+      // Which of the two this wake is for. The callback cannot work it out
+      // afterwards — a deadline that has just arrived is "pending" by
+      // definition — and the budget must bound re-asking about one deadline,
+      // never asking about the next.
+      const forDeadline =
+        retryAt === null || (deadlineAt !== null && deadlineAt < retryAt);
+      const target = forDeadline ? deadlineAt : retryAt;
       if (target === null) return;
       // `setTimeout` fires immediately past about 24 days, so a deadline
       // further out than the cap waits in hops. Only the hop that reaches the
@@ -305,11 +308,26 @@
       reviewTimer = window.setTimeout(() => {
         if (disposed) return;
         now = Date.now();
-        const stillPending = reviewReadPending(
-          untrack(() => observedPanels),
-          Date.now(),
-        );
-        if (stillPending && reviewAttempts < REVIEW_ATTEMPTS) {
+        if (forDeadline) {
+          // A hop on the way to a distant deadline, not the deadline itself.
+          if (Date.now() < target) {
+            armReviewDeadline();
+            return;
+          }
+          // A deadline of its own gets a fresh budget: three hours spent on a
+          // panel core will never confirm must not cost the next panel its
+          // one read.
+          reviewAttempts = 0;
+          void refresh();
+          return;
+        }
+        if (
+          reviewReadPending(
+            untrack(() => observedPanels),
+            Date.now(),
+          ) &&
+          reviewAttempts < REVIEW_ATTEMPTS
+        ) {
           // A read already running will re-arm when it lands; do not spend a
           // try on a call that returns without asking core anything.
           if (!inFlight) reviewAttempts += 1;
