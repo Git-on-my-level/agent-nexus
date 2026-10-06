@@ -100,8 +100,9 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 		t.Fatal(out.Body.String())
 	}
 	// No plans or ref facts are queried when all work is unreadable. The shared
-	// inbox loader retains its four fixed notification-lifecycle reads.
-	if counter.Count() != 10 {
+	// inbox loader retains its four fixed notification-lifecycle reads. A fresh
+	// read request also captures main's epoch-validated denial snapshot once.
+	if counter.Count() != 11 {
 		t.Fatalf("private query count %d", counter.Count())
 	}
 }
@@ -188,6 +189,11 @@ func TestOverviewDigestDistinctDecisionRefsQueryBudget(t *testing.T) {
 			}
 			// Each full 200-row page needs an empty-page check for previews and plan facts.
 			wantQueries := int64(5 + 2*(i/200))
+			// Main captures the immutable denial snapshot on the first read only;
+			// later writes use its statement-level epoch fallback without recapture.
+			if i == 1 {
+				wantQueries++
+			}
 			if got := counter.Count(); got != wantQueries {
 				t.Fatalf("%d distinct decision refs used %d queries; want %d", i, got, wantQueries)
 			}

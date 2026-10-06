@@ -113,8 +113,10 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 	reportReq := httptest.NewRequest("GET", "/report", nil)
 	attachResourceAccessScope(reportReq, handlerOptions{primitiveStore: store})
 	reader := reportReader{r: reportReq, opts: handlerOptions{primitiveStore: store}, now: time.Now()}
+	// This new request captures one authorization snapshot, unlike the reused
+	// render request above. Projection queries remain six at either workspace size.
 	data, _, err := reader.materialize(reports.Panel{Type: "live-initiatives", Query: reports.Query{Limit: 40}})
-	if err != nil || len(data["items"].([]map[string]any)) != 38 || counter.Count() != 6 {
+	if err != nil || len(data["items"].([]map[string]any)) != 38 || counter.Count() != 7 {
 		t.Fatalf("private initiatives must be omitted without more queries: data=%+v queries=%d error=%v", data, counter.Count(), err)
 	}
 	for _, item := range data["items"].([]map[string]any) {
