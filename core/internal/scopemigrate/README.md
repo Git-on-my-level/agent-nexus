@@ -1,8 +1,9 @@
 # Metadata migration foundation
 
-This package stages metadata and cannot select a reader. Migration registration
-and constructor changes are separate proposals for stream A. The worker remains
-disabled/unwired until the production authority adapter and capture are integrated.
+This package stages metadata and cannot select a reader. Stream A has reviewed
+and integrated the constructor change: startup never reads historical blobs.
+Migration registration remains pending; the worker stays disabled/unwired until
+the production authority adapter and capture are integrated.
 
 `Store.Step(ctx, scopes.StepRequest)` implements A's frozen `MigrationStepper`
 from #301 at `c03b020a`. Job, expected epoch, token and budgets are checked within
@@ -41,10 +42,12 @@ production supervisor/capture adapter belong to integration, not a test fixture.
 
 `storage.InstallScopeMigration(ctx, tx)` creates only empty new tables/indexes.
 A allocates its version against the actual merge head after #275's 64/65, updates
-canonical internal schema classifications and both live inventories. It should
-also remove the automatic `BackfillArtifactAccess` call from `NewStore` without
-installing any replacement legacy blob worker. The cold HTTP regression exercises
-the real constructor and intentionally fails until that shared patch lands.
+canonical internal schema classifications and both live inventories. The automatic
+`BackfillArtifactAccess` call is removed from `NewStore`, with no replacement
+legacy blob worker. The cold HTTP regression exercises the real constructor.
+Unknown manifests and dependent resources may remain inaccessible indefinitely
+until explicit maintenance or the future scope migration handles them. The
+remaining maintenance method has no production caller or operator command.
 
 Expanded databases acquire an OS serving lease. Driver connection references
 retain it after `Workspace.Close` while an outstanding transaction/connection can
@@ -69,3 +72,5 @@ reopening, and live HTTP readiness with 100/1,000 unavailable blobs. Set
 the full historical-bootstrap refusal test. Full canonical corpus migration,
 production authority/projection parity, filesystem ENOSPC, SCA-661 budgets and
 green exact-head CI remain release gates. No hosted data is used.
+
+Lifecycle slice deadlines also own the transaction, including lock acquisition and commit; a callback that returns success after its deadline cannot commit. Cold readiness tests use a delayed, unavailable blob backend and require zero reads on repeated opens.

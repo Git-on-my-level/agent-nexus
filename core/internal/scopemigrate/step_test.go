@@ -403,6 +403,7 @@ func TestSQLiteFullPreservesCheckpoint(t *testing.T) {
 type lifecycle struct {
 	calls atomic.Int64
 	fail  bool
+	delay time.Duration
 }
 
 func (l *lifecycle) Step(ctx context.Context, tx *sql.Tx, limit int, token int64) (bool, error) {
@@ -413,6 +414,9 @@ func (l *lifecycle) Step(ctx context.Context, tx *sql.Tx, limit int, token int64
 	_, err := tx.ExecContext(ctx, `INSERT INTO scope_migration_placements VALUES('lifecycle',1,'one','card','one',1,'private',0,0)`)
 	if err != nil {
 		return false, err
+	}
+	if l.delay > 0 {
+		time.Sleep(l.delay)
 	}
 	if l.fail {
 		return false, errors.New("private sentinel must not be reported")
@@ -449,5 +453,20 @@ func TestLifecycleRollbackAndSupervision(t *testing.T) {
 	}
 	if _, err = os.Stat(filepath.Join(w.Layout().RootDir, ".scope-serving.lock")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestLifecycleDeadlineRollsBackLateSuccess(t *testing.T) {
+	w, r := fixture(t, 1)
+	token := begin(t, r)
+	r.Rebuilder = &lifecycle{delay: 80 * time.Millisecond}
+	done, err := r.LifecycleStep(context.Background(), token)
+	if err == nil || done {
+		t.Fatal("late worker committed", done, err)
+	}
+	var n int
+	must(t, w.DB().QueryRow(`SELECT count(*) FROM scope_migration_placements WHERE job='lifecycle'`).Scan(&n))
+	if n != 0 {
+		t.Fatal("expired lifecycle committed")
 	}
 }

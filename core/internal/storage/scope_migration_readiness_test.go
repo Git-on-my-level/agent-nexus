@@ -20,19 +20,28 @@ import (
 type unavailableScopeBlobs struct {
 	blob.Backend
 	reads atomic.Int64
+	delay time.Duration
 }
 
 func (b *unavailableScopeBlobs) Read(ctx context.Context, hash string) ([]byte, error) {
 	b.reads.Add(1)
+	select {
+	case <-ctx.Done():
+	case <-time.After(b.delay):
+	}
 	return nil, blob.ErrBlobNotFound
 }
 func (b *unavailableScopeBlobs) OpenReadStream(ctx context.Context, hash string) (io.ReadCloser, int64, error) {
 	b.reads.Add(1)
+	select {
+	case <-ctx.Done():
+	case <-time.After(b.delay):
+	}
 	return nil, 0, blob.ErrBlobNotFound
 }
 
-// This is intentionally an integration gate for A's shared constructor patch.
-// D must not bypass NewStore or substitute the experiment-only constructor.
+// Exercise real workspace initialization, the production constructor and HTTP
+// readiness. Slow, unavailable historical blobs must never be read or retried.
 func TestScopeColdReadinessZeroHistoricalBlobReads(t *testing.T) {
 	if testing.Short() {
 		t.Skip("real HTTP cold startup gate")
@@ -69,7 +78,7 @@ func TestScopeColdReadinessZeroHistoricalBlobReads(t *testing.T) {
 			if err := w.Close(); err != nil {
 				t.Fatal(err)
 			}
-			b := &unavailableScopeBlobs{}
+			b := &unavailableScopeBlobs{delay: 10 * time.Millisecond}
 			for attempt := 0; attempt < 2; attempt++ {
 				start := time.Now()
 				w, err = storage.InitializeWorkspace(ctx, root)
@@ -100,7 +109,7 @@ func TestScopeColdReadinessZeroHistoricalBlobReads(t *testing.T) {
 					t.Fatal(err)
 				}
 				if reads := b.reads.Load(); reads != 0 {
-					t.Fatalf("startup read %d historical blobs; A must remove NewStore's BackfillArtifactAccess call", reads)
+					t.Fatalf("startup read %d historical blobs", reads)
 				}
 				if time.Since(start) > 5*time.Second {
 					t.Fatal("cold readiness exceeded five seconds")

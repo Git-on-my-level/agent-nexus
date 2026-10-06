@@ -1532,7 +1532,7 @@
     "../scopedrepo/store.go:opaque": "3ed67adc6024d2eaf21a5ab1291cd0435eeb6792c5d36009d8320554beb43b01",
     "../scopedrepo/store.go:role": "02061cc48ee6753e018971530a964e4c990d877a7981bb353044b65f4d0d70a6",
     "../scopemigrate/step.go:*Runner:Acquire": "8f3e975e89eae05da7081b051f1017edb87a3cfe17b1a1ded62795a30888f721",
-    "../scopemigrate/step.go:*Runner:LifecycleStep": "f498006bd27ca46f4a527a4156df52edf288185bba6e45426b921e588bccd20e",
+    "../scopemigrate/step.go:*Runner:LifecycleStep": "7443e71ec3720819644c2b32f7b25c77933e1d247770d46780f8a1817f1610b7",
     "../scopemigrate/step.go:*Runner:Report": "0656ace74df3bd713341ced01985a80221661caedfa9658521453dc9e85d1eef",
     "../scopemigrate/step.go:*Runner:Run": "18fd082edd1007b13ede8831f0572799593ba1c748cdba73f1dd55d1d35567f9",
     "../scopemigrate/step.go:*Runner:Step": "c8cbc31765abb30b3df5f6021e0674ece4dacc949fd2d61042d694426ce7dc7e",

@@ -287,6 +287,8 @@ func (r *Runner) LifecycleStep(ctx context.Context, token int64) (bool, error) {
 			return false, err
 		}
 	}
+	ctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancel()
 	tx, err := r.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
