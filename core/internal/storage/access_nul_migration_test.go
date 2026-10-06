@@ -80,6 +80,7 @@ func TestResourceAccessMigrationRepairsNULRows(t *testing.T) {
 	}
 	defer ws.Close()
 	s = primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	indexLegacyFixtureContent(t, ctx, s)
 	for _, actor := range []string{"owner", "stranger", "unauthorized-agent"} {
 		scope := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: actor})
 		for _, doc := range []map[string]any{textDoc, blobDoc} {

@@ -1,0 +1,22 @@
+diff --git a/core/internal/primitives/scope_migration_hook.go b/core/internal/primitives/scope_migration_hook.go
+new file mode 100644
+--- /dev/null
++++ b/core/internal/primitives/scope_migration_hook.go
+@@ -0,0 +1,17 @@
++package primitives
++
++import (
++	"context"
++
++	"agent-nexus-core/internal/scopedrepo"
++	"agent-nexus-core/internal/scopemigrate"
++	"agent-nexus-core/internal/scopes"
++)
++
++// scopeMigrationHook is a trusted constructor-injected adapter. A owns all
++// call sites and must preserve the existing canonical source transaction.
++type scopeMigrationHook struct{}
++
++func (scopeMigrationHook) ApplyCanonical(ctx context.Context, tx scopedrepo.MutationTx, mutation scopes.CanonicalMutation) error {
++	return scopemigrate.CaptureCanonical(ctx, tx, mutation)
++}
