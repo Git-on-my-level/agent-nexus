@@ -39,16 +39,18 @@ func TestEvidenceProjectionIDsDoNotBecomeExternalResourceIdentities(t *testing.T
 		t.Fatal(err)
 	}
 	scope := WithAccessScope(ctx, AccessScope{ActorID: "stranger"})
-	public, err := s.CreateWork(scope, "stranger", anyStringValue(publicBoard["id"]), map[string]any{"title": "Public numeric identity", "source": map[string]any{"authority": "generic", "connection_id": "public", "native_id": nativeID}})
-	if err != nil {
-		t.Fatalf("internal record ID constrained a public mutation: %v", err)
-	}
-	if _, err = s.GetWork(scope, anyStringValue(public["id"])); err != nil {
-		t.Fatal(err)
-	}
-	previews, err := s.ResolveRefs(scope, []string{"generic:" + nativeID}, nil, time.Now(), 0)
-	if err != nil || !previews[0].Resolvable || previews[0].ConnectionID != "public" {
-		t.Fatalf("numeric public identity hidden by private projection: %+v %v", previews, err)
+	for _, authority := range []string{"generic", "work_evidence_record", "work_evidence_alias"} {
+		public, err := s.CreateWork(scope, "stranger", anyStringValue(publicBoard["id"]), map[string]any{"title": "Public numeric identity " + authority, "source": map[string]any{"authority": authority, "connection_id": "public", "native_id": nativeID}})
+		if err != nil {
+			t.Fatalf("internal record ID constrained a public mutation: %v", err)
+		}
+		if _, err = s.GetWork(scope, anyStringValue(public["id"])); err != nil {
+			t.Fatal(err)
+		}
+		previews, err := s.ResolveRefs(scope, []string{authority + ":" + nativeID}, nil, time.Now(), 0)
+		if err != nil || !previews[0].Resolvable || previews[0].ConnectionID != "public" {
+			t.Fatalf("numeric public identity hidden by private projection: %+v %v", previews, err)
+		}
 	}
 }
 

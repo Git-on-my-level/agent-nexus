@@ -196,7 +196,7 @@ func TestExternalPlanRefAndPollFreshness(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !items[0].Resolvable || items[0].Phase != "done" || !items[1].Resolvable || items[1].Source != "parsed" || items[1].Status != "" {
+	if !items[0].Resolvable || items[0].Phase != "done" || items[1].Resolvable || items[1].Source != "" || items[1].Status != "" {
 		t.Fatal(items)
 	}
 	// A known URL projects source state; an unknown URL keeps the agent fallback.

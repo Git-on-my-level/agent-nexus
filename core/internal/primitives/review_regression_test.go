@@ -161,7 +161,7 @@ func TestGenericAliasesAndIndexedLookupIgnoreUnrelatedEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	exactIndex, publicIndex := false, false
+	exactIndex := false
 	for rows.Next() {
 		var id, parent, unused int
 		var detail string
@@ -171,11 +171,8 @@ func TestGenericAliasesAndIndexedLookupIgnoreUnrelatedEvidence(t *testing.T) {
 		if strings.Contains(detail, "idx_work_evidence_lookup") {
 			exactIndex = true
 		}
-		if strings.Contains(detail, "idx_work_evidence_public_lookup") {
-			publicIndex = true
-		}
 	}
-	if !exactIndex || !publicIndex {
+	if !exactIndex {
 		t.Fatal("evidence lookup does not use the lookup index")
 	}
 }

@@ -25,7 +25,7 @@ func TestSourceRefsGenericAnnotationsAndMarkdownIsolation(t *testing.T) {
 			t.Fatalf("items=%v err=%v", items, err)
 		}
 	}
-	resolve("parsed")
+	resolve("")
 	updated, err := s.PatchWork(ctx, "actor-1", w["id"].(string), w["version"].(int64), map[string]any{"source_refs": evidence})
 	if err != nil {
 		t.Fatal(err)
@@ -52,7 +52,7 @@ func TestSourceRefsGenericAnnotationsAndMarkdownIsolation(t *testing.T) {
 	if _, err = s.PatchWork(ctx, "actor-1", w["id"].(string), updated["version"].(int64), map[string]any{"source_refs": []any{}}); err != nil {
 		t.Fatal(err)
 	}
-	resolve("parsed")
+	resolve("")
 	for _, bad := range []any{nil, "wrong", []any{map[string]any{"authority": "any"}}, append(evidence, evidence[0]), []any{map[string]any{"authority": "any", "connection_id": "connection", "native_id": "opaque", "url": "file:///private"}}} {
 		if err := primitives.ValidateWorkAnnotations(map[string]any{"source_refs": bad}); err == nil {
 			t.Fatalf("accepted %v", bad)

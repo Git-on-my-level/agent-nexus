@@ -1091,10 +1091,10 @@ batch_ref_resolve:
   output: {items: 'list<object>'}
   fields: [ref, kind, title, phase, status, owner, owner_display, board, priority, last_moved_at, next_step, progress, url, resolvable, authority, native_id, connection_id, observed_at, source, plan_health, plan_resolution_truncated, status_mismatch]
   semantics:
-    - Preserve input order and duplicates, including unknown or inaccessible native refs as resolvable false without metadata; valid parsed GitHub refs remain resolvable with unknown status.
-    - Resolve card, doc/document, topic, and board refs by exact handle or internal id. GitHub github:owner/repo#n, owner/repo#n and pull/issues URLs resolve from source observations or generic structured source_refs. Parsed GitHub refs remain valid links with null status when no visible evidence exists. Other identifiers resolve only from visible adapter-published identifier_aliases (or legacy identifier) with no inferred authority; unknown aliases remain unresolved.
+    - Preserve input order and duplicates. Unknown, ambiguous or inaccessible refs remain resolvable false without metadata.
+    - Resolve card, doc/document, topic, and board refs by exact handle or internal id. External keys resolve only from visible source observations or generic structured source_refs by their exact published native_id, authority-prefixed native_id, URL, identifier or aliases. Core never parses provider spellings, generates provider URLs or infers authority; adapters publish any desired variants.
     - URLs for native card/document entities are workspace-relative paths; topics and boards have no current UI detail surface and omit url. No caller-supplied origin is trusted.
-    - Read access is checked for every resource and referenced plan step; unavailable refs never expose hidden state.
+    - Read access is checked for every resource and referenced plan step. Published evidence keys carry their containing card ownership to referencing plans and work through the central graph before projections, limits or counts; numeric evidence projection IDs are internal. Publishing a key does not itself reference another publisher of that key. Unavailable refs never expose hidden state.
 
 # Push-only data, declared before use; no external URL or credential lives in core.
 live_series:

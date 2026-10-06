@@ -54,6 +54,11 @@ func TestResolutionIgnoresHiddenCandidatesBeforeLimits(t *testing.T) {
 	if err != nil || !previews[0].Resolvable || previews[0].Status != "done" || !previews[1].Resolvable || previews[1].ID != visible["id"] {
 		t.Fatalf("hidden evidence changed public facts: %+v %v", previews, err)
 	}
+	for _, read := range counter.Reads() {
+		if strings.Contains(read.SQL, "anx_resource_external_key_refs") {
+			t.Fatal("ownership decoded publication payloads during candidate reads")
+		}
+	}
 	if counter.RowsRead() > 10 {
 		t.Fatalf("hidden payloads materialized: %d rows", counter.RowsRead())
 	}
@@ -72,8 +77,30 @@ func TestResolutionIgnoresHiddenCandidatesBeforeLimits(t *testing.T) {
 	if err = reader.EnrichCardPlans(scoped, []map[string]any{current}, func(_ string, owner string) bool { return owner == "" }, time.Now(), 0); err != nil {
 		t.Fatal(err)
 	}
-	if current["plan_health"].(plans.Health).State != "done" {
-		t.Fatalf("hidden evidence changed public health: %+v", current["plan_health"])
+	// Resolution still uses visible evidence. Authored plans, however, carry
+	// every published key's ownership, just as native card refs do; a key also
+	// published privately cannot expose a stored step to a stranger.
+	if current["plan_health"].(plans.Health).State != "no_plan" || current["next_step"] != nil {
+		t.Fatalf("private published ownership failed to suppress stored plan: %+v", current)
+	}
+	// A native link to the visible publisher remains unaffected by inaccessible
+	// candidates and is the unambiguous way to bind this plan to public work.
+	initiative, err = s.GetBoardCard(ctx, "", initiative["id"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.SetCardPlan(ctx, "owner", initiative["id"].(string), initiative["updated_at"].(string), plans.Plan{Steps: []plans.Step{{ID: "step", Title: "Public source", Ref: visible["ref"].(string)}}}); err != nil {
+		t.Fatal(err)
+	}
+	current, err = s.GetWork(scoped, initiative["id"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = reader.EnrichCardPlans(scoped, []map[string]any{current}, nil, time.Now(), 0); err != nil {
+		t.Fatal(err)
+	}
+	if current["plan_health"].(plans.Health).State != "on_track" {
+		t.Fatalf("hidden candidates changed native public health: %+v", current)
 	}
 }
 

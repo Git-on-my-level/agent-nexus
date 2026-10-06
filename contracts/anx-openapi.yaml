@@ -10383,12 +10383,12 @@ components:
         resolvable: {type: boolean}
         kind: {type: string}
         title: {type: string}
-        status: {type: string, nullable: true, description: Source workflow status; null for parsed links with unknown status.}
+        status: {type: string, nullable: true, description: Published source workflow status; null when the evidence has no status.}
         authority: {type: string}
         native_id: {type: string}
         connection_id: {type: string, description: Ingested source connection when evidence is unambiguous.}
         observed_at: {type: string, format: date-time}
-        source: {type: string, enum: [evidence, parsed]}
+        source: {type: string, enum: [evidence, parsed], description: Core emits evidence for published external keys. The legacy parsed value remains readable but is no longer produced.}
         plan_resolution_truncated: {type: boolean, description: True when the shared 4000 distinct plan-ref budget was exceeded; omitted refs remain unknown.}
         plan_health: { $ref: '#/components/schemas/PlanHealth' }
         status_mismatch: {type: boolean}

@@ -52,16 +52,25 @@ func ownershipClosure(name, roots string, owner bool) string {
 	} {
 		edge(e[0], e[1], e[2], e[3], e[4])
 	}
+	// Published keys are ownership identities, not numeric projection IDs.
+	// Keeping a graph vertex for each key also lets purge retain it in the
+	// existing ownership tombstone ledger. Native refs keep native resolution.
+	terms = append(terms, "SELECT 'external_key',"+resourceaccess.TrimSpaceSQL("k.lookup_key")+carry+" FROM "+name+" d JOIN main.work_evidence_index k ON d.kind='card' AND k.card_id=d.id WHERE lower("+resourceaccess.TrimSpaceSQL("substr(k.lookup_key,1,instr(k.lookup_key,':')-1)")+") NOT IN ('card','doc','document','board','topic')")
+	// Publishing the same key is not a reference to another publisher: it must
+	// not let hidden evidence suppress visible resolution candidates. Other
+	// inventory fields (including plan and work refs) inherit the key's owner.
+	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_edges e ON d.kind='external_key' AND e.target_ref=d.id COLLATE NOCASE WHERE e.source_kind NOT IN ('work_metadata','work_observation','work_evidence_record','work_evidence_alias')")
+	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_external_edges e ON d.kind='external_key' AND e.target_ref=d.id COLLATE NOCASE")
 	// Document full-text materialization includes comment text. A private
 	// contributor must constrain the document before MATCH/rank/limit are applied.
 	terms = append(terms, "SELECT 'document',r.id"+carry+" FROM "+name+" d JOIN main.events e ON d.kind='event' AND e.id=d.id JOIN main.documents r ON r.thread_id=e.thread_id WHERE e.type='message_posted' AND COALESCE(e.thread_id,'')<>''")
 	refs := func(join, ref string) {
-		terms = append(terms, "SELECT e.source_type,e.source_id"+carry+" FROM "+name+" d "+join+" JOIN main.ref_edges e INDEXED BY idx_ref_edges_access_cover ON e.target_type=d.kind AND e.target_id="+ref+" COLLATE NOCASE AND e.edge_type='ref' WHERE d.kind NOT LIKE 'filter/%'")
-		terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d "+join+" JOIN main.resource_access_exact_edges e ON e.target_key="+resourceaccess.AtomKeySQL("(d.kind||':'||"+ref+")")+" WHERE d.kind NOT LIKE 'filter/%'")
+		terms = append(terms, "SELECT e.source_type,e.source_id"+carry+" FROM "+name+" d "+join+" JOIN main.ref_edges e INDEXED BY idx_ref_edges_access_cover ON e.target_type=d.kind AND e.target_id="+ref+" COLLATE NOCASE AND e.edge_type='ref' WHERE d.kind NOT LIKE 'filter/%' AND d.kind NOT IN ('work_evidence_record','work_evidence_alias','external_key')")
+		terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d "+join+" JOIN main.resource_access_exact_edges e ON e.target_key="+resourceaccess.AtomKeySQL("(d.kind||':'||"+ref+")")+" WHERE d.kind NOT LIKE 'filter/%' AND d.kind NOT IN ('work_evidence_record','work_evidence_alias','external_key')")
 	}
 	refs("", "d.id")
 	refs("JOIN main.runs r ON d.kind='run' AND r.id=d.id", "r.handle")
-	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_exact_edges e ON e.target_key="+resourceaccess.AtomKeySQL("d.id")+" WHERE d.kind NOT IN ('plan','work_evidence_record','work_evidence_alias') AND d.kind NOT LIKE 'filter/%'")
+	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_exact_edges e ON e.target_key="+resourceaccess.AtomKeySQL("d.id")+" WHERE d.kind NOT IN ('plan','work_evidence_record','work_evidence_alias','external_key') AND d.kind NOT LIKE 'filter/%'")
 	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.work_metadata m ON d.kind='card' AND m.card_id=d.id JOIN main.resource_access_exact_edges e ON e.target_key="+resourceaccess.AtomKeySQL("json_extract(m.metadata_json,'$.source.url')")+" WHERE m.authority<>'nexus'")
 	for _, kind := range []string{"thread", "board", "card", "topic", "document", "event", "artifact"} {
 		refs("JOIN main."+resourceTables[kind]+" r ON d.kind='"+kind+"' AND r.id=d.id", "r.handle")

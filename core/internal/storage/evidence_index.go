@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
+
+	"agent-nexus-core/internal/resourceaccess"
 )
 
 // The index is a rebuildable projection, updated in the canonical write's
@@ -37,7 +40,6 @@ func applyMigration62EvidenceIndex(ctx context.Context, tx *sql.Tx) error {
 		`CREATE TABLE work_evidence_records(id INTEGER PRIMARY KEY,card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,slot TEXT NOT NULL,evidence_json TEXT NOT NULL,UNIQUE(card_id,slot));`,
 		`CREATE TABLE work_evidence_index(id INTEGER PRIMARY KEY,card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,lookup_key TEXT NOT NULL,evidence_id INTEGER NOT NULL REFERENCES work_evidence_records(id) ON DELETE CASCADE,UNIQUE(evidence_id,lookup_key));`,
 		`CREATE INDEX idx_work_evidence_lookup ON work_evidence_index(lookup_key,id);`,
-		`CREATE INDEX idx_work_evidence_public_lookup ON work_evidence_index(lookup_key COLLATE NOCASE,id);`,
 		`CREATE INDEX idx_work_evidence_card ON work_evidence_index(card_id);`,
 		`CREATE VIEW work_evidence_entries AS
  SELECT m.card_id,'refs:'||j.key AS slot,j.value AS evidence_json FROM work_metadata m,json_each(m.metadata_json,'$.source_refs') j WHERE j.type='object' AND CAST(j.key AS INTEGER)<2000
@@ -119,5 +121,97 @@ func applyMigration62EvidenceIndex(ctx context.Context, tx *sql.Tx) error {
 	}
 	// These projections inherit canonical card ownership and every reference in
 	// their payload/key. Install atomic edges after the bounded backfill too.
-	return installResourceAccessEdges(ctx, tx)
+	if err = installResourceAccessEdges(ctx, tx); err != nil {
+		return err
+	}
+	return installExternalKeyReferenceEdges(ctx, tx)
+}
+
+// External keys distinguish publication fields from references using the same
+// canonical field inventory. Keep this projection indexed and transactional;
+// scoped reads never decode a large publisher for each of its aliases.
+func installExternalKeyReferenceEdges(ctx context.Context, tx *sql.Tx) error {
+	for _, q := range []string{
+		`DROP TABLE IF EXISTS resource_access_external_edges;`,
+		`CREATE TABLE IF NOT EXISTS resource_access_external_edges(source_kind TEXT NOT NULL,source_id TEXT NOT NULL,target_ref TEXT NOT NULL COLLATE NOCASE,PRIMARY KEY(source_kind,source_id,target_ref));`,
+		`CREATE INDEX IF NOT EXISTS idx_resource_access_external_target ON resource_access_external_edges(target_ref,source_kind,source_id);`,
+	} {
+		if _, err := tx.ExecContext(ctx, q); err != nil {
+			return err
+		}
+	}
+	for _, source := range resourceaccess.OwnershipSources {
+		if _, publishes := resourceaccess.ExternalKeyPublications[source.Kind]; !publishes {
+			continue
+		}
+		exists, err := sqliteTableExists(ctx, tx, source.Table)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			continue
+		}
+		columns := []string{}
+		for _, col := range source.Columns {
+			var n int
+			if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM pragma_table_info(?) WHERE name=?`, source.Table, col).Scan(&n); err != nil {
+				return err
+			}
+			if n > 0 {
+				columns = append(columns, col)
+			}
+		}
+		if len(columns) == 0 {
+			continue
+		}
+		insert := func(prefix, from, where string) string {
+			return `INSERT INTO resource_access_external_edges(source_kind,source_id,target_ref) SELECT '` + source.Kind + `',` + prefix + source.ID + `,j.value FROM ` + from + `json_each(` + resourceaccess.ExternalKeyReferenceExpression(source, columns, prefix) + `) j WHERE j.value<>''` + where + ` ON CONFLICT(source_kind,source_id,target_ref) DO NOTHING;`
+		}
+		clear := `DELETE FROM resource_access_external_edges WHERE source_kind='` + source.Kind + `' AND source_id=OLD.` + source.ID + `;`
+		for _, q := range []string{
+			`DROP TRIGGER IF EXISTS access_external_` + source.Table + `_insert`,
+			`DROP TRIGGER IF EXISTS access_external_` + source.Table + `_update`,
+			`DROP TRIGGER IF EXISTS access_external_` + source.Table + `_delete`,
+			`CREATE TRIGGER access_external_` + source.Table + `_insert AFTER INSERT ON ` + source.Table + ` BEGIN ` + insert("NEW.", "", "") + ` END`,
+			`CREATE TRIGGER access_external_` + source.Table + `_update AFTER UPDATE OF ` + strings.Join(append([]string{source.ID}, columns...), ",") + ` ON ` + source.Table + ` BEGIN ` + clear + insert("NEW.", "", "") + ` END`,
+			`CREATE TRIGGER access_external_` + source.Table + `_delete AFTER DELETE ON ` + source.Table + ` BEGIN ` + clear + ` END`,
+		} {
+			if _, err = tx.ExecContext(ctx, q); err != nil {
+				return fmt.Errorf("external ownership %s: %w", source.Table, err)
+			}
+		}
+		var cursor any = ""
+		if source.Kind == "work_evidence_record" {
+			cursor = int64(0)
+		}
+		for {
+			rows, err := tx.QueryContext(ctx, `SELECT `+source.ID+` FROM `+source.Table+` WHERE `+source.ID+`>? ORDER BY `+source.ID+` LIMIT 32`, cursor)
+			if err != nil {
+				return err
+			}
+			ids := []any{}
+			for rows.Next() {
+				var id any
+				if err = rows.Scan(&id); err != nil {
+					rows.Close()
+					return err
+				}
+				ids = append(ids, id)
+			}
+			err = rows.Err()
+			rows.Close()
+			if err != nil {
+				return err
+			}
+			if len(ids) == 0 {
+				break
+			}
+			encoded, _ := json.Marshal(ids)
+			if _, err = tx.ExecContext(ctx, insert("r.", source.Table+" r, ", " AND r."+source.ID+" IN (SELECT value FROM json_each(?))"), string(encoded)); err != nil {
+				return err
+			}
+			cursor = ids[len(ids)-1]
+		}
+	}
+	return nil
 }

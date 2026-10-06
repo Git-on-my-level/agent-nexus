@@ -181,7 +181,9 @@ func TestSourceURLLookupStaysBounded(t *testing.T) {
 	}
 }
 
-func TestConflictingPublicIdentityCannotCompleteAnotherRef(t *testing.T) {
+// Provider identity interpretation belongs in the publisher. A URL is a
+// literal key even when its spelling resembles a different provider identity.
+func TestProviderSpellingsUseOnlyPublishedKeys(t *testing.T) {
 	ctx := context.Background()
 	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
 	if err != nil {
@@ -189,20 +191,22 @@ func TestConflictingPublicIdentityCannotCompleteAnotherRef(t *testing.T) {
 	}
 	defer ws.Close()
 	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
-	_, err = s.CreateWork(ctx, "actor", "", map[string]any{"title": "Conflicting evidence", "source_refs": []any{map[string]any{"authority": "github", "connection_id": "conn", "native_id": "org/repo#1", "url": "https://github.com/org/repo/issues/2", "status": "done"}}})
+	_, err = s.CreateWork(ctx, "actor", "", map[string]any{"title": "Generic publication", "source_refs": []any{map[string]any{"authority": "tracker", "connection_id": "conn", "native_id": "opaque-id", "aliases": []string{"team/repo#42", "github:team/repo#42", "https://github.com/team/repo/pull/42"}, "status": "done", "title": "Published tracker title"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	items, err := s.ResolveRefs(ctx, []string{"github:org/repo#2", "https://github.com/org/repo/issues/2", "github:org/repo#1"}, nil, time.Now(), 0)
+	refs := []string{"team/repo#42", "github:team/repo#42", "https://github.com/team/repo/pull/42", "https://github.com/team/repo/issues/42", "github:team/repo#999", "TEAM/repo#42"}
+	items, err := s.ResolveRefs(ctx, refs, nil, time.Now(), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, item := range items[:2] {
-		if item.Source != "parsed" || item.Status != "" || item.NativeID != "org/repo#2" {
-			t.Fatalf("conflicting evidence: %+v", items)
+	for i, item := range items {
+		if i < 3 {
+			if !item.Resolvable || item.Authority != "tracker" || item.NativeID != "opaque-id" || item.Status != "done" || item.Title != "Published tracker title" || item.Source != "evidence" || item.URL != "" {
+				t.Fatalf("provider spelling overrode literal evidence: %+v", item)
+			}
+		} else if item.Resolvable || item.Authority != "" || item.Title != "" || item.URL != "" || item.Source != "" {
+			t.Fatalf("unpublished key inferred: %+v", item)
 		}
-	}
-	if items[2].Status != "" || items[2].Source != "parsed" {
-		t.Fatal(items)
 	}
 }

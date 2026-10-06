@@ -2,7 +2,6 @@ package primitives_test
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -15,7 +14,7 @@ func TestExternalEvidenceResolutionContract(t *testing.T) {
 	s, board := newWorkTestStore(t)
 	at := "2026-10-05T10:00:00Z"
 	evidence := []map[string]any{
-		{"authority": "github", "connection_id": "gh", "native_id": "org/repo#264", "title": "Fix the gate", "url": "https://github.com/org/repo/pull/264", "status": "merged", "observed_at": at, "source_activity_at": at},
+		{"authority": "github", "connection_id": "gh", "native_id": "org/repo#264", "aliases": []string{"https://github.com/org/repo/issues/264"}, "title": "Fix the gate", "url": "https://github.com/org/repo/pull/264", "status": "merged", "observed_at": at, "source_activity_at": at},
 		{"authority": "tracker", "connection_id": "tracker-connection", "native_id": "issue-uuid", "identifier_aliases": []string{"TASK-627"}, "title": "Core", "url": "https://tracker.test/workspace/issues/issue-uuid", "status": "in_progress", "observed_at": at},
 	}
 	card, err := s.CreateWork(ctx, "actor-1", board, map[string]any{"title": "Release B", "source_refs": evidence})
@@ -40,16 +39,6 @@ func TestExternalEvidenceResolutionContract(t *testing.T) {
 			if !item.Resolvable || item.NativeID != "issue-uuid" || item.Status != "in_progress" || item.Authority != "tracker" {
 				t.Fatal(item)
 			}
-		case i == 5:
-			data, _ := json.Marshal(item)
-			var wire map[string]any
-			json.Unmarshal(data, &wire)
-			if !item.Resolvable || item.Source != "parsed" || item.URL == "" || wire["status"] != nil {
-				t.Fatal(string(data))
-			}
-			if _, ok := wire["status"]; !ok {
-				t.Fatal("parsed status must be explicit null")
-			}
 		default:
 			if item.Resolvable {
 				t.Fatal(item)
@@ -67,7 +56,7 @@ func TestExternalEvidenceResolutionContract(t *testing.T) {
 	if err = s.EnrichCardPlans(ctx, []map[string]any{card}, nil, time.Now(), 0); err != nil {
 		t.Fatal(err)
 	}
-	if card["plan_state"].(plans.State).Progress.Done != 1 || card["status_mismatch"] != true || card["column_key"] != "backlog" || card["next_step"].(*plans.NextStep).ID != "ship" {
+	if card["plan_state"].(plans.State).Progress.Done != 1 || card["status_mismatch"] != true || card["column_key"] != "backlog" || card["next_step"] != (*plans.NextStep)(nil) {
 		t.Fatal(card)
 	}
 	// Private initiative evidence must not leak source title or status.
@@ -78,7 +67,7 @@ func TestExternalEvidenceResolutionContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if items[0].Source != "parsed" || items[0].Title != "" || items[0].Status != "" || items[4].Resolvable || items[4].URL != "" || items[4].Title != "" || items[4].NativeID != "" {
+	if items[0].Resolvable || items[0].Title != "" || items[0].Status != "" || items[4].Resolvable || items[4].URL != "" || items[4].Title != "" || items[4].NativeID != "" {
 		t.Fatal(items)
 	}
 }
@@ -91,7 +80,7 @@ func TestExternalObservationAliasesAndConnectionAmbiguity(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = s.SubmitWorkObservation(ctx, "actor-1", card["id"].(string), map[string]any{"idempotency_key": "read", "reader_id": "github", "reader_revision": "v1", "observed_at": time.Now().UTC().Format(time.RFC3339Nano), "status": "reported", "facts": map[string]any{"title": "Observed", "phase": "blocked", "native_status": "pending"}, "evidence": []any{map[string]any{"url": "https://github.com/org/repo/issues/9"}}})
+		_, err = s.SubmitWorkObservation(ctx, "actor-1", card["id"].(string), map[string]any{"idempotency_key": "read", "reader_id": "github", "reader_revision": "v1", "observed_at": time.Now().UTC().Format(time.RFC3339Nano), "status": "reported", "facts": map[string]any{"title": "Observed", "phase": "blocked", "native_status": "pending", "aliases": []string{"github:org/repo#9"}}, "evidence": []any{map[string]any{"url": "https://github.com/org/repo/issues/9"}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -102,7 +91,7 @@ func TestExternalObservationAliasesAndConnectionAmbiguity(t *testing.T) {
 		if connection == "one" && (items[0].Source != "evidence" || items[0].Status != "pending" || items[0].Phase != "blocked" || items[0].ConnectionID != "one") {
 			t.Fatal(items)
 		}
-		if connection == "two" && items[0].Source != "parsed" {
+		if connection == "two" && items[0].Resolvable {
 			t.Fatal("must not collapse distinct connections", items)
 		}
 	}

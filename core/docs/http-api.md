@@ -232,7 +232,7 @@ The canonical shapes and error codes are in `contracts/anx-openapi.yaml`. See th
 
 `GET /cards/{card_id}/plan` returns `{card_ref, plan, plan_state, plan_health, next_step, status_mismatch, if_updated_at}`; plan and state are null before the first plan is set. `PUT` accepts `{plan:{steps:[...]}, if_updated_at}`. The token is the card `updated_at` from a read. Every real edit atomically persists a `card_updated` event with `before_plan`, `plan` and `changed_fields:["plan"]`; identical writes preserve activity recency. History is the existing `/cards/{card_id}/timeline`. Invalid graphs fail with 400; stale tokens fail with 409. Empty steps clear the graph. Plan edits are local annotations even on source-backed cards and never write upstream.
 
-Steps require a unique slug `id` (64 bytes) and `title` (500 bytes), with optional `ref`, `after` (existing unique step ids, max 50), `due` (YYYY-MM-DD or RFC3339), and `status` (done, active, blocked, not_started). Plans cap at 200 steps and reject cycles. Refs accept card/doc/document/topic refs, supported GitHub links or opaque adapter-published identifier aliases, or absolute HTTP(S) URLs (2048 bytes). External state comes from ingested source observations and generic structured source_refs; there is no network fetch. Ambiguous GitHub evidence returns a valid parsed link with unknown status.
+Steps require a unique slug `id` (64 bytes) and `title` (500 bytes), with optional `ref`, `after` (existing unique step ids, max 50), `due` (YYYY-MM-DD or RFC3339), and `status` (done, active, blocked, not_started). Plans cap at 200 steps and reject cycles. Refs accept card/doc/document/topic refs, opaque adapter-published identifier aliases, or absolute HTTP(S) URLs (2048 bytes). External state comes from ingested source observations and generic structured source_refs; there is no network fetch. Unknown, ambiguous or inaccessible evidence keys remain unresolved. Referencing a private published key makes the stored plan inherit its card and board ownership before projection, pagination and counts.
 
 Card and work reads expose `plan` and `plan_state`. State has effective `steps`, `progress:{done,total}`, `critical_path` (unfinished ids), `next_steps` (dependency-ready, unblocked ids), `shape` and `health`. A connected path is chain; disconnected paths are lanes; any branching/merging graph is dag. Longest paths count unfinished steps and break ties by lexicographic ids. Detailed plan_health uses the shared six-state rules below; legacy health retains on_track/stalled/blocked. Any unfinished blocked step makes health blocked; detailed completed plans are done, and empty plans are no_plan or stale. Set `ANX_PLAN_STALLED_AFTER` to a positive Go duration to configure the threshold. Plan edits and referenced native activity or external meaningful progress/source activity count as movement; unchanged observation timestamps do not. Doc/topic/board preview status is lifecycle state. Doc/topic plan steps have no workflow phase, so use their fallback status without inventing completion from existence.
 
@@ -326,14 +326,17 @@ board timestamp, or work version, so neither existing token replaces this fence.
 
 ### External refs and initiative health
 
-`POST /refs/resolve` preserves its 200-ref cap, order and duplicates. GitHub
-`github:owner/repo#n`, `owner/repo#n`, and `https://github.com/owner/repo/(pull|issues)/n`
-use workspace source observations or generic structured `source_refs` on card-backed work. External results have `kind: external`, `authority`, `native_id`, `url`,
-`status`, and `source: evidence|parsed`. Evidence adds title, connection and
-observation time. Adapters retain the observation anchor on unchanged source data. A parsed GitHub link without visible unambiguous evidence has
-`resolvable: true` and `status: null`; core never fetches external systems.
-Other source identifiers resolve only from visible structured `identifier_aliases` (or the legacy `identifier` field). Core never infers authority from an identifier prefix. Unknown aliases remain unresolved. Distinct source
-connections are never silently combined. Structured evidence without an observation time uses its containing card timestamp.
+`POST /refs/resolve` preserves its 200-ref cap, order and duplicates. External
+keys match exact adapter-published native IDs, authority-prefixed native IDs,
+URLs, identifiers or aliases in workspace observations and structured
+`source_refs`. External results have `kind: external`, `authority`, `native_id`,
+`url`, `status`, and `source: evidence`. Status and URL are null when absent
+from the published evidence. Adapters publish any provider spelling variants;
+core never parses provider identities, generates provider URLs or fetches
+external systems. Unknown, ambiguous or inaccessible keys remain unresolved.
+Distinct source connections are never silently combined. Adapters retain the
+observation anchor on unchanged source data; evidence without an observation
+time uses its containing card timestamp.
 
 Card reads/lists, work reads/lists, ref previews, initiative overview and live
 reports add `plan_health: {state, reason, since}`, `next_step: {id, title, ref}`
@@ -367,7 +370,7 @@ The CLI exposes the same read as `anx inbox summary [--limit 0..50]`.
 
 Boards expose an open `role` string on create, patch, get and list. `anx boards create --title "Initiatives" --role initiatives` or `anx boards patch board:initiatives --role initiatives` marks an initiative board. Patch omission preserves the role; `--role ""` clears it. When any board is marked, Overview initiatives include only those board cards; other cards remain in active work. With no designated board, the previous selection remains and `initiatives.hint` suggests setting a role. Planless health is `no_plan` until the configured threshold, then `stale`; card edits and discussion activity reset inactivity. Detailed `plan_health.state` uses six states; legacy fields keep their original vocabulary for older clients. Board role remains writable by ordinary authorized writers, including agents.
 
-`source_refs` is a generic list of structured source evidence on card-backed work (up to 2000 entries). Any adapter can set it through `work create` or `work patch` with `if_version`; card and work reads expose it. Every entry requires authority, connection_id and native_id (unique tuple); optional fields are identifier, title, HTTP(S) url, open status/phase, observed_at and source_activity_at. Unknown fields round-trip. Omission preserves; [] clears. Core never interprets adapter markdown. An external adapter can convert its own existing evidence into this primitive during ingestion while preserving unrelated structured source refs. Until an adapter writes structured refs, links remain parsed with unknown status.
+`source_refs` is a generic list of structured source evidence on card-backed work (up to 2000 entries). Any adapter can set it through `work create` or `work patch` with `if_version`; card and work reads expose it. Every entry requires authority, connection_id and native_id (unique tuple); optional fields are identifier, title, HTTP(S) url, open status/phase, observed_at and source_activity_at. Unknown fields round-trip. Omission preserves; [] clears. Core never interprets adapter markdown. An external adapter can convert its own existing evidence into this primitive during ingestion while preserving unrelated structured source refs. Until an adapter publishes a lookup key, that external key remains unresolved.
 
 Evidence resolution uses a transactionally maintained lookup index with 200-candidate pages. Aggregated plan refs are resolved in batches of at most 200. Card and board access are checked before enrichment and serialization, including work observations and plan reads. Effective health inputs are shared: explicit work due annotations (including clearing) override card due dates; meaningful source activity/progress, plan edits and discussion timestamps are normalized once.
 

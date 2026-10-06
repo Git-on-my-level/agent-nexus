@@ -24,6 +24,9 @@ var OwnershipSources = []OwnershipSource{
 	{"work_metadata", "work_metadata", "card_id", []string{"metadata_json", "refresh_json"}},
 	{"work_observations", "work_observation", "id", []string{"body_json"}},
 	{"work_evidence_records", "work_evidence_record", "id", []string{"evidence_json"}},
+	// Lookup keys publish external ownership identities in the central graph;
+	// they do not make numeric evidence IDs public resource identities. A
+	// publication is distinct from a plan/work field referencing that key.
 	{"work_evidence_index", "work_evidence_alias", "id", []string{"lookup_key"}},
 	{"work_participants", "participant", "id", []string{"request_json"}},
 	{"card_plans", "plan", "card_id", []string{"body_json"}},

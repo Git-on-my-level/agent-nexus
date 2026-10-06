@@ -78,7 +78,7 @@ func Validate(p Plan) error {
 			local := ok && value != "" && strings.TrimSpace(value) == value && (kind == "card" || kind == "doc" || kind == "document" || kind == "topic")
 			u, err := url.Parse(s.Ref)
 			external := err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Hostname() != "" && u.User == nil
-			if !local && !external && !IsExternalRef(s.Ref) && !IsIdentifierAlias(s.Ref) {
+			if !local && !external && !IsIdentifierAlias(s.Ref) {
 				return fmt.Errorf("step %s ref must be a card/doc/topic ref, external source ref or HTTP(S) URL", s.ID)
 			}
 		}

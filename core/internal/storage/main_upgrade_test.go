@@ -124,6 +124,12 @@ func TestFeatureUpgradeFromReleased54AndMain60(t *testing.T) {
 				if err = db.QueryRow(`SELECT count(*) FROM resource_access_edges WHERE source_kind='work_metadata' AND target_ref='card:private-card'`).Scan(&count); err != nil || count != 1 {
 					t.Fatalf("normalized canonical ownership backfill=%d err=%v", count, err)
 				}
+				if err = db.QueryRow(`SELECT count(*) FROM resource_access_external_edges WHERE source_kind='work_metadata' AND target_ref='card:private-card'`).Scan(&count); err != nil || count != 1 {
+					t.Fatalf("external-reference backfill=%d err=%v", count, err)
+				}
+				if err = db.QueryRow(`SELECT count(*) FROM resource_access_external_edges WHERE target_ref IN ('main-alias','observation-alias')`).Scan(&count); err != nil || count != 0 {
+					t.Fatalf("publication fields became references=%d err=%v", count, err)
+				}
 				if open == 0 {
 					if _, err = db.Exec(`UPDATE boards SET role='initiatives' WHERE id='public-board'`); err != nil {
 						t.Fatal(err)
@@ -131,9 +137,15 @@ func TestFeatureUpgradeFromReleased54AndMain60(t *testing.T) {
 					if _, err = db.Exec(`UPDATE work_evidence_records SET evidence_json=json_set(evidence_json,'$.reopen_marker',true)`); err != nil {
 						t.Fatal(err)
 					}
+					if _, err = db.Exec(`INSERT INTO resource_access_external_edges VALUES('work_metadata','source-card','external-reopen-marker')`); err != nil {
+						t.Fatal(err)
+					}
 				} else {
 					if err = db.QueryRow(`SELECT count(*) FROM work_evidence_records WHERE json_extract(evidence_json,'$.reopen_marker')=1`).Scan(&count); err != nil || count != 2 {
 						t.Fatalf("reopen rebuilt evidence: %d %v", count, err)
+					}
+					if err = db.QueryRow(`SELECT count(*) FROM resource_access_external_edges WHERE target_ref='external-reopen-marker'`).Scan(&count); err != nil || count != 1 {
+						t.Fatalf("reopen rebuilt external ownership: %d %v", count, err)
 					}
 				}
 				if err = ws.Close(); err != nil {
