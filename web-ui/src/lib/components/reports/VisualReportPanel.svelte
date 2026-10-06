@@ -163,7 +163,14 @@
         </p>
       </div>
     {:else}
-      {#if freshness === "stale"}
+      {#if provenance.state === "due-for-review"}
+        <!--
+          Only once the panel is actually overdue. Tied to the 24-hour evidence
+          window, this amber line argued with the quiet "Written by claude · 3d
+          ago" beside it: one of them said the panel was fine and the other
+          said to stop. The header owns that verdict now; this says what to do
+          about it.
+        -->
         <p class="mb-3 text-micro text-warn-text">
           Historical evidence. Refresh the source before acting.
         </p>
