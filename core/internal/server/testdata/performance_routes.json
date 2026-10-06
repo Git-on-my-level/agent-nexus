@@ -1007,8 +1007,17 @@
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
-    "unauthorized_status": 404,
-    "reason": "Read-only POST resolves a populated private card. Unauthorized request body selector must fail closed with 404."
+    "unauthorized_status": 200,
+    "reason": "Reference-read contract echoes the requested private reference with resolvable:false and no metadata for the unrelated principal; the entire canonical denial body is checked exactly.",
+    "must_contain": "\"resolvable\":true",
+    "unauthorized_exact_body": {
+      "items": [
+        {
+          "ref": "{card_ref}",
+          "resolvable": false
+        }
+      ]
+    }
   },
   {
     "method": "POST",

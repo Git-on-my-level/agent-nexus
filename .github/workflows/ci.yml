@@ -178,6 +178,7 @@ jobs:
       - name: Scale route, query-plan and startup budgets
         working-directory: core
         env:
+          GOMAXPROCS: "2"
           ANX_PERFORMANCE_TEST: "1"
           ANX_PERFORMANCE_REPORT: ${{ github.workspace }}/.tmp/performance/route-report.json
         run: |

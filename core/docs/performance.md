@@ -46,6 +46,12 @@ with all canonical triggers enabled, rather than issuing thousands of HTTP write
 schema or trigger changes. New targeted tests should call the same generator,
 then add valid point records through store APIs and measure only the request.
 
+The schema-65 external-evidence projection is sparse in this generic corpus,
+and its inbox ask page is not a dense ask-page fixture. These results do not
+certify dense external-evidence alias fanout or every composed inbox selector.
+Keep the focused source-reference and inbox privacy/bounds regressions; add
+populated high-fanout fixtures when changing those reads.
+
 ## Route coverage and SQL plans
 
 `internal/server/testdata/resource_access_routes.json` is the authority for route
@@ -114,7 +120,7 @@ success/denial expectations, positive fixtures, private controls and two SSE dat
 flushes; exceeding a ceiling still fails. Their purpose is to allow the guardrail
 harness to land while SCA-663/664/665 and the existing SCA-652 repairs proceed,
 not to authorize new O(workspace) work. The existing unrelated-reader overview
-currently takes over nine minutes and consumes over 100,000 rows locally; the
+schema-65 capture takes 7m36s and consumes about 100,000 rows locally; the
 separate job allows runner headroom for this baseline rather than marking a
 timeout successful. Most baseline count ceilings have only 2% headroom (minimum eight
 statements/64 rows), while latency gets threefold contention headroom. Existing PM
@@ -158,14 +164,15 @@ ping, not merely opening a connection. A failed upgrade does not proceed to the
 warm-open measurement. This is a database/store readiness proxy; deployment and
 network readiness checks require their own integration coverage.
 
-SCA-664 documents the existing schema-58 upgrade overrun. Its finite fifteen-minute
-legacy baseline (7m20s locally, with twofold runner headroom) is pinned in
-`performance_startup_allowlist.json` to migration
-version 63 and exact startup/reference-index/blob-backfill source hashes. Any
-new migration or edit to that work expires the exception in the short tier;
-set the manifest to `null` to restore the 90-second default when repaired. Warm
-readiness always remains five seconds. This exception does not relax deployment
-probes automatically; adapters must apply their own bounded upgrade grace.
+Main #275's batched source-edge reconciliation removes the measured legacy
+upgrade overrun: the schema-58 through schema-65 upgrade takes about 35 seconds,
+with millisecond warm readiness, on this corpus. The former fifteen-minute
+SCA-664 exception is retired: `performance_startup_allowlist.json` is `null`, so
+CI enforces the ordinary 90-second upgrade and five-second warm-open budgets.
+If a legacy exception is ever needed, it must be finite, linked to a reviewed P1
+and pinned to the current migration version and exact startup/index/backfill
+source hashes. Changes expire it in the short tier. Exceptions do not relax
+deployment probes automatically; adapters own any bounded probe grace.
 
 Migrations emit `migration_started`, elapsed `migration_progress` every five
 seconds, and `migration_finished`. The final signal means work stopped; successful
@@ -188,8 +195,9 @@ privacy, legacy data and response contracts:
 
 | Severity | Source                                                                                                                       | Affected reads                               | Cost before a request/page bound                                                                                                                                           |
 | -------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P1       | `internal/primitives/work_store.go:733`, `:518`                                                                              | `/work`, CLI orient                          | Loads all cards and metadata, projects and sorts O(C log C) before LIMIT.                                                                                                  |
-| P1       | `internal/primitives/derived_store.go:164`, `internal/server/inbox_handlers.go:326`                                          | `/inbox`, `/inbox/summary`, overview         | JSON recipient filtering, full projection load/sort O(I log I), then per-item enrichment and subject checks.                                                               |
+| P1       | `internal/primitives/work_store.go:718`                                                                                      | `/work`, CLI orient                          | Loads all cards and metadata, projects and sorts O(C log C) before LIMIT; access filtering is batched but the full collection is still materialized.                       |
+| P1       | `internal/primitives/derived_store.go:164`, `internal/server/inbox_handlers.go:317`                                          | `/inbox`, overview                           | JSON recipient filtering, full projection load/sort O(I log I), then payload/ref enrichment.                                                                               |
+| P1       | `internal/primitives/inbox_reads.go:39`, `:94`, `internal/server/inbox_handlers.go:295`, `:756`                              | `/inbox`, `/inbox/summary`                   | Inbox freshness materializes all scoped thread IDs, O(T). Summary bounds its returned page to 50 rows but retains corpus COUNT/JSON-kind filtering and expression sorting. |
 | P1       | `internal/server/stream_handlers.go:261`, `:491`, `:349`                                                                     | Inbox, events and receipt streams            | Repeats projection/history or subject work each tick; event history is loaded and sorted O(E log E).                                                                       |
 | P1       | `internal/primitives/docs_store.go:120`, `:135`                                                                              | `/docs`, doc point/history reads             | Event joins use TRIM/COALESCE rather than indexed equality, scanning E even for one document.                                                                              |
 | P1       | `internal/primitives/docs_store.go:1480`                                                                                     | `/docs/{id}/revisions`                       | Unpaginated revision history with queries per revision, O(R) SQL round trips plus authorization work.                                                                      |

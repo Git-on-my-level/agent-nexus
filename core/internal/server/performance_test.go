@@ -38,6 +38,7 @@ type routeBudget struct {
 	Body                    json.RawMessage `json:"body,omitempty"`
 	MustContain             string          `json:"must_contain,omitempty"`
 	UnauthorizedMustContain string          `json:"unauthorized_must_contain,omitempty"`
+	UnauthorizedExactBody   json.RawMessage `json:"unauthorized_exact_body,omitempty"`
 	AuthorizedAs            string          `json:"authorized_as,omitempty"`
 	Reason                  string          `json:"reason"`
 }
@@ -59,6 +60,9 @@ func performanceBudgets(t *testing.T) []routeBudget {
 			t.Errorf("duplicate route budget: %s", key)
 		}
 		covered[key] = true
+		if len(b.UnauthorizedExactBody) > 0 && (b.Method != http.MethodPost || b.Path != "/refs/resolve" || b.UnauthorizedStatus != http.StatusOK || !performanceExactDenialBody(b.UnauthorizedExactBody, []byte(`{"items":[{"ref":"{card_ref}","resolvable":false}]}`))) {
+			t.Errorf("exact echoed-reference denial is restricted to POST /refs/resolve: %s", key)
+		}
 		rowCeiling := 1024
 		if b.Method == http.MethodGet && (b.Path == "/series/{name}" || b.Path == "/series/{name}/query") {
 			rowCeiling = series.MaxRawQueryPoints + 512 // fixed API cap plus scoped metadata
@@ -101,6 +105,42 @@ func performanceReadPOST(method, path string) bool {
 }
 
 func TestPerformanceRouteInventory(t *testing.T) { performanceBudgets(t) }
+
+// Go's JSON response writer uses canonical key ordering. Compare the complete
+// denial body, allowing formatting whitespace but rejecting extra/duplicate
+// fields, additional references or metadata hidden behind an echoed input ID.
+func performanceExactDenialBody(got, want []byte) bool {
+	var value any
+	if json.Unmarshal(want, &value) != nil {
+		return false
+	}
+	expected, err := json.Marshal(value)
+	var actual bytes.Buffer
+	return err == nil && json.Compact(&actual, got) == nil && bytes.Equal(actual.Bytes(), expected)
+}
+
+func TestPerformanceExactDeniedReferenceEcho(t *testing.T) {
+	want := []byte(`{"items":[{"ref":"card:private-input","resolvable":false}]}`)
+	for _, tc := range []struct {
+		name string
+		body string
+		ok   bool
+	}{
+		{"input echo", string(want), true},
+		{"whitespace", " { \"items\" : [ { \"ref\" : \"card:private-input\", \"resolvable\" : false } ] } ", true},
+		{"metadata", `{"items":[{"ref":"card:private-input","resolvable":false,"title":"Private title"}]}`, false},
+		{"additional reference", `{"items":[{"ref":"card:private-input","resolvable":false},{"ref":"card:other-private","resolvable":false}]}`, false},
+		{"resolved private input", `{"items":[{"ref":"card:private-input","resolvable":true}]}`, false},
+		{"duplicate field", `{"items":[{"ref":"card:other-private","ref":"card:private-input","resolvable":false}]}`, false},
+		{"trailing JSON", string(want) + `{}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := performanceExactDenialBody([]byte(tc.body), want); got != tc.ok {
+				t.Fatalf("exact denial match = %v, want %v", got, tc.ok)
+			}
+		})
+	}
+}
 
 // This suite is explicitly selected by the performance CI job, so it neither
 // duplicates core's full integration job nor enters the pre-push short tier.
@@ -451,6 +491,9 @@ func TestPerformanceRoutes(t *testing.T) {
 					if pi == 1 && b.UnauthorizedMustContain != "" && !strings.Contains(w.Body.String(), env.replace.Replace(b.UnauthorizedMustContain)) {
 						t.Errorf("denied collection omitted expected filtered result %q", b.UnauthorizedMustContain)
 					}
+					if pi == 1 && len(b.UnauthorizedExactBody) > 0 && !performanceExactDenialBody(w.Body.Bytes(), []byte(env.replace.Replace(string(b.UnauthorizedExactBody)))) {
+						t.Errorf("denied reference response must echo only the requested input without metadata: %.500s", w.Body.String())
+					}
 					if strings.HasPrefix(b.Path, "/stream/") && strings.Contains(w.Body.String(), "event: error") {
 						t.Errorf("stream returned an error event: %.500s", w.Body.String())
 					}
@@ -462,6 +505,9 @@ func TestPerformanceRoutes(t *testing.T) {
 							t.Error("unauthorized response exposed private target title")
 						}
 						for _, selector := range []string{"{board_id}", "{card_id}", "{document_id}", "{artifact_id}", "{event_id}", "{thread_id}", "{topic_id}", "{conversation_id}", "{decision_id}", "{action_id}", "{turn_id}"} {
+							if len(b.UnauthorizedExactBody) > 0 {
+								continue // the complete exact body above permits only the supplied reference
+							}
 							if strings.Contains(w.Body.String(), env.replace.Replace(selector)) {
 								t.Errorf("unauthorized response exposed private target %s", selector)
 							}
