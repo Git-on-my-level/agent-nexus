@@ -142,6 +142,76 @@ planning measurements.
 Independent adversarial design review requested and received corrections for a
 reference-write existence oracle, plaintext global cursor IDs, omitted old/new
 search posting and rejected-candidate costs, and unenforceable downgrade refusal.
-Re-review approved the documentation proposal with no remaining concrete blocker.
-This verdict does not approve implementation or waive the full privacy, crash,
+That first re-review approved its documentation revision; the subsequent
+coordinator review identified the additional boundaries exercised below. Neither
+review approves implementation or waives the full privacy, crash,
 historical-binary and SCA-661 performance gates.
+
+## Hard-boundary prototype after coordinator review
+
+The additional `core/experiments/scopeboundary` package on the non-merge branch
+exercises the mechanisms missing from the first kernel. It does not replace the
+real storage implementation, query-template/analyzer inventory, or production
+cutover gates. All fixtures are synthetic; no long benchmark was rerun.
+
+| Review boundary         | Executed probe                                                                                              | Result / limitation                                                                                                                                                                     |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Global allocation       | Create with private record, same-name private alias and private tombstone present/absent                    | Same success and unchanged requested alias; 128-bit opaque ID shape; creator replay checked; no hidden suffix allocation                                                                |
+| Parent lifecycle        | 1,000/10,000 descendants plus one unaffected sibling; restart worker mid-job                                | Three initiating writes; unavailable counters/pages during fence; 17/158 worker slices of <=64 rows; final count one and one examined page candidate                                    |
+| Audiences and 64 scopes | 64,000 wrong-audience changes; selected personal streams in 64 scopes                                       | 64 examined selected candidates for a one-result request; zero wrong-audience/idle candidates; continuation advances only emitted heads                                                 |
+| Grant enumeration       | 10,000 sealed-scope bindings after the active page                                                          | Exactly 65 examined own-binding rows, not a join-filtered search for 65 active scopes; unavailable slots are explicit                                                                   |
+| Derivation              | Principal with private/public grants; direct copy, rebinding and private constant into public projection    | All three mechanically rejected; same-scope positive passes. Handles contain no private plaintext. Full import/call-graph analyzer is not implemented by this thin probe                |
+| Ordering/history        | 10,000-card column and 10,000-comment thread                                                                | One successor candidate; exhausted gap refused; new three-term comment causes four row writes and no history reconstruction                                                             |
+| Search progress         | Repetitive document larger than searchable prefix, phrase only beyond coverage, then a matching next record | First candidate consumed within 64 KiB declared coverage; next record reached on continuation; changed generation rejected                                                              |
+| Cold startup            | Close/reopen schema-63 DB with 100/1,000 unknown artifacts and delayed/unavailable blob backend             | Actual storage initializer, experimental primitive constructor, core HTTP handler and network `/readyz` succeed with zero startup blob reads; persisted worker cursor survives reopen   |
+| Recovery faults         | Inject low disk and worker failure, then successful retry; old/new ledger opens                             | Jobs/checkpoint preserved, unknown blobs denied, old initializer refuses fence; a **fresh compatible test executable** serves `/readyz` from the fenced DB without restoring old ledger |
+
+The derivation probe rejects cross-scope handles and scope-pinned constants; it
+does not prove whole-program implicit-flow safety. Only the trusted dispatcher may
+mint capabilities in production, and the analyzer must prohibit business code from
+opening a second computation after observing private results/errors. The test
+harness has dispatcher authority to inject both handles for the negative test.
+
+The `scope_probe` scalar function counts candidates visited in measured SQL ranges;
+it is test instrumentation, not a proposed production WHERE function. It measures
+more than returned rows, but does not count B-tree traversal instructions. The
+lifecycle prototype handles one-level ancestry; the production depth<=8 checks,
+independent inbox lifecycle rules and legacy cross-scope fence remain gates. The
+stream prototype has broadcast and personal audiences; role binding validation,
+wire SSE framing, encrypted cursors and concurrent revocation remain gates.
+
+The constructor in `core/internal/primitives/scope_experiment_bridge.go` exists
+**only on the experiment branch**. It bypasses the old synchronous blob backfill
+by constructing without a backend, then attaches the backend. The experimental
+worker persists discovery/due jobs and tests bounded retries. The real bridge must
+wire a supervisor, enforce byte limits with `OpenReadStream`, capture every relevant
+write and implement fencing-token leases; the experiment's lease test proves only
+single-slot exclusion, not takeover after process death. Low disk is injected
+before work, not a real full filesystem. The compatible recovery child verifies
+the renamed ledger and serves actual core HTTP, but does not validate all historical
+migration hashes or run the complete CLI/bootstrap path. OS/filesystem caches are
+not flushed. These are startup-boundary probes, not deployment readiness or 1-CPU
+capacity measurements.
+
+Run the complete additional suite (including child-process recovery):
+
+```sh
+GOMAXPROCS=1 go -C core test ./experiments/scopeboundary \
+  -v -count=1 -timeout=3m
+```
+
+The design now defers bulk reclassification, fuzzy/prefix and historical-version
+search. It limits generation to reviewed query templates and a small ownership
+manifest. Publication/recovery powers, incomplete PM coverage above 64 scopes,
+whole-scope lifecycle unavailability and potentially permanent sealing are explicit
+owner decisions, not inferred administrative privileges.
+
+Independent subagent re-review of this revision: **APPROVE**, with no remaining
+P1/P2 findings in the design/prototype scope. Review found and fixed a reflectable
+plaintext map on the computation capability; kernel state now lives in closure
+captures, with a regression formatting both capability and value. The reviewer
+independently ran the complete suite and repeated derivation/startup tests after
+that correction. Full analyzer/control-flow enforcement and production cutover
+gates remain open. The recorded additional suite passed in 2.855 s; cold HTTP
+readiness/reopen samples were 6.07–8.28 ms with zero startup blob reads on this
+shared host, without flushing filesystem caches.
