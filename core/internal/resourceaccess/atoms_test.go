@@ -67,3 +67,37 @@ func TestStructuredContainersAreNotScalarReferences(t *testing.T) {
 		}
 	}
 }
+
+func TestProseReferenceCandidatesPreserveLegacyIDGrammar(t *testing.T) {
+	for _, id := range []string{"[]", "{}", `"quoted"`, "(nested)", "two words", "line\nbreak", "a,b;!?", strings.Repeat("[", 5000)} {
+		text := "Evidence copied from DOC : " + id + ". More prose follows."
+		atoms := ReferenceAtoms(text)
+		found := false
+		for _, atom := range atoms {
+			found = found || textHasReference(atom, "document:"+id)
+			if textHasReference(atom, "card:"+id) || textHasReference(atom, "document:unrelated") {
+				t.Fatalf("unrelated reference matched: %q", id)
+			}
+		}
+		if !found || len(atoms) > 6 {
+			t.Fatalf("legacy ID lost or prefixes expanded: %q (%d atoms)", id, len(atoms))
+		}
+	}
+	for _, wrap := range []string{"**", "_", "__", "~~", "`", "\"", "'"} {
+		atoms := ReferenceAtoms("See " + wrap + "document:[]" + wrap)
+		found := false
+		for _, atom := range atoms {
+			found = found || textHasReference(atom, "document:[]")
+		}
+		if !found {
+			t.Errorf("markup %q hid legacy ID", wrap)
+		}
+	}
+	if textHasReference(textReferencePrefix+"thread:private-2", "thread:private") {
+		t.Fatal("canonical handle prefix matched")
+	}
+	atom := textReferencePrefix + "See document:[]"
+	if got := ReferenceAtoms(atom); len(got) != 1 || got[0] != atom {
+		t.Fatalf("candidate backfill is not idempotent: %v", got)
+	}
+}

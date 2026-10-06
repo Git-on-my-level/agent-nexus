@@ -189,7 +189,7 @@ func (s Store) Remove(ctx context.Context, name string, deleteData bool, actor a
 		event = "adapter_deleted"
 		// Workspace SQLite deliberately does not enable foreign-key cascades.
 		// Delete dependents explicitly before allowing a series name to be reused.
-		for _, table := range []string{"series_points", "series_live_daily", "series_daily", "series_labels", "resource_access_series_refs"} {
+		for _, table := range []string{"series_points", "series_live_daily", "series_daily", "series_labels", "resource_access_series_refs", "resource_access_series_unknown"} {
 			if _, err = tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE series IN (SELECT name FROM series_definitions WHERE adapter=?)`, name); err != nil {
 				return err
 			}

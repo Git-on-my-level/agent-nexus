@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"modernc.org/sqlite"
 )
@@ -13,6 +15,50 @@ import (
 // Scan explicit references in both structured content and prose/Markdown. The
 // complete string is retained too, for bare IDs, aliases and external URLs.
 var embeddedRef = regexp.MustCompile(`(?i)\b(thread|board|card|topic|document|doc|event|artifact|card_revision|document_revision|wakeup|plan|inbox|run)[\s\p{Z}\x{85}\x{0B}]*:[\s\p{Z}\x{85}\x{0B}]*[^\s\p{Z}\x{85}\x{0B}<>()\[\]{}"'` + "`" + `,;!?]+`)
+
+// Legacy document IDs admit punctuation and internal whitespace, so prose has
+// no unambiguous closing delimiter. Keep one text candidate instead of emitting
+// every possible ID prefix. Denied identities resolve these candidates at read
+// time, including resources created after the text was written.
+const textReferencePrefix = "$anx-ref-text$"
+
+var embeddedRefStart = regexp.MustCompile(`(?i)(?:^|[^[:alnum:]])(thread|board|card|topic|document|doc|event|artifact|card_revision|document_revision|wakeup|plan|inbox|run)[\s\p{Z}\x{85}\x{0B}]*:[\s\p{Z}\x{85}\x{0B}]*`)
+
+func textHasReference(atom, target string) bool {
+	if !strings.HasPrefix(atom, textReferencePrefix) {
+		return false
+	}
+	kind, id, ok := strings.Cut(target, ":")
+	if !ok || id == "" {
+		return false
+	}
+	text := strings.TrimPrefix(atom, textReferencePrefix)
+	for _, loc := range embeddedRefStart.FindAllStringSubmatchIndex(text, -1) {
+		found := text[loc[2]:loc[3]]
+		if strings.EqualFold(found, "doc") {
+			found = "document"
+		}
+		if strings.EqualFold(found, kind) && len(text)-loc[1] >= len(id) && strings.EqualFold(text[loc[1]:loc[1]+len(id)], id) {
+			end := loc[1] + len(id)
+			if end == len(text) {
+				return true
+			}
+			next, _ := utf8.DecodeRuneInString(text[end:])
+			// Keep canonical handle prefixes distinct (private vs private-2),
+			// while allowing prose/Markdown boundaries after the complete ID.
+			markupUnderscore := next == '_' && loc[2] > 0 && text[loc[2]-1] == '_'
+			if unicode.IsSpace(next) || ((unicode.IsPunct(next) || unicode.IsSymbol(next)) && next != '-' && next != '_') || markupUnderscore {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// The LIKE range selects only prose candidates from the indexed atom ledger.
+func TextReferenceMatchSQL(atom, target string) string {
+	return "(" + atom + " LIKE '" + textReferencePrefix + "%' AND anx_resource_text_has_ref(" + atom + "," + target + "))"
+}
 
 var embeddedURL = regexp.MustCompile(`(?i)https?://[^\s\p{Z}\x{85}\x{0B}<>()\[\]{}"'` + "`" + `]+`)
 
@@ -48,6 +94,12 @@ func referenceAtoms(value string, structured bool) []string {
 		switch v := v.(type) {
 		case string:
 			add(v)
+			if strings.HasPrefix(v, textReferencePrefix) {
+				return // An already-indexed candidate remains idempotent on backfill.
+			}
+			if embeddedRefStart.MatchString(v) {
+				seen[textReferencePrefix+v] = true
+			}
 			// Generic JSON envelopes (notably series label/state arrays) can contain
 			// encoded structured values. Preserve their bare IDs as well as typed refs.
 			var nested any
@@ -126,6 +178,14 @@ func ReferenceSQLAtoms(column string, structured bool) string {
 }
 
 func init() {
+	sqlite.MustRegisterDeterministicScalarFunction("anx_resource_text_has_ref", 2, func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
+		atom, _ := args[0].(string)
+		target, _ := args[1].(string)
+		if textHasReference(atom, target) {
+			return int64(1), nil
+		}
+		return int64(0), nil
+	})
 	for _, structured := range []bool{false, true} {
 		name := "anx_resource_refs"
 		if structured {

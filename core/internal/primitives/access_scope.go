@@ -58,7 +58,7 @@ func accessCTEs(scope AccessScope, query string) string {
 		return "NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind='" + kind + "' AND id=" + id + ")"
 	}
 	cleanJSON := func(column string) string {
-		return "NOT EXISTS (SELECT 1 FROM json_each(" + resourceaccess.ReferenceSQLAtoms(column, strings.HasSuffix(column, "_json") || column == "_row.body" || column == "_row.labels") + ") j WHERE j.value COLLATE NOCASE IN (SELECT ref FROM _anx_denied_refs) OR j.value COLLATE NOCASE IN (SELECT id FROM _anx_denied WHERE kind<>'plan'))"
+		return "NOT EXISTS (SELECT 1 FROM json_each(" + resourceaccess.ReferenceSQLAtoms(column, strings.HasSuffix(column, "_json") || column == "_row.body" || column == "_row.labels") + ") j WHERE j.value COLLATE NOCASE IN (SELECT ref FROM _anx_denied_refs) OR j.value COLLATE NOCASE IN (SELECT id FROM _anx_denied WHERE kind<>'plan') OR EXISTS (SELECT 1 FROM _anx_denied_refs d WHERE " + resourceaccess.TextReferenceMatchSQL("j.value", "d.ref") + "))"
 	}
 	add := func(table, where string) {
 		if !needed[table] {
@@ -96,6 +96,9 @@ func accessCTEs(scope AccessScope, query string) string {
 	add("workspace_dashboard", denied("document", "_row.document_id"))
 	add("idempotency_replays", cleanJSON("_row.response_json"))
 	for table, columns := range resourceaccess.FilterSources {
+		if table == "series_adapters" {
+			continue // Custom projection below also filters shared freshness.
+		}
 		var conditions []string
 		for _, col := range columns {
 			conditions = append(conditions, cleanJSON("_row."+col))
@@ -104,8 +107,11 @@ func accessCTEs(scope AccessScope, query string) string {
 	}
 	// A rollup must not expose a private contributor through counts or last
 	// values. Remove the whole label stream before admission, buckets or limits.
-	if needed["series_labels"] || needed["series_points"] || needed["series_daily"] || needed["series_live_daily"] {
-		graph += ", _anx_private_series(series,labels) AS (SELECT series,labels FROM main.resource_access_series_refs WHERE target_ref COLLATE NOCASE IN (SELECT ref FROM _anx_denied_refs) OR target_ref COLLATE NOCASE IN (SELECT id FROM _anx_denied WHERE kind<>'plan'))"
+	if needed["series_adapters"] || needed["series_labels"] || needed["series_points"] || needed["series_daily"] || needed["series_live_daily"] {
+		graph += ", _anx_private_series(series,labels) AS MATERIALIZED (SELECT series,labels FROM main.resource_access_series_refs r WHERE target_ref COLLATE NOCASE IN (SELECT ref FROM _anx_denied_refs) OR target_ref COLLATE NOCASE IN (SELECT id FROM _anx_denied WHERE kind<>'plan') OR EXISTS (SELECT 1 FROM _anx_denied_refs d WHERE " + resourceaccess.TextReferenceMatchSQL("r.target_ref", "d.ref") + ") UNION SELECT series,labels FROM main.resource_access_series_unknown WHERE EXISTS (SELECT 1 FROM _anx_denied))"
+		if needed["series_adapters"] {
+			graph += ", series_adapters AS (SELECT name,description,agent_id,host_id,expected_interval,created_at,revoked_at,deleted_at,CASE WHEN EXISTS (SELECT 1 FROM main.series_definitions def LEFT JOIN _anx_private_series p ON p.series=def.name WHERE def.adapter=_row.name AND (p.series IS NOT NULL OR NOT (" + cleanJSON("def.unit") + "))) THEN NULL ELSE last_push END AS last_push FROM main.series_adapters _row WHERE " + cleanJSON("_row.description") + ")"
+		}
 		for _, table := range []string{"series_labels", "series_points", "series_daily", "series_live_daily"} {
 			add(table, cleanJSON("_row.labels")+" AND NOT EXISTS (SELECT 1 FROM _anx_private_series p WHERE p.series=_row.series AND p.labels=_row.labels)")
 		}
@@ -213,7 +219,8 @@ func requireAccessibleValues(ctx context.Context, q queryRower, values any) erro
 	query := `WITH RECURSIVE ` + accessCTEs(scope, "") + ` SELECT EXISTS (
  SELECT 1 FROM json_each(anx_resource_json_refs(?)) j WHERE (
  j.value COLLATE NOCASE IN (SELECT id FROM _anx_denied WHERE kind<>'plan') OR
- j.value COLLATE NOCASE IN (SELECT ref FROM _anx_denied_refs)))`
+ j.value COLLATE NOCASE IN (SELECT ref FROM _anx_denied_refs) OR
+ EXISTS (SELECT 1 FROM _anx_denied_refs d WHERE ` + resourceaccess.TextReferenceMatchSQL("j.value", "d.ref") + `)))`
 	if err = q.QueryRowContext(ctx, query, string(encoded)).Scan(&denied); err != nil {
 		return err
 	}

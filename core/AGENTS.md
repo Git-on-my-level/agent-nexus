@@ -101,9 +101,15 @@ observations constrain the whole card before projection or search. Migration 55 
 canonical JSON/scalar writes, including imports. Migration 56 reconciles earlier
 55 previews with metadata edges and the normalized project/wakeup indexes.
 Migrations 57/58 reconcile every ref-bearing source and blob manifest, including
-scalar-vs-structured parsing in already-applied previews.
+scalar-vs-structured parsing in already-applied previews. Migration 59 repairs
+legacy prose reference candidates and marks preexisting series summaries whose
+full contributor provenance cannot be reconstructed. Those streams remain hidden
+when the reader has any denied contributor; ordinary appends do not clear the
+uncertainty. Adapter last_push is suppressed for partial-visibility readers.
 `resourceaccess.OwnershipSources` drives atomic triggers; `ReferenceAtoms` scans
-nested JSON values/keys and typed refs in text with shared normalization.
+nested JSON values/keys and typed refs in text with shared normalization. Prose
+candidates retain the original text so legacy IDs containing punctuation or
+internal whitespace can match complete denied identities at read time.
 Use the registered SQLite driver so the reference scalar functions are available
 to imports. Structured JSON contributes atoms, not whole container serialization;
 scalar text preserves even JSON-shaped IDs. Keep this distinction in new fields.

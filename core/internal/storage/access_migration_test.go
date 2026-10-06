@@ -6,6 +6,7 @@ import (
 	"agent-nexus-core/internal/storage"
 	"context"
 	"database/sql"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -366,7 +367,7 @@ func TestResourceAccessMigrationReconcilesPrivacy57(t *testing.T) {
 	}
 	defer ws.Close()
 	var retained int
-	if err = ws.DB().QueryRow(`SELECT COUNT(*) FROM resource_access_series_refs WHERE series='legacy'`).Scan(&retained); err != nil || retained != 2 {
+	if err = ws.DB().QueryRow(`SELECT COUNT(*) FROM resource_access_series_refs WHERE series='legacy' AND target_ref IN ('{}','card:private-history')`).Scan(&retained); err != nil || retained != 2 {
 		t.Fatalf("ambiguous historical ownership lost: %d %v", retained, err)
 	}
 
@@ -377,5 +378,91 @@ func TestResourceAccessMigrationReconcilesPrivacy57(t *testing.T) {
 	}
 	if s.CanAccessResource(scope, "document", "[]") {
 		t.Fatal("private scalar ID became accessible")
+	}
+}
+
+func TestResourceAccessMigrationRepairsLegacyProseAndUnknownRollups(t *testing.T) {
+	for _, version := range []int{56, 58} {
+		t.Run(fmt.Sprint(version), func(t *testing.T) {
+			ctx := context.Background()
+			root := t.TempDir()
+			ws, err := storage.InitializeWorkspace(ctx, root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			s := primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+			doc, _, err := s.CreateDocument(ctx, "owner", map[string]any{"id": "[]", "title": "private"}, "private source", "text", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = s.PatchThread(ctx, "owner", doc["thread_id"].(string), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
+				t.Fatal(err)
+			}
+			copy, _, err := s.CreateDocument(ctx, "owner", map[string]any{"title": "LegacyCopiedEvidence"}, "LegacyCopiedEvidence copied from document:[]", "text", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, sql := range []string{
+				`INSERT INTO series_definitions(name,adapter,unit,kind) VALUES('legacy','collector','state','state')`,
+				`INSERT INTO series_labels VALUES('legacy','{}')`,
+				// Raw private then public state was compacted before provenance existed.
+				`INSERT INTO series_daily(series,labels,day,n,last_ts,last_state) VALUES('legacy','{}',0,2,2,'public')`,
+				`DELETE FROM resource_access_series_refs`,
+				`INSERT INTO series_definitions(name,adapter,unit,kind) VALUES('ledger','collector','state','state')`,
+				`INSERT INTO series_labels VALUES('ledger','{}')`,
+				`INSERT INTO series_points(series,labels,ts,state,received_day) VALUES('ledger','{}',1,'public',0)`,
+				`DELETE FROM series_live_daily WHERE series='ledger'`,
+				`INSERT INTO resource_access_series_refs VALUES('ledger','{}','Earlier copied from document:[]')`,
+				`DROP TABLE resource_access_series_unknown`,
+				`UPDATE artifacts SET content_refs_json='[]'`,
+				`DELETE FROM resource_access_edges WHERE target_ref LIKE '$anx-ref-text$%'`,
+			} {
+				if _, err = ws.DB().Exec(sql); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err = ws.DB().Exec(`DELETE FROM schema_migrations WHERE version>?`, version); err != nil {
+				t.Fatal(err)
+			}
+			if err = ws.Close(); err != nil {
+				t.Fatal(err)
+			}
+			ws, err = storage.InitializeWorkspace(ctx, root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer ws.Close()
+			s = primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+			// An ordinary public append must not clear the historical uncertainty.
+			if _, err = ws.DB().Exec(`INSERT INTO series_points(series,labels,ts,state,received_day) VALUES('legacy','{}',3,'public',0)`); err != nil {
+				t.Fatal(err)
+			}
+			for _, actor := range []string{"owner", "selected-pm", "stranger", "unauthorized-agent"} {
+				scope := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: actor, PMActorID: "selected-pm"})
+				allowed := actor == "owner" || actor == "selected-pm"
+				if got := s.CanAccessResource(scope, "document", copy["id"].(string)); got != allowed {
+					t.Fatalf("upgraded prose access %s: %v", actor, got)
+				}
+				var count int
+				if err = resourceaccess.NewDB(ws.DB()).QueryRowContext(scope, `SELECT COALESCE(SUM(n),0) FROM series_daily WHERE series='legacy'`).Scan(&count); err != nil {
+					t.Fatal(err)
+				}
+				if (count == 2) != allowed || (!allowed && count != 0) {
+					t.Fatalf("legacy aggregate for %s=%d", actor, count)
+				}
+				if err = resourceaccess.NewDB(ws.DB()).QueryRowContext(scope, `SELECT COUNT(*) FROM series_points WHERE series='legacy'`).Scan(&count); err != nil {
+					t.Fatal(err)
+				}
+				if (count == 1) != allowed {
+					t.Fatalf("new point cleared uncertainty for %s=%d", actor, count)
+				}
+				if err = resourceaccess.NewDB(ws.DB()).QueryRowContext(scope, `SELECT COUNT(*) FROM series_points WHERE series='ledger'`).Scan(&count); err != nil {
+					t.Fatal(err)
+				}
+				if (count == 1) != allowed {
+					t.Fatalf("retained prose ledger lost privacy for %s=%d", actor, count)
+				}
+			}
+		})
 	}
 }

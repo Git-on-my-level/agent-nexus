@@ -70,12 +70,18 @@ func TestSeriesScopedQueriesRetainPrivateContributors(t *testing.T) {
 			t.Fatalf("authorized streams=%d", len(owner.Streams))
 		}
 	}
+	if _, err := s.DB.Exec(`INSERT INTO resource_access_series_unknown VALUES('health','{}')`); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.Remove(ctx, "collector", true, human); err != nil {
 		t.Fatal(err)
 	}
 	var remaining int
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM resource_access_series_refs`).Scan(&remaining); err != nil || remaining != 0 {
 		t.Fatalf("deleted adapter retained refs: %d %v", remaining, err)
+	}
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM resource_access_series_unknown`).Scan(&remaining); err != nil || remaining != 0 {
+		t.Fatalf("deleted adapter retained uncertainty: %d %v", remaining, err)
 	}
 	if _, err := s.Declare(ctx, Declaration{Name: "collector-new", Description: "replacement", AgentID: "owner", ExpectedInterval: "1m", Series: []Definition{{Name: "health", Kind: "state", Unit: "state"}}}, human); err != nil {
 		t.Fatal(err)

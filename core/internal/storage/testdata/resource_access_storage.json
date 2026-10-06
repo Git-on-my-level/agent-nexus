@@ -523,6 +523,10 @@
       "series": "internal:authorization",
       "target_ref": "internal:authorization"
     },
+    "resource_access_series_unknown": {
+      "labels": "internal:authorization",
+      "series": "internal:authorization"
+    },
     "resource_access_tombstones": {
       "id": "internal:authorization",
       "kind": "internal:authorization",
@@ -1129,7 +1133,7 @@
     "../primitives/access_scope.go:*Store:CanAccessResource": "ec3094ddca5451f80f0d469dfa8f35708f092c9e7ee9e6a523f7ce68638644c2",
     "../primitives/access_scope.go:WithAccessScope": "09c1ab9d64a7b9d506ce2c6a2ce291ceb73aa15807de11bf7f13a7924ecce20b",
     "../primitives/access_scope.go:preservePurgedAccess": "8f3f807ed8693b854a4efe638e90db7f762b74026a133e741b8f44dd1bac2bbc",
-    "../primitives/access_scope.go:requireAccessibleValues": "26853368fecc6ea9a91165cc3921f9b096de35d946e36e922a5819c6ca457ff6",
+    "../primitives/access_scope.go:requireAccessibleValues": "852e03ec65e4433792844fba9acf9fcf806d2d93781b4c8cd0befdf398678f85",
     "../primitives/agent_wakeups.go:*Store:ClaimAgentWakeup": "53669a9695ffaf5bf522bf99c5dae45e6d6a515b3d6b7dc3c7f715048b814a38",
     "../primitives/agent_wakeups.go:*Store:CompleteAgentWakeup": "ef6b26c325d599190cbb8f6035e973f41b75c5274e0be6a559f0a02aed9424dc",
     "../primitives/agent_wakeups.go:*Store:FailAgentWakeup": "9bd5deffccecbfd8de31f277868abedd6d678c81bcc32ddd56848082989efe71",
@@ -1497,7 +1501,7 @@
     "../series/store.go:Store:Compact": "472df257d2799adba4cbca7ad9bc30e4cb1747255c0687b6024c210b04114e3c",
     "../series/store.go:Store:Declare": "3312f77ea56a38d8905b6b1191a732807aa3bafa92f382f4aca664ce33516a4a",
     "../series/store.go:Store:Push": "ecef68d059c9b3733bbff8c8d2337f92a1d7457fde39969304ada3ab20d65e7b",
-    "../series/store.go:Store:Remove": "2775f3b408ea1aa53f27b8be113d1c6b7614b1c353b1f5fe50c2118757aef8a4",
+    "../series/store.go:Store:Remove": "6c67fb20bb37e18b571bd1335f4fa964f6420435e5c0d86d785372c51c598f56",
     "../series/store.go:compact": "35b8c66ba53ab4ede4900e9d0f07358f91cd54818580e837ef41e862894d340b",
     "../series/store.go:requestBudget": "97e3785a9afe372fa2a7de30b7d7ca412c82ef3586748052da9d971a780222ff",
     "../series/store.go:type:Adapter": "b4b1573947e5b5316fae55216532cf224cb3190a4c77450d5e9f2a78faf63ab5",
@@ -1935,7 +1939,8 @@
     "../storage/migrations.go:migration25BackfillHandles": "0b1a8866c4541f58041168cea6b043ee880a43a3afe56eca68a658ffe31fa3b6",
     "../storage/migrations.go:migration25HandleExpressions": "8981e5f9b2e01ce392b77c0763fa38a47b68b5ca20d4cadcf0d7795952dc84c8",
     "../storage/migrations.go:migration25UniqueHandle": "6bed0b1e2baf92af71deb2b6a7f9e281bd75894a80f37d4bbbb09e632befe7d3",
-    "../storage/migrations.go:migrations": "538f63c030e334ba78ab935be7ce42b5364aa231d800b3e854bbdb86674ba14b",
+    "../storage/migrations.go:migrations": "133a154ddaf32502ce1b8b30aba842aa5b6e6c335c997f23f831934954f5382b",
+    "../storage/migrations.go:repairLegacyReferenceAccess": "2fa1ff6c93046afd83b1dc57ea3f85c89ca1e59bdb0104d86bce8e6cbd18412d",
     "../storage/migrations.go:sqliteTableExists": "c0fa57bdf9800dd6002c1c4dcfcb6ab9f2a889101a7f21b61f434439a39a3ac4",
     "../storage/migrations.go:sqliteTableHasColumn": "c93760a8303ff8cac0b3040a639f92dfffa22e21851c2561cfa17c81a3c6879c",
     "../storage/series_rollups.go:SeriesLiveDailyBackfillSQL": "e9116a1a96878025863f33d754e3a566ff060fdcbab747bae49bef4a43f3735b",

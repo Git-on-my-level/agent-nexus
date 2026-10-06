@@ -1012,6 +1012,41 @@ var migrations = []migration{
 		}
 		return installCompleteResourceAccess(ctx, tx)
 	}},
+	{Version: 59, AfterApply: repairLegacyReferenceAccess},
+}
+
+// Earlier compaction did not preserve every contributor. Keep that uncertainty
+// until explicit data deletion; a later public point cannot certify old totals.
+func repairLegacyReferenceAccess(ctx context.Context, tx *sql.Tx) error {
+	if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS resource_access_series_unknown(series TEXT NOT NULL,labels TEXT NOT NULL,PRIMARY KEY(series,labels))`); err != nil {
+		return err
+	}
+	for _, table := range []string{"series_daily", "series_live_daily"} {
+		if exists, err := sqliteTableExists(ctx, tx, table); err != nil {
+			return err
+		} else if exists {
+			if _, err = tx.ExecContext(ctx, `INSERT INTO resource_access_series_unknown SELECT series,labels FROM `+table+` WHERE true ON CONFLICT DO NOTHING`); err != nil {
+				return err
+			}
+		}
+	}
+	// Retained state text may be the only surviving source after compaction.
+	// Add the new prose candidates without discarding historical ledger atoms.
+	if exists, err := sqliteTableExists(ctx, tx, "resource_access_series_refs"); err != nil {
+		return err
+	} else if exists {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO resource_access_series_refs SELECT r.series,r.labels,j.value FROM resource_access_series_refs r,json_each(anx_resource_refs(r.target_ref)) j WHERE j.value<>'' ON CONFLICT DO NOTHING`); err != nil {
+			return err
+		}
+	}
+	if exists, err := sqliteTableExists(ctx, tx, "artifacts"); err != nil {
+		return err
+	} else if exists {
+		if _, err = tx.ExecContext(ctx, `UPDATE artifacts SET content_refs_json=NULL`); err != nil {
+			return err
+		}
+	}
+	return installCompleteResourceAccess(ctx, tx)
 }
 
 func installCompleteResourceAccess(ctx context.Context, tx *sql.Tx) error {
