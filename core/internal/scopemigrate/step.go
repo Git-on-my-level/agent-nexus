@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"agent-nexus-core/internal/scopes"
 )
 
 var (
@@ -102,7 +104,46 @@ func (r *Runner) Step(ctx context.Context, token int64, limit int) (Progress, er
 	if err := r.validate(); err != nil {
 		return Progress{}, err
 	}
-	if limit < 1 || limit > MaxChunk {
+	return r.step(ctx, token, limit, r.MaxBytes, 50*time.Millisecond, nil, nil)
+}
+
+// Store implements A's frozen MigrationStepper without exposing checkpoints to
+// callers. Runner is trusted worker configuration; it must remain immutable
+// while the store is running. Source facts and all writes use one transaction.
+type Store struct{ Runner *Runner }
+
+var _ scopes.MigrationStepper = (*Store)(nil)
+
+func (s *Store) Step(ctx context.Context, request scopes.StepRequest) (scopes.StepResult, error) {
+	if s == nil || s.Runner == nil {
+		return scopes.StepResult{}, errors.New("migration store unavailable")
+	}
+	r := s.Runner
+	if err := r.validate(); err != nil {
+		return scopes.StepResult{}, err
+	}
+	if request.JobID != r.Job || request.ExpectedEpoch < 0 {
+		return scopes.StepResult{}, errors.New("invalid migration job or epoch")
+	}
+	if request.LeaseToken < 1 {
+		return scopes.StepResult{}, ErrLeaseLost
+	}
+	if request.MaxBytes < 1 || request.MaxBytes > int64(r.MaxBytes) {
+		return scopes.StepResult{}, ErrBudget
+	}
+	var result scopes.StepResult
+	_, err := r.step(ctx, request.LeaseToken, request.MaxRecords, int(request.MaxBytes), request.MaxDuration, &request.ExpectedEpoch, &result)
+	if err != nil {
+		return scopes.StepResult{}, err
+	}
+	return result, nil
+}
+
+func (r *Runner) step(ctx context.Context, token int64, limit, maxBytes int, duration time.Duration, expectedEpoch *int64, result *scopes.StepResult) (Progress, error) {
+	if err := r.validate(); err != nil {
+		return Progress{}, err
+	}
+	if limit < 1 || limit > MaxChunk || maxBytes < 1 || maxBytes > r.MaxBytes || duration <= 0 || duration > 50*time.Millisecond {
 		return Progress{}, ErrBudget
 	}
 	if r.CheckDisk != nil {
@@ -110,15 +151,16 @@ func (r *Runner) Step(ctx context.Context, token int64, limit int) (Progress, er
 			return Progress{}, err
 		}
 	}
+	// Bind the transaction itself to the work budget, so expiration also
+	// rolls back pending writes and prevents a later successful Commit.
+	// Time spent acquiring SQLite's write lock consumes the same budget.
+	ctx, cancel := context.WithTimeout(ctx, duration)
+	defer cancel()
 	tx, err := r.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return Progress{}, err
 	}
 	defer tx.Rollback()
-	// Time budgets exclude waiting to acquire SQLite's write lock. No content
-	// transaction may keep doing migration work beyond its bounded slice.
-	ctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
-	defer cancel()
 	p, err := r.progress(ctx, tx, token)
 	if err != nil {
 		return Progress{}, err
@@ -129,6 +171,9 @@ func (r *Runner) Step(ctx context.Context, token int64, limit int) (Progress, er
 	}
 	if epoch < 0 {
 		return Progress{}, errors.New("invalid source epoch")
+	}
+	if expectedEpoch != nil && epoch != *expectedEpoch {
+		return Progress{}, ErrSourceChanged
 	}
 	if p.SourceEpoch != epoch {
 		p.Generation++
@@ -146,9 +191,12 @@ func (r *Runner) Step(ctx context.Context, token int64, limit int) (Progress, er
 		return p, nil
 	}
 	if p.Done {
+		if result != nil {
+			result.Complete = true
+		}
 		return p, nil
 	}
-	batch, done, err := r.Source.Page(ctx, tx, p.Cursor, limit, r.MaxBytes)
+	batch, done, err := r.Source.Page(ctx, tx, p.Cursor, limit, maxBytes)
 	if err != nil {
 		return Progress{}, err
 	}
@@ -156,9 +204,10 @@ func (r *Runner) Step(ctx context.Context, token int64, limit int) (Progress, er
 		return Progress{}, ErrBudget
 	}
 	bytes := 0
+	initialExceptions := p.Exceptions
 	for _, record := range batch {
 		bytes += recordBytes(record)
-		if bytes > r.MaxBytes || record.Key <= p.Cursor {
+		if bytes > maxBytes || record.Key <= p.Cursor {
 			return Progress{}, ErrBudget
 		}
 		placement, err := Place(record, r.SealedScope)
@@ -189,6 +238,9 @@ VALUES(?,?,?,?,?,?,?,?,?)`, r.Job, p.Generation, record.Key, record.Kind, record
 	}
 	if err := tx.Commit(); err != nil {
 		return Progress{}, err
+	}
+	if result != nil {
+		*result = scopes.StepResult{Visited: len(batch), Changed: len(batch), Complete: p.Done, PermanentPrivateExceptions: int(p.Exceptions - initialExceptions)}
 	}
 	return p, nil
 }

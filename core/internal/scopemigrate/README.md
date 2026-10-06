@@ -1,8 +1,14 @@
 # Metadata migration foundation
 
-This package stages metadata and cannot select a reader. The constructor and
-migration registry remain owned by stream A. The foundation is disabled until
-those changes and the authority adapter are integrated.
+This package stages metadata and cannot select a reader. Migration registration
+and constructor changes are separate proposals for stream A. The worker remains
+disabled/unwired until the production authority adapter and capture are integrated.
+
+`Store.Step(ctx, scopes.StepRequest)` implements A's frozen `MigrationStepper`
+from #301 at `c03b020a`. Job, expected epoch, token and budgets are checked within
+the worker transaction. Returned counts describe that committed chunk; a failed
+request returns no progress. The opaque RID mapping and canonical transaction
+hooks remain integration work.
 
 `Runner.Acquire(ctx)` returns a monotonically fenced DB lease token.
 `Runner.Step(ctx, token, limit)` commits at most 64 ordered metadata records,
