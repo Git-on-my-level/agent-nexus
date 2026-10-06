@@ -58,6 +58,10 @@ func TestResourceAccessSnapshotParameterBindings(t *testing.T) {
 			if err = s.CheckResourceValues(WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"}), []string{ref}); !errors.Is(err, ErrNotFound) {
 				t.Fatalf("fresh selector snapshot exposed %s: %v", ref, err)
 			}
+			var denied bool
+			if err = s.db.QueryRowContext(scope, `SELECT EXISTS(SELECT 1 FROM _anx_denied_refs WHERE ref=?)`, ref).Scan(&denied); err != nil || !denied {
+				t.Fatalf("explicit denied-ref selector lost %s: denied=%v err=%v", ref, denied, err)
+			}
 		}
 	}
 	var id string

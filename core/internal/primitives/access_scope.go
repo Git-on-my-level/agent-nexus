@@ -139,6 +139,12 @@ func accessCTEsWithSnapshot(scope AccessScope, query string, snapshot *denialSna
 		roots := "SELECT * FROM (" + deniedRootSQL(scope) + ") WHERE " + current + "<>" + epoch
 		deniedGraph = ownershipClosure("_anx_fresh_denied", roots, false) + ", _anx_denied(kind,id) AS MATERIALIZED (SELECT kind,id FROM _anx_fresh_denied UNION SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]') FROM json_each(?) WHERE " + current + "=" + epoch + ")"
 	}
+	// Most indexed resource reads only need denied (kind,id) rows. Unused ref
+	// and atom CTEs still duplicate the closure during SQLite preparation.
+	needsRefs := query == "" || needed["_anx_resource_refs"] || needed["_anx_denied_refs"] || needed["_anx_denied_atoms"] || strings.Contains(graph, "_anx_denied_refs") || strings.Contains(graph, "_anx_denied_atoms")
+	if !needsRefs {
+		return deniedGraph + graph
+	}
 	return deniedGraph +
 		", " + ownershipRefs("_anx_resource_refs", "_anx_denied") +
 		// One reference to the identities CTE avoids copying the recursive graph
