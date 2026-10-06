@@ -214,9 +214,6 @@ func NewStore(db *sql.DB, blobBackend blob.Backend, blobRoot string, options ...
 	for _, option := range options {
 		option(store)
 	}
-	if err := store.BackfillArtifactAccess(context.Background()); err != nil {
-		log.Printf("artifact authorization backfill incomplete; unindexed content remains inaccessible: %v", err)
-	}
 	return store
 }
 
