@@ -80,7 +80,6 @@ func installResourceAccessMentions(ctx context.Context, tx *sql.Tx) error {
 		sources = append(sources, identitySource{s.Table, "r." + s.ID, "'" + s.Kind + "'", "r." + s.ID, refs})
 	}
 	sources = append(sources,
-		identitySource{"derived_inbox_items", "r.id", "'inbox'", "r.id", "r.id"},
 		identitySource{"resource_handle_aliases", "json_array(r.resource_type,r.alias_handle)", "r.resource_type", "r.resource_id", "r.alias_handle"},
 		identitySource{"resource_access_tombstones", "json_array(r.kind,r.id,r.ref,r.owner)", "r.kind", "r.id", "r.ref"},
 	)
@@ -146,36 +145,8 @@ func installResourceAccessMentions(ctx context.Context, tx *sql.Tx) error {
 			}
 		}
 	}
-	// Virtual revision handles depend on both revision rows and parent handles.
-	for _, kind := range []string{"document", "card"} {
-		parent, revisions := kind+"s", kind+"_revisions"
-		exists, err := sqliteTableExists(ctx, tx, revisions)
-		if err != nil {
-			return err
-		}
-		if !exists {
-			continue
-		}
-		insert := func(where string) string {
-			return `INSERT INTO resource_access_identities(origin,origin_id,kind,resource_id,ref,bucket)
-   SELECT '` + revisions + `_handle',r.revision_id,'` + kind + `_revision',r.revision_id,COALESCE(NULLIF(p.handle,''),p.id)||'-r'||r.revision_number,
-   '` + kind + `_revision:'||anx_resource_mention_bucket(CAST(COALESCE(NULLIF(p.handle,''),p.id)||'-r'||r.revision_number AS BLOB))
-   FROM ` + revisions + ` r JOIN ` + parent + ` p ON p.id=r.` + kind + `_id WHERE ` + where + ` ON CONFLICT DO NOTHING;`
-		}
-		clear := `DELETE FROM resource_access_identities WHERE origin='` + revisions + `_handle' AND origin_id=OLD.revision_id;`
-		clearParent := `DELETE FROM resource_access_identities WHERE origin='` + revisions + `_handle' AND origin_id IN (SELECT revision_id FROM ` + revisions + ` WHERE ` + kind + `_id=OLD.id);`
-		for _, q := range []string{
-			insert("true"),
-			`CREATE TRIGGER IF NOT EXISTS mention_` + revisions + `_handle_insert AFTER INSERT ON ` + revisions + ` BEGIN ` + insert("r.revision_id=NEW.revision_id") + ` END`,
-			`CREATE TRIGGER IF NOT EXISTS mention_` + revisions + `_handle_update AFTER UPDATE ON ` + revisions + ` BEGIN ` + clear + insert("r.revision_id=NEW.revision_id") + ` END`,
-			`CREATE TRIGGER IF NOT EXISTS mention_` + revisions + `_handle_delete AFTER DELETE ON ` + revisions + ` BEGIN ` + clear + ` END`,
-			`CREATE TRIGGER IF NOT EXISTS mention_` + parent + `_revision_handles_update AFTER UPDATE OF handle,id ON ` + parent + ` BEGIN ` + clearParent + insert("r."+kind+"_id=NEW.id") + ` END`,
-			`CREATE TRIGGER IF NOT EXISTS mention_` + parent + `_revision_handles_delete AFTER DELETE ON ` + parent + ` BEGIN ` + clearParent + ` END`,
-		} {
-			if _, err := tx.ExecContext(ctx, q); err != nil {
-				return fmt.Errorf("index revision handles: %w", err)
-			}
-		}
+	if err := installResourceAccessRevisionHandles(ctx, tx); err != nil {
+		return err
 	}
 	// Every write that can change roots, structural parents or reference ancestry
 	// invalidates cached request snapshots. Broad invalidation is conservative.
@@ -199,5 +170,41 @@ func installResourceAccessMentions(ctx context.Context, tx *sql.Tx) error {
 		}
 	}
 
+	return nil
+}
+
+func installResourceAccessRevisionHandles(ctx context.Context, tx *sql.Tx) error {
+	// Virtual revision handles depend on both revision rows and parent handles.
+	for _, kind := range []string{"document", "card"} {
+		parent, revisions := kind+"s", kind+"_revisions"
+		exists, err := sqliteTableExists(ctx, tx, revisions)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			continue
+		}
+		insert := func(where string) string {
+			return `INSERT INTO resource_access_identities(origin,origin_id,kind,resource_id,ref,bucket)
+   SELECT '` + revisions + `_handle',r.revision_id,'` + kind + `_revision',r.revision_id,COALESCE(NULLIF(p.handle,''),p.id)||'-r'||r.revision_number,
+   '` + kind + `_revision:'||anx_resource_mention_bucket(CAST(COALESCE(NULLIF(p.handle,''),p.id)||'-r'||r.revision_number AS BLOB))
+   FROM ` + revisions + ` r JOIN ` + parent + ` p ON p.id=r.` + kind + `_id WHERE ` + where + ` ON CONFLICT DO NOTHING;`
+		}
+		clear := `DELETE FROM resource_access_identities WHERE origin='` + revisions + `_handle' AND origin_id=OLD.revision_id;`
+		clearParent := `DELETE FROM resource_access_identities WHERE origin='` + revisions + `_handle' AND origin_id IN (SELECT revision_id FROM ` + revisions + ` WHERE ` + kind + `_id=OLD.id);`
+		for _, q := range []string{
+			insert("true"),
+			`CREATE TRIGGER IF NOT EXISTS mention_` + revisions + `_handle_insert AFTER INSERT ON ` + revisions + ` BEGIN ` + insert("r.revision_id=NEW.revision_id") + ` END`,
+			`CREATE TRIGGER IF NOT EXISTS mention_` + revisions + `_handle_update AFTER UPDATE ON ` + revisions + ` BEGIN ` + clear + insert("r.revision_id=NEW.revision_id") + ` END`,
+			`CREATE TRIGGER IF NOT EXISTS mention_` + revisions + `_handle_delete AFTER DELETE ON ` + revisions + ` BEGIN ` + clear + ` END`,
+			`CREATE TRIGGER IF NOT EXISTS mention_` + parent + `_revision_handles_insert AFTER INSERT ON ` + parent + ` BEGIN ` + insert("r."+kind+"_id=NEW.id") + ` END`,
+			`CREATE TRIGGER IF NOT EXISTS mention_` + parent + `_revision_handles_update AFTER UPDATE OF handle,id ON ` + parent + ` BEGIN ` + clearParent + insert("r."+kind+"_id=NEW.id") + ` END`,
+			`CREATE TRIGGER IF NOT EXISTS mention_` + parent + `_revision_handles_delete AFTER DELETE ON ` + parent + ` BEGIN ` + clearParent + ` END`,
+		} {
+			if _, err := tx.ExecContext(ctx, q); err != nil {
+				return fmt.Errorf("index revision handles: %w", err)
+			}
+		}
+	}
 	return nil
 }

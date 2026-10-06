@@ -125,6 +125,13 @@ exact-atom keys. Regular GET requests reuse an immutable denial snapshot only wh
 the authorization epoch still matches within the consuming statement; a mismatch
 falls back to the canonical graph. Rebinding a scope clears its cache. Streams and
 transactional reads never use that request cache.
+Migration 62 backfills PM and inbox provenance and repairs virtual revision
+identities when a parent arrives after its revisions. PM initialization installs
+its body-reference triggers atomically with the table; retain separate `(kind,id)`
+contributors even though inherited privacy follows PM IDs across kinds. Inbox
+parent columns contribute both raw atoms and typed refs, including legacy aliases.
+Canonical inbox collections use their indexed SQL visibility and batch metadata
+hydration; avoid rebuilding authorization for every already-filtered ordinary row.
 Use the registered SQLite driver so the reference scalar functions are available
 to imports. Structured JSON contributes atoms, not whole container serialization;
 scalar text preserves even JSON-shaped IDs. Keep this distinction in new fields.

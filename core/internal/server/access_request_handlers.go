@@ -199,6 +199,9 @@ func writeAccessRequestError(w http.ResponseWriter, err error) {
 }
 
 func enrichAccessRequestInboxItem(ctx context.Context, opts handlerOptions, item map[string]any) {
+	if anyString(item["source_event_id"]) == "" {
+		return
+	}
 	store, ok := opts.primitiveStore.(*primitives.Store)
 	if !ok {
 		return
@@ -207,6 +210,10 @@ func enrichAccessRequestInboxItem(ctx context.Context, opts handlerOptions, item
 	if err != nil {
 		return
 	}
+	applyAccessRequestInboxMetadata(item, request)
+}
+
+func applyAccessRequestInboxMetadata(item map[string]any, request primitives.AccessRequest) {
 	item["access_request_id"] = request.ID
 	item["requested_grant"] = request.Grant
 	item["requester_principal_id"] = request.PrincipalID

@@ -96,9 +96,9 @@ func accessCTEsWithSnapshot(scope AccessScope, query string, snapshot *denialSna
 	add("agent_presence", cleanJSON("_row.note")+" AND NOT EXISTS (SELECT 1 FROM _anx_denied_refs WHERE ref="+resourceaccess.ReferenceSQL("_row.current_card_ref")+" COLLATE NOCASE)")
 	add("agent_progress_notes", cleanJSON("_row.text")+" AND NOT EXISTS (SELECT 1 FROM _anx_denied_refs WHERE ref="+resourceaccess.ReferenceSQL("_row.card_ref")+" COLLATE NOCASE)")
 	if needed["pm_records"] {
-		graph += ", _anx_private_pm(id) AS (SELECT id FROM main.pm_records AS _row WHERE NOT (" + cleanJSON("_row.body") + `) UNION SELECT r.id FROM main.pm_records r JOIN json_tree(r.body) j JOIN _anx_private_pm p ON j.atom=p.id), pm_records AS (SELECT rowid,* FROM main.pm_records WHERE id NOT IN (SELECT id FROM _anx_private_pm))`
+		graph += ", pm_records AS (SELECT rowid,* FROM main.pm_records AS _row WHERE " + denied("pm", "_row.id") + ")"
 	}
-	add("derived_inbox_items", denied("thread", "_row.thread_id")+" AND "+denied("card", "_row.source_card_id")+" AND "+denied("event", "_row.source_event_id")+" AND "+cleanJSON("_row.data_json"))
+	add("derived_inbox_items", denied("inbox", "_row.id"))
 	add("workspace_dashboard", denied("document", "_row.document_id"))
 	add("idempotency_replays", cleanJSON("_row.response_json"))
 	for table, columns := range resourceaccess.FilterSources {

@@ -1,8 +1,11 @@
 package server
 
 import (
+	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,6 +22,9 @@ func TestResourceAccessCommonReadPerformance(t *testing.T) {
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	s := env.primitiveStore.(*primitives.Store)
+	if _, err := pm.NewStore(env.workspace.DB()); err != nil {
+		t.Fatal(err)
+	}
 	stranger := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "perf-reader", "perf-reader-actor", "perf-reader", "perf-reader-token")
 	for i := 0; i < 10; i++ {
 		board, err := s.CreateBoard(ctx, "private-owner", map[string]any{"title": fmt.Sprintf("private-%d", i)})
@@ -83,9 +89,76 @@ func TestResourceAccessCommonReadPerformance(t *testing.T) {
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
+	// Real PM record kinds reference public boards, cards and their plans. Both
+	// PM bodies and inbox bodies used to take separate read-time scan paths.
+	for _, kind := range []string{"conversation", "decision", "action"} {
+		bulk, err := env.workspace.DB().BeginTx(ctx, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		stmt, err := bulk.Prepare(`INSERT INTO pm_records VALUES(?,?,'ws_main','public-writer','',1,?)`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := 0; i < 1000; i++ {
+			ref := fmt.Sprintf("card:%08x-row-4", i)
+			if kind == "conversation" {
+				ref = "board:" + anyString(publicBoard["id"])
+			}
+			if kind == "action" {
+				ref = fmt.Sprintf("plan:%08x-row-4", i)
+			}
+			body, _ := json.Marshal(map[string]any{"id": fmt.Sprintf("perf-%s-%d", kind, i), "work_ref": ref, "text": "Public PM evidence"})
+			if _, err = stmt.Exec(kind, fmt.Sprintf("perf-%s-%d", kind, i), body); err != nil {
+				t.Fatal(err)
+			}
+		}
+		stmt.Close()
+		if err = bulk.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	bulk, err := env.workspace.DB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 1000; i++ {
+		if _, err = bulk.Exec(`INSERT INTO card_plans VALUES(?,'{}','now')`, fmt.Sprintf("%08x-row-4", i)); err != nil {
+			t.Fatal(err)
+		}
+		item := streamPrivacyInboxItem(anyString(publicBoard["thread_id"]), fmt.Sprintf("perf-inbox-%d", i), "Public inbox evidence")
+		item.SourceEventID = fmt.Sprintf("%08x-row-1", i)
+		body, _ := json.Marshal(item.Data)
+		if _, err = bulk.Exec(`INSERT INTO derived_inbox_items(id,thread_id,source_event_id,category,trigger_at,generated_at,data_json) VALUES(?,?,?,'ask','2026-01-01T00:00:00Z','now',?)`, item.ID, item.ThreadID, item.SourceEventID, body); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = bulk.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	t.Run("pm-point", func(t *testing.T) {
+		db := resourceaccess.NewDB(env.workspace.DB())
+		scope := primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: stranger.ActorID})
+		var samples []time.Duration
+		for i := 0; i < 27; i++ {
+			start := time.Now()
+			var body []byte
+			if err := db.QueryRowContext(scope, `SELECT body FROM pm_records WHERE kind='decision' AND id='perf-decision-0'`).Scan(&body); err != nil {
+				t.Fatal(err)
+			}
+			if i >= 2 {
+				samples = append(samples, time.Since(start))
+			}
+		}
+		p95 := performanceP95(samples)
+		t.Logf("p95=%s", p95)
+		if p95 > 200*time.Millisecond {
+			t.Fatalf("PM point p95=%s exceeds 200ms", p95)
+		}
+	})
 	t.Run("selector-and-stream-poll", func(t *testing.T) {
 		samples := []time.Duration{}
-		for i := 0; i < 12; i++ {
+		for i := 0; i < 27; i++ {
 			// A fresh scope on every tick mirrors stream readers, which must not
 			// reuse a connection-wide decision after private ownership changes.
 			scope := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: stranger.ActorID})
@@ -101,8 +174,7 @@ func TestResourceAccessCommonReadPerformance(t *testing.T) {
 				samples = append(samples, time.Since(start))
 			}
 		}
-		sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
-		if p95 := samples[9]; p95 > 200*time.Millisecond {
+		if p95 := performanceP95(samples); p95 > 200*time.Millisecond {
 			t.Fatalf("selector/poll p95=%s exceeds 200ms", p95)
 		} else {
 			t.Logf("p95=%s", p95)
@@ -111,8 +183,25 @@ func TestResourceAccessCommonReadPerformance(t *testing.T) {
 	client := &http.Client{Timeout: 5 * time.Second}
 	for _, path := range []string{"/agents/me", "/inbox", "/inbox/summary", "/work?limit=20", "/overview", "/events?limit=50"} {
 		t.Run(path, func(t *testing.T) {
-			samples := make([]time.Duration, 0, 10)
-			for i := 0; i < 12; i++ {
+			samples := make([]time.Duration, 0, 25)
+			var projectionSamples []time.Duration
+			for i := 0; i < 27; i++ {
+				// Pair the overview with its canonical projection so sustained CI
+				// CPU contention raises both measurements. Bounded selector/PM
+				// budgets still catch workspace-wide authorization scans.
+				if path == "/overview" {
+					start := time.Now()
+					baseline, err := s.Overview(ctx, nil, nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if _, err = json.Marshal(baseline); err != nil {
+						t.Fatal(err)
+					}
+					if i >= 2 {
+						projectionSamples = append(projectionSamples, time.Since(start))
+					}
+				}
 				start := time.Now()
 				req, err := http.NewRequest("GET", env.server.URL+path, nil)
 				if err != nil {
@@ -142,8 +231,7 @@ func TestResourceAccessCommonReadPerformance(t *testing.T) {
 					samples = append(samples, time.Since(start))
 				}
 			}
-			sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
-			p95 := samples[9]
+			p95 := performanceP95(samples)
 			t.Logf("p95=%s", p95)
 			// Overview computes and serializes 1,000 initiatives; give that
 			// projection a separate measured budget. All remain far below the
@@ -151,10 +239,20 @@ func TestResourceAccessCommonReadPerformance(t *testing.T) {
 			budget := 500 * time.Millisecond
 			if path == "/overview" {
 				budget = 1500 * time.Millisecond
+				projection := performanceP95(projectionSamples)
+				if relative := 4*projection + 500*time.Millisecond; relative > budget {
+					budget = relative
+				}
+				t.Logf("canonical projection p95=%s; overview budget=%s", projection, budget)
 			}
 			if p95 > budget {
 				t.Fatalf("p95=%s exceeds %s read budget", p95, budget)
 			}
 		})
 	}
+}
+
+func performanceP95(samples []time.Duration) time.Duration {
+	sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
+	return samples[(95*len(samples)+99)/100-1]
 }

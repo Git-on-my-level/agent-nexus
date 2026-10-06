@@ -1019,6 +1019,7 @@ var migrations = []migration{
 	// Rebuild truncated scalar-text edges and replace old TEXT-argument triggers.
 	{Version: 60, AfterApply: repairNULReferenceAccess},
 	{Version: 61, AfterApply: installResourceAccessMentions},
+	{Version: 62, AfterApply: repairResourceAccessReadIndexes},
 }
 
 func repairNULReferenceAccess(ctx context.Context, tx *sql.Tx) error {
@@ -1173,7 +1174,11 @@ func installResourceAccess(ctx context.Context, tx *sql.Tx) error {
 // These ownership edges are separate from navigational ref_edges: replacing a
 // record's top-level refs must never discard payload-derived authorization.
 func installResourceAccessEdges(ctx context.Context, tx *sql.Tx) error {
-	for _, source := range resourceaccess.OwnershipSources {
+	return installResourceAccessSourceEdges(ctx, tx, resourceaccess.OwnershipSources)
+}
+
+func installResourceAccessSourceEdges(ctx context.Context, tx *sql.Tx, sources []resourceaccess.OwnershipSource) error {
+	for _, source := range sources {
 		exists, err := sqliteTableExists(ctx, tx, source.Table)
 		if err != nil {
 			return err
@@ -1199,6 +1204,17 @@ func installResourceAccessEdges(ctx context.Context, tx *sql.Tx) error {
 			var parts []string
 			for _, column := range columns {
 				value := prefix + column
+				// Imported inbox parents can use handles/aliases. Preserve the
+				// typed spelling checked by the former per-item HTTP guard.
+				if source.Table == "derived_inbox_items" {
+					kind := map[string]string{"thread_id": "thread", "source_card_id": "card", "source_event_id": "event"}[column]
+					if kind != "" {
+						// Keep raw atoms too: legacy scalar IDs can themselves be
+						// encoded JSON or contain references to another kind.
+						parts = append(parts, `SELECT '`+source.Kind+`',`+prefix+source.ID+`,j.value FROM `+from+`json_each(`+resourceaccess.ReferenceSQLAtoms(value, false)+`) j WHERE j.value<>''`)
+						value = "('" + kind + ":'||" + value + ")"
+					}
+				}
 				parts = append(parts, `SELECT '`+source.Kind+`',`+prefix+source.ID+`,j.value FROM `+from+`json_each(`+resourceaccess.ReferenceSQLAtoms(value, strings.HasSuffix(column, "_json"))+`) j WHERE j.value<>''`)
 			}
 			// An outer UPSERT can override a trigger's legacy OR IGNORE policy.

@@ -3,6 +3,7 @@ package primitives
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -178,4 +179,30 @@ func (s *Store) applyAccessDecisionTx(ctx context.Context, tx *accessTx, sourceE
 
 func (s *Store) AccessRequestForEvent(ctx context.Context, eventID string) (AccessRequest, error) {
 	return scanAccessRequest(s.db.QueryRowContext(ctx, `SELECT `+accessRequestColumns+` FROM access_requests WHERE request_event_id=?`, eventID))
+}
+
+// AccessRequestsForEvents hydrates an inbox collection with one indexed query,
+// preserving scoped visibility without one authorization statement per item.
+func (s *Store) AccessRequestsForEvents(ctx context.Context, eventIDs []string) (map[string]AccessRequest, error) {
+	out := map[string]AccessRequest{}
+	if len(eventIDs) == 0 {
+		return out, nil
+	}
+	encoded, err := json.Marshal(eventIDs)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT `+accessRequestColumns+` FROM access_requests WHERE request_event_id IN (SELECT value FROM json_each(?))`, string(encoded))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		item, err := scanAccessRequest(rows)
+		if err != nil {
+			return nil, err
+		}
+		out[item.RequestEventRef] = item
+	}
+	return out, rows.Err()
 }

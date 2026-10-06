@@ -25,6 +25,7 @@ var OwnershipSources = []OwnershipSource{
 	{"card_plans", "plan", "card_id", []string{"body_json"}},
 	{"agent_wakeups", "wakeup", "wakeup_id", []string{"refs_json", "trigger_text", "thread_title", "failure_reason"}},
 	{"runs", "run", "id", []string{"card_ref", "labels_json", "repository", "branch", "model", "external_id"}},
+	{"derived_inbox_items", "inbox", "id", []string{"data_json", "thread_id", "source_card_id", "source_event_id"}},
 }
 
 // FilterSources are ancillary rows with no navigable canonical resource kind.
