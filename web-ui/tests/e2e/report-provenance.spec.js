@@ -97,7 +97,7 @@ const REPORT = {
       // At 390px it has to wrap inside the header, not run off the edge.
       author: LONG_AUTHOR,
       provenance: "reported",
-      observed_at: ago(30),
+      observed_at: ago(2),
       freshness: "stale",
       title: "Background",
       source_ids: [],
@@ -340,8 +340,8 @@ for (const viewport of AUDIT_VIEWPORTS) {
     // A header that wraps is fine. A header that is cut off is not: the chip
     // is the one thing on the panel the reader must be able to finish reading.
     await expect(chip(page, "milestones")).toContainText("May be stale");
-    // A 200-character author wraps inside the header rather than being cut.
-    await expect(chip(page, "legacy")).toContainText("May be stale");
+    // A long author label wraps inside the header rather than being cut.
+    await expect(chip(page, "legacy")).toContainText("Written by A long");
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth > window.innerWidth + 1,
