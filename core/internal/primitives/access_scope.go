@@ -141,7 +141,9 @@ func accessCTEsWithSnapshot(scope AccessScope, query string, snapshot *denialSna
 	}
 	return deniedGraph +
 		", " + ownershipRefs("_anx_resource_refs", "_anx_denied") +
-		", _anx_denied_refs(ref) AS MATERIALIZED (SELECT CASE WHEN kind='external_key' OR kind='card' AND (ref LIKE 'http://%' OR ref LIKE 'https://%') THEN ref ELSE kind||':'||ref END FROM _anx_resource_refs UNION SELECT 'doc:'||ref FROM _anx_resource_refs WHERE kind='document'), _anx_denied_atoms(ref,typed) AS MATERIALIZED (SELECT ref,1 FROM _anx_denied_refs UNION SELECT id,0 FROM _anx_denied WHERE kind NOT IN ('plan','work_evidence_record','work_evidence_alias','external_key') AND kind NOT LIKE 'filter/%')" + graph
+		// One reference to the identities CTE avoids copying the recursive graph
+		// again during SQLite preparation just to emit the document synonym.
+		", _anx_denied_refs(ref) AS MATERIALIZED (SELECT DISTINCT j.value FROM _anx_resource_refs r JOIN json_each(json_array(CASE WHEN r.kind='external_key' OR r.kind='card' AND (r.ref LIKE 'http://%' OR r.ref LIKE 'https://%') THEN r.ref ELSE r.kind||':'||r.ref END,CASE WHEN r.kind='document' THEN 'doc:'||r.ref END)) j WHERE j.value IS NOT NULL), _anx_denied_atoms(ref,typed) AS MATERIALIZED (SELECT ref,1 FROM _anx_denied_refs UNION SELECT id,0 FROM _anx_denied WHERE kind NOT IN ('plan','work_evidence_record','work_evidence_alias','external_key') AND kind NOT LIKE 'filter/%')" + graph
 }
 
 // Apply relation visibility before limits, aggregates and cursors. SQLite
