@@ -59,12 +59,19 @@ func (s *Store) decisionWorkSnapshots(ctx context.Context, refs []string) (map[s
 		return out, err
 	}
 	raw, _ = json.Marshal(resolved)
-	rows, err = s.db.QueryContext(ctx, `SELECT json_extract(selected.value,'$.ref'),COALESCE(json_extract(placement.metadata_json,'$.column_key'),?),c.head_revision_number,
+	// Materialize one visible placement per bounded selector. Repeating the
+	// scoped ref_edges relation for both its ID lookup and metadata hydration
+	// duplicates expensive authorization SQL preparation. Metadata is NOT NULL,
+	// so a NULL lookup retains the existing missing-placement behavior.
+	rows, err = s.db.QueryContext(ctx, `WITH _decision_placements AS MATERIALIZED (
+ SELECT json_extract(j.value,'$.ref') AS ref,json_extract(j.value,'$.id') AS id,
+ (SELECT CASE WHEN re.id IS NOT NULL THEN re.metadata_json END FROM ref_edges re WHERE re.source_type='board' AND re.edge_type='board_card' AND re.target_id=json_extract(j.value,'$.id') LIMIT 1) AS metadata_json
+ FROM json_each(?) j)
+ SELECT selected.ref,COALESCE(json_extract(selected.metadata_json,'$.column_key'),?),c.head_revision_number,
  COALESCE(m.metadata_json,'{"source":{"authority":"nexus"}}'),COALESCE(m.version,0),o.body_json
- FROM json_each(?) selected CROSS JOIN cards c ON c.id=json_extract(selected.value,'$.id')
- JOIN ref_edges placement ON placement.id=(SELECT re.id FROM ref_edges re WHERE re.source_type='board' AND re.edge_type='board_card' AND re.target_id=c.id LIMIT 1)
+ FROM _decision_placements selected CROSS JOIN cards c ON c.id=selected.id
  LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id
- WHERE COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')=''`, boardDefaultColumn, string(raw))
+ WHERE selected.metadata_json IS NOT NULL AND COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')=''`, string(raw), boardDefaultColumn)
 	if err != nil {
 		return nil, err
 	}

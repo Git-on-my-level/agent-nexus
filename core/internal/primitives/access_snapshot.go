@@ -19,7 +19,9 @@ type denialRequestKey struct{}
 // WithRequestAccessScope caches the denial closure for a regular read request.
 // Every consuming statement validates the authorization epoch IN its own SQL
 // snapshot and falls back to the canonical graph if any ownership write occurred.
-// Transactions and streams always evaluate the canonical graph directly.
+// Business transactions and streams evaluate the canonical graph directly. The
+// reader-only Overview visit can opt into an epoch-guarded check in its own write
+// transaction, falling back to that transaction's graph on any epoch mismatch.
 func WithRequestAccessScope(ctx context.Context, scope AccessScope) context.Context {
 	ctx = WithAccessScope(ctx, scope)
 	state := &denialRequestState{}

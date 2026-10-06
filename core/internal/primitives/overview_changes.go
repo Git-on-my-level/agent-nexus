@@ -64,6 +64,8 @@ func overviewSnapshot(work []map[string]any) map[string]visitState {
 	return out
 }
 
+type overviewVisitWriteKey struct{}
+
 // The database is already workspace scoped. Only authenticated principal IDs
 // are supplied by HTTP; no caller-controlled actor or timestamp is accepted.
 func (s *Store) RecordOverviewVisit(ctx context.Context, principal string, work []map[string]any, now time.Time) error {
@@ -73,6 +75,13 @@ func (s *Store) RecordOverviewVisit(ctx context.Context, principal string, work 
 	raw, err := json.Marshal(overviewSnapshot(work))
 	if err != nil {
 		return err
+	}
+	// This write stores only the reader's bounded visit state. Reuse its prepared
+	// denial only through the same epoch-guarded check on the write transaction.
+	// This local context never escapes the INSERT and retains the caller's policy;
+	// other mutations keep their ordinary transaction checks.
+	if denialSnapshotFrom(ctx) != nil {
+		ctx = context.WithValue(ctx, overviewVisitWriteKey{}, struct{}{})
 	}
 	// A slower old request cannot replace a newer visit or its snapshot.
 	_, err = s.db.ExecContext(ctx, `INSERT INTO overview_visits(principal_id,visited_at,snapshot_json) VALUES(?,?,?)
