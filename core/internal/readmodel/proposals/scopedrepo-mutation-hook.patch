@@ -1,75 +1,78 @@
 --- /dev/null
 +++ b/core/internal/scopedrepo/readmodel_hook.go
-@@ -0,0 +1,72 @@
+@@ -0,0 +1,75 @@
 +package scopedrepo
 +
 +import (
-+	"context"
-+	"database/sql"
-+
 +	"agent-nexus-core/internal/readmodel"
 +	"agent-nexus-core/internal/scopes"
++	"context"
 +)
 +
-+// applyScopeReadModelChange is a proposed lead-owned canonical mutation hook.
-+// The lead's Writer must validate its current scope/grant capability, derive
-+// before/after from canonical Change fields, and call this in the SAME source
-+// transaction. Any error must roll back the source event/answer and all deltas.
-+// Do not expose tx, this helper or a repository factory to business handlers.
-+// It is not constructor wiring: the frozen Writer/Change API remains required.
-+func applyScopeReadModelChange(ctx context.Context, tx *sql.Tx, scope scopes.ID, before, after *readmodel.Projection) error {
-+	if tx == nil || scope == "" {
-+		return scopes.ErrDenied
-+	}
-+	for _, p := range []*readmodel.Projection{before, after} {
-+		if p != nil && p.ScopeID != scope {
-+			return scopes.ErrDerivation
-+		}
-+	}
-+	delta, err := readmodel.PlanDelta(before, after)
++// Unapplied proposal for A. Do not install before complete canonical capture,
++// reviewed exact SQL templates, and generation projection coverage exist.
++const hookIdentityProposal = `SELECT d.state,d.generation,r.version,r.canonical_id,k.rid
++ FROM scope_domains d JOIN scope_resources r ON r.scope_id=d.id
++ JOIN scope_resource_rids k ON k.scope_id=r.scope_id AND k.kind=r.kind AND k.resource_id=r.id
++ WHERE d.id=? AND r.kind=? AND r.id=?`
++
++type hookExecutor struct{ tx MutationTx }
++
++func (e hookExecutor) Exec(ctx context.Context, q string, args ...any) (int64, error) {
++	r, err := e.tx.ExecContext(ctx, q, args...)
 +	if err != nil {
-+		return err
++		return 0, err
 +	}
-+	for _, change := range delta.Feeds {
-+		p, e := change.Projection, change.Entry
-+		var result sql.Result
-+		if change.Delete {
-+			result, err = tx.ExecContext(ctx, readmodel.DeleteFeed, p.ScopeID, p.Generation, e.Family, e.Audience, e.Sort, p.RID, p.Version)
-+		} else {
-+			result, err = tx.ExecContext(ctx, readmodel.InsertFeed, p.ScopeID, p.Generation, e.Family, e.Audience, e.Sort, p.RID, p.Version)
-+		}
-+		if err != nil {
-+			return err
-+		}
-+		if err = requireReadModelRow(result); err != nil {
-+			return err
-+		}
-+	}
-+	for _, change := range delta.Counters {
-+		key := change.Key
-+		var result sql.Result
-+		if change.Delta > 0 {
-+			result, err = tx.ExecContext(ctx, readmodel.IncrementCounter, key.ScopeID, key.Generation, key.Family, key.Audience, key.Bucket, change.Delta)
-+		} else {
-+			result, err = tx.ExecContext(ctx, readmodel.DecrementCounter, change.Delta, key.ScopeID, key.Generation, key.Family, key.Audience, key.Bucket)
-+		}
-+		if err != nil {
-+			return err
-+		}
-+		if err = requireReadModelRow(result); err != nil {
-+			return err
-+		}
-+	}
-+	return nil
++	return r.RowsAffected()
 +}
 +
-+func requireReadModelRow(result sql.Result) error {
-+	n, err := result.RowsAffected()
++// Candidate for A: identity comes from the private registry in the SAME source
++// transaction. This check is necessary, but complete canonical before/after
++// provenance and capture coverage must still be supplied by A's actual writers.
++type ReadModelCanonicalHook struct{ Capture readmodel.Capture }
++
++func (h ReadModelCanonicalHook) ApplyCanonical(ctx context.Context, tx MutationTx, m scopes.CanonicalMutation) error {
++	if err := m.Validate(); err != nil {
++		return err
++	}
++	i := m.Identity
++	rows, err := tx.QueryContext(ctx, hookIdentityProposal, i.ScopeID, i.Kind, i.ResourceID)
 +	if err != nil {
 +		return err
 +	}
-+	if n != 1 {
++	var state, canonical string
++	var generation, version, rid int64
++	if !rows.Next() {
++		err = rows.Err()
++		rows.Close()
++		if err != nil {
++			return err
++		}
 +		return readmodel.ErrProjection
 +	}
-+	return nil
++	if err = rows.Scan(&state, &generation, &version, &canonical, &rid); err != nil {
++		rows.Close()
++		return err
++	}
++	extra := rows.Next()
++	err = rows.Err()
++	closeErr := rows.Close()
++	if err != nil {
++		return err
++	}
++	if closeErr != nil {
++		return closeErr
++	}
++	if extra || state != "active" || generation < 1 || version != i.CanonicalVersion || canonical != i.CanonicalID || rid != i.RID {
++		return readmodel.ErrProjection
++	}
++	old, next, payloads, err := readmodel.CaptureCanonical(m, generation, h.Capture)
++	if err != nil {
++		return err
++	}
++	// Never discard semantic affected-row errors: returning them is what makes
++	// ApplyCanonicalHooks roll back the source, including earlier adapters.
++	return readmodel.ApplyProjection(ctx, hookExecutor{tx: tx}, old, next, payloads, false)
 +}
++
++var _ CanonicalHook = ReadModelCanonicalHook{}
