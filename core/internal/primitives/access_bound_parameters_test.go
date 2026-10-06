@@ -49,8 +49,20 @@ func TestResourceAccessSnapshotParameterBindings(t *testing.T) {
 	if _, err = s.PatchThread(ctx, "owner", doc["thread_id"].(string), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err = s.CheckResourceValues(scope, []string{"document:" + doc["id"].(string)}); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("stale selector snapshot exposed document: %v", err)
+	for _, prefix := range []string{"document:", "doc:"} {
+		for _, identity := range []string{doc["id"].(string), doc["handle"].(string)} {
+			ref := prefix + identity
+			if err = s.CheckResourceValues(scope, []string{ref}); !errors.Is(err, ErrNotFound) {
+				t.Fatalf("stale selector snapshot exposed %s: %v", ref, err)
+			}
+			if err = s.CheckResourceValues(WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"}), []string{ref}); !errors.Is(err, ErrNotFound) {
+				t.Fatalf("fresh selector snapshot exposed %s: %v", ref, err)
+			}
+			var denied bool
+			if err = s.db.QueryRowContext(scope, `SELECT EXISTS(SELECT 1 FROM _anx_denied_refs WHERE ref=?)`, ref).Scan(&denied); err != nil || !denied {
+				t.Fatalf("explicit denied-ref selector lost %s: denied=%v err=%v", ref, denied, err)
+			}
+		}
 	}
 	var id string
 	if err = ws.DB().QueryRowContext(ctx, q, args...).Scan(&id); err != sql.ErrNoRows {

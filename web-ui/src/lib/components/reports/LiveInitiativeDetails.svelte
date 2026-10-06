@@ -2,6 +2,7 @@
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import PlanView from "$lib/components/PlanView.svelte";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
+  import { healthState } from "$lib/healthState.js";
 
   let {
     items = [],
@@ -16,10 +17,7 @@
     canNavigate ? bindWorkspaceHref(organizationSlug, workspaceSlug) : null,
   );
 
-  const healthLabel = (item) => {
-    const health = item.health ?? item.plan_state?.health;
-    return typeof health === "string" ? health : (health?.status ?? "");
-  };
+  const healthLabel = healthState;
   const itemRefs = (item) => {
     const refs = new Map(resolved ?? []);
     const stepStates = new Map(
@@ -177,7 +175,7 @@
     text-transform: capitalize;
   }
   .meta [data-health="blocked"],
-  .meta [data-health="stalled"] {
+  .meta [data-health="stale"] {
     color: var(--warn-text);
   }
   .progress,

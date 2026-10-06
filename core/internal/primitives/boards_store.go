@@ -687,6 +687,7 @@ type boardRow struct {
 	Handle           sql.NullString
 	Title            string
 	Summary          string
+	Role             string
 	OwnersJSON       string
 	ThreadID         string
 	RefsJSON         string
@@ -822,6 +823,10 @@ func (s *Store) CreateBoard(ctx context.Context, actorID string, board map[strin
 	if err != nil {
 		return nil, fmt.Errorf("marshal board column schema: %w", err)
 	}
+	role, err := normalizeBoardRole(board, "")
+	if err != nil {
+		return nil, err
+	}
 	summary := strings.TrimSpace(anyStringValue(board["summary"]))
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -845,13 +850,14 @@ func (s *Store) CreateBoard(ctx context.Context, actorID string, board map[strin
 	_, err = tx.ExecContext(
 		ctx,
 		`INSERT INTO boards(
-			id, handle, title, summary, owners_json, thread_id, refs_json,
+			id, handle, title, summary, role, owners_json, thread_id, refs_json,
 			column_schema_json, created_at, created_by, updated_at, updated_by
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		boardID,
 		boardHandle,
 		title,
 		summary,
+		role,
 		string(ownersJSON),
 		threadID,
 		string(refsJSON),
@@ -1144,6 +1150,10 @@ func (s *Store) UpdateBoard(ctx context.Context, actorID, boardID string, patch 
 		return nil, err
 	}
 
+	nextRole, err := normalizeBoardRole(patch, currentRow.Role)
+	if err != nil {
+		return nil, err
+	}
 	nextTitle := strings.TrimSpace(currentRow.Title)
 	if _, exists := patch["title"]; exists {
 		nextTitle = strings.TrimSpace(anyStringValue(patch["title"]))
@@ -1231,12 +1241,13 @@ func (s *Store) UpdateBoard(ctx context.Context, actorID, boardID string, patch 
 	}
 
 	query := `UPDATE boards
-		SET title = ?, summary = ?, owners_json = ?, refs_json = ?,
+		SET title = ?, summary = ?, role = ?, owners_json = ?, refs_json = ?,
 		    column_schema_json = ?, updated_at = ?, updated_by = ?
 		WHERE id = ?`
 	args := []any{
 		nextTitle,
 		nextSummary,
+		nextRole,
 		string(ownersJSON),
 		string(refsJSON),
 		string(columnSchemaJSON),
@@ -3102,7 +3113,7 @@ func (s *Store) ListBoardMembershipsByThread(ctx context.Context, threadID strin
 	return out, nil
 }
 
-func (s *Store) computeBoardSummaries(ctx context.Context, boards []boardRow, typedRefsByBoard map[string][]string) (map[string]map[string]any, error) {
+func (s *Store) computeBoardSummaries(ctx context.Context, boards []boardRow, typedRefsByBoard map[string][]string, visibility ...func(string, string) bool) (map[string]map[string]any, error) {
 	summaries := make(map[string]map[string]any, len(boards))
 	if len(boards) == 0 {
 		return summaries, nil
@@ -3127,6 +3138,31 @@ func (s *Store) computeBoardSummaries(ctx context.Context, boards []boardRow, ty
 		return nil, err
 	}
 
+	if len(visibility) > 0 && visibility[0] != nil {
+		candidates := []map[string]any{}
+		for _, cards := range cardsByBoard {
+			for _, card := range cards {
+				candidates = append(candidates, map[string]any{"id": card.CardID})
+			}
+		}
+		readable, err := s.FilterCardAccess(ctx, candidates, visibility[0])
+		if err != nil {
+			return nil, err
+		}
+		allowed := map[string]bool{}
+		for _, card := range readable {
+			allowed[workString(card["id"])] = true
+		}
+		for boardID, cards := range cardsByBoard {
+			filtered := cards[:0]
+			for _, card := range cards {
+				if allowed[card.CardID] {
+					filtered = append(filtered, card)
+				}
+			}
+			cardsByBoard[boardID] = filtered
+		}
+	}
 	allThreadIDs := append([]string{}, threadIDs...)
 	for _, rows := range cardsByBoard {
 		for _, row := range rows {
@@ -3283,7 +3319,7 @@ func parseBoardCardRowDueAt(card boardCardRow) (time.Time, bool) {
 }
 
 func buildListBoardsQuery(filter BoardListFilter) (string, []any) {
-	query := `SELECT id, handle, title, summary, owners_json, thread_id, refs_json, column_schema_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason
+	query := `SELECT id, handle, title, summary, role, owners_json, thread_id, refs_json, column_schema_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		FROM boards
 		WHERE 1=1`
 	args := make([]any, 0, 8)
@@ -3713,7 +3749,7 @@ func loadBoardRow(ctx context.Context, rower queryRower, boardID string) (boardR
 	row := boardRow{}
 	err := rower.QueryRowContext(
 		ctx,
-		`SELECT id, handle, title, summary, owners_json, thread_id, refs_json, column_schema_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason
+		`SELECT id, handle, title, summary, role, owners_json, thread_id, refs_json, column_schema_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		   FROM boards
 		  WHERE id = ?`,
 		strings.TrimSpace(boardID),
@@ -3722,6 +3758,7 @@ func loadBoardRow(ctx context.Context, rower queryRower, boardID string) (boardR
 		&row.Handle,
 		&row.Title,
 		&row.Summary,
+		&row.Role,
 		&row.OwnersJSON,
 		&row.ThreadID,
 		&row.RefsJSON,
@@ -3752,6 +3789,7 @@ func scanBoardRow(scanner interface{ Scan(dest ...any) error }) (boardRow, error
 		&row.Handle,
 		&row.Title,
 		&row.Summary,
+		&row.Role,
 		&row.OwnersJSON,
 		&row.ThreadID,
 		&row.RefsJSON,
@@ -4460,6 +4498,7 @@ func (r boardRow) boardToMapWithRefData(typedRefs, cardRefs []string) (map[strin
 		"handle":        handle,
 		"title":         r.Title,
 		"summary":       strings.TrimSpace(r.Summary),
+		"role":          r.Role,
 		"state":         canonicalLifecycleState(r.ArchivedAt, r.TrashedAt),
 		"thread_id":     r.ThreadID,
 		"refs":          typedRefs,
@@ -5091,4 +5130,45 @@ func invalidBoardRequestError(err error) error {
 		return nil
 	}
 	return fmt.Errorf("%w: %s", ErrInvalidBoardRequest, strings.TrimSpace(err.Error()))
+}
+
+// Roles are open strings so clients can round-trip future roles. Empty clears.
+func normalizeBoardRole(input map[string]any, fallback string) (string, error) {
+	raw, exists := input["role"]
+	if !exists {
+		return fallback, nil
+	}
+	role, ok := raw.(string)
+	if !ok || len(role) > 64 {
+		return "", invalidBoardRequest("board.role must be a string of at most 64 bytes")
+	}
+	return strings.TrimSpace(role), nil
+}
+
+// GetBoardSummariesVisible prevents public board rollups from exposing hidden
+// child state. Cards and plans use the same card/board visibility predicate.
+func (s *Store) GetBoardSummariesVisible(ctx context.Context, ids []string, visible func(string, string) bool) (map[string]map[string]any, error) {
+	encoded, err := json.Marshal(ids)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id,handle,title,summary,role,owners_json,thread_id,refs_json,column_schema_json,created_at,created_by,updated_at,updated_by,archived_at,archived_by,trashed_at,trashed_by,trash_reason FROM boards WHERE id IN (SELECT value FROM json_each(?))`, string(encoded))
+	if err != nil {
+		return nil, err
+	}
+	boards := []boardRow{}
+	for rows.Next() {
+		board, err := scanBoardRow(rows)
+		if err != nil {
+			rows.Close()
+			return nil, err
+		}
+		boards = append(boards, board)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	return s.computeBoardSummaries(ctx, boards, nil, visible)
 }

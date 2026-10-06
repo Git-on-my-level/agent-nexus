@@ -142,9 +142,13 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 		if !ok {
 			return
 		}
-		page, err := store.ListWork(r.Context(), primitives.WorkListFilter{ProjectRef: q.Get("project_ref"), Source: q.Get("source"), Owner: q.Get("owner"), Phase: q.Get("phase"), Freshness: q.Get("freshness"), Query: q.Get("q"), Limit: limit, Cursor: q.Get("cursor")})
+		page, err := store.ListWork(r.Context(), primitives.WorkListFilter{ProjectRef: q.Get("project_ref"), Source: q.Get("source"), Owner: q.Get("owner"), Phase: q.Get("phase"), Freshness: q.Get("freshness"), Query: q.Get("q"), Limit: limit, Cursor: q.Get("cursor"), Visible: planVisibility(r, opts)})
 		if err != nil {
 			workStoreError(w, r, err)
+			return
+		}
+		page.Work, ok = filterPlanCards(w, r, opts, page.Work)
+		if !ok {
 			return
 		}
 		if !enrichPlans(w, r, opts, page.Work) {
@@ -167,6 +171,18 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 				if strings.HasPrefix(ref, "card:") {
 					archivedRefs = append(archivedRefs, ref)
 				}
+			}
+			aliases := []map[string]any{}
+			for _, ref := range archivedRefs {
+				aliases = append(aliases, map[string]any{"id": ref})
+			}
+			filtered, ok := filterPlanCards(w, r, opts, aliases)
+			if !ok {
+				return
+			}
+			archivedRefs = archivedRefs[:0]
+			for _, alias := range filtered {
+				archivedRefs = append(archivedRefs, anyString(alias["id"]))
 			}
 			sort.Strings(archivedRefs)
 		}
@@ -204,6 +220,14 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	parts = strings.Split(strings.TrimPrefix(path, "/"), "/")
 	id, ok := resolveHTTPResourceID(w, r, opts, "card", parts[0], "card")
 	if !ok {
+		return
+	}
+	card, err := opts.primitiveStore.GetBoardCard(r.Context(), "", id)
+	if err != nil {
+		workStoreError(w, r, err)
+		return
+	}
+	if !requirePlanCardAccess(w, r, opts, card) {
 		return
 	}
 	if len(parts) == 1 {

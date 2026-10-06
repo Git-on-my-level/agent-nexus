@@ -893,7 +893,7 @@
   {
     "method": "POST",
     "path": "/refs/resolve",
-    "policy": "reference-write"
+    "policy": "reference-read"
   },
   {
     "method": "POST",

@@ -43,7 +43,7 @@ func TestReportWorkQueryIsScopedAndBounded(t *testing.T) {
 		{ProjectRef: workString(topic.Topic["ref"]), Limit: 2},
 		{BoardIDs: []string{workString(board["id"])}, ProjectRef: workString(topic.Topic["ref"]), Limit: 2},
 	} {
-		query, args := reportWorkQuery(filter)
+		query, args := reportWorkQuery(ctx, filter)
 		plan := explainQueryPlan(t, ws.DB(), query, args...)
 		if strings.Contains(plan, "USE TEMP B-TREE") {
 			t.Fatalf("unbounded sort: %s", plan)

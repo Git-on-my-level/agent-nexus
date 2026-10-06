@@ -64,7 +64,6 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `topics restore` (command): Restore topic from trash
 - `boards list` (command): List boards
 - `boards get` (command): Get board
-- `boards patch` (command): Patch board
 - `boards archive` (command): Archive board
 - `boards unarchive` (command): Unarchive board
 - `boards trash` (command): Move board to trash
@@ -100,7 +99,6 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `events trash` (command): Move event to trash
 - `events restore` (command): Restore event from trash
 - `inbox get` (command): Get one inbox item
-- `inbox summary` (command): Count open asks and return the top asks visible to the caller
 - `inbox respond` (command): Respond to human attention inbox item
 - `inbox stream` (command): Stream inbox items (SSE)
 - `inbox tail` (command): Stream inbox items (SSE)
@@ -177,6 +175,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `adapters delete` (local-helper): Delete a source and its series history; invalidate its tokens.
 - `adapters token` (local-helper): Exchange owner identity for a short-lived, push-only token.
 - `inbox list` (local-helper): List asks addressed to the active agent, including answer and per-answer read state.
+- `inbox summary` (local-helper): Count open human asks and read the top asks visible in this workspace.
 - `inbox read` (local-helper): Mark one answer to your ask as read, including before its wake is delivered.
 - `move` (local-helper): Move a Card or Topic and its related Boards, Cards, and Docs between enrolled workspaces.
 - `lifecycle verbs` (local-helper): Uniform lifecycle surface for archive, unarchive, trash, restore, and purge across artifacts, boards, docs, events, cards, and topics.
@@ -186,6 +185,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `topics message` (local-helper): Post a message to a Topic conversation without hand-authoring event JSON.
 - `topics messages` (local-helper): List messages from a Topic conversation.
 - `topics reply` (local-helper): Reply to an existing Topic message.
+- `boards patch` (local-helper): Patch Board metadata from JSON or set its role with --role.
 - `boards create` (local-helper): Create an active-work Board from flags, optionally tied to a Topic.
 - `cards list` (local-helper): List cards across the workspace, or list one board's cards with --board.
 - `docs create` (local-helper): Create a durable document lineage, with a file-first text-doc path for agents.
@@ -1011,7 +1011,7 @@ Commands:
 
 Active work tracking:
   boards create           Create a Board from flags, optionally tied to `--topic`.
-  boards patch            Patch Board metadata from JSON; use `--dry-run` to preview.
+  boards patch            Patch Board metadata from JSON or `--role`; use `--dry-run` to preview.
   boards workspace        Inspect board context, cards, documents, and inbox.
 
 Card mental model:
@@ -1986,45 +1986,6 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards get ... ; anx --json boards get ... ; anx boards get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `boards patch`
-
-Patch board
-
-```text
-Generated Help: boards patch
-
-- Command ID: `boards.patch`
-- CLI path: `boards patch`
-- HTTP: `PATCH /boards/{board_id}`
-- Side effect class: `remote_coordination_write`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Update board metadata with optimistic concurrency.
-- Output: Returns `{ board }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `boards`, `write`, `concurrency`
-- Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
-
-Inputs:
-  Required:
-  - path `board_id`
-  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
-  Optional:
-  - body `patch.document_refs` (list<any>)
-  - body `patch.pinned_refs` (list<any>)
-  - body `patch.primary_topic_ref` (string)
-  - body `patch.provenance.by_field` (object)
-  - body `patch.provenance.notes` (string)
-  - body `patch.provenance.sources` (list<string>)
-  - body `patch.summary` (string)
-  - body `patch.title` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx boards patch ... ; anx --json boards patch ... ; anx boards patch ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3137,33 +3098,6 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx inbox get ... ; anx --json inbox get ... ; anx inbox get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `inbox summary`
-
-Count open asks and return the top asks visible to the caller
-
-```text
-Generated Help: inbox summary
-
-- Command ID: `inbox.summary`
-- CLI path: `inbox summary`
-- HTTP: `GET /inbox/summary`
-- Side effect class: `read_only`
-- Stability: `beta`
-- Input mode: `query`
-- Why: Cheap workspace-local human attention read for UI fan-out across existing workspace sessions.
-- Output: Returns `{ open_ask_count, asks, generated_at }`; shared human asks visible to the caller, not agent answer notifications.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Concepts: `inbox`
-- Agent notes: Uses current workspace permissions; limit 0 returns the count only. No cross-workspace identity.
-- Adjacent commands: `inbox get`, `inbox list`, `inbox respond`, `inbox stream`
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx inbox summary ... ; anx --json inbox summary ... ; anx inbox summary ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4619,7 +4553,7 @@ Generated Help: report render
 - Output: Returns `{ document_ref, revision_ref, observed_at, panels }`; every panel includes resolved live/authored provenance and authored review metadata.
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `not_found`, `invalid_request`, `unavailable`
 - Concepts: `docs`, `cards`, `evidence`
-- Agent notes: Both text and structured version 1 visual reports are supported. Authored review metadata is returned for every static panel. Reading a pinned report checks deadlines and durably deduplicates author-only inbox reminders per panel and revision. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows. Archived boards and their work are excluded. Private PM events remain private.
+- Agent notes: Both text and structured version 1 visual reports are supported. Authored review metadata is returned for every static panel. Reading a pinned report checks deadlines and durably deduplicates author-only inbox reminders per panel and revision. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows after subject, related-ref, card and board authorization. Archived boards and their work are excluded. Private PM events remain private.
 - Adjacent commands: `report preview`
 
 Inputs:
@@ -4794,12 +4728,16 @@ Inputs:
   - body `relations` (list<object>)
   - body `risk` (string)
   - body `roles` (list<string>)
+  - body `source.aliases` (list<string>)
   - body `source.authority` (string)
   - body `source.connection_id` (string)
+  - body `source.identifier` (string)
+  - body `source.identifier_aliases` (list<string>)
   - body `source.native_id` (string)
   - body `source.native_status` (string)
   - body `source.revision` (string)
   - body `source.url` (string)
+  - body `source_refs` (list<any>)
   - body `start_at` (string)
   - body `summary` (string)
   - body `topic_ref` (string)
@@ -4931,6 +4869,7 @@ Inputs:
   - body `patch.project_ref` (string)
   - body `patch.relations` (list<object>)
   - body `patch.roles` (list<string>)
+  - body `patch.source_refs` (list<any>)
   - body `patch.start_at` (string)
   - body `patch.wake_condition` (string)
   - body `patch.workspace_move` (object)
@@ -5981,6 +5920,46 @@ Global flags:
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
+## `inbox summary`
+
+Count open human asks and read the top asks visible in this workspace.
+
+```text
+Generated Help: inbox summary
+
+- Command ID: `inbox.summary`
+- CLI path: `inbox summary`
+- HTTP: `GET /inbox/summary`
+- Side effect class: `read_only`
+- Stability: `beta`
+- Input mode: `query`
+- Why: Cheap workspace-local human attention read for UI fan-out across existing workspace sessions.
+- Output: Returns `{ open_ask_count, asks, generated_at }`; shared human asks visible to the caller, not agent answer notifications.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Concepts: `inbox`
+- Agent notes: Uses current workspace permissions; limit 0 returns the count only. No cross-workspace identity.
+- Adjacent commands: `inbox get`, `inbox list`, `inbox respond`, `inbox stream`
+
+Local Help: inbox summary
+
+- Kind: `local helper`
+- Side effect class: `read_only`
+- Summary: Count open human asks and read the top asks visible in this workspace.
+- Composition: Uses current workspace permissions; shared human asks, not requester-scoped agent answer notifications. Hosted UI aggregates existing workspace sessions.
+- JSON body: `open_ask_count`, `asks`, `generated_at`
+- Examples:
+  - `anx inbox summary`
+  - `anx --json inbox summary --limit 0`
+
+Flags:
+  --limit <0..50>              Number of top asks (default 5); zero returns only the count.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx inbox summary ... ; anx --json inbox summary ... ; anx inbox summary ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
 ## `inbox read`
 
 Mark one answer to your ask as read, including before its wake is delivered.
@@ -6322,6 +6301,63 @@ Global flags:
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
+## `boards patch`
+
+Patch Board metadata from JSON or set its role with --role.
+
+```text
+Generated Help: boards patch
+
+- Command ID: `boards.patch`
+- CLI path: `boards patch`
+- HTTP: `PATCH /boards/{board_id}`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Update board metadata with optimistic concurrency.
+- Output: Returns `{ board }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `boards`, `write`, `concurrency`
+- Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+
+Inputs:
+  Required:
+  - path `board_id`
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  Optional:
+  - body `patch.document_refs` (list<any>)
+  - body `patch.pinned_refs` (list<any>)
+  - body `patch.primary_topic_ref` (string)
+  - body `patch.provenance.by_field` (object)
+  - body `patch.provenance.notes` (string)
+  - body `patch.provenance.sources` (list<string>)
+  - body `patch.role` (string)
+  - body `patch.summary` (string)
+  - body `patch.title` (string)
+
+Local Help: boards patch
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Patch Board metadata from JSON or set its role with --role.
+- Composition: Uses boards.patch. Empty --role clears the role; omission preserves it.
+- JSON body: JSON body `{ patch }`; --role alone builds `{ patch: { role } }`.
+- Examples:
+  - `anx boards patch board:initiatives --role initiatives`
+  - `anx boards patch board:launch --from-file board-patch.json`
+
+Flags:
+  --board-id <board-id>        Board ref, handle or id.
+  --role <role>                Board role; initiatives selects Overview cards; empty clears.
+  --from-file <path>           JSON request body; explicit --role overrides it.
+  --dry-run                    Render request without sending it.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx boards patch ... ; anx --json boards patch ... ; anx boards patch ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
 ## `boards create`
 
 Create an active-work Board from flags, optionally tied to a Topic.
@@ -6353,6 +6389,7 @@ Inputs:
   - body `board.primary_topic_ref` (string)
   - body `board.provenance.by_field` (object)
   - body `board.provenance.notes` (string)
+  - body `board.role` (string)
   - body `board.summary` (string)
   - body `board.thread_id` (string)
   - body `board.workspace_move` (object)
@@ -6371,6 +6408,7 @@ Local Help: boards create
 
 Flags:
   --title <text>               Board title.
+  --role <role>                Optional board role; initiatives selects Overview cards.
   --summary <text>             Optional board summary.
   --actor-id <actor-id>        Actor id; defaults from the resolved agent when available.
   --topic <topic-ref-or-handle> Primary topic typed ref or handle.

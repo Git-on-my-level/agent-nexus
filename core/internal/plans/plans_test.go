@@ -82,7 +82,7 @@ func TestHealthMovementAndNoncriticalBlocks(t *testing.T) {
 		t.Fatal(got)
 	}
 	p.Steps = append(p.Steps, Step{ID: "b", Title: "b", After: []string{"a"}}, Step{ID: "c", Title: "c", Status: "blocked"})
-	if got := Compute(p, nil, now, now, DefaultStalledAfter); got.Health != "on_track" {
+	if got := Compute(p, nil, now, now, DefaultStalledAfter); got.Health != "blocked" {
 		t.Fatal("noncritical block:", got)
 	}
 	p = Plan{Steps: []Step{{ID: "a", Title: "a", Status: "done"}}}

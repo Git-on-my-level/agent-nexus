@@ -45,14 +45,15 @@ describe("the Overview tile reads core's serialized initiative", () => {
   it("takes health from the object core sends, not a string", () => {
     expect(tile.health).toEqual({
       status: "on_track",
-      reason: "Work is progressing.",
+      state: "on_track",
+      reason: "Open steps are progressing.",
     });
     expect(model().health).toMatchObject({
       state: "on_track",
       label: "On track",
       short: "On track",
       tone: "ok",
-      reason: "Work is progressing.",
+      reason: "Open steps are progressing.",
       known: true,
     });
   });
@@ -127,7 +128,12 @@ describe("the Overview tile reads core's serialized initiative", () => {
   it("degrades for a planless initiative without inventing a plan", () => {
     // Core sends null plan_state and geometry, and a health reason from the
     // native phase; the tile still has to render.
-    const planless = model({ plan_state: null, geometry: null });
+    const planless = model({
+      plan_state: null,
+      geometry: null,
+      next_step: null,
+      plan_health: { state: "no_plan" },
+    });
     expect(planless.hasPlan).toBe(false);
     expect(planless.segments).toEqual([]);
     expect(planless.shape).toBe("");
@@ -189,12 +195,12 @@ describe("Since you last looked reads core's digest", () => {
     expect(strip.since).toBe(digest.since);
     expect(strip.counts).toEqual({
       step_completed: 1,
-      initiative_stalled: 1,
+      initiative_stale: 1,
       initiative_blocked: 1,
       ask_answered: 1,
     });
     expect(strip.summary).toBe(
-      "1 step done · 1 blocked · 1 stalled · 1 ask answered",
+      "1 step done · 1 blocked · 1 stale · 1 ask answered",
     );
   });
 
@@ -203,7 +209,7 @@ describe("Since you last looked reads core's digest", () => {
       sinceYouLastLookedStrip(digest).items.map((item) => item.kind),
     ).toEqual([
       "initiative_blocked",
-      "initiative_stalled",
+      "initiative_stale",
       "ask_answered",
       "step_completed",
     ]);
@@ -278,7 +284,7 @@ describe("the digest's decision items", () => {
     // Guards the mismatch class rather than the one instance of it.
     const enumerated = [
       "step_completed",
-      "initiative_stalled",
+      "initiative_stale",
       "initiative_blocked",
       "ask_answered",
       "decision_created",

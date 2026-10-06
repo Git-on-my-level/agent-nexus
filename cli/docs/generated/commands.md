@@ -2151,7 +2151,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `cards`, `evidence`
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `not_found`, `invalid_request`, `unavailable`
 - Output: Returns `{ document_ref, revision_ref, observed_at, panels }`; every panel includes resolved live/authored provenance and authored review metadata.
-- Agent notes: Both text and structured version 1 visual reports are supported. Authored review metadata is returned for every static panel. Reading a pinned report checks deadlines and durably deduplicates author-only inbox reminders per panel and revision. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows. Archived boards and their work are excluded. Private PM events remain private.
+- Agent notes: Both text and structured version 1 visual reports are supported. Authored review metadata is returned for every static panel. Reading a pinned report checks deadlines and durably deduplicates author-only inbox reminders per panel and revision. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows after subject, related-ref, card and board authorization. Archived boards and their work are excluded. Private PM events remain private.
 
 ## `runs.get`
 

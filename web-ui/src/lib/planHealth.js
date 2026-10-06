@@ -134,7 +134,12 @@ export function planHealthModel(item, options = {}) {
     progressOf(item?.progress);
 
   // The computed field is authoritative where it exists.
-  let state = LEGACY_STATUS[asText(planHealth?.state)] ?? "";
+  let state =
+    LEGACY_STATUS[
+      asText(
+        planHealth?.state ?? legacy?.state ?? item?.plan_state?.health_state,
+      )
+    ] ?? "";
   if (!state) {
     // The older field cannot express `no_plan`: core derives its status from
     // the card's native phase even for an initiative with no plan at all, so

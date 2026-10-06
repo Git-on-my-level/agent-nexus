@@ -342,10 +342,13 @@ func (reader *reportReader) materialize(panel reports.Panel) (map[string]any, bo
 			item := map[string]any{"ref": row["ref"], "title": row["title"], "summary": summary, "progress": progress, "needs": needs, "priority": anyString(row["priority"]), "phase": row["phase"], "board_ref": row["board_ref"], "updated_at": row["updated_at"]}
 			// Keep the authored plan and ownership fields from the same bounded card
 			// projection. Plan refs are carried by plan.steps[].ref; no N+1 reads.
-			for _, key := range []string{"plan", "plan_state", "assignee_refs"} {
+			for _, key := range []string{"plan", "plan_state", "plan_health", "next_step", "status_mismatch", "plan_resolution_truncated", "source_refs", "assignee_refs"} {
 				if value, ok := row[key]; ok && value != nil {
 					item[key] = value
 				}
+			}
+			if health, ok := row["plan_health"].(plans.Health); ok {
+				item["health"] = plans.LegacyHealth(health.State)
 			}
 			if state, ok := row["plan_state"].(plans.State); ok {
 				item["progress"] = state.Progress
@@ -397,7 +400,7 @@ func (reader *reportReader) loadEvents() {
 	}
 	cursor := ""
 	for count := 0; count < reports.MaxRows; {
-		page, err := reader.opts.primitiveStore.ListEventsPage(reader.r.Context(), primitives.EventListFilter{Types: []string{"human_attention_requested", "human_attention_responded", "card_moved", "card_resolved", "card_closed", "card_updated"}, Limit: 200, Cursor: cursor})
+		page, err := reader.opts.primitiveStore.ListEventsPage(reader.r.Context(), primitives.EventListFilter{ReportSubjects: true, Types: []string{"human_attention_requested", "human_attention_responded", "card_moved", "card_resolved", "card_closed", "card_updated"}, Limit: 200, Cursor: cursor})
 		if err != nil {
 			reader.eventsErr = err
 			return
@@ -479,6 +482,7 @@ func (reader *reportReader) activeEvent(event map[string]any) bool {
 	if subject := anyString(payload["subject_ref"]); subject != "" {
 		refs = append(refs, subject)
 	}
+	refs = append(refs, stringSliceAny(payload["related_refs"])...)
 	for _, ref := range refs {
 		if !reader.activeRef(ref) {
 			return false
