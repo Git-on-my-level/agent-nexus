@@ -106,6 +106,12 @@ legacy prose reference candidates and marks preexisting series summaries whose
 full contributor provenance cannot be reconstructed. Those streams remain hidden
 when the reader has any denied contributor; ordinary appends do not clear the
 uncertainty. Adapter last_push is suppressed for partial-visibility readers.
+Migration 60 repairs NUL-truncated indexes and replaces legacy scalar-function
+triggers before rescanning manifests. Reference SQL helpers cast arguments to
+BLOB; unsafe TEXT calls fail closed. User text/JSON and business SQL writes
+reject NUL with invalid_request at HTTP boundaries. Only internally generated
+ReferenceManifest values preserve arbitrary binary/legacy bytes; this exemption
+skips text validation, never authorization. Do not cast user input to that type.
 `resourceaccess.OwnershipSources` drives atomic triggers; `ReferenceAtoms` scans
 nested JSON values/keys and typed refs in text with shared normalization. Prose
 candidates retain the original text so legacy IDs containing punctuation or

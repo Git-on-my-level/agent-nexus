@@ -65,7 +65,7 @@ func decodeSessionBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 		}
 		return false
 	}
-	return ensureJSONBodyEOF(w, decoder)
+	return ensureJSONBodyEOF(w, decoder) && validateResourceText(w, dst)
 }
 func requireSessionAgent(w http.ResponseWriter, p *auth.Principal) bool {
 	if p.PrincipalKind != string(auth.PrincipalKindAgent) {

@@ -3513,6 +3513,9 @@ func StripThreadPlanningFieldsForAPI(m map[string]any) {
 }
 
 func encodeContent(content any) ([]byte, error) {
+	if err := resourceaccess.ValidateText(content); err != nil {
+		return nil, err
+	}
 	switch value := content.(type) {
 	case string:
 		return []byte(value), nil

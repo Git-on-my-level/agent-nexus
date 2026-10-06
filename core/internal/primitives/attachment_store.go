@@ -245,6 +245,14 @@ func (s *Store) CreateArtifactAttachment(ctx context.Context, actorID string, ar
 		return nil, fmt.Errorf("stage attachment content: %w", err)
 	}
 	defer func() { _ = staged.Cleanup() }()
+	if err := resourceaccess.ValidateText(captured.Bytes()); err != nil {
+		return nil, err
+	}
+	if strings.HasPrefix(mimeType, "text/") {
+		if err := resourceaccess.ValidateText(captured.String()); err != nil {
+			return nil, err
+		}
+	}
 
 	blobPlan, err := s.prepareBlobLedgerWritePlan(ctx, contentHash, size)
 	if err != nil {

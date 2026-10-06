@@ -195,5 +195,5 @@ func decodeSeriesJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 		writeError(w, 400, "invalid_request", "body must match the declared series schema")
 		return false
 	}
-	return ensureJSONBodyEOF(w, decoder)
+	return ensureJSONBodyEOF(w, decoder) && validateResourceText(w, dst)
 }

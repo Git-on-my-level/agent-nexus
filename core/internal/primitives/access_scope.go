@@ -217,7 +217,7 @@ func requireAccessibleValues(ctx context.Context, q queryRower, values any) erro
 	}
 	var denied bool
 	query := `WITH RECURSIVE ` + accessCTEs(scope, "") + ` SELECT EXISTS (
- SELECT 1 FROM json_each(anx_resource_json_refs(?)) j JOIN _anx_denied_atoms d
+ SELECT 1 FROM json_each(anx_resource_json_refs(CAST(? AS BLOB))) j JOIN _anx_denied_atoms d
  ON j.value=d.ref COLLATE NOCASE OR d.typed AND ` + resourceaccess.TextReferenceMatchSQL("j.value", "d.ref") + `)`
 	if err = q.QueryRowContext(ctx, query, string(encoded)).Scan(&denied); err != nil {
 		return err

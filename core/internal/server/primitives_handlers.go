@@ -15,6 +15,7 @@ import (
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/resourceaccess"
 	"agent-nexus-core/internal/schema"
 )
 
@@ -591,6 +592,10 @@ func handleCreateArtifactAttachment(w http.ResponseWriter, r *http.Request, opts
 			return
 		}
 		if errors.Is(err, primitives.ErrInvalidArtifactID) {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		if errors.Is(err, resourceaccess.ErrNULText) {
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 			return
 		}

@@ -49,12 +49,18 @@ func (d *DB) QueryRowContext(ctx context.Context, q string, args ...any) *sql.Ro
 	return d.raw.QueryRowContext(ctx, ReadQuery(ctx, q), args...)
 }
 func (d *DB) CheckValues(ctx context.Context, values any) error {
+	if err := ValidateText(values); err != nil {
+		return err
+	}
 	if p, ok := PolicyFrom(ctx); ok {
 		return p.Check(ctx, d.raw, values)
 	}
 	return nil
 }
 func (d *DB) ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error) {
+	if err := ValidateSQLValues(args); err != nil {
+		return nil, err
+	}
 	if _, ok := PolicyFrom(ctx); !ok {
 		return d.raw.ExecContext(ctx, q, args...)
 	}
@@ -92,6 +98,9 @@ func (t *Tx) PrepareReadContext(ctx context.Context, q string) (*sql.Stmt, error
 	return t.raw.PrepareContext(ctx, ReadQuery(ctx, q))
 }
 func (t *Tx) ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error) {
+	if err := ValidateSQLValues(args); err != nil {
+		return nil, err
+	}
 	if p, ok := PolicyFrom(ctx); ok {
 		if err := p.Check(ctx, t.raw, args); err != nil {
 			return nil, err

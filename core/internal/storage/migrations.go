@@ -1003,6 +1003,9 @@ var migrations = []migration{
 	{Version: 57, AfterApply: installCompleteResourceAccess},
 	// Reconcile the short-lived 57 preview's ambiguous scalar/JSON extraction.
 	{Version: 58, AfterApply: func(ctx context.Context, tx *sql.Tx) error {
+		if err := installResourceAccessEdges(ctx, tx); err != nil {
+			return err
+		}
 		if exists, err := sqliteTableExists(ctx, tx, "artifacts"); err != nil {
 			return err
 		} else if exists {
@@ -1013,11 +1016,35 @@ var migrations = []migration{
 		return installCompleteResourceAccess(ctx, tx)
 	}},
 	{Version: 59, AfterApply: repairLegacyReferenceAccess},
+	// Rebuild truncated scalar-text edges and replace old TEXT-argument triggers.
+	{Version: 60, AfterApply: repairNULReferenceAccess},
+}
+
+func repairNULReferenceAccess(ctx context.Context, tx *sql.Tx) error {
+	// Replace legacy TEXT-argument triggers before any canonical UPDATE fires.
+	if err := installCompleteResourceAccess(ctx, tx); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO resource_access_series_refs SELECT r.series,r.labels,j.value FROM resource_access_series_refs r,json_each(anx_resource_refs(CAST(r.target_ref AS BLOB))) j WHERE j.value<>'' ON CONFLICT DO NOTHING`); err != nil {
+		return err
+	}
+	// Rescan blobs with the configured backend; retain canonical bytes and fail
+	// closed while a manifest is unavailable. Existing NUL content is not erased.
+	if exists, err := sqliteTableExists(ctx, tx, "artifacts"); err != nil {
+		return err
+	} else if exists {
+		_, err = tx.ExecContext(ctx, `UPDATE artifacts SET content_refs_json=NULL`)
+		return err
+	}
+	return nil
 }
 
 // Earlier compaction did not preserve every contributor. Keep that uncertainty
 // until explicit data deletion; a later public point cannot certify old totals.
 func repairLegacyReferenceAccess(ctx context.Context, tx *sql.Tx) error {
+	if err := installResourceAccessEdges(ctx, tx); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS resource_access_series_unknown(series TEXT NOT NULL,labels TEXT NOT NULL,PRIMARY KEY(series,labels))`); err != nil {
 		return err
 	}
@@ -1035,7 +1062,7 @@ func repairLegacyReferenceAccess(ctx context.Context, tx *sql.Tx) error {
 	if exists, err := sqliteTableExists(ctx, tx, "resource_access_series_refs"); err != nil {
 		return err
 	} else if exists {
-		if _, err = tx.ExecContext(ctx, `INSERT INTO resource_access_series_refs SELECT r.series,r.labels,j.value FROM resource_access_series_refs r,json_each(anx_resource_refs(r.target_ref)) j WHERE j.value<>'' ON CONFLICT DO NOTHING`); err != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO resource_access_series_refs SELECT r.series,r.labels,j.value FROM resource_access_series_refs r,json_each(anx_resource_refs(CAST(r.target_ref AS BLOB))) j WHERE j.value<>'' ON CONFLICT DO NOTHING`); err != nil {
 			return err
 		}
 	}
@@ -1062,7 +1089,7 @@ func installCompleteResourceAccess(ctx context.Context, tx *sql.Tx) error {
 			continue
 		}
 		insert := func(prefix, from string) string {
-			return `INSERT INTO resource_access_series_refs SELECT ` + prefix + `series,` + prefix + `labels,j.value FROM ` + from + `json_each(anx_resource_json_refs(json_array(json(` + prefix + `labels),` + prefix + state + `))) j WHERE j.value<>'' ON CONFLICT DO NOTHING;`
+			return `INSERT INTO resource_access_series_refs SELECT ` + prefix + `series,` + prefix + `labels,j.value FROM ` + from + `json_each(anx_resource_json_refs(CAST(json_array(json(` + prefix + `labels),` + prefix + state + `) AS BLOB))) j WHERE j.value<>'' ON CONFLICT DO NOTHING;`
 		}
 		for _, statement := range []string{insert("r.", table+" r, "), `DROP TRIGGER IF EXISTS access_` + table + `_insert`, `DROP TRIGGER IF EXISTS access_` + table + `_update`, `CREATE TRIGGER IF NOT EXISTS access_` + table + `_insert AFTER INSERT ON ` + table + ` BEGIN ` + insert("NEW.", "") + ` END`, `CREATE TRIGGER IF NOT EXISTS access_` + table + `_update AFTER UPDATE ON ` + table + ` BEGIN ` + insert("NEW.", "") + ` END`} {
 			if _, err := tx.ExecContext(ctx, statement); err != nil {

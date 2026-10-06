@@ -3,6 +3,7 @@ package resourceaccess
 import (
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"sort"
 	"strings"
@@ -61,7 +62,7 @@ func TextReferenceCandidateSQL(atom string) string {
 }
 
 func TextReferenceMatchSQL(atom, target string) string {
-	return "(" + TextReferenceCandidateSQL(atom) + " AND anx_resource_text_has_ref(" + atom + "," + target + "))"
+	return "(" + TextReferenceCandidateSQL(atom) + " AND anx_resource_text_has_ref(CAST(" + atom + " AS BLOB),CAST(" + target + " AS BLOB)))"
 }
 
 var embeddedURL = regexp.MustCompile(`(?i)https?://[^\s\p{Z}\x{85}\x{0B}<>()\[\]{}"'` + "`" + `]+`)
@@ -165,11 +166,18 @@ func ReferenceAtomsJSON(value string) string {
 	return string(b)
 }
 
-func ContentReferenceAtomsJSON(value, contentType string) string {
+// ReferenceManifest is an internal derived index, not user text. Binary and
+// legacy blob bytes may contain NUL and must remain fully indexed. Public JSON
+// decoding never constructs this type; authorization still scans its contents.
+type ReferenceManifest string
+
+func (m ReferenceManifest) Value() (driver.Value, error) { return string(m), nil }
+
+func ContentReferenceAtomsJSON(value, contentType string) ReferenceManifest {
 	contentType = strings.ToLower(strings.TrimSpace(strings.SplitN(contentType, ";", 2)[0]))
 	structured := contentType == "structured" || contentType == "application/json" || strings.HasSuffix(contentType, "+json")
 	b, _ := json.Marshal(referenceAtoms(value, structured))
-	return string(b)
+	return ReferenceManifest(b)
 }
 
 // ReferenceSQLAtoms preserves the storage field's JSON/scalar distinction.
@@ -178,13 +186,31 @@ func ReferenceSQLAtoms(column string, structured bool) string {
 	if structured {
 		name = "anx_resource_json_refs"
 	}
-	return name + "(" + column + ")"
+	return name + "(CAST(" + column + " AS BLOB))"
+}
+
+// The SQLite driver decodes TEXT scalar arguments as NUL-terminated strings.
+// Require byte-preserving BLOBs; a future unsafe caller must fail, not truncate.
+func referenceBytes(v driver.Value) (string, error) {
+	if v == nil {
+		return "", nil
+	}
+	if b, ok := v.([]byte); ok {
+		return string(b), nil
+	}
+	return "", fmt.Errorf("reference scalar functions require BLOB arguments")
 }
 
 func init() {
 	sqlite.MustRegisterDeterministicScalarFunction("anx_resource_text_has_ref", 2, func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
-		atom, _ := args[0].(string)
-		target, _ := args[1].(string)
+		atom, err := referenceBytes(args[0])
+		if err != nil {
+			return nil, err
+		}
+		target, err := referenceBytes(args[1])
+		if err != nil {
+			return nil, err
+		}
 		if textHasReference(atom, target) {
 			return int64(1), nil
 		}
@@ -196,12 +222,9 @@ func init() {
 			name = "anx_resource_json_refs"
 		}
 		sqlite.MustRegisterDeterministicScalarFunction(name, 1, func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
-			var value string
-			switch v := args[0].(type) {
-			case string:
-				value = v
-			case []byte:
-				value = string(v)
+			value, err := referenceBytes(args[0])
+			if err != nil {
+				return nil, err
 			}
 			b, _ := json.Marshal(referenceAtoms(value, structured))
 			return string(b), nil

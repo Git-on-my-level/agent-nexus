@@ -2,6 +2,7 @@ package server
 
 import (
 	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"errors"
 	"net/http"
@@ -22,6 +23,9 @@ func attachResourceAccessScope(r *http.Request, opts handlerOptions) {
 	*r = *r.WithContext(ctx)
 }
 func authorizeResourceValues(w http.ResponseWriter, r *http.Request, values any) bool {
+	if !validateResourceText(w, values) {
+		return false
+	}
 	check, ok := r.Context().Value(resourceAccessCheckKey{}).(func(context.Context, any) error)
 	if !ok {
 		return true
@@ -32,6 +36,14 @@ func authorizeResourceValues(w http.ResponseWriter, r *http.Request, values any)
 		} else {
 			writeError(w, 500, "internal_error", "resource authorization failed")
 		}
+		return false
+	}
+	return true
+}
+
+func validateResourceText(w http.ResponseWriter, values any) bool {
+	if err := resourceaccess.ValidateText(values); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return false
 	}
 	return true
