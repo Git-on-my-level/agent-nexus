@@ -18,10 +18,14 @@
  * Both classes are stated in text. Colour is a second signal, never the only
  * one: "May be stale" says so in words whether or not the amber renders.
  *
- * Forward compatible by design. Core is adding `provenance_class`,
- * `authored_at` and `review_by` to report panels; this module prefers those
- * fields the moment they arrive and derives the same answer from the panel's
- * shape until then, so neither side has to land first.
+ * Core is adding `provenance_class`, `authored_at` and `review_by` to report
+ * panels. This module prefers those fields and derives the same answer from
+ * the panel's shape without them, so the UI side does not have to land second
+ * — but the report schema still gates them: `parseVisualReport` rejects a
+ * panel field it does not know, so a document can only carry them once
+ * `visualReports.js` and `contracts/visualreport/report.go` accept them
+ * together. Until core lands that, these fields reach the UI only through the
+ * rendered report response, never through a stored document.
  */
 
 import { formatAge, ageTitle } from "./ageBadge.js";
@@ -89,12 +93,25 @@ export function panelReviewDeadline(panel) {
   return reviewDeadline(panel?.review_by, panelAuthoredAt(panel));
 }
 
+/**
+ * `{ at, defaulted, unreadable }`. `unreadable` separates "nobody set a review
+ * date" from "a review date was set and could not be read": both fall back to
+ * the default window, but only the first is the author's omission, and the
+ * tooltip must not accuse them of the wrong one.
+ */
 function reviewDeadline(reviewBy, authoredAt) {
   const declared = instant(reviewBy);
-  if (declared !== null) return { at: declared, defaulted: false };
+  if (declared !== null)
+    return { at: declared, defaulted: false, unreadable: false };
+  const unreadable =
+    reviewBy !== null && reviewBy !== undefined && reviewBy !== "";
   const authored = instant(authoredAt);
-  if (authored === null) return { at: null, defaulted: false };
-  return { at: authored + DEFAULT_REVIEW_AFTER_MS, defaulted: true };
+  if (authored === null) return { at: null, defaulted: false, unreadable };
+  return {
+    at: authored + DEFAULT_REVIEW_AFTER_MS,
+    defaulted: true,
+    unreadable,
+  };
 }
 
 /**
@@ -153,14 +170,23 @@ export function liveProvenance(observedAt, state = {}, now = Date.now()) {
       title:
         "Computed from workspace data at read time. The last read did not complete.",
     };
+  const age = relativeAge(observedAt, now);
+  // A bound series whose publisher has missed its interval reads the same as a
+  // healthy one if only the amber changes, so it says so in the same words an
+  // overdue authored panel uses.
+  const lead = state.stale ? "May be stale · last read " : "Live · updated ";
   return {
     ...base,
     state: state.stale ? "live-stale" : "live",
-    label: `Live · updated ${relativeAge(observedAt, now)}`,
-    lead: "Live · updated ",
-    age: relativeAge(observedAt, now),
+    label: `${lead}${age}`,
+    lead,
+    age,
     datetime: observedAt,
-    title: `${ageTitle(observedAt, "read", now)} · Computed from workspace data at read time.`,
+    title: `${ageTitle(observedAt, "read", now)} · ${
+      state.stale
+        ? "This series has not been published within its expected interval."
+        : "Computed from workspace data at read time."
+    }`,
   };
 }
 
@@ -182,7 +208,7 @@ export function authoredProvenance(written = {}, now = Date.now()) {
   const age = relativeAge(authoredAt, now);
   const review =
     written.reviewable === false
-      ? { at: null, defaulted: false }
+      ? { at: null, defaulted: false, unreadable: false }
       : reviewDeadline(written.reviewBy, authoredAt);
   const dueForReview = review.at !== null && now > review.at;
   const written_by = author ? `Written by ${author}` : "Written";
@@ -220,6 +246,19 @@ export function authoredProvenance(written = {}, now = Date.now()) {
  * @param {number} [now]
  */
 export function panelProvenance(panel, freshness = "", now = Date.now()) {
+  // A bound series falling back to its snapshot is showing the document's own
+  // hand-written numbers with their original as-of time. Calling that "Live"
+  // is the exact confusion this line exists to remove, so it is authored —
+  // dated by the snapshot, not by the read that failed.
+  if (panel?.seriesFallback)
+    return authoredProvenance(
+      {
+        author: panel?.author,
+        authoredAt: panel?.fallback?.as_of ?? panel?.observed_at ?? null,
+        reviewBy: panel?.review_by,
+      },
+      now,
+    );
   if (panelProvenanceClass(panel) === "live")
     return liveProvenance(
       panel?.live?.observed_at ?? panel?.observed_at ?? null,
@@ -228,7 +267,8 @@ export function panelProvenance(panel, freshness = "", now = Date.now()) {
         // and no failure either: it is still being read.
         status:
           panel?.live?.status ??
-          (panel?.source || panel?.observed_at ? "ok" : "loading"),
+          panel?.seriesObservation?.status ??
+          (panel?.observed_at ? "ok" : "loading"),
         stale: freshness === "stale",
       },
       now,
@@ -282,7 +322,11 @@ function authoredTitle(author, authoredAt, review, now) {
     const due = formatAbsoluteDateTime(new Date(review.at).toISOString());
     parts.push(now > review.at ? `Review was due ${due}` : `Review due ${due}`);
     if (review.defaulted)
-      parts.push("No review date set; defaulted to 7 days after writing");
+      parts.push(
+        review.unreadable
+          ? "The review date could not be read; defaulted to 7 days after writing"
+          : "No review date set; defaulted to 7 days after writing",
+      );
   }
   return parts.filter(Boolean).join(" · ");
 }
