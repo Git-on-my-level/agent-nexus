@@ -76,6 +76,8 @@ jobs:
               - 'core/**'
             cli:
               - 'cli/**'
+              # CLI integration fixtures open core databases and exercise migrations.
+              - 'core/internal/storage/**'
               - 'VERSION'
               - 'scripts/read-version.sh'
               - 'scripts/set-version.sh'

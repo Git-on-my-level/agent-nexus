@@ -5,7 +5,6 @@ package integration
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -27,23 +26,15 @@ func findAskInboxID(t *testing.T, h *liveCoreHarness, askID string) string {
 	return ""
 }
 
-// This exercises the compiled CLI against core. Until S5 lands, the fixture
-// marks a legacy profile as derived so the presence endpoint accepts it.
+// This exercises the compiled CLI against core. The legacy identity fixture
+// uses core's registered SQLite functions so ownership triggers run normally.
 func TestDailyLoopAgainstCore(t *testing.T) {
 	h := newPasskeyLiveCoreHarness(t)
 	h.enrollHost(t, "worker")
 	h.registerHumanPasskey(t, "operator", "S6 Operator", h.createHumanInviteToken(t))
 	id := mustStringPath(t, h.runCLIExpectOK(t, "worker", nil, "auth", "whoami").Payload, "result.agent.id")
-	sqlite, err := exec.LookPath("sqlite3")
-	if err != nil {
-		t.Fatalf("sqlite3 is required for the derived-agent integration fixture: %v", err)
-	}
-	db := filepath.Join(h.workspace, "state.sqlite")
-	if _, err := os.Stat(db); err != nil {
-		t.Fatal(err)
-	}
 	stmt := fmt.Sprintf("UPDATE agents SET metadata_json=json_set(metadata_json,'$.identity_kind','derived','$.host_id','host-s6','$.host_slug','s6','$.name','worker') WHERE id='%s';", id)
-	if out, err := exec.Command(sqlite, db, stmt).CombinedOutput(); err != nil {
+	if out, err := runLegacySQLFixture(t, h, stmt); err != nil {
 		t.Fatalf("seed derived identity: %v %s", err, out)
 	}
 	board := h.runCLIExpectOK(t, "worker", map[string]any{"board": map[string]any{"title": "S6 daily loop", "document_refs": []any{}, "pinned_refs": []any{}, "provenance": map[string]any{"sources": []any{"inferred"}}}}, "boards", "create")
