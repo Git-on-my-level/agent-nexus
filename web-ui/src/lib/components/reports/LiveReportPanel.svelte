@@ -2,7 +2,7 @@
   import LiveInitiativeDetails from "./LiveInitiativeDetails.svelte";
   import UnavailableValue from "$lib/components/UnavailableValue.svelte";
   import { inboxItemMailboxId } from "$lib/inboxUtils.js";
-  import { formatLiveAge } from "$lib/liveReports.js";
+  import { LIVE_REPORT_TYPES, formatLiveAge } from "$lib/liveReports.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   let {
     panel,
@@ -12,6 +12,8 @@
     onpreview = null,
     onpreviewclose = null,
   } = $props();
+  /** The live types with a view of their own in this component. */
+  const KNOWN_TYPES = LIVE_REPORT_TYPES;
   let canNavigate = $derived(Boolean(organizationSlug && workspaceSlug));
   let workspaceHref = $derived(
     canNavigate ? bindWorkspaceHref(organizationSlug, workspaceSlug) : null,
@@ -197,19 +199,41 @@
         {live.data.series_message || "No fleet.* series are available."}
       </p>
     {/if}
+  {:else if !KNOWN_TYPES.includes(panel.type)}
+    <!--
+      A live type this renderer has no bespoke view for yet: core's
+      `live-cards` and `live-timeline` land separately, and the generic shape
+      every live panel shares is a list of rows with a title, a line of detail
+      and an instant. Rendering that beats an empty panel, and a bespoke view
+      can replace it without the reader ever seeing a blank box.
+    -->
+    {#if items.length}
+      <ul class="rows">
+        {#each items as item, index (item.id ?? item.ref ?? index)}
+          {@const at = item.observed_at ?? item.ts ?? item.at ?? ""}
+          {@const title = item.title ?? item.label ?? item.ref ?? ""}
+          <li>
+            {#if title}<strong class="row-title">{title}</strong>{/if}
+            {#if item.summary}<p>{item.summary}</p>{/if}
+            {#if item.detail}<p>{item.detail}</p>{/if}
+            {#if date(at)}<p class="muted">
+                <time datetime={at}>{date(at)}</time>
+              </p>{/if}
+          </li>
+        {/each}
+      </ul>
+    {:else}<p class="muted">No records in this view.</p>{/if}
   {/if}
   {#if live?.truncated}<p class="partial">
       Partial view. More records may exist beyond this panel’s limit.
     </p>{/if}
-  {#if live?.observed_at}
-    <p class="observed">
-      Live as of {#if date(live.observed_at)}<time datetime={live.observed_at}
-          >{date(live.observed_at)}</time
-        >{:else}<UnavailableValue
-          reason="This read carries no observation time."
-        />{/if}
-    </p>
-  {/if}
+  <!--
+    The read time used to be a "Live as of 2026-10-06 12:00 UTC" line at the
+    bottom of every live panel. It is in the header now, as "Live · updated 2m
+    ago" with the instant on hover: the reader asks how current a panel is
+    before reading it, not after, and an age answers that where a UTC
+    timestamp has to be subtracted first.
+  -->
 </div>
 
 <style>
@@ -218,13 +242,9 @@
     line-height: 1.6;
     overflow-wrap: anywhere;
   }
-  .muted,
-  .observed {
+  .muted {
     color: var(--fg-muted);
     font-size: 11px;
-  }
-  .observed {
-    margin-top: 16px;
   }
   .partial {
     color: var(--warn-text);
@@ -240,6 +260,10 @@
   .rows li {
     padding-bottom: 12px;
     border-bottom: 1px solid var(--line-subtle);
+  }
+  .row-title {
+    text-align: left;
+    font-weight: 600;
   }
   .rows li:last-child {
     border: 0;

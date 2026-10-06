@@ -4,6 +4,7 @@
   import { onMount } from "svelte";
   import { coreClient } from "$lib/coreClient";
   import { isLivePanel, withLiveObservation } from "$lib/liveReports.js";
+  import { withRenderedProvenance } from "$lib/reportProvenance.js";
   import { getPanelFreshness } from "$lib/visualReports.js";
   import VisualReportPanel from "./VisualReportPanel.svelte";
   import AnxRefPreview from "$lib/components/AnxRefPreview.svelte";
@@ -29,7 +30,10 @@
   let hasLive = $derived(report.panels.some(isLivePanel));
   let observedPanels = $derived(
     report.panels.map((panel) =>
-      withLiveObservation(panel, liveObservations.get(panel.id)),
+      withLiveObservation(
+        withRenderedProvenance(panel, liveObservations.get(panel.id)),
+        liveObservations.get(panel.id),
+      ),
     ),
   );
   let now = $state(Date.now());
@@ -345,6 +349,7 @@
           <VisualReportPanel
             {compact}
             {panel}
+            {now}
             sources={report.sources}
             freshness={getPanelFreshness(panel, now)}
             evidenceOpen={evidence === panel.id}

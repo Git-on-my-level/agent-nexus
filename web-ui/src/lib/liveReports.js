@@ -7,8 +7,18 @@ export const LIVE_REPORT_TYPES = Object.freeze([
   "live-activity",
   "live-fleet-health",
 ]);
+/**
+ * Whether this panel is computed at read time.
+ *
+ * Prefix rather than list membership, deliberately: `LIVE_REPORT_TYPES` is the
+ * validation gate and only core can widen it, so a type this build has never
+ * heard of cannot reach a renderer anyway. But the moment core does add one —
+ * `live-cards`, `live-timeline` — an older UI treats it as live data with a
+ * live provenance line instead of rendering an authored panel with no body.
+ */
 export const isLivePanel = (panel) =>
-  !!panel?.source || LIVE_REPORT_TYPES.includes(panel?.type);
+  !!panel?.source ||
+  (typeof panel?.type === "string" && panel.type.startsWith("live-"));
 
 /** Query validation mirrors the canonical LiveReportQuery contract. */
 export function validateLiveQuery(type, data) {

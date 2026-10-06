@@ -121,6 +121,7 @@ async function installInitiativePage(page) {
             "Tiles answer state and progress in ten seconds",
           ],
           next_action: "Wire the Overview tiles",
+          updated_at: "2026-10-03T12:00:00Z",
           source: { authority: "nexus" },
         },
       });
@@ -157,6 +158,16 @@ test("initiative page leads with the plan, and the card body follows", async ({
   await expect(
     page.locator(".plan-node [data-anx-ref='card:contracts']"),
   ).toContainText("Shared report contracts");
+
+  // Computed beside hand-written: the plan says it was read just now, and the
+  // prose below it says a person wrote it. Before this, a reader had no way to
+  // tell which of the two they were looking at.
+  await expect(planSection.locator("[data-anx-provenance]")).toHaveText(
+    /^Live · updated just now$/,
+  );
+  await expect(
+    page.locator("[data-initiative-body] [data-anx-provenance]"),
+  ).toHaveText(/^Written · 1d ago$/);
 
   // The card body is present, and below the plan.
   const order = await page

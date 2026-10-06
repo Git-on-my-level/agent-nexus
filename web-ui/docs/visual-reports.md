@@ -91,13 +91,13 @@ replaces freshness and observation time with the authorized materialization.
 The panel’s `project_id` groups presentation; use `data.project_ref` to scope a
 query to an actual workspace project (a topic).
 
-| Type               | Query fields                                                                      | Default                                                                                |
-| ------------------ | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `live-initiatives` | `board_refs`, `project_ref`, `card_ref`, `limit`, `sort`                          | All active boards; 10 rows; priority then newest update                                |
-| `live-asks`        | `limit`, `include_answered`, `answered_only`, `answered_within_hours`, `card_ref` | 10 oldest open asks; recent answers are optional, and `answered_only` returns answers only |
-| `live-work-mix`    | `board_refs`, `project_ref`, `card_ref`, `group_by`                               | Open work by phase; `group_by: "board"` also supported                                 |
-| `live-activity`    | `limit`                                                                           | 10 newest meaningful events, with same-actor board edits collapsed within five minutes |
-| `live-fleet-health` | none                                                                               | Declared `fleet.*` series and native host inventory; enrollment requests require human or auth-admin access |
+| Type                | Query fields                                                                      | Default                                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `live-initiatives`  | `board_refs`, `project_ref`, `card_ref`, `limit`, `sort`                          | All active boards; 10 rows; priority then newest update                                                     |
+| `live-asks`         | `limit`, `include_answered`, `answered_only`, `answered_within_hours`, `card_ref` | 10 oldest open asks; recent answers are optional, and `answered_only` returns answers only                  |
+| `live-work-mix`     | `board_refs`, `project_ref`, `card_ref`, `group_by`                               | Open work by phase; `group_by: "board"` also supported                                                      |
+| `live-activity`     | `limit`                                                                           | 10 newest meaningful events, with same-actor board edits collapsed within five minutes                      |
+| `live-fleet-health` | none                                                                              | Declared `fleet.*` series and native host inventory; enrollment requests require human or auth-admin access |
 
 Limits are 1–100 displayed rows, at most 16 unique `board:<handle>` refs, and
 1–720 hours for recent answers (168 by default). Sort is `priority`, `updated`,
@@ -108,8 +108,9 @@ code; no checklist means unknown progress, not zero completed work. The first
 nonempty prose line and every `Needs <human>:` line remain visible.
 
 The UI refreshes every 30 seconds while visible and immediately on returning to
-the tab. Every live panel shows **Live as of** with the actual read time. Failed
-refreshes remove previous successful values. Readers without access see an
+the tab. Every live panel's header shows **Live · updated 2m ago** with the
+actual read time, and the exact instant on hover. Failed refreshes remove
+previous successful values. Readers without access see an
 unavailable panel; other live panels and authored snapshots remain usable.
 Work materialization is bounded to 2,000 candidates per board/project scope;
 event and decision reads each have a 2,000-row source cap. A displayed-row
@@ -299,6 +300,37 @@ Row and milestone `source_ids` must also occur in their containing panel's
 `source_ids`, so every cited source is available in the panel's evidence inspector.
 Do not promote publication, installation, or a successful static check into a
 stronger claim about deployed behavior or operational qualification.
+
+### Provenance: live or authored
+
+Every panel resolves to one of two provenance classes, stated in its header so a
+reader can tell a computed panel from a hand-written one before reading it:
+
+- **live** — a live query panel or a bound series. Its header reads
+  **Live · updated 2m ago**: the age of the read, not of the document. A read
+  that is still running says so; a read that failed says so instead of showing
+  the last age it had. A bound series whose publisher has missed its interval
+  turns amber.
+- **authored** — static content. Its header reads
+  **Written by \<principal\> · 3d ago**, and the panel body is a step quieter
+  than a live panel's.
+
+An authored panel carries a review deadline. Past it, the header reads
+**May be stale · written 9d ago** in amber, with an amber edge down the whole
+panel. A panel that does not declare `review_by` is reviewed seven days after it
+was written, and the tooltip says the deadline was defaulted. A panel with no
+writing time at all asks for no review: a deadline anchored to nothing would
+read as a fact.
+
+Provenance is always conveyed in text. Colour repeats the words, never replaces
+them, so the signal survives greyscale and a colour-blind reader.
+
+`panelProvenance(panel, freshness, now)` in `src/lib/reportProvenance.js` is the
+single place this is decided, and the Overview embed, the document report view
+and the initiative page all render it through `ProvenanceChip`. The class is read
+from `provenance_class` when the panel declares it, and derived from the panel's
+shape otherwise, so a live type a build has never heard of still renders as live
+data rather than as an authored panel with no body.
 
 ### Freshness and incomplete observations
 

@@ -95,6 +95,7 @@
     <div class="report-layout-panel" data-report-layout="panel">
       <VisualReportPanel
         {compact}
+        {now}
         {panel}
         {sources}
         freshness={getPanelFreshness(panel, now)}

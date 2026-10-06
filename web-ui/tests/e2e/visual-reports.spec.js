@@ -1002,7 +1002,17 @@ for (const viewport of [
     );
     await expect(report).toContainText("7 open tasks");
     await expect(report).toContainText("This note is an authored snapshot.");
-    await expect(report.getByText(/Live as of/)).toHaveCount(4);
+    // The read time is a header chip now, in relative time: every live panel
+    // says so where the reader looks before reading it.
+    await expect(report.locator("[data-anx-provenance='live']")).toHaveCount(4);
+    await expect(
+      report.locator("[data-anx-provenance='live']").first(),
+    ).toContainText("Live · updated just now");
+    await expect(report).not.toContainText("Live as of");
+    // And the authored note beside them says who wrote it, and when.
+    await expect(
+      report.locator("[data-anx-provenance^='authored']"),
+    ).toContainText("Written by");
     await expect(report).not.toContainText("No automatic source refresh");
     await expect(
       report.getByRole("progressbar", { name: "Launch readiness checklist" }),
