@@ -36,7 +36,8 @@
       "b"
     ],
     "done": 1,
-    "health": "on_track"
+    "health": "on_track",
+    "health_state": "on_track"
   },
   {
     "name": "branch-and-merge",
@@ -85,7 +86,8 @@
       "a"
     ],
     "done": 0,
-    "health": "on_track"
+    "health": "on_track",
+    "health_state": "on_track"
   },
   {
     "name": "lanes",
@@ -131,7 +133,8 @@
       "c"
     ],
     "done": 0,
-    "health": "on_track"
+    "health": "on_track",
+    "health_state": "on_track"
   },
   {
     "name": "blocked-tied-path",
@@ -176,7 +179,8 @@
       "a"
     ],
     "done": 0,
-    "health": "blocked"
+    "health": "blocked",
+    "health_state": "blocked"
   },
   {
     "name": "ref-overrides-prose",
@@ -210,7 +214,8 @@
       "b"
     ],
     "done": 1,
-    "health": "on_track"
+    "health": "on_track",
+    "health_state": "on_track"
   },
   {
     "name": "empty",
@@ -221,7 +226,8 @@
     "critical_path": [],
     "next_steps": [],
     "done": 0,
-    "health": "on_track"
+    "health": "on_track",
+    "health_state": "no_plan"
   },
   {
     "name": "context-ref-fallback",
@@ -243,6 +249,7 @@
     "critical_path": [],
     "next_steps": [],
     "done": 1,
-    "health": "on_track"
+    "health": "on_track",
+    "health_state": "done"
   }
 ]

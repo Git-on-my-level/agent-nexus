@@ -13,9 +13,11 @@ import (
 
 const MaxOverviewChanges = 100
 const maxOverviewEventCandidates = 200
+const maxOverviewSubjectRefs = 4000
 
 type OverviewChange struct {
 	Kind   string `json:"kind"`
+	KindV2 string `json:"kind_v2,omitempty"`
 	Ref    string `json:"ref"`
 	Title  string `json:"title"`
 	StepID string `json:"step_id,omitempty"`
@@ -32,6 +34,10 @@ func (d *OverviewChanges) Add(item OverviewChange) {
 	if len(d.Items) == MaxOverviewChanges {
 		d.Truncated = true
 		return
+	}
+	if item.Kind == "initiative_stale" {
+		item.KindV2 = item.Kind
+		item.Kind = "initiative_stalled"
 	}
 	d.Items = append(d.Items, item)
 }
@@ -100,7 +106,13 @@ func (s *Store) OverviewChanges(ctx context.Context, principal string, work []ma
 		}
 		ref, title := anyStringValue(w["ref"]), anyStringValue(w["title"])
 		health := anyStringValue(initiativeHealth(w)["status"])
-		if health != old.Health && (health == "stalled" || health == "blocked") && w["phase"] != "done" && w["phase"] != "cancelled" {
+		if health == "stalled" {
+			health = "stale"
+		}
+		if old.Health == "stalled" {
+			old.Health = "stale"
+		} // Saved visits from older cores.
+		if health != old.Health && (health == "stale" || health == "blocked") && w["phase"] != "done" && w["phase"] != "cancelled" {
 			out.Add(OverviewChange{Kind: "initiative_" + health, Ref: ref, Title: title})
 		}
 		if state, ok := w["plan_state"].(plans.State); ok {
@@ -121,7 +133,7 @@ func (s *Store) OverviewChanges(ctx context.Context, principal string, work []ma
 	return out, err
 }
 
-// Read one bounded event page, then resolve all subject refs together. Answer
+// Read one accessible event page, then resolve subjects in bounded batches. Answer
 // text is deliberately absent: a compact digest needs only the existence of an
 // answer and a safe navigation ref. Inbox subject refs are folded into the same
 // batch and both the event and inbox backing threads must be readable.
@@ -134,6 +146,10 @@ func (s *Store) overviewAnsweredAsks(ctx context.Context, out *OverviewChanges, 
  WHERE e.type='human_attention_responded' AND e.trashed_at IS NULL AND e.archived_at IS NULL
  AND (t.id IS NULL OR (t.trashed_at IS NULL AND t.archived_at IS NULL))
  AND (it.id IS NULL OR (it.trashed_at IS NULL AND it.archived_at IS NULL))
+
+ AND `+backingThreadLifecycleSQL(ctx, `t.id`, true)+`
+ AND (i.id IS NULL OR (`+inboxReadSQL(ctx)+`))
+ AND NOT EXISTS (SELECT 1 FROM json_each(e.refs_json) answer_ref WHERE NOT (`+referenceLifecycleSQL(ctx, `answer_ref.value`, true)+`))
  AND julianday(e.ts)>=julianday(?) AND julianday(e.ts)<=julianday(?)
  ORDER BY e.ts DESC,e.id DESC LIMIT ?`, *out.Since, now.Format(time.RFC3339Nano), maxOverviewEventCandidates+1)
 	if err != nil {
@@ -149,6 +165,7 @@ func (s *Store) overviewAnsweredAsks(ctx context.Context, out *OverviewChanges, 
 		return err
 	}
 	answers, refs := []answer{}, []string{}
+	seen := map[string]bool{}
 	candidates := 0
 	for rows.Next() {
 		var a answer
@@ -178,11 +195,22 @@ func (s *Store) overviewAnsweredAsks(ctx context.Context, out *OverviewChanges, 
 			return err
 		}
 		a.refs = append(a.refs, subject...)
-		answers = append(answers, a)
+		complete := true
 		for _, ref := range a.refs {
-			if digestSubjectRef(ref) {
-				refs = append(refs, ref)
+			if !digestSubjectRef(ref) || seen[ref] {
+				continue
 			}
+			if len(refs) == maxOverviewSubjectRefs {
+				out.Truncated = true
+				complete = false
+				continue
+			}
+			seen[ref] = true
+			refs = append(refs, ref)
+		}
+		// Never infer an answer's eligibility from a partially resolved subject set.
+		if complete {
+			answers = append(answers, a)
 		}
 	}
 	err = rows.Err()
@@ -190,13 +218,17 @@ func (s *Store) overviewAnsweredAsks(ctx context.Context, out *OverviewChanges, 
 	if err != nil {
 		return err
 	}
-	previews, err := s.readRefFacts(ctx, uniqueSortedStrings(refs), visible)
-	if err != nil {
-		return err
-	}
 	readable := map[string]bool{}
-	for _, p := range previews {
-		readable[p.Ref] = p.Resolvable
+	refs = uniqueSortedStrings(refs)
+	for start := 0; start < len(refs); start += 200 {
+		end := min(start+200, len(refs))
+		previews, err := s.readRefFacts(ctx, refs[start:end], visible)
+		if err != nil {
+			return err
+		}
+		for _, p := range previews {
+			readable[p.Ref] = p.Resolvable
+		}
 	}
 	for _, a := range answers {
 		if visible != nil && (!visible(a.thread, a.owner) || !visible(a.inboxThread, a.inboxOwner)) {
@@ -229,7 +261,7 @@ func digestSubjectRef(ref string) bool {
 }
 
 func (s *Store) LoadOverviewChanges(ctx context.Context, principal string, visible func(string, string) bool, now time.Time, threshold time.Duration) (OverviewChanges, error) {
-	work, truncated, err := s.overviewWork(ctx, visible, now, threshold, true)
+	work, truncated, _, err := s.overviewWork(ctx, visible, now, threshold, true)
 	if err != nil {
 		return OverviewChanges{}, err
 	}

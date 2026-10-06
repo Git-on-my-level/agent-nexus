@@ -17,34 +17,52 @@ type PreviewBoard struct {
 	Ref   string `json:"ref"`
 	Title string `json:"title"`
 }
-type PreviewStep struct {
-	Title string `json:"title"`
-}
+type PreviewStep = plans.NextStep
 
 // RefPreview contains only the bounded data needed by chips and plan derivation.
 // Internal fields support principal-scoped reads and never appear on the wire.
 type RefPreview struct {
-	Ref          string          `json:"ref"`
-	Kind         string          `json:"kind,omitempty"`
-	Title        string          `json:"title,omitempty"`
-	Status       string          `json:"status,omitempty"`
-	Phase        string          `json:"phase,omitempty"`
-	Owner        string          `json:"owner,omitempty"`
-	OwnerDisplay string          `json:"owner_display,omitempty"`
-	Board        *PreviewBoard   `json:"board,omitempty"`
-	Priority     string          `json:"priority,omitempty"`
-	LastMovedAt  string          `json:"last_moved_at,omitempty"`
-	NextStep     *PreviewStep    `json:"next_step,omitempty"`
-	Progress     *plans.Progress `json:"progress,omitempty"`
-	URL          string          `json:"url,omitempty"`
-	Resolvable   bool            `json:"resolvable"`
-	ID           string          `json:"-"`
-	MovementAt   time.Time       `json:"-"`
+	Ref                     string          `json:"ref"`
+	Kind                    string          `json:"kind,omitempty"`
+	Title                   string          `json:"title,omitempty"`
+	Status                  string          `json:"status,omitempty"`
+	Authority               string          `json:"authority,omitempty"`
+	NativeID                string          `json:"native_id,omitempty"`
+	ConnectionID            string          `json:"connection_id,omitempty"`
+	ObservedAt              string          `json:"observed_at,omitempty"`
+	Source                  string          `json:"source,omitempty"`
+	PlanHealth              *plans.Health   `json:"plan_health,omitempty"`
+	PlanResolutionTruncated bool            `json:"plan_resolution_truncated,omitempty"`
+	StatusMismatch          bool            `json:"status_mismatch,omitempty"`
+	CreatedAt               time.Time       `json:"-"`
+	DueAt                   string          `json:"-"`
+	Phase                   string          `json:"phase,omitempty"`
+	Owner                   string          `json:"owner,omitempty"`
+	OwnerDisplay            string          `json:"owner_display,omitempty"`
+	Board                   *PreviewBoard   `json:"board,omitempty"`
+	Priority                string          `json:"priority,omitempty"`
+	LastMovedAt             string          `json:"last_moved_at,omitempty"`
+	NextStep                *PreviewStep    `json:"next_step,omitempty"`
+	Progress                *plans.Progress `json:"progress,omitempty"`
+	URL                     string          `json:"url,omitempty"`
+	Resolvable              bool            `json:"resolvable"`
+	ID                      string          `json:"-"`
+	MovementAt              time.Time       `json:"-"`
 }
 
-// readRefFacts uses at most four SQL queries, independent of ref count. It never
+const maxPlanRefBudget = 4000
+
+// readRefFacts accepts bounded batches of at most 200 refs. It never
 // fetches arbitrary URLs, nor interprets missing evidence as completed work.
 func (s *Store) readRefFacts(ctx context.Context, refs []string, visible func(string, string) bool) ([]RefPreview, error) {
+	if visible != nil {
+		if _, scoped := accessScopeFrom(ctx); !scoped {
+			return nil, invalidBoardRequest("principal read access scope is required for visibility-filtered resolution")
+		}
+	}
+	if len(refs) > 200 {
+		return nil, invalidBoardRequest("refs must contain at most 200 strings per batch")
+	}
 	out := make([]RefPreview, len(refs))
 	for i, ref := range refs {
 		out[i] = RefPreview{Ref: ref}
@@ -79,76 +97,111 @@ func (s *Store) readRefFacts(ctx context.Context, refs []string, visible func(st
 		var query string
 		switch kind {
 		case "card":
-			args = append(args, string(encoded))
-			query = `SELECT c.id,c.handle,CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN c.title ELSE COALESCE(json_extract(o.body_json,'$.facts.title'),json_extract(m.metadata_json,'$.title'),c.title) END,
+			args = []any{string(encoded), "", string(encoded), "", string(encoded), ""}
+			query = `WITH requested_cards AS (
+ SELECT cards.id FROM cards INDEXED BY sqlite_autoindex_cards_1 WHERE id IN (SELECT value FROM json_each(?)) AND id>? AND cards.trashed_at IS NULL AND NOT EXISTS (SELECT 1 FROM boards lifecycle_board WHERE lifecycle_board.id=cards.board_id AND lifecycle_board.trashed_at IS NOT NULL)
+ UNION SELECT id FROM cards INDEXED BY idx_cards_handle_unique WHERE handle IS NOT NULL AND trim(handle) <> '' AND handle IN (SELECT value FROM json_each(?)) AND id>? AND cards.trashed_at IS NULL AND NOT EXISTS (SELECT 1 FROM boards lifecycle_board WHERE lifecycle_board.id=cards.board_id AND lifecycle_board.trashed_at IS NOT NULL)
+ UNION SELECT bounded.value AS id FROM json_each(?) requested CROSS JOIN json_each((SELECT json_group_array(card_id) FROM (SELECT m.card_id FROM work_metadata m INDEXED BY idx_work_source_url JOIN cards access_card ON access_card.id=m.card_id WHERE json_extract(m.metadata_json,'$.source.url')=requested.value AND m.authority!='nexus' AND access_card.trashed_at IS NULL AND NOT EXISTS (SELECT 1 FROM boards lifecycle_board WHERE lifecycle_board.id=access_card.board_id AND lifecycle_board.trashed_at IS NOT NULL) ORDER BY m.card_id LIMIT 2))) bounded WHERE bounded.value>?
+ ORDER BY id LIMIT 200
+ ) SELECT c.id,COALESCE(c.handle,''),CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN c.title ELSE COALESCE(json_extract(o.body_json,'$.facts.title'),json_extract(m.metadata_json,'$.title'),c.title) END,
 			 CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN c.column_key ELSE COALESCE(json_extract(o.body_json,'$.facts.phase'),json_extract(m.metadata_json,'$.phase'),'unknown') END,
 			 CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN CASE WHEN COALESCE(c.assignee,'')='' THEN '' WHEN c.assignee LIKE '%:%' THEN c.assignee ELSE 'actor:'||c.assignee END ELSE COALESCE(json_extract(o.body_json,'$.facts.owner'),json_extract(m.metadata_json,'$.owner'),'') END,
 			 COALESCE(json_extract(m.metadata_json,'$.source.url'),''),COALESCE(NULLIF(trim(c.thread_id),''),trim(c.parent_thread_id),''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=COALESCE(NULLIF(trim(c.thread_id),''),trim(c.parent_thread_id))),''),
-			 CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN c.updated_at ELSE COALESCE(CASE WHEN julianday(json_extract(o.body_json,'$.source_activity_at')) > julianday(json_extract(o.body_json,'$.meaningful_progress_at')) THEN json_extract(o.body_json,'$.source_activity_at') END,json_extract(o.body_json,'$.meaningful_progress_at'),json_extract(o.body_json,'$.source_activity_at'),c.created_at) END,
+			 ` + effectiveCardActivitySQL + `,
  COALESCE(json_extract(m.metadata_json,'$.priority'),'none'),
  COALESCE(NULLIF(b.handle,''),b.id,''),COALESCE(b.title,''),COALESCE(b.thread_id,''),COALESCE(json_extract(bt.body_json,'$.pm_actor_id'),''),
  COALESCE((SELECT display_name FROM actors WHERE id=CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN replace(c.assignee,'actor:','') ELSE replace(COALESCE(json_extract(o.body_json,'$.facts.owner'),json_extract(m.metadata_json,'$.owner'),''),'actor:','') END),'')
-			 FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id
- LEFT JOIN boards b ON b.id=c.board_id AND b.trashed_at IS NULL
+			 , c.created_at, ` + effectiveCardDueSQL + `, COALESCE((SELECT e.ts FROM events e WHERE e.thread_id=COALESCE(NULLIF(trim(c.thread_id),''),trim(c.parent_thread_id)) AND e.type='message_posted' AND e.trashed_at IS NULL AND e.archived_at IS NULL ORDER BY e.ts DESC LIMIT 1),''),COALESCE((SELECT p.updated_at FROM card_plans p WHERE p.card_id=c.id),''),COALESCE(c.trashed_at,''),COALESCE(b.trashed_at,'')
+ FROM requested_cards r JOIN cards c ON c.id=r.id LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id
+ LEFT JOIN boards b ON b.id=c.board_id
  LEFT JOIN threads bt ON bt.id=b.thread_id
-			 WHERE c.trashed_at IS NULL AND (c.id IN (` + marks + `) OR c.handle IN (` + marks + `) OR (m.authority!='nexus' AND json_extract(m.metadata_json,'$.source.url') IN (` + marks + `))) ORDER BY c.id`
+			 ORDER BY c.id`
 		case "document":
-			query = `SELECT id,handle,COALESCE(title,''),CASE WHEN archived_at IS NULL THEN 'active' ELSE 'archived' END,'','',COALESCE(thread_id,''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=documents.thread_id),''),updated_at,'','','','','','' FROM documents WHERE trashed_at IS NULL AND (id IN (` + marks + `) OR handle IN (` + marks + `))`
+			query = `SELECT id,handle,COALESCE(title,''),CASE WHEN archived_at IS NULL THEN 'active' ELSE 'archived' END,'','',COALESCE(thread_id,''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=documents.thread_id),''),updated_at,'','','','','','',created_at,'','','','','' FROM documents WHERE trashed_at IS NULL AND (id IN (` + marks + `) OR handle IN (` + marks + `))`
 		case "topic":
-			query = `SELECT id,handle,title,CASE WHEN archived_at IS NULL THEN 'active' ELSE 'archived' END,COALESCE(json_extract(extensions_json,'$.owner_refs[0]'),''),'',thread_id,COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=topics.thread_id),''),updated_at,'','','','','',COALESCE((SELECT display_name FROM actors WHERE id=replace(json_extract(topics.extensions_json,'$.owner_refs[0]'),'actor:','')),'') FROM topics WHERE trashed_at IS NULL AND (id IN (` + marks + `) OR handle IN (` + marks + `))`
+			query = `SELECT id,handle,title,CASE WHEN archived_at IS NULL THEN 'active' ELSE 'archived' END,COALESCE(json_extract(extensions_json,'$.owner_refs[0]'),''),'',thread_id,COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=topics.thread_id),''),updated_at,'','','','','',COALESCE((SELECT display_name FROM actors WHERE id=replace(json_extract(topics.extensions_json,'$.owner_refs[0]'),'actor:','')),''),created_at,'','','','','' FROM topics WHERE trashed_at IS NULL AND (id IN (` + marks + `) OR handle IN (` + marks + `))`
 		case "board":
-			query = `SELECT id,handle,title,CASE WHEN archived_at IS NULL THEN 'active' ELSE 'archived' END,COALESCE(json_extract(owners_json,'$[0]'),''),'',thread_id,COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=boards.thread_id),''),updated_at,'','','','','',COALESCE((SELECT display_name FROM actors WHERE id=replace(json_extract(boards.owners_json,'$[0]'),'actor:','')),'') FROM boards WHERE trashed_at IS NULL AND (id IN (` + marks + `) OR handle IN (` + marks + `))`
+			query = `SELECT id,handle,title,CASE WHEN archived_at IS NULL THEN 'active' ELSE 'archived' END,COALESCE(json_extract(owners_json,'$[0]'),''),'',thread_id,COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=boards.thread_id),''),updated_at,'','','','','',COALESCE((SELECT display_name FROM actors WHERE id=replace(json_extract(boards.owners_json,'$[0]'),'actor:','')),''),created_at,'','','','','' FROM boards WHERE trashed_at IS NULL AND (id IN (` + marks + `) OR handle IN (` + marks + `))`
 		}
-		rows, err := s.db.QueryContext(ctx, query, args...)
-		if err != nil {
-			return nil, err
+		candidates := map[string][]RefPreview{}
+		wanted := map[string]bool{}
+		for _, value := range values {
+			wanted[value] = true
 		}
-		type row struct{ id, handle, title, phase, owner, external, thread, privateOwner, at, priority, boardHandle, boardTitle, boardThread, boardOwner, ownerDisplay string }
-		items := []row{}
-		for rows.Next() {
-			var item row
-			if err = rows.Scan(&item.id, &item.handle, &item.title, &item.phase, &item.owner, &item.external, &item.thread, &item.privateOwner, &item.at, &item.priority, &item.boardHandle, &item.boardTitle, &item.boardThread, &item.boardOwner, &item.ownerDisplay); err != nil {
-				rows.Close()
+		for {
+			rows, err := s.db.QueryContext(ctx, query, args...)
+			if err != nil {
 				return nil, err
 			}
-			items = append(items, item)
-		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
-			return nil, err
-		}
-		// Access checks run after closing rows, including on one-connection SQLite.
-		candidates := map[string][]RefPreview{}
-		for _, item := range items {
-			if visible != nil && (!visible(item.thread, item.privateOwner) || (kind == "card" && !visible(item.boardThread, item.boardOwner))) {
-				continue
+			type row struct{ id, handle, title, phase, owner, external, thread, privateOwner, at, priority, boardHandle, boardTitle, boardThread, boardOwner, ownerDisplay, created, due, message, planAt, trashed, boardTrashed string }
+			items := []row{}
+			for rows.Next() {
+				var item row
+				if err = rows.Scan(&item.id, &item.handle, &item.title, &item.phase, &item.owner, &item.external, &item.thread, &item.privateOwner, &item.at, &item.priority, &item.boardHandle, &item.boardTitle, &item.boardThread, &item.boardOwner, &item.ownerDisplay, &item.created, &item.due, &item.message, &item.planAt, &item.trashed, &item.boardTrashed); err != nil {
+					rows.Close()
+					return nil, err
+				}
+				items = append(items, item)
 			}
-			preview := RefPreview{ID: item.id, Kind: kind, Title: item.title, Status: item.phase, Owner: item.owner, Resolvable: true}
-			// Topics and boards have no current UI detail surface. Do not return
-			// fabricated paths that would turn a resolvable chip into a 404.
-			if pathKind := map[string]string{"card": "tasks", "document": "docs"}[kind]; pathKind != "" {
-				preview.URL = "/" + pathKind + "/" + url.PathEscape(item.handle)
+			err = rows.Err()
+			rows.Close()
+			if err != nil {
+				return nil, err
 			}
-			if kind == "card" {
-				preview.Phase = item.phase
-			}
-			preview.OwnerDisplay = firstNonEmptyString(item.ownerDisplay, item.owner)
-			if kind == "card" {
-				preview.Priority = item.priority
-				if item.boardHandle != "" {
-					preview.Board = &PreviewBoard{Ref: "board:" + item.boardHandle, Title: item.boardTitle}
+			// Access checks run after closing rows, including on one-connection SQLite.
+			for _, item := range items {
+				needed := false
+				for _, key := range []string{item.id, item.handle, item.external} {
+					if wanted[key] && len(candidates[key]) < 2 {
+						needed = true
+					}
+				}
+				if !needed {
+					continue
+				}
+				if item.trashed != "" || item.boardTrashed != "" {
+					continue
+				}
+				if visible != nil && (!visible(item.thread, item.privateOwner) || (kind == "card" && !visible(item.boardThread, item.boardOwner))) {
+					continue
+				}
+				preview := RefPreview{ID: item.id, Kind: kind, Title: item.title, Status: item.phase, Owner: item.owner, Resolvable: true}
+				// Topics and boards have no current UI detail surface. Do not return
+				// fabricated paths that would turn a resolvable chip into a 404.
+				if pathKind := map[string]string{"card": "tasks", "document": "docs"}[kind]; pathKind != "" {
+					preview.URL = "/" + pathKind + "/" + url.PathEscape(item.handle)
+				}
+				if kind == "card" {
+					preview.Phase = item.phase
+				}
+				preview.OwnerDisplay = firstNonEmptyString(item.ownerDisplay, item.owner)
+				if kind == "card" {
+					preview.Priority = item.priority
+					if item.boardHandle != "" {
+						preview.Board = &PreviewBoard{Ref: "board:" + item.boardHandle, Title: item.boardTitle}
+					}
+				}
+				preview.CreatedAt, _ = time.Parse(time.RFC3339Nano, item.created)
+				preview.DueAt = item.due
+				preview.LastMovedAt = item.at
+				preview.MovementAt = latestCardActivity(item.at, item.planAt, item.message)
+				if !preview.MovementAt.IsZero() {
+					preview.LastMovedAt = preview.MovementAt.UTC().Format(time.RFC3339Nano)
+				}
+				keys := uniqueSortedStrings([]string{item.id, item.handle, item.external})
+				for _, key := range keys {
+					if wanted[key] && len(candidates[key]) < 2 {
+						candidates[key] = append(candidates[key], preview)
+					}
 				}
 			}
-			preview.LastMovedAt = item.at
-			preview.MovementAt, _ = time.Parse(time.RFC3339Nano, item.at)
-			keys := uniqueSortedStrings([]string{item.id, item.handle, item.external})
-			for _, key := range keys {
-				if key != "" {
-					candidates[key] = append(candidates[key], preview)
-				}
+			if kind != "card" || len(items) < 200 {
+				break
 			}
+			cursor := items[len(items)-1].id
+			args[1], args[3], args[5] = cursor, cursor, cursor
 		}
+
 		for i, ref := range refs {
 			prefix, value, _ := strings.Cut(ref, ":")
 			if prefix == "doc" {
@@ -167,56 +220,86 @@ func (s *Store) readRefFacts(ctx context.Context, refs []string, visible func(st
 			}
 		}
 	}
+	if err := s.readExternalRefFacts(ctx, refs, out, visible); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
-func (s *Store) loadPlans(ctx context.Context, ids []string) (map[string]plans.Plan, map[string]time.Time, error) {
-	out, movement := map[string]plans.Plan{}, map[string]time.Time{}
+func (s *Store) loadPlans(ctx context.Context, ids []string) (map[string]plans.Plan, map[string]cardHealthInput, map[string]any, error) {
+	sourceRefs := map[string]any{}
+	out, movement := map[string]plans.Plan{}, map[string]cardHealthInput{}
 	ids = uniqueSortedStrings(ids)
 	if len(ids) == 0 {
-		return out, movement, nil
+		return out, movement, sourceRefs, nil
 	}
 	encoded, err := json.Marshal(ids)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT card_id,body_json,updated_at FROM card_plans WHERE card_id IN (SELECT value FROM json_each(?))`, string(encoded))
+	rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(p.body_json,''),`+effectiveCardActivitySQL+`,COALESCE(p.updated_at,''),COALESCE((SELECT e.ts FROM events e WHERE e.thread_id=COALESCE(NULLIF(trim(c.thread_id),''),trim(c.parent_thread_id)) AND e.type='message_posted' AND e.trashed_at IS NULL AND e.archived_at IS NULL ORDER BY e.ts DESC LIMIT 1),''),COALESCE(json_extract(m.metadata_json,'$.source_refs'),'[]'),c.created_at,`+effectiveCardDueSQL+` FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN card_plans p ON p.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id WHERE c.id IN (SELECT value FROM json_each(?))`, string(encoded))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, raw, at string
-		if err = rows.Scan(&id, &raw, &at); err != nil {
-			return nil, nil, err
+		var id, raw, at, planAt, messageAt, refsRaw, created, due string
+		if err = rows.Scan(&id, &raw, &at, &planAt, &messageAt, &refsRaw, &created, &due); err != nil {
+			return nil, nil, nil, err
 		}
-		var p plans.Plan
-		if err = json.Unmarshal([]byte(raw), &p); err != nil {
-			return nil, nil, err
+		var entries []any
+		if err = json.Unmarshal([]byte(refsRaw), &entries); err != nil {
+			return nil, nil, nil, err
 		}
-		out[id] = p
-		movement[id], _ = time.Parse(time.RFC3339Nano, at)
+		sourceRefs[id] = entries
+		if raw != "" {
+			var p plans.Plan
+			if err = json.Unmarshal([]byte(raw), &p); err != nil {
+				return nil, nil, nil, err
+			}
+			out[id] = p
+		}
+		input := cardHealthInput{Due: due}
+		input.Created, _ = time.Parse(time.RFC3339Nano, created)
+		input.Activity = latestCardActivity(at, planAt, messageAt)
+		movement[id] = input
 	}
-	return out, movement, rows.Err()
+	return out, movement, sourceRefs, rows.Err()
 }
 
 func (s *Store) planFacts(ctx context.Context, ps map[string]plans.Plan, visible func(string, string) bool) (map[string]plans.Fact, error) {
-	refs := []string{}
-	for _, p := range ps {
-		for _, step := range p.Steps {
-			if step.Ref != "" {
-				refs = append(refs, step.Ref)
+	refs, seen := []string{}, map[string]bool{}
+	ids := []string{}
+	for id := range ps {
+		ids = append(ids, id)
+	}
+	ids = uniqueSortedStrings(ids)
+	// Round-robin plans so a large plan cannot starve every other initiative.
+	for stepIndex := 0; stepIndex < plans.MaxSteps && len(refs) < maxPlanRefBudget; stepIndex++ {
+		for _, id := range ids {
+			if stepIndex >= len(ps[id].Steps) {
+				continue
+			}
+			ref := ps[id].Steps[stepIndex].Ref
+			if ref != "" && !seen[ref] && len(refs) < maxPlanRefBudget {
+				refs = append(refs, ref)
+				seen[ref] = true
 			}
 		}
 	}
-	refs = uniqueSortedStrings(refs)
 	facts := map[string]plans.Fact{}
-	rows, err := s.readRefFacts(ctx, refs, visible)
-	if err != nil {
-		return nil, err
-	}
-	for _, row := range rows {
-		facts[row.Ref] = plans.Fact{Known: row.Resolvable, Status: row.Phase, MovementAt: row.MovementAt}
+	for start := 0; start < len(refs); start += 200 {
+		end := start + 200
+		if end > len(refs) {
+			end = len(refs)
+		}
+		rows, err := s.readRefFacts(ctx, refs[start:end], visible)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			facts[row.Ref] = plans.Fact{Known: row.Resolvable, Status: row.Phase, MovementAt: row.MovementAt}
+		}
 	}
 	return facts, nil
 }
@@ -235,7 +318,7 @@ func (s *Store) ResolveRefs(ctx context.Context, refs []string, visible func(str
 			ids = append(ids, row.ID)
 		}
 	}
-	ps, movement, err := s.loadPlans(ctx, ids)
+	ps, movement, _, err := s.loadPlans(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -244,35 +327,46 @@ func (s *Store) ResolveRefs(ctx context.Context, refs []string, visible func(str
 		return nil, err
 	}
 	for i, row := range out {
-		if p, ok := ps[row.ID]; ok {
-			state := plans.Compute(p, facts, movement[row.ID], now, threshold)
-			out[i].Progress = &state.Progress
-			if len(state.NextSteps) > 0 {
-				steps := make(map[string]plans.Step, len(p.Steps))
-				for _, step := range p.Steps {
-					steps[step.ID] = step
-				}
-				for _, id := range state.NextSteps {
-					step := steps[id]
-					// Skip unreadable linked resources, including their authored titles.
-					if step.Ref == "" || facts[step.Ref].Known {
-						out[i].NextStep = &PreviewStep{Title: step.Title}
-						break
-					}
-				}
-			}
+		if row.Kind != "card" || !row.Resolvable {
+			continue
 		}
+		input := movement[row.ID]
+		at := input.Activity
+		if row.MovementAt.After(at) {
+			at = row.MovementAt
+		}
+		var p *plans.Plan
+		var state plans.State
+		if value, ok := ps[row.ID]; ok {
+			p = &value
+			state = plans.Compute(value, facts, at, now, threshold)
+			at, _ = time.Parse(time.RFC3339Nano, state.LastMovementAt)
+			out[i].PlanResolutionTruncated = planRefsTruncated(value, facts)
+			out[i].Progress = &state.Progress
+			out[i].NextStep = plans.ReadyStep(value, state, func(step plans.Step) bool { return step.Ref == "" || facts[step.Ref].Known })
+			out[i].StatusMismatch = row.Phase == "backlog" && state.Progress.Done > 0
+		}
+		health := plans.HealthFor(p, state, at, input.Created, now, threshold, input.Due)
+		out[i].PlanHealth = &health
 	}
+
 	return out, nil
 }
 
 // EnrichCardPlans batches both plans and referenced state for an entire read.
 func (s *Store) EnrichCardPlans(ctx context.Context, cards []map[string]any, visible func(string, string) bool, now time.Time, threshold time.Duration) error {
+	allowed, err := s.FilterCardAccess(ctx, cards, visible)
+	if err != nil {
+		return err
+	}
+	if len(allowed) != len(cards) {
+		return ErrNotFound
+	}
 	ids := []string{}
 	for _, card := range cards {
 		ids = append(ids, workString(card["id"]))
 	}
-	ps, movement, err := s.loadPlans(ctx, ids)
+	ps, movement, sourceRefs, err := s.loadPlans(ctx, ids)
 	if err != nil {
 		return err
 	}
@@ -281,11 +375,33 @@ func (s *Store) EnrichCardPlans(ctx context.Context, cards []map[string]any, vis
 		return err
 	}
 	for _, card := range cards {
-		if p, ok := ps[workString(card["id"])]; ok {
-			card["plan"] = p
-			card["plan_state"] = plans.Compute(p, facts, movement[workString(card["id"])], now, threshold)
+		id := workString(card["id"])
+		card["source_refs"] = sourceRefs[id]
+		input := movement[id]
+		at := input.Activity
+		var p *plans.Plan
+		var state plans.State
+		card["next_step"] = nil
+		card["status_mismatch"] = false
+		card["plan_resolution_truncated"] = false
+		if value, ok := ps[id]; ok {
+			p = &value
+			state = plans.Compute(value, facts, at, now, threshold)
+			at, _ = time.Parse(time.RFC3339Nano, state.LastMovementAt)
+			card["plan_resolution_truncated"] = planRefsTruncated(value, facts)
+			card["plan"], card["plan_state"] = value, state
+			card["next_step"] = plans.ReadyStep(value, state, func(step plans.Step) bool { return step.Ref == "" || facts[step.Ref].Known })
+			card["status_mismatch"] = firstNonEmptyString(workString(card["phase"]), workString(card["column_key"])) == "backlog" && state.Progress.Done > 0
+		}
+		health := plans.HealthFor(p, state, at, input.Created, now, threshold, input.Due)
+		card["plan_health"] = health
+		if p != nil {
+			state.HealthState = health.State
+			state.Health = plans.LegacyHealth(health.State)
+			card["plan_state"] = state
 		}
 	}
+
 	return nil
 }
 
@@ -360,3 +476,17 @@ func (s *Store) SetCardPlan(ctx context.Context, actor, id, ifUpdatedAt string, 
 	}
 	return tx.Commit()
 }
+
+func planRefsTruncated(p plans.Plan, facts map[string]plans.Fact) bool {
+	for _, step := range p.Steps {
+		if step.Ref != "" {
+			if _, ok := facts[step.Ref]; !ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// SetCardPlan commits the graph and its event together. A stale editor cannot
+// overwrite another edit. Identical retries do not create misleading movement.

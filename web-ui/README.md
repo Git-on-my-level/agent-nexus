@@ -85,7 +85,6 @@ pnpm run screenshot -- \
   --out .screenshots
 ```
 
-
 ### Deployment session adapter
 
 Native single-workspace authentication is unchanged when `ANX_UI_SESSION_ADAPTER` is unset. A deployment can provide an absolute `file://` URL for a server-only Node module (Node >=22.13, no top-level await) exporting `createSessionContext({ event, env, dev })`. It returns an immutable request `scope` (64 lowercase hex characters), optional `encodeCookie(name, value)` / `decodeCookie(name, value)` integrity codecs, `sessionTarget(workspace)` (core URL and server-only headers), and `establishSession(workspace)` (core tokens and public agent). Capture the authenticated login context before asynchronous work; never derive the scope from a client-supplied generation marker. The module is loaded at runtime and is not bundled into browser or OSS artifacts.

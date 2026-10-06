@@ -4165,9 +4165,9 @@ func TestWorkspaceSummaryTextAndJSONExcludesArchivedBoardCards(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/boards":
-			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + boardID + `","title":"Launch","state":"active"},"summary":{"card_count":2,"unresolved_card_count":1,"document_count":1,"latest_activity_at":"` + updatedAt + `"}}]}`))
+			_, _ = w.Write([]byte(`{"boards":[{"board":{"ref":"board:launch","handle":"launch","id":"` + boardID + `","title":"Launch","state":"active"},"summary":{"card_count":2,"unresolved_card_count":1,"document_count":1,"latest_activity_at":"` + updatedAt + `"}},{"board":{"ref":"board:old","state":"archived"}},{"board":{"ref":"board:trashed","trashed_at":"` + updatedAt + `"}}]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/cards":
-			_, _ = w.Write([]byte(`{"cards":[{"id":"card_1","board_id":"` + boardID + `"},{"id":"card_2","board_id":"` + boardID + `"},{"id":"card_archived","board_id":"board_archived"}]}`))
+			_, _ = w.Write([]byte(`{"cards":[{"ref":"card:one","board_ref":"board:launch"},{"ref":"card:two","board_ref":"board:launch"},{"ref":"card:archived","board_ref":"board:launch","archived_at":"` + updatedAt + `"},{"ref":"card:trashed","board_ref":"board:launch","trashed_at":"` + updatedAt + `"},{"ref":"card:old-board","board_ref":"board:old"},{"ref":"card:trash-board","board_ref":"board:trashed"}]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/docs":
 			_, _ = w.Write([]byte(`{"documents":[{"id":"doc_1"}]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
@@ -6537,4 +6537,27 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 		})
 		assertGolden(t, "inbox_stream_machine.golden.json", raw)
 	})
+}
+
+func TestInboxSummaryUsesWorkspaceReadAndLimit(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" || r.URL.Path != "/inbox/summary" || r.URL.Query().Get("limit") != "0" {
+			t.Errorf("unexpected request %s %s", r.Method, r.URL)
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"open_ask_count":3,"asks":[],"generated_at":"2026-10-05T00:00:00Z"}`))
+	}))
+	defer server.Close()
+	raw := runCLIForTest(t, t.TempDir(), map[string]string{}, nil, []string{"--json", "--base-url", server.URL, "inbox", "summary", "--limit", "0"})
+	payload := assertEnvelopeOK(t, raw)
+	if anyStringValue(machineEnvelopeCommandID(payload)) != "inbox.summary" {
+		t.Fatal(payload)
+	}
+	result := asMap(payload["result"])
+	if intValue(result["open_ask_count"]) != 3 {
+		t.Fatal(payload)
+	}
 }

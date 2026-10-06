@@ -111,16 +111,14 @@ func (s *Store) dashboard(ctx context.Context, all bool) (map[string]any, error)
 		return nil, err
 	}
 	result := map[string]any{"status": "ok", "pinned_ref": nil, "reports": []map[string]any{}, "has_more": false}
-	if pin.Valid && pin.String != "" {
-		result["pinned_ref"] = "document:" + pin.String
-	}
 	// One metadata read, with the pin first; only read candidate blobs until the
 	// selected valid report is found. No per-document GetDocument queries.
 	rows, err := s.db.QueryContext(ctx, `SELECT d.id, COALESCE(NULLIF(d.handle,''),d.id), d.title, d.updated_at,
         COALESCE(a.content_hash,''), COALESCE(d.archived_at,''), COALESCE(d.trashed_at,''), d.head_revision_number
         FROM documents d LEFT JOIN document_revisions dr ON dr.revision_id=d.head_revision_id
         LEFT JOIN artifacts a ON a.id=dr.artifact_id
-        WHERE (COALESCE(d.archived_at,'')='' AND COALESCE(d.trashed_at,'')='') OR d.id=?
+        WHERE ((COALESCE(d.archived_at,'')='' AND COALESCE(d.trashed_at,'')='') OR d.id=?)
+        AND `+backingThreadLifecycleSQL(ctx, `d.thread_id`, false)+`
         ORDER BY (d.id=?) DESC, d.updated_at DESC, d.id ASC`, pin.String, pin.String)
 	if err != nil {
 		return nil, err
@@ -205,17 +203,21 @@ func (s *Store) Overview(ctx context.Context, humanIDs map[string]bool, agentNam
 }
 
 // overviewWork shares the bounded report projection and its joined privacy context.
-func (s *Store) overviewWork(ctx context.Context, visible func(string, string) bool, now time.Time, threshold time.Duration, includeClosed bool) ([]map[string]any, bool, error) {
+func (s *Store) overviewWork(ctx context.Context, visible func(string, string) bool, now time.Time, threshold time.Duration, includeClosed bool) ([]map[string]any, bool, map[string]bool, error) {
 	page, err := s.ListReportWork(ctx, ReportWorkFilter{Limit: 2000, IncludeClosed: includeClosed})
 	if err != nil {
-		return nil, false, err
+		return nil, false, nil, err
 	}
 	work := []map[string]any{}
+	initiativeBoards := map[string]bool{}
 	for _, w := range page.Work {
 		b := page.Boards[anyStringValue(w["board_ref"])]
 		thread := firstNonEmptyString(anyStringValue(w["thread_id"]), anyStringValue(w["parent_thread_id"]))
 		if visible == nil || (visible(b.ThreadID, b.PrivateOwner) && visible(thread, page.PrivateOwners[anyStringValue(w["id"])])) {
 			work = append(work, w)
+			if b.Role == "initiatives" {
+				initiativeBoards[anyStringValue(w["board_ref"])] = true
+			}
 		}
 	}
 	sort.Slice(work, func(i, j int) bool {
@@ -226,15 +228,21 @@ func (s *Store) overviewWork(ctx context.Context, visible func(string, string) b
 		return a > b
 	})
 	if err = s.EnrichCardPlans(ctx, work, visible, now, threshold); err != nil {
-		return nil, false, err
+		return nil, false, nil, err
 	}
-	return work, page.Truncated, nil
+	return work, page.Truncated, initiativeBoards, nil
 }
 
 func (s *Store) OverviewVisible(ctx context.Context, humanIDs, agentNames map[string]bool, visible func(string, string) bool, now time.Time, threshold time.Duration) (map[string]any, error) {
 	result := map[string]any{"generated_at": now.Format(time.RFC3339Nano)}
-	work, truncated, err := s.overviewWork(ctx, visible, now, threshold, true)
+	work, truncated, initiativeBoards, err := s.overviewWork(ctx, visible, now, threshold, true)
 	if err != nil {
+		return nil, err
+	}
+	// A single indexed existence probe preserves explicit selection even when
+	// an accessible designated board has no work in the bounded visit snapshot.
+	var designated bool
+	if err = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM boards WHERE role='initiatives' LIMIT 1)`).Scan(&designated); err != nil {
 		return nil, err
 	}
 	result["_visit_work"] = work
@@ -264,13 +272,15 @@ func (s *Store) OverviewVisible(ctx context.Context, humanIDs, agentNames map[st
 		ask := strings.Join(needsHuman, " · ")
 		ref := anyStringValue(w["ref"])
 		href := "/tasks/" + url.PathEscape(strings.TrimPrefix(ref, "card:"))
-		initiative := map[string]any{"ref": ref, "title": w["title"], "summary": summary, "progress": progress, "priority": firstNonEmptyString(anyStringValue(w["priority"]), "none"), "needs": needsHuman, "phase": phase, "board_ref": w["board_ref"], "updated_at": w["updated_at"], "plan_state": nil, "geometry": nil, "health": initiativeHealth(w)}
+		initiative := map[string]any{"ref": ref, "title": w["title"], "summary": summary, "progress": progress, "priority": firstNonEmptyString(anyStringValue(w["priority"]), "none"), "needs": needsHuman, "phase": phase, "board_ref": w["board_ref"], "updated_at": w["updated_at"], "plan_state": nil, "geometry": nil, "health": initiativeHealth(w), "plan_health": w["plan_health"], "next_step": w["next_step"], "status_mismatch": w["status_mismatch"], "plan_resolution_truncated": w["plan_resolution_truncated"]}
 		if state, ok := w["plan_state"].(plans.State); ok {
 			initiative["plan_state"] = state
 			initiative["progress"] = state.Progress
 			initiative["geometry"] = plans.TileGeometry(w["plan"].(plans.Plan), state)
 		}
-		initiatives = append(initiatives, initiative)
+		if !designated || initiativeBoards[anyStringValue(w["board_ref"])] {
+			initiatives = append(initiatives, initiative)
+		}
 		if human {
 			humanCount++
 		}
@@ -280,6 +290,9 @@ func (s *Store) OverviewVisible(ctx context.Context, humanIDs, agentNames map[st
 	}
 	result["work"] = map[string]any{"status": "ok", "total": len(activeWork), "human_count": humanCount, "items": activeWork, "truncated": truncated}
 	result["initiatives"] = map[string]any{"status": "ok", "count": len(initiatives), "items": initiatives, "truncated": truncated}
+	if !designated {
+		result["initiatives"].(map[string]any)["hint"] = "Set a board role with anx boards patch <board> --role initiatives to select Overview initiatives."
+	}
 	result["needs_you"] = map[string]any{"status": "ok", "count": len(needs), "rows": needs, "href": "/inbox?mailbox=needs-you"}
 	dashboard, err := s.dashboard(ctx, false)
 	if err != nil {
@@ -290,21 +303,8 @@ func (s *Store) OverviewVisible(ctx context.Context, humanIDs, agentNames map[st
 }
 
 func initiativeHealth(w map[string]any) map[string]any {
-	status := "on_track"
-	if state, ok := w["plan_state"].(plans.State); ok {
-		status = state.Health
-	} else if w["phase"] == "blocked" {
-		status = "blocked"
+	if health, ok := w["plan_health"].(plans.Health); ok {
+		return map[string]any{"status": plans.LegacyHealth(health.State), "state": health.State, "reason": health.Reason}
 	}
-	reason := "Work is progressing."
-	switch status {
-	case "blocked":
-		reason = "A step on a critical path is blocked."
-		if w["plan_state"] == nil {
-			reason = "Initiative is blocked."
-		}
-	case "stalled":
-		reason = "No movement within the configured stall threshold."
-	}
-	return map[string]any{"status": status, "reason": reason}
+	return map[string]any{"status": "on_track", "state": "no_plan", "reason": "Initiative has no plan steps."}
 }

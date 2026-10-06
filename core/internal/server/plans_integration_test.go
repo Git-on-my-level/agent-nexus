@@ -81,26 +81,32 @@ func TestPlanAndBatchRefsRespectPrivateThreads(t *testing.T) {
 	req := httptest.NewRequest("POST", "/refs/resolve", strings.NewReader(`{"refs":["`+anyString(hidden["ref"])+`"]}`))
 	out := httptest.NewRecorder()
 	opts := handlerOptions{primitiveStore: store}
+	attachResourceAccessScope(req, opts)
 	handleResolveRefs(out, req, opts)
 	if out.Code != 200 {
 		t.Fatal(out.Body.String())
 	}
-	var body map[string]any
-	json.Unmarshal(out.Body.Bytes(), &body)
-	preview := body["items"].([]any)[0].(map[string]any)
-	if len(preview) != 2 || preview["resolvable"] != false {
-		t.Fatal("private preview:", preview)
+	var batch struct {
+		Items []primitives.RefPreview `json:"items"`
 	}
-	if err = store.EnrichCardPlans(ctx, []map[string]any{parent}, planVisibility(req, opts), time.Now(), 0); err != nil {
+	if err = json.Unmarshal(out.Body.Bytes(), &batch); err != nil || len(batch.Items) != 1 || batch.Items[0].Resolvable || batch.Items[0].Title != "" {
+		t.Fatalf("private HTTP preview: %s error=%v", out.Body.String(), err)
+	}
+	previews, err := store.ResolveRefs(req.Context(), []string{anyString(hidden["ref"])}, planVisibility(req, opts), time.Now(), 0)
+	if err != nil || len(previews) != 1 || previews[0].Resolvable || previews[0].Title != "" {
+		t.Fatalf("private store preview: %+v error=%v", previews, err)
+	}
+	if err = store.EnrichCardPlans(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), []map[string]any{parent}, planVisibility(req, opts), time.Now(), 0); err != nil {
 		t.Fatal(err)
 	}
-	state := parent["plan_state"].(plans.State)
-	if state.Steps[0].Status != "not_started" || state.Steps[0].Resolvable || state.Health == "blocked" {
-		t.Fatal("private status leaked:", state)
+	if parent["plan"] != nil || parent["plan_state"] != nil || parent["next_step"] != nil {
+		t.Fatal("private plan leaked:", parent)
 	}
 	// A linked private card cannot be read or edited through the plan route.
 	out = httptest.NewRecorder()
-	handleCardPlan(out, httptest.NewRequest("GET", "/", nil), opts, anyString(hidden["ref"]))
+	cardReq := httptest.NewRequest("GET", "/", nil)
+	attachResourceAccessScope(cardReq, opts)
+	handleCardPlan(out, cardReq, opts, anyString(hidden["ref"]))
 	if out.Code != 404 {
 		t.Fatal(out.Code, out.Body.String())
 	}
@@ -115,11 +121,14 @@ func TestPlanAPIProjectsCardsWorkReportsAndTimeline(t *testing.T) {
 	ref := anyString(work["ref"])
 	endpoint := h.baseURL + "/cards/" + ref + "/plan"
 	initial := workGetJSON(t, endpoint, 200)
+	if initial["plan_health"].(map[string]any)["state"] != "no_plan" || initial["next_step"] != nil {
+		t.Fatal(initial)
+	}
 	token := initial["if_updated_at"]
 	p := map[string]any{"steps": []any{map[string]any{"id": "build", "title": "Build", "status": "done"}, map[string]any{"id": "ship", "title": "Ship", "status": "blocked", "after": []string{"build"}}}}
 	result := planRequest(t, "PUT", endpoint, map[string]any{"actor_id": "actor-1", "if_updated_at": token, "plan": p}, 200)
 	state := result["plan_state"].(map[string]any)
-	if state["health"] != "blocked" || state["progress"].(map[string]any)["done"] != float64(1) {
+	if result["plan_health"].(map[string]any)["state"] != "blocked" || result["status_mismatch"] != true || state["health"] != "blocked" || state["progress"].(map[string]any)["done"] != float64(1) {
 		t.Fatal(result)
 	}
 	for _, path := range []string{"/cards/" + ref, "/work/" + ref} {
@@ -129,7 +138,7 @@ func TestPlanAPIProjectsCardsWorkReportsAndTimeline(t *testing.T) {
 			key = "work"
 		}
 		card := read[key].(map[string]any)
-		if card["plan"] == nil || card["plan_state"].(map[string]any)["health"] != "blocked" {
+		if card["plan_health"].(map[string]any)["state"] != "blocked" || card["status_mismatch"] != true || card["column_key"] != "backlog" && key == "card" || card["plan"] == nil || card["plan_state"].(map[string]any)["health"] != "blocked" {
 			t.Fatal(read)
 		}
 	}

@@ -112,7 +112,11 @@
    */
   let planHealth = $derived(
     planHealthModel(
-      { plan_health: work?.plan_health, health: { status: planState?.health } },
+      {
+        plan_health: work?.plan_health,
+        plan_state: planState,
+        health: { status: planState?.health },
+      },
       { hasPlan: Boolean(plan), progress: planProgress },
     ),
   );

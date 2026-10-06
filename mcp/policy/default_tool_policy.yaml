@@ -430,6 +430,9 @@ commands:
   "inbox.get":
     classification: exposed_read
     reason: "inbox item read"
+  "inbox.summary":
+    classification: exposed_read
+    reason: "workspace-local count and bounded human asks visible to the caller"
   "inbox.list":
     classification: exposed_read
     reason: "bounded inbox inventory read"
@@ -439,9 +442,6 @@ commands:
   "inbox.stream":
     classification: unsupported_streaming
     reason: "SSE stream needs a bounded read adapter before MCP exposure"
-  "inbox.summary":
-    classification: exposed_read
-    reason: "bounded workspace-local open ask summary"
   "meta.commands.get":
     classification: exposed_read
     reason: "command metadata read"

@@ -15,14 +15,21 @@
       "priority": "p1",
       "last_moved_at": "2026-10-04T12:00:00Z",
       "next_step": {
-        "title": "Build"
+        "id": "build",
+        "title": "Build",
+        "ref": ""
       },
       "progress": {
         "done": 0,
         "total": 1
       },
       "url": "/tasks/initiative",
-      "resolvable": true
+      "resolvable": true,
+      "plan_health": {
+        "state": "on_track",
+        "reason": "Open steps are progressing.",
+        "since": "2026-10-04T12:00:00Z"
+      }
     },
     {
       "ref": "card:unknown",

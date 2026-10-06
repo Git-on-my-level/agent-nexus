@@ -83,6 +83,14 @@ var localHelperTopics = []localHelperTopic{
 		},
 	},
 	{
+		Path:        "inbox summary",
+		Summary:     "Count open human asks and read the top asks visible in this workspace.",
+		JSONShape:   "`open_ask_count`, `asks`, `generated_at`",
+		Composition: "Uses current workspace permissions; shared human asks, not requester-scoped agent answer notifications. Hosted UI aggregates existing workspace sessions.",
+		Examples:    []string{"anx inbox summary", "anx --json inbox summary --limit 0"},
+		Flags:       []localHelperFlag{{Name: "--limit <0..50>", Description: "Number of top asks (default 5); zero returns only the count."}},
+	},
+	{
 		Path:        "inbox read",
 		Summary:     "Mark one answer to your ask as read, including before its wake is delivered.",
 		QuickStart:  "Pass the `event:<ask-id>` returned by `anx ask`.",
@@ -243,6 +251,19 @@ var localHelperTopics = []localHelperTopic{
 		},
 	},
 	{
+		Path:        "boards patch",
+		Summary:     "Patch Board metadata from JSON or set its role with --role.",
+		JSONShape:   "JSON body `{ patch }`; --role alone builds `{ patch: { role } }`.",
+		Composition: "Uses boards.patch. Empty --role clears the role; omission preserves it.",
+		Examples:    []string{"anx boards patch board:initiatives --role initiatives", "anx boards patch board:launch --from-file board-patch.json"},
+		Flags: []localHelperFlag{
+			{Name: "--board-id <board-id>", Description: "Board ref, handle or id."},
+			{Name: "--role <role>", Description: "Board role; initiatives selects Overview cards; empty clears."},
+			{Name: "--from-file <path>", Description: "JSON request body; explicit --role overrides it."},
+			{Name: "--dry-run", Description: "Render request without sending it."},
+		},
+	},
+	{
 		Path:        "boards create",
 		Summary:     "Create an active-work Board from flags, optionally tied to a Topic.",
 		JSONShape:   "Either flags building `{ board }`, or advanced JSON body `{ board }` from stdin/--from-file.",
@@ -254,6 +275,7 @@ var localHelperTopics = []localHelperTopic{
 		},
 		Flags: []localHelperFlag{
 			{Name: "--title <text>", Description: "Board title."},
+			{Name: "--role <role>", Description: "Optional board role; initiatives selects Overview cards."},
 			{Name: "--summary <text>", Description: "Optional board summary."},
 			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--topic <topic-ref-or-handle>", Description: "Primary topic typed ref or handle."},
@@ -1551,7 +1573,7 @@ Lower-level helpers:
 	case "boards":
 		return strings.TrimSpace(`Active work tracking:
   boards create           Create a Board from flags, optionally tied to ` + "`--topic`" + `.
-  boards patch            Patch Board metadata from JSON; use ` + "`--dry-run`" + ` to preview.
+  boards patch            Patch Board metadata from JSON or ` + "`--role`" + `; use ` + "`--dry-run`" + ` to preview.
   boards workspace        Inspect board context, cards, documents, and inbox.
 
 Card mental model:
@@ -2171,7 +2193,7 @@ func commandIDToCLIPath(commandID string) string {
 }
 
 func generatedCommandByID(commandID string) (registry.Command, bool) {
-	meta, err := registry.LoadEmbedded()
+	meta, err := runtimeHelpRegistry()
 	if err != nil {
 		return registry.Command{}, false
 	}

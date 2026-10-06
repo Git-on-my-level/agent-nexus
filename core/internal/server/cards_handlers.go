@@ -27,6 +27,11 @@ func handleListCards(w http.ResponseWriter, r *http.Request, opts handlerOptions
 		return
 	}
 
+	var accessible bool
+	cards, accessible = filterPlanCards(w, r, opts, cards)
+	if !accessible {
+		return
+	}
 	if !enrichPlans(w, r, opts, cards) {
 		return
 	}
@@ -239,6 +244,11 @@ func handleGetCardTimeline(w http.ResponseWriter, r *http.Request, opts handlerO
 		}
 		cards = append(cards, publicCardView(loaded))
 	}
+	var accessible bool
+	cards, accessible = filterPlanCards(w, r, opts, cards)
+	if !accessible {
+		return
+	}
 	cards = dedupeAndSortResourceMaps(cards)
 
 	threads := make([]map[string]any, 0, len(threadIDs))
@@ -250,6 +260,9 @@ func handleGetCardTimeline(w http.ResponseWriter, r *http.Request, opts handlerO
 			}
 			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load related threads")
 			return
+		}
+		if !canAccessPMThread(r, opts, thread) {
+			continue
 		}
 		primitives.StripThreadPlanningFieldsForAPI(thread)
 		threads = append(threads, thread)

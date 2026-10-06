@@ -11,7 +11,7 @@ import (
 )
 
 const MaxSteps = 200
-const DefaultStalledAfter = 5 * 24 * time.Hour
+const DefaultStalledAfter = 72 * time.Hour
 
 type Step struct {
 	ID     string   `json:"id"`
@@ -39,6 +39,7 @@ type State struct {
 	CriticalPath   []string        `json:"critical_path"`
 	NextSteps      []string        `json:"next_steps"`
 	Shape          string          `json:"shape"`
+	HealthState    string          `json:"health_state"`
 	Health         string          `json:"health"`
 	LastMovementAt string          `json:"last_movement_at"`
 }
@@ -77,8 +78,8 @@ func Validate(p Plan) error {
 			local := ok && value != "" && strings.TrimSpace(value) == value && (kind == "card" || kind == "doc" || kind == "document" || kind == "topic")
 			u, err := url.Parse(s.Ref)
 			external := err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Hostname() != "" && u.User == nil
-			if !local && !external {
-				return fmt.Errorf("step %s ref must be a card/doc/topic ref or HTTP(S) URL", s.ID)
+			if !local && !external && !IsIdentifierAlias(s.Ref) {
+				return fmt.Errorf("step %s ref must be a card/doc/topic ref, external source ref or HTTP(S) URL", s.ID)
 			}
 		}
 		if s.Due != "" {
@@ -142,7 +143,7 @@ func Status(phase string) string {
 		return "done"
 	case "blocked":
 		return "blocked"
-	case "active", "in_progress", "review":
+	case "active", "in_progress", "in_review", "review", "open":
 		return "active"
 	default:
 		return "not_started"
@@ -200,7 +201,7 @@ func Compute(p Plan, facts map[string]Fact, movement, now time.Time, threshold t
 	}
 	ids := order(p)
 	// Longest unfinished-weight path to each node; sorted ids break ties.
-	weights, prefix, suffix := map[string]int{}, map[string]int{}, map[string]int{}
+	weights, prefix := map[string]int{}, map[string]int{}
 	paths := map[string][]string{}
 	longest := 0
 	best := []string{}
@@ -233,26 +234,13 @@ func Compute(p Plan, facts map[string]Fact, movement, now time.Time, threshold t
 			}
 		}
 	}
-	for i := len(ids) - 1; i >= 0; i-- {
-		id := ids[i]
-		for _, child := range children[id] {
-			if suffix[child] > suffix[id] {
-				suffix[id] = suffix[child]
-			}
-		}
-		suffix[id] += weights[id]
-		if longest > 0 && status[id] == "blocked" && prefix[id]+suffix[id]-weights[id] == longest {
-			out.Health = "blocked"
-		}
-	}
 	for _, id := range best {
 		if status[id] != "done" {
 			out.CriticalPath = append(out.CriticalPath, id)
 		}
 	}
-	if longest > 0 && out.Health != "blocked" && now.Sub(movement) >= threshold {
-		out.Health = "stalled"
-	}
+	out.HealthState = HealthFor(&p, out, movement, movement, now, threshold, "").State
+	out.Health = LegacyHealth(out.HealthState)
 	out.LastMovementAt = movement.UTC().Format(time.RFC3339Nano)
 	return out
 }

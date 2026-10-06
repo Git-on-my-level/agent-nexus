@@ -70,7 +70,12 @@ func installResourceAccessMentions(ctx context.Context, tx *sql.Tx) error {
 
 	type identitySource struct{ table, id, kind, resourceID, refs string }
 	var sources []identitySource
+	// Numeric evidence projection IDs are internal, never navigable identities.
+	// Their tables still invalidate request snapshots below.
 	for _, s := range resourceaccess.OwnershipSources {
+		if s.Kind == "work_evidence_record" || s.Kind == "work_evidence_alias" {
+			continue
+		}
 		refs := "r." + s.ID
 		switch s.Kind {
 		case "thread", "board", "card", "topic", "document", "event", "artifact", "run":
@@ -150,11 +155,20 @@ func installResourceAccessMentions(ctx context.Context, tx *sql.Tx) error {
 	}
 	// Every write that can change roots, structural parents or reference ancestry
 	// invalidates cached request snapshots. Broad invalidation is conservative.
-	tables := map[string]bool{"ref_edges": true, "resource_handle_aliases": true, "resource_access_tombstones": true, "derived_inbox_items": true, "resource_access_edges": true, "resource_access_identities": true}
+	tables := map[string]bool{"ref_edges": true, "resource_handle_aliases": true, "resource_access_tombstones": true, "derived_inbox_items": true, "resource_access_edges": true, "resource_access_identities": true, "resource_access_external_edges": true}
 	for _, source := range resourceaccess.OwnershipSources {
 		tables[source.Table] = true
 	}
+	epochTables := make([]string, 0, len(tables))
 	for table := range tables {
+		epochTables = append(epochTables, table)
+	}
+	return installResourceAccessEpochTriggers(ctx, tx, epochTables)
+}
+
+// Install epoch invalidation without clearing or rebuilding authorization data.
+func installResourceAccessEpochTriggers(ctx context.Context, tx *sql.Tx, tables []string) error {
+	for _, table := range tables {
 		exists, err := sqliteTableExists(ctx, tx, table)
 		if err != nil {
 			return err

@@ -136,7 +136,7 @@ jobs:
 
   core-checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 35
     needs: changes
     if: needs.changes.outputs.core == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.go_shared == 'true'
     steps:
@@ -150,7 +150,12 @@ jobs:
           cache-dependency-path: core/go.sum
 
       - name: Run core check
-        run: make -C core check-ci
+        # Match local validation's CPU/package concurrency for SQL-backed
+        # fixtures. Leave setup and inventory room beyond the package budget.
+        env:
+          GOMAXPROCS: "2"
+          GOFLAGS: "-p=1"
+        run: make -C core check-ci GO_TEST_TIMEOUT=25m
 
       - name: Verify route inventory matches the router
         run: make route-inventory-check
@@ -201,7 +206,9 @@ jobs:
 
       - name: Run CLI integration tests
         working-directory: cli
-        run: go test -tags=integration ./integration/...
+        # Give the full real-core suite an explicit package budget below the
+        # job deadline so timed-out runs still report diagnostics.
+        run: go test -timeout=13m -tags=integration ./integration/...
 
   # Cheap deterministic checks (lint, unit tests, bundle audit). Runs on every web-ui-related change.
   web-ui-static-check:

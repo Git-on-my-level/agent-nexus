@@ -15,7 +15,7 @@ var OwnershipSources = []OwnershipSource{
 	{"events", "event", "id", []string{"refs_json", "payload_json", "trash_reason"}},
 	{"threads", "thread", "id", []string{"body_json", "provenance_json", "trash_reason"}},
 	{"topics", "topic", "id", []string{"title", "summary", "provenance_json", "extensions_json", "trash_reason"}},
-	{"boards", "board", "id", []string{"title", "summary", "owners_json", "refs_json", "column_schema_json", "trash_reason"}},
+	{"boards", "board", "id", []string{"title", "summary", "owners_json", "refs_json", "column_schema_json", "role", "trash_reason"}},
 	{"cards", "card", "id", []string{"title", "summary", "definition_of_done_json", "resolution_refs_json", "refs_json", "provenance_json", "pinned_document_id", "trash_reason"}},
 	{"documents", "document", "id", []string{"title", "summary", "source", "search_text", "supersedes_json", "refs_json", "provenance_json", "tags_json", "hosts_json", "trash_reason"}},
 	{"document_revisions", "document_revision", "revision_id", []string{"refs_json", "artifact_id", "prev_revision_id"}},
@@ -23,6 +23,11 @@ var OwnershipSources = []OwnershipSource{
 	{"artifacts", "artifact", "id", []string{"refs_json", "metadata_json", "content_refs_json", "trash_reason"}},
 	{"work_metadata", "work_metadata", "card_id", []string{"metadata_json", "refresh_json"}},
 	{"work_observations", "work_observation", "id", []string{"body_json"}},
+	{"work_evidence_records", "work_evidence_record", "id", []string{"evidence_json"}},
+	// Lookup keys publish external ownership identities in the central graph;
+	// they do not make numeric evidence IDs public resource identities. A
+	// publication is distinct from a plan/work field referencing that key.
+	{"work_evidence_index", "work_evidence_alias", "id", []string{"lookup_key"}},
 	{"work_participants", "participant", "id", []string{"request_json"}},
 	{"card_plans", "plan", "card_id", []string{"body_json"}},
 	{"agent_wakeups", "wakeup", "wakeup_id", []string{"refs_json", "trigger_text", "thread_title", "failure_reason"}},

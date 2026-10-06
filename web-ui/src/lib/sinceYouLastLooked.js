@@ -19,7 +19,7 @@ const asText = (value) => String(value ?? "").trim();
  */
 const KINDS = Object.freeze({
   step_completed: { label: "step done", tone: "ok" },
-  initiative_stalled: { label: "stalled", tone: "warn" },
+  initiative_stale: { label: "stale", tone: "warn" },
   initiative_blocked: { label: "blocked", tone: "danger" },
   ask_answered: { label: "answered", tone: "ok" },
   // The contract enum is `decision_created`; an earlier guess at
@@ -30,7 +30,7 @@ const KINDS = Object.freeze({
 /** Order the strip reads in: what needs attention first, then what progressed. */
 const ORDER = [
   "initiative_blocked",
-  "initiative_stalled",
+  "initiative_stale",
   "decision_created",
   "ask_answered",
   "step_completed",
@@ -49,7 +49,9 @@ export function sinceYouLastLookedStrip(digest, { limit = 6 } = {}) {
 
   const items = (Array.isArray(digest.items) ? digest.items : [])
     .map((item) => {
-      const kind = asText(item?.kind);
+      const rawKind = asText(item?.kind);
+      const kind =
+        rawKind === "initiative_stalled" ? "initiative_stale" : rawKind;
       const known = KINDS[kind];
       if (!known) return null;
       return {
@@ -97,8 +99,8 @@ function summarize(counts) {
   if (counts.initiative_blocked) {
     parts.push(`${counts.initiative_blocked} blocked`);
   }
-  if (counts.initiative_stalled) {
-    parts.push(`${counts.initiative_stalled} stalled`);
+  if (counts.initiative_stale) {
+    parts.push(`${counts.initiative_stale} stale`);
   }
   if (counts.ask_answered) {
     parts.push(plural(counts.ask_answered, "ask answered", "asks answered"));
