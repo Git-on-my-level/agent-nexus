@@ -91,10 +91,10 @@ func TestPlanAndReportReadsHaveBoundedQueryCounts(t *testing.T) {
 				t.Fatalf("report hydration: %d queries for %d cards", got, size)
 			}
 			counter.Reset()
-			if err = s.EnrichCardPlans(ctx, page.Work, func(string, string) bool { return true }, time.Now(), 0); err != nil {
+			if err = s.EnrichCardPlans(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "selected-pm", PMActorID: "selected-pm"}), page.Work, func(string, string) bool { return true }, time.Now(), 0); err != nil {
 				t.Fatal(err)
 			}
-			if got := counter.Count(); got != 2 {
+			if got := counter.Count(); got != int64(1+2*((size+199)/200)+size/200) {
 				t.Fatalf("plan roll-up: %d queries for %d distinct linked refs", got, size)
 			}
 			for _, work := range page.Work {
@@ -108,11 +108,11 @@ func TestPlanAndReportReadsHaveBoundedQueryCounts(t *testing.T) {
 				n = 200
 			}
 			counter.Reset()
-			items, err := s.ResolveRefs(ctx, refs[:n], func(string, string) bool { return true }, time.Now(), 0)
+			items, err := s.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "selected-pm", PMActorID: "selected-pm"}), refs[:n], func(string, string) bool { return true }, time.Now(), 0)
 			if err != nil || len(items) != n {
 				t.Fatalf("batch=%d error=%v", len(items), err)
 			}
-			if got := counter.Count(); got != 3 {
+			if got := counter.Count(); got != int64(3+2*(n/200)) {
 				t.Fatalf("batch resolve: %d queries for %d refs", got, n)
 			}
 		})

@@ -121,6 +121,8 @@ func TestResourceAccessEveryOwnershipField(t *testing.T) {
 		}
 	}
 	fixtures := map[string]string{"threads": anyStringValue(public["thread_id"]), "boards": anyStringValue(public["board_id"]), "cards": id, "work_metadata": id, "work_observations": anyStringValue(obs["observation"].(map[string]any)["id"]), "documents": anyStringValue(doc["id"]), "topics": anyStringValue(topic.Topic["id"]), "events": anyStringValue(event["id"]), "card_plans": id, "agent_wakeups": "field-wakeup", "work_participants": "field-participant", "runs": "field-run"}
+	fixtures["work_evidence_records"] = "1000000"
+	fixtures["work_evidence_index"] = "1000001"
 	for table, parent := range map[string]string{"card_revisions": "card_id", "document_revisions": "document_id"} {
 		parentID := id
 		if table == "document_revisions" {
@@ -140,6 +142,16 @@ func TestResourceAccessEveryOwnershipField(t *testing.T) {
 	}
 	fixtures["derived_inbox_items"] = "field-inbox"
 	for _, source := range resourceaccess.OwnershipSources {
+		if source.Table == "work_evidence_records" || source.Table == "work_evidence_index" {
+			// Earlier metadata-field cases replace the evidence projection. Seed
+			// these owned rows after those cases, using stable fixture identities.
+			if _, err := ws.DB().Exec(`INSERT OR IGNORE INTO work_evidence_records(id,card_id,slot,evidence_json) VALUES(1000000,?,'field-fixture','{}')`, id); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := ws.DB().Exec(`INSERT OR IGNORE INTO work_evidence_index(id,card_id,lookup_key,evidence_id) VALUES(1000001,?,'field-fixture',1000000)`, id); err != nil {
+				t.Fatal(err)
+			}
+		}
 		rowID, ok := fixtures[source.Table]
 		if !ok || rowID == "" {
 			t.Fatalf("add ownership fixture for %s", source.Table)

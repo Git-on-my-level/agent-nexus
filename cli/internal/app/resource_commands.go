@@ -460,18 +460,27 @@ func (a *App) runWorkspaceCommand(ctx context.Context, args []string, cfg config
 	boardBody := commandResultBody(boardResult)
 	boards := asSlice(boardBody["boards"])
 	activeBoardIDs := make(map[string]struct{}, len(boards))
+	activeBoards := make([]any, 0, len(boards))
 	for _, row := range boards {
 		entry := asMap(row)
 		board := asMap(entry["board"])
 		if board == nil {
 			board = entry
 		}
-		if id := strings.TrimSpace(anyString(board["id"])); id != "" {
-			activeBoardIDs[id] = struct{}{}
+		if !workspaceSummaryActive(board) {
+			continue
+		}
+		activeBoards = append(activeBoards, row)
+		for _, key := range []string{"id", "ref", "handle"} {
+			if value := strings.TrimSpace(anyString(board[key])); value != "" {
+				activeBoardIDs[value] = struct{}{}
+				activeBoardIDs[strings.TrimPrefix(value, "board:")] = struct{}{}
+				activeBoardIDs["board:"+strings.TrimPrefix(value, "board:")] = struct{}{}
+			}
 		}
 	}
 	counts := map[string]any{
-		"boards":      len(boards),
+		"boards":      len(activeBoards),
 		"cards":       nil,
 		"documents":   nil,
 		"inbox_items": nil,
@@ -485,7 +494,14 @@ func (a *App) runWorkspaceCommand(ctx context.Context, args []string, cfg config
 			if nested := asMap(card["card"]); nested != nil {
 				card = nested
 			}
-			if _, activeBoard := activeBoardIDs[strings.TrimSpace(anyString(card["board_id"]))]; activeBoard {
+			if !workspaceSummaryActive(card) {
+				continue
+			}
+			boardKey := anyString(card["board_ref"])
+			if boardKey == "" {
+				boardKey = anyString(card["board_id"])
+			}
+			if _, activeBoard := activeBoardIDs[strings.TrimSpace(boardKey)]; activeBoard {
 				activeCardCount++
 			}
 		}
@@ -505,7 +521,7 @@ func (a *App) runWorkspaceCommand(ctx context.Context, args []string, cfg config
 	}
 
 	data := map[string]any{
-		"boards":       boards,
+		"boards":       activeBoards,
 		"counts":       counts,
 		"generated_at": generatedAt,
 	}
@@ -521,6 +537,10 @@ func commandResultBody(result *commandResult) map[string]any {
 	}
 	data := asMap(result.Data)
 	return asMap(data["body"])
+}
+
+func workspaceSummaryActive(resource map[string]any) bool {
+	return strings.TrimSpace(anyString(resource["archived_at"])) == "" && strings.TrimSpace(anyString(resource["trashed_at"])) == "" && anyString(resource["state"]) != "archived" && anyString(resource["state"]) != "trashed"
 }
 
 func workspaceSummaryWarning(section string, err error) map[string]any {
@@ -2227,6 +2247,10 @@ func (a *App) runInboxCommand(ctx context.Context, args []string, cfg config.Res
 	}
 	sub := inboxSubcommandSpec.normalize(args[0])
 	switch sub {
+	case "summary":
+		result, err := a.runInboxSummary(ctx, args[1:], cfg)
+		return result, "inbox summary", err
+
 	case "list":
 		result, err := a.runInboxList(ctx, args[1:], cfg)
 		return result, "inbox list", err
@@ -2674,10 +2698,11 @@ func docsCreateBodyFromFlags(title string, summary string, topic string, subject
 
 func (a *App) parseBoardCreateInput(args []string, cfg config.Resolved, commandName string) (any, bool, error) {
 	fs := newSilentFlagSet(commandName)
-	var fromFileFlag, titleFlag, summaryFlag, topicFlag, actorIDFlag trackedString
+	var fromFileFlag, titleFlag, summaryFlag, topicFlag, actorIDFlag, roleFlag trackedString
 	var documentRefFlags, pinnedRefFlags trackedStrings
 	var dryRunFlag trackedBool
 	fs.Var(&fromFileFlag, "from-file", "Advanced JSON request body from file or stdin with -")
+	fs.Var(&roleFlag, "role", "Board role; initiatives selects Overview cards")
 	fs.Var(&titleFlag, "title", "Board title")
 	fs.Var(&summaryFlag, "summary", "Board summary")
 	fs.Var(&topicFlag, "topic", "Primary topic typed ref or handle")
@@ -2691,7 +2716,7 @@ func (a *App) parseBoardCreateInput(args []string, cfg config.Resolved, commandN
 	if len(fs.Args()) > 0 {
 		return nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 	}
-	fieldFlagsSet := strings.TrimSpace(titleFlag.value) != "" ||
+	fieldFlagsSet := roleFlag.set || strings.TrimSpace(titleFlag.value) != "" ||
 		strings.TrimSpace(summaryFlag.value) != "" ||
 		strings.TrimSpace(topicFlag.value) != "" ||
 		strings.TrimSpace(actorIDFlag.value) != "" ||
@@ -2721,6 +2746,9 @@ func (a *App) parseBoardCreateInput(args []string, cfg config.Resolved, commandN
 		"document_refs": normalizedStringsOrEmpty(documentRefFlags.values),
 		"pinned_refs":   normalizedStringsOrEmpty(pinnedRefFlags.values),
 		"provenance":    map[string]any{"sources": []any{"event:anx-cli"}},
+	}
+	if roleFlag.set {
+		board["role"] = strings.TrimSpace(roleFlag.value)
 	}
 	if summary := strings.TrimSpace(summaryFlag.value); summary != "" {
 		board["summary"] = summary
@@ -2833,10 +2861,17 @@ func (a *App) parseIDAndBodyInput(args []string, idFlag string, idLabel string, 
 }
 
 func (a *App) parseIDAndBodyInputWithOptions(args []string, idFlag string, idLabel string, commandName string, options jsonBodyInputOptions) (string, any, bool, error) {
+	// Board role edits support the documented `boards patch <board> --role ...` form.
+	if commandName == "boards patch" && len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		args = append(append([]string{}, args[1:]...), args[0])
+	}
 	fs := newSilentFlagSet(commandName)
-	var idArgFlag, fromFileFlag, contentFileFlag trackedString
+	var idArgFlag, fromFileFlag, contentFileFlag, roleFlag trackedString
 	var dryRunFlag trackedBool
 	fs.Var(&idArgFlag, idFlag, idLabel)
+	if commandName == "boards patch" {
+		fs.Var(&roleFlag, "role", "Board role; empty clears")
+	}
 	fs.Var(&fromFileFlag, "from-file", "Advanced JSON body from file path or stdin with -")
 	if options.allowContentFile {
 		fs.Var(&contentFileFlag, "body-file", "Load document/content field from file path or stdin with -")
@@ -2866,7 +2901,9 @@ func (a *App) parseIDAndBodyInputWithOptions(args []string, idFlag string, idLab
 	}
 	var payload []byte
 	var err error
-	if skipJSONStdinForContentFile(fromFile, contentFile) {
+	if roleFlag.set && fromFile == "" {
+		payload = []byte(`{"patch":{}}`)
+	} else if skipJSONStdinForContentFile(fromFile, contentFile) {
 		payload = nil
 	} else {
 		payload, err = a.readBodyInput(fromFile)
@@ -2888,6 +2925,17 @@ func (a *App) parseIDAndBodyInputWithOptions(args []string, idFlag string, idLab
 	body, err := decodeJSONPayload(payload)
 	if err != nil {
 		return "", nil, false, err
+	}
+	if roleFlag.set {
+		object, ok := body.(map[string]any)
+		if !ok {
+			return "", nil, false, errnorm.Usage("invalid_request", "board patch body must be an object")
+		}
+		patch, ok := object["patch"].(map[string]any)
+		if !ok {
+			return "", nil, false, errnorm.Usage("invalid_request", "board patch body must include patch object")
+		}
+		patch["role"] = strings.TrimSpace(roleFlag.value)
 	}
 	if options.allowContentFile {
 		body, err = a.applyContentFileOverride(body, contentFile, commandName)

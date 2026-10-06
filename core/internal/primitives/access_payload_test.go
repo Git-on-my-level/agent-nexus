@@ -67,7 +67,7 @@ func TestResourceAccessPayloadNotificationsAndPlans(t *testing.T) {
 	}
 	for _, actor := range []string{"stranger", "owner"} {
 		c := WithAccessScope(ctx, AccessScope{ActorID: actor})
-		p, _, err := s.loadPlans(c, []string{anyStringValue(public["id"])})
+		p, _, _, err := s.loadPlans(c, []string{anyStringValue(public["id"])})
 		if err != nil {
 			t.Fatal(err)
 		}

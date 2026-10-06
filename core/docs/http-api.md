@@ -230,17 +230,17 @@ The canonical shapes and error codes are in `contracts/anx-openapi.yaml`. See th
 
 ## Initiative plans and batch ref previews
 
-`GET /cards/{card_id}/plan` returns `{card_ref, plan, plan_state, if_updated_at}`; plan and state are null before the first plan is set. `PUT` accepts `{plan:{steps:[...]}, if_updated_at}`. The token is the card `updated_at` from a read. Every real edit atomically persists a `card_updated` event with `before_plan`, `plan` and `changed_fields:["plan"]`; identical writes preserve activity recency. History is the existing `/cards/{card_id}/timeline`. Invalid graphs fail with 400; stale tokens fail with 409. Empty steps clear the graph. Plan edits are local annotations even on source-backed cards and never write upstream.
+`GET /cards/{card_id}/plan` returns `{card_ref, plan, plan_state, plan_health, next_step, status_mismatch, if_updated_at}`; plan and state are null before the first plan is set. `PUT` accepts `{plan:{steps:[...]}, if_updated_at}`. The token is the card `updated_at` from a read. Every real edit atomically persists a `card_updated` event with `before_plan`, `plan` and `changed_fields:["plan"]`; identical writes preserve activity recency. History is the existing `/cards/{card_id}/timeline`. Invalid graphs fail with 400; stale tokens fail with 409. Empty steps clear the graph. Plan edits are local annotations even on source-backed cards and never write upstream.
 
-Steps require a unique slug `id` (64 bytes) and `title` (500 bytes), with optional `ref`, `after` (existing unique step ids, max 50), `due` (YYYY-MM-DD or RFC3339), and `status` (done, active, blocked, not_started). Plans cap at 200 steps and reject cycles. Refs accept card/doc/document/topic refs or absolute HTTP(S) URLs (2048 bytes). External state is read only from existing source-backed cards with an exact `source.url`; there is no network fetch. Duplicate accessible source URL matches remain unresolved.
+Steps require a unique slug `id` (64 bytes) and `title` (500 bytes), with optional `ref`, `after` (existing unique step ids, max 50), `due` (YYYY-MM-DD or RFC3339), and `status` (done, active, blocked, not_started). Plans cap at 200 steps and reject cycles. Refs accept card/doc/document/topic refs, opaque adapter-published identifier aliases, or absolute HTTP(S) URLs (2048 bytes). External state comes from ingested source observations and generic structured source_refs; there is no network fetch. Unknown, ambiguous or inaccessible evidence keys remain unresolved. Referencing a private published key makes the stored plan inherit its card and board ownership before projection, pagination and counts.
 
-Card and work reads expose `plan` and `plan_state`. State has effective `steps`, `progress:{done,total}`, `critical_path` (unfinished ids), `next_steps` (dependency-ready, unblocked ids), `shape` and `health`. A connected path is chain; disconnected paths are lanes; any branching/merging graph is dag. Longest paths count unfinished steps and break ties by lexicographic ids. A blocked step on any tied longest path makes health blocked. Otherwise health is stalled after 5 days without movement; completed and empty plans are on_track. Set `ANX_PLAN_STALLED_AFTER` to a positive Go duration to configure the threshold. Plan edits and referenced native activity or external meaningful progress/source activity count as movement; unchanged observation timestamps do not. Doc/topic/board preview status is lifecycle state. Doc/topic plan steps have no workflow phase, so use their fallback status without inventing completion from existence.
+Card and work reads expose `plan` and `plan_state`. State has effective `steps`, `progress:{done,total}`, `critical_path` (unfinished ids), `next_steps` (dependency-ready, unblocked ids), `shape` and `health`. A connected path is chain; disconnected paths are lanes; any branching/merging graph is dag. Longest paths count unfinished steps and break ties by lexicographic ids. Detailed plan_health uses the shared six-state rules below; legacy health retains on_track/stalled/blocked. Any unfinished blocked step makes health blocked; detailed completed plans are done, and empty plans are no_plan or stale. Set `ANX_PLAN_STALLED_AFTER` to a positive Go duration to configure the threshold. Plan edits and referenced native activity or external meaningful progress/source activity count as movement; unchanged observation timestamps do not. Doc/topic/board preview status is lifecycle state. Doc/topic plan steps have no workflow phase, so use their fallback status without inventing completion from existence.
 
 The existing live-initiatives report projection retains `progress` and `needs[]`. Plans replace markdown-derived progress with computed counts and needs with blocked step titles; `plan_state` and `health` are additional fields. Cards without plans retain the previous summary projection.
 
-Report hydration joins cards, metadata, latest good/attempt observations, board labels and thread privacy in one query for the bounded candidate set (up to 2,000 rows). Plan enrichment uses one plan query plus at most one fact query per referenced resource kind, independent of card/step count. Batch ref resolution uses at most four initial kind queries, one plan query and four linked-fact queries. These paths never call `GetWork` per row or ref. The general `ListWork` read path is unchanged.
+Report hydration joins cards, metadata, latest good/attempt observations, board labels and thread privacy in one query for the bounded candidate set (up to 2,000 rows). Plan enrichment uses one plan/activity query plus at most one fact query per referenced resource kind and one external-evidence scan, independent of card/step count. Batch ref resolution uses at most five initial fact queries, one plan/activity query and five linked-fact queries. These paths never call `GetWork` per row or ref. The general `ListWork` read path is unchanged.
 
-`POST /refs/resolve` accepts `{refs:[...]}` (max 200). Results are `{items:[{ref,resolvable,kind?,title?,status?,phase?,owner?,owner_display?,board?,priority?,last_moved_at?,next_step?,progress?,url?}]}` in input order, retaining duplicates. Native card/document URLs are workspace-relative UI paths; topics and boards omit url because they have no current UI detail surface. Unknown, trashed or inaccessible refs return only `{ref,resolvable:false}`. Native handles and internal ids resolve for cards, docs/documents, topics and boards. Plan-derived progress and status honor the requesting principal's access to every referenced resource. Responses are read-only and uncached. `board` contains `{ref,title}` and is independently visibility checked. `owner_display` is the workspace actor display name, falling back to the owner ref. `next_step` contains the first readable ready step's title when a plan exists. `last_moved_at` uses the same native update/source meaningful movement timestamp as plan facts, never a polling observation timestamp. Hosted clients prepend `/o/<org>/w/<ws>` to native relative URLs; absolute source URLs are used unchanged.
+`POST /refs/resolve` accepts `{refs:[...]}` (max 200). Results are `{items:[{ref,resolvable,kind?,title?,status?,phase?,owner?,owner_display?,board?,priority?,last_moved_at?,next_step?,progress?,url?}]}` in input order, retaining duplicates. Native card/document URLs are workspace-relative UI paths; topics and boards omit url because they have no current UI detail surface. Unknown, trashed or inaccessible native refs return only `{ref,resolvable:false}`. Native handles and internal ids resolve for cards, docs/documents, topics and boards. Plan-derived progress and status honor the requesting principal's access to every referenced resource. Responses are read-only and uncached. `board` contains `{ref,title}` and is independently visibility checked. `owner_display` is the workspace actor display name, falling back to the owner ref. `next_step` contains id, title and ref for a readable ready step, preferring the critical path when a plan exists. `last_moved_at` uses the same native update/source meaningful movement timestamp as plan facts, never a polling observation timestamp. Hosted clients prepend `/o/<org>/w/<ws>` to native relative URLs; absolute source URLs are used unchanged.
 
 ## Executive Overview and workspace dashboard
 
@@ -257,7 +257,7 @@ Planless initiatives have null plan_state/geometry and phase-based health.
 Geometry supplies shape, effective node status, dependency layer and included
 `after` edges, capped at 24 nodes; `total_nodes` and `collapsed_nodes` describe
 the remainder. Clients render geometry without re-deriving workflow semantics.
-The projection reads at most 2,000 active-lifecycle candidate cards (including
+The projection reads at most 2,000 accessible active-lifecycle candidate cards (including
 closed cards for completion digests), reuses the report batch privacy context,
 and declares `truncated` on work and initiatives when more candidates exist.
 Counts refer to the visible bounded set.
@@ -272,7 +272,7 @@ advance the baseline. A first visit (or unauthenticated dev read) has null since
 and empty items; anonymous reads never share stored visit state.
 
 Digest items have kind, ref, title, optional step_id and optional ts. Kinds are
-`step_completed`, `initiative_stalled`, `initiative_blocked`, `ask_answered`,
+`step_completed`, `initiative_stalled` (with additive `kind_v2: initiative_stale`), `initiative_blocked`, `ask_answered`,
 and `decision_created`. Steps and health are net changes against previously
 visible statuses, including time-only stalling and steps of now-closed cards.
 Newly visible cards do not invent transitions. Answers are canonical events
@@ -280,6 +280,9 @@ and new decisions are ordinary permission-filtered PM records in
 `(since,generated_at]`; private answer/decision text is never copied. Reads
 recheck current resource visibility. The digest caps output at 100 and each
 answer/decision candidate read at 200, with `truncated` for any reached limit.
+Answer subjects share a 4,000-distinct-ref budget, resolved in batches of at most
+200; an answer requiring omitted subjects is excluded and sets `truncated`.
+Card, board, event and subject access is applied before candidate budgets.
 The shared wire fixtures live in `contracts/fixtures/initiative-overview/`.
 
 `PUT /workspace/dashboard` accepts `{ "document_ref": "document:<handle>" }`
@@ -294,7 +297,7 @@ list reads and the web UI Archive view. Watching groups all card edits by their
 board and orders asks/answers and done/blocked transitions before routine edits.
 
 Overview bulk-loads active work and observation metadata once. Its dashboard
-contains only the selected validated report and `has_more` when unread candidates
+contains only the selected accessible validated report and `has_more` when unread accessible candidates
 remain. `GET /workspace/dashboard/reports` (`anx workspace dashboard list`) loads
 selector candidates on demand. Pin acceptance, selection and CLI publishing share
 `contracts/visualreport`; renderer conformance covers static and live panels.
@@ -320,6 +323,96 @@ preserves the existing archive behavior. Pair it with `if_board_updated_at` and
 `if_version` to also fence canonical card/board edits and work annotations.
 Successful source polls can change the observation ID without changing phase,
 board timestamp, or work version, so neither existing token replaces this fence.
+
+### External refs and initiative health
+
+`POST /refs/resolve` preserves its 200-ref cap, order and duplicates. External
+keys match exact adapter-published native IDs, authority-prefixed native IDs,
+URLs, identifiers or aliases in workspace observations and structured
+`source_refs`. External results have `kind: external`, `authority`, `native_id`,
+`url`, `status`, and `source: evidence`. Status and URL are null when absent
+from the published evidence. Adapters publish any provider spelling variants;
+core never parses provider identities, generates provider URLs or fetches
+external systems. Unknown, ambiguous or inaccessible keys remain unresolved.
+Resolution filters candidates in the caller's scope rather than denying the
+batch because an input key has an inaccessible publisher. A shared public/private
+key returns the visible evidence, retaining unknown entries and duplicates.
+Writing references still requires their inherited ownership checks.
+Distinct source connections are never silently combined. Adapters retain the
+observation anchor on unchanged source data; evidence without an observation
+time uses its containing card timestamp.
+
+Card reads/lists, work reads/lists, ref previews, initiative overview and live
+reports add `plan_health: {state, reason, since}`, `next_step: {id, title, ref}`
+(or null), and `status_mismatch` alongside existing progress and `plan_state`.
+Health precedence: no steps → `no_plan` if recent, `stale` after the inactivity threshold; all complete → `done`; any unfinished
+blocked step/dependency → `blocked`; card or unfinished step due within 24 hours
+or overdue → `at_risk`; no card/plan/step activity for 72 hours → `stale`;
+otherwise `on_track`. Workspace service env `ANX_PLAN_STALLED_AFTER` overrides
+the stale threshold. Card and linked card messages count as activity; repeated
+source polls do not. `since` is the reproducible condition anchor documented in
+OpenAPI, not a persisted historical transition timestamp. Ready steps prefer the
+critical path, then lexicographic id, skipping unreadable linked resources.
+`status_mismatch` is true for backlog cards with completed steps; computation
+never changes phase. `plan_state.health` and Overview `health.status` retain legacy values: stale maps to stalled, blocked to blocked, other detailed states to on_track. New clients read `plan_health.state`.
+
+### Workspace-local asks summary
+
+`GET /inbox/summary?limit=5` returns `{open_ask_count, asks, generated_at}` from
+materialized open human attention asks visible to the current caller. Limit is
+0–50 (default 5); `limit=0` returns the count and an empty list. SQLite counts before limiting and decodes only the requested page. Authorization
+covers the ask thread, subject, related refs, source event, and the subject's
+containing card and board, including legacy backing threads. Answered/withdrawn and review/escalation rows are excluded. Canonical open asks survive linked context archive; access to that context still applies. Asks are ordered by priority or projected severity (case-insensitive), oldest trigger, then id.
+This route avoids the inbox's workspace-wide thread freshness scan and per-item
+notification enrichment. Shared human asks are visible to each authorized human
+reader; this is separate from requester-scoped `GET /agent-inbox/asks`.
+
+Hosted clients fan out with existing per-workspace sessions; core adds no global
+identity. The hosted proxy must retain collection-read classification for
+`/inbox/summary`, which is already present on main.
+The CLI exposes the same read as `anx inbox summary [--limit 0..50]`.
+
+Boards expose an open `role` string on create, patch, get and list. `anx boards create --title "Initiatives" --role initiatives` or `anx boards patch board:initiatives --role initiatives` marks an initiative board. Patch omission preserves the role; `--role ""` clears it. When any board is marked, Overview initiatives include only those board cards; other cards remain in active work. With no designated board, the previous selection remains and `initiatives.hint` suggests setting a role. Planless health is `no_plan` until the configured threshold, then `stale`; card edits and discussion activity reset inactivity. Detailed `plan_health.state` uses six states; legacy fields keep their original vocabulary for older clients. Board role remains writable by ordinary authorized writers, including agents.
+
+`source_refs` is a generic list of structured source evidence on card-backed work (up to 2000 entries). Any adapter can set it through `work create` or `work patch` with `if_version`; card and work reads expose it. Every entry requires authority, connection_id and native_id (unique tuple); optional fields are identifier, title, HTTP(S) url, open status/phase, observed_at and source_activity_at. Unknown fields round-trip. Omission preserves; [] clears. Core never interprets adapter markdown. An external adapter can convert its own existing evidence into this primitive during ingestion while preserving unrelated structured source refs. Until an adapter publishes a lookup key, that external key remains unresolved.
+
+Evidence resolution uses a transactionally maintained lookup index with 200-candidate pages. Aggregated plan refs are resolved in batches of at most 200. Card and board access are checked before enrichment and serialization, including work observations and plan reads. Effective health inputs are shared: explicit work due annotations (including clearing) override card due dates; meaningful source activity/progress, plan edits and discussion timestamps are normalized once.
+
+Evidence lookups apply principal card/board access before selecting at most 33 candidates per exact key; overloaded visible aliases remain unknown. Source URL lookup selects at most two accessible native cards per URL, sufficient to establish ambiguity. Aggregated plan reads share a round-robin budget of 4,000 distinct refs, resolved in batches of 200. `plan_resolution_truncated` reports omitted refs. Both `identifier_aliases` and compatible `aliases` publish exact generic aliases (50 unique strings, 2048 bytes each). Detailed health remains available in `plan_health.state`, `plan_state.health_state`, and Overview `health.state`; legacy badges remain `on_track`, `blocked`, or `stalled`.
+
+Indexed alias caps apply equally to `source_refs`, `source`, observation `facts`,
+and observation `evidence`: each alias array allows 50 unique nonblank strings;
+all indexed identity, identifier, URL and alias strings cap at 2048 UTF-8 bytes.
+Observation evidence arrays allow at most 2000 entries. Migration 62 stores each
+evidence payload once with bounded alias-key references. It backfills canonical
+evidence in 32-card batches, indexing at most the first 2000 evidence entries and
+first 50 strings per alias array without changing canonical legacy evidence.
+Migration 61 adds board roles after main's migration 60. Upgrade support follows
+released and main history; migration numbers from unmerged PRs are not reserved.
+Evidence records, alias keys, `source_refs` and plan refs participate in the
+central inherited-ownership inventory and use scoped database handles. Internal
+evidence row numbers are not public resource identities. Inbox summary counts
+and pagination use the scoped inbox relation in SQL.
+
+Event list/detail, event SSE, and thread/topic timelines apply containing card
+and board access to events and referenced subjects before pagination or
+serialization, including subject and related references in canonical wrapped
+and legacy flat payloads. Thread workspace recent events use the same predicate.
+Timeline notification receipts and receipt streams inherit the
+same access through their backing thread and trigger event. Durable inbox
+projections remain canonical; inbox lists, summary, Overview and the shared inbox
+stream loader apply the requesting principal's visibility when reading them.
+Board list cursors count accessible matches only.
+
+Inbox detail, board/thread/topic workspace sections use the same authorized inbox
+predicate as inbox summary before serializing items or counting asks. Principal
+workspace summaries are copied from canonical projections and recount authorized
+inbox rows; stored projections remain complete. Inbox list freshness loads only
+active accessible backing threads, including containing card and board access.
+Live report event selection authorizes payload subjects and related refs before
+its source-row cap; private candidates cannot consume that budget or set
+`truncated`. Generic backing-thread authorization and mutation authorization
+are tracked separately from these local projection read filters.
 
 ## Structured access requests
 

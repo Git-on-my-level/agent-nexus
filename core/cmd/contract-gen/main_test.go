@@ -204,3 +204,35 @@ func TestValidateXAnxAuthoringFailsStreamingMetadataMissingMode(t *testing.T) {
 		t.Fatalf("error did not include streaming mode detail:\n%v", err)
 	}
 }
+
+func TestSharedAliasSchemaPreservesExistingSourceFields(t *testing.T) {
+	// WorkSource adds shared alias constraints alongside its existing fields.
+	// Generating only the allOf branch used to remove native_status/revision.
+	schema := openAPISchema{
+		Type: "object",
+		AllOf: []openAPISchema{{Type: "object", Properties: map[string]openAPISchema{
+			"identifier_aliases": {Type: "array", Items: &openAPISchema{Type: "string"}},
+			"authority":          {Type: "string"},
+		}}},
+		Required: []string{"authority"},
+		Properties: map[string]openAPISchema{
+			"authority":     {Type: "string"},
+			"native_status": {Type: "string"},
+			"revision":      {Type: "string"},
+		},
+	}
+	fields := map[string]bodyFieldState{}
+	collectOpenAPISchemaFields(openAPIDocument{}, schema, "source", true, fields, map[string]struct{}{})
+	for name, expected := range map[string]string{
+		"source.identifier_aliases": "list<string>",
+		"source.authority":          "string", "source.native_status": "string", "source.revision": "string",
+	} {
+		field, ok := fields[name]
+		if !ok || field.field.Type != expected {
+			t.Fatalf("generated %s = %+v, want %s", name, field, expected)
+		}
+	}
+	if !fields["source.authority"].required {
+		t.Fatal("shared schema lost the sibling authority requirement")
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -292,13 +293,9 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 }
 
 func loadOpenInbox(r *http.Request, opts handlerOptions, now time.Time) (map[string]any, error) {
-	threads, _, err := opts.primitiveStore.ListThreads(r.Context(), primitives.ThreadListFilter{})
+	threadIDs, err := opts.primitiveStore.ListInboxThreadIDs(r.Context())
 	if err != nil {
 		return nil, err
-	}
-	threadIDs := make([]string, 0, len(threads))
-	for _, thread := range threads {
-		threadIDs = append(threadIDs, anyString(thread["id"]))
 	}
 	states, err := loadTopicProjectionStates(r.Context(), opts, threadIDs)
 	if err != nil {
@@ -350,36 +347,34 @@ func loadVisibleInboxItems(r *http.Request, opts handlerOptions, notifications b
 		}
 		payloadItems = append(payloadItems, payload)
 	}
-	payloadItems = filterAccessibleInboxItems(r, opts, payloadItems, projected)
-	if store, ok := opts.primitiveStore.(interface {
-		HiddenSubjectRefs(context.Context) (map[string]bool, error)
-	}); ok {
-		hidden, err := store.HiddenSubjectRefs(r.Context())
-		if err != nil {
-			return nil, err
-		}
-		visible := payloadItems[:0]
-		for _, item := range payloadItems {
-			// Requests have their own response/withdrawal lifecycle. Archiving
-			// linked context must not silently withdraw a pending decision.
-			// Subject-card, containing-board and thread privacy are enforced above.
-			if canonicalHumanAttentionKind(anyString(item["kind"])) != "" {
-				visible = append(visible, item)
-				continue
+	// Authorization is already applied by the scoped inbox relation. Lifecycle
+	// filtering is only needed for ordinary notifications; requests keep their
+	// own response/withdrawal lifecycle when linked context is archived.
+	if notifications {
+		if store, ok := opts.primitiveStore.(interface {
+			HiddenSubjectRefs(context.Context) (map[string]bool, error)
+		}); ok {
+			hidden, err := store.HiddenSubjectRefs(r.Context())
+			if err != nil {
+				return nil, err
 			}
-			refs, _ := extractStringSlice(item["related_refs"])
-			hide := false
-			for _, ref := range refs {
-				if hidden[ref] {
-					hide = true
-					break
+			visible := payloadItems[:0]
+			for _, item := range payloadItems {
+				if canonicalHumanAttentionKind(anyString(item["kind"])) != "" {
+					visible = append(visible, item)
+					continue
+				}
+				refs, _ := extractStringSlice(item["related_refs"])
+				hide := false
+				for _, ref := range refs {
+					hide = hide || hidden[ref]
+				}
+				if !hide {
+					visible = append(visible, item)
 				}
 			}
-			if !hide {
-				visible = append(visible, item)
-			}
+			payloadItems = visible
 		}
-		payloadItems = visible
 	}
 	return payloadItems, nil
 }
@@ -402,22 +397,8 @@ func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 
-	threads, _, err := opts.primitiveStore.ListThreads(r.Context(), primitives.ThreadListFilter{})
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load threads")
-		return
-	}
-	threadIDs := make([]string, 0, len(threads))
-	for _, thread := range threads {
-		threadIDs = append(threadIDs, anyString(thread["id"]))
-	}
-	states, err := loadTopicProjectionStates(r.Context(), opts, threadIDs)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load inbox projection status")
-		return
-	}
-
 	var item primitives.DerivedInboxItem
+	var err error
 	for _, candidate := range inboxItemIDVariants(inboxItemID) {
 		item, err = opts.primitiveStore.GetDerivedInboxItem(r.Context(), candidate)
 		if err == nil {
@@ -435,6 +416,12 @@ func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	payload := payloadFromDerivedInboxItem(item)
 	if !inboxItemAccessible(r, opts, item.ThreadID, payload) {
 		denyPMNotFound(w, "inbox item")
+		return
+	}
+
+	states, err := loadTopicProjectionStates(r.Context(), opts, []string{item.ThreadID})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load inbox projection status")
 		return
 	}
 
@@ -762,4 +749,37 @@ func sortInboxItems(items []derivedInboxItem) {
 
 		return left.ID < right.ID
 	})
+}
+
+// Summary reuses permission and lifecycle filtering without scanning all
+// workspace threads for freshness or hydrating every subject ref.
+func handleGetInboxSummary(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+	if opts.primitiveStore == nil {
+		writeError(w, 503, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	limit := 5
+	if values, ok := r.URL.Query()["limit"]; ok {
+		var err error
+		if len(values) != 1 {
+			writeError(w, 400, "invalid_request", "limit must be an integer from 0 to 50")
+			return
+		}
+		limit, err = strconv.Atoi(values[0])
+		if err != nil || limit < 0 || limit > 50 {
+			writeError(w, 400, "invalid_request", "limit must be an integer from 0 to 50")
+			return
+		}
+	}
+	projected, count, err := opts.primitiveStore.ReadInbox(r.Context(), primitives.InboxReadOptions{AsksOnly: true, Limit: &limit})
+	if err != nil {
+		writeError(w, 500, "internal_error", "failed to load inbox projections")
+		return
+	}
+	asks := make([]map[string]any, 0, len(projected))
+	for _, item := range projected {
+		asks = append(asks, payloadFromDerivedInboxItem(item))
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, 200, map[string]any{"open_ask_count": count, "asks": asks, "generated_at": time.Now().UTC().Format(time.RFC3339Nano)})
 }

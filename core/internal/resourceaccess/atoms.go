@@ -10,6 +10,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"agent-nexus-core/internal/handles"
 	"modernc.org/sqlite"
 )
 
@@ -78,6 +79,8 @@ func TextReferenceMatchSQL(atom, target string) string {
 
 var embeddedURL = regexp.MustCompile(`(?i)https?://[^\s\p{Z}\x{85}\x{0B}<>()\[\]{}"'` + "`" + `]+`)
 
+var exactModernReference = regexp.MustCompile(`(?i)^(thread|board|card|topic|document|doc|event|artifact|card_revision|document_revision|wakeup|plan|inbox|run)[\s\p{Z}\x{85}\x{0B}]*:[\s\p{Z}\x{85}\x{0B}]*[a-z0-9_-]+$`)
+
 func ReferenceAtoms(value string) []string { return referenceAtoms(value, false) }
 
 // Structured values contribute their string atoms, never the serialization of
@@ -97,6 +100,12 @@ func referenceAtoms(value string, structured bool) []string {
 				fallthrough
 			case "thread", "board", "card", "topic", "document", "event", "artifact", "card_revision", "document_revision", "wakeup", "plan", "inbox", "run":
 				s = kind + ":" + strings.TrimSpace(ref)
+				// Public point resolution accepts normalized handles. Index that
+				// spelling too, while retaining exact legacy IDs (including long
+				// virtual revision refs). External identities remain opaque.
+				if normalized := handles.Normalize(ref); normalized != "" {
+					seen[kind+":"+normalized] = true
+				}
 			}
 		}
 		// Explicit legacy document IDs have no length bound. Never silently
@@ -113,7 +122,11 @@ func referenceAtoms(value string, structured bool) []string {
 			if strings.HasPrefix(v, textReferencePrefix) {
 				return // An already-indexed candidate remains idempotent on backfill.
 			}
-			if embeddedRefStart.MatchString(v) {
+			// Exact modern refs have complete indexed atoms already. A prose
+			// candidate would force every denied identity to rescan them, making
+			// large private event collections quadratic. Keep the fallback for
+			// punctuation/whitespace legacy IDs and refs embedded in actual text.
+			if embeddedRefStart.MatchString(v) && !exactModernReference.MatchString(strings.TrimSpace(v)) {
 				seen[textReferencePrefix+v] = true
 			}
 			// Generic JSON envelopes (notably series label/state arrays) can contain

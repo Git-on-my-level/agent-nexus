@@ -67,6 +67,7 @@ func workTimestamp(v any) (time.Time, error) { return time.Parse(time.RFC3339Nan
 type WorkListFilter struct {
 	ProjectRef, Source, Owner, Phase, Freshness, Query, Cursor string
 	Limit                                                      int
+	Visible                                                    func(string, string) bool `json:"-"`
 }
 type WorkPage struct {
 	Work       []map[string]any `json:"work"`
@@ -125,6 +126,14 @@ func validateWorkLocal(m map[string]any) error {
 		}
 	}
 
+	if err := validateIndexedAliases(workMap(m["source"]), "source"); err != nil {
+		return err
+	}
+	if raw, ok := m["source_refs"]; ok {
+		if err := validateSourceRefs(raw); err != nil {
+			return err
+		}
+	}
 	for _, k := range []string{"project_ref", "priority", "next_actor", "next_action", "wake_condition", "start_at", "due_at", "risk"} {
 		if v, ok := m[k]; ok && v != nil {
 			if _, ok := v.(string); !ok {
@@ -437,7 +446,7 @@ func projectWork(card, m map[string]any, version int64, latest, attempt, refresh
 	if refs, ok := card["assignee_refs"].([]string); ok && len(refs) > 0 {
 		out["owner"] = refs[0]
 	}
-	for _, key := range []string{"source", "project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "topic_ref", "document_ref", "related_refs", "risk", "plan", "labels", "roles"} {
+	for _, key := range []string{"source", "project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "topic_ref", "document_ref", "related_refs", "risk", "plan", "labels", "roles", "source_refs"} {
 		if v, ok := m[key]; ok {
 			out[key] = v
 		}
@@ -595,7 +604,7 @@ type ReportWorkFilter struct {
 	IncludeClosed bool
 }
 type ReportWorkBoard struct {
-	Title, ThreadID, PrivateOwner string
+	Title, ThreadID, PrivateOwner, Role string
 }
 
 type ReportWorkPage struct {
@@ -606,7 +615,7 @@ type ReportWorkPage struct {
 	PrivateOwners map[string]string
 }
 
-func reportWorkQuery(filter ReportWorkFilter) (string, []any) {
+func reportWorkQuery(ctx context.Context, filter ReportWorkFilter) (string, []any) {
 	limit := filter.Limit
 	if limit < 1 || limit > 2000 {
 		limit = 2000
@@ -655,12 +664,12 @@ func reportWorkQuery(filter ReportWorkFilter) (string, []any) {
 	 c.pinned_document_id,c.assignee,c.risk,c.resolution,c.resolution_refs_json,c.refs_json,c.created_at,c.created_by,c.updated_at,c.updated_by,c.provenance_json,
 	 c.archived_at,c.archived_by,c.trashed_at,c.trashed_by,c.trash_reason,
 	 COALESCE(m.metadata_json,'{"source":{"authority":"nexus"}}'),COALESCE(m.version,0),COALESCE(m.refresh_json,'{"state":"idle"}'),o.body_json,a.body_json,
-	 b.title,COALESCE(b.thread_id,''),COALESCE(json_extract(bt.body_json,'$.pm_actor_id'),''),COALESCE(json_extract(ct.body_json,'$.pm_actor_id'),'')
+	 b.title,COALESCE(b.role,''),COALESCE(b.thread_id,''),COALESCE(json_extract(bt.body_json,'$.pm_actor_id'),''),COALESCE(json_extract(ct.body_json,'$.pm_actor_id'),'')
 	 FROM ` + from + ` WHERE ` + where + ordering + ` LIMIT ?`, args
 }
 
 func (s *Store) ListReportWork(ctx context.Context, filter ReportWorkFilter) (ReportWorkPage, error) {
-	query, args := reportWorkQuery(filter)
+	query, args := reportWorkQuery(ctx, filter)
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return ReportWorkPage{}, err
@@ -680,7 +689,7 @@ func (s *Store) ListReportWork(ctx context.Context, filter ReportWorkFilter) (Re
 		var latestJSON, attemptJSON sql.NullString
 		var version int64
 		var board ReportWorkBoard
-		row, err := scanBoardCardRow(rows, &metadataJSON, &version, &refreshJSON, &latestJSON, &attemptJSON, &board.Title, &board.ThreadID, &board.PrivateOwner, &privateOwner)
+		row, err := scanBoardCardRow(rows, &metadataJSON, &version, &refreshJSON, &latestJSON, &attemptJSON, &board.Title, &board.Role, &board.ThreadID, &board.PrivateOwner, &privateOwner)
 		if err != nil {
 			return ReportWorkPage{}, err
 		}
@@ -727,6 +736,14 @@ func (s *Store) ListWork(ctx context.Context, f WorkListFilter) (WorkPage, error
 	work, err := s.ListAllWork(ctx)
 	if err != nil {
 		return page, err
+	}
+	// Select pages and cursors only from readable cards; hidden rows must not
+	// expose their IDs or activity through an otherwise empty page.
+	if f.Visible != nil {
+		work, err = s.FilterCardAccess(ctx, work, f.Visible)
+		if err != nil {
+			return page, err
+		}
 	}
 	updated := make(map[string]time.Time, len(work))
 	for _, w := range work {
@@ -781,7 +798,7 @@ func (s *Store) ensureWorkMetadata(ctx context.Context, id, actor string) error 
 
 // WorkAnnotationKeys returns the keys writable through local work annotations.
 func WorkAnnotationKeys() []string {
-	return []string{"labels", "roles", "project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "plan"}
+	return []string{"labels", "roles", "project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "plan", "source_refs"}
 }
 
 // ValidateWorkAnnotations is shared by proposal validation and canonical writes.
@@ -943,6 +960,9 @@ func (s *Store) submitWorkObservation(ctx context.Context, actor, identifier, to
 		return nil, workInvalid("actor required")
 	}
 	o := workClone(input)
+	if err := validateObservationAliases(o); err != nil {
+		return nil, err
+	}
 	for _, key := range []string{"id", "received_at", "actor_id", "verification", "work_ref"} {
 		delete(o, key)
 	}

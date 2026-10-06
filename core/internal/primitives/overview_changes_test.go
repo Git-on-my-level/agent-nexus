@@ -89,7 +89,7 @@ func TestOverviewDigestNetTransitionsVisibilityAndBounds(t *testing.T) {
 		}
 	}
 	counter.Reset()
-	d, err := s.LoadOverviewChanges(ctx, "alice", visible, now.Add(2*time.Hour), time.Hour)
+	d, err := s.LoadOverviewChanges(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), "alice", visible, now.Add(2*time.Hour), time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestOverviewDigestNetTransitionsVisibilityAndBounds(t *testing.T) {
 		t.Fatalf("digest wire fixture differs: got=%+v want=%+v", d, expected)
 	}
 	// A fresh principal and a new workspace never inherit Alice's baseline.
-	if d, err = s.LoadOverviewChanges(ctx, "bob", visible, now.Add(2*time.Hour), time.Hour); err != nil || d.Since != nil || len(d.Items) != 0 {
+	if d, err = s.LoadOverviewChanges(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), "bob", visible, now.Add(2*time.Hour), time.Hour); err != nil || d.Since != nil || len(d.Items) != 0 {
 		t.Fatalf("%+v %v", d, err)
 	}
 	other, err := storage.InitializeWorkspace(ctx, t.TempDir())
@@ -148,7 +148,7 @@ func TestOverviewDigestNetTransitionsVisibilityAndBounds(t *testing.T) {
 		}
 	}
 	counter.Reset()
-	d, err = s.LoadOverviewChanges(ctx, "alice", visible, now.Add(2*time.Hour), time.Hour)
+	d, err = s.LoadOverviewChanges(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), "alice", visible, now.Add(2*time.Hour), time.Hour)
 	if err != nil || len(d.Items) != primitives.MaxOverviewChanges || !d.Truncated || counter.Count() > queries {
 		t.Fatalf("bounded digest items=%d truncated=%v queries=%d error=%v", len(d.Items), d.Truncated, counter.Count(), err)
 	}
@@ -190,6 +190,11 @@ func TestRefPreviewRealWireFixtureAndBoardPrivacy(t *testing.T) {
 		t.Fatal(err)
 	}
 	item["last_moved_at"] = "2026-10-04T12:00:00Z"
+	health := item["plan_health"].(map[string]any)
+	if _, err = time.Parse(time.RFC3339Nano, health["since"].(string)); err != nil {
+		t.Fatal(err)
+	}
+	health["since"] = "2026-10-04T12:00:00Z"
 	fixture, err := os.ReadFile("../../../contracts/fixtures/initiative-overview/refs.json")
 	if err != nil {
 		t.Fatal(err)
@@ -206,7 +211,7 @@ func TestRefPreviewRealWireFixtureAndBoardPrivacy(t *testing.T) {
 	if _, err = s.PatchThread(ctx, "actor-1", b["thread_id"].(string), map[string]any{"pm_actor_id": "private"}, nil); err != nil {
 		t.Fatal(err)
 	}
-	items, err = s.ResolveRefs(ctx, []string{"card:initiative"}, func(_ string, owner string) bool { return owner == "" }, time.Now(), 0)
+	items, err = s.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), []string{"card:initiative"}, func(_ string, owner string) bool { return owner == "" }, time.Now(), 0)
 	raw, _ = json.Marshal(items)
 	if err != nil || string(raw) != `[{"ref":"card:initiative","resolvable":false}]` {
 		t.Fatalf("private board leak: %s %v", raw, err)

@@ -1021,6 +1021,8 @@ var migrations = []migration{
 	{Version: 61, AfterApply: installResourceAccessMentions},
 	{Version: 62, AfterApply: repairResourceAccessReadIndexes},
 	{Version: 63, AfterApply: indexResourceAccessProfiles},
+	{Version: 64, AfterApply: applyMigration64BoardRole},
+	{Version: 65, AfterApply: applyMigration65EvidenceIndex},
 }
 
 func repairNULReferenceAccess(ctx context.Context, tx *sql.Tx) error {
@@ -1179,6 +1181,12 @@ func installResourceAccessEdges(ctx context.Context, tx *sql.Tx) error {
 }
 
 func installResourceAccessSourceEdges(ctx context.Context, tx *sql.Tx, sources []resourceaccess.OwnershipSource) error {
+	return installResourceAccessSourceEdgesBatched(ctx, tx, sources, 0)
+}
+
+// Existing main migrations retain their historical backfill. Feature upgrades
+// register only changed sources and hydrate a bounded keyset page at a time.
+func installResourceAccessSourceEdgesBatched(ctx context.Context, tx *sql.Tx, sources []resourceaccess.OwnershipSource, batchSize int) error {
 	for _, source := range sources {
 		exists, err := sqliteTableExists(ctx, tx, source.Table)
 		if err != nil {
@@ -1223,15 +1231,65 @@ func installResourceAccessSourceEdges(ctx context.Context, tx *sql.Tx, sources [
 			return `INSERT INTO resource_access_edges(source_kind,source_id,target_ref) ` + strings.Join(parts, ` UNION `) + ` ON CONFLICT(source_kind,source_id,target_ref) DO NOTHING;`
 		}
 		clear := `DELETE FROM resource_access_edges WHERE source_kind='` + source.Kind + `' AND source_id=OLD.` + source.ID + `;`
-		for _, statement := range []string{
+		backfill := []string{insert("r.", source.Table+" r, ")}
+		if batchSize > 0 {
+			backfill = nil
+			var cursor any
+			for {
+				query := `SELECT ` + source.ID + ` FROM ` + source.Table
+				args := []any{}
+				if cursor != nil {
+					query += ` WHERE ` + source.ID + `>?`
+					args = append(args, cursor)
+				}
+				query += ` ORDER BY ` + source.ID + ` LIMIT ?`
+				args = append(args, batchSize)
+				rows, err := tx.QueryContext(ctx, query, args...)
+				if err != nil {
+					return err
+				}
+				ids := []any{}
+				for rows.Next() {
+					var id any
+					if err = rows.Scan(&id); err != nil {
+						rows.Close()
+						return err
+					}
+					ids = append(ids, id)
+				}
+				err = rows.Err()
+				rows.Close()
+				if err != nil {
+					return err
+				}
+				if len(ids) == 0 {
+					break
+				}
+				encoded, err := json.Marshal(ids)
+				if err != nil {
+					return err
+				}
+				// Materialize only this requested page; every column matcher shares
+				// the same binding and cannot decode unrelated workspace rows.
+				q := `WITH access_backfill_batch AS MATERIALIZED (SELECT * FROM ` + source.Table + ` WHERE ` + source.ID + ` IN (SELECT value FROM json_each(?))) ` + insert("r.", "access_backfill_batch r, ")
+				if _, err = tx.ExecContext(ctx, q, string(encoded)); err != nil {
+					return err
+				}
+				cursor = ids[len(ids)-1]
+			}
+		}
+		statements := []string{
 			`DROP TRIGGER IF EXISTS access_` + source.Table + `_insert`,
 			`DROP TRIGGER IF EXISTS access_` + source.Table + `_update`,
 			`DROP TRIGGER IF EXISTS access_` + source.Table + `_delete`,
-			insert("r.", source.Table+" r, "),
-			`CREATE TRIGGER IF NOT EXISTS access_` + source.Table + `_insert AFTER INSERT ON ` + source.Table + ` BEGIN ` + insert("NEW.", "") + ` END`,
-			`CREATE TRIGGER IF NOT EXISTS access_` + source.Table + `_update AFTER UPDATE OF ` + strings.Join(append([]string{source.ID}, columns...), ",") + ` ON ` + source.Table + ` BEGIN ` + clear + insert("NEW.", "") + ` END`,
-			`CREATE TRIGGER IF NOT EXISTS access_` + source.Table + `_delete AFTER DELETE ON ` + source.Table + ` BEGIN ` + clear + ` END`,
-		} {
+		}
+		statements = append(statements, backfill...)
+		statements = append(statements,
+			`CREATE TRIGGER IF NOT EXISTS access_`+source.Table+`_insert AFTER INSERT ON `+source.Table+` BEGIN `+insert("NEW.", "")+` END`,
+			`CREATE TRIGGER IF NOT EXISTS access_`+source.Table+`_update AFTER UPDATE OF `+strings.Join(append([]string{source.ID}, columns...), ",")+` ON `+source.Table+` BEGIN `+clear+insert("NEW.", "")+` END`,
+			`CREATE TRIGGER IF NOT EXISTS access_`+source.Table+`_delete AFTER DELETE ON `+source.Table+` BEGIN `+clear+` END`,
+		)
+		for _, statement := range statements {
 			if _, err := tx.ExecContext(ctx, statement); err != nil {
 				return fmt.Errorf("index %s authorization: %w", source.Table, err)
 			}

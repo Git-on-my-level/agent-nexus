@@ -57,8 +57,28 @@ func handleListBoards(w http.ResponseWriter, r *http.Request, opts handlerOption
 		return
 	}
 
+	accessibleBoards := make([]primitives.BoardListItem, 0, len(items))
+	boardIDs := []string{}
+	for _, item := range items {
+		if threadAccessible(r, opts, anyString(item.Board["thread_id"])) {
+			accessibleBoards = append(accessibleBoards, item)
+			boardIDs = append(boardIDs, anyString(item.Board["id"]))
+		}
+	}
+	if store, ok := opts.primitiveStore.(interface {
+		GetBoardSummariesVisible(context.Context, []string, func(string, string) bool) (map[string]map[string]any, error)
+	}); ok {
+		summaries, err := store.GetBoardSummariesVisible(r.Context(), boardIDs, planVisibility(r, opts))
+		if err != nil {
+			workStoreError(w, r, err)
+			return
+		}
+		for i := range accessibleBoards {
+			accessibleBoards[i].Summary = summaries[anyString(accessibleBoards[i].Board["id"])]
+		}
+	}
 	response := map[string]any{
-		"boards": boardListItemsResponse(items),
+		"boards": boardListItemsResponse(accessibleBoards),
 	}
 	if nextCursor != "" {
 		response["next_cursor"] = nextCursor
@@ -217,6 +237,12 @@ func handleGetBoard(w http.ResponseWriter, r *http.Request, opts handlerOptions,
 	}
 
 	summary, summaryErr := opts.primitiveStore.GetBoardSummary(r.Context(), boardID)
+	if store, ok := opts.primitiveStore.(interface {
+		GetBoardSummariesVisible(context.Context, []string, func(string, string) bool) (map[string]map[string]any, error)
+	}); ok {
+		summaries, err := store.GetBoardSummariesVisible(r.Context(), []string{boardID}, planVisibility(r, opts))
+		summary, summaryErr = summaries[boardID], err
+	}
 	response := map[string]any{"board": board}
 	if summaryErr == nil {
 		response["summary"] = summary
@@ -504,7 +530,7 @@ func handleGetBoardWorkspace(w http.ResponseWriter, r *http.Request, opts handle
 		return
 	}
 
-	body, err := buildBoardWorkspacePayload(r.Context(), opts, boardID)
+	body, err := buildBoardWorkspacePayload(r.Context(), opts, boardID, planVisibility(r, opts))
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "board not found")
@@ -538,6 +564,11 @@ func handleListBoardCards(w http.ResponseWriter, r *http.Request, opts handlerOp
 		return
 	}
 
+	var accessible bool
+	cards, accessible = filterPlanCards(w, r, opts, cards)
+	if !accessible {
+		return
+	}
 	if !enrichPlans(w, r, opts, cards) {
 		return
 	}
@@ -1319,7 +1350,7 @@ func handleTrashBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOp
 	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "card": publicCardView(result.Card)})
 }
 
-func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardID string) (map[string]any, error) {
+func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardID string, visibility ...func(string, string) bool) (map[string]any, error) {
 	board, err := opts.primitiveStore.GetBoard(ctx, boardID)
 	if err != nil {
 		return nil, err
@@ -1394,6 +1425,16 @@ func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardI
 		return nil, err
 	}
 
+	if len(visibility) > 0 {
+		if store, ok := opts.primitiveStore.(interface {
+			FilterCardAccess(context.Context, []map[string]any, func(string, string) bool) ([]map[string]any, error)
+		}); ok {
+			cards, err = store.FilterCardAccess(ctx, cards, visibility[0])
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	threadIDs := collectBoardWorkspaceThreadIDs(backingThreadID, board, cards)
 	now := time.Now().UTC()
 	states, err := loadTopicProjectionStates(ctx, opts, threadIDs)

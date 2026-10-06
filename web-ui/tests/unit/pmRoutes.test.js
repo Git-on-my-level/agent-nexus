@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -34,6 +35,7 @@ const client = vi.hoisted(() =>
     [
       "listWork",
       "getWork",
+      "getCardPlan",
       "listWorkObservations",
       "listWorkParticipants",
       "requestWorkRefresh",
@@ -214,6 +216,37 @@ describe("PM operator interactions", () => {
       screen.getByText(/Showing the previously loaded records/),
     ).toBeTruthy();
   });
+  it.each([
+    [{ health: "stalled" }, "Stale"],
+    [{ health: "on_track", health_state: "done" }, "Done"],
+    [{ health: "on_track", health_state: "at_risk" }, "At risk"],
+  ])(
+    "task plan badge reads canonical and legacy health %j",
+    async (health, badge) => {
+      state.route("/tasks/card%3Aone", { workId: "card:one" });
+      client.getWork.mockResolvedValue({
+        work: work("card:one", "Plan health"),
+      });
+      client.listWorkObservations.mockResolvedValue({ observations: [] });
+      client.getCardPlan.mockResolvedValue({
+        plan: { steps: [{ id: "ship", title: "Ship", after: [] }] },
+        plan_state: {
+          ...health,
+          shape: "lanes",
+          steps: [{ id: "ship", status: "active", resolvable: false }],
+          progress: { done: 0, total: 1 },
+          critical_path: ["ship"],
+          next_steps: ["ship"],
+        },
+      });
+      render(WorkDetail);
+      const heading = await screen.findByRole("heading", {
+        name: "Plan",
+        exact: true,
+      });
+      expect(within(heading.parentElement).getByText(badge)).toBeTruthy();
+    },
+  );
   it("does not promote the claimed verification field, and refresh only queues", async () => {
     state.route("/tasks/card%3Aone", { workId: "card:one" });
     client.getWork.mockResolvedValue({

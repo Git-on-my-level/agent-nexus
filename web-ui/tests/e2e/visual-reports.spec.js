@@ -841,7 +841,7 @@ function liveObservation() {
               progress: { done: 3, total: 7 },
               priority: "p1",
               phase: "in_progress",
-              health: "stalled",
+              health: "stale",
               plan: {
                 steps: [
                   {
@@ -1003,7 +1003,7 @@ for (const viewport of [
     ).toBeVisible();
     await expect(report).toContainText("3/7");
     await expect(report).toContainText("Needs Alex: choose the launch date");
-    await expect(report.getByText("stalled", { exact: true })).toBeVisible();
+    await expect(report.getByText("stale", { exact: true })).toBeVisible();
     const initiative = report.locator('[data-report-initiative="card:launch"]');
     const initiativePlan = initiative.locator("[data-initiative-plan]");
     await expect(

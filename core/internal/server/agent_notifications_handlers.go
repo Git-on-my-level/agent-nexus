@@ -359,7 +359,7 @@ func deriveAgentNotifications(ctx context.Context, opts handlerOptions, actorID 
 	return items, nil
 }
 
-func deriveAgentNotificationReceiptsByEvent(ctx context.Context, opts handlerOptions, threadID string) (map[string][]map[string]any, error) {
+func deriveAgentNotificationReceiptsByEvent(ctx context.Context, opts handlerOptions, threadID string, events []map[string]any) (map[string][]map[string]any, error) {
 	threadID = strings.TrimSpace(threadID)
 	if opts.primitiveStore == nil || threadID == "" {
 		return map[string][]map[string]any{}, nil
@@ -371,10 +371,14 @@ func deriveAgentNotificationReceiptsByEvent(ctx context.Context, opts handlerOpt
 	if err != nil {
 		return nil, err
 	}
+	visibleEvents := make(map[string]bool, len(events))
+	for _, event := range events {
+		visibleEvents[strings.TrimSpace(anyString(event["id"]))] = true
+	}
 	receipts := make(map[string][]map[string]any)
 	for _, wakeup := range wakeups {
 		eventID := strings.TrimSpace(wakeup.TriggerEventID)
-		if eventID == "" {
+		if eventID == "" || !visibleEvents[eventID] {
 			continue
 		}
 		item := agentNotificationFromWakeup(wakeup).toMap()

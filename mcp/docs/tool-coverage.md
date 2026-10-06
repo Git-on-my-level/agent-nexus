@@ -195,7 +195,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | inbox.list | inbox | GET | /inbox | exposed_read | bounded inbox inventory read |
 | inbox.respond | inbox | POST | /inbox/{inbox_id}/respond | unsupported_interactive | human-only response submission requires human judgment |
 | inbox.stream | inbox | GET | /stream/inbox | unsupported_streaming | SSE stream needs a bounded read adapter before MCP exposure |
-| inbox.summary | inbox | GET | /inbox/summary | exposed_read | bounded workspace-local open ask summary |
+| inbox.summary | inbox | GET | /inbox/summary | exposed_read | workspace-local count and bounded human asks visible to the caller |
 | meta.commands.get | meta | GET | /meta/commands/{command_id} | exposed_read | command metadata read |
 | meta.commands.list | meta | GET | /meta/commands | exposed_read | command metadata inventory read |
 | meta.concepts.get | meta | GET | /meta/concepts/{concept_name} | exposed_read | concept metadata read |

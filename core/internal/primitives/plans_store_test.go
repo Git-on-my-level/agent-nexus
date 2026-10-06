@@ -10,6 +10,7 @@ import (
 
 	"agent-nexus-core/internal/plans"
 	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/storage"
 )
 
 func TestPlanEditsRefStateAndHistory(t *testing.T) {
@@ -75,7 +76,7 @@ func TestPlanEditsRefStateAndHistory(t *testing.T) {
 	if count != 2 || snapshots != 1 {
 		t.Fatalf("plan events=%d", count)
 	}
-	preview, err := store.ResolveRefs(ctx, []string{child["ref"].(string)}, func(string, string) bool { return false }, time.Now(), 0)
+	preview, err := store.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "selected-pm", PMActorID: "selected-pm"}), []string{child["ref"].(string)}, func(string, string) bool { return false }, time.Now(), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +135,7 @@ func TestBatchRefsSharedCorpus(t *testing.T) {
 	}
 }
 
-func TestRefPreviewSelectsFirstReadableReadyStep(t *testing.T) {
+func TestRefPreviewKeepsPrivatePlanOutOfPublicCardPreview(t *testing.T) {
 	ctx := context.Background()
 	store, board := newWorkTestStore(t)
 	initiative, err := store.CreateWork(ctx, "actor-1", board, map[string]any{"title": "Initiative"})
@@ -152,8 +153,8 @@ func TestRefPreviewSelectsFirstReadableReadyStep(t *testing.T) {
 	if _, err = store.PatchThread(ctx, "actor-1", hidden["thread_id"].(string), map[string]any{"pm_actor_id": "private-owner"}, nil); err != nil {
 		t.Fatal(err)
 	}
-	// Authored order differs from computed ready order: choose b before c,
-	// while never exposing the authored title for unreadable a.
+	// Main's central field inventory makes a plan that references private work
+	// private as a whole, while leaving its public containing card readable.
 	p := plans.Plan{Steps: []plans.Step{
 		{ID: "c-readable", Title: "Later readable", After: []string{}},
 		{ID: "b-readable", Title: "First readable", Ref: readable["ref"].(string), After: []string{}},
@@ -162,12 +163,19 @@ func TestRefPreviewSelectsFirstReadableReadyStep(t *testing.T) {
 	if err = store.SetCardPlan(ctx, "actor-1", initiative["id"].(string), initiative["updated_at"].(string), p); err != nil {
 		t.Fatal(err)
 	}
-	items, err := store.ResolveRefs(ctx, []string{initiative["ref"].(string)}, func(_ string, owner string) bool { return owner != "private-owner" }, time.Now(), 0)
+	items, err := store.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), []string{initiative["ref"].(string)}, func(_ string, owner string) bool { return owner != "private-owner" }, time.Now(), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if items[0].NextStep == nil || items[0].NextStep.Title != "First readable" {
-		t.Fatalf("next step=%+v; want first readable ready step", items[0].NextStep)
+	if !items[0].Resolvable || items[0].Progress != nil || items[0].NextStep != nil {
+		t.Fatalf("public preview leaked private plan: %+v", items[0])
+	}
+	items, err = store.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "private-owner"}), []string{initiative["ref"].(string)}, nil, time.Now(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if items[0].NextStep == nil || items[0].NextStep.Title != "Secret step title" {
+		t.Fatalf("owner preview lost private plan: %+v", items[0])
 	}
 }
 
@@ -188,7 +196,7 @@ func TestExternalPlanRefAndPollFreshness(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !items[0].Resolvable || items[0].Phase != "done" || items[1].Resolvable {
+	if !items[0].Resolvable || items[0].Phase != "done" || items[1].Resolvable || items[1].Source != "" || items[1].Status != "" {
 		t.Fatal(items)
 	}
 	// A known URL projects source state; an unknown URL keeps the agent fallback.
@@ -197,5 +205,65 @@ func TestExternalPlanRefAndPollFreshness(t *testing.T) {
 	state := plans.Compute(p, facts, time.Now().Add(-6*24*time.Hour), time.Now(), 0)
 	if state.Progress.Done != 1 || state.Steps[1].Status != "active" || state.Health != "stalled" {
 		t.Fatal(state)
+	}
+}
+
+func TestCardAndStepMessagesResetPlanRecency(t *testing.T) {
+	for _, subject := range []string{"card", "step"} {
+		t.Run(subject, func(t *testing.T) {
+			ctx := context.Background()
+			ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer ws.Close()
+			s := primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+			board, err := s.CreateBoard(ctx, "actor-1", map[string]any{"title": "Initiatives"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			parent, err := s.CreateWork(ctx, "actor-1", board["id"].(string), map[string]any{"title": "Initiative"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			child, err := s.CreateWork(ctx, "actor-1", board["id"].(string), map[string]any{"title": "Step"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := plans.Plan{Steps: []plans.Step{{ID: "build", Title: "Build", Ref: child["ref"].(string)}}}
+			if err = s.SetCardPlan(ctx, "actor-1", parent["id"].(string), parent["updated_at"].(string), p); err != nil {
+				t.Fatal(err)
+			}
+			old := time.Now().UTC().Add(-96 * time.Hour).Format(time.RFC3339Nano)
+			if _, err = ws.DB().Exec(`UPDATE cards SET updated_at=?`, old); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = ws.DB().Exec(`UPDATE card_plans SET updated_at=?`, old); err != nil {
+				t.Fatal(err)
+			}
+			card, err := s.GetBoardCard(ctx, "", parent["id"].(string))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = s.EnrichCardPlans(ctx, []map[string]any{card}, nil, time.Now(), 0); err != nil {
+				t.Fatal(err)
+			}
+			if card["plan_health"].(plans.Health).State != "stale" {
+				t.Fatal(card["plan_health"])
+			}
+			thread := parent["thread_id"].(string)
+			if subject == "step" {
+				thread = child["thread_id"].(string)
+			}
+			if _, err = s.AppendEvent(ctx, "actor-1", map[string]any{"type": "message_posted", "thread_id": thread, "refs": []string{}, "payload": map[string]any{"text": "Verified progress"}}); err != nil {
+				t.Fatal(err)
+			}
+			if err = s.EnrichCardPlans(ctx, []map[string]any{card}, nil, time.Now(), 0); err != nil {
+				t.Fatal(err)
+			}
+			if card["plan_health"].(plans.Health).State != "on_track" {
+				t.Fatal(card["plan_health"])
+			}
+		})
 	}
 }

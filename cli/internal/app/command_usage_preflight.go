@@ -695,7 +695,8 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"write-file": valueFlag,
 			"force":      boolFlag,
 		},
-		"topics list": merge(listFlags, lifecycle),
+		"boards patch": {"board-id": valueFlag, "from-file": valueFlag, "role": valueFlag, "dry-run": boolFlag},
+		"topics list":  merge(listFlags, lifecycle),
 		"topics patch": {
 			"topic-id":      valueFlag,
 			"from-file":     valueFlag,
