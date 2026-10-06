@@ -108,6 +108,28 @@ func TestApplyRejectsAudienceFamiliesAndCrossScopeBeforeMutation(t *testing.T) {
 	}
 }
 
+func TestCanonicalDeltaPreservesSharedSourceCoverage(t *testing.T) {
+	for _, shared := range []bool{false, true} {
+		for _, standalone := range []bool{false, true} {
+			w := &countingWriter{scope: "s"}
+			d := scopes.Change{ScopeID: "s", Kind: "document", ResourceID: "r", CanonicalVersion: 1, Family: "events", Audience: "all", After: &scopes.Projection{Text: "needle", SourceTruncated: shared}}
+			if err := ApplyCanonical(context.Background(), w, d, standalone); err != nil {
+				t.Fatal(err)
+			}
+			if w.last.Content.Truncated() != (shared || standalone) {
+				t.Fatalf("coverage lost: shared=%v standalone=%v", shared, standalone)
+			}
+		}
+	}
+	// Normalization can exceed its own byte budget even when source capture
+	// fits the shared cap (lowercase U+023A expands from two to three bytes).
+	w := &countingWriter{scope: "s"}
+	d := scopes.Change{ScopeID: "s", Kind: "document", ResourceID: "r", CanonicalVersion: 1, Family: "events", Audience: "all", After: &scopes.Projection{Text: strings.Repeat("Ⱥ", MaxTextBytes/2)}}
+	if err := ApplyCanonical(context.Background(), w, d, false); err != nil || !w.last.Content.Truncated() {
+		t.Fatalf("normalization coverage lost: %v", err)
+	}
+}
+
 type unopenedRepo struct{ calls int }
 
 func (r *unopenedRepo) ReadSearch(context.Context, string, []string, func(Snapshot) error) error {

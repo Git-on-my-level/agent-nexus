@@ -20,6 +20,8 @@ const (
 	MaxCandidates        = 4096
 	MaxVerificationBytes = 4 * 1024 * 1024
 	MaxSnippetBytes      = 512
+	maxResourceIDBytes   = 512
+	maxScopeIDBytes      = 256
 )
 
 var (
@@ -125,7 +127,7 @@ func Apply(ctx context.Context, w Writer, c Change) error {
 	if w == nil || c.Scope == "" || c.Scope != w.ScopeID() || (!c.Delete && c.Content.scope != c.Scope) {
 		return ErrDerivation
 	}
-	if (c.Kind != "document" && c.Kind != "comment") || c.RID == "" || c.Version == "" || c.Recency < 0 || len(c.RID) > 512 || len(c.Version) > 256 || len(c.Parent) > 512 {
+	if (c.Kind != "document" && c.Kind != "comment") || c.RID == "" || c.Version == "" || c.Recency < 0 || len(c.RID) > maxResourceIDBytes || len(c.Version) > 256 || len(c.Parent) > 512 {
 		return ErrProjection
 	}
 	return w.ReplaceSearch(ctx, c)

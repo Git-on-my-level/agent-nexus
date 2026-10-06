@@ -114,7 +114,7 @@ func Search(ctx context.Context, repo Repository, tokens *Tokens, req Request) (
 	scopes := append([]string(nil), req.Scopes...)
 	sort.Strings(scopes)
 	for i, s := range scopes {
-		if s == "" || len(s) > 256 || (i > 0 && s == scopes[i-1]) {
+		if s == "" || len(s) > maxScopeIDBytes || (i > 0 && s == scopes[i-1]) {
 			return page, ErrBudget
 		}
 	}
@@ -174,7 +174,7 @@ func Search(ctx context.Context, repo Repository, tokens *Tokens, req Request) (
 			}
 			possibleMore = possibleMore || len(rows) == fetch
 			for j, c := range rows {
-				if c.Scope != s || c.Key.Scope != s || c.IndexedBytes < 0 || c.IndexedBytes > MaxTextBytes || c.Key.RID == "" || len(c.Key.RID) > 512 || c.Version == "" || len(c.Version) > 256 || len(c.Parent) > 512 || c.Key.Recency < 0 || (c.Key.Kind != "document" && c.Key.Kind != "comment") || (cursor.After != nil && !lessKey(*cursor.After, c.Key)) || (j > 0 && !lessKey(rows[j-1].Key, c.Key)) {
+				if c.Scope != s || c.Key.Scope != s || c.IndexedBytes < 0 || c.IndexedBytes > MaxTextBytes || c.Key.RID == "" || len(c.Key.RID) > maxResourceIDBytes || c.Version == "" || len(c.Version) > 256 || len(c.Parent) > 512 || c.Key.Recency < 0 || (c.Key.Kind != "document" && c.Key.Kind != "comment") || (cursor.After != nil && !lessKey(*cursor.After, c.Key)) || (j > 0 && !lessKey(rows[j-1].Key, c.Key)) {
 					return ErrProjection
 				}
 			}

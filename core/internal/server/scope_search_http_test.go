@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -228,5 +229,27 @@ func TestScopeSearchHTTPDisabledByDefault(t *testing.T) {
 	scopesearch.Handler(scopesearch.HTTPOptions{}).ServeHTTP(w, r)
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("partly migrated reader enabled: %d", w.Code)
+	}
+}
+
+func TestScopeSearchHTTPUnchangedQueryResumesEscapedIdentity(t *testing.T) {
+	for _, character := range []string{"<", ">", "&", "\x01"} {
+		t.Run(character, func(t *testing.T) {
+			c := newScopeCRepository(t)
+			scope := strings.Repeat(character, 256)
+			c.grant(t, scope, "reader", "active")
+			rid := strings.Repeat(character, 512)
+			c.searchWrite(t, scope, "document", rid, "needle", math.MaxInt64)
+			c.searchWrite(t, scope, "document", "second", "needle", 1)
+			s := scopeCSearchHTTP(t, c, []string{scope})
+			first := scopeCSearchPage(t, s.URL, "needle", "", 1)
+			if len(first.Items) != 1 || first.Items[0].RID != rid || len(first.Continuation) != 6471 {
+				t.Fatalf("missing worst-case continuation: hits=%d bytes=%d", len(first.Items), len(first.Continuation))
+			}
+			second := scopeCSearchPage(t, s.URL, "needle", first.Continuation, 1)
+			if len(second.Items) != 1 || second.Items[0].RID != "second" || second.Continuation != "" {
+				t.Fatalf("unchanged-query continuation failed: %#v", second)
+			}
+		})
 	}
 }
