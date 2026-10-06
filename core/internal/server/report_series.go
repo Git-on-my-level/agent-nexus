@@ -24,6 +24,7 @@ func (reader *reportReader) materializeSeries(panel reports.Panel) map[string]an
 		}
 	}
 	step := series.DefaultStep(window)
+
 	// Metrics aggregate the complete requested window; charts/tables use bins.
 	if panel.Type == "metric" || panel.Type == "metric-strip" {
 		step = window
@@ -35,7 +36,14 @@ func (reader *reportReader) materializeSeries(panel reports.Panel) map[string]an
 	if agg == "" {
 		agg = "last"
 	}
-	r, err := reader.opts.seriesStore.Query(reader.r.Context(), source.Series, source.Labels, window, step, agg, reader.now)
+	var r series.Result
+	if panel.Type == "live-timeline" {
+		var truncated bool
+		r, truncated, err = reader.opts.seriesStore.Timeline(reader.r.Context(), source.Series, source.Labels, window, reader.now)
+		out["truncated"] = truncated
+	} else {
+		r, err = reader.opts.seriesStore.Query(reader.r.Context(), source.Series, source.Labels, window, step, agg, reader.now)
+	}
 	if err != nil {
 		if errors.Is(err, series.ErrCapacity) {
 			out["message"] = "Select fewer labels or a shorter range to show this panel."
@@ -117,6 +125,34 @@ func (reader *reportReader) materializeSeries(panel reports.Panel) map[string]an
 		return ""
 	}
 	switch panel.Type {
+	case "live-timeline":
+		items := []map[string]any{}
+		for _, stream := range streams {
+			for _, point := range stream.Points {
+				var value any
+				if point.State != nil {
+					value = *point.State
+				} else if point.Value != nil {
+					value = *point.Value
+				} else {
+					continue
+				}
+				items = append(items, map[string]any{"at": point.TS, "label": label(stream), "value": value})
+			}
+		}
+		sort.SliceStable(items, func(i, j int) bool {
+			a, _ := time.Parse(time.RFC3339Nano, fmt.Sprint(items[i]["at"]))
+			b, _ := time.Parse(time.RFC3339Nano, fmt.Sprint(items[j]["at"]))
+			if a.Equal(b) {
+				return fmt.Sprint(items[i]["label"]) < fmt.Sprint(items[j]["label"])
+			}
+			return a.After(b)
+		})
+		if len(items) > 100 {
+			items = items[:100]
+			out["truncated"] = true
+		}
+		out["data"] = map[string]any{"items": items}
 	case "metric":
 		// A metric is one value. Multiple matching label sets require a strip/table
 		// or an exact label filter rather than a silently chosen fleet member.

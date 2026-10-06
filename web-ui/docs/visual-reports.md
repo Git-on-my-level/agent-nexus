@@ -15,6 +15,7 @@ external truth.
 2. Start with `anx report templates`, then generate a live report skeleton:
 
    ```sh
+   anx report init
    anx report init --template workspace-overview --topic topic:YOUR-TOPIC > report.json
    anx report init --template initiative --card card:YOUR-INITIATIVE > initiative.json
    ```
@@ -91,13 +92,13 @@ replaces freshness and observation time with the authorized materialization.
 The panel’s `project_id` groups presentation; use `data.project_ref` to scope a
 query to an actual workspace project (a topic).
 
-| Type               | Query fields                                                                      | Default                                                                                |
-| ------------------ | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `live-initiatives` | `board_refs`, `project_ref`, `card_ref`, `limit`, `sort`                          | All active boards; 10 rows; priority then newest update                                |
-| `live-asks`        | `limit`, `include_answered`, `answered_only`, `answered_within_hours`, `card_ref` | 10 oldest open asks; recent answers are optional, and `answered_only` returns answers only |
-| `live-work-mix`    | `board_refs`, `project_ref`, `card_ref`, `group_by`                               | Open work by phase; `group_by: "board"` also supported                                 |
-| `live-activity`    | `limit`                                                                           | 10 newest meaningful events, with same-actor board edits collapsed within five minutes |
-| `live-fleet-health` | none                                                                               | Declared `fleet.*` series and native host inventory; enrollment requests require human or auth-admin access |
+| Type                | Query fields                                                                      | Default                                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `live-initiatives`  | `board_refs`, `project_ref`, `card_ref`, `limit`, `sort`                          | All active boards; 10 rows; priority then newest update                                                     |
+| `live-asks`         | `limit`, `include_answered`, `answered_only`, `answered_within_hours`, `card_ref` | 10 oldest open asks; recent answers are optional, and `answered_only` returns answers only                  |
+| `live-work-mix`     | `board_refs`, `project_ref`, `card_ref`, `group_by`                               | Open work by phase; `group_by: "board"` also supported                                                      |
+| `live-activity`     | `limit`                                                                           | 10 newest meaningful events, with same-actor board edits collapsed within five minutes                      |
+| `live-fleet-health` | none                                                                              | Declared `fleet.*` series and native host inventory; enrollment requests require human or auth-admin access |
 
 Limits are 1–100 displayed rows, at most 16 unique `board:<handle>` refs, and
 1–720 hours for recent answers (168 by default). Sort is `priority`, `updated`,
@@ -588,3 +589,40 @@ The Overview uses compact rendering: report title and panels. Project filters,
 counts, freshness controls and provenance details are available through its
 **Open document** link. The reusable `LiveInitiatives.svelte` expects the shared
 `progress.done/total` and `needs[]` projection for the Overview initiatives section.
+
+## Live first and review deadlines
+
+Dashboards default to live asks, initiatives and activity. Use `live-cards` with
+`board_refs`, `label`, `role`, `status`, `limit` and `sort` to query work. Labels
+and roles are optional bounded work annotations set on create or annotate;
+status matches the card phase, including closed work. Query results remain
+permission-filtered and expose truncation when the candidate cap is reached.
+
+A `live-timeline` binds an adapter-fed series through `source` like other series
+panels, with `data: {}`. It returns the newest individual observations as
+`items: [{at, label, value}]`, capped at 100, with source freshness and provenance.
+Timeline range is limited to the existing 90-day raw retention. Core fetches no
+external URLs; adapters publish the underlying release or deployment events.
+
+Hand-write only unavoidable narrative. Set `author` to the owning principal's
+actor ID, `authored_at` to a zoned timestamp and `review_by` to a UTC date,
+zoned timestamp or positive duration such as `7d`. Dates mean midnight UTC;
+durations start at `authored_at`. Explicit expired deadlines are rejected when
+creating or revising documents, while expired saved reports remain readable.
+Existing panels missing the new fields remain valid: `authored_at` falls back to
+`generated_at`, and `review_by` defaults to seven days later. The response marks
+that default with `review_by_defaulted: true`.
+
+Report reads and previews return every panel with `provenance_class: live` or
+`authored`. Authored results include `author`, resolved `authored_at`, `review_by`
+and `review_due`. Existing evidence provenance retains its original meaning.
+Validation and document CLI writes warn for authored milestone timelines,
+state/status tables and status callouts, naming their live alternatives. If an
+important fact cannot be shown live, file sync work instead of a manual panel.
+
+Reading a pinned dashboard checks deadlines and durably deduplicates one inbox
+reminder per panel and revision. A known author actor receives it; legacy display
+names fall back to the revision's writer. The recipient must have current access
+to the subject and its containing resources. Reminders leave the visible inbox
+when the document is revised, unpinned, archived or trashed, while their dedupe
+receipts survive projection rebuilds. Preview never writes reminders.

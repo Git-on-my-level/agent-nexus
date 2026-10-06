@@ -419,7 +419,7 @@ Executive workspace
 - A card represents a human-level initiative or outcome that may span many executor tasks and outlive them. Keep issue, PR and run detail in its source; link that detail as evidence. Before `anx work create`, run `anx work list --project-ref <ref>` and update a matching card; never mirror a tracker 1:1.
 - For source ingestion through an external adapter, route linked source evidence to existing initiatives. Review the adapter preview before publishing workspace mapping rules with `anx docs revise <mapping-doc> --apply --body-file mapping.json`. Keep unmatched items visible for deliberate triage. Linked evidence complements the initiative plan; only deliberate milestones become plan steps.
 - Keep one plan per initiative card. Add steps rather than writing progress prose; link steps to real refs. Never pick a view: the graph determines it. Read `anx plan show card:<slug>` for computed progress and health. Keep about 15 or fewer open cards per workspace and very few open asks; consolidate when approaching that budget.
-- For a human-facing dashboard, start with `anx report templates` and `anx report init --template <name> [--topic <topic-ref>] [--card <card-ref>]`; add narrative without pasting live numbers. Run `anx report preview <file>` and inspect its panel summary and PNG before sharing. Publish with `anx report publish <file> --topic <topic-ref> [--title <title>] [--doc <doc-ref>]`; it validates the report, writes a text document, and verifies the saved revision. `--doc` is an exact ref; use `--replace` only when intentionally replacing a non-report document.
+- For a human-facing dashboard, start with `anx report templates` and `anx report init --template <name> [--topic <topic-ref>] [--card <card-ref>]`; The default `anx report init` contains live asks, initiatives and activity. Prefer live-cards for filtered work and live-timeline for adapter-fed events. File missing sync work instead of a manual status panel. Hand-write only unavoidable narrative, always with author, authored_at and review_by; never paste live numbers into it. Run `anx report preview <file>` and inspect its panel summary and PNG before sharing. Publish with `anx report publish <file> --topic <topic-ref> [--title <title>] [--doc <doc-ref>]`; it validates the report, writes a text document, and verifies the saved revision. `--doc` is an exact ref; use `--replace` only when intentionally replacing a non-report document.
 - Ask only for a decision that belongs to the human (direction, money, risk or an irreversible choice). Recommend one answer, give at most 2–3 alternatives, and batch related decisions into one ask. Do not also block the card or set its `next_actor` to the human for that same question; that duplicates the Inbox item. Keep `next_actor` on the agent and advance after the answer with its response event as evidence, for example `anx work done <card> --evidence event:<response_event_id>`.
 - Write for a busy executive: lead with the outcome and what needs them, then add detail. Example: 12 PRs + 4 Multica issues for one project → 1 card with a linked plan, not 16 cards.
 
@@ -4616,10 +4616,10 @@ Generated Help: report render
 - Stability: `beta`
 - Input mode: `none`
 - Why: Read the same live dashboard data shown to a workspace reader.
-- Output: Returns `{ document_ref, revision_ref, observed_at, panels }`; static panels are omitted.
+- Output: Returns `{ document_ref, revision_ref, observed_at, panels }`; every panel includes resolved live/authored provenance and authored review metadata.
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `not_found`, `invalid_request`, `unavailable`
 - Concepts: `docs`, `cards`, `evidence`
-- Agent notes: Read-only. Both text and structured version 1 visual reports are supported. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows. Archived boards and their work are excluded. Private PM events remain private.
+- Agent notes: Both text and structured version 1 visual reports are supported. Authored review metadata is returned for every static panel. Reading a pinned report checks deadlines and durably deduplicates author-only inbox reminders per panel and revision. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows. Archived boards and their work are excluded. Private PM events remain private.
 - Adjacent commands: `report preview`
 
 Inputs:
@@ -4782,6 +4782,7 @@ Inputs:
   - body `due_at` (string)
   - body `executions` (list<object>)
   - body `id` (string)
+  - body `labels` (list<string>)
   - body `next_action` (string)
   - body `next_actor` (string)
   - body `owner` (string)
@@ -4792,6 +4793,7 @@ Inputs:
   - body `related_refs` (list<any>)
   - body `relations` (list<object>)
   - body `risk` (string)
+  - body `roles` (list<string>)
   - body `source.authority` (string)
   - body `source.connection_id` (string)
   - body `source.native_id` (string)
@@ -4921,12 +4923,14 @@ Inputs:
   - body `patch.blockers` (list<string>)
   - body `patch.due_at` (string)
   - body `patch.executions` (list<object>)
+  - body `patch.labels` (list<string>)
   - body `patch.next_action` (string)
   - body `patch.next_actor` (string)
   - body `patch.plan` (any)
   - body `patch.priority` (string)
   - body `patch.project_ref` (string)
   - body `patch.relations` (list<object>)
+  - body `patch.roles` (list<string>)
   - body `patch.start_at` (string)
   - body `patch.wake_condition` (string)
   - body `patch.workspace_move` (object)
@@ -9526,7 +9530,7 @@ Local Help: report init
   - `anx report init --template initiative --card card:launch > initiative.json`
 
 Flags:
-  --template <name>            One of workspace-overview, initiative, weekly-review, release-readiness, incident-review, fleet-health.
+  --template <name>            Defaults to workspace-overview. One of workspace-overview, initiative, weekly-review, release-readiness, incident-review, fleet-health.
   --topic <ref>                Scope project-based live queries to a topic.
   --card <ref>                 Scope a card-centered template to an initiative card.
 

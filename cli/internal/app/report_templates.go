@@ -21,13 +21,12 @@ var reportCardRefPattern = regexp.MustCompile(`^card:[A-Za-z0-9][A-Za-z0-9._-]{0
 
 var reportTemplates = []reportTemplate{
 	{
-		name: "workspace-overview", purpose: "Live initiatives, work by phase, and recent movement.",
+		name: "workspace-overview", purpose: "Live asks, initiatives and recent activity.",
 		title: "Workspace overview", summary: "Current initiatives and movement from live workspace queries.",
 		build: func(topic, _ string) []map[string]any {
 			return []map[string]any{
 				liveReportPanel("initiatives", "live-initiatives", "Initiatives", reportWorkQuery(topic, "", map[string]any{"limit": 8, "sort": "priority"})),
-				liveReportPanel("work-mix", "live-work-mix", "Work by phase", reportWorkQuery(topic, "", map[string]any{"group_by": "phase"})),
-				seriesReportPanel("throughput", "chart", "Merged PR throughput", map[string]any{"series": "github-prs", "labels": map[string]string{"status": "merged"}, "range": "84d", "agg": "sum"}),
+				liveReportPanel("asks", "live-asks", "Open asks", reportAskQuery("", map[string]any{"limit": 8})),
 				liveReportPanel("movement", "live-activity", "Recent movement", map[string]any{"limit": 8}),
 			}
 		},
@@ -60,7 +59,6 @@ var reportTemplates = []reportTemplate{
 			return []map[string]any{
 				liveReportPanel("checklist", "live-initiatives", "Release checklist", reportWorkQuery(topic, card, map[string]any{"limit": 12, "sort": "priority"})),
 				liveReportPanel("blockers", "live-asks", "Open blockers and decisions", reportAskQuery(card, map[string]any{"limit": 10})),
-				staticReportPanel("release-notes", "callout", "Release narrative", map[string]any{"tone": "info", "text": "Add the release outcome, evidence boundaries, and remaining human decisions."}),
 			}
 		},
 	},
@@ -70,7 +68,6 @@ var reportTemplates = []reportTemplate{
 		build: func(_ string, card string) []map[string]any {
 			return []map[string]any{
 				liveReportPanel("movement", "live-activity", "Recent incident movement", map[string]any{"limit": 20}),
-				staticReportPanel("timeline", "milestone-timeline", "Incident timeline", map[string]any{"items": []any{}}),
 				liveReportPanel("actions", "live-asks", "Action items", reportAskQuery(card, map[string]any{"limit": 12})),
 			}
 		},
@@ -114,7 +111,7 @@ func parseReportInitArgs(args []string) (reportInitArgs, error) {
 	}
 	result := reportInitArgs{template: strings.TrimSpace(template.value), topic: strings.TrimSpace(topic.value), card: strings.TrimSpace(card.value)}
 	if result.template == "" {
-		return reportInitArgs{}, errnorm.Usage("invalid_request", "usage: anx report init --template <name> [--topic topic:ref] [--card card:ref]")
+		result.template = "workspace-overview"
 	}
 	if _, ok := findReportTemplate(result.template); !ok {
 		return reportInitArgs{}, errnorm.WithDetails(errnorm.Usage("invalid_report_template", "unknown report template; run `anx report templates` to list supported templates"), map[string]any{"template": result.template})
@@ -137,7 +134,12 @@ func (a *App) runReportInit(args []string) (*commandResult, error) {
 		return nil, err
 	}
 	template, _ := findReportTemplate(parsed.template)
-	panels := template.build(parsed.topic, parsed.card)
+	panels := []map[string]any{}
+	for _, panel := range template.build(parsed.topic, parsed.card) {
+		if visualreport.IsLive(fmt.Sprint(panel["type"])) || panel["source"] != nil {
+			panels = append(panels, panel)
+		}
+	}
 	title := template.title
 	if parsed.card != "" && parsed.template == "initiative" {
 		title += " — " + strings.TrimPrefix(parsed.card, "card:")
@@ -178,14 +180,6 @@ func liveReportPanel(id, kind, title string, query map[string]any) map[string]an
 		"id": id, "project_id": "workspace", "type": kind, "title": title,
 		"author": "Agent Nexus template", "provenance": "reported", "observed_at": nil,
 		"freshness": "unknown", "source_ids": []any{}, "data": query,
-	}
-}
-
-func staticReportPanel(id, kind, title string, data map[string]any) map[string]any {
-	return map[string]any{
-		"id": id, "project_id": "workspace", "type": kind, "title": title,
-		"author": "Agent Nexus template", "provenance": "reported", "observed_at": nil,
-		"freshness": "unknown", "source_ids": []any{}, "data": data,
 	}
 }
 

@@ -318,7 +318,11 @@ func loadOpenInboxItems(r *http.Request, opts handlerOptions) ([]map[string]any,
 }
 
 func loadVisibleInboxItems(r *http.Request, opts handlerOptions, notifications bool) ([]map[string]any, error) {
-	projected, err := opts.primitiveStore.ListDerivedInboxItems(r.Context(), primitives.DerivedInboxListFilter{})
+	recipient := ""
+	if principal, ok := cachedAuthenticatedPrincipal(r); ok && principal != nil {
+		recipient = principal.ActorID
+	}
+	projected, err := opts.primitiveStore.ListDerivedInboxItems(r.Context(), primitives.DerivedInboxListFilter{RecipientActorID: recipient})
 	if err != nil {
 		return nil, err
 	}

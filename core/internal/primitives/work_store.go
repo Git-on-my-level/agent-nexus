@@ -111,6 +111,20 @@ func workLocalInvalid(field, reason string) error {
 }
 
 func validateWorkLocal(m map[string]any) error {
+	for _, key := range []string{"labels", "roles"} {
+		if raw, exists := m[key]; exists && raw != nil {
+			values, err := normalizeStringSlice(raw)
+			if err != nil || len(values) > 16 {
+				return workInvalid("%s must contain at most 16 strings", key)
+			}
+			for _, value := range values {
+				if len(value) > 128 || strings.TrimSpace(value) == "" {
+					return workInvalid("invalid %s value", key)
+				}
+			}
+		}
+	}
+
 	for _, k := range []string{"project_ref", "priority", "next_actor", "next_action", "wake_condition", "start_at", "due_at", "risk"} {
 		if v, ok := m[k]; ok && v != nil {
 			if _, ok := v.(string); !ok {
@@ -423,7 +437,7 @@ func projectWork(card, m map[string]any, version int64, latest, attempt, refresh
 	if refs, ok := card["assignee_refs"].([]string); ok && len(refs) > 0 {
 		out["owner"] = refs[0]
 	}
-	for _, key := range []string{"source", "project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "topic_ref", "document_ref", "related_refs", "risk", "plan"} {
+	for _, key := range []string{"source", "project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "topic_ref", "document_ref", "related_refs", "risk", "plan", "labels", "roles"} {
 		if v, ok := m[key]; ok {
 			out[key] = v
 		}
@@ -454,6 +468,11 @@ func projectWork(card, m map[string]any, version int64, latest, attempt, refresh
 			if v, ok := latest["source_revision"]; ok {
 				source["revision"] = v
 			}
+		}
+	}
+	for _, key := range []string{"labels", "roles"} {
+		if out[key] == nil {
+			delete(out, key)
 		}
 	}
 	out["source"] = source
@@ -762,7 +781,7 @@ func (s *Store) ensureWorkMetadata(ctx context.Context, id, actor string) error 
 
 // WorkAnnotationKeys returns the keys writable through local work annotations.
 func WorkAnnotationKeys() []string {
-	return []string{"project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "plan"}
+	return []string{"labels", "roles", "project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "plan"}
 }
 
 // ValidateWorkAnnotations is shared by proposal validation and canonical writes.

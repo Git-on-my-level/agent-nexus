@@ -8779,7 +8779,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/pm/decisions",
     "operation_id": "pmDecisionsCreate",
     "summary": "Propose a scoped PM decision",
-    "description": "Proposals require live work; missing, trashed, or archived work returns 404 not_found after principal authorization. For work.annotate, instruction must be a nonempty JSON object containing only project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form \u003ctype\u003e:\u003chandle-or-id\u003e (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values.",
+    "description": "Proposals require live work; missing, trashed, or archived work returns 404 not_found after principal authorization. For work.annotate, instruction must be a nonempty JSON object containing only labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form \u003ctype\u003e:\u003chandle-or-id\u003e (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Labels and roles accept arrays of at most 16 nonempty strings of at most 128 characters (or null to clear). Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values.",
     "why": "Propose a scoped PM decision.",
     "input_mode": "json-body",
     "streaming": {
@@ -9312,7 +9312,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/pm/turns/{turn_id}/decisions",
     "operation_id": "pmTurnsDecisionsCreate",
     "summary": "Record a selected PM agent proposal",
-    "description": "For work.annotate, instruction must be a nonempty JSON object containing only project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form \u003ctype\u003e:\u003chandle-or-id\u003e (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values. Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.",
+    "description": "For work.annotate, instruction must be a nonempty JSON object containing only labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form \u003ctype\u003e:\u003chandle-or-id\u003e (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Labels and roles accept arrays of at most 16 nonempty strings of at most 128 characters (or null to clear). Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values. Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.",
     "why": "Record a selected PM agent proposal.",
     "input_mode": "json-body",
     "streaming": {
@@ -9832,7 +9832,7 @@ export const commandRegistry: CommandSpec[] = [
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ document_ref, revision_ref, observed_at, panels }`; static panels are omitted.",
+    "output_envelope": "Returns `{ document_ref, revision_ref, observed_at, panels }`; every panel includes resolved live/authored provenance and authored review metadata.",
     "error_codes": [
       "auth_required",
       "invalid_token",
@@ -9848,7 +9848,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "projection",
-    "agent_notes": "Read-only. Both text and structured version 1 visual reports are supported. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows. Archived boards and their work are excluded. Private PM events remain private.",
+    "agent_notes": "Both text and structured version 1 visual reports are supported. Authored review metadata is returned for every static panel. Reading a pinned report checks deadlines and durably deduplicates author-only inbox reminders per panel and revision. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows. Archived boards and their work are excluded. Private PM events remain private.",
     "path_params": [
       "document_id"
     ],
@@ -11610,6 +11610,10 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "labels",
+          "type": "list\u003cstring\u003e"
+        },
+        {
           "name": "next_action",
           "type": "string"
         },
@@ -11654,6 +11658,10 @@ export const commandRegistry: CommandSpec[] = [
             "low",
             "medium"
           ]
+        },
+        {
+          "name": "roles",
+          "type": "list\u003cstring\u003e"
         },
         {
           "name": "source.authority",
@@ -12175,6 +12183,10 @@ export const commandRegistry: CommandSpec[] = [
           "type": "list\u003cobject\u003e"
         },
         {
+          "name": "patch.labels",
+          "type": "list\u003cstring\u003e"
+        },
+        {
           "name": "patch.next_action",
           "type": "string"
         },
@@ -12197,6 +12209,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "patch.relations",
           "type": "list\u003cobject\u003e"
+        },
+        {
+          "name": "patch.roles",
+          "type": "list\u003cstring\u003e"
         },
         {
           "name": "patch.start_at",

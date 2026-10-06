@@ -3,8 +3,10 @@ package primitives_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"agent-nexus-visualreport"
 
@@ -101,5 +103,34 @@ func TestDocumentWriteMatchesReportReader(t *testing.T) {
 	}
 	if _, updated, err := store.UpdateDocument(ctx, "actor-1", documentID, nil, revisionID, invalidVisualReport, "text", nil, nil); err == nil || updated != nil {
 		t.Fatalf("invalid revision stored: %v", err)
+	}
+}
+
+func TestDocumentReviewDeadlineRejectedAtCreateAndRevise(t *testing.T) {
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer workspace.Close()
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+	now := time.Now().UTC()
+	past := strings.Replace(validVisualReport, `"author":"Test"`, fmt.Sprintf(`"author":"Test","authored_at":%q,"review_by":%q`, now.Add(-48*time.Hour).Format(time.RFC3339Nano), now.Add(-24*time.Hour).Format(time.RFC3339Nano)), 1)
+	if !visualreport.Validate([]byte(past)).Valid {
+		t.Fatal("expired stored report did not validate for reading")
+	}
+	if _, _, err := store.CreateDocument(ctx, "actor", map[string]any{"title": "Report"}, past, "text", nil); err == nil {
+		t.Fatal("expired deadline accepted on create")
+	}
+	doc, rev, err := store.CreateDocument(ctx, "actor", map[string]any{"title": "Report"}, validVisualReport, "text", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.UpdateDocument(ctx, "actor", anyString(doc["id"]), nil, anyString(rev["revision_id"]), past, "text", nil, nil); err == nil {
+		t.Fatal("expired deadline accepted on revise")
+	}
+	_, current, err := store.GetDocument(ctx, anyString(doc["id"]))
+	if err != nil || current["revision_id"] != rev["revision_id"] {
+		t.Fatal("failed deadline write changed head")
 	}
 }
