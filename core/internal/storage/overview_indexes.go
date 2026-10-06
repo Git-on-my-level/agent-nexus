@@ -16,6 +16,8 @@ func indexBoundedOverviewReads(ctx context.Context, tx *sql.Tx) error {
 
 		`CREATE INDEX IF NOT EXISTS idx_cards_work_page ON cards(trashed_at,archived_at,anx_timestamp_key(updated_at) DESC,id DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_cards_closed_work_page ON cards(trashed_at,archived_at,column_key,anx_timestamp_key(updated_at) DESC,id DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_cards_closed_probe ON cards(column_key) WHERE column_key IN ('done','cancelled')`,
+		`CREATE INDEX IF NOT EXISTS idx_ref_edges_work_placement ON ref_edges(target_id) WHERE source_type='board' AND edge_type='board_card'`,
 		`CREATE INDEX IF NOT EXISTS idx_work_metadata_external ON work_metadata(card_id) WHERE anx_unicode_trim(COALESCE(authority,'nexus'))<>'nexus'`,
 		`CREATE INDEX IF NOT EXISTS idx_documents_dashboard ON documents(updated_at DESC,id ASC) WHERE COALESCE(archived_at,'')='' AND COALESCE(trashed_at,'')=''`,
 		`CREATE INDEX IF NOT EXISTS idx_host_keys_latest ON host_keys(host_id,created_at DESC,id)`,

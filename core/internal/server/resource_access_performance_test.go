@@ -460,7 +460,9 @@ func performanceP95(samples []time.Duration) time.Duration {
 func logReadPlans(t *testing.T, db *sql.DB, statements []testsql.Statement) {
 	t.Helper()
 	for _, statement := range statements {
-		if !strings.Contains(statement.SQL, "_work_candidates") && !strings.Contains(statement.SQL, "pm_records") && !strings.Contains(statement.SQL, " FROM host_keys ") && !strings.Contains(statement.SQL, " FROM documents ") && !strings.Contains(statement.SQL, "handle = ? AND handle IS NOT NULL") && !strings.Contains(statement.SQL, "idx_agents_admin_page") {
+		closedProbe := strings.Contains(statement.SQL, "column_key IN ('done','cancelled')")
+		placementSnapshot := strings.Contains(statement.SQL, "JOIN ref_edges placement ON placement.id=")
+		if !closedProbe && !placementSnapshot && !strings.Contains(statement.SQL, "_work_candidates") && !strings.Contains(statement.SQL, "pm_records") && !strings.Contains(statement.SQL, " FROM host_keys ") && !strings.Contains(statement.SQL, " FROM documents ") && !strings.Contains(statement.SQL, "handle = ? AND handle IS NOT NULL") && !strings.Contains(statement.SQL, "idx_agents_admin_page") {
 			continue
 		}
 		rows, err := db.Query("EXPLAIN QUERY PLAN "+statement.SQL, statement.Args...)
@@ -479,6 +481,12 @@ func logReadPlans(t *testing.T, db *sql.DB, statements []testsql.Statement) {
 		}
 		err = rows.Err()
 		rows.Close()
+		if closedProbe && (!strings.Contains(strings.Join(details, " "), "idx_cards_closed_probe") || !strings.Contains(strings.Join(details, " "), "idx_work_metadata_external")) {
+			t.Fatalf("closed superset probe lost sparse indexes: %v", details)
+		}
+		if placementSnapshot && !strings.Contains(strings.Join(details, " "), "idx_ref_edges_work_placement") {
+			t.Fatalf("PM snapshot placement lost its indexed target lookup: %v", details)
+		}
 		if err != nil {
 			t.Fatal(err)
 		}

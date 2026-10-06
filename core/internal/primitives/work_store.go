@@ -609,6 +609,7 @@ type ReportWorkFilter struct {
 	BeforeUpdated, BeforeID string
 	CardIDs                 []string
 	CardLifecycleOnly       bool
+	skipOwnerContext        bool
 }
 type ReportWorkBoard struct {
 	Title, ThreadID, PrivateOwner, Role string
@@ -672,12 +673,21 @@ func reportWorkSQL(filter ReportWorkFilter, candidatesOnly bool) (string, []any)
 	from += ` LEFT JOIN work_observations o ON o.id=m.latest_observation_id
 	 LEFT JOIN work_observations a ON a.id=m.latest_attempt_id`
 	candidateFrom := from
+	if filter.WorkList == nil || filter.WorkList.Freshness == "" {
+		// Only the freshness selector needs attempt data before LIMIT.
+		candidateFrom = strings.Replace(candidateFrom, ` LEFT JOIN work_observations a ON a.id=m.latest_attempt_id`, "", 1)
+	}
 	if filter.ProjectRef != "" {
 		from = strings.Replace(from, `work_metadata m INDEXED BY idx_work_metadata_project CROSS JOIN cards c ON c.id=m.card_id LEFT JOIN boards b ON b.id=c.board_id`, `cards c LEFT JOIN boards b ON b.id=c.board_id LEFT JOIN work_metadata m ON m.card_id=c.id`, 1)
 	}
-	from += ` LEFT JOIN threads ct ON ct.id=COALESCE(NULLIF(trim(c.thread_id),''),trim(c.parent_thread_id))
-	 LEFT JOIN threads bt ON bt.id=trim(b.thread_id)
-	 LEFT JOIN ref_edges placement ON placement.source_type='board' AND placement.target_type='card' AND placement.edge_type='board_card' AND placement.source_id=b.id AND placement.target_id=c.id`
+	ownerColumns := `COALESCE(json_extract(bt.body_json,'$.pm_actor_id'),''),COALESCE(json_extract(ct.body_json,'$.pm_actor_id'),'')`
+	if filter.skipOwnerContext {
+		ownerColumns = `'', ''`
+	} else {
+		from += ` LEFT JOIN threads ct ON ct.id=COALESCE(NULLIF(trim(c.thread_id),''),trim(c.parent_thread_id))
+	 LEFT JOIN threads bt ON bt.id=trim(b.thread_id)`
+	}
+	from += ` LEFT JOIN ref_edges placement ON placement.source_type='board' AND placement.target_type='card' AND placement.edge_type='board_card' AND placement.source_id=b.id AND placement.target_id=c.id`
 	if !filter.IncludeClosed {
 		where += ` AND (` + projectedWorkStringSQL("phase", "c.column_key") + `) NOT IN ('done','cancelled')`
 	}
@@ -721,8 +731,12 @@ func reportWorkSQL(filter ReportWorkFilter, candidatesOnly bool) (string, []any)
 	if filter.WorkList != nil {
 		placementColumns = `c.column_key,c.rank`
 	}
-	prefix := `WITH _work_candidates AS MATERIALIZED (SELECT c.id FROM ` + candidateFrom + ` WHERE ` + where + ordering + ` LIMIT ?) `
+	contextColumns := `,b.id AS board_id,b.handle AS board_handle,b.title AS board_title,b.role AS board_role,b.thread_id AS board_thread,
+ m.metadata_json AS metadata_json,m.version AS metadata_version,m.refresh_json AS refresh_json,m.latest_attempt_id AS latest_attempt_id,o.body_json AS observation_json`
+	prefix := `WITH _work_candidates AS MATERIALIZED (SELECT c.id` + contextColumns + ` FROM ` + candidateFrom + ` WHERE ` + where + ordering + ` LIMIT ?) `
+	carryContext := true
 	if filter.OverviewClosed != nil && *filter.OverviewClosed && filter.IncludeClosed && filter.WorkList == nil {
+		carryContext = false
 		// Native closed work can seek by its canonical phase. External phases
 		// still use the full projection rule, but start from sparse metadata so
 		// an empty closed-history page does not scan every active native card.
@@ -743,18 +757,49 @@ func reportWorkSQL(filter ReportWorkFilter, candidatesOnly bool) (string, []any)
 	if candidatesOnly {
 		return prefix + `SELECT id FROM _work_candidates`, args
 	}
-	from = `_work_candidates selected CROSS JOIN ` + from
-	return prefix + `SELECT COALESCE(b.id,''),b.handle,c.id,c.handle,` + placementColumns + `,
+	projectionWhere := `c.id=selected.id`
+	projectionLimit := ""
+	if len(filter.CardIDs) > 0 {
+		// Explicit IDs are already a bounded selector. Apply lifecycle and
+		// optional filters directly, without repeating every scoped relation
+		// in another candidate CTE before the same projection joins.
+		prefix, projectionWhere, projectionLimit = "", where, ` LIMIT ?`
+		carryContext = false
+	} else {
+		from = `_work_candidates selected CROSS JOIN ` + from
+	}
+	if carryContext {
+		// These relations were already scoped and read in the candidate
+		// statement snapshot. Reuse their bounded context during enrichment.
+		for _, join := range []string{` LEFT JOIN boards b ON b.id=c.board_id`, ` LEFT JOIN work_metadata m ON m.card_id=c.id`, ` LEFT JOIN work_observations o ON o.id=m.latest_observation_id`} {
+			from = strings.Replace(from, join, "", 1)
+		}
+	}
+	projection := `SELECT COALESCE(b.id,''),b.handle,c.id,c.handle,` + placementColumns + `,
 	 c.title,c.summary,c.version,c.head_revision_id,c.head_revision_number,c.thread_id,c.parent_thread_id,c.due_at,c.definition_of_done_json,
 	 c.pinned_document_id,c.assignee,c.risk,c.resolution,c.resolution_refs_json,c.refs_json,c.created_at,c.created_by,c.updated_at,c.updated_by,c.provenance_json,
 	 c.archived_at,c.archived_by,c.trashed_at,c.trashed_by,c.trash_reason,
 	 COALESCE(m.metadata_json,'{"source":{"authority":"nexus"}}'),COALESCE(m.version,0),COALESCE(m.refresh_json,'{"state":"idle"}'),o.body_json,a.body_json,
-	 COALESCE(b.title,''),COALESCE(b.role,''),COALESCE(b.thread_id,''),COALESCE(json_extract(bt.body_json,'$.pm_actor_id'),''),COALESCE(json_extract(ct.body_json,'$.pm_actor_id'),'')
-	 FROM ` + from + ` WHERE c.id=selected.id` + ordering, args
+	 COALESCE(b.title,''),COALESCE(b.role,''),COALESCE(b.thread_id,''),` + ownerColumns + `
+	 FROM ` + from + ` WHERE ` + projectionWhere + ordering + projectionLimit
+	if carryContext {
+		projection = strings.NewReplacer("b.id", "selected.board_id", "b.handle", "selected.board_handle", "b.title", "selected.board_title", "b.role", "selected.board_role", "b.thread_id", "selected.board_thread", "m.metadata_json", "selected.metadata_json", "m.version", "selected.metadata_version", "m.refresh_json", "selected.refresh_json", "m.latest_attempt_id", "selected.latest_attempt_id", "o.body_json", "selected.observation_json").Replace(projection)
+	}
+	return prefix + projection, args
 }
 
 func (s *Store) ListReportWork(ctx context.Context, filter ReportWorkFilter) (ReportWorkPage, error) {
 	if filter.OverviewClosed != nil && *filter.OverviewClosed && filter.IncludeClosed && filter.WorkList == nil {
+		// This indexed, scoped superset cannot miss a closed candidate. Most
+		// workspaces have neither canonical closed cards nor external overlays;
+		// avoid compiling all lifecycle joins when both sets are empty.
+		var possible bool
+		if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM cards WHERE column_key IN ('done','cancelled') LIMIT 1) OR EXISTS(SELECT 1 FROM work_metadata WHERE anx_unicode_trim(COALESCE(authority,'nexus'))<>'nexus' LIMIT 1)`).Scan(&possible); err != nil {
+			return ReportWorkPage{}, err
+		}
+		if !possible {
+			return ReportWorkPage{Work: []map[string]any{}, Boards: map[string]ReportWorkBoard{}, PrivateOwners: map[string]string{}}, nil
+		}
 		// Avoid preparing the wide projection (and its reference/identity
 		// predicates) for an empty closed-history page. The selector still
 		// applies canonical visibility and lifecycle before its bounded limit.

@@ -296,14 +296,15 @@ func (s *Store) overviewWork(ctx context.Context, visible func(string, string) b
 	// Scoped SQL has already applied canonical card and contributor privacy.
 	// Keep legacy callbacks for direct/unscoped callers; do not query every thread
 	// again for rows already filtered by this request's immutable policy.
-	if _, scoped := resourceaccess.PolicyFrom(ctx); scoped {
+	_, scoped := resourceaccess.PolicyFrom(ctx)
+	if scoped {
 		visible = nil
 	}
 	closed := false
-	page, err := s.ListReportWork(ctx, ReportWorkFilter{Limit: 100, IncludeClosed: true, OverviewClosed: &closed})
+	page, err := s.ListReportWork(ctx, ReportWorkFilter{Limit: 100, IncludeClosed: true, OverviewClosed: &closed, skipOwnerContext: scoped})
 	if err == nil && includeClosed {
 		closed = true
-		history, e := s.ListReportWork(ctx, ReportWorkFilter{Limit: 100, IncludeClosed: true, OverviewClosed: &closed})
+		history, e := s.ListReportWork(ctx, ReportWorkFilter{Limit: 100, IncludeClosed: true, OverviewClosed: &closed, skipOwnerContext: scoped})
 		if e != nil {
 			return nil, false, nil, e
 		}
