@@ -230,6 +230,11 @@ func (s *Store) overviewAnsweredAsks(ctx context.Context, out *OverviewChanges, 
 	if err != nil {
 		return err
 	}
+	// Over-budget answers are already excluded. With no complete candidates,
+	// their accumulated subjects cannot contribute any output or eligibility.
+	if len(answers) == 0 {
+		return nil
+	}
 	readable := map[string]bool{}
 	refs = uniqueSortedStrings(refs)
 	for start := 0; start < len(refs); start += 200 {
