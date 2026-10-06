@@ -51,7 +51,7 @@ type scopeCStreamSnapshot struct {
 	binding scopestream.Binding
 }
 type scopeCWriter struct {
-	tx    *sql.Tx
+	tx    scopedrepo.MutationTx
 	scope string
 }
 
@@ -224,8 +224,19 @@ func (w *scopeCWriter) ReplaceSearch(ctx context.Context, c scopesearch.Change) 
 		if _, err := w.tx.ExecContext(ctx, `INSERT INTO scope_search_resources VALUES(?,?,?,?,?,?,?,?,?)`, c.Scope, c.Kind, c.RID, c.Version, c.Parent, -c.Recency, c.Content.Normalized(), c.Content.IndexedBytes(), c.Content.Truncated()); err != nil {
 			return err
 		}
-		for _, term := range c.Content.Terms() {
-			if _, err := w.tx.ExecContext(ctx, `INSERT INTO scope_search_postings VALUES(?,?,?,?,?)`, c.Scope, term, -c.Recency, c.RID, c.Kind); err != nil {
+		// Bounded VALUES batches fit A's shared 256-call hook budget even
+		// when a resource has all 4,096 postings. Production templates and
+		// schema constraints remain an A-owned proposal.
+		terms := c.Content.Terms()
+		for start := 0; start < len(terms); start += 128 {
+			end := min(start+128, len(terms))
+			values := make([]string, 0, end-start)
+			args := make([]any, 0, 5*(end-start))
+			for _, term := range terms[start:end] {
+				values = append(values, "(?,?,?,?,?)")
+				args = append(args, c.Scope, term, -c.Recency, c.RID, c.Kind)
+			}
+			if _, err := w.tx.ExecContext(ctx, `INSERT INTO scope_search_postings VALUES `+strings.Join(values, ","), args...); err != nil {
 				return err
 			}
 		}
@@ -351,8 +362,25 @@ func (w *scopeCWriter) AppendChanges(ctx context.Context, changes []scopestream.
 	}
 	for _, c := range changes {
 		var seq int64
-		if err := w.tx.QueryRowContext(ctx, `INSERT INTO scope_stream_sequences(scope_id,family,audience_key,head) VALUES(?,?,?,1) ON CONFLICT(scope_id,family,audience_key) DO UPDATE SET head=head+1 RETURNING head`, c.Stream.Scope, c.Stream.Family, c.Stream.Audience).Scan(&seq); err != nil {
+		rows, err := w.tx.QueryContext(ctx, `INSERT INTO scope_stream_sequences(scope_id,family,audience_key,head) VALUES(?,?,?,1) ON CONFLICT(scope_id,family,audience_key) DO UPDATE SET head=head+1 RETURNING head`, c.Stream.Scope, c.Stream.Family, c.Stream.Audience)
+		if err != nil {
 			return err
+		}
+		if !rows.Next() {
+			err = rows.Err()
+			rows.Close()
+			if err != nil {
+				return err
+			}
+			return scopestream.ErrProjection
+		}
+		err = rows.Scan(&seq)
+		closeErr := rows.Close()
+		if err != nil {
+			return err
+		}
+		if closeErr != nil {
+			return closeErr
 		}
 		payload := c.Payload.Bytes()
 		if _, err := w.tx.ExecContext(ctx, `INSERT INTO scope_changes VALUES(?,?,?,?,?,?,?,?)`, c.Stream.Scope, c.Stream.Family, c.Stream.Audience, seq, c.RID, c.Version, string(payload), len(payload)); err != nil {

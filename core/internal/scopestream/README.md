@@ -74,3 +74,13 @@ and dispatcher isolation; the writer inventory proposal; route/contracts/auth an
 are trusted hook operations, not declassification APIs for business code. The
 factory/import and implicit-flow analyzer gates remain required before wiring.
 No passing fixture authorizes enabling an incomplete phase.
+
+The test-only adapter proposal in `server/scope_search_hooks_test.go` now consumes
+A's existing-transaction `CanonicalHook`/`MutationTx` interface. Sequence allocation
+uses `QueryContext`/`RETURNING` and closes its result before inserting the payload;
+no raw transaction, commit method or second connection is exposed to that hook.
+It exercises atomic source/search/stream commit and rollback and real HTTP/SSE
+output. Canonical production capture, audience provenance, exact template
+allowlisting and durable-worker parity remain A-owned gates. Shared search source
+coverage is available at `1308385b` and preserved by C; production capture must
+still use it correctly. Guarded-reference previews remain render-only.

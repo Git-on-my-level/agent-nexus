@@ -13,8 +13,9 @@ has no database import, SQL handle or capability factory.
 
 Search indexes current document heads and independent comment resources. `Apply`
 replaces only that resource's postings in the caller's canonical transaction;
-`ApplyCanonical` consumes the frozen `scopes.Change`, plus a trusted source-prefix
-truncation bit. Its writer must delete at most 4,096 old postings, insert at most
+`ApplyCanonical` consumes the frozen `scopes.Change`, conservatively OR-ing
+`After.SourceTruncated`, the existing trusted source-prefix argument and its own
+normalization truncation. Its writer must delete at most 4,096 old postings, insert at most
 4,096 new postings and advance the scope's search generation atomically. It must
 never load a document's revisions or backing-thread history on a comment change.
 
@@ -35,6 +36,12 @@ A saturated final range may produce one extra terminal empty page. An unchanged
 corpus always progresses; changed selected search/lifecycle/authority generations
 return an explicit restart. Tokens bind query, principal, exact scope selection,
 generations and the last fully verified key, and are encrypted/authenticated.
+The symmetric token ceiling is derived from the complete cursor JSON shape:
+62 scaffold bytes + two 64-byte hexadecimal fingerprints + 19 recency digits +
+8 kind bytes + sixfold JSON escaping of a 512-byte RID and 256-byte scope =
+4,825 bytes. AES-GCM's 12-byte nonce and 16-byte tag produce at most 6,471
+unpadded base64url bytes. Both encoding and decoding enforce this same bound;
+maximum HTML-sensitive and control-character keys resume an unchanged HTTP query.
 
 CPU is O(K log N + C log K + V*T + P*512), with fixed T<=8; SQL examines at most C
 candidate keys and hydrates at most V bytes. Required indexes:
@@ -59,9 +66,11 @@ are A's opaque allocated IDs.
    complete old-posting bounds and scope/parent equality in the production schema.
 2. Produce the bounded head/comment prefix from the incoming canonical write
    **before** forming the frozen bounded Change. Carry source truncation explicitly
-   (the current shared Projection has no such field). Never pass a full oversized
+   using A's `scopes.BoundSearchProjection` and shared `SourceTruncated` bit.
+   Never pass a full oversized
    canonical record through `Change.Validate`, and never silently label an already
-   truncated delta complete. Add a shared coverage bit when freezing that hook.
+   truncated delta complete. These are trusted canonical capture operations;
+   never use the helper to declassify guarded-reference previews.
    Hooks must call this package for append/edit/delete/purge/lifecycle rebuilds in
    the same transaction as canonical state, including imports.
    Guarded-reference labels borrowed from another scope are render-only; never
@@ -78,6 +87,17 @@ are A's opaque allocated IDs.
    bounded VALUES hydration plans are checked, but this is not production route
    performance approval. Real canonical HTTP mutations and durable lifecycle
    worker tests remain integration gates. Do not retire old tests yet.
+
+The executable adapter proposal in `server/scope_search_hooks_test.go` uses A's
+`ApplyCanonicalHooks` with an existing `resourceaccess.Tx`; its capability expires
+at callback exit. It commits/rolls back a canonical document, search postings,
+generation and exact stream together, then checks HTTP/SSE output. The reference
+writer uses <=32 batches of <=128 posting tuples, two deletes, one head insert
+and one generation update (<=36 search calls), plus <=8 calls for four stream
+destinations. This fits the shared 256-call ceiling without limiting coverage to
+256 terms. A must integrate reviewed typed batch templates and enforce the old
+posting cap in the production schema. This is an adapter proposal with explicit
+test selection, not complete production source capture or route authority.
 
 The HTTP tests exercise the production executor/helper over a real SQLite
 workspace and foundation authority tables with explicit test selection. They
