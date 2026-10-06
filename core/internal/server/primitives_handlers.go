@@ -576,6 +576,10 @@ func handleCreateArtifactAttachment(w http.ResponseWriter, r *http.Request, opts
 	maxBytes := opts.requestBodyLimits.normalize().Attachment
 	created, err := opts.primitiveStore.CreateArtifactAttachment(r.Context(), actorID, artifact, mimeChosen, header.Filename, br, maxBytes)
 	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "resource not found")
+			return
+		}
 		if errors.Is(err, blob.ErrUploadTooLarge) {
 			writeError(w, http.StatusRequestEntityTooLarge, "payload_too_large", "attachment exceeds maximum upload size")
 			return

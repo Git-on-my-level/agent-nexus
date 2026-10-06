@@ -48,7 +48,7 @@ func (s *Store) prepareArtifactWrite(ctx context.Context, actorID string, artifa
 	if err != nil {
 		return nil, fmt.Errorf("artifact.refs: %w", err)
 	}
-	encodedContent, err := encodeContent(content)
+	encodedContent, err := encodeContent(content, contentType)
 	if err != nil {
 		return nil, err
 	}

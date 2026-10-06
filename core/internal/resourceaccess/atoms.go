@@ -25,6 +25,12 @@ const textReferencePrefix = "$anx-ref-text$"
 
 var embeddedRefStart = regexp.MustCompile(`(?i)(?:^|[^[:alnum:]])(thread|board|card|topic|document|doc|event|artifact|card_revision|document_revision|wakeup|plan|inbox|run)[\s\p{Z}\x{85}\x{0B}]*:[\s\p{Z}\x{85}\x{0B}]*`)
 
+// Only identifier continuations suppress a boundary. Controls (including NUL),
+// punctuation, symbols and malformed UTF-8 all separate identifiers.
+func referenceIdentifierRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsNumber(r) || unicode.IsMark(r) || r == '-' || r == '_'
+}
+
 func textHasReference(atom, target string) bool {
 	if !strings.HasPrefix(atom, textReferencePrefix) {
 		return false
@@ -41,14 +47,19 @@ func textHasReference(atom, target string) bool {
 		}
 		if strings.EqualFold(found, kind) && len(text)-loc[1] >= len(id) && strings.EqualFold(text[loc[1]:loc[1]+len(id)], id) {
 			end := loc[1] + len(id)
+			// Paired underscores are Markdown wrappers, not identifier bytes.
+			markupUnderscore := loc[2] > 0 && text[loc[2]-1] == '_' && end < len(text) && text[end] == '_'
+			if loc[2] > 0 {
+				prev, _ := utf8.DecodeLastRuneInString(text[:loc[2]])
+				if referenceIdentifierRune(prev) && !markupUnderscore {
+					continue
+				}
+			}
 			if end == len(text) {
 				return true
 			}
 			next, _ := utf8.DecodeRuneInString(text[end:])
-			// Keep canonical handle prefixes distinct (private vs private-2),
-			// while allowing prose/Markdown boundaries after the complete ID.
-			markupUnderscore := next == '_' && loc[2] > 0 && text[loc[2]-1] == '_'
-			if unicode.IsSpace(next) || ((unicode.IsPunct(next) || unicode.IsSymbol(next)) && next != '-' && next != '_') || markupUnderscore {
+			if !referenceIdentifierRune(next) || markupUnderscore {
 				return true
 			}
 		}

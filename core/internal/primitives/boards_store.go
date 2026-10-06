@@ -301,7 +301,7 @@ func (s *Store) prepareCardRevisionInsert(ctx context.Context, actorID, cardID s
 		"summary":            strings.TrimSpace(summary),
 		"definition_of_done": uniqueSortedStrings(definitionOfDone),
 	}
-	encodedContent, err := encodeContent(content)
+	encodedContent, err := encodeContent(content, "structured")
 	if err != nil {
 		return cardRevisionInsert{}, nil, err
 	}

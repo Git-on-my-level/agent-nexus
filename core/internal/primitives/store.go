@@ -394,7 +394,7 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 		return nil, fmt.Errorf("artifact.refs: %w", err)
 	}
 
-	encodedContent, err := encodeContent(content)
+	encodedContent, err := encodeContent(content, contentType)
 	if err != nil {
 		return nil, err
 	}
@@ -529,7 +529,7 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 		return nil, nil, fmt.Errorf("artifact.refs: %w", err)
 	}
 
-	encodedContent, err := encodeContent(content)
+	encodedContent, err := encodeContent(content, contentType)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -3512,8 +3512,8 @@ func StripThreadPlanningFieldsForAPI(m map[string]any) {
 	delete(m, "next_check_in_at")
 }
 
-func encodeContent(content any) ([]byte, error) {
-	if err := resourceaccess.ValidateText(content); err != nil {
+func encodeContent(content any, contentType string) ([]byte, error) {
+	if err := resourceaccess.ValidateContent(content, contentType); err != nil {
 		return nil, err
 	}
 	switch value := content.(type) {

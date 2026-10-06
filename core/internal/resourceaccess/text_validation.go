@@ -8,6 +8,22 @@ import (
 
 var ErrNULText = errors.New("text and JSON strings must not contain NUL")
 
+// ValidateContent uses the declared media type. Binary bytes may happen to be
+// JSON; they remain opaque to text validation, but never to reference indexing.
+func ValidateContent(content any, contentType string) error {
+	kind := strings.ToLower(strings.TrimSpace(strings.SplitN(contentType, ";", 2)[0]))
+	if kind == "binary" || (strings.Contains(kind, "/") && !strings.HasPrefix(kind, "text/") && kind != "application/json" && !strings.HasSuffix(kind, "+json")) {
+		return nil
+	}
+	if err := ValidateText(content); err != nil {
+		return err
+	}
+	if b, ok := content.([]byte); ok {
+		return ValidateText(string(b))
+	}
+	return nil
+}
+
 // ValidateText follows the same nested strings and encoded JSON containers as
 // reference extraction. Binary values remain opaque unless they encode JSON.
 func ValidateText(value any) error {

@@ -478,7 +478,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		return nil, nil, invalidDocumentRequest("document.state is not writable on create; new documents start active")
 	}
 
-	encodedContent, err := encodeContent(content)
+	encodedContent, err := encodeContent(content, contentType)
 	if err != nil {
 		return nil, nil, invalidDocumentRequestError(err)
 	}
@@ -1082,7 +1082,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		return nil, nil, fmt.Errorf("marshal document resource refs: %w", err)
 	}
 
-	encodedContent, err := encodeContent(content)
+	encodedContent, err := encodeContent(content, contentType)
 	if err != nil {
 		return nil, nil, invalidDocumentRequestError(err)
 	}

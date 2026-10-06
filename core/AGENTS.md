@@ -112,6 +112,10 @@ BLOB; unsafe TEXT calls fail closed. User text/JSON and business SQL writes
 reject NUL with invalid_request at HTTP boundaries. Only internally generated
 ReferenceManifest values preserve arbitrary binary/legacy bytes; this exemption
 skips text validation, never authorization. Do not cast user input to that type.
+Blob validation uses the declared content type: binary bytes remain binary even
+when they parse as JSON. Binary manifests still scan every byte for ownership.
+Reference matching treats controls and invalid UTF-8 as boundaries on both sides;
+only identifier continuations suppress a boundary (with paired Markdown wrappers).
 `resourceaccess.OwnershipSources` drives atomic triggers; `ReferenceAtoms` scans
 nested JSON values/keys and typed refs in text with shared normalization. Prose
 candidates retain the original text so legacy IDs containing punctuation or

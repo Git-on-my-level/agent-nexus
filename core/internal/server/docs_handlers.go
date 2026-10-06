@@ -193,6 +193,10 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 
 	document, revision, err := opts.primitiveStore.CreateDocument(r.Context(), actorID, req.Document, req.Content, req.ContentType, refs)
 	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "resource not found")
+			return
+		}
 		if writePrimitiveQuotaViolationError(w, err) {
 			return
 		}

@@ -1,8 +1,14 @@
 package server
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"io"
+	"mime/multipart"
+	"net/http"
+	"net/textproto"
 	"testing"
 
 	"agent-nexus-core/internal/primitives"
@@ -56,4 +62,83 @@ func TestResourceAccessNULJSONHTTP(t *testing.T) {
 			getJSONExpectStatusWithAuth(t, env.server.URL+"/docs/"+id, token, want).Body.Close()
 		}
 	}
+	// Binary is never reclassified as text merely because its bytes parse as
+	// JSON. Both raw and JSON-escaped controls still participate in ownership.
+	for _, content := range []string{`{"text":"\u0000"}`, "prose\x00document:[]\x00", `{"text":"prose\u0000document:[]\u0000"}`} {
+		private := content != `{"text":"\u0000"}`
+		create := map[string]any{"document": map[string]any{"title": "binary control"}, "content_type": "binary", "content_base64": base64.StdEncoding.EncodeToString([]byte(content)), "refs": []string{}}
+		response := postJSONExpectStatusWithAuth(t, env.server.URL+"/docs", create, owner.AccessToken, 201)
+		var saved map[string]any
+		if err := json.NewDecoder(response.Body).Decode(&saved); err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		id := saved["document"].(map[string]any)["id"].(string)
+		if saved["revision"].(map[string]any)["content_base64"] != create["content_base64"] {
+			t.Fatal("binary document bytes changed")
+		}
+		artifact := postNULBinaryAttachment(t, env.server.URL, owner.AccessToken, content, 201)
+		for _, token := range []string{owner.AccessToken, stranger.AccessToken, agent.AccessToken} {
+			readStatus, writeStatus := 200, 201
+			if private && token != owner.AccessToken {
+				readStatus, writeStatus = 404, 404
+			}
+			getJSONExpectStatusWithAuth(t, env.server.URL+"/docs/"+id, token, readStatus).Body.Close()
+			read := getJSONExpectStatusWithAuth(t, env.server.URL+"/artifacts/"+artifact+"/content", token, readStatus)
+			body, err := io.ReadAll(read.Body)
+			read.Body.Close()
+			if err != nil || readStatus == 200 && !bytes.Equal(body, []byte(content)) {
+				t.Fatalf("binary attachment read changed: %q %v", body, err)
+			}
+			postJSONExpectStatusWithAuth(t, env.server.URL+"/docs", create, token, writeStatus).Body.Close()
+			postNULBinaryAttachment(t, env.server.URL, token, content, writeStatus)
+		}
+	}
+}
+
+func postNULBinaryAttachment(t *testing.T, base, token, content string, want int) string {
+	t.Helper()
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+	if err := w.WriteField("refs", "[]"); err != nil {
+		t.Fatal(err)
+	}
+	h := textproto.MIMEHeader{}
+	h.Set("Content-Disposition", `form-data; name="file"; filename="binary.png"`)
+	h.Set("Content-Type", "image/png")
+	part, err := w.CreatePart(h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = io.WriteString(part, content); err != nil {
+		t.Fatal(err)
+	}
+	if err = w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequest(http.MethodPost, base+"/artifacts/attachments", &body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil || resp.StatusCode != want {
+		t.Fatalf("attachment status=%d want %d body=%s err=%v", resp.StatusCode, want, raw, err)
+	}
+	if want != 201 {
+		return ""
+	}
+	var saved struct {
+		Artifact map[string]any `json:"artifact"`
+	}
+	if err = json.Unmarshal(raw, &saved); err != nil {
+		t.Fatal(err)
+	}
+	return saved.Artifact["id"].(string)
 }
