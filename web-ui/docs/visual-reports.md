@@ -326,10 +326,18 @@ read as a fact.
 Provenance is always conveyed in text. Colour repeats the words, never replaces
 them, so the signal survives greyscale and a colour-blind reader.
 
+An authored panel is also overdue the moment its document declares
+`freshness: "stale"`. That is the author warning a reader deliberately, and it
+is a stronger statement than a review date nobody has reached yet. Being merely
+older than the 24-hour evidence window is not: that drives the freshness filter,
+not this line.
+
 A bound series falling back to its authored snapshot is authored, not live: it
-is showing the document's own numbers with their original as-of time. A series
-that has missed its expected publishing interval reads **May be stale · last
-read 3d ago**.
+is showing the document's own numbers with their original as-of time, and it is
+always overdue, because the binding did not answer. While the first read is
+still in flight the panel stays live rather than flipping class on every load. A
+series that has missed its expected publishing interval reads **May be stale ·
+last read 3d ago**.
 
 `panelProvenance(panel, freshness, now)` in `src/lib/reportProvenance.js` is the
 single place this is decided, and the Overview embed, the document report view
@@ -345,6 +353,11 @@ text fallback. A stored document can therefore only carry them once
 `visualReports.js` and `contracts/visualreport/report.go` accept them together.
 The same applies to a new `live-` panel type. Until then these fields reach the
 UI only through the rendered report response, which is not schema-validated.
+
+Mind the asymmetry while that is true: the Overview renders its pinned report
+from the `/overview` snapshot without validating it, so a stored document
+carrying `authored_at` renders normally there and drops to a text fallback on
+the document view.
 
 ### Freshness and incomplete observations
 

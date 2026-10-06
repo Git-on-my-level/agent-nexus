@@ -197,8 +197,12 @@ export function liveProvenance(observedAt, state = {}, now = Date.now()) {
  * body of a card, a decision note. Marking it hand-written is useful; turning
  * it amber a week later is noise, because nobody ever undertook to rewrite it.
  *
+ * `stale: true` says so without waiting for a deadline: an author who declared
+ * the panel stale, or a snapshot standing in for a live read that failed.
+ * `note` is one more sentence for the tooltip, saying which.
+ *
  * @param {{ author?: string, authoredAt?: string|null, reviewBy?: string|null,
- *   reviewable?: boolean }} written
+ *   reviewable?: boolean, stale?: boolean, note?: string }} written
  * @param {number} [now]
  */
 export function authoredProvenance(written = {}, now = Date.now()) {
@@ -210,7 +214,8 @@ export function authoredProvenance(written = {}, now = Date.now()) {
     written.reviewable === false
       ? { at: null, defaulted: false, unreadable: false }
       : reviewDeadline(written.reviewBy, authoredAt);
-  const dueForReview = review.at !== null && now > review.at;
+  const dueForReview =
+    written.stale === true || (review.at !== null && now > review.at);
   const written_by = author ? `Written by ${author}` : "Written";
   const lead = dueForReview
     ? age
@@ -227,7 +232,9 @@ export function authoredProvenance(written = {}, now = Date.now()) {
     label: `${lead}${age}`,
     lead,
     age,
-    title: authoredTitle(author, authoredAt, review, now),
+    title: [authoredTitle(author, authoredAt, review, now), written.note]
+      .filter(Boolean)
+      .join(" · "),
     datetime: authoredAt ?? "",
     author,
     reviewBy: review.at,
@@ -250,12 +257,20 @@ export function panelProvenance(panel, freshness = "", now = Date.now()) {
   // hand-written numbers with their original as-of time. Calling that "Live"
   // is the exact confusion this line exists to remove, so it is authored —
   // dated by the snapshot, not by the read that failed.
-  if (panel?.seriesFallback)
+  //
+  // Not while the first read is still in flight, though: `seriesFallback` is
+  // set from the moment there is no observation, and flipping a panel from
+  // hand-written to live on every page load would teach a reader to ignore
+  // the line. And always stale: the snapshot is standing in for a binding
+  // that did not answer, which a quiet "Written by claude · 2d ago" hides.
+  if (panel?.seriesFallback && panel?.seriesObservation?.status !== "loading")
     return authoredProvenance(
       {
         author: panel?.author,
         authoredAt: panel?.fallback?.as_of ?? panel?.observed_at ?? null,
         reviewBy: panel?.review_by,
+        stale: true,
+        note: "The live series could not be read; this is the document's own snapshot.",
       },
       now,
     );
@@ -278,6 +293,16 @@ export function panelProvenance(panel, freshness = "", now = Date.now()) {
       author: panel?.author,
       authoredAt: panelAuthoredAt(panel),
       reviewBy: panel?.review_by,
+      // An author who writes `freshness: "stale"` into the document is warning
+      // the reader deliberately. That is a stronger statement than a review
+      // date nobody has reached yet, and dropping it would leave the report's
+      // own stale counter and filter pointing at panels that present as
+      // ordinary notes.
+      stale: panel?.freshness === "stale",
+      note:
+        panel?.freshness === "stale"
+          ? "The author marked this panel stale."
+          : "",
     },
     now,
   );

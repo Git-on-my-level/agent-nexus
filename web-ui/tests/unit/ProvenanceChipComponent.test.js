@@ -18,7 +18,9 @@ const panel = (extra = {}) => ({
   author: "claude",
   provenance: "reported",
   observed_at: ago(3),
-  freshness: "stale",
+  // Not declared stale: that is the author warning a reader, and these
+  // fixtures are ordinary notes that happen to be older than a day.
+  freshness: "current",
   source_ids: [],
   data: { text: "Release B is in review." },
   ...extra,
