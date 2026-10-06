@@ -70,7 +70,24 @@ epoch changes, lifecycle rollback, old-loader refusal, compatible subprocess
 reopening, and live HTTP readiness with 100/1,000 unavailable blobs. Set
 `ANX_SCOPE_OLD_BINARY` to an independently built schema-63 core executable to run
 the full historical-bootstrap refusal test. Full canonical corpus migration,
-production authority/projection parity, filesystem ENOSPC, SCA-661 budgets and
+production authority/projection parity, SCA-661 budgets and
 green exact-head CI remain release gates. No hosted data is used.
 
 Lifecycle slice deadlines also own the transaction, including lock acquisition and commit; a callback that returns success after its deadline cannot commit. Cold readiness tests use a delayed, unavailable blob backend and require zero reads on repeated opens.
+
+`TestFilesystemENOSPCPreservesCheckpoint` exercises actual filesystem exhaustion,
+distinct from the SQLite page-limit test. Supply `ANX_SCOPE_ENOSPC_ROOT` pointing
+to a disposable mounted filesystem of at most 128 MiB, containing a file named
+`.anx-disposable-enospc` with exactly `scope migration disposable filesystem`
+and a final newline. Run from `core`:
+
+```sh
+go test ./internal/scopemigrate -run TestFilesystemENOSPCPreservesCheckpoint -count=1 -v
+```
+
+The probe fills only its temporary directory on that filesystem until even a
+one-byte write returns ENOSPC, requires SQLite FULL from the next metadata chunk,
+then frees the filler, reopens storage and checks the unchanged durable checkpoint
+and zero partial placements before resuming. Test cleanup removes its files. It
+skips without the explicit environment variable and in the short test tier. A
+64 MiB HFS+ disk-image run passed; Linux can use a dedicated small tmpfs mount.

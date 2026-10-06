@@ -77,7 +77,12 @@ func (s artifactSource) Page(ctx context.Context, tx *sql.Tx, after string, limi
 
 func fixture(t *testing.T, n int) (*storage.Workspace, *scopemigrate.Runner) {
 	t.Helper()
-	w, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	return fixtureAt(t, n, t.TempDir())
+}
+
+func fixtureAt(t *testing.T, n int, root string) (*storage.Workspace, *scopemigrate.Runner) {
+	t.Helper()
+	w, err := storage.InitializeWorkspace(context.Background(), root)
 	must(t, err)
 	t.Cleanup(func() { w.Close() })
 	tx, err := w.DB().Begin()
