@@ -83,7 +83,10 @@ const REPORT = {
       author: "claude",
       provenance: "reported",
       observed_at: RECENT,
-      freshness: "stale",
+      // Not declared stale: an author who writes that into the document is
+      // warning the reader, and the panel says so. This one is simply older
+      // than the 24-hour evidence window, which is not the same claim.
+      freshness: "current",
       source_ids: [],
       data: {
         text: "Release B is in review. The adapter contract is still open.",
@@ -98,7 +101,7 @@ const REPORT = {
       author: LONG_AUTHOR,
       provenance: "reported",
       observed_at: ago(2),
-      freshness: "stale",
+      freshness: "current",
       title: "Background",
       source_ids: [],
       data: { text: "Why this programme exists. Nobody has revisited it." },
@@ -281,12 +284,6 @@ for (const [surface, path] of [
 
     // The read time is in the header now, not a line under the panel body.
     await expect(report).not.toContainText("Live as of");
-
-    // A live read in flight or failed is never also badged "Unavailable":
-    // the provenance line is the only thing that speaks for a live panel.
-    await expect(
-      report.locator('[data-report-panel="asks"] .report-state'),
-    ).toHaveCount(0);
   });
 }
 
@@ -305,6 +302,31 @@ test("the exact instant is one hover away, and reaches a screen reader", async (
   expect(label).toContain("Written");
   // A default deadline says it is a default rather than the author's promise.
   expect(label).toContain("defaulted to 7 days after writing");
+});
+
+test("a live panel whose read fails says so, and is not also badged", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await installDashboard(page);
+  // Installed after the dashboard so this route wins: the rendered report is
+  // forbidden, which is what a reader without access to the query sees.
+  await page.route(`**/docs/${DOC_ID}/report`, (route) =>
+    route.fulfill({
+      status: 403,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "forbidden" } }),
+    }),
+  );
+  await page.goto(DOC_PATH);
+  const report = reportRegion(page);
+  await expect(chip(report, "asks")).toHaveText(/^Live · read failed$/);
+  // `withLiveObservation` calls a failed read `unavailable`, and the panel
+  // used to print that as a second badge beside a line already saying it.
+  await expect(
+    report.locator('[data-report-panel="asks"] .report-state'),
+  ).toHaveCount(0);
+  await expect(report).toContainText("Live data unavailable");
 });
 
 test("provenance survives without colour, and passes an accessibility scan", async ({

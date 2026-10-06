@@ -24,7 +24,9 @@ const authored = (extra = {}) => ({
   author: "claude",
   provenance: "reported",
   observed_at: ago(3 * DAY),
-  freshness: "stale",
+  // Not declared stale: that is the author warning a reader, and these
+  // fixtures are ordinary notes that happen to be older than a day.
+  freshness: "current",
   source_ids: [],
   data: { text: "Release B is in review." },
   ...extra,
@@ -122,6 +124,33 @@ describe("live panels", () => {
     expect(model.title).toContain("expected interval");
   });
 
+  it("keeps an author's own stale declaration visible", () => {
+    // `freshness: "stale"` written into the document is the author warning a
+    // reader deliberately. Waiting for a review deadline to agree would leave
+    // the report's stale counter and filter pointing at a panel that presents
+    // as an ordinary note.
+    const model = panelProvenance(
+      authored({ authored_at: ago(2 * DAY), freshness: "stale" }),
+      "stale",
+      NOW,
+    );
+    expect(model.state).toBe("due-for-review");
+    expect(model.label).toBe("May be stale · written 2d ago");
+    expect(model.title).toContain("marked this panel stale");
+  });
+
+  it("does not call a panel stale just for being a day old", () => {
+    // The 24-hour evidence window is not a review promise. `freshness` is
+    // `current`; only `getPanelFreshness` demotes it, and that demotion is
+    // what drives the filter, not this line.
+    const model = panelProvenance(
+      authored({ authored_at: ago(2 * DAY), freshness: "current" }),
+      "stale",
+      NOW,
+    );
+    expect(model.state).toBe("authored");
+  });
+
   it("calls a series showing its authored snapshot hand-written", () => {
     // `withSeriesObservation` falls back to the document's own numbers with
     // their original as-of time. Labelling that "Live" is the confusion this
@@ -141,6 +170,47 @@ describe("live panels", () => {
     );
     expect(model.class).toBe("authored");
     expect(model.label).toBe("May be stale · written 9d ago");
+  });
+
+  it("says a standing-in snapshot is stale however young it is", () => {
+    // The binding did not answer. A quiet "Written by claude · 2d ago" would
+    // leave the broken series invisible in the header.
+    const model = panelProvenance(
+      {
+        type: "metric",
+        author: "claude",
+        source: { stream: "a" },
+        fallback: { as_of: ago(2 * DAY), data: { value: "94%" } },
+        observed_at: ago(2 * DAY),
+        seriesFallback: true,
+        seriesObservation: { status: "unavailable" },
+      },
+      "stale",
+      NOW,
+    );
+    expect(model.state).toBe("due-for-review");
+    expect(model.title).toContain("could not be read");
+  });
+
+  it("does not flip a series to hand-written while its first read runs", () => {
+    // `seriesFallback` is set from the moment there is no observation, so a
+    // panel with a fallback would read hand-written on every page load and
+    // then jump to live.
+    const model = panelProvenance(
+      {
+        type: "metric",
+        author: "claude",
+        source: { stream: "a" },
+        fallback: { as_of: ago(2 * DAY), data: {} },
+        observed_at: ago(2 * DAY),
+        seriesFallback: true,
+        seriesObservation: { status: "loading" },
+      },
+      "stale",
+      NOW,
+    );
+    expect(model.class).toBe("live");
+    expect(model.state).toBe("live-pending");
   });
 
   it("says a series is still being read rather than that it failed", () => {
