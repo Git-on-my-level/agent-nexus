@@ -1112,6 +1112,17 @@
   },
   {
     "method": "GET",
+    "path": "/work/{card_ref}",
+    "principal": "unauthorized",
+    "p95_ms": 2500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "issue": "SCA-665",
+    "issue_url": "mention://issue/01a11100-d0de-7e3e-9e54-b0eceddb59a0",
+    "reason": "Existing main 0c01b68b (schema 63): the denied work point read inherits the remaining per-request denial snapshot cost tracked by SCA-665. CI run 37514028408 measured p95 633.082382ms over three measured samples, each with 5 SQL executions, 5 consumed rows and the expected private-resource 404. Allow only this method, path and principal 2500ms (threefold latency headroom plus 250ms, rounded up to 500ms); ordinary 100-query and 1024-row ceilings remain unchanged. Success/status, privacy and exact ordered query-plan checks stay mandatory."
+  },
+  {
+    "method": "GET",
     "path": "/work/{card_ref}/observations",
     "principal": "unauthorized",
     "p95_ms": 2000,
