@@ -24,6 +24,27 @@ adds no inspection/recovery workflow.
 | `scope_replays(principal,replay_key,scope_id,kind,request_hash,resource_id)` | Creator replay; reauthorizes scope and checks request hash   |
 | `scope_projection_values(scope_id,projection_key,value)`                     | Derived value, readable/writable only under its source scope |
 
+## Identity and reference integrity
+
+The `(scope_id, kind, id, canonical_id)` registry binding is permanent. Updates,
+deletes and replacement inserts cannot redirect an opaque identity or its RID
+to another canonical source; canonical version updates remain possible. New
+publication creates a separate identity rather than rebinding an existing one.
+
+Persistent schema triggers enforce the declared scope/resource references even
+when a workspace connection has `PRAGMA foreign_keys=OFF`. Constraints therefore
+apply to every pooled connection and trusted migration transaction, without
+changing the legacy workspace connection configuration. Child insert/update
+checks and parent deletion guards use exact keys or indexed scope prefixes.
+Regression tests use the real workspace initializer and multiple connections,
+in addition to the foreign-key-enabled repository fixture.
+
+Feed binding deletion preserves the declared membership cascade with foreign keys
+disabled. That maintenance operation is proportional to matching bindings,
+including historical generations; bounding retirement/cascade work remains a
+write-enablement gate. Replacing a membership that still has bindings is rejected
+rather than allowing SQLite replacement to retain stale audience authority.
+
 ## Interfaces available to parallel workstreams
 
 - `scopes.ID`, `Role`, `Stream`, `Binding`, `DirectoryPage`, fixed scope/stream/page
@@ -130,3 +151,49 @@ counts, search and streams. Passing these small repository tests establishes
 neither endpoint speed nor permission to switch the reader. Migration interruption,
 1x/10x fixtures, SCA-661 budgets, real crash/lease/ENOSPC and compatible reopen stay
 release gates for the phases that introduce those behaviors.
+
+## Transaction-bound legacy census registration
+
+`RegisterLegacyBatch(ctx context.Context, tx *sql.Tx, sink scopes.ID,
+records []LegacyRecord) ([]scopes.ResourceIdentity, error)` accepts an existing
+trusted migration transaction. `LegacyRecord` carries `Kind`, `CanonicalID` and
+`CanonicalVersion`; a batch contains 1..64 records, with kinds <=32 bytes and
+canonical keys 1..512 bytes. Canonical keys preserve arbitrary legacy bytes,
+including NUL and invalid UTF-8; they remain internal and use exact parameterized
+lookups. An oversized key is an unprocessed census exception, not successful
+coverage. D must explicitly account for it before claiming a complete census.
+
+Only a permanent `inaccessible` domain with no memberships is accepted. This
+conservative registration boundary cannot certify a less restrictive placement.
+A future audience-proof adapter must implement container/owner placement; no
+registration caller may infer that merely reading a row proves its audience.
+Exact replay requires the same scope and canonical version and preserves both
+opaque identity and RID. It neither reads nor creates aliases. Each record uses
+an indexed canonical-key lookup and RID probe; new records use one insertion
+and one exact verification lookup. The whole call uses at most 193 SQL statements
+plus bounded insert-trigger work, independent of workspace size.
+
+Every error, including an ignored error or panic, rolls back the caller's whole
+transaction. Success leaves it open so D commits registration and its durable
+checkpoint atomically. No transaction is started here, no canonical content/blob
+is read, and no worker or migration is enabled. D still owns full-family indexed
+census, interruption/replay, authority epoch and checkpoint coverage. This is a
+background migration batch bound, not a claim of a 100-SQL serving request.
+
+## Audience-bound feed reads
+
+`ReadFeed(ctx context.Context, request scopes.RequestSelection,
+streams []scopes.Stream, fn func(FeedReader) error) error` pins the authorized
+selection, exact audience bindings, projection generation and legacy authorization
+epoch in one read transaction. `FeedReader` exposes `Snapshot`, `Candidates`,
+`Hydrate` and `Buckets`, with B-compatible value types and no raw SQL access.
+[FEEDS.md](FEEDS.md) specifies the exact schema, method budgets and readiness
+receipt obligations. B adapts this capability to its read-model kernel inside the
+callback; the capability expires on return. The empty feed schema is unregistered.
+
+This dependency API does not authorize enabling a reader. In particular, 64 scopes
+and 256 streams can require 643 SQL statements, exceeding the unchanged 100-SQL
+full-request gate. Batched authority/candidate access or a smaller independently
+measured admission budget is required before serving; none of the limits or
+allowances is raised here. Old-policy parity, complete source capture, external PM
+authority invalidation and full-request latency/rows remain activation gates.
