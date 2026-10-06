@@ -149,6 +149,10 @@ func TestResourceAccessRequestSnapshotMissingEpochFallsBack(t *testing.T) {
 	if s.CanAccessResource(request, "document", doc["id"].(string)) {
 		t.Fatal("missing cache sentinel exposed private resource")
 	}
+	freshRequest := WithRequestAccessScope(ctx, AccessScope{ActorID: "stranger"})
+	if s.CanAccessResource(freshRequest, "document", doc["id"].(string)) || denialSnapshotFrom(freshRequest) != nil {
+		t.Fatal("missing epoch allowed a shared cache hit on a new request")
+	}
 }
 
 func TestResourceAccessRequestSnapshotSeesLateAliasAndProse(t *testing.T) {

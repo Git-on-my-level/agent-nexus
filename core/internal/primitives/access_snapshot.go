@@ -33,10 +33,16 @@ var readDenials = struct {
 	bytes int
 }{rows: make(map[denialCacheKey]*denialSnapshot)}
 
-func cachedReadDenial(db *sql.DB, scope AccessScope, epoch int64) *denialSnapshot {
+func cachedReadDenial(db *sql.DB, scope AccessScope) *denialSnapshot {
 	readDenials.Lock()
 	defer readDenials.Unlock()
-	return readDenials.rows[denialCacheKey{db, scope, epoch}]
+	for i := len(readDenials.keys) - 1; i >= 0; i-- {
+		key := readDenials.keys[i]
+		if key.db == db && key.scope == scope {
+			return readDenials.rows[key]
+		}
+	}
+	return nil
 }
 
 func rememberReadDenial(db *sql.DB, scope AccessScope, snapshot *denialSnapshot) {
@@ -77,17 +83,27 @@ func WithRequestAccessScope(ctx context.Context, scope AccessScope) context.Cont
 		}
 		state.Lock()
 		if state.snapshot == nil {
-			// Lookup only on ordinary DB reads. Transactions continue to use
-			// their current graph (or the visit's existing request snapshot).
+			// Validate a possible cache hit and capture a stale or missing closure
+			// in one statement snapshot. CASE skips graph construction on a hit.
+			// Transactions continue to evaluate their current graph directly.
 			raw, _ := db.(*sql.DB)
-			var epoch int64
-			if raw != nil && db.QueryRowContext(c, `SELECT version FROM main.resource_access_epoch WHERE singleton=1`).Scan(&epoch) == nil {
-				state.snapshot = cachedReadDenial(raw, scope, epoch)
+			var cached *denialSnapshot
+			if raw != nil {
+				cached = cachedReadDenial(raw, scope)
 			}
-			if state.snapshot == nil {
-				candidate := &denialSnapshot{}
-				sql := `WITH RECURSIVE ` + ownershipClosure("_anx_denied", deniedRootSQL(scope), false) + ` SELECT (SELECT version FROM main.resource_access_epoch WHERE singleton=1),COALESCE((SELECT json_group_array(json_array(kind,id)) FROM _anx_denied),'[]')`
-				if err := db.QueryRowContext(c, sql).Scan(&candidate.epoch, &candidate.rows); err == nil {
+			candidate := &denialSnapshot{}
+			sql := `WITH RECURSIVE ` + ownershipClosure("_anx_denied", deniedRootSQL(scope), false) + ` SELECT (SELECT version FROM main.resource_access_epoch WHERE singleton=1),COALESCE((SELECT json_group_array(json_array(kind,id)) FROM _anx_denied),'[]')`
+			var captureArgs []any
+			if cached != nil {
+				current := `(SELECT version FROM _anx_snapshot_epoch)`
+				roots := `SELECT * FROM (` + deniedRootSQL(scope) + `) WHERE COALESCE(` + current + `,-1)<>?`
+				sql = `WITH RECURSIVE _anx_snapshot_epoch(version) AS MATERIALIZED (SELECT version FROM main.resource_access_epoch WHERE singleton=1), ` + ownershipClosure("_anx_denied", roots, false) + ` SELECT ` + current + `,CASE WHEN ` + current + `=? THEN ? ELSE COALESCE((SELECT json_group_array(json_array(kind,id)) FROM _anx_denied),'[]') END`
+				captureArgs = []any{cached.epoch, cached.epoch, cached.rows}
+			}
+			if err := db.QueryRowContext(c, sql, captureArgs...).Scan(&candidate.epoch, &candidate.rows); err == nil {
+				if cached != nil && candidate.epoch == cached.epoch {
+					state.snapshot = cached
+				} else {
 					state.snapshot = candidate
 					rememberReadDenial(raw, scope, candidate)
 				}
