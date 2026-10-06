@@ -142,9 +142,9 @@ caches protect routing state only; authority I/O stays outside shared locks.
 Use the registered SQLite driver so the reference scalar functions are available
 to imports. Structured JSON contributes atoms, not whole container serialization;
 scalar text preserves even JSON-shaped IDs. Keep this distinction in new fields.
-Blob writers publish `content_refs_json` atomically with metadata; startup scans
-older content through its configured backend. Unindexed/unavailable old blobs
-remain inaccessible until indexed. Document search inherits private comments
+Blob writers publish `content_refs_json` atomically with metadata. Startup never
+reads historical blobs or schedules retries. Unindexed/unavailable old blobs
+remain inaccessible; explicit maintenance is separate from readiness. Document search inherits private comments
 and revision content before MATCH/rank/limit. Series rollups retain reference
 provenance after compaction; full adapter data deletion removes that provenance. Ambiguous preview57 ledger
 atoms are conservatively retained because compacted historical states cannot be

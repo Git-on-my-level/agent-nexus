@@ -8,9 +8,9 @@ import (
 	"agent-nexus-core/internal/resourceaccess"
 )
 
-// BackfillArtifactAccess runs before a store is handed to readers and works with
-// every blob backend. Unknown or unavailable old blobs remain fail-closed in the
-// access graph; a later startup can retry them. Rows and reference edges publish
+// BackfillArtifactAccess is an explicit maintenance operation; startup never calls
+// it or schedules automatic retries. Unknown or unavailable old blobs remain
+// fail-closed in the access graph. Rows and reference edges publish
 // atomically, and content hashes make the scan independent of mutable metadata.
 func (s *Store) BackfillArtifactAccess(ctx context.Context) error {
 	if s.db == nil || s.blob == nil {

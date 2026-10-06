@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sync"
 
 	_ "modernc.org/sqlite"
 )
@@ -22,8 +23,11 @@ type Layout struct {
 }
 
 type Workspace struct {
-	layout Layout
-	db     *sql.DB
+	layout      Layout
+	db          *sql.DB
+	processLock *scopeProcessLease
+	closeOnce   sync.Once
+	closeErr    error
 }
 
 func NewLayout(root string) Layout {
@@ -45,13 +49,20 @@ func InitializeWorkspace(ctx context.Context, workspaceRoot string) (*Workspace,
 	if err := ensureLayout(layout); err != nil {
 		return nil, err
 	}
+	processLock := &scopeProcessLease{refs: 1}
+	succeeded := false
+	defer func() {
+		if !succeeded {
+			_ = processLock.release(true)
+		}
+	}()
 
 	databasePath, err := filepath.Abs(layout.DatabasePath)
 	if err != nil {
 		return nil, fmt.Errorf("resolve sqlite database path: %w", err)
 	}
 
-	db, err := sql.Open("sqlite", sqliteDSN(databasePath))
+	db, err := openScopeDatabase(sqliteDSN(databasePath), processLock)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite database: %w", err)
 	}
@@ -60,13 +71,24 @@ func InitializeWorkspace(ctx context.Context, workspaceRoot string) (*Workspace,
 		_ = db.Close()
 		return nil, fmt.Errorf("ping sqlite database: %w", err)
 	}
-
-	if err := applyMigrations(ctx, db); err != nil {
+	if err := enableExpandedScopeLease(ctx, db, processLock, layout.RootDir); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
 
-	return &Workspace{layout: layout, db: db}, nil
+	if err := applyWorkspaceMigrations(ctx, db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	// A's expand-only migration may have added the scope state table during
+	// this open. Require exclusive serving ownership before returning it.
+	if err := enableExpandedScopeLease(ctx, db, processLock, layout.RootDir); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+
+	succeeded = true
+	return &Workspace{layout: layout, db: db, processLock: processLock}, nil
 }
 
 func ensureLayout(layout Layout) error {
@@ -106,7 +128,13 @@ func (w *Workspace) Close() error {
 	if w == nil || w.db == nil {
 		return nil
 	}
-	return w.db.Close()
+	w.closeOnce.Do(func() {
+		w.closeErr = w.db.Close()
+		if w.processLock != nil {
+			w.closeErr = errors.Join(w.closeErr, w.processLock.release(true))
+		}
+	})
+	return w.closeErr
 }
 
 func sqliteDSN(databasePath string) string {

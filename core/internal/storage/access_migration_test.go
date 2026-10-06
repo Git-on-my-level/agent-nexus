@@ -65,6 +65,10 @@ func TestResourceAccessMigrationReconcilesPrivacy56(t *testing.T) {
 	}
 	defer ws.Close()
 	s = primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	// Exercise legacy index repair explicitly; readiness no longer reads blobs.
+	if err = s.BackfillArtifactAccess(ctx); err != nil {
+		t.Fatal(err)
+	}
 	for _, actor := range []string{"stranger", "owner"} {
 		scope := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: actor})
 		for kind, id := range map[string]string{"card": public["id"].(string), "artifact": artifact["id"].(string)} {
@@ -165,6 +169,10 @@ func TestResourceAccessMigrationReconcilesPrivacy55(t *testing.T) {
 	defer ws.Close()
 	assertAccessIndexesUsed(t, ws.DB())
 	s = primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	// Exercise legacy index repair explicitly; readiness no longer reads blobs.
+	if err = s.BackfillArtifactAccess(ctx); err != nil {
+		t.Fatal(err)
+	}
 	scoped := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "stranger"})
 	if s.CanAccessResource(scoped, "card", linked["id"].(string)) {
 		t.Fatal("preview-55 metadata was not backfilled")
@@ -242,6 +250,10 @@ func TestResourceAccessMigrationBackfillsAndMaintainsPayloadEdges(t *testing.T) 
 			defer ws.Close()
 			assertAccessIndexesUsed(t, ws.DB())
 			s = primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+			// Exercise legacy index repair explicitly; readiness no longer reads blobs.
+			if err = s.BackfillArtifactAccess(ctx); err != nil {
+				t.Fatal(err)
+			}
 			scoped := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "stranger"})
 			if s.CanAccessResource(scoped, "event", e["id"].(string)) {
 				t.Fatal("pre-migration payload leak")
@@ -373,6 +385,10 @@ func TestResourceAccessMigrationReconcilesPrivacy57(t *testing.T) {
 	}
 
 	s = primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	// Exercise legacy index repair explicitly; readiness no longer reads blobs.
+	if err = s.BackfillArtifactAccess(ctx); err != nil {
+		t.Fatal(err)
+	}
 	scope := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "stranger"})
 	if !s.CanAccessResource(scope, "card", public["id"].(string)) {
 		t.Fatal("preview57 false edges survived reconciliation")
@@ -434,6 +450,10 @@ func TestResourceAccessMigrationRepairsLegacyProseAndUnknownRollups(t *testing.T
 			}
 			defer ws.Close()
 			s = primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+			// Exercise legacy index repair explicitly; readiness no longer reads blobs.
+			if err = s.BackfillArtifactAccess(ctx); err != nil {
+				t.Fatal(err)
+			}
 			// An ordinary public append must not clear the historical uncertainty.
 			if _, err = ws.DB().Exec(`INSERT INTO series_points(series,labels,ts,state,received_day) VALUES('legacy','{}',3,'public',0)`); err != nil {
 				t.Fatal(err)

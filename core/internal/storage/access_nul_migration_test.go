@@ -80,6 +80,10 @@ func TestResourceAccessMigrationRepairsNULRows(t *testing.T) {
 	}
 	defer ws.Close()
 	s = primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	// Exercise legacy index repair explicitly; readiness no longer reads blobs.
+	if err = s.BackfillArtifactAccess(ctx); err != nil {
+		t.Fatal(err)
+	}
 	for _, actor := range []string{"owner", "stranger", "unauthorized-agent"} {
 		scope := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: actor})
 		for _, doc := range []map[string]any{textDoc, blobDoc} {
