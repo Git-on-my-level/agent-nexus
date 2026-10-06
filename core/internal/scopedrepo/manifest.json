@@ -8,5 +8,16 @@
   "register": "scope",
   "alias": "scope",
   "save_replay": "principal",
-  "identity": "scope"
+  "identity": "scope",
+  "legacy_sink": "authority",
+  "legacy_identity": "authority",
+  "legacy_register": "scope",
+  "feed_authority": "authority",
+  "feed_generation": "authority",
+  "feed_legacy_epoch": "authority",
+  "feed_binding": "principal",
+  "feed_start": "scope",
+  "feed_after": "scope",
+  "feed_hydrate_suffix": "scope",
+  "feed_buckets_suffix": "scope"
 }

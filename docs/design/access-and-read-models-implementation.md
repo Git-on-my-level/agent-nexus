@@ -142,3 +142,34 @@ conservative OR alongside its existing truncation argument. The helper reads and
 copies only the retained <=64 KiB prefix plus metadata, retains complete UTF-8
 runes, and rejects oversized metadata. It does not load comment history, perform
 publication, or enable the search route.
+
+## Wiring dependencies after the foundation
+
+A publishes the next dependency APIs on a separate disabled wiring branch while
+the foundation and readiness PRs undergo independent review. No production
+reader is scheduled for the initial release; SCA-665 supplies its speed change.
+
+- B consumes `Store.ReadFeed(ctx, RequestSelection, []Stream, func(FeedReader)
+error) error` and its transaction-bound `Snapshot`, `Candidates`, `Hydrate` and
+  `Buckets` methods. The concrete types and schema are in
+  `core/internal/scopedrepo/FEEDS.md`. Persisted readiness receipts must match the
+  current legacy authorization epoch. A receipt is trusted output of a future
+  verified builder, not proof furnished by a request. There is no receipt writer
+  or production constructor wiring in this dependency change.
+- D consumes `RegisterLegacyBatch(ctx, existingSQLTx, inaccessibleSink,
+[]LegacyRecord) ([]ResourceIdentity, error)`. Up to 64 identity rows share the
+  caller's census/checkpoint transaction. Registration failure rolls it all back;
+  replay preserves opaque identities and RIDs. Registration only into no-grants
+  sinks is an interim conservative boundary, not the final placement algorithm.
+  D must account for every canonical family and refused oversized legacy key.
+- The trusted canonical hook contract above remains unchanged. Complete source
+  provenance, exact template allowlisting, durable lifecycle/epoch capture and
+  constructor wiring are still required before activation.
+
+No allowance or harness pin changes accompany these APIs. Changed serving paths
+retain 500 ms, 100 SQL statements and 1,024 rows; default upgrade remains 90 s and
+warm open 5 s. The unmerged scale harness's old-source pins do not establish a
+regression in the disabled readiness foundation: its owner must remeasure the
+merged schema-65 code with zero-blob startup before proposing replacement pins.
+The feed API's maximum 643 statements is explicitly not a passing full-request
+budget; batching and parity must be demonstrated before switching a reader.
