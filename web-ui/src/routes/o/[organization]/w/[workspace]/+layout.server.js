@@ -257,10 +257,26 @@ export async function load(event) {
   }
 
   const session = await sessionResult;
-  if (session.failure)
+  /*
+   * On the viewer's own navigation an unreadable session is not an error page:
+   * the shell paints its skeleton and the selection POST establishes it (or
+   * reports the failure with its own Retry). Route-data loads keep failing
+   * loudly, so a broken preload is still visible rather than silently empty.
+   */
+  if (session.failure && event.isDataRequest)
     throw error(
       session.failure.status || 503,
       "Could not validate workspace session.",
+    );
+  if (session.failure)
+    logServerEvent(
+      "workspace.layout.session_read_deferred",
+      {
+        org: workOrg,
+        slug: workSlug,
+        status: session.failure.status ?? 0,
+      },
+      { level: "warn" },
     );
   return {
     ...(provider.mode === "hosted"
