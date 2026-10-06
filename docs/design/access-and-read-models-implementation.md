@@ -133,3 +133,12 @@ resource identity. Canonical source IDs and RIDs never appear in JSON. The
 version and at most four distinct audience deltas. Structural validation is not
 source-provenance validation: A must still capture these fields from canonical
 rows, build B's feed adapter, and prove complete mutation coverage before serving.
+
+Shared search coverage is now explicit: `scopes.Projection.SourceTruncated` and
+`scopes.BoundSearchProjection(Projection) (Projection, error)`. Canonical capture
+supplies the incoming current head/comment body, bounds it before Change
+validation, and preserves any earlier truncation. C consumes this bit with a
+conservative OR alongside its existing truncation argument. The helper reads and
+copies only the retained <=64 KiB prefix plus metadata, retains complete UTF-8
+runes, and rejects oversized metadata. It does not load comment history, perform
+publication, or enable the search route.

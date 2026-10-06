@@ -94,6 +94,17 @@ one to four distinct family/audience `Change` deltas. The new version must be th
 previous version plus one; every delta must name the same scope/resource/version.
 Audience moves use old-only/new-only deltas. Adapters receive detached copies.
 
+Search source capture uses `scopes.BoundSearchProjection(Projection)
+(Projection, error)` before constructing a bounded Change. It reserves space for
+metadata, copies at most 64 KiB of valid UTF-8 title/body/metadata, trims body only
+at rune boundaries, and preserves `Projection.SourceTruncated`. It neither scans
+the rest of an oversized incoming body nor retains its backing string. Metadata
+that cannot fit is refused. Callers must pass the complete incoming body or carry
+any prior truncation explicitly; this helper does not authorize classification.
+C's search adapter must OR `After.SourceTruncated` with its existing trusted
+truncation argument and its own normalized-prefix coverage. An omitted source
+suffix can never become complete merely because normalization fits the budget.
+
 This raw SQL proxy belongs **only to trusted repository adapters using reviewed,
 bounded templates**; it is not a business computation capability, and a call
 count does not bound arbitrary SQL work. Exact B/C template allowlisting is a
