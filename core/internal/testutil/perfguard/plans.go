@@ -4,20 +4,160 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/binary"
+	"encoding/json"
 	"fmt"
+	"math"
+	"regexp"
 	"strings"
+	"time"
 )
 
 // PlanException grants one SQL shape one specific plan finding, never a route
 // or table-wide exemption. Reasons belong in a reviewed, checked-in manifest.
 type PlanException struct {
-	SQLHash string `json:"sql_sha256"`
-	Finding string `json:"finding"`
-	Reason  string `json:"reason"`
+	SQLHash  string   `json:"sql_sha256"`
+	PlanHash string   `json:"plan_sha256"`
+	Findings []string `json:"findings"`
+	Reason   string   `json:"reason"`
+	Issue    string   `json:"issue"`
+	IssueURL string   `json:"issue_url"`
 }
 
 func SQLHash(q string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.TrimSpace(q))))
+}
+
+// PlanSQLHash preserves the submitted SQL exactly except for the two epoch
+// values emitted by the authorization compiler. Those values are snapshot data,
+// not query structure, and change with fixture writes. Business literals and
+// quoted/commented text remain part of the fingerprint.
+func PlanSQLHash(q string) string {
+	if !strings.HasPrefix(strings.TrimSpace(q), "WITH RECURSIVE _anx_fresh_denied(") {
+		return SQLHash(q)
+	}
+	mask := unquotedSQL(q)
+	re := regexp.MustCompile(`COALESCE\(\(SELECT version FROM main\.resource_access_epoch WHERE singleton=1\),-1\)(?:<>|=)([0-9]+)\b`)
+	matches := re.FindAllSubmatchIndex(mask, -1)
+	// The compiler emits exactly a cold <> gate and a cached = gate with the
+	// same epoch. Extra occurrences (including business predicates) stay exact.
+	if len(matches) != 2 || !strings.HasSuffix(string(mask[matches[0][0]:matches[0][2]]), "<>") || !strings.HasSuffix(string(mask[matches[1][0]:matches[1][2]]), "=") || q[matches[0][2]:matches[0][3]] != q[matches[1][2]:matches[1][3]] {
+		return SQLHash(q)
+	}
+	var b strings.Builder
+	start := 0
+	for _, m := range matches {
+		b.WriteString(q[start:m[2]])
+		b.WriteByte('?')
+		start = m[3]
+	}
+	b.WriteString(q[start:])
+	return SQLHash(b.String())
+}
+
+func unquotedSQL(q string) []byte {
+	mask := []byte(q)
+	for i := 0; i < len(mask); {
+		start := i
+		switch {
+		case q[i] == '\'' || q[i] == '"' || q[i] == '`' || q[i] == '[':
+			end := q[i]
+			if end == '[' {
+				end = ']'
+			}
+			i++
+			for i < len(q) {
+				if q[i] == end {
+					i++
+					if i < len(q) && q[i] == end && end != ']' {
+						i++
+						continue
+					}
+					break
+				}
+				i++
+			}
+		case i+1 < len(q) && q[i:i+2] == "--":
+			for i < len(q) && q[i] != '\n' {
+				i++
+			}
+		case i+1 < len(q) && q[i:i+2] == "/*":
+			i += 2
+			for i+1 < len(q) && q[i:i+2] != "*/" {
+				i++
+			}
+			i = min(i+2, len(q))
+		default:
+			i++
+			continue
+		}
+		for j := start; j < i; j++ {
+			mask[j] = ' '
+		}
+	}
+	return mask
+}
+
+// PlanMemoKey keeps every typed argument variant: this SQLite build enables
+// STAT4, so distribution-sensitive equality/range predicates as well as LIKE
+// can choose different plans. Byte strings and text must not collide.
+func PlanMemoKey(s Statement) string { return PlanSQLHash(s.SQL) + ArgsHash(s.Args) }
+func ArgsHash(args []any) string {
+	h := sha256.New()
+	number := func(n uint64) { var b [8]byte; binary.LittleEndian.PutUint64(b[:], n); h.Write(b[:]) }
+	bytes := func(b []byte) { number(uint64(len(b))); h.Write(b) }
+	number(uint64(len(args)))
+	for _, v := range args {
+		if named, ok := v.(sql.NamedArg); ok {
+			h.Write([]byte{'N'})
+			bytes([]byte(named.Name))
+			v = named.Value
+		} else {
+			h.Write([]byte{'V'})
+		}
+		switch value := v.(type) {
+		case nil:
+			h.Write([]byte{'0'})
+		case string:
+			h.Write([]byte{'s'})
+			bytes([]byte(value))
+		case []byte:
+			h.Write([]byte{'b'})
+			if value == nil {
+				h.Write([]byte{0})
+			} else {
+				h.Write([]byte{1})
+			}
+			bytes(value)
+		case int64:
+			h.Write([]byte{'i'})
+			number(uint64(value))
+		case float64:
+			h.Write([]byte{'f'})
+			number(math.Float64bits(value))
+		case bool:
+			h.Write([]byte{'t'})
+			if value {
+				h.Write([]byte{1})
+			} else {
+				h.Write([]byte{0})
+			}
+		case time.Time:
+			h.Write([]byte{'d'})
+			bytes([]byte(value.String()))
+		default:
+			h.Write([]byte{'x'})
+			bytes([]byte(fmt.Sprintf("%T:%#v", v, v)))
+		}
+	}
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+// PlanHash retains ordering and duplicate nodes. A second scan with the same
+// alias must not inherit an exception intended for the first one.
+func PlanHash(details []string) string {
+	b, _ := json.Marshal(details)
+	return SQLHash(string(b))
 }
 
 // sqlTokens retains quoted identifiers and skips literals/comments. It is a
@@ -187,6 +327,11 @@ func Findings(q string, details []string, large map[string]bool, custom ...map[s
 			continue
 		}
 		relation = strings.ToLower(relation)
+		// SQLite prefixes unaliased attached/schema-qualified tables in EXPLAIN.
+		// Match both the bare name and schema-qualified name before an index suffix.
+		if strings.HasPrefix(relation, "main.") || strings.HasPrefix(relation, "temp.") {
+			_, relation, _ = strings.Cut(relation, ".")
+		}
 		// EXPLAIN prints a quoted alias verbatim, including embedded spaces.
 		// Compare whole known names, rather than splitting the alias into words.
 		for alias := range aliases {

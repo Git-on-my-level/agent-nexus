@@ -162,7 +162,7 @@ jobs:
 
   core-performance:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 150
     needs: changes
     if: needs.changes.outputs.core == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.go_shared == 'true'
     steps:
@@ -179,7 +179,19 @@ jobs:
         working-directory: core
         env:
           ANX_PERFORMANCE_TEST: "1"
-        run: go test -p=1 -parallel=1 -timeout=20m -count=1 -v ./internal/server ./internal/storage ./internal/testutil/perfguard -run TestPerformance
+          ANX_PERFORMANCE_REPORT: ${{ github.workspace }}/.tmp/performance/route-report.json
+        run: |
+          mkdir -p ../.tmp/performance
+          go test -p=1 -parallel=1 -timeout=120m -count=1 -v ./internal/server ./internal/storage ./internal/testutil/perfguard -run 'TestPerformance|TestResourceAccessCommonReadPerformance|TestResourceAccessLargeDenialPrepareAndPMRoutes'
+
+      - name: Upload synthetic route samples and SQL plans
+        if: always()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: core-performance-report
+          path: .tmp/performance/route-report.json
+          include-hidden-files: true
+          if-no-files-found: ignore
 
   mcp-checks:
     runs-on: ubuntu-latest

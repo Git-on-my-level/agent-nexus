@@ -19,24 +19,30 @@ Run the independent scale tier (the `core-performance` CI job is required by
 
 ```sh
 cd core
-ANX_PERFORMANCE_TEST=1 go test -p=1 -parallel=1 -timeout=20m -count=1 -v \
-  ./internal/server ./internal/storage ./internal/testutil/perfguard -run TestPerformance
+ANX_PERFORMANCE_TEST=1 go test -p=1 -parallel=1 -timeout=120m -count=1 -v \
+  ./internal/server ./internal/storage ./internal/testutil/perfguard -run 'TestPerformance|TestResourceAccessCommonReadPerformance|TestResourceAccessLargeDenialPrepareAndPMRoutes'
 ```
 
 The fixture is synthetic; it never opens an existing workspace or reads real
 credentials. `internal/testutil/perfguard.Seed(ctx, db, contentDir, owner,
 seriesAnchor)` creates 4,096 cards, documents, artifacts, content-bearing events,
 plans, inbox items, series points, principals and runs; nine boards include eight
-private boards. Four PM record families contain 4,096 entries each. Deterministic
+private boards. Four PM record families contain 1,024 entries each (4,096 PM records total).
+The public board contains 3,840 cards; 256 cards belong to the eight private
+boards. Each artifact retains a 16 KiB logical content blob; summaries/FTS use
+1 KiB prose to avoid redundant copies. Deterministic
 IDs and content are shared, while the explicit series anchor keeps observations
 inside the requested window. Canonical ownership/reference triggers remain on.
 Content-addressed artifacts share one synthetic text blob to reduce disk work.
 
 The route test constructs one migrated workspace and reuses it across every
 route, principal and sample. The startup test needs a separate schema-58 corpus
-to measure a real upgrade. A standalone fixture integrity test checks table
-cardinalities. Bulk construction takes tens of seconds rather than issuing
-thousands of HTTP writes; there is no persisted cross-run cache that can conceal
+to measure a real upgrade. Every fixture consumer validates table/PM
+cardinalities, the private-card distribution, FTS and populated series. The two
+authorization hotfix regressions remain separate: their established common-read
+fixture and 1,000-root denial graph retain their 25-sample latency, privacy and
+SQL prepare-size/time budgets. Bulk construction takes a few minutes on a laptop
+with all canonical triggers enabled, rather than issuing thousands of HTTP writes; there is no persisted cross-run cache that can conceal
 schema or trigger changes. New targeted tests should call the same generator,
 then add valid point records through store APIs and measure only the request.
 
@@ -45,18 +51,34 @@ then add valid point records through store APIs and measure only the request.
 `internal/server/testdata/resource_access_routes.json` is the authority for route
 coverage. Every entry must have either a budget in `performance_routes.json` or
 an explicit mutation reason in `performance_write_routes.json`. Read-only POSTs
-(ref resolution, report previews and PM turn context) have budgets too. A new or
+(ref resolution, report previews, PM turn context and secret reveals) have budgets too. A new or
 stale entry fails in the short tier; GETs cannot be classified as mutations.
 
 Each route uses an owner (or the appropriate agent) and an unrelated principal.
 Point fixtures require successful authorized responses; denial expectations
 follow each route's public/private semantics. Enrollment polling separately
 requires its poll credential. Series responses must contain populated data, and
-selected collection responses must contain known records. These are representative
-selectors, not every possible route filter or a replacement for privacy tests.
+selected collection responses must contain known records. Adapter inventory requires an explicit series grant (403 for the unrelated
+principal); public series metadata/query and PM collections retain their
+existing filtered-200 semantics. These are representative
+selectors (including a populated public-thread event stream and a one-row
+target-board page and a populated one-card ref source), not every possible route filter or a replacement for privacy
+tests. The target-board page requires a positive owner result and an explicitly
+empty unrelated-reader result. It does not certify default unpaginated board/ref
+hydration, whose existing unrelated-reader overrun is tracked in SCA-665. The
+one-card ref-source selector likewise does not certify a public source with
+thousands of edges; that fanout overrun remains tracked in the same P1.
+Secret listing/reveal operations use an encrypted positive fixture and audit
+writes. The preview uses a populated fleet-health panel; saved reports cover live activity.
+Secret cardinality and document/card revision histories are shallow;
+those fanout dimensions need dedicated scale fixtures when changed.
 
-One warm-up precedes four measured requests. Nearest-rank p95 is the maximum of
-those four measurements; the default 500 ms budget also has a one-second context
+One warm-up precedes three measured requests. Nearest-rank p95 is the maximum of
+those three measurements. Explicit existing-main baselines with an allowance of
+at least ten seconds use two full measured requests instead, including the
+first/cold request; their maximum is a conservative smoke budget with reduced
+sampling confidence, not a reliable tail-latency estimate. Every sample retains
+all count, plan, status and privacy checks. The default 500 ms budget also has a one-second context
 deadline. SQL statement and returned-row counts provide machine-independent
 bounds, including discarded authorization/projection rows. Series observations
 have a separately documented fixed cap. SSE requests exercise the header flush
@@ -65,20 +87,51 @@ event or a missing second poll fails. Network transport latency is not measured.
 
 A wrapper around the canonical SQLite driver captures raw and authorization-
 rewritten statements, including prepared and transactional operations. Every
-unique SQL plus bound-argument combination is explained outside timing/capture.
+unique SQL shape plus typed argument set is explained outside timing/capture.
+This SQLite build enables STAT4: equality/range distributions and LIKE/GLOB
+patterns can change a plan. Repeated executions still count toward query/row
+budgets; identical SQL text is interned to avoid retaining thousands of copies
+of the authorization compiler output. Targeted filter-value tests remain necessary.
 Tables with at least 1,024 rows are discovered from the fixture. Plans fail on
 large-table SCANs (including full covering-index scans), automatic indexes, or a
 registered custom function in WHERE over a large relation. Alias handling includes
 quoted and schema-qualified identifiers. Classification is conservative; SQLite
 owns execution and its actual plan, and this lexer is not a general SQL parser.
 
-`performance_plan_allowlist.json` starts empty. An exception must identify the
-exact trimmed SQL SHA-256, exact finding, and a reviewed reason explaining the
-index, bound and unavoidable cost. It cannot exempt a route or an entire table.
-Changing SQL or its plan requires reviewing the exception again. Do not raise a
-budget or add an exception just to hide O(workspace) behavior. Populate new large
-record families and high-fanout selectors when adding endpoints; an empty table
-or a shallow history is not useful performance evidence.
+`performance_plan_allowlist.json` identifies an exact SQL-shape SHA-256 and
+specific EXPLAIN findings and the full ordered plan fingerprint (including
+duplicate nodes), with a justification and link to the existing P1 issue.
+The fingerprint preserves all SQL except the two numeric snapshot epochs emitted
+by the authorization compiler: those are data, and change with fixture writes.
+Quoted business literals and comments are preserved. Actual SQL is always used
+for EXPLAIN; normalization never changes execution. New SQL or findings require
+reviewing a new entry. There are no table-wide or route-wide plan exemptions.
+
+`performance_budget_allowlist.json` records finite baselines for existing hazards
+on main, per method/path/principal, with linked P1 justification. Standard budgets
+remain the default for every new route. Baselines retain query/row ceilings,
+success/denial expectations, positive fixtures, private controls and two SSE data
+flushes; exceeding a ceiling still fails. Their purpose is to allow the guardrail
+harness to land while SCA-663/664/665 and the existing SCA-652 repairs proceed,
+not to authorize new O(workspace) work. The existing unrelated-reader overview
+currently takes over nine minutes and consumes over 100,000 rows locally; the
+separate job allows runner headroom for this baseline rather than marking a
+timeout successful. Baseline count ceilings have only 2% headroom (minimum eight
+statements/64 rows), while latency gets threefold contention headroom. Remove entries as those repairs land.
+A changed read must satisfy the ordinary budget; do not add a baseline for a new
+regression. Populate new large record families and high-fanout selectors when
+adding endpoints; empty tables and shallow histories are not scale evidence.
+
+Set `ANX_PERFORMANCE_REPORT` to an absolute writable JSON path to collect
+synthetic SQL shapes/findings and route samples for review. CI uploads this report as
+`core-performance-report`, so reviewers can inspect the plans behind the hashes.
+`ANX_PERFORMANCE_DIAGNOSTIC=1`
+uses one diagnostic sample and extends the request deadline to ten minutes to
+observe baseline counts; it always fails as a diagnostic run, and
+latency/query/row and plan failures still fail. An exact
+`ANX_PERFORMANCE_DIAGNOSTIC_ROUTE="METHOD /path"` selector can isolate one
+diagnostic route; setting it in acceptance mode fails before fixture setup. CI
+never enables either diagnostic option.
 
 ## Startup and migration readiness
 
@@ -88,6 +141,15 @@ a five-second budget. It includes blob access-manifest backfill and a database
 ping, not merely opening a connection. A failed upgrade does not proceed to the
 warm-open measurement. This is a database/store readiness proxy; deployment and
 network readiness checks require their own integration coverage.
+
+SCA-664 documents the existing schema-58 upgrade overrun. Its finite fifteen-minute
+legacy baseline (7m20s locally, with twofold runner headroom) is pinned in
+`performance_startup_allowlist.json` to migration
+version 63 and exact startup/reference-index/blob-backfill source hashes. Any
+new migration or edit to that work expires the exception in the short tier;
+set the manifest to `null` to restore the 90-second default when repaired. Warm
+readiness always remains five seconds. This exception does not relax deployment
+probes automatically; adapters must apply their own bounded upgrade grace.
 
 Migrations emit `migration_started`, elapsed `migration_progress` every five
 seconds, and `migration_finished`. The final signal means work stopped; successful
@@ -102,12 +164,10 @@ the deployment adapter, outside core.
 
 ## Sweep findings and current baseline
 
-The initial scale run is red, rather than allowing known problems through. The
-separate authorization repair must land before assessing downstream route timing:
-its per-statement text scan currently overwhelms most request budgets. A one-row
-work request exceeds one second; schema-58 reconciliation/blob migration exceeds
-90 seconds. These are baseline defects, not justification for weaker thresholds.
-The following independently visible hazards require remedies that preserve
+The authorization repair (#294/#298) is now the base of the harness. Existing
+projection, query-plan and startup hazards are tracked separately; the checked-in
+exceptions link their P1 issues and cap the current behavior. This is a baseline,
+not proof that every reader is bounded. The following independently visible hazards require remedies that preserve
 privacy, legacy data and response contracts:
 
 | Severity | Source                                                                                                                       | Affected reads                               | Cost before a request/page bound                                                                                                                                           |
@@ -140,6 +200,7 @@ LIMIT. Inspect the scale result and actual EXPLAIN plans, including denied reads
 Treat any hot-path O(workspace) scan, graph rebuild, read-time JSON/text extraction,
 materialization-before-limit, or N+1 loop as a merge-blocking P1. Require a bounded
 implementation and meaningful scale evidence; do not accept a future follow-up
-as mitigation. Review startup/backfill cost and advancing progress separately
+as mitigation for new work. Existing main exceptions must remain exact, finite
+and linked to the P1 repair; do not broaden them for a changed hot path. Review startup/backfill cost and advancing progress separately
 from readiness. Check fixture coverage, successful point selectors, second SSE
 ticks, and narrowly justified SQL exceptions before trusting a green result.

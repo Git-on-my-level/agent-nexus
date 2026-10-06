@@ -23,12 +23,16 @@ type Capture struct {
 	statements    []Statement
 	queries, rows int
 	enabled       bool
+	seen          map[string]map[string]bool
+	canonicalSQL  map[string]string
 }
 
 func (c *Capture) Start() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.statements = nil
+	c.seen = map[string]map[string]bool{}
+	c.canonicalSQL = map[string]string{}
 	c.queries = 0
 	c.rows = 0
 	c.enabled = true
@@ -45,16 +49,42 @@ func (c *Capture) record(q string, args []driver.NamedValue) {
 	if !c.enabled {
 		return
 	}
+	c.queries++ // count every execution, including repeated N+1 lookups
+	patterns, seen := c.seen[q]
+	if !seen {
+		patterns = map[string]bool{}
+		c.seen[q] = patterns
+		c.canonicalSQL[q] = q
+	} else {
+		q = c.canonicalSQL[q]
+	}
 	v := make([]any, len(args))
 	for i, a := range args {
+		v[i] = a.Value
+		if a.Name != "" {
+			v[i] = sql.Named(a.Name, a.Value)
+		}
+	}
+	key := ArgsHash(v)
+	if patterns[key] {
+		return
+	}
+	patterns[key] = true
+	for i, a := range args {
 		if b, ok := a.Value.([]byte); ok {
-			v[i] = append([]byte(nil), b...)
-		} else {
-			v[i] = a.Value
+			var cloned []byte
+			if b != nil {
+				cloned = make([]byte, len(b))
+				copy(cloned, b)
+			}
+			v[i] = cloned
+			if a.Name != "" {
+				v[i] = sql.Named(a.Name, v[i])
+			}
 		}
 	}
 	c.statements = append(c.statements, Statement{q, v})
-	c.queries++
+
 }
 func (c *Capture) row() {
 	c.mu.Lock()

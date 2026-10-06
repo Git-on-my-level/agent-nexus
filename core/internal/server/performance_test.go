@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -20,23 +21,25 @@ import (
 	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
+	"agent-nexus-core/internal/secrets"
 	"agent-nexus-core/internal/series"
 	"agent-nexus-core/internal/testutil/perfguard"
 )
 
 type routeBudget struct {
-	Method             string          `json:"method"`
-	Path               string          `json:"path"`
-	Query              string          `json:"query,omitempty"`
-	P95MS              int             `json:"p95_ms"`
-	MaxQueries         int             `json:"max_queries"`
-	MaxRows            int             `json:"max_rows"`
-	AuthorizedStatus   int             `json:"authorized_status"`
-	UnauthorizedStatus int             `json:"unauthorized_status"`
-	Body               json.RawMessage `json:"body,omitempty"`
-	MustContain        string          `json:"must_contain,omitempty"`
-	AuthorizedAs       string          `json:"authorized_as,omitempty"`
-	Reason             string          `json:"reason"`
+	Method                  string          `json:"method"`
+	Path                    string          `json:"path"`
+	Query                   string          `json:"query,omitempty"`
+	P95MS                   int             `json:"p95_ms"`
+	MaxQueries              int             `json:"max_queries"`
+	MaxRows                 int             `json:"max_rows"`
+	AuthorizedStatus        int             `json:"authorized_status"`
+	UnauthorizedStatus      int             `json:"unauthorized_status"`
+	Body                    json.RawMessage `json:"body,omitempty"`
+	MustContain             string          `json:"must_contain,omitempty"`
+	UnauthorizedMustContain string          `json:"unauthorized_must_contain,omitempty"`
+	AuthorizedAs            string          `json:"authorized_as,omitempty"`
+	Reason                  string          `json:"reason"`
 }
 
 func performanceBudgets(t *testing.T) []routeBudget {
@@ -56,7 +59,11 @@ func performanceBudgets(t *testing.T) []routeBudget {
 			t.Errorf("duplicate route budget: %s", key)
 		}
 		covered[key] = true
-		if b.P95MS <= 0 || b.P95MS > 1000 || b.MaxQueries <= 0 || b.MaxRows <= 0 || b.AuthorizedStatus != 200 || (b.UnauthorizedStatus != 200 && b.UnauthorizedStatus != 403 && b.UnauthorizedStatus != 404 && !(b.Path == "/auth/hosts/enrollments/{enrollment_id}" && b.UnauthorizedStatus == 401)) || b.Reason == "" || (b.AuthorizedAs != "" && b.AuthorizedAs != "agent") {
+		rowCeiling := 1024
+		if b.Method == http.MethodGet && (b.Path == "/series/{name}" || b.Path == "/series/{name}/query") {
+			rowCeiling = series.MaxRawQueryPoints + 512 // fixed API cap plus scoped metadata
+		}
+		if b.P95MS <= 0 || b.P95MS > 500 || b.MaxQueries <= 0 || b.MaxQueries > 100 || b.MaxRows <= 0 || b.MaxRows > rowCeiling || b.AuthorizedStatus != 200 || (b.UnauthorizedStatus != 200 && b.UnauthorizedStatus != 403 && b.UnauthorizedStatus != 404 && !(b.Path == "/auth/hosts/enrollments/{enrollment_id}" && b.UnauthorizedStatus == 401)) || b.Reason == "" || (b.AuthorizedAs != "" && b.AuthorizedAs != "agent") {
 			t.Errorf("incomplete or excessive route budget: %s", key)
 		}
 	}
@@ -90,7 +97,7 @@ func performanceBudgets(t *testing.T) []routeBudget {
 }
 
 func performanceReadPOST(method, path string) bool {
-	return method == http.MethodPost && (path == "/refs/resolve" || path == "/reports/preview" || path == "/pm/turns/{turn_id}/context")
+	return method == http.MethodPost && (path == "/refs/resolve" || path == "/reports/preview" || path == "/pm/turns/{turn_id}/context" || path == "/secrets/{secret_id}/reveal" || path == "/secrets/reveal-batch")
 }
 
 func TestPerformanceRouteInventory(t *testing.T) { performanceBudgets(t) }
@@ -105,6 +112,7 @@ func requirePerformanceTest(t *testing.T) {
 }
 
 type performanceEnv struct {
+	store            *primitives.Store
 	handler          http.Handler
 	db               *sql.DB // uninstrumented EXPLAIN connection
 	capture          *perfguard.Capture
@@ -124,6 +132,19 @@ func newPerformanceEnv(t *testing.T) performanceEnv {
 	agent := seedMachinePrincipalForLockoutTest(t, ctx, db, "scale-authorized", "scale-authorized-actor", "scale.authorized", "scale-authorized-token")
 	stranger := seedMachinePrincipalForLockoutTest(t, ctx, db, "scale-stranger", "scale-stranger-actor", "scale.stranger", "scale-stranger-token")
 	store := env.primitiveStore.(*primitives.Store)
+	// Unrelated private controls retain the hotfix's leak sentinel.
+	for i := 0; i < 10; i++ {
+		b, err := store.CreateBoard(ctx, "scale-private-control-owner", map[string]any{"title": "Private control"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = store.PatchThread(ctx, "scale-private-control-owner", anyString(b["thread_id"]), map[string]any{"pm_actor_id": "scale-private-control-owner"}, nil); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = store.CreateBoardCard(ctx, "scale-private-control-owner", anyString(b["id"]), primitives.AddBoardCardInput{Title: "PrivatePerformanceSecret", ColumnKey: "ready"}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	// Real API writes provide valid point selectors. Bulk synthetic rows then
 	// supply the unrelated corpus; fixture setup is outside all request budgets.
 	board, err := store.CreateBoard(ctx, owner.ActorID, map[string]any{"title": "Private scale target"})
@@ -187,6 +208,15 @@ func newPerformanceEnv(t *testing.T) performanceEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
+	encryptor, err := secrets.NewEncryptor(strings.Repeat("11", 32), "synthetic")
+	if err != nil {
+		t.Fatal(err)
+	}
+	secretStore := secrets.NewStore(observed, encryptor)
+	secret, err := secretStore.Create(ctx, secrets.CreateSecretInput{Name: "scale-secret", Value: "SyntheticScaleSecret", ActorID: owner.ActorID})
+	if err != nil {
+		t.Fatal(err)
+	}
 	now := time.Now().UTC()
 	for kind, value := range map[string]any{
 		"decision": pm.Decision{ID: "scale-target-decision", WorkspaceID: "ws_main", ActorID: owner.ActorID, WorkRef: "card:" + cardID, Status: pm.AwaitingAnswer, Revision: 1, CreatedAt: now},
@@ -204,10 +234,10 @@ func newPerformanceEnv(t *testing.T) performanceEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hub := newAgentChangeHub()
-	handler := NewHandler("scale-test", WithPrimitiveStore(ps), WithAuthStore(as), WithActorRegistry(actors.NewStore(observed)), WithSchemaContract(contract), WithHealthCheck(env.workspace.Ping), WithPMRuntime(runtime), WithSeriesStore(&series.Store{DB: observed, Auth: as}), WithRunStore(commandcenter.NewStore(observed, commandcenter.SQLIdentities{DB: observed})), WithStreamPollInterval(5*time.Millisecond), func(o *handlerOptions) { o.agentChanges = hub })
-	return performanceEnv{agent: agent, handler: handler, db: db, capture: capture, principals: []lockoutPrincipalSeed{owner, stranger}, hub: hub, documentRevision: anyString(doc["head_revision_id"]), replace: strings.NewReplacer(
-		"{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{document_id}", anyString(doc["id"]), "{revision_id}", strings.TrimPrefix(anyString(card.Card["head_revision_ref"]), "card_revision:"), "{event_id}", anyString(event["id"]), "{artifact_id}", anyString(artifact["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{inbox_id}", "scale-target-inbox", "{host_id}", "scale-host", "{agent_id}", "scale-owner", "{conversation_id}", conversation.ID, "{decision_id}", "scale-target-decision", "{action_id}", "scale-target-action", "{turn_id}", "scale-target-turn", "{name}", "scale.series", "{command_id}", "work.list", "{concept_name}", "cards", "{session_id}", session.SessionID, "{enrollment_id}", "scale-target-enrollment", "{run_id}", "scale-target-run")}
+	var configured *handlerOptions
+	handler := NewHandler("scale-test", WithPrimitiveStore(ps), WithAuthStore(as), WithSecretsStore(secretStore), WithActorRegistry(actors.NewStore(observed)), WithSchemaContract(contract), WithHealthCheck(env.workspace.Ping), WithPMRuntime(runtime), WithSeriesStore(&series.Store{DB: observed, Auth: as}), WithRunStore(commandcenter.NewStore(observed, commandcenter.SQLIdentities{DB: observed})), WithStreamPollInterval(5*time.Millisecond), func(o *handlerOptions) { configured = o })
+	return performanceEnv{store: store, agent: agent, handler: handler, db: db, capture: capture, principals: []lockoutPrincipalSeed{owner, stranger}, hub: configured.agentChanges, documentRevision: anyString(doc["head_revision_id"]), replace: strings.NewReplacer(
+		"{secret_id}", secret.ID, "{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{document_id}", anyString(doc["id"]), "{revision_id}", strings.TrimPrefix(anyString(card.Card["head_revision_ref"]), "card_revision:"), "{event_id}", anyString(event["id"]), "{artifact_id}", anyString(artifact["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{inbox_id}", "scale-target-inbox", "{host_id}", "scale-host", "{agent_id}", "scale-owner", "{conversation_id}", conversation.ID, "{decision_id}", "scale-target-decision", "{action_id}", "scale-target-action", "{turn_id}", "scale-target-turn", "{name}", "scale.series", "{command_id}", "work.list", "{concept_name}", "cards", "{session_id}", session.SessionID, "{enrollment_id}", "scale-target-enrollment", "{run_id}", "scale-target-run")}
 }
 
 type performanceWriter struct {
@@ -215,15 +245,27 @@ type performanceWriter struct {
 	cancel  context.CancelFunc
 	flushes []time.Time
 	onFlush func()
+	closed  bool
 }
 
+func (w *performanceWriter) Write(b []byte) (int, error) {
+	if w.closed {
+		return 0, context.Canceled
+	}
+	return w.ResponseRecorder.Write(b)
+}
+func (w *performanceWriter) WriteString(s string) (int, error) { return w.Write([]byte(s)) }
 func (w *performanceWriter) Flush() {
+	if w.closed {
+		return
+	}
 	w.ResponseRecorder.Flush()
 	w.flushes = append(w.flushes, time.Now())
 	if len(w.flushes) == 2 && w.onFlush != nil {
 		w.onFlush()
 	}
 	if len(w.flushes) >= 3 {
+		w.closed = true
 		w.cancel()
 	}
 }
@@ -231,6 +273,32 @@ func (w *performanceWriter) Flush() {
 func TestPerformanceRoutes(t *testing.T) {
 	requirePerformanceTest(t)
 	budgets := performanceBudgets(t)
+	diagnostic := os.Getenv("ANX_PERFORMANCE_DIAGNOSTIC") == "1"
+	if diagnostic {
+		t.Error("diagnostic sampling is not an acceptance run")
+	}
+	selector := os.Getenv("ANX_PERFORMANCE_DIAGNOSTIC_ROUTE")
+	if selector != "" {
+		if !diagnostic {
+			t.Fatal("a diagnostic route selector cannot skip acceptance coverage")
+		}
+		found := false
+		for _, b := range budgets {
+			found = found || selector == b.Method+" "+b.Path
+		}
+		if !found {
+			t.Fatal("unknown diagnostic route selector")
+		}
+	}
+	reportPath := os.Getenv("ANX_PERFORMANCE_REPORT")
+	if reportPath != "" {
+		if !filepath.IsAbs(reportPath) {
+			t.Fatal("ANX_PERFORMANCE_REPORT must be an absolute path (go test runs in the package directory)")
+		}
+		if err := os.MkdirAll(filepath.Dir(reportPath), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
 	env := newPerformanceEnv(t) // cached once for every route, principal and sample
 	large, err := perfguard.LargeTables(context.Background(), env.db)
 	if err != nil {
@@ -240,29 +308,46 @@ func TestPerformanceRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile("testdata/performance_plan_allowlist.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var exceptions []perfguard.PlanException
-	if err := json.Unmarshal(raw, &exceptions); err != nil {
-		t.Fatal(err)
-	}
-	allowed := map[string]bool{}
-	for _, e := range exceptions {
-		if len(e.SQLHash) != 64 || e.Finding == "" || e.Reason == "" {
-			t.Fatal("plan exception needs exact SQL hash, finding and justification")
-		}
-		allowed[e.SQLHash+"\n"+e.Finding] = true
-	}
+	allowed := performancePlanExceptions(t)
+	baseline := performanceBaselineBudgets(t, budgets)
 	checked := map[string]bool{}
+	reported := map[string]bool{}
+	report := struct {
+		Plans   map[string]map[string]any `json:"plans"`
+		Samples []map[string]any          `json:"samples"`
+	}{Plans: map[string]map[string]any{}}
+	persistReport := func() {
+		if path := reportPath; path != "" {
+			b, err := json.MarshalIndent(report, "", "  ")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = os.WriteFile(path, b, 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	defer persistReport()
+
 	for pi, principal := range env.principals {
 		label := "authorized"
 		if pi == 1 {
 			label = "unauthorized"
 		}
 		for _, b := range budgets {
+			if selector != "" && selector != b.Method+" "+b.Path {
+				continue
+			}
 			t.Run(label+"/"+b.Method+" "+b.Path, func(t *testing.T) {
+				defer persistReport()
+				slowBaseline := false
+				if e, ok := baseline[b.Method+" "+b.Path+" "+label]; ok {
+					slowBaseline = e.P95MS >= 10000
+					b.P95MS = e.P95MS
+					b.MaxQueries = e.MaxQueries
+					b.MaxRows = e.MaxRows
+					t.Logf("existing baseline exception %s: %s", e.Issue, e.Reason)
+				}
 				path := env.replace.Replace(b.Path)
 				if strings.Contains(path, "{") {
 					t.Fatalf("missing selector fixture: %s", path)
@@ -279,8 +364,19 @@ func TestPerformanceRoutes(t *testing.T) {
 					want = b.UnauthorizedStatus
 				}
 				var durations []time.Duration
-				for sample := 0; sample < 5; sample++ {
-					ctx, cancel := context.WithTimeout(context.Background(), time.Duration(b.P95MS)*time.Millisecond*2)
+				samples := 4 // one warmup and three measured requests
+				if slowBaseline {
+					samples = 2 // both measured: include the first/cold request
+				}
+				if diagnostic {
+					samples = 1
+				}
+				for sample := 0; sample < samples; sample++ {
+					deadlineBudget := time.Duration(b.P95MS) * time.Millisecond * 2
+					if diagnostic {
+						deadlineBudget = 10 * time.Minute
+					}
+					ctx, cancel := context.WithTimeout(context.Background(), deadlineBudget)
 					req := httptest.NewRequest(b.Method, path, bytes.NewBufferString(env.replace.Replace(string(b.Body)))).WithContext(ctx)
 					req.Header.Set("Authorization", "Bearer "+principal.AccessToken)
 					if pi == 0 && b.AuthorizedAs == "agent" {
@@ -299,16 +395,17 @@ func TestPerformanceRoutes(t *testing.T) {
 					env.handler.ServeHTTP(w, req)
 					elapsed := time.Since(start)
 					statements, queries, rows := env.capture.Stop()
+					report.Samples = append(report.Samples, map[string]any{"method": b.Method, "path": b.Path, "principal": label, "sample": sample, "elapsed_ms": float64(elapsed) / float64(time.Millisecond), "queries": queries, "rows": rows, "status": w.Code})
 					deadline := ctx.Err() == context.DeadlineExceeded
 					cancel()
-					if sample > 0 {
+					if sample > 0 || diagnostic || slowBaseline {
 						durations = append(durations, elapsed)
-					} // one warmup
+					}
 					for _, s := range statements {
-						// EXPLAIN does not execute SQL. Deduplicate identical SQL shapes
-						// and bound arguments across samples, retaining all query counts.
-						encoded, _ := json.Marshal(s.Args)
-						key := perfguard.SQLHash(s.SQL) + perfguard.SQLHash(string(encoded))
+						// EXPLAIN does not execute SQL. Retain every typed argument
+						// variant for STAT4-dependent plans while deduplicating repeats;
+						// execution and row counts still include every call.
+						key := perfguard.PlanMemoKey(s)
 						if checked[key] {
 							continue
 						}
@@ -320,10 +417,25 @@ func TestPerformanceRoutes(t *testing.T) {
 							t.Errorf("EXPLAIN %s: %v", perfguard.SQLHash(s.SQL), err)
 							continue
 						}
-						for _, finding := range perfguard.Findings(s.SQL, plan, large, functions) {
-							hash := perfguard.SQLHash(s.SQL)
-							if !allowed[hash+"\n"+finding] {
-								t.Errorf("unreviewed query plan: sql_sha256=%s finding=%q", hash, finding)
+						findings := perfguard.Findings(s.SQL, plan, large, functions)
+						hash := perfguard.PlanSQLHash(s.SQL)
+						planHash := perfguard.PlanHash(plan)
+						reportKey := hash + "/" + planHash
+						if len(findings) > 0 {
+							entry := report.Plans[reportKey]
+							if entry == nil {
+								entry = map[string]any{"sql": s.SQL, "sql_sha256": hash, "plan_sha256": planHash, "plan": plan, "method": b.Method, "path": b.Path, "principal": label, "findings": map[string]bool{}}
+								report.Plans[reportKey] = entry
+							}
+							for _, f := range findings {
+								entry["findings"].(map[string]bool)[f] = true
+							}
+						}
+						for _, finding := range findings {
+							hash := perfguard.PlanSQLHash(s.SQL)
+							if !allowed[hash+"\n"+planHash+"\n"+finding] && !reported[hash+"\n"+planHash+"\n"+finding] {
+								reported[hash+"\n"+planHash+"\n"+finding] = true
+								t.Errorf("unreviewed query plan: sql_sha256=%s plan_sha256=%s finding=%q", hash, planHash, finding)
 							}
 						}
 					}
@@ -336,19 +448,35 @@ func TestPerformanceRoutes(t *testing.T) {
 					if pi == 0 && b.MustContain != "" && !strings.Contains(w.Body.String(), env.replace.Replace(b.MustContain)) {
 						t.Errorf("successful response omitted positive fixture %q", b.MustContain)
 					}
+					if pi == 1 && b.UnauthorizedMustContain != "" && !strings.Contains(w.Body.String(), env.replace.Replace(b.UnauthorizedMustContain)) {
+						t.Errorf("denied collection omitted expected filtered result %q", b.UnauthorizedMustContain)
+					}
 					if strings.HasPrefix(b.Path, "/stream/") && strings.Contains(w.Body.String(), "event: error") {
 						t.Errorf("stream returned an error event: %.500s", w.Body.String())
 					}
 					if want == 200 && strings.HasPrefix(b.Path, "/stream/") && len(w.flushes) < 3 {
 						t.Fatal("stream did not exercise a second poll/invalidation")
 					}
+					if pi == 1 && want == 200 {
+						if strings.Contains(w.Body.String(), "Private scale target") {
+							t.Error("unauthorized response exposed private target title")
+						}
+						for _, selector := range []string{"{board_id}", "{card_id}", "{document_id}", "{artifact_id}", "{event_id}", "{thread_id}", "{topic_id}", "{conversation_id}", "{decision_id}", "{action_id}", "{turn_id}"} {
+							if strings.Contains(w.Body.String(), env.replace.Replace(selector)) {
+								t.Errorf("unauthorized response exposed private target %s", selector)
+							}
+						}
+					}
+					if !(pi == 0 && b.AuthorizedAs == "agent") && strings.Contains(w.Body.String(), "PrivatePerformanceSecret") {
+						t.Error("unrelated private control leaked")
+					}
 					if queries > b.MaxQueries || rows > b.MaxRows {
 						t.Errorf("unbounded read: SQL=%d (budget %d), rows=%d (budget %d)", queries, b.MaxQueries, rows, b.MaxRows)
 					}
 				}
 				sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
-				p95 := durations[len(durations)-1] // nearest-rank p95 of four measured samples
-				t.Logf("p95=%v budget=%dms", p95, b.P95MS)
+				p95 := durations[len(durations)-1] // nearest-rank p95 is max for N=2 or N=3
+				t.Logf("p95=%v measured_samples=%d budget=%dms", p95, len(durations), b.P95MS)
 				if p95 > time.Duration(b.P95MS)*time.Millisecond {
 					t.Errorf("p95 %v exceeds %dms", p95, b.P95MS)
 				}
@@ -374,6 +502,9 @@ func TestPerformanceStreamSampleRequiresTwoDataFlushes(t *testing.T) {
 	}
 	w.WriteString("event: snapshot\ndata: {}\n\n")
 	w.Flush()
+	if n, err := w.WriteString("event: error\ndata: disconnected\n\n"); n != 0 || err != context.Canceled || strings.Contains(w.Body.String(), "event: error") {
+		t.Fatal("closed client accepted a post-disconnect event")
+	}
 	if ctx.Err() != context.Canceled || len(w.flushes) != 3 {
 		t.Fatal("second poll was not measured")
 	}

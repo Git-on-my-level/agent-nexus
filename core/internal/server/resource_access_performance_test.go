@@ -19,6 +19,7 @@ import (
 // every canonical collection. The former closure matched all stored prose once
 // per denied identity, making even identity and bounded collection reads stall.
 func TestResourceAccessCommonReadPerformance(t *testing.T) {
+	requirePerformanceTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	s := env.primitiveStore.(*primitives.Store)

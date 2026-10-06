@@ -510,11 +510,6 @@
     "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
   },
   {
-    "method": "POST",
-    "path": "/secrets/reveal-batch",
-    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
-  },
-  {
     "method": "DELETE",
     "path": "/secrets/{secret_id}",
     "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
@@ -522,11 +517,6 @@
   {
     "method": "PUT",
     "path": "/secrets/{secret_id}",
-    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
-  },
-  {
-    "method": "POST",
-    "path": "/secrets/{secret_id}/reveal",
     "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
   },
   {

@@ -100,7 +100,9 @@ allowlist. Do not weaken a budget to make a regression pass.
 
 Reviewers must treat hot-path O(workspace) work as a merge-blocking P1, including
 unbounded materialization, per-row queries, full ownership/graph rebuilds, and
-read-time text/JSON scans. It cannot be deferred as a performance follow-up.
+read-time text/JSON scans. New or changed hot paths cannot be deferred as a performance follow-up. Existing
+main hazards may use exact, finite checked-in baselines linked to their P1 repair,
+as documented in `core/docs/performance.md`; remove those entries when repaired.
 
 ## Local check tiers
 

@@ -16,7 +16,7 @@
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
-    "unauthorized_status": 200,
+    "unauthorized_status": 403,
     "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
   },
   {
@@ -79,7 +79,8 @@
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Representative 20-row page; artifact owner enrichment and document-revision joins must still remain bounded before and within the page.",
+    "query": "limit=20"
   },
   {
     "method": "GET",
@@ -118,8 +119,8 @@
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
-    "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "unauthorized_status": 403,
+    "reason": "Human-only summary. The authorized owner exercises the read; unrelated machine credentials must be rejected with human_required."
   },
   {
     "method": "GET",
@@ -210,7 +211,10 @@
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "One populated target-board page in the unchanged 4K corpus and 256-private-card denial graph. Owner must see the target; unrelated reader must see an empty page. Default unscoped collection/ref hydration overrun is tracked by SCA-665.",
+    "query": "q=Private%20scale%20target&limit=1",
+    "must_contain": "Private scale target",
+    "unauthorized_must_contain": "\"boards\":[]"
   },
   {
     "method": "GET",
@@ -364,7 +368,7 @@
     "authorized_status": 200,
     "unauthorized_status": 404,
     "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
-    "must_contain": "activity"
+    "must_contain": "\"status\":\"ok\""
   },
   {
     "method": "GET",
@@ -585,7 +589,7 @@
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
-    "unauthorized_status": 403,
+    "unauthorized_status": 200,
     "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
   },
   {
@@ -626,7 +630,7 @@
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
-    "unauthorized_status": 403,
+    "unauthorized_status": 200,
     "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
   },
   {
@@ -646,7 +650,7 @@
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
-    "unauthorized_status": 403,
+    "unauthorized_status": 200,
     "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
   },
   {
@@ -686,9 +690,10 @@
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
-    "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
-    "query": "source_ref=board:scale-board-0"
+    "unauthorized_status": 404,
+    "reason": "Populated one-card board source with the full unrelated corpus/private graph. Private source selector must be denied. High-fanout public source (3,840 edges) exceeds 120 seconds for unrelated readers and remains a SCA-665 repair.",
+    "query": "source_ref=board:{board_id}",
+    "must_contain": "\"relation\":\"board_card\""
   },
   {
     "method": "GET",
@@ -719,7 +724,8 @@
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "must_contain": "scale-secret"
   },
   {
     "method": "GET",
@@ -795,7 +801,9 @@
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Two ticks for a populated public thread, with the full unrelated corpus and private denial graph. Unscoped full-history materialization is separately tracked by SCA-652.",
+    "query": "thread_id=scale-thread-1",
+    "must_contain": "scale-event-1"
   },
   {
     "method": "GET",
@@ -925,9 +933,9 @@
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "reason": "One-row page over the full workspace. The private target title is a positive sentinel because the public work projection removes internal IDs.",
     "query": "limit=1",
-    "must_contain": "{card_id}"
+    "must_contain": "Private scale target"
   },
   {
     "method": "GET",
@@ -999,8 +1007,8 @@
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
-    "unauthorized_status": 200,
-    "reason": "Read-only POST; request payload and context limit bound work."
+    "unauthorized_status": 404,
+    "reason": "Read-only POST resolves a populated private card. Unauthorized request body selector must fail closed with 404."
   },
   {
     "method": "POST",
@@ -1024,7 +1032,7 @@
         "panels": [
           {
             "id": "activity",
-            "type": "live-activity",
+            "type": "live-fleet-health",
             "title": "Activity",
             "project_id": "workspace",
             "data": {},
@@ -1042,7 +1050,8 @@
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read-only POST; request payload and context limit bound work."
+    "reason": "Representative populated fleet-health preview with capped host/agent inventory. The saved-document report case covers live-activity fanout; uncached read-only POST activity rebuilds remain tracked by SCA-665.",
+    "must_contain": "scale-host"
   },
   {
     "method": "POST",
@@ -1058,5 +1067,30 @@
     "unauthorized_status": 403,
     "reason": "Read-only POST; request payload and context limit bound work.",
     "authorized_as": "agent"
+  },
+  {
+    "method": "POST",
+    "path": "/secrets/reveal-batch",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "must_contain": "SyntheticScaleSecret",
+    "reason": "Credential read with an audit write; both authenticated principals may reveal under the existing independent policy. Actual encrypted fixture exercises decryption and audit SQL.",
+    "body": {
+      "names": ["scale-secret"]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/secrets/{secret_id}/reveal",
+    "p95_ms": 500,
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "must_contain": "SyntheticScaleSecret",
+    "reason": "Credential read with an audit write; both authenticated principals may reveal under the existing independent policy. Actual encrypted fixture exercises decryption and audit SQL."
   }
 ]

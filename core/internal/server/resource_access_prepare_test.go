@@ -20,6 +20,7 @@ import (
 // Exercise ancillary filters, which reference the denial graph multiple times,
 // with thousands of denied identities rather than only public history.
 func TestResourceAccessLargeDenialPrepareAndPMRoutes(t *testing.T) {
+	requirePerformanceTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	db := env.workspace.DB()
