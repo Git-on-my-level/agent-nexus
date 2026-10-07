@@ -159,7 +159,8 @@ const (
 )
 
 type preflightFlagSpec struct {
-	kind preflightFlagKind
+	kind            preflightFlagKind
+	requireNonEmpty bool
 }
 
 func preflightKnownCommandShape(args []string) error {
@@ -460,7 +461,12 @@ func preflightFlagUsage(args []string, spec map[string]preflightFlagSpec) error 
 				if i+1 >= len(args) || (strings.HasPrefix(args[i+1], "-") && !looksLikeStringFlagValue(args[i+1])) {
 					return errnorm.Usage("invalid_flags", fmt.Sprintf("flag needs an argument: -%s", name))
 				}
+				if flagSpec.requireNonEmpty && strings.TrimSpace(args[i+1]) == "" {
+					return errnorm.Usage("invalid_request", fmt.Sprintf("--%s must not be empty", name))
+				}
 				i++
+			} else if flagSpec.requireNonEmpty && strings.TrimSpace(value) == "" {
+				return errnorm.Usage("invalid_request", fmt.Sprintf("--%s must not be empty", name))
 			}
 		}
 	}
@@ -700,8 +706,14 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"write-file": valueFlag,
 			"force":      boolFlag,
 		},
-		"boards patch": {"board-id": valueFlag, "from-file": valueFlag, "role": valueFlag, "dry-run": boolFlag},
-		"topics list":  merge(listFlags, lifecycle),
+		"boards patch": {
+			"board-id":      valueFlag,
+			"from-file":     valueFlag,
+			"role":          valueFlag,
+			"if-updated-at": {kind: preflightFlagString, requireNonEmpty: true},
+			"dry-run":       boolFlag,
+		},
+		"topics list": merge(listFlags, lifecycle),
 		"topics patch": {
 			"topic-id":      valueFlag,
 			"from-file":     valueFlag,

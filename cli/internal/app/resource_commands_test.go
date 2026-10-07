@@ -3991,6 +3991,34 @@ func TestPreConfigUsagePreflightRejectsStaleManualResourceFlags(t *testing.T) {
 	}
 }
 
+func TestBoardPatchEmptyConcurrencyTokenPrecedesWorkspaceResolution(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		flag []string
+	}{
+		{name: "inline empty", flag: []string{"--if-updated-at="}},
+		{name: "whitespace value", flag: []string{"--if-updated-at", "  "}},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			args := []string{"--json", "--workspace", "sca-670-missing-workspace", "boards", "patch", "board:initiatives", "--role", "initiatives"}
+			args = append(args, tt.flag...)
+			raw := runCLIForTest(t, t.TempDir(), nil, nil, args)
+			payload := assertEnvelopeError(t, raw)
+			if got := anyStringValue(asMap(payload["error"])["code"]); got != "invalid_request" {
+				t.Fatalf("expected empty token usage error before workspace resolution, got %#v", payload)
+			}
+			if got := anyStringValue(asMap(payload["error"])["message"]); !strings.Contains(got, "--if-updated-at") {
+				t.Fatalf("expected error to name --if-updated-at, got %#v", payload)
+			}
+		})
+	}
+}
+
 func TestBoardCommands(t *testing.T) {
 	t.Parallel()
 
