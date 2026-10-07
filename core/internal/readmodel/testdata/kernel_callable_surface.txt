@@ -1,0 +1,60 @@
+# Reviewed kernel-reachable application API; changes require layering review.
+constraint agent-nexus-core/internal/scopes.Page[T any].T any
+constraint agent-nexus-core/internal/scopes.Page[agent-nexus-core/internal/scopes.StreamChange].T any
+func agent-nexus-core/internal/scopes.BoundSearchProjection(source agent-nexus-core/internal/scopes.Projection) (agent-nexus-core/internal/scopes.Projection, error)
+func agent-nexus-core/internal/scopes.ValidateStreams(streams []agent-nexus-core/internal/scopes.Stream) error
+method *agent-nexus-core/internal/scopes.CanonicalMutation.Validate func() error
+method *agent-nexus-core/internal/scopes.Change.Validate func() error
+method *agent-nexus-core/internal/scopes.Role.CanPublish func() bool
+method *agent-nexus-core/internal/scopes.Role.CanRead func() bool
+method *agent-nexus-core/internal/scopes.Role.CanWrite func() bool
+method agent-nexus-core/internal/scopes.CanonicalMutation.Validate func() error
+method agent-nexus-core/internal/scopes.Change.Validate func() error
+method agent-nexus-core/internal/scopes.MigrationStepper.Step func(context.Context, agent-nexus-core/internal/scopes.StepRequest) (agent-nexus-core/internal/scopes.StepResult, error)
+method agent-nexus-core/internal/scopes.Role.CanPublish func() bool
+method agent-nexus-core/internal/scopes.Role.CanRead func() bool
+method agent-nexus-core/internal/scopes.Role.CanWrite func() bool
+method agent-nexus-core/internal/scopes.StreamTicker.Tick func(context.Context, agent-nexus-core/internal/scopes.TickRequest) (agent-nexus-core/internal/scopes.TickResult, error)
+type agent-nexus-core/internal/scopes.Binding struct{ID agent-nexus-core/internal/scopes.ID; Available bool}
+type agent-nexus-core/internal/scopes.CanonicalMutation struct{Identity agent-nexus-core/internal/scopes.ResourceIdentity; PreviousVersion int64; Changes []agent-nexus-core/internal/scopes.Change}
+type agent-nexus-core/internal/scopes.Change struct{ScopeID agent-nexus-core/internal/scopes.ID; Kind string; ResourceID string; CanonicalVersion int64; Family string; Audience string; Before *agent-nexus-core/internal/scopes.Projection; After *agent-nexus-core/internal/scopes.Projection}
+type agent-nexus-core/internal/scopes.Coverage struct{CoveredScopeIDs []agent-nexus-core/internal/scopes.ID; UnavailableScopeIDs []agent-nexus-core/internal/scopes.ID; MoreScopes bool; ScopeCursor string; AsOf time.Time}
+type agent-nexus-core/internal/scopes.DirectoryPage struct{Bindings []agent-nexus-core/internal/scopes.Binding; After agent-nexus-core/internal/scopes.ID; MoreScopes bool}
+type agent-nexus-core/internal/scopes.ID string
+type agent-nexus-core/internal/scopes.MigrationStepper interface{Step(context.Context, agent-nexus-core/internal/scopes.StepRequest) (agent-nexus-core/internal/scopes.StepResult, error)}
+type agent-nexus-core/internal/scopes.Page[T any] struct{Items []T; NextCursor string; Coverage agent-nexus-core/internal/scopes.Coverage}
+type agent-nexus-core/internal/scopes.Projection struct{Title string; Text string; ContainerID string; Status string; Rank string; Timestamp int64; Deleted bool; SourceTruncated bool}
+type agent-nexus-core/internal/scopes.RequestSelection struct{Principal string; ScopeIDs []agent-nexus-core/internal/scopes.ID}
+type agent-nexus-core/internal/scopes.ResourceIdentity struct{ScopeID agent-nexus-core/internal/scopes.ID; Kind string; ResourceID string; RID int64 "json:\"-\""; CanonicalID string "json:\"-\""; CanonicalVersion int64}
+type agent-nexus-core/internal/scopes.Role string
+type agent-nexus-core/internal/scopes.StepRequest struct{JobID string; ExpectedEpoch int64; LeaseToken int64; MaxRecords int; MaxBytes int64; MaxDuration time.Duration}
+type agent-nexus-core/internal/scopes.StepResult struct{Visited int; Changed int; Complete bool; PermanentPrivateExceptions int}
+type agent-nexus-core/internal/scopes.Stream struct{Scope agent-nexus-core/internal/scopes.ID; Family string; Audience string}
+type agent-nexus-core/internal/scopes.StreamChange struct{ScopeID agent-nexus-core/internal/scopes.ID; Family string; Audience string; ResourceID string; Sequence int64; Payload []byte}
+type agent-nexus-core/internal/scopes.StreamTicker interface{Tick(context.Context, agent-nexus-core/internal/scopes.TickRequest) (agent-nexus-core/internal/scopes.TickResult, error)}
+type agent-nexus-core/internal/scopes.TickRequest struct{Selection agent-nexus-core/internal/scopes.RequestSelection; Streams []agent-nexus-core/internal/scopes.Stream; Cursor string; Limit int}
+type agent-nexus-core/internal/scopes.TickResult = agent-nexus-core/internal/scopes.Page[agent-nexus-core/internal/scopes.StreamChange]
+underlying agent-nexus-core/internal/scopes.Binding struct{ID agent-nexus-core/internal/scopes.ID; Available bool}
+underlying agent-nexus-core/internal/scopes.CanonicalMutation struct{Identity agent-nexus-core/internal/scopes.ResourceIdentity; PreviousVersion int64; Changes []agent-nexus-core/internal/scopes.Change}
+underlying agent-nexus-core/internal/scopes.Change struct{ScopeID agent-nexus-core/internal/scopes.ID; Kind string; ResourceID string; CanonicalVersion int64; Family string; Audience string; Before *agent-nexus-core/internal/scopes.Projection; After *agent-nexus-core/internal/scopes.Projection}
+underlying agent-nexus-core/internal/scopes.Coverage struct{CoveredScopeIDs []agent-nexus-core/internal/scopes.ID; UnavailableScopeIDs []agent-nexus-core/internal/scopes.ID; MoreScopes bool; ScopeCursor string; AsOf time.Time}
+underlying agent-nexus-core/internal/scopes.DirectoryPage struct{Bindings []agent-nexus-core/internal/scopes.Binding; After agent-nexus-core/internal/scopes.ID; MoreScopes bool}
+underlying agent-nexus-core/internal/scopes.ID string
+underlying agent-nexus-core/internal/scopes.MigrationStepper interface{Step(context.Context, agent-nexus-core/internal/scopes.StepRequest) (agent-nexus-core/internal/scopes.StepResult, error)}
+underlying agent-nexus-core/internal/scopes.Page[T any] struct{Items []T; NextCursor string; Coverage agent-nexus-core/internal/scopes.Coverage}
+underlying agent-nexus-core/internal/scopes.Page[agent-nexus-core/internal/scopes.StreamChange] struct{Items []agent-nexus-core/internal/scopes.StreamChange; NextCursor string; Coverage agent-nexus-core/internal/scopes.Coverage}
+underlying agent-nexus-core/internal/scopes.Projection struct{Title string; Text string; ContainerID string; Status string; Rank string; Timestamp int64; Deleted bool; SourceTruncated bool}
+underlying agent-nexus-core/internal/scopes.RequestSelection struct{Principal string; ScopeIDs []agent-nexus-core/internal/scopes.ID}
+underlying agent-nexus-core/internal/scopes.ResourceIdentity struct{ScopeID agent-nexus-core/internal/scopes.ID; Kind string; ResourceID string; RID int64 "json:\"-\""; CanonicalID string "json:\"-\""; CanonicalVersion int64}
+underlying agent-nexus-core/internal/scopes.Role string
+underlying agent-nexus-core/internal/scopes.StepRequest struct{JobID string; ExpectedEpoch int64; LeaseToken int64; MaxRecords int; MaxBytes int64; MaxDuration time.Duration}
+underlying agent-nexus-core/internal/scopes.StepResult struct{Visited int; Changed int; Complete bool; PermanentPrivateExceptions int}
+underlying agent-nexus-core/internal/scopes.Stream struct{Scope agent-nexus-core/internal/scopes.ID; Family string; Audience string}
+underlying agent-nexus-core/internal/scopes.StreamChange struct{ScopeID agent-nexus-core/internal/scopes.ID; Family string; Audience string; ResourceID string; Sequence int64; Payload []byte}
+underlying agent-nexus-core/internal/scopes.StreamTicker interface{Tick(context.Context, agent-nexus-core/internal/scopes.TickRequest) (agent-nexus-core/internal/scopes.TickResult, error)}
+underlying agent-nexus-core/internal/scopes.TickRequest struct{Selection agent-nexus-core/internal/scopes.RequestSelection; Streams []agent-nexus-core/internal/scopes.Stream; Cursor string; Limit int}
+var agent-nexus-core/internal/scopes.ErrBudget error
+var agent-nexus-core/internal/scopes.ErrClosed error
+var agent-nexus-core/internal/scopes.ErrDenied error
+var agent-nexus-core/internal/scopes.ErrDerivation error
+var agent-nexus-core/internal/scopes.ErrUpdating error

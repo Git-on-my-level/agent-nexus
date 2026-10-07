@@ -101,6 +101,20 @@ projection parity, reviewed receipt writing and full SCA-661 request budgets.
 #302 is merged; its handlers/tests and #308's stream ownership are preserved.
 Readers stay disabled under `docs/design/scope-phase-two.md`.
 
+The kernel boundary tests check both the full application import closure and
+the allowed dependencies' exported API in `testdata/kernel_callable_surface.txt`.
+That reviewed surface includes interfaces, callbacks in fields/parameters,
+mutable package variables, promoted methods and reachable private types. A
+storage-backed implementation supplied by `scopedrepo` can change no kernel
+import and still introduce authority; the interface fixture rejects that API
+addition. This snapshot requires review of API changes, while implementation
+purity and serving approval still require the separate gates above. After
+reviewing a deliberate API change, regenerate from `core/` with
+`ANX_UPDATE_KERNEL_API=1 go test ./internal/readmodel -run '^TestKernelCallableSurfaceGolden$'`,
+then inspect and commit the golden diff. Production sources excluded by build
+tags are included; conflicting declarations fail closed rather than disappear
+from the review surface on a different platform.
+
 The inbox follow-up adds pure canonical payload codecs and a transaction-bound
 point writer in `primitives/scope_feeds*.go`, plus `OrderedReader`/`ReadOrdered`
 for the legacy category/text/ID comparator. BLOB seeks, <=770-byte private keys,

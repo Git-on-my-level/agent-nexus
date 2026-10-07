@@ -182,6 +182,7 @@ later full semantic cutover. Search/SSE retain all #306 wiring gates.
 
 ## Remaining security gates
 
+- Restored database clones share the namespace identity of the original; define a clone identity policy before enabling any reader.
 - **Dispatcher isolation:** business computations cannot obtain factories,
   raw handles or capabilities for a second scope. Enforce transitive imports
   and call paths, including implicit-flow derivation negatives and route matrix.
