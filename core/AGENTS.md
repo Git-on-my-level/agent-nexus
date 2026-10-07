@@ -191,7 +191,19 @@ bindings. The field-driven regression must cover every indexed source/column.
 
 Keep authorization separate from lifecycle filtering. Missing records may retain
 legacy semantics, but a known inaccessible record must never be treated as
-public. Never cache visibility decisions for an SSE connection. Shared cached
+public. Never cache visibility decisions for an SSE connection. The event stream creates
+a fresh epoch-validated read snapshot per bounded page. Its internal
+`event_stream_positions` view exposes only immutable ID/timestamp traversal
+metadata, allowing bounded progress over hidden rows. Never serialize those
+positions; payloads must load through the scoped `events` relation before decoding.
+Client resume IDs must authorize through the same event relation; hidden and
+unknown IDs seed head identically. Empty pages advance silently within a fixed
+2000-candidate chunk budget. Chunks with remaining positions continue immediately after
+yielding; hidden backlog must never add poll-timer waits to visible delivery.
+Keepalive cadence and visible-count continuation markers must never depend on hidden backlog or progress.
+The event pager alone may narrow cached denial bindings to its explicit page keys
+and batch-reference keys; parent denial propagation and the consuming statement's
+epoch fallback must remain intact. Never reuse that context for a general read. Shared cached
 projections with inaccessible contributors are unavailable to the reader;
 a reader-filtered projection must never replace canonical derived state.
 

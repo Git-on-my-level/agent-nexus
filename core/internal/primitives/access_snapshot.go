@@ -8,8 +8,10 @@ import (
 )
 
 type denialSnapshot struct {
-	epoch int64
-	rows  string
+	epoch       int64
+	rows        string
+	indexOnce   sync.Once
+	targetIndex map[denialTarget]struct{}
 }
 type denialRequestState struct {
 	sync.Mutex
@@ -50,6 +52,7 @@ func rememberReadDenial(db *sql.DB, scope AccessScope, snapshot *denialSnapshot)
 	if db == nil || len(snapshot.rows) > 8<<20 {
 		return
 	}
+	snapshot.prepareTargetIndex()
 	key := denialCacheKey{db, scope, snapshot.epoch}
 	readDenials.Lock()
 	defer readDenials.Unlock()

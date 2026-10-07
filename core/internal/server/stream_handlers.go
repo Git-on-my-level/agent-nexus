@@ -1,13 +1,14 @@
 package server
 
 import (
+	"context"
 	"crypto/sha1"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"sort"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -184,7 +185,11 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	if !ok {
 		return
 	}
-	lastEventID := resolveLastEventID(r)
+	cursor, err := opts.primitiveStore.EventStreamCursor(r.Context(), resolveLastEventID(r))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to initialize event stream")
+		return
+	}
 
 	controller, flusher, ok := prepareSSE(w)
 	if !ok {
@@ -192,46 +197,110 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 
-	cursorEventID := lastEventID
+	// Only the handler writes SSE frames. A single owned scanner keeps slow
+	// authorization/page reads from postponing the independent keepalive timer.
+	// Requests never overlap and each chunk has a fixed candidate budget.
+	scanCtx, cancelScan := context.WithCancel(r.Context())
+	requests := make(chan struct{}, 1)
+	type scanResult struct {
+		page primitives.EventStreamPage
+		err  error
+	}
+	results := make(chan scanResult)
+	scanDone := make(chan struct{})
+	go func() {
+		defer close(scanDone)
+		for {
+			select {
+			case <-scanCtx.Done():
+				return
+			case <-requests:
+			}
+			var result scanResult
+			for candidates := 0; candidates < primitives.EventStreamChunkCandidateBudget; candidates += primitives.EventStreamPageSize {
+				result.page, result.err = opts.primitiveStore.ListEventStreamPage(scanCtx, primitives.EventListFilter{
+					ThreadID: threadID, ThreadIDs: threadIDs, Types: eventTypes,
+				}, cursor)
+				if result.err != nil {
+					break
+				}
+				// Hidden positions stay exclusively in this connection's scanner.
+				cursor = result.page.Cursor
+				if len(result.page.Events) != 0 || !result.page.HasMore {
+					break
+				}
+			}
+			select {
+			case <-scanCtx.Done():
+				return
+			case results <- result:
+			}
+		}
+	}()
+	defer func() { cancelScan(); <-scanDone }()
+
+	visibleSinceResume := 0
 	ticker := time.NewTicker(opts.streamPollInterval)
 	defer ticker.Stop()
-
-	for {
-		events, err := listEventsForStream(r, opts, threadID, threadIDs, eventTypes)
-		if err != nil {
-			writeSSEErrorEvent(controller, w, flusher, "internal_error", "failed to load events for stream")
-			return
-		}
-		events = filterAccessibleEvents(r, opts, events)
-
-		events = eventsAfterID(events, cursorEventID)
-
-		sentAny := false
-		for _, event := range events {
-			eventID := strings.TrimSpace(anyString(event["id"]))
-			if eventID == "" {
-				continue
-			}
-			if err := writeSSEEvent(controller, w, eventID, "event", map[string]any{"event": event}); err != nil {
-				clearSSEWriteDeadline(controller)
-				return
-			}
-			cursorEventID = eventID
-			sentAny = true
-		}
-
-		if !sentAny {
-			if err := writeSSEKeepalive(controller, w); err != nil {
-				clearSSEWriteDeadline(controller)
-				return
-			}
+	keepalive := func() bool {
+		if err := writeSSEKeepalive(controller, w); err != nil {
+			clearSSEWriteDeadline(controller)
+			return false
 		}
 		flushSSE(controller, flusher)
-
+		return true
+	}
+	if !keepalive() {
+		return
+	}
+	requests <- struct{}{}
+	scanning := true
+	for {
 		select {
 		case <-r.Context().Done():
 			return
 		case <-ticker.C:
+			if !keepalive() {
+				return
+			}
+			if !scanning {
+				requests <- struct{}{}
+				scanning = true
+			}
+		case result := <-results:
+			scanning = false
+			if result.err != nil {
+				writeSSEErrorEvent(controller, w, flusher, "internal_error", "failed to load events for stream")
+				return
+			}
+			for _, event := range result.page.Events {
+				eventID := strings.TrimSpace(anyString(event["id"]))
+				if eventID == "" {
+					continue
+				}
+				if err := writeSSEEvent(controller, w, eventID, "event", map[string]any{"event": event}); err != nil {
+					clearSSEWriteDeadline(controller)
+					return
+				}
+				visibleSinceResume++
+				// Fixed visible-event cadence exposes neither hidden progress nor IDs.
+				if visibleSinceResume == primitives.EventStreamPageSize {
+					if err := writeSSEEvent(controller, w, eventID, "resume", map[string]any{}); err != nil {
+						clearSSEWriteDeadline(controller)
+						return
+					}
+					visibleSinceResume = 0
+				}
+			}
+			flushSSE(controller, flusher)
+			if result.page.HasMore {
+				// Remaining positions must not add a poll interval to visible
+				// delivery; wait on the timer only after reaching the head. Yield before scheduling the next bounded
+				// chunk; the handler still services keepalives independently.
+				runtime.Gosched()
+				requests <- struct{}{}
+				scanning = true
+			}
 		}
 	}
 }
@@ -488,28 +557,6 @@ func inboxRecordsAfterID(records []inboxStreamRecord, lastEventID string) []inbo
 	return records
 }
 
-func listEventsForStream(r *http.Request, opts handlerOptions, threadID string, threadIDs []string, eventTypes []string) ([]map[string]any, error) {
-	if threadID != "" || len(threadIDs) > 0 {
-		events, err := opts.primitiveStore.ListEvents(r.Context(), primitives.EventListFilter{
-			ThreadID:  threadID,
-			ThreadIDs: threadIDs,
-			Types:     eventTypes,
-		})
-		if err != nil {
-			return nil, err
-		}
-		sortEventsAscending(events)
-		return events, nil
-	}
-
-	events, err := opts.primitiveStore.ListEvents(r.Context(), primitives.EventListFilter{Types: eventTypes})
-	if err != nil {
-		return nil, err
-	}
-	sortEventsAscending(events)
-	return events, nil
-}
-
 func parseEventTypeFilters(w http.ResponseWriter, r *http.Request, opts handlerOptions) ([]string, bool) {
 	values := r.URL.Query()
 	out := make([]string, 0)
@@ -610,38 +657,6 @@ func splitCommaSeparated(raw string) []string {
 		out = append(out, part)
 	}
 	return out
-}
-
-func sortEventsAscending(events []map[string]any) {
-	sort.Slice(events, func(i, j int) bool {
-		leftTS, leftHasTS := parseTimestamp(events[i]["ts"])
-		rightTS, rightHasTS := parseTimestamp(events[j]["ts"])
-		switch {
-		case leftHasTS && rightHasTS:
-			if !leftTS.Equal(rightTS) {
-				return leftTS.Before(rightTS)
-			}
-		case leftHasTS != rightHasTS:
-			return leftHasTS
-		}
-		return anyString(events[i]["id"]) < anyString(events[j]["id"])
-	})
-}
-
-func eventsAfterID(events []map[string]any, lastEventID string) []map[string]any {
-	lastEventID = strings.TrimSpace(lastEventID)
-	if lastEventID == "" {
-		return events
-	}
-	for index, event := range events {
-		if strings.TrimSpace(anyString(event["id"])) == lastEventID {
-			if index+1 >= len(events) {
-				return []map[string]any{}
-			}
-			return events[index+1:]
-		}
-	}
-	return events
 }
 
 func resolveLastEventID(r *http.Request) string {
