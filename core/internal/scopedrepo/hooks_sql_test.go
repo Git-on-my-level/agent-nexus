@@ -14,14 +14,22 @@ import (
 )
 
 func TestRegisteredProxyRejectsSQLBeforeExecution(t *testing.T) {
-	for _, query := range []string{
-		"COMMIT", "ROLLBACK", "BEGIN", "SAVEPOINT escape", "PRAGMA foreign_keys=OFF",
-		"CREATE TABLE escaped(v)", "DELETE FROM documents", "SELECT title FROM documents",
-		readmodel.InsertFeed + "; COMMIT", readModelHookIdentity + "; SELECT title FROM documents",
-		" " + readModelHookIdentity, readmodel.InsertFeed + " -- bypass", "WITH x AS (SELECT 1) SELECT * FROM x",
+	// TempDir includes subtest names in its directory component. Keep SQL out
+	// of those names so the rejection matrix is portable to Linux NAME_MAX.
+	for _, test := range []struct{ name, query string }{
+		{"commit", "COMMIT"}, {"rollback", "ROLLBACK"}, {"begin", "BEGIN"},
+		{"savepoint", "SAVEPOINT escape"}, {"pragma", "PRAGMA foreign_keys=OFF"},
+		{"ddl", "CREATE TABLE escaped(v)"}, {"delete", "DELETE FROM documents"},
+		{"arbitrary-read", "SELECT title FROM documents"},
+		{"compound-write", readmodel.InsertFeed + "; COMMIT"},
+		{"compound-read", readModelHookIdentity + "; SELECT title FROM documents"},
+		{"altered-read", " " + readModelHookIdentity},
+		{"altered-write", readmodel.InsertFeed + " -- bypass"},
+		{"cte", "WITH x AS (SELECT 1) SELECT * FROM x"},
 	} {
-		for _, read := range []bool{false, true} {
-			t.Run(query, func(t *testing.T) {
+		for _, method := range []string{"exec", "query"} {
+			t.Run(test.name+"/"+method, func(t *testing.T) {
+				query := test.query
 				ctx := context.Background()
 				db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "hooks.db"))
 				if err != nil {
@@ -41,7 +49,7 @@ func TestRegisteredProxyRejectsSQLBeforeExecution(t *testing.T) {
 				}
 				remaining := scopes.MaxComputationOps
 				cap := &mutationTx{tx: tx, alive: true, ctx: ctx, remaining: &remaining, registered: true}
-				if read {
+				if method == "query" {
 					_, err = cap.QueryContext(ctx, query)
 				} else {
 					_, err = cap.ExecContext(ctx, query)
