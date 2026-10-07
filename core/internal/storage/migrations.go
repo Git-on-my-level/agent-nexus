@@ -1025,7 +1025,7 @@ var migrations = []migration{
 	{Version: 65, AfterApply: applyMigration65EvidenceIndex},
 	{Version: 66, AfterApply: indexBoundedOverviewReads},
 	{Version: 68, AfterApply: indexBoundedEventStreamReads},
-	// Migration 69 is reserved for #312.
+	{Version: 69, AfterApply: indexBoundedReceiptStreamReads},
 	{Version: 70, AfterApply: indexInboxLifecycle},
 }
 

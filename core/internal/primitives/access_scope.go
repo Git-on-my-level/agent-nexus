@@ -136,6 +136,9 @@ func accessCTEsWithSnapshot(scope AccessScope, query string, snapshot *denialSna
 	if snapshot != nil {
 		epoch := fmt.Sprint(snapshot.epoch)
 		current := "COALESCE((SELECT version FROM main.resource_access_epoch WHERE singleton=1),-1)"
+		if snapshot.epochTable == "receipt_access_epoch" {
+			current = "COALESCE((SELECT version FROM main.receipt_access_epoch WHERE singleton=1),-1)"
+		}
 		roots := "SELECT * FROM (" + deniedRootSQL(scope) + ") WHERE " + current + "<>" + epoch
 		deniedGraph = ownershipClosure("_anx_fresh_denied", roots, false) + ", _anx_denied(kind,id) AS MATERIALIZED (SELECT kind,id FROM _anx_fresh_denied UNION SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]') FROM json_each(?) WHERE " + current + "=" + epoch + ")"
 	}

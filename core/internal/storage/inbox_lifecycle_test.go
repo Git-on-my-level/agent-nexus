@@ -98,12 +98,12 @@ func testInboxLifecycleAppliedPreviewGetsReadinessMetadata(t *testing.T, version
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Keep the preview's migration marker and #312's reserved 69 while restoring
+	// Keep the preview's migration marker and #312's migration 69 while restoring
 	// the old column shape. Neither marker may suppress migration 70.
 	if _, err = w.DB().Exec(`UPDATE schema_migrations SET version=? WHERE version=70`, version); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = w.DB().Exec(`INSERT INTO schema_migrations(version,applied_at) VALUES(69,CURRENT_TIMESTAMP)`); err != nil {
+	if _, err = w.DB().Exec(`INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(69,CURRENT_TIMESTAMP)`); err != nil {
 		t.Fatal(err)
 	}
 	rows, err := w.DB().Query(`SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'inbox_lifecycle_%'`)

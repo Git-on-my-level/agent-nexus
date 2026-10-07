@@ -205,8 +205,20 @@ yielding; hidden backlog must never add poll-timer waits to visible delivery.
 Keepalive cadence and visible-count continuation markers must never depend on hidden backlog or progress.
 The event pager alone may narrow cached denial bindings to its explicit page keys
 and batch-reference keys; parent denial propagation and the consuming statement's
-epoch fallback must remain intact. Never reuse that context for a general read. Shared cached
-projections with inaccessible contributors are unavailable to the reader;
+epoch fallback must remain intact. Never reuse that context for a general read.
+Agent notification receipt streams must not reload a thread's full wakeup history
+on each poll: page indexed snapshot positions, then replay the append-only update
+log. Hidden or trashed positions stay inside the connection and emit no SSE controls.
+Reuse the shared bounded denial cache for stable receipt ancestry. New isolated
+wakeup leaves check current materialized exact/prose references against that
+ancestry; cross-receipt references and every existing ownership input invalidate
+it. Payload reads validate the full authorization epoch in the consuming scoped
+statement and retain canonical fallback. Visibility replay retains its position
+across epoch changes and checks the update log before each replay page. Migration
+69 installs schema and metadata only, without copying historical receipts or
+indexing populated tables. Accepted resumes page the canonical receipt table
+through its released ordering index; the update log contains only new writes.
+Shared cached projections with inaccessible contributors are unavailable to the reader;
 a reader-filtered projection must never replace canonical derived state.
 
 `CanonicalMaintenanceContext` is restricted to namespace allocation, quota

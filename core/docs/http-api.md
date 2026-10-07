@@ -409,8 +409,21 @@ and board access to events and referenced subjects before pagination or
 serialization, including subject and related references in canonical wrapped
 and legacy flat payloads. Thread workspace recent events use the same predicate.
 Timeline notification receipts and receipt streams inherit the
-same access through their backing thread and trigger event. Durable inbox
-projections remain canonical; inbox lists, summary, Overview and the shared inbox
+same access through their backing thread and trigger event. Receipt streams
+page an indexed created-at snapshot, then an append-only update log, at most
+200 candidates per page and 2000 per chunk. The connection waits on the poll
+timer only at the head and does not hold a database connection between pages.
+Hidden and trashed receipts advance that cursor without a client-visible control.
+A visible receipt whose payload changed while disconnected is delivered from that receipt forward.
+This also applies to receipts predating the update log: migration 69 installs
+schema and records the initial log head without backfilling history. Historical
+resumes seek the existing canonical receipt index and use the same scoped payload
+read as new receipts; startup work does not grow with receipt history.
+Inherited visibility changes replay the snapshot without a wakeup rewrite.
+Replay retains its position across further visibility changes and checks new
+updates before each replay page. Payload reads validate authorization in the
+same database statement, including concurrent revocation and trigger trash.
+Durable inbox projections remain canonical; inbox lists, summary, Overview and the shared inbox
 stream loader apply the requesting principal's visibility when reading them.
 Board list cursors count accessible matches only.
 
