@@ -3,6 +3,7 @@ package primitives_test
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -484,8 +485,10 @@ func TestReceiptPayloadPlanSeeksWakeupID(t *testing.T) {
 		t.Fatalf("page %#v", page.Wakeups)
 	}
 	sawSeek := false
+	sawMetadataSeek := false
 	for _, statement := range counter.Statements() {
-		if !strings.Contains(statement.SQL, "JOIN agent_wakeups") {
+		metadata := strings.Contains(statement.SQL, "JOIN agent_wakeup_snapshot_positions")
+		if !strings.Contains(statement.SQL, "JOIN agent_wakeups") && !metadata {
 			continue
 		}
 		rows, err := counted.Query("EXPLAIN QUERY PLAN "+statement.SQL, statement.Args...)
@@ -513,12 +516,21 @@ func TestReceiptPayloadPlanSeeksWakeupID(t *testing.T) {
 		}
 		if strings.Contains(detail, "sqlite_autoindex_agent_wakeups_1") || strings.Contains(detail, "idx_agent_wakeups_thread_wakeup") {
 			sawSeek = true
+			if metadata {
+				sawMetadataSeek = true
+				if !strings.Contains(detail, "idx_access_exact_source") || !strings.Contains(detail, "idx_access_mentions_source") {
+					t.Fatalf("reference metadata did not seek the selected source keys:\n%s", detail)
+				}
+			}
 		} else {
 			t.Fatalf("payload read did not seek wakeup_id:\n%s\nSQL=%s", detail, statement.SQL)
 		}
 	}
 	if !sawSeek {
 		t.Fatal("payload query was not explained")
+	}
+	if !sawMetadataSeek {
+		t.Fatal("receipt/reference metadata query was not explained")
 	}
 }
 
@@ -529,6 +541,13 @@ func TestReceiptStreamHiddenHistoryTickTiming(t *testing.T) {
 	small := measureHiddenReceiptTicks(t, 1000)
 	large := measureHiddenReceiptTicks(t, 100000)
 	t.Logf("hidden 1k idle=%s append=%s; 100k idle=%s append=%s", small.idle, small.append, large.idle, large.append)
+	t.Logf("during ten unrelated private changes: 1k max=%s budget=%+v; 100k max=%s budget=%+v", small.replay, small.replayBudget, large.replay, large.replayBudget)
+	if small.replayBudget != large.replayBudget || large.replayBudget.statements > 10 || large.replayBudget.rows > 10 {
+		t.Fatalf("append during replay depends on history: 1k=%+v 100k=%+v", small.replayBudget, large.replayBudget)
+	}
+	if large.replay > time.Second && large.replay > small.replay*20 {
+		t.Fatalf("private changes delayed public delivery: 1k=%s 100k=%s", small.replay, large.replay)
+	}
 	const limit = 8 * time.Second
 	if large.idle > limit || large.append > limit {
 		t.Fatalf("hidden-history ticks depend on history size: 1k idle=%s append=%s; 100k idle=%s append=%s", small.idle, small.append, large.idle, large.append)
@@ -541,7 +560,10 @@ func TestReceiptStreamHiddenHistoryTickTiming(t *testing.T) {
 	}
 }
 
-type hiddenReceiptTicks struct{ idle, append time.Duration }
+type hiddenReceiptTicks struct {
+	idle, append, replay time.Duration
+	replayBudget         receiptReadBudget
+}
 
 func measureHiddenReceiptTicks(t *testing.T, count int) hiddenReceiptTicks {
 	t.Helper()
@@ -551,7 +573,9 @@ func measureHiddenReceiptTicks(t *testing.T, count int) hiddenReceiptTicks {
 		t.Fatal(err)
 	}
 	defer ws.Close()
-	store := primitives.NewTestStore(ws.DB(), "")
+	counted, counter := testsql.Open("file:" + ws.Layout().DatabasePath)
+	defer counted.Close()
+	store := primitives.NewTestStore(counted, "")
 	public, err := store.CreateThread(ctx, "owner", map[string]any{"title": "timed public"})
 	if err != nil {
 		t.Fatal(err)
@@ -573,6 +597,11 @@ func measureHiddenReceiptTicks(t *testing.T, count int) hiddenReceiptTicks {
 		t.Fatal(err)
 	}
 	triggerID := anyString(event["id"])
+	unrelated, err := store.AppendEvent(ctx, "owner", map[string]any{"type": "message_posted", "thread_id": privateID, "refs": []string{}, "payload": map[string]any{"text": "unrelated"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	unrelatedID := anyString(unrelated["id"])
 	tx, err := ws.DB().BeginTx(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -624,16 +653,65 @@ func measureHiddenReceiptTicks(t *testing.T, count int) hiddenReceiptTicks {
 	if _, err = store.UpsertAgentWakeup(ctx, next); err != nil {
 		t.Fatal(err)
 	}
+	counter.Reset()
 	started = time.Now()
 	page, err = store.ListReceiptStreamPage(scope, publicID, cursor)
 	appended := time.Since(started)
+	for _, statement := range counter.Statements() {
+		if statement.Elapsed > 10*time.Millisecond {
+			t.Logf("slow append statement %s: %.160s", statement.Elapsed, statement.SQL)
+		}
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(page.Wakeups) != 1 || page.Wakeups[0].WakeupID != next.WakeupID {
 		t.Fatalf("append tick %#v", page.Wakeups)
 	}
-	return hiddenReceiptTicks{idle: idle, append: appended}
+	result := hiddenReceiptTicks{idle: idle, append: appended}
+	// An authorized resume establishes an idle stream that may replay visibility.
+	cursor, err = store.ReceiptStreamCursor(scope, publicID, "receipt:wake-next@digest", func(primitives.AgentWakeup) bool { return true })
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err = store.ListReceiptStreamPage(scope, publicID, cursor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cursor = page.Cursor
+	for i := 0; i < 10; i++ {
+		trash := "now"
+		if i%2 == 1 {
+			trash = ""
+		}
+		if _, err = ws.DB().Exec(`UPDATE events SET trashed_at=? WHERE id=?`, trash, unrelatedID); err != nil {
+			t.Fatal(err)
+		}
+		probe := receiptWakeup(fmt.Sprintf("wake-replay-%d", i), publicID, "2026-04-01T00:00:00Z")
+		if _, err = store.UpsertAgentWakeup(ctx, probe); err != nil {
+			t.Fatal(err)
+		}
+		counter.Reset()
+		started = time.Now()
+		page, err = store.ListReceiptStreamPage(scope, publicID, cursor)
+		elapsed := time.Since(started)
+		if elapsed > result.replay {
+			result.replay = elapsed
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(page.Wakeups) != 1 || page.Wakeups[0].WakeupID != probe.WakeupID {
+			t.Fatalf("private epoch change starved append %d: %+v", i, page.Wakeups)
+		}
+		budget := receiptReadBudget{statements: int(counter.Count()), rows: counter.ReturnedRows()}
+		if i > 0 && budget != result.replayBudget {
+			t.Fatalf("replay work grew across epochs: prior=%+v current=%+v", result.replayBudget, budget)
+		}
+		result.replayBudget = budget
+		cursor = page.Cursor
+	}
+	return result
 }
 
 func receiptWakeup(id, threadID, createdAt string) primitives.AgentWakeup {

@@ -415,6 +415,9 @@ timer only at the head and does not hold a database connection between pages.
 Hidden and trashed receipts advance that cursor without a client-visible control.
 A visible receipt whose payload changed while disconnected is delivered from that receipt forward.
 Inherited visibility changes replay the snapshot without a wakeup rewrite.
+Replay retains its position across further visibility changes and checks new
+updates before each replay page. Payload reads validate authorization in the
+same database statement, including concurrent revocation and trigger trash.
 Durable inbox projections remain canonical; inbox lists, summary, Overview and the shared inbox
 stream loader apply the requesting principal's visibility when reading them.
 Board list cursors count accessible matches only.

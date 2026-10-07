@@ -1026,6 +1026,7 @@ var migrations = []migration{
 	{Version: 66, AfterApply: indexBoundedOverviewReads},
 	{Version: 67, AfterApply: indexBoundedReceiptStreamReads},
 	{Version: 68, AfterApply: indexBoundedEventStreamReads},
+	{Version: 69, AfterApply: reconcileReceiptStreamAccess},
 }
 
 func repairNULReferenceAccess(ctx context.Context, tx *sql.Tx) error {

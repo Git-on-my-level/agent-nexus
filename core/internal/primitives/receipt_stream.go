@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
-	"sync"
 
 	"agent-nexus-core/internal/resourceaccess"
 )
@@ -23,6 +22,8 @@ const agentWakeupSelectList = `wakeup_id, status, notification_status, target_ha
 // hidden row and must not be serialized to a client.
 type ReceiptStreamCursor struct {
 	Snapshot         bool
+	Replay           bool
+	ReplayAgain      bool
 	IncludeCurrent   bool
 	CreatedAt        string
 	WakeupID         string
@@ -42,6 +43,7 @@ type ReceiptStreamPage struct {
 	Cursor        ReceiptStreamCursor `json:"-"`
 	HasMore       bool
 	AccessChanged bool `json:"-"`
+	ThreadDenied  bool `json:"-"`
 }
 
 // ReceiptStreamCursor replays the snapshot for an empty id. A visible receipt
@@ -60,7 +62,7 @@ func (s *Store) ReceiptStreamCursor(ctx context.Context, threadID string, lastEv
 	if err != nil {
 		return ReceiptStreamCursor{}, err
 	}
-	base := ReceiptStreamCursor{TailFrom: head, VisibilityEpoch: visibility, VisibilityKnown: true}
+	base := ReceiptStreamCursor{Seq: head, TailFrom: head, VisibilityEpoch: visibility, VisibilityKnown: true}
 	wakeupID, digest, ok := receiptStreamWakeupID(lastEventID)
 	if !ok {
 		if strings.TrimSpace(lastEventID) == "" {
@@ -107,6 +109,28 @@ func (s *Store) ListReceiptStreamPage(ctx context.Context, threadID string, curs
 	}
 	var page ReceiptStreamPage
 	if cursor.Snapshot {
+		if cursor.Replay {
+			// Drain new updates before every replay page. Unrelated changes cannot
+			// starve newly appended visible receipts.
+			tail, tailErr := s.listReceiptTailPage(ctx, threadID, cursor)
+			if tailErr != nil {
+				return ReceiptStreamPage{}, tailErr
+			}
+			if tail.Cursor.Seq != cursor.Seq {
+				seq := tail.Cursor.Seq
+				tail.Cursor = cursor
+				tail.Cursor.Seq = seq
+				tail.HasMore = true
+				tail.AccessChanged = changed
+				if changed {
+					tail.ThreadDenied, err = s.receiptThreadDenied(ctx, threadID)
+					if err != nil {
+						return ReceiptStreamPage{}, err
+					}
+				}
+				return tail, nil
+			}
+		}
 		page, err = s.listReceiptSnapshotPage(ctx, threadID, cursor)
 	} else {
 		page, err = s.listReceiptTailPage(ctx, threadID, cursor)
@@ -115,6 +139,12 @@ func (s *Store) ListReceiptStreamPage(ctx context.Context, threadID string, curs
 		return ReceiptStreamPage{}, err
 	}
 	page.AccessChanged = changed
+	if changed {
+		page.ThreadDenied, err = s.receiptThreadDenied(ctx, threadID)
+		if err != nil {
+			return ReceiptStreamPage{}, err
+		}
+	}
 	page.Cursor.ReplayVisibility = cursor.ReplayVisibility
 	page.Cursor.VisibilityEpoch = cursor.VisibilityEpoch
 	page.Cursor.VisibilityKnown = true
@@ -126,13 +156,18 @@ func (s *Store) advanceReceiptVisibility(ctx context.Context, threadID string, c
 	if err != nil {
 		return cursor, false, err
 	}
-	changed := cursor.VisibilityKnown && cursor.ReplayVisibility && visibility != cursor.VisibilityEpoch
-	if changed {
-		head, err := s.receiptStreamHead(ctx, threadID)
-		if err != nil {
-			return cursor, false, err
+	changed := cursor.VisibilityKnown && visibility != cursor.VisibilityEpoch
+	if changed && cursor.ReplayVisibility {
+		if cursor.Snapshot {
+			cursor.Replay = true
+			cursor.ReplayAgain = true
+		} else {
+			cursor.Snapshot = true
+			cursor.Replay = true
+			cursor.CreatedAt = ""
+			cursor.WakeupID = ""
+			cursor.IncludeCurrent = false
 		}
-		cursor = ReceiptStreamCursor{Snapshot: true, TailFrom: head, ReplayVisibility: true}
 	}
 	cursor.VisibilityEpoch = visibility
 	cursor.VisibilityKnown = true
@@ -220,9 +255,21 @@ func (s *Store) listReceiptSnapshotPage(ctx context.Context, threadID string, cu
 	// Snapshot positions are consumed. Changes committed after the cursor was
 	// opened remain on the update log and are not folded into this page.
 	page.Cursor.Snapshot = false
-	page.Cursor.Seq = cursor.TailFrom
+	if cursor.ReplayAgain {
+		page.Cursor.Snapshot = true
+		page.Cursor.Replay = true
+		page.Cursor.ReplayAgain = false
+		page.Cursor.CreatedAt = ""
+		page.Cursor.WakeupID = ""
+		page.HasMore = true
+		return page, nil
+	}
+	if !cursor.Replay {
+		page.Cursor.Seq = cursor.TailFrom
+	}
+	page.Cursor.Replay = false
 	var next int64
-	err = s.db.QueryRowContext(ctx, `SELECT seq FROM agent_wakeup_stream WHERE thread_id=? AND seq>? ORDER BY seq LIMIT 1`, threadID, cursor.TailFrom).Scan(&next)
+	err = s.db.QueryRowContext(ctx, `SELECT seq FROM agent_wakeup_stream WHERE thread_id=? AND seq>? ORDER BY seq LIMIT 1`, threadID, page.Cursor.Seq).Scan(&next)
 	if errors.Is(err, sql.ErrNoRows) {
 		return page, nil
 	}
@@ -278,48 +325,48 @@ func (s *Store) listReceiptTailPage(ctx context.Context, threadID string, cursor
 	return page, nil
 }
 
+// Only traversal/ownership metadata is read before the scoped payload query.
+// New isolated wakeup leaves can inherit cached parent denials without rebuilding
+// the workspace closure. The final read validates the full authorization epoch.
 func (s *Store) loadVisibleReceipts(ctx context.Context, threadID string, ids []string) ([]AgentWakeup, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	keys, err := json.Marshal(ids)
+	keys, _ := json.Marshal(ids)
+	rows, err := s.db.QueryContext(ctx, `SELECT p.wakeup_id,p.thread_id,p.trigger_event_id,
+  COALESCE((SELECT json_group_array(target_key) FROM resource_access_exact_edges WHERE source_kind='wakeup' AND source_id=p.wakeup_id),'[]'),
+  COALESCE((SELECT json_group_array(json_array(i.kind,i.resource_id)) FROM resource_access_mentions m JOIN resource_access_identities i ON i.identity_id=m.identity_id WHERE m.source_kind='wakeup' AND m.source_id=p.wakeup_id),'[]'),
+  (SELECT version FROM resource_access_epoch WHERE singleton=1)
+  FROM json_each(?) wanted JOIN agent_wakeup_snapshot_positions p ON p.wakeup_id=wanted.value`, string(keys))
 	if err != nil {
 		return nil, err
 	}
-	plain := resourceaccess.WithoutPolicy(ctx)
-	metaRows, err := s.db.QueryContext(plain, `SELECT agent_wakeups.wakeup_id, agent_wakeups.thread_id, agent_wakeups.trigger_event_id,
-		agent_wakeups.refs_json, agent_wakeups.trigger_text, agent_wakeups.thread_title, agent_wakeups.failure_reason
-		FROM json_each(?) AS wanted
-		JOIN agent_wakeups ON agent_wakeups.wakeup_id = wanted.value`, string(keys))
-	if err != nil {
-		return nil, err
-	}
-	type receiptIdentity struct {
-		threadID, triggerID string
+	type metadata struct {
+		id, thread, trigger string
 		atoms               []string
+		mentions            [][2]string
 	}
-	identity := map[string]receiptIdentity{}
-	triggerIDs := []string{}
-	for metaRows.Next() {
-		var wakeupID, wakeupThread, triggerID, refs, triggerText, threadTitle, failure string
-		if err = metaRows.Scan(&wakeupID, &wakeupThread, &triggerID, &refs, &triggerText, &threadTitle, &failure); err != nil {
-			metaRows.Close()
+	var metas []metadata
+	var epoch int64
+	for rows.Next() {
+		var m metadata
+		var atoms, mentions string
+		if err = rows.Scan(&m.id, &m.thread, &m.trigger, &atoms, &mentions, &epoch); err != nil {
+			rows.Close()
 			return nil, err
 		}
-		identity[wakeupID] = receiptIdentity{
-			threadID: wakeupThread, triggerID: triggerID,
-			atoms: receiptReferenceAtoms(refs, triggerText, threadTitle, failure),
+		if err = json.Unmarshal([]byte(atoms), &m.atoms); err != nil {
+			rows.Close()
+			return nil, err
 		}
-		if triggerID != "" {
-			triggerIDs = append(triggerIDs, triggerID)
+		if err = json.Unmarshal([]byte(mentions), &m.mentions); err != nil {
+			rows.Close()
+			return nil, err
 		}
+		metas = append(metas, m)
 	}
-	err = metaRows.Err()
-	metaRows.Close()
-	if err != nil {
-		return nil, err
-	}
-	trashed, err := s.trashedReceiptTriggers(plain, triggerIDs)
+	err = rows.Err()
+	rows.Close()
 	if err != nil {
 		return nil, err
 	}
@@ -327,25 +374,32 @@ func (s *Store) loadVisibleReceipts(ctx context.Context, threadID string, ids []
 	if err != nil {
 		return nil, err
 	}
-	denied := make([][2]string, 0)
-	for _, id := range ids {
-		meta, ok := identity[id]
-		if !ok || meta.threadID != threadID || trashed[meta.triggerID] || snap.deniesWakeup(id, meta.threadID, meta.triggerID) || receiptAtomsDenied(snap, meta.atoms) {
-			denied = append(denied, [2]string{"wakeup", id})
+	denied := [][2]string{}
+	for _, m := range metas {
+		hidden := m.thread != threadID || snap.deniesWakeup(m.id, m.thread, m.trigger)
+		for _, atom := range m.atoms {
+			hidden = hidden || snap.deniesAtom(atom)
+		}
+		for _, ref := range m.mentions {
+			hidden = hidden || snap.denies(ref[0], ref[1])
+		}
+		if hidden {
+			denied = append(denied, [2]string{"wakeup", m.id})
 		}
 	}
-	deniedJSON, err := json.Marshal(denied)
-	if err != nil {
-		return nil, err
+	data, _ := json.Marshal(denied)
+	readCtx := ctx
+	if scope, scoped := accessScopeFrom(ctx); scoped {
+		readCtx = WithRequestAccessScope(ctx, scope)
+		state, _ := readCtx.Value(denialRequestKey{}).(*denialRequestState)
+		state.snapshot = &denialSnapshot{epoch: epoch, rows: string(data)}
 	}
-	// Seek each candidate by primary key. Denial and trash are a page-sized
-	// set, not a scan of the thread's history.
-	rows, err := s.db.QueryContext(plain, `SELECT `+agentWakeupSelectList+` FROM json_each(?) AS wanted
-		JOIN agent_wakeups ON agent_wakeups.wakeup_id = wanted.value
-		WHERE NOT EXISTS (
-			SELECT 1 FROM json_each(?) AS denied
-			WHERE json_extract(denied.value,'$[0]')='wakeup' AND json_extract(denied.value,'$[1]')=agent_wakeups.wakeup_id
-		)`, string(keys), string(deniedJSON))
+	// Scope shadows agent_wakeups and validates resource_access_epoch in this
+	// statement, falling back to the canonical graph on ANY intervening write.
+	rows, err = s.db.QueryContext(readCtx, `SELECT `+agentWakeupSelectList+` FROM json_each(?) wanted
+  CROSS JOIN agent_wakeups ON agent_wakeups.wakeup_id=wanted.value
+  WHERE agent_wakeups.thread_id=? AND NOT EXISTS (SELECT 1 FROM receipt_trigger_positions e
+   WHERE e.id=agent_wakeups.trigger_event_id AND COALESCE(e.trashed_at,'')<>'')`, string(keys), threadID)
 	if err != nil {
 		return nil, err
 	}
@@ -363,121 +417,79 @@ func (s *Store) loadVisibleReceipts(ctx context.Context, threadID string, ids []
 	if err != nil {
 		return nil, err
 	}
-	out := make([]AgentWakeup, 0, len(byID))
+	out := []AgentWakeup{}
 	for _, id := range ids {
-		wakeup, ok := byID[id]
-		if !ok || wakeup.ThreadID != threadID {
-			continue
+		if wakeup, ok := byID[id]; ok {
+			out = append(out, wakeup)
 		}
-		out = append(out, wakeup)
 	}
 	return out, nil
 }
 
-func receiptReferenceAtoms(fields ...string) []string {
-	seen := map[string]bool{}
-	out := []string{}
-	for _, field := range fields {
-		for _, atom := range resourceaccess.ReferenceAtoms(field) {
-			if seen[atom] || strings.HasPrefix(atom, "$") {
-				continue
-			}
-			seen[atom] = true
-			out = append(out, atom)
-		}
-	}
-	return out
-}
-
-func receiptAtomsDenied(snap *denialSnapshot, atoms []string) bool {
-	for _, atom := range atoms {
-		kind, id, ok := strings.Cut(atom, ":")
-		if ok && snap.denies(kind, id) {
-			return true
-		}
-	}
-	return false
-}
-
-func (s *Store) trashedReceiptTriggers(ctx context.Context, ids []string) (map[string]bool, error) {
-	trashed := map[string]bool{}
-	if len(ids) == 0 {
-		return trashed, nil
-	}
-	keys, err := json.Marshal(ids)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := s.db.QueryContext(ctx, `SELECT events.id FROM json_each(?) AS wanted
-		JOIN events ON events.id = wanted.value
-		WHERE COALESCE(events.trashed_at,'')<>''`, string(keys))
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id string
-		if err = rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		trashed[id] = true
-	}
-	return trashed, rows.Err()
-}
-
-type receiptDenialCacheKey struct {
-	db    *accessDB
-	scope AccessScope
-}
-
-type receiptDenialSlot struct {
-	visibility int64
-	snapshot   *denialSnapshot
-}
-
-var receiptDenials = struct {
-	sync.Mutex
-	slots map[receiptDenialCacheKey]receiptDenialSlot
-}{slots: map[receiptDenialCacheKey]receiptDenialSlot{}}
-
-// receiptDenial reuses one closure for the whole visibility epoch. Wakeup
-// inserts and updates move the resource-access epoch without changing which
-// existing receipts the caller can see, so those writes must not rebuild it.
 func (s *Store) receiptDenial(ctx context.Context) (*denialSnapshot, error) {
 	scope, scoped := accessScopeFrom(ctx)
 	if !scoped {
 		return nil, nil
 	}
-	visibility, err := s.receiptVisibilityEpoch(ctx)
-	if err != nil {
-		return nil, err
+	capture := withRequestAccessEpoch(ctx, scope, "receipt_access_epoch")
+	policy, _ := resourceaccess.PolicyFrom(capture)
+	original := policy.ReadOnDB
+	policy.ReadOnDB = func(c context.Context, db resourceaccess.QueryRower, query string, args []any) (string, []any) {
+		state, _ := c.Value(denialRequestKey{}).(*denialRequestState)
+		state.Lock()
+		if state.snapshot == nil {
+			raw, _ := db.(*sql.DB)
+			cached := cachedReadDenialForEpoch(raw, scope, "receipt_access_epoch")
+			if cached != nil {
+				var epoch int64
+				if db.QueryRowContext(c, `SELECT version FROM receipt_access_epoch WHERE singleton=1`).Scan(&epoch) == nil && epoch == cached.epoch {
+					state.snapshot = cached
+				}
+			}
+		}
+		state.Unlock()
+		if denialSnapshotFrom(c) == nil {
+			original(c, db, query, args)
+		}
+		if snap := denialSnapshotFrom(c); snap != nil {
+			// This capture probe selects the impossible thread key, so no denial
+			// binding from the complete closure is needed on warm reads.
+			empty := &denialSnapshot{epoch: snap.epoch, epochTable: "receipt_access_epoch", rows: "[]"}
+			return scopeReadWithSnapshot(c, query, empty), append([]any{"[]"}, args...)
+		}
+		return original(c, db, query, args)
 	}
-	key := receiptDenialCacheKey{db: s.db, scope: scope}
-	receiptDenials.Lock()
-	slot, ok := receiptDenials.slots[key]
-	receiptDenials.Unlock()
-	if ok && slot.visibility == visibility && slot.snapshot != nil {
-		return slot.snapshot, nil
-	}
-	captureCtx := WithRequestAccessScope(ctx, scope)
+	capture = resourceaccess.WithPolicy(capture, policy)
 	var n int
-	if err = s.db.QueryRowContext(captureCtx, `SELECT count(*) FROM threads WHERE id=''`).Scan(&n); err != nil {
+	if err := s.db.QueryRowContext(capture, `SELECT count(*) FROM threads WHERE id=''`).Scan(&n); err != nil {
 		return nil, err
 	}
-	snap := denialSnapshotFrom(captureCtx)
+	snap := denialSnapshotFrom(capture)
 	if snap == nil {
 		return nil, errors.New("receipt access snapshot unavailable")
 	}
-	receiptDenials.Lock()
-	if len(receiptDenials.slots) >= 32 {
-		for old := range receiptDenials.slots {
-			delete(receiptDenials.slots, old)
-			break
-		}
-	}
-	receiptDenials.slots[key] = receiptDenialSlot{visibility: visibility, snapshot: snap}
-	receiptDenials.Unlock()
 	return snap, nil
+}
+
+func (s *Store) receiptThreadDenied(ctx context.Context, threadID string) (bool, error) {
+	scope, scoped := accessScopeFrom(ctx)
+	if !scoped {
+		return false, nil
+	}
+	snap, err := s.receiptDenial(ctx)
+	if err != nil {
+		return false, err
+	}
+	rows, ok := snap.targetRows("thread", []string{threadID})
+	if !ok {
+		return false, errors.New("receipt thread access snapshot unavailable")
+	}
+	readCtx := WithRequestAccessScope(ctx, scope)
+	state, _ := readCtx.Value(denialRequestKey{}).(*denialRequestState)
+	state.snapshot = &denialSnapshot{epoch: snap.epoch, epochTable: "receipt_access_epoch", rows: rows}
+	var visible bool
+	err = s.db.QueryRowContext(readCtx, `SELECT EXISTS(SELECT 1 FROM threads WHERE id=?)`, threadID).Scan(&visible)
+	return !visible, err
 }
 
 func receiptStreamWakeupID(lastEventID string) (string, string, bool) {

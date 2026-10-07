@@ -34,9 +34,18 @@ type Statement struct {
 	Elapsed time.Duration
 }
 type Counter struct {
-	queries    atomic.Int64
-	mu         sync.Mutex
-	statements []*Statement
+	queries     atomic.Int64
+	mu          sync.Mutex
+	statements  []*Statement
+	beforeQuery func(string)
+}
+
+// BeforeQuery injects a deterministic competing write immediately before a
+// real SQLite read. It is used to exercise consuming-statement epoch fallback.
+func (c *Counter) BeforeQuery(hook func(string)) {
+	c.mu.Lock()
+	c.beforeQuery = hook
+	c.mu.Unlock()
 }
 
 func (c *Counter) Statements() []Statement {
@@ -63,7 +72,11 @@ func (c *Counter) start(query string, args []driver.NamedValue) *Statement {
 	}
 	c.mu.Lock()
 	c.statements = append(c.statements, s)
+	hook := c.beforeQuery
 	c.mu.Unlock()
+	if hook != nil {
+		hook(query)
+	}
 	return s
 }
 

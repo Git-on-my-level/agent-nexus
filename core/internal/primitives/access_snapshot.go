@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"strings"
 	"sync"
 )
 
@@ -12,9 +13,48 @@ type denialTarget struct{ kind, id string }
 
 type denialSnapshot struct {
 	epoch       int64
+	epochTable  string
+	refs        string
+	refOnce     sync.Once
+	refIndex    map[string]struct{}
 	rows        string
 	indexOnce   sync.Once
 	targetIndex map[denialTarget]struct{}
+}
+
+// deniesAtom uses the canonical exact-atom and identity indexes. Preparing
+// aliases and bare ID keys once avoids scanning the denial closure per page.
+func (s *denialSnapshot) deniesAtom(key string) bool {
+	if s == nil {
+		return false
+	}
+	s.refOnce.Do(func() {
+		s.prepareTargetIndex()
+		s.refIndex = map[string]struct{}{}
+		for target := range s.targetIndex {
+			if strings.HasPrefix(target.kind, "filter/") || target.kind == "plan" || target.kind == "work_evidence_record" || target.kind == "work_evidence_alias" {
+				continue
+			}
+			s.refIndex[resourceaccess.AtomKey(target.id)] = struct{}{}
+			if target.kind != "external_key" {
+				s.refIndex[resourceaccess.AtomKey(target.kind+":"+target.id)] = struct{}{}
+			}
+		}
+		var refs [][2]string
+		if json.Unmarshal([]byte(s.refs), &refs) == nil {
+			for _, ref := range refs {
+				s.refIndex[resourceaccess.AtomKey(ref[0]+":"+ref[1])] = struct{}{}
+				if ref[0] == "document" {
+					s.refIndex[resourceaccess.AtomKey("doc:"+ref[1])] = struct{}{}
+				}
+				if strings.HasPrefix(ref[1], "http://") || strings.HasPrefix(ref[1], "https://") {
+					s.refIndex[resourceaccess.AtomKey(ref[1])] = struct{}{}
+				}
+			}
+		}
+	})
+	_, denied := s.refIndex[key]
+	return denied
 }
 
 // Index once when a closure is cached, rather than decoding every denied
@@ -68,9 +108,10 @@ type denialRequestState struct {
 type denialRequestKey struct{}
 
 type denialCacheKey struct {
-	db    *sql.DB
-	scope AccessScope
-	epoch int64
+	db         *sql.DB
+	scope      AccessScope
+	epoch      int64
+	epochTable string
 }
 
 // Hold at most 32 immutable closures and 8 MiB of encoded rows, evicting oldest
@@ -84,12 +125,15 @@ var readDenials = struct {
 }{rows: make(map[denialCacheKey]*denialSnapshot)}
 
 func cachedReadDenial(db *sql.DB, scope AccessScope) *denialSnapshot {
+	return cachedReadDenialForEpoch(db, scope, "resource_access_epoch")
+}
+func cachedReadDenialForEpoch(db *sql.DB, scope AccessScope, epochTable string) *denialSnapshot {
 	readDenials.Lock()
 	defer readDenials.Unlock()
 	var newest *denialSnapshot
 	// Captures can finish out of order; insertion order is not epoch order.
 	for _, key := range readDenials.keys {
-		if key.db == db && key.scope == scope && (newest == nil || key.epoch > newest.epoch) {
+		if key.db == db && key.scope == scope && key.epochTable == epochTable && (newest == nil || key.epoch > newest.epoch) {
 			newest = readDenials.rows[key]
 		}
 	}
@@ -97,25 +141,29 @@ func cachedReadDenial(db *sql.DB, scope AccessScope) *denialSnapshot {
 }
 
 func rememberReadDenial(db *sql.DB, scope AccessScope, snapshot *denialSnapshot) {
-	if db == nil || snapshot == nil || len(snapshot.rows) > 8<<20 {
+	if db == nil || snapshot == nil || len(snapshot.rows)+len(snapshot.refs) > 8<<20 {
 		return
 	}
 	snapshot.prepareTargetIndex()
-	key := denialCacheKey{db, scope, snapshot.epoch}
+	epochTable := snapshot.epochTable
+	if epochTable == "" {
+		epochTable = "resource_access_epoch"
+	}
+	key := denialCacheKey{db, scope, snapshot.epoch, epochTable}
 	readDenials.Lock()
 	defer readDenials.Unlock()
 	if readDenials.rows[key] != nil {
 		return
 	}
-	for len(readDenials.keys) >= 32 || readDenials.bytes+len(snapshot.rows) > 8<<20 {
+	for len(readDenials.keys) >= 32 || readDenials.bytes+len(snapshot.rows)+len(snapshot.refs) > 8<<20 {
 		old := readDenials.keys[0]
 		readDenials.keys = readDenials.keys[1:]
-		readDenials.bytes -= len(readDenials.rows[old].rows)
+		readDenials.bytes -= len(readDenials.rows[old].rows) + len(readDenials.rows[old].refs)
 		delete(readDenials.rows, old)
 	}
 	readDenials.keys = append(readDenials.keys, key)
 	readDenials.rows[key] = snapshot
-	readDenials.bytes += len(snapshot.rows)
+	readDenials.bytes += len(snapshot.rows) + len(snapshot.refs)
 }
 
 // WithRequestAccessScope caches the denial closure for a regular read request.
@@ -124,6 +172,11 @@ func rememberReadDenial(db *sql.DB, scope AccessScope, snapshot *denialSnapshot)
 // Business transactions, visit writes and streams evaluate the canonical graph
 // directly. Shared read snapshots are bounded and isolated by DB, scope and epoch.
 func WithRequestAccessScope(ctx context.Context, scope AccessScope) context.Context {
+	return withRequestAccessEpoch(ctx, scope, "resource_access_epoch")
+}
+
+// epochTable is an internal schema identifier, never caller input.
+func withRequestAccessEpoch(ctx context.Context, scope AccessScope, epochTable string) context.Context {
 	ctx = WithAccessScope(ctx, scope)
 	state := &denialRequestState{}
 	ctx = context.WithValue(ctx, denialRequestKey{}, state)
@@ -141,9 +194,9 @@ func WithRequestAccessScope(ctx context.Context, scope AccessScope) context.Cont
 			raw, _ := db.(*sql.DB)
 			var cached *denialSnapshot
 			if raw != nil {
-				cached = cachedReadDenial(raw, scope)
+				cached = cachedReadDenialForEpoch(raw, scope, epochTable)
 			}
-			candidate := &denialSnapshot{}
+			candidate := &denialSnapshot{epochTable: epochTable}
 			sql := `WITH RECURSIVE ` + ownershipClosure("_anx_denied", deniedRootSQL(scope), false) + ` SELECT (SELECT version FROM main.resource_access_epoch WHERE singleton=1),COALESCE((SELECT json_group_array(json_array(kind,id)) FROM _anx_denied),'[]')`
 			var captureArgs []any
 			if cached != nil {
@@ -152,7 +205,18 @@ func WithRequestAccessScope(ctx context.Context, scope AccessScope) context.Cont
 				sql = `WITH RECURSIVE _anx_snapshot_epoch(version) AS MATERIALIZED (SELECT version FROM main.resource_access_epoch WHERE singleton=1), ` + ownershipClosure("_anx_denied", roots, false) + ` SELECT ` + current + `,CASE WHEN ` + current + `=? THEN ? ELSE COALESCE((SELECT json_group_array(json_array(kind,id)) FROM _anx_denied),'[]') END`
 				captureArgs = []any{cached.epoch, cached.epoch, cached.rows}
 			}
-			if err := db.QueryRowContext(c, sql, captureArgs...).Scan(&candidate.epoch, &candidate.rows); err == nil {
+			sql = strings.ReplaceAll(sql, "main.resource_access_epoch", "main."+epochTable)
+			dest := []any{&candidate.epoch, &candidate.rows}
+			if epochTable == "receipt_access_epoch" {
+				refSQL := `COALESCE((SELECT json_group_array(json_array(kind,ref)) FROM (WITH ` + ownershipRefs("_anx_receipt_refs", "_anx_denied") + ` SELECT kind,ref FROM _anx_receipt_refs WHERE ref<>id)),'[]')`
+				if cached != nil {
+					refSQL = `CASE WHEN (SELECT version FROM _anx_snapshot_epoch)=? THEN ? ELSE ` + refSQL + ` END`
+					captureArgs = append(captureArgs, cached.epoch, cached.refs)
+				}
+				sql += "," + refSQL
+				dest = append(dest, &candidate.refs)
+			}
+			if err := db.QueryRowContext(c, sql, captureArgs...).Scan(dest...); err == nil {
 				if cached != nil && candidate.epoch == cached.epoch {
 					state.snapshot = cached
 				} else {

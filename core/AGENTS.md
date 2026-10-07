@@ -207,8 +207,13 @@ epoch fallback must remain intact. Never reuse that context for a general read.
 Agent notification receipt streams must not reload a thread's full wakeup history
 on each poll: page indexed snapshot positions, then replay the append-only update
 log. Hidden or trashed positions stay inside the connection and emit no SSE controls.
-Reuse one access snapshot per visibility epoch, and replay that snapshot when
-inherited visibility changes without a wakeup write.
+Reuse the shared bounded denial cache for stable receipt ancestry. New isolated
+wakeup leaves check current materialized exact/prose references against that
+ancestry; cross-receipt references and every existing ownership input invalidate
+it. Payload reads validate the full authorization epoch in the consuming scoped
+statement and retain canonical fallback. Visibility replay retains its position
+across epoch changes and checks the update log before each replay page. Migration
+69 reconciles applied receipt previews while preserving historical migration 67.
 Shared cached projections with inaccessible contributors are unavailable to the reader;
 a reader-filtered projection must never replace canonical derived state.
 

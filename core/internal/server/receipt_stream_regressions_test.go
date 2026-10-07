@@ -81,6 +81,48 @@ type noopAfterReceiptCursor struct {
 	once     sync.Once
 }
 
+func TestReceiptStreamDoesNotEmitNewRestrictedTrigger(t *testing.T) {
+	ctx := context.Background()
+	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	store := primitives.NewTestStore(ws.DB(), "")
+	for _, q := range []string{
+		`INSERT INTO threads(id,updated_at,updated_by,body_json) VALUES('public','now','owner','{}'),('private','now','other','{"pm_actor_id":"other"}')`,
+		`INSERT INTO agent_wakeups(wakeup_id,status,notification_status,target_handle,target_actor_id,thread_id,refs_json,created_at,updated_at) VALUES('accepted','requested','unread','agent','target','public','[]','now','now')`,
+	} {
+		if _, err = ws.DB().Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	accepted, err := store.GetAgentWakeup(ctx, "accepted")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrapped := &restrictedAfterReceiptCursor{Store: store, db: ws.DB()}
+	frame := readNextReceiptStreamFrame(t, wrapped, "public", receiptStreamEventID(accepted), 50*time.Millisecond)
+	if frame != ": keepalive\n\n" {
+		t.Fatalf("new restricted trigger emitted a payload or control: %q", frame)
+	}
+}
+
+type restrictedAfterReceiptCursor struct {
+	*primitives.Store
+	db *sql.DB
+}
+
+func (s *restrictedAfterReceiptCursor) ReceiptStreamCursor(ctx context.Context, threadID, lastEventID string, accept func(primitives.AgentWakeup) bool) (primitives.ReceiptStreamCursor, error) {
+	cursor, err := s.Store.ReceiptStreamCursor(ctx, threadID, lastEventID, accept)
+	if err != nil {
+		return cursor, err
+	}
+	_, err = s.db.Exec(`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) VALUES('secret-trigger','message_posted','now','owner','public','["thread:private"]','{}');
+	 INSERT INTO agent_wakeups(wakeup_id,status,notification_status,target_handle,target_actor_id,thread_id,trigger_event_id,trigger_text,refs_json,created_at,updated_at) VALUES('secret-wake','requested','unread','agent','target','public','secret-trigger','secret-text','[]','now','now')`)
+	return cursor, err
+}
+
 func (s *noopAfterReceiptCursor) ReceiptStreamCursor(ctx context.Context, threadID, lastEventID string, accept func(primitives.AgentWakeup) bool) (primitives.ReceiptStreamCursor, error) {
 	cursor, err := s.Store.ReceiptStreamCursor(ctx, threadID, lastEventID, accept)
 	if err != nil {

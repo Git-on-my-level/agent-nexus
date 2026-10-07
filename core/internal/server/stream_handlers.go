@@ -442,7 +442,7 @@ func handleAgentNotificationReceiptsStream(w http.ResponseWriter, r *http.Reques
 				cursor = result.page.Cursor
 				// Rebuild authorization only when inherited visibility changes.
 				// Steady ticks reuse the cached closure inside the page read.
-				if result.page.AccessChanged && !threadAccessible(r, opts, threadID) {
+				if result.page.ThreadDenied {
 					result.err = errReceiptStreamDenied
 					break
 				}
