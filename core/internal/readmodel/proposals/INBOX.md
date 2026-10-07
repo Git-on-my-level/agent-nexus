@@ -18,9 +18,16 @@ the eventual minimal handler switch.
    in that transaction. `EncodeScopeInbox` stores a <=16 KiB envelope;
    `DecodeScopeInbox` requires the independently joined exact tuple and preserves
    unknown JSON fields. Neither method grants scope/audience provenance.
-2. Bulk `ReplaceDerivedInboxItems`, inbox decision/answer/read updates, report
-   review projections, lifecycle and imports still need complete capture. A bulk
-   replacement must fence the generation and enqueue a durable keyset rebuild;
+2. Use the detached `ScopeInboxMutationLedger` and exact, unapplied
+   `ScopeInboxInvalidationProposal` for bulk `ReplaceDerivedInboxItems`, canonical
+   decision/answer/read state, report reviews, lifecycle and imports. Install the
+   monotonic `ScopeInboxEpochGuardProposal` and all source triggers atomically
+   through A’s reviewed schema/hook boundary before publishing any receipt.
+   These constant-work BEFORE triggers invalidate the global legacy epoch; they
+   abort the source statement if invalidation cannot persist. Invalid clock
+   invariants explicitly roll back the whole transaction; A must keep generic
+   SQL errors sticky and roll back instead of committing earlier writes. A bulk
+   replacement invalidates and enqueues a durable keyset rebuild;
    do not turn the point helper into an unbounded loop or certify a partially
    captured generation. Bind all external PM authority to invalidation as well.
 3. The integer `FeedKey` cannot preserve existing inbox order. Use the bounded
@@ -58,8 +65,9 @@ the eventual minimal handler switch.
    to activate without independently supplied current receipts. The production
    source/ancestry loader and reviewed schema registration remain A/D work.
 7. Preserve the existing bounded notification-target and access-request
-   enrichment. The HTTP hydration fixture has no live target; it proves neither
-   target authority nor freshness/summary/count semantics. Lifecycle exclusions
+   enrichment. The HTTP hydration fixture uses real actor/agent target lookups; a separate
+   fixture checks canonical access-request metadata and target revocation. Neither
+   test admits enrichment into the closed production authority boundary. Lifecycle exclusions
    must be captured before candidate admission, including the independent-ask
    exception. Do not carry the legacy handler's post-page lifecycle filter into
    the new bridge.
@@ -72,6 +80,14 @@ equivalence, explicitly rejects the integer/RID comparator as an enablement
 proof, and exercises BLOB seeks + one exact batched RID hydration per page in a
 test-only pinned SQL adapter. The adapter uses synthetic fixture authority and
 receipts; this is not production dispatcher isolation or uniform-scope proof.
+The 65-canonical-source mounted HTTP oracle exercises page order, summary
+counts and dirty/error freshness for sources with no inbox rows. It demonstrates
+that the old selected-only snapshot can omit a canonical source while claiming
+no more scopes. Missing proof/directory, >64 selection, mixed transition, revoked
+membership and an out-of-selection canonical mutation all refuse the repository
+batch callback. The mounted legacy route retains the whole result. This is not
+a test of a production mixed-selection fallback dispatcher: none exists yet.
+
 The canonical point mutation probe covers real `derived_inbox_items`, the
 published canonical hook, source/registry/feed/payload/counter commit and full
 rollback after projection writes. The durable worker probe examines 10,000
@@ -99,3 +115,35 @@ uniform old-policy parity, route/storage inventories and full SCA-661 budgets
 remain mandatory. A's exact two-file trusted adapter exception is retained, and
 the independent repository guard still rejects every live consumer. No scope is enabled,
 no schema is installed at startup, and no speed improvement is claimed.
+
+### Canonical invalidation proposal
+
+`primitives/scope_feeds_ledger.go` lists 47 canonical dependencies, including all
+legacy ownership/profile sources, answer/read/resolution state, report pins and
+revisions, freshness queues/status, auth routing, aliases/ancestry and PM sources.
+The tests install the proposed DDL only in isolated real-workspace fixtures.
+Actual legacy APIs cover ask/answer/read, bulk replacement (including a valid
+legacy payload larger than the certified codec), report review creation, owner
+changes, archive and canonical deletion; PM import/change/delete uses its actual
+same-database canonical table. Missing/exhausted clocks explicitly roll back
+ignored errors and earlier transaction writes. An injected SQLite ABORT confirms that a generic epoch
+write error aborts the source statement but can leave earlier writes committable;
+A’s sticky transaction error boundary remains required. The passkey regression
+covers the legacy auth classification fallback that changes notification targets
+without changing the agent row. Existing epoch triggers may advance the clock
+further; receipts compare equality rather than delta size.
+
+A must register the complete ledger against the schema in one trusted migration
+and review exact trigger SQL/read/write effects. Optional PM tables must be
+installed when their producer is enabled, before any proof is minted. Separate
+external PM databases/policies require a trusted revision witness and atomic
+invalidation protocol; these same-database triggers do not certify them. Epoch
+delete/replacement, database restore and DDL changes remain trusted maintenance
+boundaries, requiring receipt invalidation rather than epoch reuse.
+
+Invalidation adds one primary-key epoch update per changed canonical row; bulk
+operations retain their legacy write semantics and invalidate globally, without
+materializing inbox payloads or enumerating scopes. This conservative proposal
+also invalidates on profile and operational changes, so fallback churn and full
+latency must be measured after A registers it. No production registration, proof
+writer, canonical completeness verifier or reader switch is added by B.

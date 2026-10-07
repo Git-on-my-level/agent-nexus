@@ -1441,6 +1441,8 @@
     "../primitives/scope_feeds.go:ScopeInboxOrderSchemaProposal": "75dbc87c1f7a534abc6fd2d57e9c3415bd096b7968a46cb0c80b5fa03e2d155a",
     "../primitives/scope_feeds.go:type:scopeInboxEnvelope": "7694979d5c4053451599e000b6b9e0b5bbadc5c32718a904065b9197cc86a269",
     "../primitives/scope_feeds.go:type:scopeInboxIdentity": "6909ccb3568086f1543cc0b46a4db66811b1008a10bd5c7f6b314f881972a790",
+    "../primitives/scope_feeds_ledger.go:ScopeInboxEpochGuardProposal": "e38fc49e2cc1ab1899e3aabe09cdd0c5e3857d00eb461c45399b7a21e26362d8",
+    "../primitives/scope_feeds_ledger.go:ScopeInboxInvalidationProposal": "338600d15bbe7d6740a2e009b1907297fbb723ed255ad1ca47f095c9a68cc0fd",
     "../primitives/scope_feeds_writer.go:WriteScopeInboxItem": "00e629767b82bab522ba6387486431dbcb8d7b1cbc35ed2ac345d7528b351b20",
     "../primitives/sessions_store.go:*Store:GetSession": "9076a74946de52d3e5379a1f89a3be6884e5de9db719419617cfc7a2c278f8fc",
     "../primitives/sessions_store.go:*Store:ListWorkParticipants": "a6f84bbed3eeeaa75dbd52d28213bd81a8e1335238e3fa74f46b778623c82b6c",

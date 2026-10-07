@@ -62,6 +62,11 @@ func TestScopeInboxHTTPShadowHydrationPrivacyAndOrderingGate(t *testing.T) {
 			item := streamPrivacyInboxItem(thread, fmt.Sprintf("shadow-%s-%d", name, n), name+" title")
 			item.Category = category
 			item.TriggerAt = "2026-10-07T00:00:00Z" // equal timestamps expose the RID tie-break gap
+			if n == 0 {
+				item.Data["requester_agent_id"] = agent.AgentID
+			} else if n == 1 {
+				item.Data["requester_actor_id"] = agent.ActorID
+			}
 			items = append(items, item)
 		}
 		if err := store.ReplaceDerivedInboxItems(ctx, thread, items); err != nil {
@@ -133,6 +138,26 @@ func TestScopeInboxHTTPShadowHydrationPrivacyAndOrderingGate(t *testing.T) {
 	if _, err := db.Exec(`INSERT INTO scope_feed_generations SELECT id,1,1,1,1,1,? FROM scope_domains`, epoch); err != nil {
 		t.Fatal(err)
 	}
+	enrich := func(payloads []map[string]any) error {
+		// The fixture exercises the real bounded enrichment API. This does not
+		// admit it to the future closed serving slice or certify live routing.
+		targets, err := env.authStore.NotificationTargets(ctx, []string{agent.ActorID}, []string{agent.AgentID})
+		if err != nil {
+			return err
+		}
+		for _, payload := range payloads {
+			if canonicalHumanAttentionKind(anyString(payload["kind"])) == "" {
+				continue
+			}
+			key := "actor:" + anyString(payload["requester_actor_id"])
+			if id := anyString(payload["requester_agent_id"]); id != "" {
+				key = "agent:" + id
+			}
+			target, found := targets[key]
+			applyNotificationTargetStatus(payload, humanAttentionResponseTarget{ActorID: target.ActorID, AgentID: target.AgentID, Handle: target.Username}, found, nil)
+		}
+		return nil
+	}
 	for _, principal := range []struct {
 		id, token string
 		selected  []scopes.ID
@@ -177,15 +202,9 @@ func TestScopeInboxHTTPShadowHydrationPrivacyAndOrderingGate(t *testing.T) {
 						return err
 					}
 					payload := payloadFromDerivedInboxItem(item)
-					// This fixture has no requester target. The future bridge must
-					// retain the handler's bounded NotificationTargets batch for
-					// real targets; captured payloads cannot certify live routing.
-					if canonicalHumanAttentionKind(anyString(payload["kind"])) != "" {
-						applyNotificationTargetStatus(payload, humanAttentionResponseTarget{}, false, nil)
-					}
 					shadow = append(shadow, payload)
 				}
-				return nil
+				return enrich(shadow)
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -216,7 +235,7 @@ func TestScopeInboxHTTPShadowHydrationPrivacyAndOrderingGate(t *testing.T) {
 			for _, id := range principal.selected {
 				snapshot.Scopes = append(snapshot.Scopes, readmodel.Scope{ID: id, Generation: 1, Availability: readmodel.Available, Ready: true})
 			}
-			reader := scopeInboxOrderedProbe{tx: tx, snapshot: snapshot}
+			reader := scopeInboxOrderedProbe{tx: tx, snapshot: snapshot, enrich: enrich}
 			codec, err := readmodel.NewCursorCodec(make([]byte, 32))
 			if err != nil {
 				t.Fatal(err)
@@ -252,6 +271,7 @@ func TestScopeInboxHTTPShadowHydrationPrivacyAndOrderingGate(t *testing.T) {
 type scopeInboxOrderedProbe struct {
 	tx       *sql.Tx
 	snapshot readmodel.Snapshot
+	enrich   func([]map[string]any) error
 }
 
 func (p scopeInboxOrderedProbe) Snapshot(context.Context) (readmodel.Snapshot, error) {
@@ -292,6 +312,7 @@ func (p scopeInboxOrderedProbe) HydrateOrdered(ctx context.Context, refs []readm
 	}
 	defer rows.Close()
 	var result []readmodel.Item
+	var payloads []map[string]any
 	for rows.Next() {
 		var ord int
 		var opaque, canonical string
@@ -311,19 +332,31 @@ func (p scopeInboxOrderedProbe) HydrateOrdered(ctx context.Context, refs []readm
 			return nil, err
 		}
 		payload := payloadFromDerivedInboxItem(item)
-		if canonicalHumanAttentionKind(anyString(payload["kind"])) != "" {
-			applyNotificationTargetStatus(payload, humanAttentionResponseTarget{}, false, nil)
-		}
-		raw, err := json.Marshal(payload)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, readmodel.Item{Ref: "inbox:" + opaque, Data: raw})
+		payloads = append(payloads, payload)
+		result = append(result, readmodel.Item{Ref: "inbox:" + opaque})
 	}
 	if len(result) != len(refs) {
 		return nil, readmodel.ErrProjection
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if p.enrich != nil {
+		if err := p.enrich(payloads); err != nil {
+			return nil, err
+		}
+	}
+	for n, payload := range payloads {
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return nil, err
+		}
+		result[n].Data = raw
+	}
+	return result, nil
 }
 
 type inboxMutationHook func(context.Context, scopedrepo.MutationTx, scopes.CanonicalMutation) error
