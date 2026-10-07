@@ -60,6 +60,27 @@ func (l *pmPrincipalLookup) find(ctx context.Context, actorID string) (auth.Auth
 			return auth.AuthPrincipalSummary{}, err
 		}
 	}
+	if direct, ok := l.store.(interface {
+		PrincipalForActor(context.Context, string) (auth.AuthPrincipalSummary, error)
+	}); ok {
+		principal, err := direct.PrincipalForActor(ctx, actorID)
+		if errors.Is(err, auth.ErrAgentNotFound) {
+			return auth.AuthPrincipalSummary{}, pm.ErrForbidden
+		}
+		if err != nil {
+			return auth.AuthPrincipalSummary{}, err
+		}
+		if principal.ActorID != actorID || principal.Revoked {
+			return auth.AuthPrincipalSummary{}, pm.ErrForbidden
+		}
+		l.mu.Lock()
+		if len(l.identities) >= 256 {
+			clear(l.identities)
+		}
+		l.identities[actorID] = pmPrincipalIdentity{agentID: principal.AgentID, expires: now.Add(30 * time.Second)}
+		l.mu.Unlock()
+		return principal, nil
+	}
 	limit, cursor := 200, ""
 	for {
 		items, next, err := l.store.ListPrincipals(ctx, auth.AuthPrincipalListFilter{Limit: &limit, Cursor: cursor})

@@ -1410,10 +1410,16 @@ const cardVisibilityJoins = ` LEFT JOIN boards b ON b.id = c.board_id
  LEFT JOIN work_metadata wm ON wm.card_id = c.id `
 
 func cardLifecycleWhere(states []string) string {
-	topicHidden := func(field string) string {
+	topicHidden := func(fields ...string) string {
+		inactive := make([]string, 0, len(fields))
+		for _, field := range fields {
+			inactive = append(inactive, `COALESCE(pt.`+field+`, '') <> ''`)
+		}
 		return `EXISTS (SELECT 1 FROM topics pt WHERE
-          json_extract(wm.metadata_json, '$.project_ref') IN ('topic:' || pt.id, 'topic:' || pt.handle)
-          AND COALESCE(pt.` + field + `, '') <> '')`
+          substr(json_extract(wm.metadata_json, '$.project_ref'),1,6)='topic:'
+          AND (pt.id=substr(json_extract(wm.metadata_json, '$.project_ref'),7)
+               OR (pt.handle=substr(json_extract(wm.metadata_json, '$.project_ref'),7) AND pt.handle IS NOT NULL AND trim(pt.handle)<>''))
+          AND (` + strings.Join(inactive, ` OR `) + `))`
 	}
 	boardActive := `(COALESCE(b.archived_at, '') = '' AND COALESCE(b.trashed_at, '') = '')`
 	notTrashed := `COALESCE(c.trashed_at, '') = '' AND COALESCE(b.trashed_at, '') = '' AND NOT ` + topicHidden("trashed_at")
@@ -1421,7 +1427,7 @@ func cardLifecycleWhere(states []string) string {
 	for _, state := range NormalizeListLifecycleStates(states) {
 		switch state {
 		case "active":
-			clauses = append(clauses, `(`+LifecycleStatesOrGroup("c.archived_at", "c.trashed_at", []string{"active"})+` AND `+boardActive+` AND NOT `+topicHidden("archived_at")+` AND NOT `+topicHidden("trashed_at")+`)`)
+			clauses = append(clauses, `(`+LifecycleStatesOrGroup("c.archived_at", "c.trashed_at", []string{"active"})+` AND `+boardActive+` AND NOT `+topicHidden("archived_at", "trashed_at")+`)`)
 		case "archived":
 			clauses = append(clauses, `(`+notTrashed+` AND (COALESCE(c.archived_at, '') <> '' OR COALESCE(b.archived_at, '') <> '' OR `+topicHidden("archived_at")+`))`)
 		default:

@@ -213,6 +213,44 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		}
 	}
 	deps := pm.Dependencies{Authorize: authorize, EnsureThread: bridge.EnsureThread}
+	deps.AuthorizeReadBatch = func(ctx context.Context, p pm.Principal, permission string, refs []string) (map[string]bool, error) {
+		if permission != "pm.read" && permission != "pm.approve" {
+			return nil, pm.ErrForbidden
+		}
+		// This is one read operation, not a principal cache. Reload authority for
+		// every batch; mutation permissions always use the original authorizer.
+		if err := authorize(ctx, p, permission, ""); err != nil {
+			return nil, err
+		}
+		// Empty legacy work refs have no resource check, matching the point
+		// authorizer after the fresh principal check above.
+		allowed := map[string]bool{"": true}
+		var check func([]string) error
+		check = func(batch []string) error {
+			if len(batch) == 0 {
+				return nil
+			}
+			err := store.CheckResourceValues(ctx, batch)
+			if err == nil {
+				for _, ref := range batch {
+					allowed[ref] = true
+				}
+				return nil
+			}
+			if !errors.Is(err, primitives.ErrNotFound) {
+				return fmt.Errorf("%w: resource authorization could not be read", pm.ErrUnavailable)
+			}
+			if len(batch) == 1 {
+				return nil
+			}
+			middle := len(batch) / 2
+			if err := check(batch[:middle]); err != nil {
+				return err
+			}
+			return check(batch[middle:])
+		}
+		return allowed, check(uniqueServerStrings(refs))
+	}
 	if cfg.BridgeEnabled {
 		deps.Dispatch = bridge.Dispatch
 	}
@@ -251,6 +289,17 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		return pm.DecisionWork{Revision: primitives.WorkDecisionRevision(w), Phase: anyString(w["phase"]), SourceAuthority: anyString(workSourceMap(w)["authority"])}, nil
 	}
 
+	deps.DecisionWorkBatch = func(ctx context.Context, p pm.Principal, refs []string) (map[string]pm.DecisionWork, error) {
+		snapshots, err := store.LiveWorkSnapshots(ctx, refs)
+		if err != nil {
+			return nil, err
+		}
+		out := map[string]pm.DecisionWork{}
+		for ref, w := range snapshots {
+			out[ref] = pm.DecisionWork{Revision: primitives.WorkDecisionRevision(w), Phase: anyString(w["phase"]), SourceAuthority: anyString(workSourceMap(w)["authority"])}
+		}
+		return out, nil
+	}
 	// The registry is the single source of configured native execution paths.
 	nativeExecutors := map[string]func(context.Context, pm.Action) (pm.Receipt, error){
 		"work.phase": func(ctx context.Context, a pm.Action) (pm.Receipt, error) { return executeWorkPhase(ctx, store, a) },

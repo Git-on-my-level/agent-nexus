@@ -119,27 +119,32 @@ remain the default for every new route. Baselines retain query/row ceilings,
 success/denial expectations, positive fixtures, private controls and two SSE data
 flushes; exceeding a ceiling still fails. Their purpose is to allow the guardrail
 harness to land while SCA-663/664/665 and the existing SCA-652 repairs proceed,
-not to authorize new O(workspace) work. The existing unrelated-reader overview
-schema-65 capture takes 7m36s and consumes about 100,000 rows locally; the
-separate job allows runner headroom for this baseline rather than marking a
-timeout successful. Most baseline count ceilings have only 2% headroom (minimum eight
-statements/64 rows), while latency gets threefold contention headroom. Existing PM
-and overview reads have a separate clock-dependent cost: the identity-routing
-cache expires every 30 seconds, and refreshing its first directory page adds
-204 SQL executions and 4,495 rows relative to a hit on this corpus. Their raw
-ceilings conservatively add `(ceil(latency_budget_ms / 30000) + 1)` refreshes to
-the smallest observed request counts, then the same count headroom. First and
-returning overview visits are measured separately; the returning visit enables
-additional change-feed queries. These are finite existing-main allowances, not
-machine-independent query counts or permission to add repeated lookups.
+not to authorize new O(workspace) work. After merging #302 at `ac77fae8`
+(schema66), all 24 previous PM/overview exceptions and 60 of the other 90
+exceptions were retired. Seven PM/denied reads still need narrow allowances;
+30 other reads retain only the dimensions that exceed ordinary limits. The
+ordinary limits stay at 500 ms, 100 SQL executions and 1,024 returned rows
+(except the existing fixed series-observation cap).
 
-Those wider entries carry `core_source_sha256`: a fingerprint of core runtime
+Completed merged-code measurements replace the former threefold latency
+allowances and identity-cache refresh extrapolation. Latency headroom is 20%,
+rounded up to 50 ms; overrun counts get 2% headroom with a minimum of eight SQL
+executions or 64 rows. Counts below the ordinary limit use that limit. First
+and returning overview visits remain separately sampled. Legacy PM response
+projection still issues 159 SQL for actions and up to 164 for decisions;
+completed denied PM/overview probes take seconds even after indexed principal
+lookup. These are existing main hazards linked to SCA-663, not permission to
+add repeated lookups. Diagnostic probes provide completed baseline evidence
+but intentionally fail; normal mode and CI must independently pass status,
+privacy, count, stream and exact-plan checks.
+
+Every remaining route exception carries `core_source_sha256`: a fingerprint of core runtime
 Go, module dependencies, local replacement modules, fixture/performance-harness
 code, inventories and relevant text assets. Release-version metadata, unrelated
 tests and the self-referential budget manifest are excluded. A changed or added
 input expires the allowance in the short tier and before corpus construction;
 re-review the linked P1 instead of copying the hash automatically. All other
-routes retain their ordinary or narrowly measured count ceilings. Remove entries as those repairs land.
+routes retain their ordinary count ceilings. Remove entries as those repairs land.
 A changed read must satisfy the ordinary budget; do not add a baseline for a new
 regression. Populate new large record families and high-fanout selectors when
 adding endpoints; empty tables and shallow histories are not scale evidence.
@@ -167,8 +172,8 @@ warm-open measurement. This is a database/store readiness proxy; deployment and
 network readiness checks require their own integration coverage.
 
 Main #275's batched source-edge reconciliation removes the measured legacy
-upgrade overrun: the schema-58 through schema-65 upgrade takes about 35 seconds,
-with millisecond warm readiness, on this corpus. The former fifteen-minute
+upgrade overrun: the schema-58 through schema-66 upgrade takes 17.23 seconds,
+with a 5.16 ms warm open, in the merged-code local measurement. The former fifteen-minute
 SCA-664 exception is retired: `performance_startup_allowlist.json` is `null`, so
 CI enforces the ordinary 90-second upgrade and five-second warm-open budgets.
 If a legacy exception is ever needed, it must be finite, linked to a reviewed P1
@@ -195,22 +200,26 @@ exceptions link their P1 issues and cap the current behavior. This is a baseline
 not proof that every reader is bounded. The following independently visible hazards require remedies that preserve
 privacy, legacy data and response contracts:
 
-| Severity | Source                                                                                          | Affected reads                               | Cost before a request/page bound                                                                                                                                                                     |
-| -------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P1       | `internal/primitives/work_store.go:718`                                                         | `/work`, CLI orient                          | Loads all cards and metadata, projects and sorts O(C log C) before LIMIT; access filtering is batched but the full collection is still materialized.                                                 |
-| P1       | `internal/primitives/derived_store.go:164`, `internal/server/inbox_handlers.go:317`             | `/inbox`, overview                           | JSON recipient filtering, full projection load/sort O(I log I), then payload/ref enrichment.                                                                                                         |
-| P1       | `internal/primitives/inbox_reads.go:39`, `:94`, `internal/server/inbox_handlers.go:295`, `:756` | `/inbox`, `/inbox/summary`                   | Inbox freshness materializes all scoped thread IDs, O(T). Summary bounds its returned page to 50 rows but retains corpus COUNT/JSON-kind filtering and expression sorting.                           |
-| P1       | `internal/server/stream_handlers.go:261`, `:491`, `:349`                                        | Inbox, events and receipt streams            | Repeats projection/history or subject work each tick; event history is loaded and sorted O(E log E).                                                                                                 |
-| P1       | `internal/primitives/docs_store.go:120`, `:135`                                                 | `/docs`, doc point/history reads             | Event joins use TRIM/COALESCE rather than indexed equality, scanning E even for one document.                                                                                                        |
-| P1       | `internal/primitives/docs_store.go:1480`                                                        | `/docs/{id}/revisions`                       | Unpaginated revision history with queries per revision, O(R) SQL round trips plus authorization work.                                                                                                |
-| P1       | `internal/primitives/docs_knowledge.go:327`, `:335`, `:372`                                     | Document search                              | Full matching-corpus ranking and correlated event scans, O(matches × E); private corpus statistics need privacy review too.                                                                          |
-| P1       | `internal/pm/store.go:83`, `internal/server/overview_handlers.go:163`                           | PM lists and overview                        | 200-row SQL windows are accumulated until exhaustion; O(PM records) memory/work before projection. Optional-filter ORs and JSON predicates need indexed selector analysis.                           |
-| P1       | `internal/auth/admins.go:90`, `internal/server/overview_handlers.go:84`, `:99`                  | Auth admin directory and overview enrichment | Per-entry host lookup and repeated full actor/principal directories; cost grows with identity cardinality.                                                                                           |
-| P1       | `internal/server/pm_principals.go:40`, `internal/auth/audit.go:169`                             | PM reads, overview and changes               | Thirty-second identity-cache expiry rehydrates a 201-principal page and a 4,096-agent host roster, even during a single long request.                                                                |
-| P1       | `internal/storage/workspace.go:83`, `internal/storage/migrations.go:1018`, `:1020`              | Upgrade and store startup                    | Reconciliation grows with corpus before readiness; main #275 batches source edges and #305 removes historical blob reads from startup. The ordinary startup budgets cap this remaining upgrade work. |
+| Severity | Source                                                                                              | Affected reads                    | Cost before a request/page bound                                                                                                                                                                                                                                       |
+| -------- | --------------------------------------------------------------------------------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1       | `internal/primitives/inbox_freshness.go:7`, `internal/primitives/inbox_reads.go:39`                 | Inbox freshness and summary       | Aggregate freshness still scans scoped thread candidates, with view/status joins. Summary counts and JSON-kind/lifecycle predicates inspect the corpus; output pagination does not bound candidates. #302 removes full page materialization.                           |
+| P1       | `internal/server/stream_handlers.go:261`, `:491`, `:349`                                            | Inbox, events and receipt streams | Repeated freshness/history and subject work per tick remains. #302's internal 100-record inbox sampling also has a completeness regression, owned by the SCA-665 forward fix; representative two-tick tests do not certify complete feeds.                             |
+| P1       | `internal/primitives/docs_store.go:120`, `:135`                                                     | Document point/history reads      | TRIM/COALESCE event joins inspect events rather than using direct indexed equality.                                                                                                                                                                                    |
+| P1       | `internal/primitives/docs_store.go:1480`                                                            | Document revisions                | Unpaginated revision history has queries per revision, O(R) round trips. The generic fixture has shallow histories.                                                                                                                                                    |
+| P1       | `internal/primitives/docs_knowledge.go:327`, `:335`, `:372`                                         | Document search                   | Matching-corpus ranking and correlated event scans can grow with matches and event history.                                                                                                                                                                            |
+| P1       | `internal/server/pm_runtime.go:310`, `internal/pm/resolution.go:48`, `internal/pm/decisions.go:622` | PM actions and decisions          | Legacy delivery-authority projection resolves work per returned record despite batched snapshots. Measured action/decision requests execute 159/164 SQL. #302's HTTP page selectors and indexed principal lookup retire the prior exhaustion/cache-refresh allowances. |
+| P1       | `internal/pm/store.go:101`                                                                          | Internal PM list consumers        | Internal `listRecords` still accumulates 200-row windows to exhaustion; bounded HTTP pages bypass it. Do not apply this finding to the repaired HTTP page loaders.                                                                                                     |
+| P1       | `internal/auth/hosts.go:738`, `internal/primitives/store.go:1905`                                   | Host enrichment, thread list      | Indexed host selection still hydrates an agent directory; thread lists retain per-thread subject/summary hydration. Selection indexes do not bound those downstream costs.                                                                                             |
+| P1       | `internal/primitives/access_scope.go:56`, `internal/primitives/overview_changes.go:76`              | Fresh transaction/denied reads    | Fresh canonical denial closure and candidate filtering remain costly. Snapshot fallback executes on an epoch miss; cached denied/reference membership still executes on a hit.                                                                                         |
+| P1       | `internal/storage/workspace.go:83`, `internal/storage/migrations.go:1018`                           | Upgrade and startup               | Remaining reconciliation grows with corpus before readiness. #275 batches source edges and #305 removes historical blob reads; ordinary startup budgets now pass without an exception.                                                                                 |
+
+#302 also repairs work selection before metadata/projection (`work_store.go:905`),
+page-before-enrichment inbox loading (`derived_store.go:167`), bounded PM/overview
+loaders, principal lookup and batched admin host lookup. Their former full-load,
+N+1 and clock-refresh descriptions no longer apply to these paths.
 
 CLI `internal/app/daily_loop.go:86` requests `/work?limit=200`: the client makes a
-bounded request, but inherits the server's unbounded implementation. Work commands
+bounded request and now inherits #302's selection-before-projection bound. Work commands
 carry limits/cursors through. No additional client-side unbounded pagination loop
 was found in this sweep. Web UI overview server load returns an empty bootstrap;
 business data loads use core. `src/lib/server/authSession.js:805` makes a fixed

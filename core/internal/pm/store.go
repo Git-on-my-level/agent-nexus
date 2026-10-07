@@ -33,7 +33,14 @@ func NewStore(db *sql.DB) (*Store, error) {
  kind TEXT NOT NULL, id TEXT NOT NULL, workspace_id TEXT NOT NULL, actor_id TEXT NOT NULL,
  parent_id TEXT NOT NULL DEFAULT '', revision INTEGER NOT NULL, body BLOB NOT NULL,
  PRIMARY KEY(kind,id));
- CREATE INDEX IF NOT EXISTS pm_records_scope ON pm_records(kind,workspace_id,actor_id,parent_id);`)
+ CREATE INDEX IF NOT EXISTS pm_records_scope ON pm_records(kind,workspace_id,actor_id,parent_id);
+ CREATE INDEX IF NOT EXISTS pm_records_page ON pm_records(kind,workspace_id,rtrim(COALESCE(json_extract(body,'$.created_at'),''),'Z'));
+ CREATE INDEX IF NOT EXISTS pm_records_owner_page ON pm_records(kind,workspace_id,actor_id,rtrim(COALESCE(json_extract(body,'$.created_at'),''),'Z'));
+ CREATE INDEX IF NOT EXISTS pm_records_status ON pm_records(kind,workspace_id,json_extract(body,'$.status'));
+ CREATE INDEX IF NOT EXISTS pm_records_legacy_actions ON pm_records(kind,workspace_id,parent_id) WHERE kind='action' AND json_extract(body,'$.created_at') IS NULL;
+ CREATE INDEX IF NOT EXISTS pm_records_changes ON pm_records(kind,workspace_id,julianday(json_extract(body,'$.created_at')));
+ CREATE INDEX IF NOT EXISTS pm_records_overview_owner ON pm_records(kind,workspace_id,actor_id,json_extract(body,'$.status'));
+ CREATE INDEX IF NOT EXISTS pm_records_parent_status ON pm_records(kind,workspace_id,parent_id,json_extract(body,'$.status'));`)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +102,19 @@ func listRecords[T any](ctx context.Context, s *Store, kind, ws, actor, parent s
 	out := make([]T, 0)
 	var after int64
 	for {
-		rows, err := s.database().QueryContext(ctx, `SELECT rowid,body FROM pm_records WHERE kind=? AND workspace_id=? AND (?='' OR actor_id=?) AND (?='' OR parent_id=?) AND rowid>? ORDER BY rowid LIMIT 200`, kind, ws, actor, actor, parent, parent, after)
+		query := `SELECT rowid,body FROM pm_records WHERE kind=? AND workspace_id=?`
+		args := []any{kind, ws}
+		if actor != "" {
+			query += ` AND actor_id=?`
+			args = append(args, actor)
+		}
+		if parent != "" {
+			query += ` AND parent_id=?`
+			args = append(args, parent)
+		}
+		query += ` AND rowid>? ORDER BY rowid LIMIT 200`
+		args = append(args, after)
+		rows, err := s.database().QueryContext(ctx, query, args...)
 		if err != nil {
 			return nil, err
 		}

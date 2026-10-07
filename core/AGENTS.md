@@ -123,7 +123,7 @@ inheritance at write time and on identity/alias/revision changes, including targ
 created after the prose. Reads traverse materialized mention edges and fixed-size
 exact-atom keys. Regular GET requests reuse an immutable denial snapshot only when
 the authorization epoch still matches within the consuming statement; a mismatch
-falls back to the canonical graph. Rebinding a scope clears its cache. Streams and
+falls back to the canonical graph. Rebinding a scope clears its request state. Streams and
 transactional reads never use that request cache.
 Migration 62 backfills PM and inbox provenance and repairs virtual revision
 identities when a parent arrives after its revisions. PM initialization installs
@@ -137,8 +137,11 @@ resource identities: those denials are graph leaves. Host/auth/actor profiles
 remain scoped. Bind cached denial rows as data, never literal SQL, and avoid
 repeated CTE references that duplicate the ownership graph during SQLite
 preparation. Read selector checks reuse the epoch-validated request snapshot;
-transactional mutation checks always evaluate their current graph. PM principal
-caches protect routing state only; authority I/O stays outside shared locks.
+transactional mutation checks, including Overview visits, always evaluate their
+current graph. Read closures may be shared only with bounded storage keyed by
+database identity, ActorID, PMActorID and authorization epoch. Every consuming
+statement must retain epoch validation and canonical fallback.
+PM principal caches protect routing state only; authority I/O stays outside shared locks.
 Use the registered SQLite driver so the reference scalar functions are available
 to imports. Structured JSON contributes atoms, not whole container serialization;
 scalar text preserves even JSON-shaped IDs. Keep this distinction in new fields.

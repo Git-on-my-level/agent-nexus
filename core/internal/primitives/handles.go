@@ -216,7 +216,12 @@ func revisionHandle(parentHandle string, revisionNumber int) string {
 func resolveResourceByColumn(ctx context.Context, q queryRower, typ, table, column, value string) (ResolvedResourceRef, error) {
 	var id string
 	var handle sql.NullString
-	err := q.QueryRowContext(ctx, `SELECT id, handle FROM `+table+` WHERE `+column+` = ?`, value).Scan(&id, &handle)
+	predicate := column + ` = ?`
+	if column == "handle" {
+		// Match the partial namespace index, including on a cache-cold point read.
+		predicate += ` AND handle IS NOT NULL AND trim(handle)<>''`
+	}
+	err := q.QueryRowContext(ctx, `SELECT id, handle FROM `+table+` WHERE `+predicate, value).Scan(&id, &handle)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ResolvedResourceRef{}, ErrNotFound
 	}

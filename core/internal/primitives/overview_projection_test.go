@@ -36,7 +36,7 @@ func TestOverviewDefersReportSelectorBlobReads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 9; i++ {
+	for i := 0; i < 109; i++ {
 		if _, _, err = store.CreateDocument(ctx, "actor", map[string]any{"title": fmt.Sprintf("Note %d", i)}, "Plain notes", "text", nil); err != nil {
 			t.Fatal(err)
 		}
@@ -60,8 +60,14 @@ func TestOverviewDefersReportSelectorBlobReads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(candidates["reports"].([]map[string]any)) != 2 || backend.reads != 11 || candidates["has_more"] != false {
-		t.Fatalf("selector: reads=%d %v", backend.reads, candidates)
+	if len(candidates["reports"].([]map[string]any)) != 1 || backend.reads != 100 || candidates["has_more"] != true {
+		t.Fatalf("selector page: reads=%d %v", backend.reads, candidates)
+	}
+	cursor, _ := candidates["next_cursor"].(string)
+	backend.reads = 0
+	next, err := store.DashboardReportsPage(ctx, cursor)
+	if err != nil || len(next["reports"].([]map[string]any)) != 1 || backend.reads != 11 || next["has_more"] != false {
+		t.Fatalf("selector continuation: reads=%d %v %v", backend.reads, next, err)
 	}
 	if err = store.SetWorkspaceDashboard(ctx, "actor", old["id"].(string)); err != nil {
 		t.Fatal(err)
@@ -120,6 +126,11 @@ func TestBulkWorkMatchesIndividualProjectionAndPagination(t *testing.T) {
 		}
 		if len(page.Work) != 1 || page.Work[0]["ref"] != all[count]["ref"] {
 			t.Fatal(page)
+		}
+		paged, _ := json.Marshal(page.Work[0])
+		expected, _ := json.Marshal(all[count])
+		if string(paged) != string(expected) {
+			t.Fatalf("paged observation projection diverged:\n%s\n%s", paged, expected)
 		}
 		count++
 		cursor = page.NextCursor

@@ -471,3 +471,21 @@ describe("anxCoreClient error messaging", () => {
     ]);
   });
 });
+
+it("forwards the dashboard report cursor to the scoped API", async () => {
+  const seen = [];
+  const client = createAnxCoreClient({
+    baseUrl: "http://core.test",
+    fetchFn: async (url) => {
+      seen.push(String(url));
+      return new Response(
+        JSON.stringify({ status: "ok", reports: [], has_more: false }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    },
+  });
+  await client.getDashboardReports({ cursor: "page-two" });
+  expect(seen).toEqual([
+    "http://core.test/workspace/dashboard/reports?cursor=page-two",
+  ]);
+});

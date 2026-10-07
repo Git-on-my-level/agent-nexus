@@ -28,7 +28,7 @@ type baselineBudget struct {
 	CoreSourceHash string `json:"core_source_sha256,omitempty"`
 }
 
-// The wider, clock-dependent PM baselines must expire on runtime, dependency,
+// Measured existing-main baselines must expire on runtime, dependency,
 // fixture or gate changes. Exclude only release metadata and unrelated tests;
 // include assets/module files and the local modules replaced by core/go.mod.
 func performanceRuntimeSourceHash(root string) (string, error) {

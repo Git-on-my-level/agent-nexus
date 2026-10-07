@@ -8,6 +8,7 @@ import (
 	"database/sql/driver"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -16,37 +17,76 @@ type ReadQuery struct {
 	SQL  string
 	Args []any
 }
-type Counter struct {
-	queries atomic.Int64
-	rows    atomic.Int64
-	mu      sync.Mutex
-	reads   []ReadQuery
+
+func (c *Counter) RowsRead() int64 { return int64(c.ReturnedRows()) }
+func (c *Counter) Reads() []ReadQuery {
+	out := []ReadQuery{}
+	for _, s := range c.Statements() {
+		out = append(out, ReadQuery{SQL: s.SQL, Args: s.Args})
+	}
+	return out
 }
 
-func (c *Counter) Count() int64    { return c.queries.Load() }
-func (c *Counter) RowsRead() int64 { return c.rows.Load() }
-func (c *Counter) Reset() {
-	c.queries.Store(0)
-	c.rows.Store(0)
-	c.mu.Lock()
-	c.reads = nil
-	c.mu.Unlock()
+type Statement struct {
+	SQL     string
+	Args    []any
+	Rows    int
+	Elapsed time.Duration
 }
-func (c *Counter) Reads() []ReadQuery {
+type Counter struct {
+	queries    atomic.Int64
+	mu         sync.Mutex
+	statements []*Statement
+}
+
+func (c *Counter) Statements() []Statement {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return append([]ReadQuery{}, c.reads...)
+	out := []Statement{}
+	for _, s := range c.statements {
+		out = append(out, *s)
+	}
+	return out
 }
-func (c *Counter) record(q string, args []driver.NamedValue) {
+func (c *Counter) ReturnedRows() int {
+	total := 0
+	for _, s := range c.Statements() {
+		total += s.Rows
+	}
+	return total
+}
+func (c *Counter) start(query string, args []driver.NamedValue) *Statement {
 	c.queries.Add(1)
-	values := make([]any, len(args))
-	for i, arg := range args {
-		values[i] = arg.Value
+	s := &Statement{SQL: query}
+	for _, v := range args {
+		s.Args = append(s.Args, v.Value)
 	}
 	c.mu.Lock()
-	c.reads = append(c.reads, ReadQuery{SQL: q, Args: values})
+	c.statements = append(c.statements, s)
 	c.mu.Unlock()
+	return s
 }
+
+type countedRows struct {
+	driver.Rows
+	counter   *Counter
+	statement *Statement
+	started   time.Time
+}
+
+func (r *countedRows) Next(dest []driver.Value) error {
+	err := r.Rows.Next(dest)
+	r.counter.mu.Lock()
+	r.statement.Elapsed = time.Since(r.started)
+	if err == nil {
+		r.statement.Rows++
+	}
+	r.counter.mu.Unlock()
+	return err
+}
+
+func (c *Counter) Count() int64 { return c.queries.Load() }
+func (c *Counter) Reset()       { c.queries.Store(0); c.mu.Lock(); c.statements = nil; c.mu.Unlock() }
 
 // Open wraps each connection and prepared statement, counting QueryContext and
 // QueryRowContext alike. Each test gets its own counter and connection pool.
@@ -86,25 +126,13 @@ type countedConn struct {
 }
 
 func (c *countedConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
-	c.counter.record(query, args)
+	statement := c.counter.start(query, args)
+	started := time.Now()
 	rows, err := c.Conn.(driver.QueryerContext).QueryContext(ctx, query, args)
 	if err != nil {
 		return nil, err
 	}
-	return &countedRows{Rows: rows, counter: c.counter}, nil
-}
-
-type countedRows struct {
-	driver.Rows
-	counter *Counter
-}
-
-func (r *countedRows) Next(values []driver.Value) error {
-	err := r.Rows.Next(values)
-	if err == nil {
-		r.counter.rows.Add(1)
-	}
-	return err
+	return &countedRows{Rows: rows, counter: c.counter, statement: statement, started: started}, nil
 }
 
 func (c *countedConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
@@ -124,24 +152,58 @@ func (c *countedConn) PrepareContext(ctx context.Context, query string) (driver.
 	if err != nil {
 		return nil, err
 	}
-	return &countedStmt{Stmt: stmt, counter: c.counter}, nil
+	return &countedStmt{Stmt: stmt, counter: c.counter, query: query}, nil
 }
 
 type countedStmt struct {
 	driver.Stmt
 	counter *Counter
+	query   string
 }
 
 func (s *countedStmt) Query(args []driver.Value) (driver.Rows, error) {
-	s.counter.queries.Add(1)
-	return s.Stmt.Query(args)
+	named := []driver.NamedValue{}
+	for i, v := range args {
+		named = append(named, driver.NamedValue{Ordinal: i + 1, Value: v})
+	}
+	statement := s.counter.start(s.query, named)
+	started := time.Now()
+	rows, err := s.Stmt.Query(args)
+	if err != nil {
+		return nil, err
+	}
+	return &countedRows{Rows: rows, counter: s.counter, statement: statement, started: started}, nil
 }
 
 func (s *countedStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
-	s.counter.queries.Add(1)
-	return s.Stmt.(driver.StmtQueryContext).QueryContext(ctx, args)
+	statement := s.counter.start(s.query, args)
+	started := time.Now()
+	rows, err := s.Stmt.(driver.StmtQueryContext).QueryContext(ctx, args)
+	if err != nil {
+		return nil, err
+	}
+	return &countedRows{Rows: rows, counter: s.counter, statement: statement, started: started}, nil
 }
 
 func (s *countedStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
 	return s.Stmt.(driver.StmtExecContext).ExecContext(ctx, args)
+}
+
+func (c *countedConn) ResetSession(ctx context.Context) error {
+	if inner, ok := c.Conn.(driver.SessionResetter); ok {
+		return inner.ResetSession(ctx)
+	}
+	return nil
+}
+func (c *countedConn) IsValid() bool {
+	if inner, ok := c.Conn.(driver.Validator); ok {
+		return inner.IsValid()
+	}
+	return true
+}
+func (c *countedConn) CheckNamedValue(value *driver.NamedValue) error {
+	if inner, ok := c.Conn.(driver.NamedValueChecker); ok {
+		return inner.CheckNamedValue(value)
+	}
+	return driver.ErrSkip
 }
