@@ -2123,7 +2123,7 @@
     "../server/observation_runtime.go:type:observationConfig": "2187bf97877570d47d1c2855356a17c95c1e1b53a09788ec552bfe86e1396ee5",
     "../server/overview_changes_handlers.go:appendOverviewDecisions": "9aa3c2078f93322723cff6d9a540a1e507939897c3c561e69acd71f6ec76753f",
     "../server/overview_changes_handlers.go:handleOverviewChanges": "005bab0bcac55045d3ce49328b2774a66bd0d69340de64dd1dfdbd30c9d11097",
-    "../server/overview_handlers.go:handleGetOverview": "bf5bf5d9b71123d9ab7d6948908a0e69b3a830ddc5edc02e47f2f36a0228dac7",
+    "../server/overview_handlers.go:handleGetOverview": "39975b98887586c83a5130cfdce31c350a6957682b570bab67e3dedebc184ce8",
     "../server/overview_handlers.go:handleListWorkspaceDashboardReports": "255edfaf9d98c3ebe64d78aa2d69ae7ea1e25674b3b7bd5f0125f823eada36ce",
     "../server/overview_handlers.go:handleSetWorkspaceDashboard": "6bb12edc276c5f0f4ef71551da2f763280194746e2d054e6d50441f77d7c8c91",
     "../server/plans_handlers.go:enrichPlans": "9aba9d24e7a2df87d89e3c280727d02cb9eab86c81288e314c07fe2371733e91",

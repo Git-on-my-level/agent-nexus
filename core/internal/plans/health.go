@@ -98,12 +98,17 @@ func ReadyStep(p Plan, state State, readable func(Step) bool) *NextStep {
 
 // LegacyHealth preserves the pre-detailed-health client vocabulary. Detailed
 // state remains available in the additive plan_health field.
+//
+// A state this field can name is never collapsed into "on_track". An
+// initiative with no plan steps has no basis for a green chip, and reporting
+// one made every planless initiative read as healthy; the same went for
+// at_risk and done. Only a genuinely unnamed state falls back to on_track.
 func LegacyHealth(state string) string {
 	switch state {
 	case "stale", "stalled":
 		return "stalled"
-	case "blocked":
-		return "blocked"
+	case "blocked", "no_plan", "at_risk", "done", "on_track":
+		return state
 	default:
 		return "on_track"
 	}

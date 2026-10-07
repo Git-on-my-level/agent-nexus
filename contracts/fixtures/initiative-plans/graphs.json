@@ -226,7 +226,7 @@
     "critical_path": [],
     "next_steps": [],
     "done": 0,
-    "health": "on_track",
+    "health": "no_plan",
     "health_state": "no_plan"
   },
   {
@@ -249,7 +249,7 @@
     "critical_path": [],
     "next_steps": [],
     "done": 1,
-    "health": "on_track",
+    "health": "done",
     "health_state": "done"
   }
 ]

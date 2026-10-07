@@ -418,9 +418,11 @@ func (s *Store) OverviewVisible(ctx context.Context, humanIDs, agentNames map[st
 	return result, nil
 }
 
+// A missing plan is reported as a missing plan. The fallback used to claim
+// on_track, which rendered green for an initiative nobody had planned.
 func initiativeHealth(w map[string]any) map[string]any {
 	if health, ok := w["plan_health"].(plans.Health); ok {
 		return map[string]any{"status": plans.LegacyHealth(health.State), "state": health.State, "reason": health.Reason}
 	}
-	return map[string]any{"status": "on_track", "state": "no_plan", "reason": "Initiative has no plan steps."}
+	return map[string]any{"status": "no_plan", "state": "no_plan", "reason": "Initiative has no plan steps."}
 }
