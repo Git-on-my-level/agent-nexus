@@ -1,0 +1,442 @@
+[
+  {
+    "key": "GET /actors",
+    "milliseconds": 2209
+  },
+  {
+    "key": "GET /adapters",
+    "milliseconds": 114
+  },
+  {
+    "key": "GET /agent-inbox/asks",
+    "milliseconds": 179
+  },
+  {
+    "key": "GET /agent-notifications",
+    "milliseconds": 141
+  },
+  {
+    "key": "GET /agents",
+    "milliseconds": 2135
+  },
+  {
+    "key": "GET /agents/me",
+    "milliseconds": 323
+  },
+  {
+    "key": "GET /agents/{agent_id}",
+    "milliseconds": 3497
+  },
+  {
+    "key": "GET /artifacts",
+    "milliseconds": 16255
+  },
+  {
+    "key": "GET /artifacts/{artifact_id}",
+    "milliseconds": 800
+  },
+  {
+    "key": "GET /artifacts/{artifact_id}/content",
+    "milliseconds": 819
+  },
+  {
+    "key": "GET /auth/access-requests",
+    "milliseconds": 73
+  },
+  {
+    "key": "GET /auth/access/summary",
+    "milliseconds": 82
+  },
+  {
+    "key": "GET /auth/admins",
+    "milliseconds": 91
+  },
+  {
+    "key": "GET /auth/audit",
+    "milliseconds": 75
+  },
+  {
+    "key": "GET /auth/bootstrap/status",
+    "milliseconds": 4
+  },
+  {
+    "key": "GET /auth/hosts/enrollment-tokens",
+    "milliseconds": 55
+  },
+  {
+    "key": "GET /auth/hosts/enrollments/pending",
+    "milliseconds": 82
+  },
+  {
+    "key": "GET /auth/hosts/enrollments/{enrollment_id}",
+    "milliseconds": 4
+  },
+  {
+    "key": "GET /auth/invites",
+    "milliseconds": 54
+  },
+  {
+    "key": "GET /auth/principals",
+    "milliseconds": 164
+  },
+  {
+    "key": "GET /boards",
+    "milliseconds": 1179
+  },
+  {
+    "key": "GET /boards/{board_id}",
+    "milliseconds": 1561
+  },
+  {
+    "key": "GET /boards/{board_id}/cards",
+    "milliseconds": 1004
+  },
+  {
+    "key": "GET /boards/{board_id}/cards/{card_id}",
+    "milliseconds": 1057
+  },
+  {
+    "key": "GET /boards/{board_id}/workspace",
+    "milliseconds": 2857
+  },
+  {
+    "key": "GET /cards",
+    "milliseconds": 18324
+  },
+  {
+    "key": "GET /cards/{card_id}",
+    "milliseconds": 1020
+  },
+  {
+    "key": "GET /cards/{card_id}/plan",
+    "milliseconds": 1125
+  },
+  {
+    "key": "GET /cards/{card_id}/revisions",
+    "milliseconds": 749
+  },
+  {
+    "key": "GET /cards/{card_id}/revisions/{revision_id}",
+    "milliseconds": 780
+  },
+  {
+    "key": "GET /cards/{card_id}/timeline",
+    "milliseconds": 1470
+  },
+  {
+    "key": "GET /docs",
+    "milliseconds": 1745
+  },
+  {
+    "key": "GET /docs/search",
+    "milliseconds": 1706
+  },
+  {
+    "key": "GET /docs/{document_id}",
+    "milliseconds": 825
+  },
+  {
+    "key": "GET /docs/{document_id}/comments",
+    "milliseconds": 864
+  },
+  {
+    "key": "GET /docs/{document_id}/report",
+    "milliseconds": 6548
+  },
+  {
+    "key": "GET /docs/{document_id}/revisions",
+    "milliseconds": 914
+  },
+  {
+    "key": "GET /docs/{document_id}/revisions/{revision_id}",
+    "milliseconds": 903
+  },
+  {
+    "key": "GET /events",
+    "milliseconds": 617
+  },
+  {
+    "key": "GET /events/{event_id}",
+    "milliseconds": 693
+  },
+  {
+    "key": "GET /health",
+    "milliseconds": 4
+  },
+  {
+    "key": "GET /home/unread",
+    "milliseconds": 28744
+  },
+  {
+    "key": "GET /hosts",
+    "milliseconds": 2809
+  },
+  {
+    "key": "GET /hosts/{host_id}",
+    "milliseconds": 2669
+  },
+  {
+    "key": "GET /inbox",
+    "milliseconds": 1385
+  },
+  {
+    "key": "GET /inbox/summary",
+    "milliseconds": 487
+  },
+  {
+    "key": "GET /inbox/{inbox_id}",
+    "milliseconds": 751
+  },
+  {
+    "key": "GET /livez",
+    "milliseconds": 4
+  },
+  {
+    "key": "GET /meta/commands",
+    "milliseconds": 79
+  },
+  {
+    "key": "GET /meta/commands/{command_id}",
+    "milliseconds": 50
+  },
+  {
+    "key": "GET /meta/concepts",
+    "milliseconds": 55
+  },
+  {
+    "key": "GET /meta/concepts/{concept_name}",
+    "milliseconds": 61
+  },
+  {
+    "key": "GET /meta/handshake",
+    "milliseconds": 52
+  },
+  {
+    "key": "GET /ops/health",
+    "milliseconds": 6
+  },
+  {
+    "key": "GET /ops/usage-summary",
+    "milliseconds": 1055
+  },
+  {
+    "key": "GET /overview",
+    "milliseconds": 57727
+  },
+  {
+    "key": "GET /overview/changes",
+    "milliseconds": 45442
+  },
+  {
+    "key": "GET /overview/changes [returning-visit]",
+    "milliseconds": 45442
+  },
+  {
+    "key": "GET /pm/actions",
+    "milliseconds": 64964
+  },
+  {
+    "key": "GET /pm/actions/{action_id}",
+    "milliseconds": 597
+  },
+  {
+    "key": "GET /pm/bindings",
+    "milliseconds": 380
+  },
+  {
+    "key": "GET /pm/context",
+    "milliseconds": 906
+  },
+  {
+    "key": "GET /pm/conversations",
+    "milliseconds": 490
+  },
+  {
+    "key": "GET /pm/conversations/{conversation_id}",
+    "milliseconds": 463
+  },
+  {
+    "key": "GET /pm/decisions",
+    "milliseconds": 87691
+  },
+  {
+    "key": "GET /pm/decisions/{decision_id}",
+    "milliseconds": 884
+  },
+  {
+    "key": "GET /pm/turns/{turn_id}",
+    "milliseconds": 472
+  },
+  {
+    "key": "GET /readyz",
+    "milliseconds": 4
+  },
+  {
+    "key": "GET /ref-edges",
+    "milliseconds": 705
+  },
+  {
+    "key": "GET /runs",
+    "milliseconds": 284
+  },
+  {
+    "key": "GET /runs/{run_id}",
+    "milliseconds": 609
+  },
+  {
+    "key": "GET /secrets",
+    "milliseconds": 184
+  },
+  {
+    "key": "GET /series",
+    "milliseconds": 309
+  },
+  {
+    "key": "GET /series/{name}",
+    "milliseconds": 497980
+  },
+  {
+    "key": "GET /series/{name}/query",
+    "milliseconds": 496353
+  },
+  {
+    "key": "GET /sessions/{session_id}",
+    "milliseconds": 9
+  },
+  {
+    "key": "GET /stream/agent-notification-receipts",
+    "milliseconds": 10109
+  },
+  {
+    "key": "GET /stream/agents",
+    "milliseconds": 6
+  },
+  {
+    "key": "GET /stream/agents [agents-resumed-header]",
+    "milliseconds": 6
+  },
+  {
+    "key": "GET /stream/events",
+    "milliseconds": 64839
+  },
+  {
+    "key": "GET /stream/events [events-default]",
+    "milliseconds": 11566
+  },
+  {
+    "key": "GET /stream/events [events-idle]",
+    "milliseconds": 80854
+  },
+  {
+    "key": "GET /stream/events [events-large-thread]",
+    "milliseconds": 59792
+  },
+  {
+    "key": "GET /stream/events [events-resumed]",
+    "milliseconds": 77937
+  },
+  {
+    "key": "GET /stream/inbox",
+    "milliseconds": 48008
+  },
+  {
+    "key": "GET /stream/inbox [inbox-idle]",
+    "milliseconds": 47132
+  },
+  {
+    "key": "GET /stream/inbox [inbox-resumed]",
+    "milliseconds": 47271
+  },
+  {
+    "key": "GET /threads",
+    "milliseconds": 432182
+  },
+  {
+    "key": "GET /threads/{thread_id}",
+    "milliseconds": 664
+  },
+  {
+    "key": "GET /threads/{thread_id}/context",
+    "milliseconds": 3424
+  },
+  {
+    "key": "GET /threads/{thread_id}/timeline",
+    "milliseconds": 851
+  },
+  {
+    "key": "GET /threads/{thread_id}/workspace",
+    "milliseconds": 3815
+  },
+  {
+    "key": "GET /topics",
+    "milliseconds": 1873
+  },
+  {
+    "key": "GET /topics/{topic_id}",
+    "milliseconds": 760
+  },
+  {
+    "key": "GET /topics/{topic_id}/timeline",
+    "milliseconds": 2919
+  },
+  {
+    "key": "GET /topics/{topic_id}/workspace",
+    "milliseconds": 2704
+  },
+  {
+    "key": "GET /v1/usage/summary",
+    "milliseconds": 1911
+  },
+  {
+    "key": "GET /version",
+    "milliseconds": 50
+  },
+  {
+    "key": "GET /work",
+    "milliseconds": 2298
+  },
+  {
+    "key": "GET /work/capabilities",
+    "milliseconds": 6
+  },
+  {
+    "key": "GET /work/{card_ref}",
+    "milliseconds": 1291
+  },
+  {
+    "key": "GET /work/{card_ref}/observations",
+    "milliseconds": 1162
+  },
+  {
+    "key": "GET /work/{card_ref}/participants",
+    "milliseconds": 1169
+  },
+  {
+    "key": "GET /work/{card_ref}/refresh",
+    "milliseconds": 1137
+  },
+  {
+    "key": "GET /workspace/dashboard/reports",
+    "milliseconds": 372
+  },
+  {
+    "key": "POST /pm/turns/{turn_id}/context",
+    "milliseconds": 12728
+  },
+  {
+    "key": "POST /refs/resolve",
+    "milliseconds": 13046
+  },
+  {
+    "key": "POST /reports/preview",
+    "milliseconds": 59669
+  },
+  {
+    "key": "POST /secrets/reveal-batch",
+    "milliseconds": 35291
+  },
+  {
+    "key": "POST /secrets/{secret_id}/reveal",
+    "milliseconds": 23776
+  }
+]

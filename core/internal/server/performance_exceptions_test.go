@@ -16,6 +16,7 @@ import (
 )
 
 type baselineBudget struct {
+	CachePhase     string `json:"cache_phase,omitempty"`
 	Case           string `json:"case,omitempty"`
 	MaxVMSteps     uint64 `json:"max_vm_steps"`
 	Method         string `json:"method"`
@@ -69,6 +70,13 @@ func performanceRuntimeSourceHash(root string) (string, error) {
 			return "", err
 		}
 	}
+	for _, relative := range []string{"scripts/check-performance-shards.py", "scripts/tests/test_performance_shards.py", ".github/workflows/ci.yml"} {
+		if _, err := os.Stat(filepath.Join(root, relative)); err == nil {
+			paths = append(paths, relative)
+		} else if !os.IsNotExist(err) {
+			return "", err
+		}
+	}
 	sort.Strings(paths)
 	h := sha256.New()
 	for _, path := range paths {
@@ -103,7 +111,10 @@ func performanceBaselineBudgets(t *testing.T, routes []routeBudget) map[string]b
 		registered[performanceCaseKey(b.Method, b.Path, b.Case)] = true
 	}
 	for _, e := range entries {
-		key := performanceCaseKey(e.Method, e.Path, e.Case) + " " + e.Principal
+		key := performanceBaselineKey(e.Method, e.Path, e.Case, e.Principal, e.CachePhase)
+		if e.CachePhase != "" && e.CachePhase != "first_read" && e.CachePhase != "post_invalidation" {
+			t.Fatalf("invalid cache phase %q", e.CachePhase)
+		}
 		if !registered[performanceCaseKey(e.Method, e.Path, e.Case)] || (e.Principal != "authorized" && e.Principal != "unauthorized") || e.LatencyMS <= 0 || e.LatencyMS > 1800000 || e.MaxQueries <= 0 || e.MaxQueries > 100000 || e.MaxRows <= 0 || e.MaxRows > 500000 || !reviewedPerformanceException(e.Issue, e.IssueURL, e.Reason) || out[key].Path != "" {
 			t.Fatalf("invalid, duplicate or stale performance baseline %s", key)
 		}
@@ -143,6 +154,9 @@ func TestPerformanceRuntimeSourcePin(t *testing.T) {
 	}
 	write := func(path, content string) {
 		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(root, path)), 0755); err != nil {
+			t.Fatal(err)
+		}
 		if err := os.WriteFile(filepath.Join(root, path), []byte(content), 0644); err != nil {
 			t.Fatal(err)
 		}
@@ -162,7 +176,7 @@ func TestPerformanceRuntimeSourcePin(t *testing.T) {
 	if hash() != before {
 		t.Fatal("release metadata/unrelated tests expired runtime pin")
 	}
-	for _, path := range []string{"core/go.mod", "core/go.sum", "tests/channels/new.go", "contracts/visualreport/go.mod", "contracts/anx-schema.yaml", "core/internal/server/auth_integration_test.go", "core/internal/server/stream_privacy_integration_test.go", "core/internal/server/notifications_integration_test.go", "core/internal/server/performance_test.go", "core/internal/server/routes.json", "core/new.go"} {
+	for _, path := range []string{"core/go.mod", "core/go.sum", "tests/channels/new.go", "contracts/visualreport/go.mod", "contracts/anx-schema.yaml", "core/internal/server/auth_integration_test.go", "core/internal/server/stream_privacy_integration_test.go", "core/internal/server/notifications_integration_test.go", "core/internal/server/performance_test.go", "core/internal/server/routes.json", "core/new.go", "scripts/check-performance-shards.py", "scripts/tests/test_performance_shards.py", ".github/workflows/ci.yml"} {
 		before = hash()
 		write(path, "changed runtime input")
 		if hash() == before {

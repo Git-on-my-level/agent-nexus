@@ -145,7 +145,10 @@ test("all balanced shards cover exactly the real Playwright suite, including bas
   const timings = JSON.parse(
     readFileSync(join(root, ".github/e2e-timings.json"), "utf8"),
   );
-  const count = ci.match(/shard: \[([^\]]+)\]/)[1].split(",").length;
+  const browserJob = ci
+    .slice(ci.indexOf("\n  web-ui-e2e-check:") + 1)
+    .split(/\n(?=  [\w-]+:\n)/)[0];
+  const count = browserJob.match(/shard: \[([^\]]+)\]/)[1].split(",").length;
   const plan = balance(discoveredFiles(report), timings.files, count);
   const expected = ids(report).sort();
   const actual = plan
@@ -154,4 +157,37 @@ test("all balanced shards cover exactly the real Playwright suite, including bas
   assert.ok(expected.some((id) => id.endsWith(":base-path")));
   assert.equal(new Set(actual).size, actual.length);
   assert.deepEqual(actual, expected);
+});
+
+test("all four route shards, legacy checks and executed coverage are required", () => {
+  const job = (name) =>
+    ci.slice(ci.indexOf(`\n  ${name}:`) + 1).split(/\n(?=  [\w-]+:\n)/)[0];
+  const routes = job("core-performance-routes");
+  assert.match(routes, /shard: \[1, 2, 3, 4\]/);
+  assert.match(routes, /fail-fast: false/);
+  assert.match(routes, /ANX_PERFORMANCE_SHARD: \$\{\{ matrix.shard \}\}/);
+  assert.match(routes, /if-no-files-found: error/);
+  assert.match(
+    routes,
+    /name: core-performance-routes-\$\{\{ matrix.shard \}\}/,
+  );
+  assert.match(
+    job("core-performance-coverage"),
+    /needs: \[changes, core-performance-routes\]/,
+  );
+  assert.match(job("core-performance-coverage"), /check-performance-shards.py/);
+  assert.match(
+    job("core-performance-legacy"),
+    /-skip '\^TestPerformanceRoutes\$'/,
+  );
+  for (const name of [
+    "core-performance-routes",
+    "core-performance-legacy",
+    "core-performance-coverage",
+  ]) {
+    assert.ok(needs.includes(name));
+    assert.doesNotMatch(job(name), /continue-on-error/);
+    for (const flag of ["core", "contracts", "go_shared"])
+      assert.ok(job(name).includes(`needs.changes.outputs.${flag} == 'true'`));
+  }
 });

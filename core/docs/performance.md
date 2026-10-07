@@ -14,8 +14,9 @@ cd core
 go test -short ./internal/server ./internal/storage ./internal/testutil/perfguard
 ```
 
-Run the independent scale tier (the `core-performance` CI job is required by
-`ci-ok`):
+Run the independent scale tier. Four `core-performance-routes` shards,
+`core-performance-legacy`, and their executed-artifact coverage check are all
+required by `ci-ok`:
 
 ```sh
 cd core
@@ -35,7 +36,17 @@ IDs and content are shared, while the explicit series anchor keeps observations
 inside the requested window. Canonical ownership/reference triggers remain on.
 Content-addressed artifacts share one synthetic text blob to reduce disk work.
 
-All routes reuse one migrated workspace across principals and samples. The
+All routes reuse one migrated workspace, with a fresh instrumented SQL pool and
+complete native handler/PM runtime for each case and principal. The first read
+cannot inherit another route's authorization cache. Five warm reads reuse only
+that pool. A real trigger-backed thread update then advances the authorization
+epoch before a separately measured post-invalidation read. Cursor setup uses a
+separate handler, preserving the measured handler's cache state. No global cache
+reset or production cache API is introduced. `/overview` and the default changes
+case explicitly start without a saved visit; a separate `returning-visit` changes
+case persists a scoped visit through the setup handler, then requires a recent
+private decision in the owner response and a non-null visit cursor for both
+principals. Shard order cannot turn that workload into an empty first visit. The
 unfiltered default stream retains 8,192+ events, 4,096 distinct baseline threads
 and card references, the large-history thread and canonical private-board graph.
 After #311 it starts at HEAD: its first completed chunk must skip old history,
@@ -87,15 +98,30 @@ writes. The preview uses a populated fleet-health panel; saved reports cover liv
 Secret cardinality and document/card revision histories are shallow;
 those fanout dimensions need dedicated scale fixtures when changed.
 
-One warm-up precedes five measured requests. The median must meet the 500 ms
-ordinary latency reference; nearest-rank p95 and the maximum are reported
-separately. A loose secondary maximum (four times the reference, at least five
-seconds) bounds catastrophic stalls and supplies the request deadline. Existing
-baselines of at least ten seconds include the cold request without an extra
-warm-up. This policy tolerates one scheduling spike without treating a maximum
-of three observations as a stable tail estimate. Statement, returned-row and
-SQLite VM-instruction ceilings are the primary assertions on **every** sample,
-including warm-up. Timing never relaxes counts, work, plans or privacy.
+Each case/principal executes seven measured requests: one independently isolated
+first read, five warm reads, and one read after invalidation of that same pool.
+The warm median must meet the 500 ms ordinary latency reference; nearest-rank
+p95 and the maximum are reported separately. A loose secondary maximum (four
+times the reference, at least five seconds) bounds stalls and supplies deadlines.
+The single first-read and invalidation samples primarily enforce deterministic
+statement, row and VM ceilings, with that same loose secondary maximum rather
+than a one-sample median. Their finite, source-pinned allowances have separate
+cache-phase keys and never widen warm ceilings. All seven requests retain
+status, privacy, positive-control and exact-plan assertions.
+
+The four route shards keep both principals and all cache states of each case
+together. `performance_shard_weights.json` records measured execution weights;
+deterministic longest-processing-time balancing validates exact inventory
+coverage before fixture setup. Select a local shard with
+`ANX_PERFORMANCE_SHARD=1` (values 1–4); omitting it runs the full matrix. Every
+shard uploads its actual executed report. `scripts/check-performance-shards.py`
+requires four distinct, current-source reports, all 109+ cases, both principals,
+exactly five warm and one first-read/invalidation samples, valid metrics,
+effective per-state limits, and successful case completions. Missing, duplicate,
+stale, partial and zero-test reports fail. The separate legacy job retains both
+25-sample authorization regressions, prepare-size/time checks, cache controls,
+native-counter controls and startup measurements without repeating them in each
+route shard.
 
 Every read has an ordinary 50,000-VM-instruction ceiling alongside 100 statements
 and 1,024 returned rows. `sqlite3_stmt_status` counters include indexed aggregate
@@ -147,7 +173,7 @@ for EXPLAIN; normalization never changes execution. New SQL or findings require
 reviewing a new entry. There are no table-wide or route-wide plan exemptions.
 
 `performance_budget_allowlist.json` records finite baselines for existing hazards
-on main, per method/path/case/principal, with linked repair justification. Standard budgets
+on main, per method/path/case/principal/cache phase, with linked repair justification. Standard budgets
 remain the default for every new route. Baselines retain query/row ceilings,
 success/denial expectations, positive fixtures, private controls and two SSE data
 flushes; exceeding a ceiling still fails. Their purpose is to allow the guardrail
@@ -185,10 +211,10 @@ regression. Populate new large record families and high-fanout selectors when
 adding endpoints; empty tables and shallow histories are not scale evidence.
 
 Set `ANX_PERFORMANCE_REPORT` to an absolute writable JSON path to collect
-synthetic SQL shapes/findings and route samples for review. CI uploads this report as
-`core-performance-report`, so reviewers can inspect the plans behind the hashes.
+synthetic SQL shapes/findings and route samples for review. CI uploads each report as
+`core-performance-routes-N`, so reviewers can inspect every shard's plans.
 `ANX_PERFORMANCE_DIAGNOSTIC=1`
-uses one diagnostic sample and extends the request deadline to sixty minutes to
+retains all seven state-specific samples and extends the request deadline to sixty minutes to
 observe baseline counts; it always fails as a diagnostic run, and
 latency/query/row/work and plan failures still fail. An exact
 `ANX_PERFORMANCE_DIAGNOSTIC_ROUTE="METHOD /path"` selector can isolate one
@@ -237,7 +263,7 @@ privacy, legacy data and response contracts:
 | Severity | Source                                                                                              | Affected reads                          | Cost before a request/page bound                                                                                                                                                                                                                                       |
 | -------- | --------------------------------------------------------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | P1       | `internal/primitives/inbox_freshness.go:7`, `internal/primitives/inbox_reads.go:39`                 | Inbox freshness and summary             | Aggregate freshness still scans scoped thread candidates, with view/status joins. Summary counts and JSON-kind/lifecycle predicates inspect the corpus; output pagination does not bound candidates. #302 removes full page materialization.                           |
-| P0       | `internal/server/stream_handlers.go:200`, `:505`; `internal/primitives/store.go:2494`               | Default and large-history event streams | Main materializes, decodes and authorizes the entire selected event history on each poll before applying Last-Event-ID; subject/reference hydration repeats canonical denial work. Separate two-poll allowances link SCA-673.                                          |
+| Repaired | `internal/server/event_stream_scanner.go`                                                           | Default and large-history event streams | #311 bounds history traversal and starts an unfiltered new connection at HEAD. Canonical authorization and other stream work retain separate SCA-665 allowances where measured.                                                                                        |
 | P1       | `internal/server/stream_handlers.go:261`, `:491`, `:349`                                            | Inbox, events and receipt streams       | Repeated freshness/history and subject work per tick remains. #302's internal 100-record inbox sampling also has a completeness regression, owned by the SCA-665 forward fix; representative two-tick tests do not certify complete feeds.                             |
 | P1       | `internal/primitives/docs_store.go:120`, `:135`                                                     | Document point/history reads            | TRIM/COALESCE event joins inspect events rather than using direct indexed equality.                                                                                                                                                                                    |
 | P1       | `internal/primitives/docs_store.go:1480`                                                            | Document revisions                      | Unpaginated revision history has queries per revision, O(R) round trips. The generic fixture has shallow histories.                                                                                                                                                    |

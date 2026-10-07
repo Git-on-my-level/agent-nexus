@@ -148,7 +148,11 @@ func configurePerformanceStreamCase(t *testing.T, env performanceEnv, b routeBud
 			listReq := httptest.NewRequest(http.MethodGet, "/inbox?limit=100", nil)
 			listReq.Header.Set("Authorization", req.Header.Get("Authorization"))
 			list := httptest.NewRecorder()
-			env.handler.ServeHTTP(list, listReq)
+			setupHandler := env.handler
+			if env.setupHandler != nil {
+				setupHandler = env.setupHandler
+			}
+			setupHandler.ServeHTTP(list, listReq)
 			var payload struct {
 				Items []map[string]any `json:"items"`
 			}

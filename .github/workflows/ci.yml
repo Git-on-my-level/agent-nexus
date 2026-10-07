@@ -56,6 +56,8 @@ jobs:
             go_shared:
               - '.github/actions/setup-go/**'
               - '.github/workflows/ci.yml'
+              - 'scripts/check-performance-shards.py'
+              - 'scripts/tests/test_performance_shards.py'
             node_shared:
               - '.github/actions/setup-node-pnpm/**'
               - '.github/workflows/ci.yml'
@@ -63,6 +65,8 @@ jobs:
               - '.github/e2e-timings.json'
               - 'scripts/ci-e2e.mjs'
               - 'scripts/tests/ci-automation.test.mjs'
+              - 'scripts/check-performance-shards.py'
+              - 'scripts/tests/test_performance_shards.py'
               - 'package.json'
               - 'pnpm-workspace.yaml'
               - 'pnpm-lock.yaml'
@@ -108,7 +112,9 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Test CI gate and shard coverage
-        run: node --test scripts/tests/ci-automation.test.mjs
+        run: |
+          node --test scripts/tests/ci-automation.test.mjs
+          python3 -m unittest discover -s scripts/tests -p "test_performance_shards.py"
 
       - name: Check GitHub automation formatting
         run: pnpm -C web-ui exec prettier --check "../.github/**/*.{yml,yaml}"
@@ -160,9 +166,49 @@ jobs:
       - name: Verify route inventory matches the router
         run: make route-inventory-check
 
-  core-performance:
+  core-performance-routes:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 25
+    needs: changes
+    if: needs.changes.outputs.core == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.go_shared == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+
+      - name: Scale route and query-plan shard
+        working-directory: core
+        env:
+          GOMAXPROCS: "2"
+          ANX_PERFORMANCE_TEST: "1"
+          ANX_PERFORMANCE_SHARD: ${{ matrix.shard }}
+          ANX_PERFORMANCE_REPORT: ${{ github.workspace }}/.tmp/performance/route-report.json
+        run: |
+          mkdir -p ../.tmp/performance
+          rm -f ../.tmp/performance/route-report.json
+          go test -p=1 -parallel=1 -timeout=20m -count=1 -v ./internal/server -run '^TestPerformanceRoutes$'
+
+      - name: Upload this shard's executed samples and SQL plans
+        if: always()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: core-performance-routes-${{ matrix.shard }}
+          path: .tmp/performance/route-report.json
+          include-hidden-files: true
+          if-no-files-found: error
+
+  core-performance-legacy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: changes
     if: needs.changes.outputs.core == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.go_shared == 'true'
     steps:
@@ -175,24 +221,43 @@ jobs:
           go-version-file: core/go.mod
           cache-dependency-path: core/go.sum
 
-      - name: Scale route, query-plan and startup budgets
+      - name: Legacy regressions, cache controls and startup budgets
         working-directory: core
         env:
           GOMAXPROCS: "2"
           ANX_PERFORMANCE_TEST: "1"
-          ANX_PERFORMANCE_REPORT: ${{ github.workspace }}/.tmp/performance/route-report.json
         run: |
           mkdir -p ../.tmp/performance
-          go test -p=1 -parallel=1 -timeout=120m -count=1 -v ./internal/server ./internal/storage ./internal/testutil/perfguard -run 'TestPerformance|TestResourceAccessCommonReadPerformance|TestResourceAccessLargeDenialPrepareAndPMRoutes'
+          set -o pipefail
+          go test -p=1 -parallel=1 -timeout=10m -count=1 -v ./internal/server ./internal/storage -run '^TestPerformance|^TestResourceAccess(CommonReadPerformance|LargeDenialPrepareAndPMRoutes)$' -skip '^TestPerformanceRoutes$' | tee ../.tmp/performance/legacy.log
+          go test -p=1 -count=1 -v ./internal/testutil/perfguard | tee ../.tmp/performance/perfguard.log
 
-      - name: Upload synthetic route samples and SQL plans
+      - name: Upload legacy and startup measurements
         if: always()
         uses: actions/upload-artifact@v7.0.0
         with:
-          name: core-performance-report
-          path: .tmp/performance/route-report.json
+          name: core-performance-legacy
+          path: .tmp/performance/*.log
           include-hidden-files: true
-          if-no-files-found: ignore
+          if-no-files-found: error
+
+  core-performance-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [changes, core-performance-routes]
+    if: always() && (needs.changes.outputs.core == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.go_shared == 'true')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Download every route shard
+        uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: core-performance-routes-*
+          path: .tmp/performance/shards
+
+      - name: Assert executed union covers all cases and both principals
+        run: python3 scripts/check-performance-shards.py .tmp/performance/shards
 
   mcp-checks:
     runs-on: ubuntu-latest
@@ -458,7 +523,9 @@ jobs:
       - workflow-checks
       - contracts-check
       - core-checks
-      - core-performance
+      - core-performance-routes
+      - core-performance-legacy
+      - core-performance-coverage
       - mcp-checks
       - cli-checks
       - web-ui-static-check

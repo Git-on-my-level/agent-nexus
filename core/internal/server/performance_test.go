@@ -168,6 +168,8 @@ type performanceEnv struct {
 	hub              *agentChangeHub
 	agent            lockoutPrincipalSeed
 	documentRevision string
+	fresh            func(*testing.T) (http.Handler, *perfguard.Capture, *agentChangeHub, func())
+	setupHandler     http.Handler
 }
 
 func newPerformanceEnv(t *testing.T) performanceEnv {
@@ -283,8 +285,26 @@ func newPerformanceEnv(t *testing.T) performanceEnv {
 	}
 	var configured *handlerOptions
 	handler := NewHandler("scale-test", WithPrimitiveStore(ps), WithAuthStore(as), WithSecretsStore(secretStore), WithActorRegistry(actors.NewStore(observed)), WithSchemaContract(contract), WithHealthCheck(env.workspace.Ping), WithPMRuntime(runtime), WithSeriesStore(&series.Store{DB: observed, Auth: as}), WithRunStore(commandcenter.NewStore(observed, commandcenter.SQLIdentities{DB: observed})), WithStreamPollInterval(5*time.Millisecond), func(o *handlerOptions) { configured = o })
-	return performanceEnv{store: store, agent: agent, handler: handler, db: db, capture: capture, principals: []lockoutPrincipalSeed{owner, stranger}, hub: configured.agentChanges, documentRevision: anyString(doc["head_revision_id"]), replace: strings.NewReplacer(
+	result := performanceEnv{store: store, agent: agent, handler: handler, db: db, capture: capture, principals: []lockoutPrincipalSeed{owner, stranger}, hub: configured.agentChanges, documentRevision: anyString(doc["head_revision_id"]), replace: strings.NewReplacer(
 		"{secret_id}", secret.ID, "{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{document_id}", anyString(doc["id"]), "{revision_id}", strings.TrimPrefix(anyString(card.Card["head_revision_ref"]), "card_revision:"), "{event_id}", anyString(event["id"]), "{artifact_id}", anyString(artifact["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{inbox_id}", "scale-target-inbox", "{host_id}", "scale-host", "{agent_id}", "scale-owner", "{conversation_id}", conversation.ID, "{decision_id}", "scale-target-decision", "{action_id}", "scale-target-action", "{turn_id}", "scale-target-turn", "{name}", "scale.series", "{command_id}", "work.list", "{concept_name}", "cards", "{session_id}", session.SessionID, "{enrollment_id}", "scale-target-enrollment", "{run_id}", "scale-target-run")}
+	result.fresh = func(t *testing.T) (http.Handler, *perfguard.Capture, *agentChangeHub, func()) {
+		t.Helper()
+		pool, capture, err := perfguard.Open("file:" + env.workspace.Layout().DatabasePath + "?_pragma=busy_timeout(20000)&_pragma=journal_mode(WAL)&_txlock=immediate")
+		if err != nil {
+			t.Fatal(err)
+		}
+		ps := primitives.NewStore(pool, blob.NewFilesystemBackend(env.workspace.Layout().ArtifactContentDir), env.workspace.Layout().ArtifactContentDir)
+		as := auth.NewStore(pool)
+		runtime, err := NewPMRuntime(pool, ps, as, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: agent.ActorID}})
+		if err != nil {
+			pool.Close()
+			t.Fatal(err)
+		}
+		var configured *handlerOptions
+		h := NewHandler("scale-test", WithPrimitiveStore(ps), WithAuthStore(as), WithSecretsStore(secrets.NewStore(pool, encryptor)), WithActorRegistry(actors.NewStore(pool)), WithSchemaContract(contract), WithHealthCheck(env.workspace.Ping), WithPMRuntime(runtime), WithSeriesStore(&series.Store{DB: pool, Auth: as}), WithRunStore(commandcenter.NewStore(pool, commandcenter.SQLIdentities{DB: pool})), WithStreamPollInterval(5*time.Millisecond), func(o *handlerOptions) { configured = o })
+		return h, capture, configured.agentChanges, func() { pool.Close() }
+	}
+	return result
 }
 
 type performanceWriter struct {
@@ -333,6 +353,9 @@ func (w *performanceWriter) Flush() {
 func TestPerformanceRoutes(t *testing.T) {
 	requirePerformanceTest(t)
 	budgets := performanceBudgets(t)
+	allBudgets := budgets
+	shard, shardCount := performanceShardSelection(t)
+	budgets = performanceShardBudgets(t, budgets, shard, shardCount)
 	diagnostic := os.Getenv("ANX_PERFORMANCE_DIAGNOSTIC") == "1"
 	if diagnostic {
 		t.Error("diagnostic sampling is not an acceptance run")
@@ -360,8 +383,13 @@ func TestPerformanceRoutes(t *testing.T) {
 		}
 	}
 	allowed := performancePlanExceptions(t)
-	baseline := performanceBaselineBudgets(t, budgets)                     // expire pins before the costly corpus
-	env := preparePerformanceStreamCases(t, newPerformanceEnv(t), budgets) // cached once for every route, principal and sample
+	baseline := performanceBaselineBudgets(t, allBudgets)                     // expire pins before the costly corpus
+	env := preparePerformanceStreamCases(t, newPerformanceEnv(t), allBudgets) // every shard retains the complete privacy selector set
+	for _, selector := range []string{"{board_id}", "{card_id}", "{document_id}", "{artifact_id}", "{event_id}", "{thread_id}", "{topic_id}", "{conversation_id}", "{decision_id}", "{action_id}", "{turn_id}"} {
+		if value := env.replace.Replace(selector); value == "" || value == selector {
+			t.Fatalf("shard omitted privacy selector %s", selector)
+		}
+	}
 	large, err := perfguard.LargeTables(context.Background(), env.db)
 	if err != nil {
 		t.Fatal(err)
@@ -386,16 +414,23 @@ func TestPerformanceRoutes(t *testing.T) {
 	}
 	report := struct {
 		SourceHash string                    `json:"core_source_sha256"`
+		Diagnostic bool                      `json:"diagnostic"`
+		Shard      int                       `json:"shard"`
+		ShardCount int                       `json:"shard_count"`
+		Completed  []string                  `json:"completed"`
 		Plans      map[string]map[string]any `json:"plans"`
 		Samples    []map[string]any          `json:"samples"`
-	}{SourceHash: sourceHash, Plans: map[string]map[string]any{}}
+	}{SourceHash: sourceHash, Diagnostic: diagnostic, Shard: shard, ShardCount: shardCount, Plans: map[string]map[string]any{}}
 	persistReport := func() {
 		if path := reportPath; path != "" {
 			b, err := json.MarshalIndent(report, "", "  ")
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err = os.WriteFile(path, b, 0600); err != nil {
+			if err = os.WriteFile(path+".new", b, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err = os.Rename(path+".new", path); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -412,20 +447,22 @@ func TestPerformanceRoutes(t *testing.T) {
 				continue
 			}
 			routeEnv, routePrincipal := env, principal
-			fixturePolicy := "shared-4096-distinct-thread-corpus"
+			fixturePolicy := "fresh-pool-and-handler-per-case-principal/shared-4096-distinct-thread-corpus"
 
 			t.Run(label+"/"+performanceCaseKey(b.Method, b.Path, b.Case), func(t *testing.T) {
 				env, principal := routeEnv, routePrincipal
 				defer persistReport()
-				slowBaseline := false
-				if e, ok := baseline[performanceCaseKey(b.Method, b.Path, b.Case)+" "+label]; ok {
-					slowBaseline = e.LatencyMS >= 10000
-					b.LatencyMS = e.LatencyMS
-					b.MaxQueries = e.MaxQueries
-					b.MaxRows = e.MaxRows
-					b.MaxVMSteps = e.MaxVMSteps
-					t.Logf("existing baseline exception %s: %s", e.Issue, e.Reason)
-				}
+				env.setupHandler = env.handler
+				preparePerformanceVisit(t, env, b, principal, pi)
+				h, capture, hub, closePool := env.fresh(t)
+				defer closePool()
+				env.handler, env.capture, env.hub = h, capture, hub
+				original := b
+				defer func() {
+					if !t.Failed() {
+						report.Completed = append(report.Completed, performanceCaseKey(original.Method, original.Path, original.Case)+" "+label)
+					}
+				}()
 				path := env.replace.Replace(b.Path)
 				if strings.Contains(path, "{") {
 					t.Fatalf("missing selector fixture: %s", path)
@@ -441,20 +478,24 @@ func TestPerformanceRoutes(t *testing.T) {
 				if pi == 1 {
 					want = b.UnauthorizedStatus
 				}
-				var durations []time.Duration
-				samples := 6 // one warmup and five measured requests
-				if slowBaseline {
-					samples = 5 // include first/cold request for slow existing-main baselines
-				}
-				policy := "warmup-plus-five-measured"
-				if slowBaseline {
-					policy = "five-measured-including-cold"
-				}
-				if diagnostic {
-					samples = 1
-					policy = "diagnostic-not-acceptance"
-				}
-				for sample := 0; sample < samples; sample++ {
+				durations := map[string][]time.Duration{}
+				// The first read warms only this subject. Five warm measurements keep
+				// the established median policy; cold and invalidated work have their
+				// own deterministic ceilings and loose secondary deadlines.
+				for sample := 0; sample < 7; sample++ {
+					phase := "warm"
+					if sample == 0 {
+						phase = "first_read"
+					}
+					if sample == 6 {
+						phase = "post_invalidation"
+					}
+					b := original
+					if e, ok := baseline[performanceBaselineKey(b.Method, b.Path, b.Case, label, phase)]; ok {
+						b.LatencyMS, b.MaxQueries, b.MaxRows, b.MaxVMSteps = e.LatencyMS, e.MaxQueries, e.MaxRows, e.MaxVMSteps
+						t.Logf("%s existing baseline exception %s: %s", phase, e.Issue, e.Reason)
+					}
+					policy := "one-first-read/five-warm/one-post-invalidation"
 					deadlineBudget := performanceMaxSample(b.LatencyMS)
 					if diagnostic {
 						deadlineBudget = 60 * time.Minute // diagnostic evidence only; never an acceptance allowance
@@ -477,6 +518,10 @@ func TestPerformanceRoutes(t *testing.T) {
 						w.onFlush = env.hub.publish
 					}
 					validateStream := configurePerformanceStreamCase(t, env, b, pi, sample, req, w)
+					beforeEpoch, afterEpoch := int64(0), int64(0)
+					if phase == "post_invalidation" {
+						beforeEpoch, afterEpoch = invalidatePerformanceCache(t, env)
+					}
 					cancel()
 					ctx, cancel = context.WithTimeout(context.Background(), deadlineBudget)
 					req = req.WithContext(ctx)
@@ -491,11 +536,9 @@ func TestPerformanceRoutes(t *testing.T) {
 						t.Fatalf("SQLite work counters: %v", err)
 					}
 					deadline := ctx.Err() == context.DeadlineExceeded
-					report.Samples = append(report.Samples, map[string]any{"method": b.Method, "path": b.Path, "case": b.Case, "principal": label, "sample": sample, "measured": sample > 0 || diagnostic || slowBaseline, "sampling_policy": policy, "fixture_policy": fixturePolicy, "elapsed_ms": float64(elapsed) / float64(time.Millisecond), "queries": queries, "rows": rows, "vm_steps": work.VMSteps, "fullscan_steps": work.FullScanSteps, "sorts": work.Sorts, "autoindex_rows": work.AutoIndexRows, "status": w.Code, "deadline_exceeded": deadline, "stream_polls": w.polls})
+					report.Samples = append(report.Samples, map[string]any{"method": b.Method, "path": b.Path, "case": b.Case, "principal": label, "sample": sample, "measured": true, "cache_phase": phase, "invalidation_epoch_before": beforeEpoch, "invalidation_epoch_after": afterEpoch, "sampling_policy": policy, "fixture_policy": fixturePolicy, "elapsed_ms": float64(elapsed) / float64(time.Millisecond), "queries": queries, "rows": rows, "vm_steps": work.VMSteps, "fullscan_steps": work.FullScanSteps, "sorts": work.Sorts, "autoindex_rows": work.AutoIndexRows, "status": w.Code, "deadline_exceeded": deadline, "stream_polls": w.polls})
 					cancel()
-					if sample > 0 || diagnostic || slowBaseline {
-						durations = append(durations, elapsed)
-					}
+					durations[phase] = append(durations[phase], elapsed)
 					for _, s := range statements {
 						// EXPLAIN does not execute SQL. Retain every typed argument
 						// variant for STAT4-dependent plans while deduplicating repeats;
@@ -543,6 +586,7 @@ func TestPerformanceRoutes(t *testing.T) {
 					if validateStream != nil {
 						validateStream()
 					}
+					validatePerformanceVisit(t, b, sample, w.Body.Bytes())
 					if pi == 0 && b.MustContain != "" && !strings.Contains(w.Body.String(), env.replace.Replace(b.MustContain)) {
 						t.Errorf("successful response omitted positive fixture %q", b.MustContain)
 					}
@@ -578,10 +622,16 @@ func TestPerformanceRoutes(t *testing.T) {
 						t.Errorf("unbounded read: SQL=%d (budget %d), rows=%d (budget %d), VM steps=%d (budget %d)", queries, b.MaxQueries, rows, b.MaxRows, work.VMSteps, b.MaxVMSteps)
 					}
 				}
-				median, p95, maximum := performanceLatency(durations)
-				t.Logf("median=%v p95=%v max=%v measured_samples=%d median_budget=%dms secondary_max=%v", median, p95, maximum, len(durations), b.LatencyMS, performanceMaxSample(b.LatencyMS))
-				if median > time.Duration(b.LatencyMS)*time.Millisecond || maximum > performanceMaxSample(b.LatencyMS) {
-					t.Errorf("secondary latency bound exceeded: median=%v (budget%dms), max=%v (budget%v)", median, b.LatencyMS, maximum, performanceMaxSample(b.LatencyMS))
+				for _, phase := range []string{"first_read", "warm", "post_invalidation"} {
+					b := original
+					if e, ok := baseline[performanceBaselineKey(b.Method, b.Path, b.Case, label, phase)]; ok {
+						b.LatencyMS = e.LatencyMS
+					}
+					median, p95, maximum := performanceLatency(durations[phase])
+					t.Logf("%s median=%v p95=%v max=%v measured_samples=%d median_budget=%dms secondary_max=%v", phase, median, p95, maximum, len(durations[phase]), b.LatencyMS, performanceMaxSample(b.LatencyMS))
+					if (phase == "warm" && median > time.Duration(b.LatencyMS)*time.Millisecond) || maximum > performanceMaxSample(b.LatencyMS) {
+						t.Errorf("%s secondary latency bound exceeded: median=%v (budget%dms), max=%v (budget%v)", phase, median, b.LatencyMS, maximum, performanceMaxSample(b.LatencyMS))
+					}
 				}
 
 			})
@@ -675,4 +725,36 @@ func performanceLatency(durations []time.Duration) (median, p95, maximum time.Du
 	p95 = values[(95*n+99)/100-1]
 	maximum = values[n-1]
 	return
+}
+
+// Empty legacy phase keys denote warm allowances only. Cold exceptions never
+// flow into the five-sample warm ceiling.
+func performanceBaselineKey(method, path, caseID, principal, phase string) string {
+	key := performanceCaseKey(method, path, caseID) + " " + principal
+	if phase != "" && phase != "warm" {
+		key += " " + phase
+	}
+	return key
+}
+func invalidatePerformanceCache(t *testing.T, env performanceEnv) (int64, int64) {
+	t.Helper()
+	var before, after int64
+	if err := env.db.QueryRow(`SELECT version FROM resource_access_epoch WHERE singleton=1`).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	r, err := env.db.Exec(`UPDATE threads SET updated_by=updated_by WHERE id=?`, env.replace.Replace("{thread_id}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := r.RowsAffected()
+	if err != nil || n != 1 {
+		t.Fatalf("invalidation changed %d rows: %v", n, err)
+	}
+	if err := env.db.QueryRow(`SELECT version FROM resource_access_epoch WHERE singleton=1`).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if after <= before {
+		t.Fatal("canonical mutation did not invalidate authorization epoch")
+	}
+	return before, after
 }

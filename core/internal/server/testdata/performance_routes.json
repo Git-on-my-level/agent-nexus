@@ -641,6 +641,19 @@
   },
   {
     "method": "GET",
+    "path": "/overview/changes",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Returning scoped overview visit exercises compact digest and PM decision enrichment independently of shard order; private decision positive control is mandatory.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000,
+    "case": "returning-visit",
+    "must_contain": "decision:scale-target-decision"
+  },
+  {
+    "method": "GET",
     "path": "/pm/actions",
     "max_queries": 100,
     "max_rows": 1024,

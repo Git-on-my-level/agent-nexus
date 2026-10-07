@@ -10,6 +10,7 @@ import (
 	"math"
 	"path/filepath"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"unsafe"
 
@@ -17,6 +18,8 @@ import (
 	"modernc.org/sqlite"
 	sqlite3lib "modernc.org/sqlite/lib"
 )
+
+var driverID atomic.Uint64 // Unique registered scalar/aggregate names in tests.
 
 func workFixture(t *testing.T) (*sql.DB, *Capture) {
 	t.Helper()

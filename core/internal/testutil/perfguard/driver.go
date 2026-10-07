@@ -4,10 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
-	"fmt"
 	"io"
 	"sync"
-	"sync/atomic"
 
 	_ "modernc.org/sqlite"
 )
@@ -100,8 +98,6 @@ func (c *Capture) row(epoch uint64) {
 	}
 }
 
-var driverID atomic.Uint64
-
 // Open instruments a separate pool, including raw auth reads, transactions and
 // prepared statements. The normal workspace connection remains uninstrumented
 // for fixture construction and EXPLAIN (which must not recursively capture).
@@ -113,11 +109,19 @@ func Open(dsn string) (*sql.DB, *Capture, error) {
 	d := base.Driver() // includes the canonical driver's registered scalar functions
 	_ = base.Close()
 	c := &Capture{}
-	name := fmt.Sprintf("scale-sqlite-%d", driverID.Add(1))
-	sql.Register(name, &captureDriver{base: d, capture: c})
-	db, err := sql.Open(name, dsn)
-	return db, c, err
+	// A connector owns the capture only for this pool's lifetime. Registering a
+	// unique driver would retain every closed cold-request capture globally.
+	wrapper := &captureDriver{base: d, capture: c}
+	return sql.OpenDB(&captureConnector{driver: wrapper, dsn: dsn}), c, nil
 }
+
+type captureConnector struct {
+	driver *captureDriver
+	dsn    string
+}
+
+func (c *captureConnector) Connect(context.Context) (driver.Conn, error) { return c.driver.Open(c.dsn) }
+func (c *captureConnector) Driver() driver.Driver                        { return c.driver }
 
 type captureDriver struct {
 	base    driver.Driver
