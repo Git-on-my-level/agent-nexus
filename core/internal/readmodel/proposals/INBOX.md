@@ -160,3 +160,21 @@ with 177 triggers, including scope-directory and graph-index dependencies. It
 adds two clock-row updates per watched trigger invocation, with additional
 legacy cascade amplification; see the measured write-cost caveats in
 `docs/design/scope-phase-two.md`. This integration has no live registration.
+
+The mounted canonical-source fixture installs that combined installer only
+in a real test workspace with the actual PM schema. It creates and projects an
+ask from its canonical event, archives the linked board, answers through
+`POST /inbox/{id}/respond`, and marks the answer read through the separate legacy
+agent-inbox route. The independent ask survives archived context, ordinary
+notifications are suppressed, and answering changes the list and exact summary
+count. Every tested source mutation invalidates old selection/directory evidence
+and advances all four clocks. Exhausting the selection clock refuses the mounted
+answer-read write and preserves its durable unread state; restoring the injected
+fault permits the write and invalidation together. A trusted import that removes
+the resolution row invalidates evidence as well: the agent reader returns an
+open ask while the main inbox still suppresses it through the surviving response
+event's inbox reference. Preserve this route-specific legacy meaning instead of
+inferring both routes from resolution rows alone. No serving proof is minted.
+The current legacy list still filters notification lifecycle after paging;
+#308 owns that repair. This small full-response fixture does not establish
+limit=1 continuation parity or certified HTTP request budgets.
