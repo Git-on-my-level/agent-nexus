@@ -167,7 +167,7 @@ jobs:
         run: make route-inventory-check
 
   core-performance-routes:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 25
     needs: changes
     if: needs.changes.outputs.core == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.go_shared == 'true'
@@ -234,7 +234,7 @@ jobs:
           if-no-files-found: error
 
   core-performance-legacy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
     needs: changes
     if: needs.changes.outputs.core == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.go_shared == 'true'

@@ -127,7 +127,7 @@ native-counter controls and startup measurements without repeating them in each
 route shard.
 
 Each CI shard compiles once and runs three independent workers on
-the standard four-CPU runner. Two workers retain the established `GOMAXPROCS=2`
+the standard four-CPU `ubuntu-24.04-arm` runner. Two workers retain the established `GOMAXPROCS=2`
 setting and partition whole cases for the first read and five warm requests.
 The third uses `GOMAXPROCS=1` and lower scheduling priority to reduce competition
 with warm requests' garbage collection. It runs every case's
@@ -140,7 +140,8 @@ workers never share an authorization cache. `ANX_PERFORMANCE_WORKER=1`, `2` or
 CI waits for all processes, preserves their exit results and logs, and merges
 their reports without manufacturing successful case completions. The coverage
 job verifies each sample's worker assignment as well as the full shard union.
-Reports record and validate the actual Go CPU settings. Both warm workers finish authorized reads before either starts denied reads.
+Reports record and validate the actual architecture, CPU count and Go CPU settings. Worker 1 completes its authorized stage before worker 2 constructs its
+fixture and completes its authorized stage. Both finish before denied reads.
 The post worker waits before constructing its fixture, preventing heavy denial
 setup and GC from competing with owner timing checks. Atomic markers include
 source, worker, completion time and stage outcome; failure releases peers with

@@ -393,7 +393,8 @@ func TestPerformanceRoutes(t *testing.T) {
 	stageDir := os.Getenv("ANX_PERFORMANCE_STAGE_BARRIER")
 	schedule := performanceStageSchedule{Policy: "independent"}
 	ownerPublished := false
-	waitOwners := func() {
+	fixtureWaitMS := 0.0
+	waitOwners := func(ownerCount int) {
 		deadline := time.Now().Add(20 * time.Minute)
 		if testDeadline, ok := t.Deadline(); ok && testDeadline.Before(deadline) {
 			deadline = testDeadline
@@ -401,7 +402,7 @@ func TestPerformanceRoutes(t *testing.T) {
 		ctx, cancel := context.WithDeadline(context.Background(), deadline)
 		defer cancel()
 		var err error
-		schedule, err = waitPerformanceOwnerStages(ctx, stageDir, sourceHash)
+		schedule, err = waitPerformanceOwnerStages(ctx, stageDir, sourceHash, ownerCount)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -419,7 +420,8 @@ func TestPerformanceRoutes(t *testing.T) {
 			t.Fatal(err)
 		}
 		if worker == 3 {
-			waitOwners() // Delay fixture setup and its GC as well as measured post reads.
+			waitOwners(2) // Delay fixture setup and its GC as well as measured post reads.
+			fixtureWaitMS = schedule.WaitMS
 		} else {
 			defer func() {
 				if !ownerPublished {
@@ -428,6 +430,10 @@ func TestPerformanceRoutes(t *testing.T) {
 					}
 				}
 			}()
+			if worker == 2 {
+				waitOwners(1) // Owner fixtures and reads never compete with a peer.
+				fixtureWaitMS = schedule.WaitMS
+			}
 		}
 	}
 	allowed := performancePlanExceptions(t)
@@ -466,11 +472,15 @@ func TestPerformanceRoutes(t *testing.T) {
 		WorkerCount    int                       `json:"worker_count"`
 		MaxProcs       int                       `json:"gomaxprocs"`
 		Schedule       *performanceStageSchedule `json:"stage_schedule"`
+		PlatformOS     string                    `json:"goos"`
+		PlatformArch   string                    `json:"goarch"`
+		CPUs           int                       `json:"num_cpu"`
+		FixtureWaitMS  float64                   `json:"fixture_wait_ms"`
 		FixtureStarted int64                     `json:"fixture_started_unix_ns"`
 		Completed      []string                  `json:"completed"`
 		Plans          map[string]map[string]any `json:"plans"`
 		Samples        []map[string]any          `json:"samples"`
-	}{SourceHash: sourceHash, Diagnostic: diagnostic, Shard: shard, ShardCount: shardCount, Worker: worker, WorkerCount: workerCount, MaxProcs: runtime.GOMAXPROCS(0), Schedule: &schedule, FixtureStarted: fixtureStarted, Plans: map[string]map[string]any{}}
+	}{SourceHash: sourceHash, Diagnostic: diagnostic, Shard: shard, ShardCount: shardCount, Worker: worker, WorkerCount: workerCount, MaxProcs: runtime.GOMAXPROCS(0), Schedule: &schedule, FixtureStarted: fixtureStarted, PlatformOS: runtime.GOOS, PlatformArch: runtime.GOARCH, CPUs: runtime.NumCPU(), FixtureWaitMS: fixtureWaitMS, Plans: map[string]map[string]any{}}
 	persistReport := func() {
 		if path := reportPath; path != "" {
 			b, err := json.MarshalIndent(report, "", "  ")
@@ -738,7 +748,7 @@ func TestPerformanceRoutes(t *testing.T) {
 				t.Fatal(err)
 			}
 			ownerPublished = true
-			waitOwners()
+			waitOwners(2)
 		}
 	}
 }

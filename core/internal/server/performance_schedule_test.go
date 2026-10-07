@@ -37,13 +37,16 @@ func publishPerformanceOwnerStage(dir, source string, worker int, success bool) 
 	return os.Rename(path+".new", path)
 }
 
-func waitPerformanceOwnerStages(ctx context.Context, dir, source string) (performanceStageSchedule, error) {
+func waitPerformanceOwnerStages(ctx context.Context, dir, source string, ownerCount int) (performanceStageSchedule, error) {
+	if ownerCount < 1 || ownerCount > 2 {
+		return performanceStageSchedule{}, fmt.Errorf("invalid owner stage count")
+	}
 	started := time.Now()
-	schedule := performanceStageSchedule{Policy: "owners-before-denials", Owners: map[int]performanceOwnerStage{}}
+	schedule := performanceStageSchedule{Policy: "serial-owners-before-denials", Owners: map[int]performanceOwnerStage{}}
 	tick := time.NewTicker(25 * time.Millisecond)
 	defer tick.Stop()
 	for {
-		for worker := 1; worker <= 2; worker++ {
+		for worker := 1; worker <= ownerCount; worker++ {
 			if _, ok := schedule.Owners[worker]; ok {
 				continue
 			}
@@ -63,7 +66,7 @@ func waitPerformanceOwnerStages(ctx context.Context, dir, source string) (perfor
 			}
 			schedule.Owners[worker] = stage
 		}
-		if len(schedule.Owners) == 2 {
+		if len(schedule.Owners) == ownerCount {
 			schedule.WaitMS = float64(time.Since(started)) / float64(time.Millisecond)
 			schedule.ReleasedNS = time.Now().UnixNano()
 			return schedule, nil // Failed predecessors release peers; callers preserve failure.
@@ -82,15 +85,19 @@ func TestPerformanceOwnerStageBarrier(t *testing.T) {
 	if err := publishPerformanceOwnerStage(dir, source, 1, true); err != nil {
 		t.Fatal(err)
 	}
+	one, err := waitPerformanceOwnerStages(context.Background(), dir, source, 1)
+	if err != nil || len(one.Owners) != 1 || !one.Owners[1].Success {
+		t.Fatalf("single-owner release: %+v %v", one, err)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := waitPerformanceOwnerStages(ctx, dir, source); err != context.Canceled {
+	if _, err := waitPerformanceOwnerStages(ctx, dir, source, 2); err != context.Canceled {
 		t.Fatalf("missing peer did not honor deadline: %v", err)
 	}
 	if err := publishPerformanceOwnerStage(dir, source, 2, false); err != nil {
 		t.Fatal(err)
 	}
-	schedule, err := waitPerformanceOwnerStages(context.Background(), dir, source)
+	schedule, err := waitPerformanceOwnerStages(context.Background(), dir, source, 2)
 	if err != nil || schedule.Owners[2].Success || !schedule.Owners[1].Success {
 		t.Fatalf("failed peer did not release with its failure preserved: %+v %v", schedule, err)
 	}
@@ -99,7 +106,7 @@ func TestPerformanceOwnerStageBarrier(t *testing.T) {
 			t.Fatal("release predates owner completion")
 		}
 	}
-	if _, err = waitPerformanceOwnerStages(context.Background(), dir, "stale-source"); err == nil {
+	if _, err = waitPerformanceOwnerStages(context.Background(), dir, "stale-source", 2); err == nil {
 		t.Fatal("stale source marker accepted")
 	}
 }

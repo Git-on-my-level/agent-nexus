@@ -40,6 +40,7 @@ class ExecutedCoverageTests(unittest.TestCase):
                 worker_count=3,
                 workers=[1, 2, 3],
                 worker_gomaxprocs={"1": 2, "2": 2, "3": 1},
+                platform=dict(goos="linux", goarch="arm64", num_cpu=4),
                 core_source_sha256=self.hash,
                 samples=[],
                 completed=[],
@@ -49,23 +50,27 @@ class ExecutedCoverageTests(unittest.TestCase):
         ]
         owners = {
             str(w): dict(
-                source=self.hash, worker=w, success=True, finished_unix_ns=2_000_000_000
+                source=self.hash,
+                worker=w,
+                success=True,
+                finished_unix_ns=(1_500_000_000 if w == 1 else 2_000_000_000),
             )
             for w in (1, 2)
         }
         for report in self.reports:
             report["worker_stage_schedules"] = {
                 str(w): dict(
-                    policy="owners-before-denials",
+                    policy="serial-owners-before-denials",
                     wait_ms=10,
                     owners=copy.deepcopy(owners),
                     released_unix_ns=2_500_000_000,
                 )
                 for w in (1, 2, 3)
             }
+            report["worker_fixture_wait_ms"] = {"1": 0, "2": 10, "3": 20}
             report["worker_fixture_started_unix_ns"] = {
                 "1": 100,
-                "2": 100,
+                "2": 1_600_000_000,
                 "3": 2_600_000_000,
             }
         for route in self.routes:
@@ -112,14 +117,14 @@ class ExecutedCoverageTests(unittest.TestCase):
                                 21 if phase == "post_invalidation" else 0
                             ),
                             request_started_unix_ns=(
-                                1_000_000_000
+                                (1_000_000_000 if worker == 1 else 1_700_000_000)
                                 if principal == "authorized"
                                 and phase
                                 not in {"post_preparation", "post_invalidation"}
                                 else 3_000_000_000
                             ),
                             request_finished_unix_ns=(
-                                1_001_000_000
+                                (1_001_000_000 if worker == 1 else 1_701_000_000)
                                 if principal == "authorized"
                                 and phase
                                 not in {"post_preparation", "post_invalidation"}
@@ -204,6 +209,12 @@ class ExecutedCoverageTests(unittest.TestCase):
         def missing_worker(reports):
             reports[0]["workers"] = [1]
 
+        def overlapping_owner_fixture(reports):
+            reports[0]["worker_fixture_started_unix_ns"]["2"] = 100
+
+        def wrong_architecture(reports):
+            reports[0]["platform"]["goarch"] = "amd64"
+
         def early_post_fixture(reports):
             reports[0]["worker_fixture_started_unix_ns"]["3"] = 100
 
@@ -253,6 +264,8 @@ class ExecutedCoverageTests(unittest.TestCase):
             missing_worker,
             wrong_cpu_policy,
             early_post_fixture,
+            overlapping_owner_fixture,
+            wrong_architecture,
             unfinished_owner_request,
             early_denied_request,
             failed_owner_stage,
@@ -292,6 +305,8 @@ class ExecutedCoverageTests(unittest.TestCase):
         for worker in (1, 2, 3):
             fragment = copy.deepcopy(report)
             fragment["worker"] = worker
+            fragment.update(report["platform"])
+            fragment["fixture_wait_ms"] = report["worker_fixture_wait_ms"][str(worker)]
             fragment["gomaxprocs"] = 1 if worker == 3 else 2
             fragment["stage_schedule"] = report["worker_stage_schedules"][str(worker)]
             fragment["fixture_started_unix_ns"] = report[

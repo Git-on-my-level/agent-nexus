@@ -55,6 +55,10 @@ def limit_phase(phase):
 def validate_stage_schedule(report, expected_hash, require_success):
     schedules = report["worker_stage_schedules"]
     fixtures = report["worker_fixture_started_unix_ns"]
+    waits = report["worker_fixture_wait_ms"]
+    assert set(waits) == {"1", "2", "3"} and all(
+        math.isfinite(v) and v >= 0 for v in waits.values()
+    ), "invalid fixture wait evidence"
     assert set(schedules) == set(fixtures) == {"1", "2", "3"}, "missing stage evidence"
     common_owners = schedules["1"]["owners"]
     assert set(common_owners) == {"1", "2"}, "missing owner completion"
@@ -68,7 +72,7 @@ def validate_stage_schedule(report, expected_hash, require_success):
             assert stage["success"], "failed owner stage"
     for worker, schedule in schedules.items():
         assert (
-            schedule["policy"] == "owners-before-denials"
+            schedule["policy"] == "serial-owners-before-denials"
             and schedule["owners"] == common_owners
         ), "inconsistent stage schedule"
         assert math.isfinite(schedule["wait_ms"]) and schedule["wait_ms"] >= 0
@@ -81,6 +85,9 @@ def validate_stage_schedule(report, expected_hash, require_success):
             assert fixtures[worker] >= release, "post fixture competed with owner reads"
         else:
             assert fixtures[worker] < common_owners[worker]["finished_unix_ns"]
+    assert fixtures["2"] >= common_owners["1"]["finished_unix_ns"], (
+        "owner fixtures competed"
+    )
     for sample in report["samples"]:
         worker = str(sample["worker"])
         started = sample["request_started_unix_ns"]
@@ -127,6 +134,8 @@ def merge_workers(routes, weights, reports, expected_hash):
         worker_gomaxprocs={"1": 2, "2": 2, "3": 1},
         worker_stage_schedules={},
         worker_fixture_started_unix_ns={},
+        worker_fixture_wait_ms={},
+        platform={},
         samples=[],
         completed=[],
         plans={},
@@ -142,7 +151,19 @@ def merge_workers(routes, weights, reports, expected_hash):
             type(report["gomaxprocs"]) is int
             and report["gomaxprocs"] == out["worker_gomaxprocs"][str(report["worker"])]
         ), "wrong worker CPU policy"
+        platform = {key: report[key] for key in ("goos", "goarch", "num_cpu")}
+        assert platform["goos"] in {"linux", "darwin", "windows"} and platform[
+            "goarch"
+        ] in {"amd64", "arm64"}, "unsupported platform"
+        assert type(platform["num_cpu"]) is int and platform["num_cpu"] > 0
+        if out["platform"]:
+            assert out["platform"] == platform, "mixed worker platforms"
+        out["platform"] = platform
+        assert (
+            math.isfinite(report["fixture_wait_ms"]) and report["fixture_wait_ms"] >= 0
+        )
         out["worker_stage_schedules"][str(report["worker"])] = report["stage_schedule"]
+        out["worker_fixture_wait_ms"][str(report["worker"])] = report["fixture_wait_ms"]
         out["worker_fixture_started_unix_ns"][str(report["worker"])] = report[
             "fixture_started_unix_ns"
         ]
@@ -262,6 +283,11 @@ def validate(routes, weights, allowances, reports, expected_hash):
             "2": 2,
             "3": 1,
         }, "wrong worker CPU policy"
+        assert report["platform"] == {
+            "goos": "linux",
+            "goarch": "arm64",
+            "num_cpu": 4,
+        }, "wrong benchmark runner"
         validate_stage_schedule(report, expected_hash, True)
         workers = worker_assignments(routes, weights, shard)
         durations = {}
