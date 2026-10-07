@@ -120,19 +120,21 @@ success/denial expectations, positive fixtures, private controls and two SSE dat
 flushes; exceeding a ceiling still fails. Their purpose is to allow the guardrail
 harness to land while SCA-663/664/665 and the existing SCA-652 repairs proceed,
 not to authorize new O(workspace) work. After merging #302 at `ac77fae8`
-(schema66), all 24 previous PM/overview exceptions and 60 of the other 90
+(schema66), all 24 previous PM/overview exceptions and 58 of the other 90
 exceptions were retired. Seven PM/denied reads still need narrow allowances;
-30 other reads retain only the dimensions that exceed ordinary limits. The
+33 other reads retain only the dimensions that exceed ordinary limits. The
 ordinary limits stay at 500 ms, 100 SQL executions and 1,024 returned rows
 (except the existing fixed series-observation cap).
 
-Completed merged-code measurements replace the former threefold latency
+Completed merged-code measurements, including Linux CI run `37555029376`, replace the former threefold latency
 allowances and identity-cache refresh extrapolation. Latency headroom is 20%,
 rounded up to 50 ms; overrun counts get 2% headroom with a minimum of eight SQL
 executions or 64 rows. Counts below the ordinary limit use that limit. First
 and returning overview visits remain separately sampled. Legacy PM response
-projection still issues 159 SQL for actions and up to 164 for decisions;
-completed denied PM/overview probes take seconds even after indexed principal
+projection still issues 159 SQL for actions and up to 164 for decisions; indexed
+identity-cache refresh adds two SQL executions and one row in the completed CI
+capture, rather than the old directory-refresh multiplier.
+Completed denied PM/overview probes take seconds even after indexed principal
 lookup. These are existing main hazards linked to SCA-663, not permission to
 add repeated lookups. Diagnostic probes provide completed baseline evidence
 but intentionally fail; normal mode and CI must independently pass status,
