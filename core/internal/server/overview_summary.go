@@ -4,7 +4,7 @@ package server
 // It preserves the fields used by tile deduplication, freshness and navigation.
 func compactOverviewWork(item map[string]any) map[string]any {
 	out := map[string]any{}
-	for _, key := range []string{"id", "ref", "handle", "title", "phase", "owner", "priority", "next_actor", "next_action", "next_step", "board_ref", "project_ref", "created_at", "updated_at", "freshness"} {
+	for _, key := range []string{"ref", "handle", "title", "phase", "owner", "priority", "next_actor", "next_action", "next_step", "board_ref", "project_ref", "created_at", "updated_at", "freshness", "decision_revision", "version"} {
 		if value, ok := item[key]; ok {
 			out[key] = value
 		}

@@ -99,10 +99,11 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 	if out.Code != 200 || strings.Contains(out.Body.String(), "Initiative 0") || strings.Contains(out.Body.String(), "Initiative 39") {
 		t.Fatal(out.Body.String())
 	}
-	// One denial snapshot, bounded open/closed selectors, the designated-board
-	// probe, two dashboard reads and the inbox page. No plans, ref facts or
+	// One denial snapshot plus read-transaction admission, bounded open/closed
+	// selectors, the designated-board probe, two dashboard reads and the inbox page.
+	// No plans, ref facts or
 	// notification lifecycle queries run when all work is unreadable.
-	if counter.Count() != 7 {
+	if counter.Count() != 8 {
 		t.Fatalf("private query count %d", counter.Count())
 	}
 }

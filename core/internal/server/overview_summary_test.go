@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/getkin/kin-openapi/openapi3"
 )
 
 func TestOverviewSummaryCompatibilityAndPrivacy(t *testing.T) {
@@ -62,19 +65,28 @@ func TestOverviewSummaryCompatibilityAndPrivacy(t *testing.T) {
 	cw := compact["work"].(map[string]any)
 	fi := fw["items"].([]any)
 	ci := cw["items"].([]any)
+	contract, err := openapi3.NewLoader().LoadFromFile(filepath.Join(repoRootFromServerTest(t), "contracts", "anx-openapi.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	workSchema := contract.Components.Schemas["Work"].Value
 	if len(fi) != 49 || len(ci) != 49 {
 		t.Fatalf("visible work counts %d / %d", len(fi), len(ci))
 	}
+	blockerControl := false
 	for i := range fi {
 		f := fi[i].(map[string]any)
 		c := ci[i].(map[string]any)
+		if err := workSchema.VisitJSON(c); err != nil {
+			t.Fatalf("summary work %v violates Work schema: %v", c["ref"], err)
+		}
 		if _, ok := f["provenance"]; !ok {
 			t.Fatal("default response lost full details")
 		}
 		if _, ok := c["provenance"]; ok {
 			t.Fatal("summary retained full details")
 		}
-		for _, key := range []string{"ref", "title", "phase", "owner", "freshness", "next_action", "created_at"} {
+		for _, key := range []string{"ref", "title", "phase", "owner", "freshness", "next_action", "created_at", "decision_revision", "version"} {
 			if !reflect.DeepEqual(f[key], c[key]) {
 				t.Fatalf("summary changed %s", key)
 			}
@@ -86,8 +98,25 @@ func TestOverviewSummaryCompatibilityAndPrivacy(t *testing.T) {
 				t.Fatalf("summary changed source %s", key)
 			}
 		}
-		if f["id"] == "summary-card-0" && c["blocker_count"] != float64(2) {
-			t.Fatal("summary lost blocker count")
+		if f["ref"] == "card:summary-card-0" {
+			blockerControl = true
+			if c["blocker_count"] != float64(2) {
+				t.Fatal("summary lost blocker count")
+			}
+		}
+	}
+	if !blockerControl {
+		t.Fatal("fixture lost blocker-count control")
+	}
+	// These controls must fail schema validation if compaction drops a fence.
+	for _, field := range []string{"decision_revision", "version"} {
+		missing := map[string]any{}
+		for key, value := range ci[0].(map[string]any) {
+			missing[key] = value
+		}
+		delete(missing, field)
+		if err := workSchema.VisitJSON(missing); err == nil {
+			t.Fatalf("Work schema accepted missing %s", field)
 		}
 	}
 	for _, key := range []string{"initiatives", "needs_you", "dashboard"} {
