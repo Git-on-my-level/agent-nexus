@@ -69,7 +69,9 @@ func accessCTEsWithSnapshot(scope AccessScope, query string, snapshot *denialSna
 		// Buckets are conservative candidates; the full boundary matcher remains
 		// authoritative for legacy punctuation, whitespace and Unicode identities.
 		atoms := resourceaccess.ReferenceSQLAtoms(column, strings.HasSuffix(column, "_json") || column == "_row.body" || column == "_row.labels")
-		return "NOT EXISTS (SELECT 1 FROM json_each(" + atoms + ") j WHERE EXISTS (SELECT 1 FROM _anx_denied_atoms d WHERE d.ref=j.value COLLATE NOCASE) OR EXISTS (SELECT 1 FROM json_each(anx_resource_mention_buckets(CAST(j.value AS BLOB))) b JOIN _anx_denied_prose d ON d.bucket=" + resourceaccess.MentionRefBucketSQL("b.value") + " WHERE " + resourceaccess.TextReferenceMatchSQL("j.value", "d.ref") + "))"
+		// CASE skips atom extraction when the consuming statement's epoch-checked
+		// denial relation is empty, including a cached empty request snapshot.
+		return "CASE WHEN EXISTS (SELECT 1 FROM _anx_denied) THEN NOT EXISTS (SELECT 1 FROM json_each(" + atoms + ") j WHERE EXISTS (SELECT 1 FROM _anx_denied_atoms d WHERE d.ref=j.value COLLATE NOCASE) OR EXISTS (SELECT 1 FROM json_each(anx_resource_mention_buckets(CAST(j.value AS BLOB))) b JOIN _anx_denied_prose d ON d.bucket=" + resourceaccess.MentionRefBucketSQL("b.value") + " WHERE " + resourceaccess.TextReferenceMatchSQL("j.value", "d.ref") + ")) ELSE 1 END"
 	}
 	add := func(table, where string) {
 		if !needed[table] {

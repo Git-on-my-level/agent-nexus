@@ -149,8 +149,15 @@ func TestOverviewDenseAccessWorkspaceLatency(t *testing.T) {
 	for i := 0; i < 12; i++ {
 		exec(`INSERT INTO derived_inbox_items(id,thread_id,category,trigger_at,generated_at,data_json) VALUES(?,'dense-thread-0','ask','2026-01-01T00:00:00Z','now','{}')`, fmt.Sprintf("dense-inbox-%d", i))
 	}
+	// A thirteenth stored item belongs to another principal's thread. Keeping
+	// twelve visible items must depend on authorization, not an empty fixture.
+	exec(`INSERT INTO derived_inbox_items(id,thread_id,category,trigger_at,generated_at,data_json) VALUES('private-dense-inbox','dense-thread-474','ask','2026-01-01T00:00:00Z','now','{"title":"PrivateDenseSecret"}')`)
 	if err = tx.Commit(); err != nil {
 		t.Fatal(err)
+	}
+	var privateControls int
+	if err := env.workspace.DB().QueryRow(`SELECT count(*) FROM derived_inbox_items i JOIN threads t ON t.id=i.thread_id WHERE i.id='private-dense-inbox' AND json_extract(i.data_json,'$.title')='PrivateDenseSecret' AND json_extract(t.body_json,'$.pm_actor_id')=?`, "dense-agent-1-actor").Scan(&privateControls); err != nil || privateControls != 1 {
+		t.Fatalf("missing private inbox control: count=%d err=%v", privateControls, err)
 	}
 	for _, table := range []string{"resource_access_edges", "resource_access_exact_edges", "resource_access_mention_buckets", "resource_access_mentions", "resource_access_external_edges", "resource_access_identities", "ref_edges", "events", "threads", "cards", "artifacts", "actors", "agents", "derived_inbox_items", "work_observations", "work_metadata", "work_evidence_records", "auth_access_tokens", "auth_refresh_sessions", "inbox_hidden_subject_refs", "work_evidence_index", "idempotency_replays", "derived_topic_views"} {
 		var n int
@@ -301,7 +308,7 @@ func TestOverviewDenseAccessWorkspaceLatency(t *testing.T) {
 								}
 							}
 						}
-						if strings.Contains(string(body), "PrivateDenseSecret") {
+						if strings.Contains(string(body), "PrivateDenseSecret") || strings.Contains(string(body), "private-dense-inbox") {
 							t.Fatal("private work leaked")
 						}
 						if i > 1 && i < 6 {
