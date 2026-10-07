@@ -58,6 +58,17 @@
       "request_json": "identity",
       "sequence": "identity"
     },
+    "agent_wakeup_snapshot_positions": {
+      "created_at": "internal:reader-cursor",
+      "thread_id": "internal:reader-cursor",
+      "trigger_event_id": "internal:reader-cursor",
+      "wakeup_id": "internal:reader-cursor"
+    },
+    "agent_wakeup_stream": {
+      "seq": "internal:reader-cursor",
+      "thread_id": "internal:reader-cursor",
+      "wakeup_id": "internal:reader-cursor"
+    },
     "agent_wakeups": {
       "bridge_instance_id": "parent:wakeup",
       "claimed_at": "parent:wakeup",
@@ -507,6 +518,22 @@
       "parent_id": "scope:pm-closure",
       "revision": "scope:pm-closure",
       "workspace_id": "scope:pm-closure"
+    },
+    "receipt_access_epoch": {
+      "singleton": "internal:reader-snapshot",
+      "version": "internal:reader-snapshot"
+    },
+    "receipt_stream_state": {
+      "log_start_seq": "internal:reader-cursor",
+      "singleton": "internal:reader-cursor"
+    },
+    "receipt_trigger_positions": {
+      "id": "internal:reader-cursor",
+      "trashed_at": "internal:reader-cursor"
+    },
+    "receipt_visibility_epoch": {
+      "singleton": "internal:reader-cursor",
+      "version": "internal:reader-cursor"
     },
     "ref_edges": {
       "created_at": "scope:edge-endpoints",
@@ -1237,7 +1264,8 @@
     "../primitives/access_scope.go:WithAccessScope": "aecd5b7c839ea97175e41b32915baab388ac95ccefe3fe6d70d0d075e1192fc6",
     "../primitives/access_scope.go:preservePurgedAccess": "8f3f807ed8693b854a4efe638e90db7f762b74026a133e741b8f44dd1bac2bbc",
     "../primitives/access_scope.go:requireAccessibleValues": "c5857924cae3c2bbe4362b92cb871bfc55a9415d978958a0ec9ffec89f567832",
-    "../primitives/access_snapshot.go:WithRequestAccessScope": "93b3386471d99e1b35055121fed4907c69e078867f0daa17176fdfdcdc271ea7",
+    "../primitives/access_snapshot.go:WithRequestAccessScope": "a280c4f880e48f2e7f3e2ea8344d4bc0fd65faee03fdf7c3d6c28bde5a9c08aa",
+    "../primitives/access_snapshot.go:withRequestAccessEpoch": "873b758766bce45c4fc63f0c60266c5cea82cd2023d7e5598ec8a659a73ea36f",
     "../primitives/agent_wakeups.go:*Store:ClaimAgentWakeup": "53669a9695ffaf5bf522bf99c5dae45e6d6a515b3d6b7dc3c7f715048b814a38",
     "../primitives/agent_wakeups.go:*Store:CompleteAgentWakeup": "ef6b26c325d599190cbb8f6035e973f41b75c5274e0be6a559f0a02aed9424dc",
     "../primitives/agent_wakeups.go:*Store:FailAgentWakeup": "9bd5deffccecbfd8de31f277868abedd6d678c81bcc32ddd56848082989efe71",
@@ -1449,6 +1477,18 @@
     "../primitives/quota.go:type:WorkspaceUsageSummary": "bdb3959aef4b1b58f3a610d938e98b519aeda465140e0acb124344ed251d9c68",
     "../primitives/quota.go:type:WorkspaceUsageV1": "6c2783daee781ce733e15dce132a49f88ab4e9d87a620af81ab7e851ab3199ec",
     "../primitives/quota.go:type:WorkspaceUsageV1Summary": "9a40b52fe11f3a5447c161462bb66e256acbe6a6351f340cb4668aac6ccd5d55",
+    "../primitives/receipt_stream.go:*Store:ListReceiptStreamPage": "0f905409143773d79fcf9c97938a17cc19e79105e6a6739f2e6ac6376c537a9c",
+    "../primitives/receipt_stream.go:*Store:ReceiptStreamCursor": "d556e69559d0b1f28dc6d7eec237a79975ee94e621cb36c0ab049a3ebf677e93",
+    "../primitives/receipt_stream.go:*Store:advanceReceiptVisibility": "c082294cdfc2520a53499c32f1fc87f9cb4026b6849efd2e94fba93f4f7a32f5",
+    "../primitives/receipt_stream.go:*Store:listReceiptSnapshotPage": "39d852280d5074cab60a9791ae10f626e9851237ea718bbd06b6ee20cffa57b5",
+    "../primitives/receipt_stream.go:*Store:listReceiptTailPage": "1b7fc78d975ce945a97c4353bd02a737ab1686d461e505719c07ac4fcc0b5098",
+    "../primitives/receipt_stream.go:*Store:loadVisibleReceipts": "55bbebed7e2b83f9bb7cf1a2cd9cb56b86628b8992b409784dc08b17e5b857b3",
+    "../primitives/receipt_stream.go:*Store:receiptDenial": "3da86b58d83c174f9ebf2d0d0ce6a930c70e2d1e03e2cb7f5575887af3fe30fc",
+    "../primitives/receipt_stream.go:*Store:receiptStreamHead": "1aba0745bc7e013e78c4a5ffd401b6b045b95a6d44e6405c3bda6d13180ec340",
+    "../primitives/receipt_stream.go:*Store:receiptThreadDenied": "1e8d1a0bb697e38ea451ac80b4c4ce9bacba820b06728a7ced021fc54f935076",
+    "../primitives/receipt_stream.go:*Store:receiptVisibilityEpoch": "69b56f6c61ace0cf6bddb63d877db36a5332f418cb34ee2e03d1b5bf4db939ac",
+    "../primitives/receipt_stream.go:*Store:visibleReceiptWakeup": "d732ff3325dfcd3d26b4c0fa3cecd9a5714ed244682eba16be84652235e9f2a1",
+    "../primitives/receipt_stream.go:type:ReceiptStreamPage": "75474912a07e63831a0e4b755076c034f8fd6fa37b6cbfd357a81137f3eb83b6",
     "../primitives/ref_edges_store.go:*Store:ListRefEdgesBySource": "715525062c54e8c70b0b7b4b57022b225fe06f89a76ee55ab7110589c57b3db9",
     "../primitives/ref_edges_store.go:*Store:ListRefEdgesByTarget": "a40d79bf199a93ad59ac371460783c9ea68921f847594e10e489536dcad4d278",
     "../primitives/ref_edges_store.go:*Store:scanRefEdges": "11c932d9f61f2b13c09b6b636e569889473f4e326186c4ec787acf01470cec78",
@@ -2154,7 +2194,7 @@
     "../server/stream/stream.go:Mount": "c7c1010a32acc2717715197bfe793cc32669a8a6e16f5f94489256ab29a72292",
     "../server/stream/stream.go:Wrap": "2272bb83cf2ca8ab5bd8af2e16647a33aa4adb6038c1581aa6d18edee6439822",
     "../server/stream_handlers.go:eventActorIDsForKind": "728326f05609e5aa9b1c038ad58c700a2095dfbac9c7ed67b4d539ecf1940a86",
-    "../server/stream_handlers.go:handleAgentNotificationReceiptsStream": "a8cb94c709fa1a12f7e523f4b492ca075f74f3064d0e171a40c087b1158d5d8e",
+    "../server/stream_handlers.go:handleAgentNotificationReceiptsStream": "fa67a5fa2847d408d53eff5aa726fc85f13543a503826649a500ef30921293fe",
     "../server/stream_handlers.go:handleEventsStream": "73baf8dc75843e4147e1cd317568aa1d990329d866a7a4167e9dae4845962669",
     "../server/stream_handlers.go:handleInboxStream": "e8dbf7414c9ff01684b1c008fd6a137272d071aef68106d4aed325c38ec691e1",
     "../server/stream_handlers.go:handleListEvents": "bc86466808b5f652ae07736e56abcd6c2dad8e19b14c687b03a751eac81eab79",
@@ -2258,12 +2298,14 @@
     "../storage/migrations.go:migration25BackfillHandles": "0b1a8866c4541f58041168cea6b043ee880a43a3afe56eca68a658ffe31fa3b6",
     "../storage/migrations.go:migration25HandleExpressions": "8981e5f9b2e01ce392b77c0763fa38a47b68b5ca20d4cadcf0d7795952dc84c8",
     "../storage/migrations.go:migration25UniqueHandle": "6bed0b1e2baf92af71deb2b6a7f9e281bd75894a80f37d4bbbb09e632befe7d3",
-    "../storage/migrations.go:migrations": "dde1316ed0f8430a7342716fd5ea4d5caad052dd55138de2badc03ee583a0cd4",
+    "../storage/migrations.go:migrations": "0b2b6e14b16da163dcb861b39228d0fabb5793ba2f80ebee704565eb67318af0",
     "../storage/migrations.go:repairLegacyReferenceAccess": "03b66e0fb21f24a185a0127b607c51d9760f17b8abfbe904451d093c732ac5ab",
     "../storage/migrations.go:repairNULReferenceAccess": "7579edda9e055e69a0e88914fcd02f919d26c1f02a5b456a6ac3bf25f422fed9",
     "../storage/migrations.go:sqliteTableExists": "c0fa57bdf9800dd6002c1c4dcfcb6ab9f2a889101a7f21b61f434439a39a3ac4",
     "../storage/migrations.go:sqliteTableHasColumn": "c93760a8303ff8cac0b3040a639f92dfffa22e21851c2561cfa17c81a3c6879c",
     "../storage/overview_indexes.go:indexBoundedOverviewReads": "bdd13b08f0d2475647709f911adc50fbec3c9b04185d9991374f6a494cded96e",
+    "../storage/receipt_stream.go:indexBoundedReceiptStreamReads": "4a6bb9bc30a15286702cf72090fa97ecc82a5c427714b3c067cf96ef35405367",
+    "../storage/receipt_stream_access.go:installReceiptStreamAccess": "89c871e912f38c3d85424a142d3548dba4612af54d9d7d42079eb3b0b09650d8",
     "../storage/scope_migration.go:InstallScopeMigration": "adb762d563288438b59694c7aaa10b836bae717480aa00e423121f4cd7bf5b0a",
     "../storage/scope_migration_connections.go:*Workspace:EnableScopeServingLease": "a740cfafaf4acefa74f873daa130bc25023d7a5f43f324f9aaf629339e75e7d8",
     "../storage/scope_migration_connections.go:*scopeConnection:Close": "949b18b2fff1dcfc7a922cca4587d74bb3414224a4217bb74296e61d3c51c4a4",
