@@ -1,7 +1,8 @@
 ## Inbox integration for A
 
 #302, #301, #305, #306 and #307 are on main. B has integrated those released
-changes and A's `4e9f0c12` trusted adapters/phase plan while preserving A/C/D
+changes and A's `4e9f0c12` trusted adapters/phase plan plus `48b65e2f` batch
+admission while preserving A/C/D
 implementation, privacy gates and budgets. The Linux legacy-test-name fix is
 retained. No handler or constructor selects B yet. Follow
 `docs/design/scope-phase-two.md`; #308 owns the inbox stream follow-up before
@@ -33,6 +34,14 @@ the eventual minimal handler switch.
 4. Adapt the authenticated, transaction-bound repository to
    `readmodel.OrderedReader`. Admit tuples using the entire `(order_key,rid)`
    range before LIMIT; never fetch an integer-key page and then sort/filter it.
+   A's `ReadBatchFeed` now supplies proof-bound batched authority/candidates;
+   extend its integer comparator to this BLOB shape under A's ownership. Bind
+   trusted ordered cursor decoding to `Snapshot.Binding` and retain directory
+   coverage. Its persisted selection proof must cover complete old-policy
+   audience/lifecycle/payload/counters and entire-generation RID disjointness;
+   the shadow/identity revision alone misses canonical ask/answer and external
+   PM changes. Supply actual same-transaction old/new sources and publication
+   authority to A's comparator; no production proof writer exists yet.
    Hydrate once using `OrderedHydrationProposal`, including the private canonical
    key/version join. Validate every ordinal, tuple, payload, nullable join and
    byte bound, then call `DecodeScopeInbox`. Keep capability expiry and all
@@ -72,10 +81,13 @@ The BLOB continuation plan is an indexed SEARCH over
 `(scope,generation,family,audience,order_key,rid)` before LIMIT. Candidate work is
 O(S log N + S(P+1)), heap merge O(S + P log S), hydration one VALUES batch of
 <=P exact identity/payload joins. Payload bytes are <=P\*16 KiB; cursors <=2 KiB.
-The existing maximum adapter costs (643 SQL/27,365 rows; legacy-prepared sparse
-request 645 SQL/1,510 rows) still fail 500 ms /100 SQL/1,024 rows. Batched
-authority/candidates, disjointness, legacy preparation, notification/freshness
-enrichment and all HTTP overhead must be measured together before enabling.
+The older per-stream adapter costs (643 SQL/27,365 rows; legacy-prepared sparse
+request 645 SQL/1,510 rows) fail 500 ms /100 SQL/1,024 rows. A's new batch
+repository subtotal is 7 SQL/527 rows. Its SCA-661 preparation probes still fail:
+1x cold/revoked 1.128s/0.962s, 10x 47.914s/45.025s, dominated by legacy denial
+construction. See `docs/design/scope-batch-evidence.md`; those probes omit full
+HTTP/count/fallback acceptance. BLOB batching, disjointness, legacy preparation,
+notification/freshness enrichment and all HTTP overhead must pass together.
 
 A's dispatcher isolation, trusted provenance and hook-SQL allowlisting, complete
 capture/receipt/epoch coverage, C's derivation/INFO wiring, D's supervised loader,
