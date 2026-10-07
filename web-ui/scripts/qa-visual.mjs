@@ -242,7 +242,9 @@ export const QA_SCENES = [
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
       await page.waitForSelector("text=Waiting on you");
-      await page.waitForSelector("text=Never checked in");
+      // Identities that never checked in are folded into a counted group, so
+      // the roster's first screen is the agents that actually exist.
+      await page.waitForSelector('[data-agents-fold="inactive"]');
     },
   },
   {

@@ -24,6 +24,7 @@
    * `dependency-diagram` panels already render — it also still lists the
    * collapsed steps, so nothing is hidden from it.
    */
+  import { tooltip } from "$lib/actions/tooltip.js";
   import AnxRefChip from "$lib/components/AnxRefChip.svelte";
   import {
     PLAN_COLLAPSE_MIN,
@@ -214,7 +215,7 @@
               style:top="{geometry.collapsed.y}px"
               style:width="{geometry.collapsed.width}px"
               style:height="{geometry.collapsed.height}px"
-              title={`${doneSummary(geometry.collapsed.count)} — listed under View plan steps`}
+              use:tooltip={`${doneSummary(geometry.collapsed.count)} — listed under View plan steps`}
             >
               <span class="plan-done-column__check" aria-hidden="true">✓</span>
               <span class="plan-done-column__count"
@@ -450,7 +451,6 @@
     border-radius: 5px;
     background: var(--bg-soft);
     color: var(--fg-muted);
-    cursor: help;
   }
   .plan-done-column__check {
     color: var(--ok-text, var(--accent-solid));

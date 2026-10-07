@@ -35,9 +35,12 @@
   import { inboxItemIsReminder, inboxItemSubject } from "$lib/inboxMailbox.js";
   import {
     defaultNotifyMode,
+    dismissInboxResponseFailure,
     flushInboxResponse,
     hasPendingInboxResponse,
+    inboxResponseFailures,
     queueInboxResponse,
+    retryInboxResponse,
     takeInboxRestore,
     undoInboxResponse,
   } from "$lib/inboxResponseQueue.js";
@@ -64,6 +67,13 @@
   let loading = $state(false);
   let loadError = $state("");
   let item = $state(null);
+  /*
+   * The last send for this item, if it failed. The item stays on screen
+   * unanswered and says why; nothing is filed as handled until core says so.
+   */
+  let responseError = $derived(
+    item?.id ? ($inboxResponseFailures[item.id]?.error ?? "") : "",
+  );
   let responseDraft = $state("");
   let notifyMode = $state("original");
   let notifyTargetActorID = $state("");
@@ -843,6 +853,34 @@
           {/if}
         </div>
       {:else}
+        {#if responseError}
+          <div
+            class="mb-3 rounded-md border border-danger bg-danger-soft px-3 py-2"
+            role="alert"
+            data-inbox-response-error
+          >
+            <p class="text-meta text-fg">
+              <span class="font-medium text-danger-text"
+                >Your response was not sent.</span
+              >
+              {responseError}
+            </p>
+            <p class="mt-1.5 flex flex-wrap items-center gap-3">
+              <button
+                class="ui-btn-secondary"
+                type="button"
+                onclick={() => void retryInboxResponse(item.id)}
+                >Retry send</button
+              >
+              <button
+                class="text-micro text-fg-muted hover:text-fg"
+                type="button"
+                onclick={() => dismissInboxResponseFailure(item.id)}
+                >Answer it again instead</button
+              >
+            </p>
+          </div>
+        {/if}
         <InboxRespondPanel
           kind={itemKind(item)}
           access={accessRequest}

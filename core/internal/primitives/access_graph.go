@@ -16,8 +16,13 @@ func ownershipClosure(name, roots string, owner bool) string {
 		carry = ",d.owner"
 	}
 	terms := []string{roots}
+	children := map[string][]string{}
+	parents := []string{}
 	edge := func(parent, child, table, parentCol, childCol string) {
-		terms = append(terms, "SELECT '"+child+"',r."+childCol+carry+" FROM "+name+" d JOIN main."+table+" r ON d.kind='"+parent+"' AND r."+parentCol+"=d.id WHERE COALESCE(r."+childCol+",'')<>''")
+		if _, ok := children[parent]; !ok {
+			parents = append(parents, parent)
+		}
+		children[parent] = append(children[parent], "SELECT '"+child+"' child_kind,r."+childCol+" child_id FROM main."+table+" r WHERE r."+parentCol+"=d.id AND COALESCE(r."+childCol+",'')<>''")
 	}
 	for _, e := range [][5]string{
 		{"thread", "board", "boards", "thread_id", "id"}, {"board", "thread", "boards", "id", "thread_id"},
@@ -52,6 +57,15 @@ func ownershipClosure(name, roots string, owner bool) string {
 	} {
 		edge(e[0], e[1], e[2], e[3], e[4])
 	}
+	// Dispatch structural probes once per vertex kind instead of running a
+	// separate recursive UNION arm for every possible parent/child pairing.
+	// Each collection remains an indexed lookup of this vertex's children.
+	structural := "CASE d.kind"
+	for _, parent := range parents {
+		structural += " WHEN '" + parent + "' THEN (SELECT json_group_array(json_array(child_kind,child_id)) FROM (" + strings.Join(children[parent], " UNION ALL ") + "))"
+	}
+	structural += " ELSE '[]' END"
+	terms = append(terms, "SELECT json_extract(child.value,'$[0]'),json_extract(child.value,'$[1]')"+carry+" FROM "+name+" d JOIN json_each("+structural+") child")
 	// Published keys are ownership identities, not numeric projection IDs.
 	// Keeping a graph vertex for each key also lets purge retain it in the
 	// existing ownership tombstone ledger. Native refs keep native resolution.
@@ -66,11 +80,16 @@ func ownershipClosure(name, roots string, owner bool) string {
 	terms = append(terms, "SELECT 'document',r.id"+carry+" FROM "+name+" d JOIN main.events e ON d.kind='event' AND e.id=d.id JOIN main.documents r ON r.thread_id=e.thread_id WHERE e.type='message_posted' AND COALESCE(e.thread_id,'')<>''")
 	refs := func(join, ref string) {
 		terms = append(terms, "SELECT e.source_type,e.source_id"+carry+" FROM "+name+" d "+join+" JOIN main.ref_edges e INDEXED BY idx_ref_edges_access_cover ON e.target_type=d.kind AND e.target_id="+ref+" COLLATE NOCASE AND e.edge_type='ref' WHERE d.kind NOT LIKE 'filter/%' AND d.kind NOT IN ('work_evidence_record','work_evidence_alias','external_key')")
-		terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d "+join+" JOIN main.resource_access_exact_edges e ON e.target_key="+resourceaccess.AtomKeySQL("(d.kind||':'||"+ref+")")+" WHERE d.kind NOT LIKE 'filter/%' AND d.kind NOT IN ('work_evidence_record','work_evidence_alias','external_key')")
+		keys := "=" + resourceaccess.AtomKeySQL("(d.kind||':'||"+ref+")")
+		if join == "" {
+			// Raw and typed ID atoms use the same target index. One recursive
+			// term avoids visiting and deduplicating the same children twice.
+			keys = " IN (" + resourceaccess.AtomKeySQL("(d.kind||':'||d.id)") + ",CASE WHEN d.kind<>'plan' THEN " + resourceaccess.AtomKeySQL("d.id") + " END)"
+		}
+		terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d "+join+" JOIN main.resource_access_exact_edges e ON e.target_key"+keys+" WHERE d.kind NOT LIKE 'filter/%' AND d.kind NOT IN ('work_evidence_record','work_evidence_alias','external_key')")
 	}
 	refs("", "d.id")
 	refs("JOIN main.runs r ON d.kind='run' AND r.id=d.id", "r.handle")
-	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_exact_edges e ON e.target_key="+resourceaccess.AtomKeySQL("d.id")+" WHERE d.kind NOT IN ('plan','work_evidence_record','work_evidence_alias','external_key') AND d.kind NOT LIKE 'filter/%'")
 	// Legacy source URLs may exceed the bounded evidence-key projection. Keep
 	// their indexed ownership edges while separating publication from reference.
 	for _, e := range []struct{ table, where string }{
@@ -84,7 +103,7 @@ func ownershipClosure(name, roots string, owner bool) string {
 	// virtual revision handles, historical aliases and tombstones. One indexed
 	// probe replaces a recursive UNION arm per spelling source. SQLite copies
 	// every arm while preparing each scoped relation, even on an epoch cache hit.
-	refs("JOIN main.resource_access_identities r ON r.kind=d.kind AND r.resource_id=d.id", "r.ref")
+	refs("JOIN main.resource_access_identities r ON r.kind=d.kind AND r.resource_id=d.id AND r.ref<>d.id COLLATE NOCASE", "r.ref")
 	// Empty legacy handles are intentionally absent from the identity index.
 	// Preserve their conservative ref-edge inheritance without one UNION arm
 	// per canonical table. NULL handles never matched the old equality probe.
@@ -95,8 +114,12 @@ func ownershipClosure(name, roots string, owner bool) string {
 	emptyHandle += " END"
 	emptyRef := "((" + emptyHandle + ")='' OR EXISTS(SELECT 1 FROM main.resource_handle_aliases r WHERE r.resource_type=d.kind AND r.resource_id=d.id AND r.alias_handle='') OR EXISTS(SELECT 1 FROM main.resource_access_tombstones r WHERE r.kind=d.kind AND r.id=d.id AND r.ref=''))"
 	validKind := "d.kind NOT LIKE 'filter/%' AND d.kind NOT IN ('work_evidence_record','work_evidence_alias','external_key')"
-	terms = append(terms, "SELECT e.source_type,e.source_id"+carry+" FROM "+name+" d JOIN main.ref_edges e INDEXED BY idx_ref_edges_access_cover ON e.target_type=d.kind AND e.target_id='' AND e.edge_type='ref' WHERE "+validKind+" AND "+emptyRef)
-	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_exact_edges e ON e.target_key="+resourceaccess.AtomKeySQL("(d.kind||':')")+" WHERE "+validKind+" AND "+emptyRef)
+	// SQLite otherwise evaluates the legacy spelling probes before discovering
+	// that no empty edge exists. Gate them with a cheap covering-index lookup.
+	emptyNavigation := "EXISTS(SELECT 1 FROM main.ref_edges empty WHERE empty.target_type=d.kind AND empty.target_id='' COLLATE NOCASE AND empty.edge_type='ref')"
+	emptyExact := "EXISTS(SELECT 1 FROM main.resource_access_exact_edges empty WHERE empty.target_key=" + resourceaccess.AtomKeySQL("(d.kind||':')") + ")"
+	terms = append(terms, "SELECT e.source_type,e.source_id"+carry+" FROM "+name+" d JOIN main.ref_edges e INDEXED BY idx_ref_edges_access_cover ON e.target_type=d.kind AND e.target_id='' COLLATE NOCASE AND e.edge_type='ref' WHERE "+validKind+" AND CASE WHEN "+emptyNavigation+" THEN "+emptyRef+" ELSE 0 END")
+	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_exact_edges e ON e.target_key="+resourceaccess.AtomKeySQL("(d.kind||':')")+" WHERE "+validKind+" AND CASE WHEN "+emptyExact+" THEN "+emptyRef+" ELSE 0 END")
 	// Prose ownership is resolved atomically at writes, including new/renamed
 	// identities matching older text. Reads never inspect stored mention text.
 	terms = append(terms, "SELECT m.source_kind,m.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_identities i ON i.kind=d.kind AND i.resource_id=d.id JOIN main.resource_access_mentions m ON m.identity_id=i.identity_id")

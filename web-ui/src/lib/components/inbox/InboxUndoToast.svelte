@@ -34,7 +34,7 @@
         <button
           class="shrink-0 text-micro font-medium text-accent-text hover:underline"
           type="button"
-          onclick={() => void retryInboxResponse()}>Retry</button
+          onclick={() => void retryInboxResponse(toast.itemId)}>Retry</button
         >
         <button
           class="shrink-0 text-micro text-fg-muted hover:text-fg"

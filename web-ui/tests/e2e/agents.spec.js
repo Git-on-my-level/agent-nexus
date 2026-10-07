@@ -70,8 +70,23 @@ const OMAR = agent("claude", "waiting_on_human", {
   waiting_ask: WAITING_ASK,
 });
 const IDLE = agent("reviewer", "idle", { last_signal_at: ago(120) });
-const STALE = agent("release-bot", "stale", { last_signal_at: null });
-const ROSTER = [STALE, IDLE, LEO, OMAR];
+/*
+ * Core seeds every roster row with `state: "stale"` and only overwrites it
+ * with waiting / working / idle (`commandcenter/roster.go`), so every agent
+ * silent beyond 24h arrives as "stale". What it means now depends on whether
+ * work is riding on the silence.
+ */
+// Enrolled, never run: roster bookkeeping, folded away.
+const NEVER = agent("release-bot", "stale", { last_signal_at: null });
+// Silent two days, holding nothing: offline, and not a warning.
+const OFFLINE = agent("packager", "stale", { last_signal_at: ago(60 * 60) });
+// Silent two days while holding a card: the one that is actually alarming.
+const STALE = agent("builder", "stale", {
+  last_signal_at: ago(60 * 50),
+  current_card_ref: "card:lock-hub-quest-path",
+  current_card_title: "Lock hub quest path",
+});
+const ROSTER = [NEVER, OFFLINE, STALE, IDLE, LEO, OMAR];
 
 const INBOX_ITEM = {
   id: "inbox:ask:thread-1:evt-ask:evt-ask",
@@ -233,15 +248,29 @@ test("roster groups agents by derived state and hands asks to the Inbox", async 
   await page.goto(`${BASE}/agents`);
   const roster = page.locator("[data-agents-roster]");
   await expect(roster).toBeVisible();
-  await expect(roster.locator("h2")).toHaveText([
+  // "Stale" is reserved for a silence with work riding on it; an agent that
+  // is simply not running is offline, and one that never checked in is folded
+  // into a counted group rather than listed beside working agents.
+  await expect(roster.locator("section > h2")).toHaveText([
     /Waiting on you\s*1/,
     /Working\s*1/,
     /Idle\s*1/,
     /Stale\s*1/,
+    /Offline\s*1/,
   ]);
   await expect(page.locator("[data-agent-summary]")).toContainText(
     "1 waiting on you",
   );
+  // Five agents that exist in practice; the never-run identity is counted apart.
+  await expect(page.locator("[data-agent-summary]")).toContainText("5 agents");
+  const folded = page.locator('[data-agents-fold="inactive"]');
+  await expect(folded).toContainText("Inactive identities");
+  await expect(folded).toContainText("(1)");
+  // Folded shut: its rows are not on the first screen.
+  await expect(
+    page.locator('[data-agent-row="release-bot.workstation-a"]'),
+  ).toBeHidden();
+  await expect(page.locator('[data-agent-dot="stale"]').first()).toBeVisible();
   await expect(page.locator("[data-agents-nav-count]").first()).toHaveText("1");
 
   const working = page.locator('[data-agent-row="codex.workstation-a"]');
@@ -263,6 +292,15 @@ test("roster groups agents by derived state and hands asks to the Inbox", async 
   // The roster never answers: no response controls on the page.
   await expect(page.getByRole("button", { name: /Send/ })).toHaveCount(0);
 
+  // Silence only reads as an alarm where something is waiting on it.
+  await expect(
+    page.locator('[data-agent-row="builder.workstation-a"]'),
+  ).toContainText("No signal for 2d 2h on this task");
+  await expect(
+    page.locator('[data-agent-row="packager.workstation-a"]'),
+  ).toContainText("Not running");
+
+  await folded.locator("summary").click();
   await expect(
     page.locator('[data-agent-row="release-bot.workstation-a"]'),
   ).toContainText("Never checked in");

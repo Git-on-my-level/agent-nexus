@@ -6,6 +6,7 @@
     agentActivity,
     agentKindLabel,
     agentRuntimeLabel,
+    agentPresentationState,
     agentStateLabel,
     askKindLabel,
     formatAge,
@@ -69,6 +70,12 @@
       : null,
   );
   let agent = $derived(rosterAgent ?? detail?.agent ?? null);
+  /*
+   * Core reports no state for an agent silent beyond 24h. Reading that as
+   * "stale" put a warning on every agent that was merely not running; the
+   * split lives in `agentPresence.js` so this page and the roster agree.
+   */
+  let presentationState = $derived(agentPresentationState(agent));
   let canManage = $derived(Boolean($authenticatedAgent));
   let titles = $derived(
     new Map(
@@ -292,20 +299,20 @@
   {:else if agent}
     <header class="space-y-1" data-agent-header>
       <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <AgentStateDot state={agent.state} size="md" />
+        <AgentStateDot state={presentationState} size="md" />
         <h1 class="text-title text-fg [overflow-wrap:anywhere]">
           {agent.display_name || agent.handle}
         </h1>
         <span
-          class="rounded px-1.5 py-0.5 text-micro font-medium {agent.state ===
-          'waiting_on_human'
+          class="rounded px-1.5 py-0.5 text-micro font-medium {presentationState ===
+            'waiting_on_human' || presentationState === 'stale'
             ? 'bg-warn-soft text-warn-text'
-            : agent.state === 'working'
+            : presentationState === 'working'
               ? 'bg-accent-soft text-accent-text'
               : 'bg-line-subtle text-fg-muted'}"
           data-agent-state-label
         >
-          {agentStateLabel(agent.state)}
+          {agentStateLabel(presentationState)}
         </span>
         {#if agent.revoked_at}
           <span

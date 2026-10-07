@@ -20,6 +20,7 @@
  *   a tile and a page header cannot disagree about which is worse.
  */
 
+import { freshnessKindForPhase, freshnessModel } from "./freshness.js";
 import { markdownExcerpt } from "./markdown.js";
 import { nextStepModel, planHealthModel } from "./planHealth.js";
 
@@ -85,7 +86,7 @@ export function planSegments(planState, geometry = null, limit = 24) {
  * @param {{ now?: number, href?: (ref: string) => string, excerptLimit?: number }} [options]
  */
 export function initiativeTileModel(item, options = {}) {
-  const { href = () => "", excerptLimit = 120 } = options;
+  const { href = () => "", excerptLimit = 120, now = Date.now() } = options;
   const ref = asText(item?.ref);
   const planState = item?.plan_state ?? null;
   const geometry = item?.geometry ?? null;
@@ -120,6 +121,50 @@ export function initiativeTileModel(item, options = {}) {
   const bars = planSegments(planState, geometry);
   const next = nextStepModel(item);
 
+  /*
+   * An initiative is expected to move every three days, so its age is a
+   * freshness badge rather than a bare "2h": green inside the expectation,
+   * amber up to twice it, red beyond.
+   *
+   * Unless it is finished. A freshness badge is a prompt — it says somebody
+   * should look — and a done initiative is not asking anyone for anything, so
+   * expanding the Done fold and finding a red "9d, expected every 3d" is the
+   * badge telling a reader to chase work that is already delivered. Finished
+   * is `closed`, which `freshnessModel` gives no badge at all.
+   *
+   * Three things can say it is finished and they are read in the order they
+   * are trustworthy: the card's lifecycle (archived or trashed), its own
+   * phase, and the computed health state. Core can mark health `done` while a
+   * card's phase still lags, and the reverse; either one is enough.
+   */
+  const closed =
+    health.state === "done" ||
+    freshnessKindForPhase(item?.phase, item?.state ?? item?.lifecycle_state) ===
+      "closed";
+  const freshness = freshnessModel(movedAt, {
+    kind: closed ? "closed" : "initiative",
+    row: item,
+    verb: "moved",
+    now,
+  });
+
+  /*
+   * Stale is what the freshness badge is for. Showing core's "Stale" pill
+   * beside a red `9d` says the same thing twice and costs the title a line of
+   * width — the whole reason the badges moved off it. Every other health
+   * state (Blocked, At risk, On track) is something the age cannot express,
+   * so it keeps its pill.
+   *
+   * Only when the badge actually reads late, though. Core computes staleness
+   * its own way and can call an initiative stale while its last movement is
+   * well inside our expectation; dropping the pill there would replace the
+   * one surface saying something is wrong with a green badge saying it is
+   * fine. When the two disagree, the reader gets both.
+   */
+  const showHealth =
+    health.known &&
+    !(health.state === "stale" && freshness && freshness.state !== "fresh");
+
   return {
     ref,
     title: asText(item?.title) || ref,
@@ -140,6 +185,15 @@ export function initiativeTileModel(item, options = {}) {
     needs,
     /** ISO instant for the age badge; the badge owns the wording. */
     movedAt,
+    /**
+     * Freshness against the initiative cadence, or null when unknowable — and
+     * null for anything finished, which nobody needs prompting about.
+     */
+    freshness,
+    /** The expectation this tile is judged against, for the badge to echo. */
+    freshnessKind: closed ? "closed" : "initiative",
+    /** False when the freshness badge already says what health would. */
+    showHealth,
   };
 }
 

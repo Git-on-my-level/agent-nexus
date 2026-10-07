@@ -8,7 +8,12 @@
    * still get it.
    *
    * Renders a `<time>` so the machine-readable instant travels with it.
+   *
+   * Use this where there is no cadence to judge the age against. Where there
+   * is one — a card, an initiative — `FreshnessBadge` says the same thing and
+   * colours it.
    */
+  import { tooltip } from "$lib/actions/tooltip.js";
   import { ageTitle, formatAge } from "$lib/ageBadge.js";
 
   let {
@@ -26,8 +31,11 @@
 </script>
 
 {#if age}
-  <time class="age-badge {extraClass}" datetime={at} {title} aria-label={title}
-    >{age}</time
+  <time
+    class="age-badge {extraClass}"
+    datetime={at}
+    aria-label={title}
+    use:tooltip={title}>{age}</time
   >
 {/if}
 
@@ -38,6 +46,5 @@
     font-size: 11px;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
-    cursor: help;
   }
 </style>

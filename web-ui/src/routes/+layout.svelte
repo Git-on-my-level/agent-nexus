@@ -30,6 +30,7 @@
   } from "$lib/authSession";
   import SessionEndedOverlay from "$lib/components/SessionEndedOverlay.svelte";
   import CommandPalette from "$lib/components/CommandPalette.svelte";
+  import TooltipHost from "$lib/components/TooltipHost.svelte";
   import { navIconPath } from "$lib/icons.js";
   import { commandPaletteRequests } from "$lib/stores/commandPalette.js";
   import {
@@ -1577,6 +1578,9 @@
       userLabel={shellIdentity.primaryLabel}
     />
   {/if}
+
+  <!-- The one tooltip layer every `use:tooltip` reports into. -->
+  <TooltipHost />
 
   {#if $sessionEndedByAccountStatus}
     <SessionEndedOverlay

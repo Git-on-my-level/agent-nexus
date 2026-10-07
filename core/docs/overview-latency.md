@@ -16,6 +16,10 @@ inheritance remain intact. No result cache or visibility decision was added.
 
 ## Measurements
 
+These initial fixtures model card/principal cardinalities. The subsequent
+access-history fixture and its remaining cold-read gap are documented in
+`dense-access-latency.md`.
+
 Local production UI, Chromium, loopback core, synthetic data. The server was
 warmed once before navigation; the first browser had an empty HTTP cache.
 Browser readiness is a MutationObserver mark when primary content renders,

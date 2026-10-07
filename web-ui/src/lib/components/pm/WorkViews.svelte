@@ -23,6 +23,8 @@
     CLOSED_PHASES,
   } from "$lib/pm/presentation.js";
   import { formatTimestamp, formatAbsoluteDateTime } from "$lib/formatDate";
+  import { coreClient } from "$lib/coreClient";
+  import { prefetchWork, primeWorkSummary } from "$lib/workCache.js";
   import {
     DRAG_THRESHOLD_PX,
     columnAtPoint,
@@ -100,6 +102,21 @@
   );
   const href = (work) => workspaceHref(taskDetailPath(work));
   let focusedKey = $state("");
+
+  /*
+   * Opening a card should not re-ask for what is already on screen. Every row
+   * writes its own projection into the card cache, so the detail page paints
+   * the title, status and owner at once; pointing at a row reads the card
+   * ahead of the click, so by the time it arrives there is nothing to wait
+   * for. Both are display-only snapshots — see `workCache.js`.
+   */
+  $effect(() => {
+    for (const work of records) primeWorkSummary(work);
+  });
+  function prefetch(work) {
+    const id = workKey(work) || String(work?.ref ?? "");
+    if (id) void prefetchWork(id, coreClient);
+  }
 
   /**
    * Status is a dot plus its name. Only the two states a reader has to act on
@@ -526,6 +543,8 @@
                   <WorkCard
                     {work}
                     href={href(work)}
+                    {now}
+                    onprefetch={prefetch}
                     boardTitle={multipleBoards ? boardLabel(work) : ""}
                     requested={Boolean(requested[key] || decisionId)}
                     requestedHref={decisionId
@@ -609,7 +628,10 @@
               <th scope="row" class="min-w-56 max-w-96 px-3 py-1.5 font-normal">
                 <a
                   class="block truncate font-medium text-fg hover:text-accent-text"
-                  href={href(work)}>{work.title || "Untitled task"}</a
+                  href={href(work)}
+                  onpointerenter={() => prefetch(work)}
+                  onfocus={() => prefetch(work)}
+                  >{work.title || "Untitled task"}</a
                 >
                 {#if work.next_actor || work.next_action}
                   <p class="truncate text-micro text-fg-muted">

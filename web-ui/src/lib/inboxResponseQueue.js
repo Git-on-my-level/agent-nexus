@@ -11,6 +11,19 @@ import { errorMessage } from "$lib/pm/presentation.js";
  * State lives in this module, not in a component, so a response queued on
  * the standalone item page survives the navigation back to the Inbox and is
  * committed (and undoable) there.
+ *
+ * ## A failed write is not a quiet write
+ *
+ * The optimistic overlay files an answered item under Handled before core has
+ * confirmed it. When the commit then failed — a 500 from a quota error is the
+ * one that found this — the overlay was simply deleted and the row slid back
+ * into Needs you with nothing on it, minutes after the reader had watched it
+ * leave. The toast said so, but a toast is gone by the next click.
+ *
+ * So a failure is now recorded *on the item*: the row stays where it is,
+ * carries the error and a Retry, and is not filed as answered. Only a server
+ * confirmation does that. `applyResponseOverlay` is what both Inbox surfaces
+ * read, so neither can forget.
  */
 
 export const UNDO_WINDOW_MS = 5_000;
@@ -36,13 +49,58 @@ export const inboxResponseOverlay = writable(
   /** @type {Record<string, { status: string, response_text: string, outcome: string, responded_at: string, until?: number }>} */ ({}),
 );
 
+/**
+ * Responses whose commit failed, keyed by inbox item id, so the row that
+ * failed is the row that says so. Cleared by a retry, a dismissal, or a
+ * fresh response to the same item.
+ */
+export const inboxResponseFailures = writable(
+  /** @type {Record<string, { error: string, outcome: string, response_text: string, at: string }>} */ ({}),
+);
+
 let sequence = 0;
 /** @type {null | { id: number, itemId: string, request: object, message: string, restore: any, timer: any, deadline: number }} */
 let pending = null;
-/** @type {null | { id: number, itemId: string, request: object, message: string, restore: any }} */
-let failed = null;
+/**
+ * Responses whose commit failed, by inbox item id, holding what it would take
+ * to send each one again.
+ *
+ * One slot was not enough. The mark on the row is per item, so a reader could
+ * see "Not sent" and a Retry on A, answer B, come back, click Retry on A and
+ * have nothing happen at all: answering B had cleared the only slot while A's
+ * error and its button stayed on screen. A button that does nothing is worse
+ * than no button.
+ *
+ * Insertion order is kept, so the no-argument form (the toast's Retry, which
+ * is only ever about the newest failure) resends the most recent one.
+ *
+ * @type {Map<string, { id: number, itemId: string, request: object, message: string, restore: any }>}
+ */
+const failedByItem = new Map();
 let toastTimer = null;
 const committedListeners = new Set();
+
+/** Drop the mark and the resend payload for one item. */
+function forgetFailure(itemId) {
+  failedByItem.delete(itemId);
+  setFailure(itemId, null);
+}
+
+/** The newest failure, for callers that do not name an item. */
+function newestFailure() {
+  let last = null;
+  for (const entry of failedByItem.values()) last = entry;
+  return last;
+}
+
+function setFailure(itemId, value) {
+  inboxResponseFailures.update((current) => {
+    const next = { ...current };
+    if (value) next[itemId] = value;
+    else delete next[itemId];
+    return next;
+  });
+}
 
 function setOverlay(itemId, value) {
   inboxResponseOverlay.update((current) => {
@@ -83,7 +141,8 @@ export function queueInboxResponse({ itemId, request, message, restore }) {
     throw new Error("queueInboxResponse requires a valid outcome");
   }
   if (pending) void commit(pending);
-  failed = null;
+  // Only this item's failure: answering B must not disarm Retry on A.
+  forgetFailure(id);
   const entry = {
     id: ++sequence,
     itemId: id,
@@ -121,6 +180,7 @@ export function undoInboxResponse() {
   pending = null;
   clearTimeout(entry.timer);
   setOverlay(entry.itemId, null);
+  forgetFailure(entry.itemId);
   showToast(null);
   return {
     itemId: entry.itemId,
@@ -138,11 +198,26 @@ export function flushInboxResponse() {
   return pending ? commit(pending) : Promise.resolve();
 }
 
-/** Resend a response whose commit failed. It is not undoable a second time. */
-export function retryInboxResponse() {
+/**
+ * Resend a response whose commit failed. It is not undoable a second time.
+ *
+ * `itemId` is optional and only guards the call: a Retry on a row must not
+ * resend a different item's response, which is possible once the failure lives
+ * on the row rather than only in the one toast.
+ */
+export function retryInboxResponse(itemId = "") {
+  const want = String(itemId ?? "").trim();
+  const failed = want ? failedByItem.get(want) : newestFailure();
   if (!failed) return Promise.resolve();
   const entry = { ...failed, deadline: Date.now(), timer: null };
-  failed = null;
+  forgetFailure(entry.itemId);
+  /*
+   * A response still inside its undo window is committed first. Only one can
+   * be `pending`, and overwriting it would strand it: its timer would fire on
+   * an entry the queue no longer recognises and send nothing. This is what
+   * `queueInboxResponse` does with a superseded response, for the same reason.
+   */
+  if (pending) void commit(pending);
   pending = entry;
   setOverlay(entry.itemId, {
     status: "pending",
@@ -153,8 +228,21 @@ export function retryInboxResponse() {
   return commit(entry);
 }
 
+/** Give up on a failed response: the item stays unanswered, visibly so. */
+export function dismissInboxResponseFailure(itemId = "") {
+  const want = String(itemId ?? "").trim();
+  const target = want || newestFailure()?.itemId || "";
+  if (!target) return;
+  forgetFailure(target);
+  // The toast only ever shows one failure; retire it when that is this one.
+  inboxResponseToast.update((toast) =>
+    toast?.state === "failed" && toast.itemId === target ? null : toast,
+  );
+}
+
 export function dismissInboxResponseToast() {
-  failed = null;
+  // The toast goes; the mark on the item stays, because the item is still
+  // unanswered and that is the thing the reader has to come back to.
   showToast(null);
 }
 
@@ -176,6 +264,7 @@ async function commit(entry) {
       entry.itemId,
       entry.request,
     );
+    forgetFailure(entry.itemId);
     setOverlay(entry.itemId, {
       status: "committed",
       response_text: String(entry.request?.response_text ?? ""),
@@ -204,14 +293,25 @@ async function commit(entry) {
       }
     }
   } catch (err) {
+    /*
+     * Not answered. The overlay goes — an unanswered item must not sit under
+     * Handled — and the failure takes its place, so the row comes back
+     * carrying the reason and a Retry rather than silently reappearing.
+     */
     setOverlay(entry.itemId, null);
-    failed = {
+    setFailure(entry.itemId, {
+      error: errorMessage(err),
+      outcome: String(entry.request?.outcome ?? ""),
+      response_text: String(entry.request?.response_text ?? ""),
+      at: new Date().toISOString(),
+    });
+    failedByItem.set(entry.itemId, {
       id: entry.id,
       itemId: entry.itemId,
       request: entry.request,
       message: entry.message,
       restore: entry.restore,
-    };
+    });
     showToast({
       id: entry.id,
       itemId: entry.itemId,
@@ -227,12 +327,30 @@ async function commit(entry) {
  * Items as the reader should see them: anything answered here is completed,
  * whether or not core's projection has caught up yet.
  */
-export function applyResponseOverlay(items, overlay, now = Date.now()) {
+export function applyResponseOverlay(
+  items,
+  overlay,
+  now = Date.now(),
+  failures = {},
+) {
   const list = Array.isArray(items) ? items : [];
   const entries = overlay && typeof overlay === "object" ? overlay : {};
-  if (!Object.keys(entries).length) return list;
+  const failedById = failures && typeof failures === "object" ? failures : {};
+  if (!Object.keys(entries).length && !Object.keys(failedById).length) {
+    return list;
+  }
   return list.map((item) => {
-    const entry = entries[String(item?.id ?? "")];
+    const id = String(item?.id ?? "");
+    const failure = failedById[id];
+    const entry = entries[id];
+    /*
+     * A failure outranks the overlay. An item whose send failed is not
+     * answered, however optimistically it was filed a moment ago, and it has
+     * to stay where the reader left it with the reason attached.
+     */
+    if (failure) {
+      return { ...item, response_error: failure.error, response_failed: true };
+    }
     if (!entry || (entry.until && entry.until <= now)) return item;
     if (String(item?.status ?? "") === "completed") return item;
     return {
@@ -276,11 +394,12 @@ export function takeInboxRestore(itemId) {
 export function resetInboxResponseQueue() {
   if (pending) clearTimeout(pending.timer);
   pending = null;
-  failed = null;
+  failedByItem.clear();
   clearTimeout(toastTimer);
   toastTimer = null;
   committedListeners.clear();
   restoreSlots.clear();
   inboxResponseToast.set(null);
   inboxResponseOverlay.set({});
+  inboxResponseFailures.set({});
 }

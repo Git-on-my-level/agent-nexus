@@ -55,12 +55,24 @@
   let reports = $derived(
     model?.reports?.status === "ok" ? model.reports.reports : [],
   );
+  /*
+   * Three counts. The third is "Stale" only when something is actually stale —
+   * a silence with work riding on it. Otherwise it is "Offline", because an
+   * agent that is not running is the normal state of most agents most of the
+   * time and badging that amber made a healthy workspace look broken.
+   */
   let agentCounts = $derived(
     model?.agents?.status === "ok"
       ? [
           { key: "working", label: "Working", count: model.agents.working },
           { key: "waiting", label: "Waiting", count: model.agents.waiting },
-          { key: "stale", label: "Stale", count: model.agents.stale },
+          model.agents.stale
+            ? { key: "stale", label: "Stale", count: model.agents.stale }
+            : {
+                key: "offline",
+                label: "Offline",
+                count: model.agents.offline ?? 0,
+              },
         ]
       : [],
   );
@@ -115,10 +127,14 @@
     otherWorkspaces.filter((entry) => entry.hasSession === false),
   );
 
+  /** Ticks so a freshness badge on screen does not go quietly out of date. */
+  let now = $state(Date.now());
+
   let initiativeTileList = $derived(
     model?.initiatives?.status === "ok"
       ? initiativeTiles(model.initiatives.items, {
           href: (ref) => workspaceHref(`/tasks/${encodeURIComponent(ref)}`),
+          now,
         })
       : [],
   );
@@ -290,6 +306,12 @@
   onMount(() => {
     void refresh();
     void fanOutOpenAsks();
+    // Freshness badges colour themselves against the clock, so the clock has
+    // to move: a tile left open overnight must not still read "2h, green".
+    const clock = setInterval(() => {
+      now = Date.now();
+    }, 60_000);
+    return () => clearInterval(clock);
   });
 </script>
 
@@ -318,6 +340,7 @@
       band={urgentBand}
       hrefFor={urgentHref}
       loading={fanningOut && !otherWorkspaceAsks.length}
+      {now}
     />
     <!--
       Initiatives, worst first: blocked, at risk, stale, on track, done. The
@@ -353,7 +376,7 @@
         </div>
       {:else}
         <div class="p-3">
-          <LiveInitiatives items={model.initiatives.items} />
+          <LiveInitiatives items={model.initiatives.items} {now} />
         </div>
       {/if}
     </section>

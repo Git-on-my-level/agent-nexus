@@ -472,7 +472,15 @@ export async function loadOverview(client, { now = Date.now() } = {}) {
               return {
                 working: summary.working,
                 waiting: summary.waiting_on_human,
+                /*
+                 * Two different facts, both counted: `stale` is a silence with
+                 * work riding on it, `offline` is an agent that is simply not
+                 * running. The tile shows the first when there is one and the
+                 * second otherwise, so a quiet workspace does not read as a
+                 * page of warnings. See `agentPresence.js`.
+                 */
                 stale: summary.stale,
+                offline: summary.offline,
                 href: "/agents",
                 truncated: snapshot.agents.truncated === true,
               };
