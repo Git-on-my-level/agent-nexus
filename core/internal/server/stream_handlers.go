@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/sha1"
 	"encoding/json"
 	"errors"
@@ -195,54 +196,102 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 
-	lastVisibleID := ""
+	// Only the handler writes SSE frames. A single owned scanner keeps slow
+	// authorization/page reads from postponing the independent keepalive timer.
+	// Requests never overlap and each scans at most one tick's candidate budget.
+	scanCtx, cancelScan := context.WithCancel(r.Context())
+	requests := make(chan struct{}, 1)
+	type scanResult struct {
+		page primitives.EventStreamPage
+		err  error
+	}
+	results := make(chan scanResult)
+	scanDone := make(chan struct{})
+	go func() {
+		defer close(scanDone)
+		for {
+			select {
+			case <-scanCtx.Done():
+				return
+			case <-requests:
+			}
+			var result scanResult
+			for candidates := 0; candidates < primitives.EventStreamTickCandidateBudget; candidates += primitives.EventStreamPageSize {
+				result.page, result.err = opts.primitiveStore.ListEventStreamPage(scanCtx, primitives.EventListFilter{
+					ThreadID: threadID, ThreadIDs: threadIDs, Types: eventTypes,
+				}, cursor)
+				if result.err != nil {
+					break
+				}
+				// Hidden positions stay exclusively in this connection's scanner.
+				cursor = result.page.Cursor
+				if len(result.page.Events) != 0 || !result.page.HasMore {
+					break
+				}
+			}
+			select {
+			case <-scanCtx.Done():
+				return
+			case results <- result:
+			}
+		}
+	}()
+	defer func() { cancelScan(); <-scanDone }()
+
+	visibleSinceResume := 0
 	ticker := time.NewTicker(opts.streamPollInterval)
 	defer ticker.Stop()
-
-	for {
-		page, err := opts.primitiveStore.ListEventStreamPage(r.Context(), primitives.EventListFilter{
-			ThreadID: threadID, ThreadIDs: threadIDs, Types: eventTypes,
-		}, cursor)
-		if err != nil {
-			writeSSEErrorEvent(controller, w, flusher, "internal_error", "failed to load events for stream")
-			return
-		}
-		// Advance across hidden and nonmatching positions without exposing them.
-		cursor = page.Cursor
-
-		sentAny := false
-		for _, event := range page.Events {
-			eventID := strings.TrimSpace(anyString(event["id"]))
-			if eventID == "" {
-				continue
-			}
-			if err := writeSSEEvent(controller, w, eventID, "event", map[string]any{"event": event}); err != nil {
-				clearSSEWriteDeadline(controller)
-				return
-			}
-			lastVisibleID = eventID
-			sentAny = true
-		}
-
-		if page.HasMore {
-			if err := writeSSEEvent(controller, w, lastVisibleID, "resume", map[string]any{}); err != nil {
-				clearSSEWriteDeadline(controller)
-				return
-			}
-		}
-
-		if !sentAny && !page.HasMore {
-			if err := writeSSEKeepalive(controller, w); err != nil {
-				clearSSEWriteDeadline(controller)
-				return
-			}
+	keepalive := func() bool {
+		if err := writeSSEKeepalive(controller, w); err != nil {
+			clearSSEWriteDeadline(controller)
+			return false
 		}
 		flushSSE(controller, flusher)
-
+		return true
+	}
+	if !keepalive() {
+		return
+	}
+	requests <- struct{}{}
+	scanning := true
+	for {
 		select {
 		case <-r.Context().Done():
 			return
 		case <-ticker.C:
+			if !keepalive() {
+				return
+			}
+			if !scanning {
+				requests <- struct{}{}
+				scanning = true
+			}
+		case result := <-results:
+			scanning = false
+			if result.err != nil {
+				writeSSEErrorEvent(controller, w, flusher, "internal_error", "failed to load events for stream")
+				return
+			}
+			for _, event := range result.page.Events {
+				eventID := strings.TrimSpace(anyString(event["id"]))
+				if eventID == "" {
+					continue
+				}
+				if err := writeSSEEvent(controller, w, eventID, "event", map[string]any{"event": event}); err != nil {
+					clearSSEWriteDeadline(controller)
+					return
+				}
+				visibleSinceResume++
+				// Fixed visible-event cadence exposes neither hidden progress nor IDs.
+				if visibleSinceResume == primitives.EventStreamPageSize {
+					if err := writeSSEEvent(controller, w, eventID, "resume", map[string]any{}); err != nil {
+						clearSSEWriteDeadline(controller)
+						return
+					}
+					visibleSinceResume = 0
+				}
+			}
+			flushSSE(controller, flusher)
 		}
 	}
 }

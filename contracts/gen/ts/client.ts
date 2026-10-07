@@ -6042,7 +6042,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/stream/events",
     "operation_id": "streamEvents",
     "summary": "Stream events (SSE)",
-    "description": "Starts at the current workspace head when no known resume ID is supplied. Known IDs resume in chronological timestamp/ID order, reading at most 200 candidate positions per poll. Hidden and nonmatching positions advance only an internal cursor. A `resume` SSE message with empty JSON data indicates another bounded page remains; its optional ID is the last delivered visible event, never a hidden position.",
+    "description": "Starts at the current workspace head unless the supplied resume ID identifies a currently authorized-visible, untrashed event. Hidden, trashed and unknown IDs behave identically. Accepted IDs resume in chronological timestamp/ID order. Each tick reads pages of 200 candidates and silently skips empty pages up to a fixed 2000-candidate budget; at most one visible page is decoded. Hidden and nonmatching positions advance only a connection-local cursor. Keepalive comments follow the polling timer regardless of hidden activity. A `resume` SSE marker with empty JSON data follows every 200 delivered visible events and repeats that visible ID; it does not indicate hidden backlog or carry internal progress.",
     "why": "Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.",
     "input_mode": "none",
     "streaming": {

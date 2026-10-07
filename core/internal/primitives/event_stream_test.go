@@ -94,7 +94,7 @@ func TestEventStreamPagesAdvanceAcrossHiddenRowsAndFreshAuthority(t *testing.T) 
 		t.Fatalf("lost rows: %d", len(seen))
 	}
 	// Both empty and unknown initial resume IDs seed head, never replay.
-	for _, id := range []string{"", "unknown"} {
+	for _, id := range []string{"", "unknown", "0001", "0450"} {
 		cur, err := s.EventStreamCursor(scope, id)
 		if err != nil || cur.ID != "0450" {
 			t.Fatalf("head: %+v %v", cur, err)
@@ -134,6 +134,41 @@ func TestEventStreamChronologyAndSparseFilters(t *testing.T) {
 	page, err = s.ListEventStreamPage(ctx, EventListFilter{ThreadID: "absent"}, EventCursor{})
 	if err != nil || len(page.Events) != 0 || page.Cursor.ID != "c" {
 		t.Fatalf("filter stalled: %+v %v", page, err)
+	}
+}
+
+func TestEventStreamPlainThreadAppendRefreshesInheritedDenials(t *testing.T) {
+	ctx := context.Background()
+	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	if _, err := ws.DB().Exec(`INSERT INTO threads(id,updated_at,updated_by,body_json) VALUES('private','now','owner','{"pm_actor_id":"owner"}')`); err != nil {
+		t.Fatal(err)
+	}
+	scope := WithAccessScope(ctx, AccessScope{ActorID: "reader"})
+	if _, err := ws.DB().Exec(`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) VALUES('0001','message_posted','2026-01-01T00:00:00Z','owner','private','[]','{"text":"plain message"}')`); err != nil {
+		t.Fatal(err)
+	}
+	first, err := s.ListEventStreamPage(scope, EventListFilter{}, EventCursor{})
+	if err != nil || len(first.Events) != 0 {
+		t.Fatalf("prime: %+v %v", first, err)
+	}
+	var before, after int64
+	if err := ws.DB().QueryRow(`SELECT version FROM resource_access_epoch`).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ws.DB().Exec(`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) VALUES('0002','message_posted','2026-01-01T00:00:00Z','owner','private','[]','{"text":"another plain message"}')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := ws.DB().QueryRow(`SELECT version FROM resource_access_epoch`).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	page, err := s.ListEventStreamPage(scope, EventListFilter{}, first.Cursor)
+	if err != nil || len(page.Events) != 0 || page.Cursor.ID != "0002" || after <= before {
+		t.Fatalf("plain append needs fresh inherited denial: %+v epochs=%d/%d err=%v", page, before, after, err)
 	}
 }
 

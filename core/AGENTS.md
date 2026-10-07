@@ -196,6 +196,10 @@ a fresh epoch-validated read snapshot per bounded poll. Its internal
 `event_stream_positions` view exposes only immutable ID/timestamp traversal
 metadata, allowing bounded progress over hidden rows. Never serialize those
 positions; payloads must load through the scoped `events` relation before decoding.
+Client resume IDs must authorize through the same event relation; hidden and
+unknown IDs seed head identically. Empty pages advance silently within a fixed
+2000-candidate tick budget. Keepalive cadence and visible-count continuation
+markers must never depend on hidden backlog or progress.
 The event pager alone may narrow cached denial bindings to its explicit page keys
 and batch-reference keys; parent denial propagation and the consuming statement's
 epoch fallback must remain intact. Never reuse that context for a general read. Shared cached

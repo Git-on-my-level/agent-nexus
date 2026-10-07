@@ -1,11 +1,17 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
+
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/schema"
 )
 
 func TestEventsStreamBoundedResumeFramesAndHiddenPositions(t *testing.T) {
@@ -32,11 +38,9 @@ func TestEventsStreamBoundedResumeFramesAndHiddenPositions(t *testing.T) {
 	}
 	for _, test := range []struct {
 		name, query, header string
-		wantControls        int
 	}{
-		{"header-precedence", "0401", "0000", 2},
-		{"query-resume", "0000", "", 2},
-		{"trashed-resume", "0201", "", 0},
+		{"header-precedence", "0401", "0000"},
+		{"query-resume", "0000", ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			streamCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -59,11 +63,11 @@ func TestEventsStreamBoundedResumeFramesAndHiddenPositions(t *testing.T) {
 			defer stop()
 			seen := map[string]bool{}
 			controls := 0
-			for len(seen) < 200 {
+			for len(seen) < 200 || controls < 1 {
 				frame := awaitSSEEvent(t, frames, 5*time.Second)
 				if frame.Event == "resume" {
 					controls++
-					if len(frame.Data) != 0 || frame.ID != "" && frame.ID != "0400" {
+					if len(seen) != 200 || len(frame.Data) != 0 || frame.ID != "0401" {
 						t.Fatalf("hidden position in control: %+v", frame)
 					}
 					continue
@@ -73,8 +77,8 @@ func TestEventsStreamBoundedResumeFramesAndHiddenPositions(t *testing.T) {
 				}
 				seen[frame.ID] = true
 			}
-			if controls != test.wantControls {
-				t.Fatalf("controls=%d want=%d", controls, test.wantControls)
+			if controls != 1 {
+				t.Fatalf("controls=%d want=1", controls)
 			}
 			select {
 			case frame := <-frames:
@@ -82,5 +86,200 @@ func TestEventsStreamBoundedResumeFramesAndHiddenPositions(t *testing.T) {
 			case <-time.After(100 * time.Millisecond):
 			}
 		})
+	}
+}
+
+func eventPrivacyHTTPServer(t *testing.T, env authIntegrationEnv, interval time.Duration) *httptest.Server {
+	t.Helper()
+	contract, err := schema.Load("../../../contracts/anx-schema.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(NewHandler("test", WithActorRegistry(env.registry), WithAuthStore(env.authStore), WithPrimitiveStore(env.primitiveStore), WithSchemaContract(contract), WithWorkspaceID("ws_main"), WithStreamPollInterval(interval)))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func readQuietEventStream(t *testing.T, url, token, id string, header bool) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if !header {
+		url += "?last_event_id=" + id
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	if header {
+		req.Header.Set("Last-Event-ID", id)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 || resp.Header.Get("Content-Type") != "text/event-stream" {
+		t.Fatalf("unexpected response: %d %v", resp.StatusCode, resp.Header)
+	}
+	reader := bufio.NewReader(resp.Body)
+	var wire strings.Builder
+	for i := 0; i < 3; i++ {
+		frame := round4SSEFrame(t, reader)
+		if frame != ": keepalive\n\n" {
+			t.Fatalf("quiet stream disclosed activity: %q", frame)
+		}
+		wire.WriteString(frame)
+	}
+	return wire.String()
+}
+
+func TestEventsStreamHiddenAndUnknownResumeIDsAreIdenticalOverHTTP(t *testing.T) {
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	reader := seedHumanPrincipalForLockoutTest(t, context.Background(), env.workspace.DB(), "probe-reader", "probe-reader-actor", "probe-reader", "probe-reader-token")
+	for _, query := range []string{
+		`INSERT INTO threads(id,updated_at,updated_by,body_json) VALUES('private','now','owner','{"pm_actor_id":"owner"}')`,
+		`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json,trashed_at) VALUES
+		('private-probe','message_posted','2026-01-01T00:00:00Z','owner','private','[]','{}',NULL),
+		('trashed-probe','message_posted','2026-01-01T00:00:01Z','owner',NULL,'[]','{}','now'),
+		('public-later','message_posted','2026-01-01T00:00:02Z','owner',NULL,'[]','{}',NULL)`,
+	} {
+		if _, err := env.workspace.DB().Exec(query); err != nil {
+			t.Fatal(err)
+		}
+	}
+	srv := eventPrivacyHTTPServer(t, env, 20*time.Millisecond)
+	for _, header := range []bool{true, false} {
+		want := readQuietEventStream(t, srv.URL+"/stream/events", reader.AccessToken, "unknown-probe", header)
+		for _, id := range []string{"private-probe", "trashed-probe"} {
+			if got := readQuietEventStream(t, srv.URL+"/stream/events", reader.AccessToken, id, header); got != want {
+				t.Fatalf("%s differs from unknown: %q %q", id, got, want)
+			}
+		}
+	}
+}
+
+func TestEventsStreamHiddenOnlyHistoryMatchesIdleOverHTTP(t *testing.T) {
+	for _, hidden := range []int{0, 401, 10000} {
+		t.Run(fmt.Sprint(hidden), func(t *testing.T) {
+			env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+			db := env.workspace.DB()
+			reader := seedHumanPrincipalForLockoutTest(t, context.Background(), db, "quiet-reader", "quiet-reader-actor", "quiet-reader", "quiet-reader-token")
+			for _, q := range []string{
+				`INSERT INTO threads(id,updated_at,updated_by,body_json) VALUES('private','now','owner','{"pm_actor_id":"owner"}')`,
+				`INSERT INTO events(id,type,ts,actor_id,refs_json,payload_json) VALUES('000000','message_posted','2026-01-01T00:00:00Z','owner','[]','{}')`,
+			} {
+				if _, err := db.Exec(q); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if hidden > 0 {
+				if _, err := db.Exec(`WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<?)
+				INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) SELECT printf('%06d',i),'message_posted','2026-01-01T00:00:00Z','owner','private','[]','{}' FROM n`, hidden); err != nil {
+					t.Fatal(err)
+				}
+			}
+			srv := eventPrivacyHTTPServer(t, env, 20*time.Millisecond)
+			if got := readQuietEventStream(t, srv.URL+"/stream/events", reader.AccessToken, "000000", true); got != strings.Repeat(": keepalive\n\n", 3) {
+				t.Fatalf("wire=%q", got)
+			}
+		})
+	}
+}
+
+type eventTickBudgetStore struct {
+	PrimitiveStore
+	calls chan int
+	gate  <-chan struct{}
+}
+
+func (s *eventTickBudgetStore) EventStreamCursor(context.Context, string) (primitives.EventCursor, error) {
+	return primitives.EventCursor{}, nil
+}
+func (s *eventTickBudgetStore) ListEventStreamPage(ctx context.Context, _ primitives.EventListFilter, cursor primitives.EventCursor) (primitives.EventStreamPage, error) {
+	s.calls <- 1
+	if s.gate != nil {
+		select {
+		case <-s.gate:
+		case <-ctx.Done():
+			return primitives.EventStreamPage{}, ctx.Err()
+		}
+	}
+	return primitives.EventStreamPage{Cursor: cursor, HasMore: true}, nil
+}
+func TestEventsStreamHiddenCandidateBudgetIsBoundedPerTick(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := &eventTickBudgetStore{calls: make(chan int, 20)}
+	w := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handleEventsStream(w, httptest.NewRequest("GET", "/stream/events", nil).WithContext(ctx), handlerOptions{primitiveStore: s, contract: &schema.Contract{}, streamPollInterval: time.Hour})
+	}()
+	defer func() { cancel(); <-done }()
+	for i := 0; i < primitives.EventStreamTickCandidateBudget/primitives.EventStreamPageSize; i++ {
+		select {
+		case <-s.calls:
+		case <-time.After(5 * time.Second):
+			t.Fatal("hidden budget was not scanned within a tick")
+		}
+	}
+	select {
+	case <-s.calls:
+		t.Fatal("tick exceeded candidate budget")
+	case <-time.After(50 * time.Millisecond):
+	}
+	cancel()
+	<-done
+	if w.Body.String() != ": keepalive\n\n" {
+		t.Fatalf("hidden controls: %q", w.Body.String())
+	}
+}
+
+// Keepalives must continue even while a hidden-page read has not returned.
+// Blocking instead of sleeping makes this independent of machine/query timing.
+func TestEventsStreamKeepalivesContinueDuringHiddenScanAndCancelWorker(t *testing.T) {
+	s := &eventTickBudgetStore{calls: make(chan int, 20), gate: make(chan struct{})}
+	done := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer close(done)
+		handleEventsStream(w, r, handlerOptions{primitiveStore: s, contract: &schema.Contract{}, streamPollInterval: 20 * time.Millisecond})
+	}))
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, "GET", srv.URL+"/stream/events", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	select {
+	case <-s.calls:
+	case <-ctx.Done():
+		t.Fatal("scanner did not start")
+	}
+	reader := bufio.NewReader(resp.Body)
+	for i := 0; i < 4; i++ {
+		if frame := round4SSEFrame(t, reader); frame != ": keepalive\n\n" {
+			t.Fatalf("hidden activity frame: %q", frame)
+		}
+	}
+	select {
+	case <-s.calls:
+		t.Fatal("overlapping scan request")
+	default:
+	}
+	cancel()
+	resp.Body.Close()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("cancelled handler did not join scanner")
 	}
 }

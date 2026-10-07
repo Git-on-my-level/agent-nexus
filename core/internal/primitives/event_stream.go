@@ -9,6 +9,7 @@ import (
 )
 
 const EventStreamPageSize = 200
+const EventStreamTickCandidateBudget = 2000
 
 // EventStreamPage carries server-local traversal state. Cursor can refer to a
 // hidden row and MUST NOT be serialized to a client (including SSE IDs).
@@ -18,13 +19,16 @@ type EventStreamPage struct {
 	HasMore bool
 }
 
-// EventStreamCursor resolves immutable position metadata, including a resume
-// ID whose resource has become hidden. Unknown IDs start at the current head.
-// The metadata-only view is deliberately separate from scoped payload reads.
+// EventStreamCursor accepts only a currently visible event as client-supplied
+// continuation provenance. Hidden, trashed and unknown IDs all seed head.
+// Internal progress over hidden positions stays within the SSE connection.
 func (s *Store) EventStreamCursor(ctx context.Context, lastEventID string) (EventCursor, error) {
 	var cursor EventCursor
 	if id := strings.TrimSpace(lastEventID); id != "" {
-		err := s.db.QueryRowContext(ctx, `SELECT ts,id FROM event_stream_positions WHERE id=?`, id).Scan(&cursor.TS, &cursor.ID)
+		readCtx := withEventPageAccessScope(ctx, []string{id})
+		predicate, args := eventStreamLegacyPMPredicate(readCtx)
+		args = append([]any{id}, args...)
+		err := s.db.QueryRowContext(readCtx, `SELECT e.ts,e.id FROM events e WHERE e.id=? AND COALESCE(e.trashed_at,'')=''`+predicate, args...).Scan(&cursor.TS, &cursor.ID)
 		if err == nil {
 			return cursor, nil
 		}
@@ -105,18 +109,9 @@ func (s *Store) ListEventStreamPage(ctx context.Context, filter EventListFilter,
 			args = append(args, typ)
 		}
 	}
-	if scope, ok := accessScopeFrom(ctx); ok && (scope.ActorID == "" || scope.ActorID != scope.PMActorID) {
-		// Retain the legacy PM fallback for orphaned conversation events. A
-		// canonical backing thread (including one in refs) owns its events via
-		// the indexed authorization graph; no per-event thread reads are needed.
-		query += ` AND (e.actor_id=? AND e.actor_id<>'' OR NOT (
-			COALESCE(trim(json_extract(e.payload_json,'$.pm_conversation_id')),'')<>''
-			OR COALESCE(json_type(e.payload_json,'$.payload.pm_turn_id'),'null')<>'null'
-			OR COALESCE(json_type(e.payload_json,'$.payload.pm_execution'),'null')<>'null'
-		) OR EXISTS (SELECT 1 FROM threads t WHERE t.id=e.thread_id
-			OR t.id IN (SELECT substr(value,8) FROM json_each(e.refs_json) WHERE value LIKE 'thread:%')))`
-		args = append(args, scope.ActorID)
-	}
+	predicate, legacyArgs := eventStreamLegacyPMPredicate(ctx)
+	query += predicate
+	args = append(args, legacyArgs...)
 	query += ` ORDER BY anx_timestamp_key(e.ts),e.id`
 	rows, err = s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -161,4 +156,18 @@ func (s *Store) ListEventStreamPage(ctx context.Context, filter EventListFilter,
 		page.Events = append(page.Events, body)
 	}
 	return page, nil
+}
+
+// Apply the same orphan-PM protection to payloads and client resume provenance.
+// Canonical thread/ref inheritance is enforced by the scoped events relation.
+func eventStreamLegacyPMPredicate(ctx context.Context) (string, []any) {
+	if scope, ok := accessScopeFrom(ctx); ok && (scope.ActorID == "" || scope.ActorID != scope.PMActorID) {
+		return ` AND (e.actor_id=? AND e.actor_id<>'' OR NOT (
+			COALESCE(trim(json_extract(e.payload_json,'$.pm_conversation_id')),'')<>''
+			OR COALESCE(json_type(e.payload_json,'$.payload.pm_turn_id'),'null')<>'null'
+			OR COALESCE(json_type(e.payload_json,'$.payload.pm_execution'),'null')<>'null'
+		) OR EXISTS (SELECT 1 FROM threads t WHERE t.id=e.thread_id
+			OR t.id IN (SELECT substr(value,8) FROM json_each(e.refs_json) WHERE value LIKE 'thread:%')))`, []any{scope.ActorID}
+	}
+	return "", nil
 }
