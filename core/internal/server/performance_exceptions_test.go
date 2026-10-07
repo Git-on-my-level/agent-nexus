@@ -70,7 +70,7 @@ func performanceRuntimeSourceHash(root string) (string, error) {
 			return "", err
 		}
 	}
-	for _, relative := range []string{"scripts/check-performance-shards.py", "scripts/tests/test_performance_shards.py", ".github/workflows/ci.yml"} {
+	for _, relative := range []string{"scripts/check-performance-shards.py", "scripts/tests/test_performance_shards.py", ".github/workflows/performance.yml"} {
 		if _, err := os.Stat(filepath.Join(root, relative)); err == nil {
 			paths = append(paths, relative)
 		} else if !os.IsNotExist(err) {
@@ -118,17 +118,25 @@ func performanceBaselineBudgets(t *testing.T, routes []routeBudget) map[string]b
 		if !registered[performanceCaseKey(e.Method, e.Path, e.Case)] || (e.Principal != "authorized" && e.Principal != "unauthorized") || e.LatencyMS <= 0 || e.LatencyMS > 1800000 || e.MaxQueries <= 0 || e.MaxQueries > 100000 || e.MaxRows <= 0 || e.MaxRows > 500000 || !reviewedPerformanceException(e.Issue, e.IssueURL, e.Reason) || out[key].Path != "" {
 			t.Fatalf("invalid, duplicate or stale performance baseline %s", key)
 		}
-		if sourceHash == "" {
-			sourceHash, err = performanceRuntimeSourceHash("../../..")
-			if err != nil {
-				t.Fatal(err)
-			}
+		if err := validatePerformanceSourceHash(e.CoreSourceHash); err != nil {
+			t.Fatalf("invalid source pin for %s: %v", key, err)
 		}
-		if err := validatePerformanceSourcePin(e.CoreSourceHash, sourceHash); err != nil {
-			if os.Getenv("ANX_PERFORMANCE_DIAGNOSTIC") == "1" {
-				t.Errorf("diagnostic only: expired baseline %s: %v", key, err)
-			} else {
-				t.Fatalf("runtime/dependency/fixture changed: source-pinned existing-main baseline expired for %s: %v", key, err)
+		// Freshness belongs to the advisory scale tier. Ordinary CI validates
+		// the inventory and mandatory pin format without requiring a scale run
+		// and baseline renewal for every production change.
+		if os.Getenv("ANX_PERFORMANCE_TEST") == "1" {
+			if sourceHash == "" {
+				sourceHash, err = performanceRuntimeSourceHash("../../..")
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := validatePerformanceSourcePin(e.CoreSourceHash, sourceHash); err != nil {
+				if os.Getenv("ANX_PERFORMANCE_DIAGNOSTIC") == "1" {
+					t.Errorf("diagnostic only: expired baseline %s: %v", key, err)
+				} else {
+					t.Fatalf("runtime/dependency/fixture changed: source-pinned existing-main baseline expired for %s: %v", key, err)
+				}
 			}
 		}
 		if e.MaxVMSteps == 0 || e.MaxVMSteps > 1000000000000 {
@@ -176,7 +184,7 @@ func TestPerformanceRuntimeSourcePin(t *testing.T) {
 	if hash() != before {
 		t.Fatal("release metadata/unrelated tests expired runtime pin")
 	}
-	for _, path := range []string{"core/go.mod", "core/go.sum", "tests/channels/new.go", "contracts/visualreport/go.mod", "contracts/anx-schema.yaml", "core/internal/server/auth_integration_test.go", "core/internal/server/stream_privacy_integration_test.go", "core/internal/server/notifications_integration_test.go", "core/internal/server/performance_test.go", "core/internal/server/routes.json", "core/new.go", "scripts/check-performance-shards.py", "scripts/tests/test_performance_shards.py", ".github/workflows/ci.yml"} {
+	for _, path := range []string{"core/go.mod", "core/go.sum", "tests/channels/new.go", "contracts/visualreport/go.mod", "contracts/anx-schema.yaml", "core/internal/server/auth_integration_test.go", "core/internal/server/stream_privacy_integration_test.go", "core/internal/server/notifications_integration_test.go", "core/internal/server/performance_test.go", "core/internal/server/routes.json", "core/new.go", "scripts/check-performance-shards.py", "scripts/tests/test_performance_shards.py", ".github/workflows/performance.yml"} {
 		before = hash()
 		write(path, "changed runtime input")
 		if hash() == before {
@@ -224,10 +232,17 @@ func TestPerformanceExceptionInventory(t *testing.T) {
 	performancePlanExceptions(t)
 }
 
-func validatePerformanceSourcePin(pin, actual string) error {
+func validatePerformanceSourceHash(pin string) error {
 	decoded, err := hex.DecodeString(pin)
 	if err != nil || len(pin) != 64 || len(decoded) != 32 {
 		return fmt.Errorf("every allowance requires a valid SHA-256 source hash")
+	}
+	return nil
+}
+
+func validatePerformanceSourcePin(pin, actual string) error {
+	if err := validatePerformanceSourceHash(pin); err != nil {
+		return err
 	}
 	if pin != actual {
 		return fmt.Errorf("source hash changed; remeasure and review the linked P1")

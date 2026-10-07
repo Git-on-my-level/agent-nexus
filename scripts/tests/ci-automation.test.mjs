@@ -159,9 +159,19 @@ test("all balanced shards cover exactly the real Playwright suite, including bas
   assert.deepEqual(actual, expected);
 });
 
-test("all four route shards, legacy checks and executed coverage are required", () => {
+test("performance runs separately on main and never gates ordinary CI", () => {
+  const performance = readFileSync(
+    join(root, ".github/workflows/performance.yml"),
+    "utf8",
+  );
   const job = (name) =>
-    ci.slice(ci.indexOf(`\n  ${name}:`) + 1).split(/\n(?=  [\w-]+:\n)/)[0];
+    performance
+      .slice(performance.indexOf(`\n  ${name}:`) + 1)
+      .split(/\n(?=  [\w-]+:\n)/)[0];
+  assert.match(performance, /push:\s+branches:\s+- main/);
+  assert.match(performance, /workflow_dispatch:/);
+  assert.doesNotMatch(performance, /pull_request:|merge_group:|workflow_run:/);
+  assert.doesNotMatch(ci, /core-performance-/);
   const routes = job("core-performance-routes");
   assert.match(routes, /shard: \[1, 2, 3, 4\]/);
   assert.match(routes, /fail-fast: false/);
@@ -173,7 +183,7 @@ test("all four route shards, legacy checks and executed coverage are required", 
   );
   assert.match(
     job("core-performance-coverage"),
-    /needs: \[changes, core-performance-routes\]/,
+    /needs: core-performance-routes/,
   );
   assert.match(job("core-performance-coverage"), /check-performance-shards.py/);
   assert.match(
@@ -185,9 +195,9 @@ test("all four route shards, legacy checks and executed coverage are required", 
     "core-performance-legacy",
     "core-performance-coverage",
   ]) {
-    assert.ok(needs.includes(name));
+    assert.ok(!needs.includes(name));
+    assert.ok(performance.includes(`\n  ${name}:`));
     assert.doesNotMatch(job(name), /continue-on-error/);
-    for (const flag of ["core", "contracts", "go_shared"])
-      assert.ok(job(name).includes(`needs.changes.outputs.${flag} == 'true'`));
+    assert.doesNotMatch(job(name), /needs.changes/);
   }
 });

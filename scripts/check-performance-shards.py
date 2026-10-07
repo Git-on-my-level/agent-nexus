@@ -226,7 +226,7 @@ def source_hash(root):
     for relative in (
         "scripts/check-performance-shards.py",
         "scripts/tests/test_performance_shards.py",
-        ".github/workflows/ci.yml",
+        ".github/workflows/performance.yml",
     ):
         if (root / relative).is_file():
             paths.append(relative)

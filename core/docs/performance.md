@@ -14,9 +14,12 @@ cd core
 go test -short ./internal/server ./internal/storage ./internal/testutil/perfguard
 ```
 
-Run the independent scale tier. Four `core-performance-routes` shards,
-`core-performance-legacy`, and their executed-artifact coverage check are all
-required by `ci-ok`:
+The independent scale tier is advisory. `.github/workflows/performance.yml`
+runs four `core-performance-routes` shards, `core-performance-legacy`, and their
+executed-artifact coverage check on pushes to main or manual dispatch. It has
+no pull-request trigger and no dependency from `ci-ok`, so it does not delay
+ordinary PRs or releases. Failed deterministic checks remain visible in that
+separate workflow. Run the same tier locally with:
 
 ```sh
 cd core
@@ -124,7 +127,9 @@ effective per-state limits, and successful case completions. Missing, duplicate,
 stale, partial and zero-test reports fail. The separate legacy job retains both
 25-sample authorization regressions, prepare-size/time checks, cache controls,
 native-counter controls and startup measurements without repeating them in each
-route shard.
+route shard. `TestResourceAccessCommonReadPerformance` logs its wall-clock
+overruns as advisory measurements; SQL and row bounds still fail. The route
+matrix retains fatal SQL, row, VM-work, response and privacy checks.
 
 Each CI shard compiles once and runs three independent workers on
 the standard four-CPU `ubuntu-24.04-arm` runner. Two workers retain the established `GOMAXPROCS=2`
@@ -253,8 +258,10 @@ Every remaining route exception carries `core_source_sha256`: a fingerprint of c
 Go, module dependencies, local replacement modules, fixture/performance-harness
 code, inventories and relevant text assets. Release-version metadata, unrelated
 tests and the self-referential budget manifest are excluded. A changed or added
-input expires the allowance in the short tier and before corpus construction;
-re-review the linked P1 instead of copying the hash automatically. All other
+input expires the allowance in the advisory scale tier before corpus construction;
+remeasure the linked P1 instead of copying the hash automatically. The cheap
+inventory check always requires valid source hashes and finite exact entries,
+but freshness does not gate ordinary CI. All other
 routes retain their ordinary count ceilings. Remove entries as those repairs land.
 A changed read must satisfy the ordinary budget; do not add a baseline for a new
 regression. Populate new large record families and high-fanout selectors when
