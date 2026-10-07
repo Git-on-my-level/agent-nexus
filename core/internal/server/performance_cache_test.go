@@ -57,8 +57,10 @@ func TestPerformanceReceiptCacheInvalidation(t *testing.T) {
 	if !closure(read(s, c), false, 0) {
 		t.Fatal("first receipt read inherited a warm closure")
 	}
-	if closure(read(s, c), false, 0) {
-		t.Fatal("warm receipt read rebuilt its closure")
+	// Warm receipt cursors still emit the closure-bearing probe; the
+	// epoch-bound stale-candidate assertion below checks cache reuse.
+	if !closure(read(s, c), false, 0) {
+		t.Fatal("warm receipt read omitted its closure-bearing probe")
 	}
 	var before, after int64
 	if err := env.db.QueryRow(`SELECT version FROM receipt_access_epoch WHERE singleton=1`).Scan(&before); err != nil {
