@@ -1,0 +1,18 @@
+{
+  "bytes.ErrTooLarge": {
+    "type": "error",
+    "reason": "Standard-library buffer-size sentinel in the approved bytes leaf. The kernel does not reference it; any new reference requires a use-golden review."
+  },
+  "context.Canceled": {
+    "type": "error",
+    "reason": "Standard-library cancellation sentinel returned by the approved context contract. Application code must not rebind standard-library sentinels."
+  },
+  "context.DeadlineExceeded": {
+    "type": "error",
+    "reason": "Standard-library deadline sentinel returned by the approved context contract. Application code must not rebind standard-library sentinels."
+  },
+  "crypto/rand.Reader": {
+    "type": "io.Reader",
+    "reason": "Reviewed standard-library entropy source behind the kernel's existing crypto/rand.Read calls. No application callback globals are approved."
+  }
+}

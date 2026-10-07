@@ -171,6 +171,12 @@ INSERT INTO scope_resources VALUES('scope','card','opaque-root','canonical-root'
 				t.Fatal(err)
 			}
 			db = openFixture(t, path)
+			// sql.Open is lazy. Initialize the restored physical connection
+			// before D starts its 50 ms transaction window, as its contention
+			// tests do; reconnect setup is not lifecycle chunk work.
+			if err := db.PingContext(ctx); err != nil {
+				t.Fatal(err)
+			}
 			runner.DB = db
 		}
 	}

@@ -330,9 +330,17 @@ Transaction control, compound/altered SQL and arbitrary queries poison the proxy
 ignored failures roll back the source transaction. The older generic hook API is
 still a disabled test adapter. SQL sealing does not establish provenance for its
 trusted Capture callback. Live hook registration still needs actual canonical
-capture and direct/implicit derivation negatives. The kernel import gate now uses
-a closed pure-library/type allowlist so a new helper package cannot acquire raw
-authority transitively. The independent foundation gate still rejects **every**
+capture and direct/implicit derivation negatives. The kernel gate combines its
+closed import closure with reviewed typed API and actual symbol/method-use
+goldens, including production sources excluded by build tags. Uses/Selections
+resolve aliases, dot imports, generic arguments and promoted methods; references
+are counted per declaration so additional uses of existing capabilities require
+review. Interface/function globals and callback-bearing containers require a
+separate explicit variable exception; no application callback globals are
+approved. Scope and kernel error sentinels are immutable typed constants, so an
+adapter cannot replace an existing error with a storage-backed implementation.
+These API/use gates complement implementation purity review. The independent
+foundation gate still rejects **every**
 live repository consumer; no HTTP handler or migration exception was added.
 
 Synthetic maximum-selection evidence covers 64 scopes, 256 audiences, P=100 and

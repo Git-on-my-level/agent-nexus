@@ -3,7 +3,6 @@ package readmodel
 import (
 	"fmt"
 	"go/ast"
-	"go/importer"
 	"go/parser"
 	"go/token"
 	"go/types"
@@ -24,23 +23,17 @@ const applicationPrefix = "agent-nexus-core/internal/"
 // Standard-library packages remain the reviewed leaf allowlist in boundary_test.
 // This is an API review gate, not proof that an approved implementation is pure.
 func kernelCallableSurface(internalRoot string) (string, error) {
-	dependencies, err := kernelDependencyPackages(internalRoot, kernelPackage)
+	analysis, err := inspectKernel(internalRoot)
 	if err != nil {
 		return "", err
 	}
-	fset := token.NewFileSet()
-	loader := &kernelTypeImporter{
-		root: internalRoot, fset: fset, packages: map[string]*types.Package{},
-		standard: importer.ForCompiler(fset, "gc", nil),
-	}
-	// Check production sources as well as the dependencies: fixture wiring must
-	// be valid Go, rather than an inert, syntactically plausible import edge.
-	if _, err := loader.Import(kernelPackage); err != nil {
-		return "", err
-	}
+	return analysis.apiSurface(), nil
+}
+
+func (analysis *kernelInspection) apiSurface() string {
 	surface := &callableSurface{entries: map[string]bool{}, visited: map[types.Type]bool{}}
-	for _, name := range dependencies {
-		pkg := loader.packages[name]
+	for _, name := range analysis.dependencies {
+		pkg := analysis.loader.packages[name]
 		for _, symbol := range pkg.Scope().Names() {
 			object := pkg.Scope().Lookup(symbol)
 			if !object.Exported() {
@@ -52,6 +45,10 @@ func kernelCallableSurface(internalRoot string) (string, error) {
 			case *types.TypeName:
 				// Preserve alias declarations as well as their reachable target.
 				surface.add(types.ObjectString(object, packageQualifier))
+			case *types.Const:
+				// A typed constant can carry methods, including immutable errors.
+				surface.walk(object.Type())
+				continue
 			default:
 				continue // Constants cannot carry implementations/callbacks.
 			}
@@ -63,7 +60,7 @@ func kernelCallableSurface(internalRoot string) (string, error) {
 		lines = append(lines, entry)
 	}
 	sort.Strings(lines)
-	return "# Reviewed kernel-reachable application API; changes require layering review.\n" + strings.Join(lines, "\n") + "\n", nil
+	return "# Reviewed kernel-reachable application API; changes require layering review.\n" + strings.Join(lines, "\n") + "\n"
 }
 
 // Parse every production file, matching the import guard's treatment of build
@@ -75,11 +72,17 @@ type kernelTypeImporter struct {
 	standard types.Importer
 	packages map[string]*types.Package
 	loading  map[string]bool
+	infos    map[string]*types.Info
+	files    map[string][]*ast.File
 }
 
 func (i *kernelTypeImporter) Import(name string) (*types.Package, error) {
 	if !strings.HasPrefix(name, applicationPrefix) {
-		return i.standard.Import(name)
+		pkg, err := i.standard.Import(name)
+		if err == nil {
+			i.packages[name] = pkg
+		}
+		return pkg, err
 	}
 	if pkg := i.packages[name]; pkg != nil {
 		return pkg, nil
@@ -108,12 +111,21 @@ func (i *kernelTypeImporter) Import(name string) (*types.Package, error) {
 		}
 		files = append(files, file)
 	}
+	info := &types.Info{
+		Defs: map[*ast.Ident]types.Object{}, Uses: map[*ast.Ident]types.Object{},
+		Selections: map[*ast.SelectorExpr]*types.Selection{},
+	}
 	config := types.Config{Importer: i}
-	pkg, err := config.Check(name, i.fset, files, nil)
+	pkg, err := config.Check(name, i.fset, files, info)
 	if err != nil {
 		return nil, fmt.Errorf("kernel API type check: %w", err)
 	}
 	i.packages[name] = pkg
+	if i.infos == nil {
+		i.infos = map[string]*types.Info{}
+		i.files = map[string][]*ast.File{}
+	}
+	i.infos[name], i.files[name] = info, files
 	return pkg, nil
 }
 
@@ -210,6 +222,10 @@ func checkKernelCallableSurface(internalRoot, goldenPath string) error {
 	if err != nil {
 		return err
 	}
+	return compareKernelGolden(actual, goldenPath, "callable surface")
+}
+
+func compareKernelGolden(actual, goldenPath, description string) error {
 	expected, err := os.ReadFile(goldenPath)
 	if err != nil {
 		return err
@@ -236,7 +252,7 @@ func checkKernelCallableSurface(internalRoot, goldenPath string) error {
 		}
 	}
 	sort.Strings(changes)
-	return fmt.Errorf("kernel callable surface changed; review implementations and update %s explicitly:\n%s", goldenPath, strings.Join(changes, "\n"))
+	return fmt.Errorf("kernel %s changed; review implementations and update %s explicitly:\n%s", description, goldenPath, strings.Join(changes, "\n"))
 }
 
 // Regeneration is explicit and separate from enforcement. Editing this golden
@@ -245,15 +261,20 @@ func TestKernelCallableSurfaceGolden(t *testing.T) {
 	if os.Getenv("ANX_UPDATE_KERNEL_API") != "1" {
 		return
 	}
-	surface, err := kernelCallableSurface("..")
+	analysis, err := inspectKernel("..")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll("testdata", 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile("testdata/kernel_callable_surface.txt", []byte(surface), 0600); err != nil {
-		t.Fatal(err)
+	for path, surface := range map[string]string{
+		"testdata/kernel_callable_surface.txt": analysis.apiSurface(),
+		"testdata/kernel_symbol_uses.txt":      analysis.symbolUses(),
+	} {
+		if err := os.WriteFile(path, []byte(surface), 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

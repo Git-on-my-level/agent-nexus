@@ -7,7 +7,6 @@ import (
 	"container/heap"
 	"context"
 	"encoding/json"
-	"errors"
 	"time"
 
 	"agent-nexus-core/internal/scopes"
@@ -21,10 +20,15 @@ const (
 	MaxItemBytes       = 16 * 1024
 )
 
-var (
-	ErrBudget     = errors.New("readmodel budget exceeded")
-	ErrProjection = errors.New("invalid readmodel projection")
-	ErrCursor     = errors.New("readmodel continuation invalid; restart required")
+// Immutable sentinels cannot be rebound to callbacks supplied by an adapter.
+type kernelError string
+
+func (e kernelError) Error() string { return string(e) }
+
+const (
+	ErrBudget     kernelError = "readmodel budget exceeded"
+	ErrProjection kernelError = "invalid readmodel projection"
+	ErrCursor     kernelError = "readmodel continuation invalid; restart required"
 )
 
 type Availability string

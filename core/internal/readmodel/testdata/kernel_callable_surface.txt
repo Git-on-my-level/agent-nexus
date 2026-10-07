@@ -8,6 +8,7 @@ method *agent-nexus-core/internal/scopes.Change.Validate func() error
 method *agent-nexus-core/internal/scopes.Role.CanPublish func() bool
 method *agent-nexus-core/internal/scopes.Role.CanRead func() bool
 method *agent-nexus-core/internal/scopes.Role.CanWrite func() bool
+method *agent-nexus-core/internal/scopes.scopeError.Error func() string
 method agent-nexus-core/internal/scopes.CanonicalMutation.Validate func() error
 method agent-nexus-core/internal/scopes.Change.Validate func() error
 method agent-nexus-core/internal/scopes.MigrationStepper.Step func(context.Context, agent-nexus-core/internal/scopes.StepRequest) (agent-nexus-core/internal/scopes.StepResult, error)
@@ -15,6 +16,7 @@ method agent-nexus-core/internal/scopes.Role.CanPublish func() bool
 method agent-nexus-core/internal/scopes.Role.CanRead func() bool
 method agent-nexus-core/internal/scopes.Role.CanWrite func() bool
 method agent-nexus-core/internal/scopes.StreamTicker.Tick func(context.Context, agent-nexus-core/internal/scopes.TickRequest) (agent-nexus-core/internal/scopes.TickResult, error)
+method agent-nexus-core/internal/scopes.scopeError.Error func() string
 type agent-nexus-core/internal/scopes.Binding struct{ID agent-nexus-core/internal/scopes.ID; Available bool}
 type agent-nexus-core/internal/scopes.CanonicalMutation struct{Identity agent-nexus-core/internal/scopes.ResourceIdentity; PreviousVersion int64; Changes []agent-nexus-core/internal/scopes.Change}
 type agent-nexus-core/internal/scopes.Change struct{ScopeID agent-nexus-core/internal/scopes.ID; Kind string; ResourceID string; CanonicalVersion int64; Family string; Audience string; Before *agent-nexus-core/internal/scopes.Projection; After *agent-nexus-core/internal/scopes.Projection}
@@ -53,8 +55,4 @@ underlying agent-nexus-core/internal/scopes.Stream struct{Scope agent-nexus-core
 underlying agent-nexus-core/internal/scopes.StreamChange struct{ScopeID agent-nexus-core/internal/scopes.ID; Family string; Audience string; ResourceID string; Sequence int64; Payload []byte}
 underlying agent-nexus-core/internal/scopes.StreamTicker interface{Tick(context.Context, agent-nexus-core/internal/scopes.TickRequest) (agent-nexus-core/internal/scopes.TickResult, error)}
 underlying agent-nexus-core/internal/scopes.TickRequest struct{Selection agent-nexus-core/internal/scopes.RequestSelection; Streams []agent-nexus-core/internal/scopes.Stream; Cursor string; Limit int}
-var agent-nexus-core/internal/scopes.ErrBudget error
-var agent-nexus-core/internal/scopes.ErrClosed error
-var agent-nexus-core/internal/scopes.ErrDenied error
-var agent-nexus-core/internal/scopes.ErrDerivation error
-var agent-nexus-core/internal/scopes.ErrUpdating error
+underlying agent-nexus-core/internal/scopes.scopeError string

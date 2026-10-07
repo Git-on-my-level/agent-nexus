@@ -23,7 +23,7 @@ func TestReadModelNotServing(t *testing.T) {
 	if err := checkKernelDependencyClosure("..", "agent-nexus-core/internal/readmodel"); err != nil {
 		t.Error(err)
 	}
-	if err := checkKernelCallableSurface("..", "testdata/kernel_callable_surface.txt"); err != nil {
+	if err := checkKernelReview("..", "testdata"); err != nil {
 		t.Error(err)
 	}
 	for _, root := range []string{"..", "../../cmd"} {

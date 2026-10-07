@@ -107,11 +107,22 @@ That reviewed surface includes interfaces, callbacks in fields/parameters,
 mutable package variables, promoted methods and reachable private types. A
 storage-backed implementation supplied by `scopedrepo` can change no kernel
 import and still introduce authority; the interface fixture rejects that API
-addition. This snapshot requires review of API changes, while implementation
+addition. `testdata/kernel_symbol_uses.txt` also pins actual `go/types`
+Uses/Selections across every kernel package, including aliases, dot imports,
+generic arguments and promoted methods. References are counted per declaration;
+new uses of an existing symbol or method require a golden update too.
+`testdata/kernel_callable_variables.json` is a separate explicit exception list
+for interface/function globals, including private application globals and
+callback-bearing containers. It approves only four standard-library globals;
+no application callback globals are approved. Refreshing either golden does
+not approve a mutable callback. Scope and kernel error sentinels are immutable
+typed constants, retaining messages, comparisons and wrapped `errors.Is` behavior.
+These checks require review of API and usage changes, while implementation
 purity and serving approval still require the separate gates above. After
 reviewing a deliberate API change, regenerate from `core/` with
 `ANX_UPDATE_KERNEL_API=1 go test ./internal/readmodel -run '^TestKernelCallableSurfaceGolden$'`,
-then inspect and commit the golden diff. Production sources excluded by build
+then inspect and commit both golden diffs. Review variable exceptions separately.
+Production sources excluded by build
 tags are included; conflicting declarations fail closed rather than disappear
 from the review surface on a different platform.
 
