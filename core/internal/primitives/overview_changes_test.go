@@ -120,6 +120,16 @@ func TestOverviewDigestNetTransitionsVisibilityAndBounds(t *testing.T) {
 	}
 	d.Since = expected.Since
 	d.GeneratedAt = expected.GeneratedAt
+	/*
+	 * PriorPhases is a derivation input for callers that need to tell a
+	 * transition from a current state; it is deliberately not serialized, so
+	 * it has nothing to say about the wire fixture. Its own round trip is
+	 * covered in overview_visit_phase_test.go.
+	 */
+	if len(d.PriorPhases) == 0 {
+		t.Fatal("the visit baseline recorded no phases")
+	}
+	d.PriorPhases = nil
 	for i := range d.Items {
 		if d.Items[i].TS != "" {
 			d.Items[i].TS = "2026-10-04T12:01:00Z"
@@ -127,6 +137,7 @@ func TestOverviewDigestNetTransitionsVisibilityAndBounds(t *testing.T) {
 	}
 	sort.Slice(d.Items, func(i, j int) bool { return d.Items[i].Kind < d.Items[j].Kind })
 	sort.Slice(expected.Items, func(i, j int) bool { return expected.Items[i].Kind < expected.Items[j].Kind })
+	d.PriorPhases = nil
 	if !reflect.DeepEqual(d, expected) {
 		t.Fatalf("digest wire fixture differs: got=%+v want=%+v", d, expected)
 	}

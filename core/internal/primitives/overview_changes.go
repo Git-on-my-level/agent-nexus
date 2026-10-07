@@ -28,6 +28,12 @@ type OverviewChanges struct {
 	GeneratedAt string           `json:"generated_at"`
 	Items       []OverviewChange `json:"items"`
 	Truncated   bool             `json:"truncated"`
+	// Phase per card id as the previous visit saw it, for callers that need to
+	// distinguish a transition from a current state. A card the previous visit
+	// did not record has no entry, which means "unknown", not "no phase".
+	// Never serialized: the digest's contract is its items, and this is a
+	// derivation input.
+	PriorPhases map[string]string `json:"-"`
 }
 
 func (d *OverviewChanges) Add(item OverviewChange) {
@@ -44,6 +50,7 @@ func (d *OverviewChanges) Add(item OverviewChange) {
 
 type visitState struct {
 	Health string            `json:"health"`
+	Phase  string            `json:"phase,omitempty"`
 	Steps  map[string]string `json:"steps"`
 }
 
@@ -54,7 +61,11 @@ type overviewVisitValidationKey struct{}
 func overviewSnapshot(work []map[string]any) map[string]visitState {
 	out := map[string]visitState{}
 	for _, w := range work {
-		v := visitState{Health: anyStringValue(initiativeHealth(w)["status"]), Steps: map[string]string{}}
+		// Phase is recorded so the next visit can tell a card that moved into
+		// blocked from one that was already blocked and merely edited. A
+		// snapshot written by an older core has no phase, which reads as
+		// "unknown" rather than as a transition.
+		v := visitState{Health: anyStringValue(initiativeHealth(w)["status"]), Phase: anyStringValue(w["phase"]), Steps: map[string]string{}}
 		if state, ok := w["plan_state"].(plans.State); ok {
 			p := w["plan"].(plans.Plan)
 			for i, step := range state.Steps {
@@ -107,6 +118,18 @@ func (s *Store) OverviewChanges(ctx context.Context, principal string, work []ma
 	before := map[string]visitState{}
 	if err = json.Unmarshal([]byte(raw), &before); err != nil {
 		return out, err
+	}
+	/*
+	 * An empty phase is a snapshot written before phase was recorded. Passing
+	 * it through as "" would read as a real previous phase and make every
+	 * blocked card look newly blocked on the first read after an upgrade, so
+	 * it is omitted and the caller sees "unknown".
+	 */
+	out.PriorPhases = map[string]string{}
+	for id, state := range before {
+		if state.Phase != "" {
+			out.PriorPhases[id] = state.Phase
+		}
 	}
 	for _, w := range work {
 		old, known := before[anyStringValue(w["id"])]

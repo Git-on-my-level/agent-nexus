@@ -85,8 +85,13 @@ func TestHealthMovementAndNoncriticalBlocks(t *testing.T) {
 	if got := Compute(p, nil, now, now, DefaultStalledAfter); got.Health != "blocked" {
 		t.Fatal("noncritical block:", got)
 	}
+	// A finished plan reports "done", not "on_track": the legacy field names
+	// every state it can name rather than flattening them into green.
 	p = Plan{Steps: []Step{{ID: "a", Title: "a", Status: "done"}}}
-	if got := Compute(p, nil, old, now, DefaultStalledAfter); got.Health != "on_track" || len(got.CriticalPath) != 0 {
+	if got := Compute(p, nil, old, now, DefaultStalledAfter); got.Health != "done" || got.HealthState != "done" || len(got.CriticalPath) != 0 {
 		t.Fatal(got)
+	}
+	if got := Compute(Plan{Steps: []Step{}}, nil, now, now, DefaultStalledAfter); got.Health != "no_plan" || got.HealthState != "no_plan" {
+		t.Fatal("empty plan must not read on_track:", got)
 	}
 }

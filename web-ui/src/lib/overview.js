@@ -456,6 +456,12 @@ export async function loadOverview(client, { now = Date.now() } = {}) {
     },
     initiatives: snapshot.initiatives,
     sinceYouLastLooked: snapshot.since_you_last_looked,
+    /*
+     * The morning brief arrives computed. An older core sends no `brief` at
+     * all, and that stays undefined rather than becoming an empty object, so
+     * the band can tell "no brief" apart from "a brief with nothing in it".
+     */
+    brief: snapshot.brief,
     reports: {
       ...snapshot.dashboard,
       reports: (snapshot.dashboard.reports || []).flatMap((entry) => {

@@ -5952,7 +5952,7 @@
           ],
           "stability": "beta",
           "surface": "projection",
-          "agent_notes": "Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it.",
+          "agent_notes": "Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it. brief holds the ranked morning answers (decisions, since_last_look, at_risk, machine, initiatives) computed from the same authorized rows, with no extra query.",
           "adjacent_commands": [
             "overview.changes"
           ],
@@ -11634,7 +11634,7 @@
           ],
           "stability": "beta",
           "surface": "projection",
-          "agent_notes": "Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it.",
+          "agent_notes": "Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it. brief holds the ranked morning answers (decisions, since_last_look, at_risk, machine, initiatives) computed from the same authorized rows, with no extra query.",
           "adjacent_commands": [
             "overview.changes"
           ],
@@ -15708,7 +15708,7 @@
           ],
           "stability": "beta",
           "surface": "projection",
-          "agent_notes": "Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it.",
+          "agent_notes": "Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it. brief holds the ranked morning answers (decisions, since_last_look, at_risk, machine, initiatives) computed from the same authorized rows, with no extra query.",
           "adjacent_commands": [
             "overview.changes"
           ],
