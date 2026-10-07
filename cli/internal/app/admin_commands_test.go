@@ -17,6 +17,7 @@ func TestAdminCLICommands(t *testing.T) {
 		{[]string{"auth", "admins", "grant", "fleet.host-a"}, "POST", "/auth/admins/fleet.host-a/grant"},
 		{[]string{"auth", "admins", "revoke", "agent-1"}, "POST", "/auth/admins/agent-1/revoke"},
 		{[]string{"auth", "admins", "list"}, "GET", "/auth/admins"},
+		{[]string{"auth", "admins", "list", "--limit", "2", "--cursor", "next"}, "GET", "/auth/admins"},
 		{[]string{"host", "tokens", "create", "--label", "fleet", "--expires-in", "10m"}, "POST", "/auth/hosts/enrollment-tokens"},
 		{[]string{"host", "tokens", "list"}, "GET", "/auth/hosts/enrollment-tokens"},
 		{[]string{"host", "tokens", "revoke", "htok-1"}, "POST", "/auth/hosts/enrollment-tokens/htok-1/revoke"},
@@ -47,6 +48,11 @@ func TestAdminCLICommands(t *testing.T) {
 					t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 				}
 				seen = true
+				if len(tc.args) > 3 && tc.args[1] == "admins" && tc.args[2] == "list" {
+					if r.URL.Query().Get("limit") != "2" || r.URL.Query().Get("cursor") != "next" {
+						t.Error("pagination flags were not sent")
+					}
+				}
 				if tc.args[1] == "tokens" && tc.args[2] == "create" {
 					var body map[string]any
 					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -99,7 +105,7 @@ func TestAdminCLICommands(t *testing.T) {
 
 func TestAdminCommandUsageBeforeIdentity(t *testing.T) {
 	for _, args := range [][]string{
-		{"host", "tokens", "create", "--typo"}, {"host", "enrollments", "bad"}, {"auth", "admins", "bad"},
+		{"auth", "admins", "list", "--limit", "0"}, {"auth", "admins", "list", "--limit", "abc"}, {"auth", "admins", "list", "extra"}, {"host", "tokens", "create", "--typo"}, {"host", "enrollments", "bad"}, {"auth", "admins", "bad"},
 		{"host", "enrollments", "list", "--typo"}, {"host", "revoke", "host-b", "--typo"}, {"host", "enroll", "--token-stdinn"},
 	} {
 		_, err := preflightConfigIndependentUsage(args)

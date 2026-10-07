@@ -31,7 +31,7 @@ func TestReportPanelsShareBoundedReadsByScope(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if len(store.filters) != 1 || store.filters[0].Limit != reports.MaxRows {
+	if len(store.filters) != 1 || store.filters[0].Limit != maxReportCandidates {
 		t.Fatalf("shared default scope: %#v", store.filters)
 	}
 	for _, kind := range []string{"live-initiatives", "live-work-mix"} {

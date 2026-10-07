@@ -27,7 +27,7 @@ func pageParams(r *http.Request) (int, string, error) {
 	}
 	return n, r.URL.Query().Get("cursor"), nil
 }
-func recordPage[T any](ctx context.Context, s *Service, p Principal, kind string, limit int, cursor string, allowed func(T) bool) (Page[T], error) {
+func recordPage[T any](ctx context.Context, s *Service, p Principal, kind string, limit int, cursor string, workRef func(T) string) (Page[T], error) {
 	out := Page[T]{Items: make([]T, 0)}
 	if err := s.authorize(ctx, p, "pm.read", ""); err != nil {
 		return out, err
@@ -57,15 +57,45 @@ func recordPage[T any](ctx context.Context, s *Service, p Principal, kind string
 		// Go stores UTC RFC3339Nano. Removing Z preserves exact fractional-second
 		// ordering (including whole seconds) without SQLite's millisecond rounding.
 		// Legacy actions had no creation timestamp; use their decision's timestamp.
-		rows, err := s.store.database().QueryContext(ctx, `WITH records AS (
- SELECT r.rowid AS record_rowid, r.body,
- rtrim(COALESCE(json_extract(r.body,'$.created_at'),
-   (SELECT json_extract(d.body,'$.created_at') FROM pm_records d
-    WHERE r.kind='action' AND d.kind='decision' AND d.id=r.parent_id AND d.workspace_id=r.workspace_id), ''), 'Z') AS created
- FROM pm_records r WHERE r.kind=? AND r.workspace_id=? AND (?='' OR r.actor_id=?))
- SELECT record_rowid,created,body FROM records
- WHERE (?=0 OR created<? OR (created=? AND record_rowid<?))
- ORDER BY created DESC,record_rowid DESC LIMIT ?`, kind, p.WorkspaceID, owner, owner, before.Row, before.Created, before.Created, before.Row, limit+1)
+		created := `rtrim(COALESCE(json_extract(r.body,'$.created_at'),''),'Z')`
+		where := `r.kind=? AND r.workspace_id=?`
+		args := []any{kind, p.WorkspaceID}
+		if owner != "" {
+			where += ` AND r.actor_id=?`
+			args = append(args, owner)
+		}
+		boundary := func(expr string) string {
+			if before.Row == 0 {
+				return ""
+			}
+			return ` AND (` + expr + `<? OR (` + expr + `=? AND r.rowid<?))`
+		}
+		bindBoundary := func(args []any) []any {
+			if before.Row > 0 {
+				args = append(args, before.Created, before.Created, before.Row)
+			}
+			return args
+		}
+		query := `SELECT r.rowid,` + created + ` AS created,r.body FROM pm_records r WHERE ` + where + boundary(created) + ` ORDER BY ` + created + ` DESC,r.rowid DESC LIMIT ?`
+		args = bindBoundary(args)
+		args = append(args, limit+1)
+		if kind == "action" {
+			// Modern actions use the indexed timestamp directly. Keep legacy fallback
+			// in a separate sparse selector so it cannot force a sort of all actions.
+			query = `SELECT * FROM (SELECT r.rowid,` + created + ` AS created,r.body FROM pm_records r WHERE ` + where + ` AND json_extract(r.body,'$.created_at') IS NOT NULL` + boundary(created) + ` ORDER BY ` + created + ` DESC,r.rowid DESC LIMIT ?)`
+			legacy := `rtrim(COALESCE((SELECT json_extract(d.body,'$.created_at') FROM pm_records d WHERE d.kind='decision' AND d.id=r.parent_id AND d.workspace_id=r.workspace_id),''),'Z')`
+			legacyArgs := []any{kind, p.WorkspaceID}
+			if owner != "" {
+				legacyArgs = append(legacyArgs, owner)
+			}
+			query += ` UNION ALL SELECT * FROM (SELECT r.rowid,` + legacy + ` AS created,r.body FROM pm_records r WHERE ` + where + ` AND json_extract(r.body,'$.created_at') IS NULL` + boundary(legacy) + ` ORDER BY created DESC,r.rowid DESC LIMIT ?)`
+			legacyArgs = bindBoundary(legacyArgs)
+			legacyArgs = append(legacyArgs, limit+1)
+			args = append(args, legacyArgs...)
+			query = `SELECT * FROM (` + query + `) ORDER BY created DESC,rowid DESC LIMIT ?`
+			args = append(args, limit+1)
+		}
+		rows, err := s.store.database().QueryContext(ctx, query, args...)
 		if err != nil {
 			return out, err
 		}
@@ -94,9 +124,20 @@ func recordPage[T any](ctx context.Context, s *Service, p Principal, kind string
 		if err != nil {
 			return out, err
 		}
+		readable := map[string]bool{}
+		if workRef != nil {
+			refs := make([]string, 0, len(records))
+			for _, v := range records {
+				refs = append(refs, workRef(v.value))
+			}
+			readable, err = s.authorizeReadBatch(ctx, p, "pm.read", refs)
+			if err != nil {
+				return out, err
+			}
+		}
 		for _, v := range records {
 			before.Scope, before.Created, before.Row = scope, v.created, v.row
-			if !allowed(v.value) {
+			if workRef != nil && !readable[workRef(v.value)] {
 				continue
 			}
 			if len(out.Items) == limit {
@@ -121,17 +162,17 @@ func recordPage[T any](ctx context.Context, s *Service, p Principal, kind string
 }
 
 func (s *Service) ConversationPage(ctx context.Context, p Principal, limit int, cursor string) (Page[Conversation], error) {
-	return recordPage(ctx, s, p, "conversation", limit, cursor, func(c Conversation) bool { return s.authorize(ctx, p, "pm.read", c.WorkRef) == nil })
+	return recordPage(ctx, s, p, "conversation", limit, cursor, func(c Conversation) string { return c.WorkRef })
 }
 func (s *Service) DecisionPage(ctx context.Context, p Principal, limit int, cursor string) (Page[Decision], error) {
-	page, err := recordPage(ctx, s, p, "decision", limit, cursor, func(d Decision) bool { return s.authorize(ctx, p, "pm.read", d.WorkRef) == nil })
-	for i, d := range page.Items {
-		page.Items[i] = s.decisionForReader(ctx, p, d)
+	page, err := recordPage(ctx, s, p, "decision", limit, cursor, func(d Decision) string { return d.WorkRef })
+	if err == nil {
+		page.Items, err = s.decisionsForReader(ctx, p, page.Items)
 	}
 	return page, err
 }
 func (s *Service) ActionPage(ctx context.Context, p Principal, limit int, cursor string) (Page[Action], error) {
-	page, err := recordPage(ctx, s, p, "action", limit, cursor, func(a Action) bool { return s.authorize(ctx, p, "pm.read", a.WorkRef) == nil })
+	page, err := recordPage(ctx, s, p, "action", limit, cursor, func(a Action) string { return a.WorkRef })
 	for i, a := range page.Items {
 		page.Items[i] = s.actionForReader(ctx, a)
 	}
@@ -141,7 +182,7 @@ func (s *Service) BindingPage(ctx context.Context, p Principal, limit int, curso
 	if err := s.authorize(ctx, p, "pm.bind", ""); err != nil {
 		return Page[Binding]{}, err
 	}
-	return recordPage(ctx, s, p, "binding", limit, cursor, func(Binding) bool { return true })
+	return recordPage[Binding](ctx, s, p, "binding", limit, cursor, nil)
 }
 
 // ConversationHistory reads newest history by default, in chronological display

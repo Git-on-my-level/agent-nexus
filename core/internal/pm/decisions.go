@@ -519,15 +519,58 @@ func validActionPayload(scope string, p *ActionPayload) bool {
 
 // Reading decisions is workspace-visible; answering never inherits that scope.
 func (s *Service) decisionForReader(ctx context.Context, p Principal, d Decision) Decision {
+	return s.decisionForReaderWithWork(ctx, p, d, s.deps.DecisionWork)
+}
+func (s *Service) decisionsForReader(ctx context.Context, p Principal, ds []Decision) ([]Decision, error) {
+	work := s.deps.DecisionWork
+	if s.deps.DecisionWorkBatch != nil {
+		refs := []string{}
+		for _, d := range ds {
+			refs = append(refs, d.WorkRef)
+		}
+		snapshots, err := s.deps.DecisionWorkBatch(ctx, p, refs)
+		if err != nil {
+			return nil, err
+		}
+		work = func(_ context.Context, _ Principal, ref string) (DecisionWork, error) {
+			w, ok := snapshots[ref]
+			if !ok {
+				return DecisionWork{}, ErrNotFound
+			}
+			return w, nil
+		}
+	}
+	refs := []string{}
+	for _, d := range ds {
+		if p.Human && d.ActorID == p.ActorID && d.Status == AwaitingAnswer {
+			refs = append(refs, d.WorkRef)
+		}
+	}
+	approval, err := s.authorizeReadBatch(ctx, p, "pm.approve", refs)
+	if err != nil {
+		return nil, err
+	}
+	for i, d := range ds {
+		canAnswer := p.Human && d.ActorID == p.ActorID && d.Status == AwaitingAnswer && approval[d.WorkRef]
+		ds[i] = s.decisionReaderProjection(ctx, p, d, work, canAnswer)
+	}
+	return ds, nil
+}
+func (s *Service) decisionForReaderWithWork(ctx context.Context, p Principal, d Decision, decisionWork func(context.Context, Principal, string) (DecisionWork, error)) Decision {
+	canAnswer := p.Human && d.ActorID == p.ActorID && d.Status == AwaitingAnswer && s.authorize(ctx, p, "pm.approve", d.WorkRef) == nil
+	return s.decisionReaderProjection(ctx, p, d, decisionWork, canAnswer)
+}
+
+func (s *Service) decisionReaderProjection(ctx context.Context, p Principal, d Decision, decisionWork func(context.Context, Principal, string) (DecisionWork, error), canAnswer bool) Decision {
 	// Older rejections used superseded without a replacement. Project them as
 	// declined without rewriting the durable answer or its revision.
 	if d.Status == Superseded && d.SupersededBy == "" {
 		d.Status = Declined
 	}
-	d.CanAnswer = p.Human && d.ActorID == p.ActorID && d.Status == AwaitingAnswer && s.authorize(ctx, p, "pm.approve", d.WorkRef) == nil
+	d.CanAnswer = canAnswer
 	d.WorkMissing, d.TargetCurrent, d.AlreadyAtTarget = false, nil, nil
-	if s.deps.DecisionWork != nil {
-		work, err := s.deps.DecisionWork(ctx, p, d.WorkRef)
+	if decisionWork != nil {
+		work, err := decisionWork(ctx, p, d.WorkRef)
 		d.WorkMissing = errors.Is(err, ErrNotFound)
 		if err != nil {
 			d.CanAnswer = false

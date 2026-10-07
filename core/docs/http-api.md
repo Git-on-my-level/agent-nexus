@@ -214,7 +214,9 @@ development mode. See the canonical OpenAPI for request/response envelopes.
 
 ### Explicit agent auth-admin grants
 
-- `GET /auth/admins`: humans or auth-admin agents list active explicit agent grants (`{ admins: [{ principal_id, actor_id, username, auth_admin }] }`).
+- `GET /auth/admins`: humans or auth-admin agents list active explicit agent grants (`{ admins: [{ principal_id, actor_id, username, auth_admin }], next_cursor, has_more }`).
+  `limit` defaults to 50 (1..200); `cursor` continues in username/ID order. Host
+  fields are enriched in one batch for that page.
 - Host-backed grants also include `host_id`, `host_slug`, and `agent_name`. Granting one trusts every process that can read that shared host key and derive the named agent's bearer. Grant/revoke audit metadata records that scope.
 - `POST /auth/principals/{principal_id}/revoke` (including the human lockout override) and `POST /auth/invites/{invite_id}/revoke` require active human authorization in their mutation transactions. Agent grants provide fleet writes and inventory/audit reads only.
 - `POST /auth/invites` is human-only. Human credential creation validates a human invite issuer inside its transaction, so historical agent-issued invites cannot mint human identities. Agent bearers cannot authorize human credential ceremonies.
@@ -238,7 +240,7 @@ Card and work reads expose `plan` and `plan_state`. State has effective `steps`,
 
 The existing live-initiatives report projection retains `progress` and `needs[]`. Plans replace markdown-derived progress with computed counts and needs with blocked step titles; `plan_state` and `health` are additional fields. Cards without plans retain the previous summary projection.
 
-Report hydration joins cards, metadata, latest good/attempt observations, board labels and thread privacy in one query for the bounded candidate set (up to 2,000 rows). Plan enrichment uses one plan/activity query plus at most one fact query per referenced resource kind and one external-evidence scan, independent of card/step count. Batch ref resolution uses at most five initial fact queries, one plan/activity query and five linked-fact queries. These paths never call `GetWork` per row or ref. The general `ListWork` read path is unchanged.
+Report hydration joins cards, metadata, latest good/attempt observations, board labels and thread privacy in one query for the bounded candidate set (up to 200 rows per native report scope). Plan enrichment uses one plan/activity query plus at most one fact query per referenced resource kind and one external-evidence scan, independent of card/step count. Batch ref resolution uses at most five initial kind queries, one plan/activity query and five linked-fact queries. Work and plan projection reads never call `GetWork` per row or ref. Native report event and decision reads each stop after one 200-candidate page, including uncached `POST /reports/preview`, and preserve `truncated` when more remain. `GET /work` applies its source, owner, phase, freshness, query and project filters in SQL before a bounded page is hydrated. Cursor ordering uses UTC timestamps and card IDs, including nanosecond precision.
 
 `POST /refs/resolve` accepts `{refs:[...]}` (max 200). Results are `{items:[{ref,resolvable,kind?,title?,status?,phase?,owner?,owner_display?,board?,priority?,last_moved_at?,next_step?,progress?,url?}]}` in input order, retaining duplicates. Native card/document URLs are workspace-relative UI paths; topics and boards omit url because they have no current UI detail surface. Unknown, trashed or inaccessible native refs return only `{ref,resolvable:false}`. Native handles and internal ids resolve for cards, docs/documents, topics and boards. Plan-derived progress and status honor the requesting principal's access to every referenced resource. Responses are read-only and uncached. `board` contains `{ref,title}` and is independently visibility checked. `owner_display` is the workspace actor display name, falling back to the owner ref. `next_step` contains id, title and ref for a readable ready step, preferring the critical path when a plan exists. `last_moved_at` uses the same native update/source meaningful movement timestamp as plan facts, never a polling observation timestamp. Hosted clients prepend `/o/<org>/w/<ws>` to native relative URLs; absolute source URLs are used unchanged.
 
@@ -257,10 +259,13 @@ Planless initiatives have null plan_state/geometry and phase-based health.
 Geometry supplies shape, effective node status, dependency layer and included
 `after` edges, capped at 24 nodes; `total_nodes` and `collapsed_nodes` describe
 the remainder. Clients render geometry without re-deriving workflow semantics.
-The projection reads at most 2,000 accessible active-lifecycle candidate cards (including
-closed cards for completion digests), reuses the report batch privacy context,
-and declares `truncated` on work and initiatives when more candidates exist.
-Counts refer to the visible bounded set.
+The projection reads at most 100 open and 100 closed active-lifecycle candidate
+cards for completion digests, reuses the report batch privacy context, and
+declares `truncated` on work and initiatives when more candidates exist.
+Counts refer to the visible bounded set. Needs you also declares `truncated`
+when work, inbox or its 100 actionable PM decision candidates exceed their
+windows. Agent presence samples at most 100 visible identities. Use the work,
+inbox and PM collection endpoints to continue through their pages.
 
 `GET /overview/changes` returns `{since,generated_at,items,truncated}` for the
 last authenticated principal visit to Overview in this workspace database.
@@ -299,7 +304,10 @@ board and orders asks/answers and done/blocked transitions before routine edits.
 Overview bulk-loads active work and observation metadata once. Its dashboard
 contains only the selected accessible validated report and `has_more` when unread accessible candidates
 remain. `GET /workspace/dashboard/reports` (`anx workspace dashboard list`) loads
-selector candidates on demand. Pin acceptance, selection and CLI publishing share
+at most 100 recent document candidates plus the pinned document on demand;
+`next_cursor` continues through older candidates. Overview validates only the
+selected report within that window and declares `has_more` when more candidates
+remain. Pin acceptance, selection and CLI publishing share
 `contracts/visualreport`; renderer conformance covers static and live panels.
 Both dashboard responses include each report's selected head `revision_ref`, so
 live data from a later revision cannot render under an earlier definition.
@@ -448,3 +456,13 @@ idempotent replay; losing access makes the item look absent even after response.
 `GET /inbox/summary` uses the same visibility rules as `/inbox`, counts open asks,
 and returns up to `limit` asks (default 5, range 0–50), with priority and oldest-first
 ordering. Access reviews are counted by the Access summary.
+
+### Open inbox pages
+
+`GET /inbox?status=open` accepts `limit` (default 50, max 100) and an opaque
+`cursor`. Rows order escalation, ask, review, then other categories, with newest
+trigger first inside each category. `has_more` and `next_cursor` describe further
+candidate rows; lifecycle filtering can leave a page empty while a cursor still
+continues. Cursors belong to the authenticated principal and inbox status.
+Workspace projection freshness retains the complete status and `thread_count`,
+with at most 100 thread details and `truncated` for additional threads.

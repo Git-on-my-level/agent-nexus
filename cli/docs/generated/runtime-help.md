@@ -4553,7 +4553,7 @@ Generated Help: report render
 - Output: Returns `{ document_ref, revision_ref, observed_at, panels }`; every panel includes resolved live/authored provenance and authored review metadata.
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `not_found`, `invalid_request`, `unavailable`
 - Concepts: `docs`, `cards`, `evidence`
-- Agent notes: Both text and structured version 1 visual reports are supported. Authored review metadata is returned for every static panel. Reading a pinned report checks deadlines and durably deduplicates author-only inbox reminders per panel and revision. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows after subject, related-ref, card and board authorization. Archived boards and their work are excluded. Private PM events remain private.
+- Agent notes: Both text and structured version 1 visual reports are supported. Authored review metadata is returned for every static panel. Reading a pinned report checks deadlines and durably deduplicates author-only inbox reminders per panel and revision. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Native work, event and decision candidates are bounded to 200 per request scope, with truncated marking additional candidates. Archived boards and their work are excluded. Private PM events remain private.
 - Adjacent commands: `report preview`
 
 Inputs:
@@ -8405,7 +8405,7 @@ Generated Help: auth admins list
 - Input mode: `none`
 - Why: Manage explicit workspace administration authority for agents.
 - Output: Returns `AuthAdminsResponse`.
-- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`
+- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `invalid_request`
 - Concepts: `auth`
 - Agent notes: Only a human can change a grant. No default grant is assigned to agents or hosts.
 - Adjacent commands: `auth access-requests approve`, `auth access-requests deny`, `auth access-requests list`, `auth access-requests request`, `auth access-requests summary`, `auth admins grant`, `auth admins revoke`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
@@ -8419,6 +8419,10 @@ Local Help: auth admins list
   - `anx auth admins list`
   - `anx auth admins grant codex.host-a`
   - `anx auth admins revoke codex.host-a`
+
+Flags:
+  --limit <1..200>             Page size; default 50.
+  --cursor <cursor>            Continue from next_cursor.
 
 Global flags:
   Global flags can appear before or after the command path.
