@@ -368,15 +368,17 @@ func handleAgentNotificationReceiptsStream(w http.ResponseWriter, r *http.Reques
 					result.err = scanCtx.Err()
 					break
 				}
-				if !threadAccessible(r, opts, threadID) {
-					result.err = errReceiptStreamDenied
-					break
-				}
 				result.page, result.err = opts.primitiveStore.ListReceiptStreamPage(scanCtx, threadID, cursor)
 				if result.err != nil {
 					break
 				}
 				cursor = result.page.Cursor
+				// Rebuild authorization only when inherited visibility changes.
+				// Steady ticks reuse the cached closure inside the page read.
+				if result.page.AccessChanged && !threadAccessible(r, opts, threadID) {
+					result.err = errReceiptStreamDenied
+					break
+				}
 				if len(result.page.Wakeups) != 0 || !result.page.HasMore {
 					break
 				}
@@ -391,6 +393,9 @@ func handleAgentNotificationReceiptsStream(w http.ResponseWriter, r *http.Reques
 	defer func() { cancelScan(); <-scanDone }()
 
 	lastDigestByWakeup := map[string]string{}
+	if cursor.AcceptedWakeupID != "" && cursor.AcceptedDigest != "" {
+		lastDigestByWakeup[cursor.AcceptedWakeupID] = cursor.AcceptedDigest
+	}
 	ticker := time.NewTicker(opts.streamPollInterval)
 	defer ticker.Stop()
 	keepalive := func() bool {

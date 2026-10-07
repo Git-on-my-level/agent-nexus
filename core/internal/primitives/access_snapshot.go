@@ -4,13 +4,63 @@ import (
 	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"sync"
 )
 
+type denialTarget struct{ kind, id string }
+
 type denialSnapshot struct {
-	epoch int64
-	rows  string
+	epoch       int64
+	rows        string
+	indexOnce   sync.Once
+	targetIndex map[denialTarget]struct{}
 }
+
+// Index once when a closure is cached, rather than decoding every denied
+// resource again on each warm stream poll.
+func (s *denialSnapshot) prepareTargetIndex() {
+	s.indexOnce.Do(func() {
+		var rows [][2]string
+		if json.Unmarshal([]byte(s.rows), &rows) != nil {
+			return
+		}
+		index := make(map[denialTarget]struct{}, len(rows))
+		for _, row := range rows {
+			index[denialTarget{row[0], row[1]}] = struct{}{}
+		}
+		s.targetIndex = index
+	})
+}
+
+func (s *denialSnapshot) denies(kind, id string) bool {
+	if s == nil || id == "" {
+		return false
+	}
+	s.prepareTargetIndex()
+	if s.targetIndex == nil {
+		return true
+	}
+	_, denied := s.targetIndex[denialTarget{kind, id}]
+	return denied
+}
+
+// deniesWakeup applies the cached closure to one receipt. A wakeup created
+// after the closure was captured still inherits its thread and trigger event.
+func (s *denialSnapshot) deniesWakeup(wakeupID, threadID, triggerEventID string) bool {
+	if s == nil {
+		return false
+	}
+	s.prepareTargetIndex()
+	if s.targetIndex == nil {
+		return true
+	}
+	if s.denies("wakeup", wakeupID) || s.denies("thread", threadID) || s.denies("event", triggerEventID) {
+		return true
+	}
+	return false
+}
+
 type denialRequestState struct {
 	sync.Mutex
 	snapshot *denialSnapshot
@@ -47,9 +97,10 @@ func cachedReadDenial(db *sql.DB, scope AccessScope) *denialSnapshot {
 }
 
 func rememberReadDenial(db *sql.DB, scope AccessScope, snapshot *denialSnapshot) {
-	if db == nil || len(snapshot.rows) > 8<<20 {
+	if db == nil || snapshot == nil || len(snapshot.rows) > 8<<20 {
 		return
 	}
+	snapshot.prepareTargetIndex()
 	key := denialCacheKey{db, scope, snapshot.epoch}
 	readDenials.Lock()
 	defer readDenials.Unlock()

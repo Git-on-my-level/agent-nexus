@@ -195,6 +195,8 @@ public. Never cache visibility decisions for an SSE connection. Agent notificati
 receipt streams must not reload a thread's full wakeup history on each poll:
 page indexed snapshot positions, then replay the append-only update log. Hidden
 or trashed positions stay inside the connection and emit no SSE controls.
+Reuse one access snapshot per visibility epoch, and replay that snapshot when
+inherited visibility changes without a wakeup write.
 Shared cached projections with inaccessible contributors are unavailable to the reader;
 a reader-filtered projection must never replace canonical derived state.
 
