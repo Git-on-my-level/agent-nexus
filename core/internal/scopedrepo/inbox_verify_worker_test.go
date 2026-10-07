@@ -31,17 +31,32 @@ func TestInboxVerificationSupervisorCompletionAndShutdown(t *testing.T) {
 			w, err := scopedrepo.StartInboxVerificationWorker(ctx, true, s, id, options)
 			must(t, err)
 			t.Cleanup(func() { w.Close() })
-			deadline := time.NewTimer(10 * time.Second)
+			// Legacy oracle work is not a whole-job time bound. Instrumented
+			// SQLite can make a valid multi-slice job exceed ten seconds. Watch
+			// for stalled progress using the actual lease window instead, while
+			// retaining production per-slice deadline and receipt checks.
+			deadline := time.NewTimer(options.LeaseDuration)
 			defer deadline.Stop()
 			ticker := time.NewTicker(5 * time.Millisecond)
 			defer ticker.Stop()
+			var slices uint64
 			for {
-				if w.Diagnostics().Completed == 1 {
+				diagnostics := w.Diagnostics()
+				// These finite 16/160-row fixtures need far fewer slices. An
+				// endless loop cannot keep renewing the progress watchdog.
+				if diagnostics.Slices > 64 {
+					t.Fatal("supervisor exceeded finite fixture work", diagnostics)
+				}
+				if diagnostics.Completed == 1 {
 					break
+				}
+				if diagnostics.Slices > slices {
+					slices = diagnostics.Slices
+					deadline.Reset(options.LeaseDuration)
 				}
 				select {
 				case <-deadline.C:
-					t.Fatal("supervisor did not complete")
+					t.Fatal("supervisor stopped progressing", diagnostics)
 				case <-ticker.C:
 				}
 			}
