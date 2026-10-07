@@ -131,6 +131,13 @@
 
   /** Ticks so a freshness badge on screen does not go quietly out of date. */
   let now = $state(Date.now());
+  /*
+   * The tile grid, collapsed by default once the brief covers the same
+   * initiatives and opened by the reader from there. `null` means "nobody has
+   * chosen", so the default follows the brief rather than freezing at
+   * whatever the first render happened to be.
+   */
+  let initiativeTilesOpen = $state(null);
 
   let initiativeTileList = $derived(
     model?.initiatives?.status === "ok"
@@ -148,15 +155,47 @@
   let brief = $derived(
     morningBriefModel(model?.brief, { hrefFor: workspaceHref }),
   );
+  /*
+   * Who owns which rows.
+   *
+   * The brief answers this workspace: its Decisions section already ranks the
+   * same asks the band listed, and its At risk section already names the same
+   * initiatives. Showing both meant reading the morning twice and scrolling
+   * past the second copy.
+   *
+   * So when the brief is present the band keeps only what the brief cannot
+   * see — asks in the other workspaces this reader can reach — and the
+   * initiative tiles below fold away. Nothing is lost: the band still fans
+   * out, the tiles are one click down, and on a single-workspace deployment
+   * the band simply has nothing left to say and does not render.
+   */
+  let briefOwnsThisWorkspace = $derived(Boolean(brief));
   let urgentBand = $derived(
     urgentBandModel({
       asks: [
-        ...(model ? [asksFromSnapshot(model.needsYou, currentWorkspace)] : []),
+        ...(model && !briefOwnsThisWorkspace
+          ? [asksFromSnapshot(model.needsYou, currentWorkspace)]
+          : []),
         ...otherWorkspaceAsks,
       ],
-      tiles: initiativeTileList,
+      tiles: briefOwnsThisWorkspace ? [] : initiativeTileList,
       notCovered: unreadableWorkspaces,
     }),
+  );
+  /*
+   * An empty band under a brief would contradict it — "Nothing is waiting on
+   * you" directly below "26 waiting". It renders only when it still carries
+   * something the brief does not: a row, a failed read, or a workspace this
+   * browser has no session for.
+   */
+  let showInitiativeTiles = $derived(
+    initiativeTilesOpen ?? !briefOwnsThisWorkspace,
+  );
+  let showUrgentBand = $derived(
+    !briefOwnsThisWorkspace ||
+      urgentBand.asks.count > 0 ||
+      urgentBand.unavailable.length > 0 ||
+      urgentBand.notCovered.length > 0,
   );
 
   /** An ask's link belongs to the workspace it came from, not to this one. */
@@ -348,18 +387,20 @@
     -->
     <MorningBrief {brief} />
     <!--
-      One urgent band, not a second Inbox. It is the top of the page because it
-      is the only part of the page that might need doing in the next minute:
-      open asks for this reader across every workspace they can reach, then
-      initiatives that have stopped moving. Each row links to the surface that
-      owns it; the band never answers anything itself.
+      One urgent band, not a second Inbox. Without a brief it is the top of the
+      page and covers every workspace this reader can reach. With one, the
+      brief has already answered this workspace, so the band narrows to the
+      others — see `briefOwnsThisWorkspace` above.
     -->
-    <UrgentBand
-      band={urgentBand}
-      hrefFor={urgentHref}
-      loading={fanningOut && !otherWorkspaceAsks.length}
-      {now}
-    />
+    {#if showUrgentBand}
+      <UrgentBand
+        band={urgentBand}
+        title={briefOwnsThisWorkspace ? "Waiting elsewhere" : "Needs you"}
+        hrefFor={urgentHref}
+        loading={fanningOut && !otherWorkspaceAsks.length}
+        {now}
+      />
+    {/if}
     <!--
       Initiatives, worst first: blocked, at risk, stale, on track, done. The
       sort lives in `planHealth.js` so this section and the band above it
@@ -371,12 +412,27 @@
       class="rounded-md border border-line bg-panel"
       aria-labelledby="overview-initiatives"
       data-overview-section="initiatives"
+      data-overview-initiatives-folded={briefOwnsThisWorkspace
+        ? "true"
+        : "false"}
     >
       <header
         class="flex items-baseline justify-between border-b border-line px-3 py-2"
       >
         <h2 id="overview-initiatives" class="text-subtitle text-fg">
-          Initiatives
+          {#if briefOwnsThisWorkspace}
+            <button
+              class="text-subtitle text-fg hover:underline"
+              type="button"
+              aria-expanded={showInitiativeTiles}
+              onclick={() => (initiativeTilesOpen = !showInitiativeTiles)}
+              data-overview-initiatives-toggle
+            >
+              {showInitiativeTiles ? "▾" : "▸"} All initiatives
+            </button>
+          {:else}
+            Initiatives
+          {/if}
         </h2>
         <a
           class="text-meta text-accent-text hover:underline"
@@ -392,7 +448,7 @@
             retrying={refreshing}
           />
         </div>
-      {:else}
+      {:else if showInitiativeTiles}
         <div class="p-3">
           <LiveInitiatives items={model.initiatives.items} {now} />
         </div>

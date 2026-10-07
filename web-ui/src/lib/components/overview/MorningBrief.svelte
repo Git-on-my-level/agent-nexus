@@ -97,8 +97,10 @@
                 <span class="brief__rank" aria-hidden="true">{index + 1}</span>
                 <a class="brief__row-link" href={row.href}>{row.title}</a>
                 {#if row.reason}
-                  <span class="brief__reason" data-brief-reason
-                    >{row.reason}</span
+                  <span
+                    class="brief__reason"
+                    data-brief-reason
+                    title={row.reason}>{row.reason}</span
                   >
                 {/if}
               </li>
@@ -145,7 +147,7 @@
                 </button>
                 {#if opened.has(group.key)}
                   <ul class="brief__sub">
-                    {#each group.rows as row (row.ref)}
+                    {#each group.rows as row (row.key)}
                       <li>
                         <a class="brief__row-link" href={row.href}
                           >{row.title}</a
@@ -191,7 +193,9 @@
               <li class="brief__row" data-brief-risk={row.ref}>
                 <HealthBadge health={row.health} />
                 <a class="brief__row-link" href={row.href}>{row.title}</a>
-                <span class="brief__reason">{row.reason}</span>
+                <span class="brief__reason" data-brief-reason title={row.reason}
+                  >{row.reason}</span
+                >
               </li>
             {/each}
           </ul>
@@ -241,7 +245,9 @@
             {#each machine.rows as row (row.ref)}
               <li class="brief__row" data-brief-stuck={row.ref}>
                 <a class="brief__row-link" href={row.href}>{row.title}</a>
-                <span class="brief__reason">{row.reason}</span>
+                <span class="brief__reason" data-brief-reason title={row.reason}
+                  >{row.reason}</span
+                >
               </li>
             {/each}
           </ul>
@@ -303,7 +309,11 @@
                     >
                   </span>
                 {:else}
-                  <span class="brief__reason">{row.reason}</span>
+                  <span
+                    class="brief__reason"
+                    data-brief-reason
+                    title={row.reason}>{row.reason}</span
+                  >
                 {/if}
               </li>
             {/each}
@@ -458,6 +468,12 @@
     color: var(--accent-text);
     text-decoration: underline;
   }
+  /*
+   * The reason is the part that makes a ranking usable, so it is allowed to
+   * clip only where there is somewhere else to read it. On a wide row it
+   * ellipsizes against the title and carries the full text in its title
+   * attribute; at phone width it wraps instead — see the narrow rule below.
+   */
   .brief__reason {
     flex: 1 1 auto;
     min-width: 0;
@@ -597,7 +613,17 @@
   @media (max-width: 719px) {
     .brief__reason {
       flex-basis: 100%;
+      /*
+       * Nothing is truncated on a phone. A reason is one short clause and a
+       * second line costs less than an ellipsis the reader cannot open: a
+       * hover tooltip is not available to them, and "blocks 2 cards · 3d…"
+       * loses exactly the part that says how late it is.
+       */
+      overflow: visible;
       text-align: left;
+      text-overflow: clip;
+      white-space: normal;
+      overflow-wrap: anywhere;
     }
   }
 </style>

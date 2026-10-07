@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -142,8 +143,13 @@ func TestBriefWorkPriorityP0OutranksP3(t *testing.T) {
 	if items[0]["id"] != "task:card:gate" {
 		t.Fatalf("p0 did not outrank p3: %v", items)
 	}
-	if reason := items[0]["reason"].(string); !strings.Contains(reason, "p0 priority") {
-		t.Fatalf("p0 missing from reason: %q", reason)
+	// p0 ranks as critical and reads as critical: the reader is shown the
+	// word, not the code they would have to translate.
+	if reason := items[0]["reason"].(string); !strings.Contains(reason, "critical priority") {
+		t.Fatalf("p0 did not read as critical in the reason: %q", reason)
+	}
+	if priority := items[0]["signals"].(map[string]any)["priority"]; priority != "critical" {
+		t.Fatalf("signals kept the raw code: %v", priority)
 	}
 }
 
@@ -251,12 +257,18 @@ func TestBriefSinceLastLookGroupsAndSeparatesFirstVisit(t *testing.T) {
 		// Older than the baseline: not news.
 		briefCard("card:old", "Last week", "done", 36*time.Hour, nil),
 	}
+	for _, w := range work {
+		w["id"] = anyString(w["ref"])
+	}
 	in := briefInputs{
 		now:     briefNow,
 		since:   &since,
 		work:    work,
 		needsOK: true,
 		signals: map[string]briefSignal{},
+		// The blocked card moved into blocked since the last visit; the rest
+		// were already where they are.
+		priorPhases: map[string]string{"card:blocked": "in_progress", "card:moved": "in_progress"},
 		changes: []primitives.OverviewChange{
 			{Kind: "step_completed", Ref: "card:init", Title: "Draft the plan", StepID: "a"},
 			{Kind: "ask_answered", Ref: "event:1", Title: "Ask answered", TS: briefAt(time.Hour)},
@@ -305,12 +317,27 @@ func TestBriefSinceLastLookTreatsEditsAsUpdatesNotTransitions(t *testing.T) {
 		briefCard("card:fresh-blocked", "Just blocked", "blocked", time.Hour, nil),
 	}
 	in := briefInputs{
-		now:         briefNow,
-		since:       &since,
-		work:        work,
-		needsOK:     true,
-		signals:     map[string]briefSignal{},
-		priorPhases: map[string]string{"card:done": "done", "card:blocked": "blocked"},
+		now:     briefNow,
+		since:   &since,
+		work:    work,
+		needsOK: true,
+		signals: map[string]briefSignal{},
+		/*
+		 * A transition needs both ends. card:fresh-done and card:fresh-blocked
+		 * moved; card:done and card:blocked were already there and were only
+		 * edited. A card with no entry at all is covered in
+		 * TestBriefNewlyBlockedCountsOnlyTransitions, where the absence of a
+		 * previous phase makes it an update rather than a guess.
+		 */
+		priorPhases: map[string]string{
+			"card:done":          "done",
+			"card:blocked":       "blocked",
+			"card:fresh-done":    "in_progress",
+			"card:fresh-blocked": "in_progress",
+		},
+	}
+	for _, w := range work {
+		w["id"] = anyString(w["ref"])
 	}
 	section := briefSection(t, buildOverviewBrief(in), "since_last_look")
 	counts := map[string]int{}
@@ -493,5 +520,156 @@ func TestBriefWithoutWorkSnapshotSaysSoRatherThanReportingZero(t *testing.T) {
 	machine := briefSection(t, brief, "machine")
 	if machine["finished_24h"] != nil || machine["throughput_status"] != "unavailable" {
 		t.Fatalf("throughput reported from rows nobody counted: %v", machine)
+	}
+}
+
+/*
+"Newly blocked" has to be a transition.
+
+Current phase plus a fresh updated_at also matches a card that was already
+blocked at the last visit and has since had its title edited — which reported
+a brand new blocker every time anyone touched it. The previous visit's phase
+is what separates the two, and where it is unknown the row is an update, not
+an alarm.
+*/
+func TestBriefNewlyBlockedCountsOnlyTransitions(t *testing.T) {
+	since := briefAt(12 * time.Hour)
+	work := []map[string]any{
+		briefCard("card:fresh", "Lost the credential", "blocked", time.Hour, nil),
+		briefCard("card:old-news", "Known blocker, retitled", "blocked", time.Hour, nil),
+		briefCard("card:unseen", "First time seen", "blocked", time.Hour, nil),
+	}
+	for _, w := range work {
+		w["id"] = anyString(w["ref"])
+	}
+	in := briefInputs{
+		now:     briefNow,
+		since:   &since,
+		work:    work,
+		needsOK: true,
+		signals: map[string]briefSignal{},
+		priorPhases: map[string]string{
+			"card:fresh":    "in_progress",
+			"card:old-news": "blocked",
+			// card:unseen is deliberately absent: the last visit never saw it.
+		},
+	}
+	groups := map[string][]string{}
+	for _, group := range briefSection(t, buildOverviewBrief(in), "since_last_look")["groups"].([]map[string]any) {
+		for _, item := range group["items"].([]map[string]any) {
+			groups[group["key"].(string)] = append(groups[group["key"].(string)], anyString(item["ref"]))
+		}
+	}
+	if len(groups["newly_blocked"]) != 1 || groups["newly_blocked"][0] != "card:fresh" {
+		t.Fatalf("newly_blocked is not a transition: %v", groups)
+	}
+	for _, ref := range []string{"card:old-news", "card:unseen"} {
+		if !slices.Contains(groups["updated"], ref) {
+			t.Fatalf("%s should be reported as updated, not as a new blocker: %v", ref, groups)
+		}
+	}
+
+	// A core with no recorded phases at all (a snapshot from before phase was
+	// stored) must degrade to "updated", never to a wall of false blockers.
+	in.priorPhases = map[string]string{}
+	legacy := map[string]int{}
+	for _, group := range briefSection(t, buildOverviewBrief(in), "since_last_look")["groups"].([]map[string]any) {
+		legacy[group["key"].(string)] = group["count"].(int)
+	}
+	if legacy["newly_blocked"] != 0 || legacy["updated"] != 3 {
+		t.Fatalf("an unknown prior phase invented blockers: %v", legacy)
+	}
+}
+
+/*
+Two completed steps of one initiative share the initiative's ref, so a row
+needs its step id to be identifiable. Without it a client keying rows on ref
+has a duplicate key, not two rows.
+*/
+func TestBriefCompletedStepRowsCarryStepIdentity(t *testing.T) {
+	since := briefAt(6 * time.Hour)
+	in := briefInputs{
+		now:     briefNow,
+		since:   &since,
+		needsOK: true,
+		signals: map[string]briefSignal{},
+		changes: []primitives.OverviewChange{
+			{Kind: "step_completed", Ref: "card:initiative", Title: "Draft the brief", StepID: "draft"},
+			{Kind: "step_completed", Ref: "card:initiative", Title: "Review the brief", StepID: "review"},
+			{Kind: "ask_answered", Ref: "event:1", Title: "Ask answered", TS: briefAt(time.Hour)},
+		},
+	}
+	var steps []map[string]any
+	for _, group := range briefSection(t, buildOverviewBrief(in), "since_last_look")["groups"].([]map[string]any) {
+		if group["key"] == "steps" {
+			steps = group["items"].([]map[string]any)
+		}
+	}
+	if len(steps) != 2 {
+		t.Fatalf("expected both completed steps: %v", steps)
+	}
+	identity := map[string]bool{}
+	for _, step := range steps {
+		if anyString(step["step_id"]) == "" {
+			t.Fatalf("completed step row has no step identity: %v", step)
+		}
+		key := anyString(step["ref"]) + "#" + anyString(step["step_id"])
+		if identity[key] {
+			t.Fatalf("two rows share the identity %q: %v", key, steps)
+		}
+		identity[key] = true
+	}
+	// A row that is not a step must not carry an empty step_id field at all.
+	for _, group := range briefSection(t, buildOverviewBrief(in), "since_last_look")["groups"].([]map[string]any) {
+		if group["key"] != "answered" {
+			continue
+		}
+		if _, present := group["items"].([]map[string]any)[0]["step_id"]; present {
+			t.Fatal("a non-step row published an empty step_id")
+		}
+	}
+}
+
+// Work carries p0..p3; inbox severity and PM carry words. Ranking only the
+// words scored every card zero, which put a p0 below a three-day-old question.
+func TestBriefRanksNumericWorkPriorities(t *testing.T) {
+	for raw, want := range map[string]string{
+		"p0": "critical", "P0": "critical", "critical": "critical", "urgent": "critical",
+		"p1": "high", "high": "high",
+		"p2": "medium", "medium": "medium", "normal": "medium",
+		"p3": "low", "low": "low",
+		"none": "", "": "", "p9": "",
+	} {
+		if got := briefPriorityName(raw); got != want {
+			t.Fatalf("briefPriorityName(%q)=%q want %q", raw, got, want)
+		}
+	}
+	if briefPriorityWeight("p0") != briefPriorityWeight("critical") || briefPriorityWeight("p0") == 0 {
+		t.Fatalf("p0 is not weighted as critical: %d vs %d", briefPriorityWeight("p0"), briefPriorityWeight("critical"))
+	}
+	if briefPriorityWeight("p1") != briefPriorityWeight("high") || briefPriorityWeight("p1") <= briefPriorityWeight("p2") {
+		t.Fatalf("p1 is not weighted as high: %d", briefPriorityWeight("p1"))
+	}
+
+	work := []map[string]any{
+		briefCard("card:p0", "Production is down", "in_progress", 2*time.Hour, map[string]any{"priority": "p0"}),
+		briefCard("card:stale-question", "What should we call it", "in_progress", 20*24*time.Hour, map[string]any{"priority": "p3"}),
+	}
+	in := briefInputs{now: briefNow, workAvailable: true, work: work, needsOK: true, dependents: briefDependents(work), signals: map[string]briefSignal{}}
+	in.recordWorkSignals(work)
+	in.needsRows = []map[string]any{
+		briefNeedsRow("task:card:stale-question", "What should we call it"),
+		briefNeedsRow("task:card:p0", "Production is down"),
+	}
+	items := briefItems(t, briefSection(t, buildOverviewBrief(in), "decisions"))
+	if items[0]["id"] != "task:card:p0" {
+		t.Fatalf("a p0 did not outrank a three-week-old p3: %v", items)
+	}
+	// The reader sees the word, not the code.
+	if reason := items[0]["reason"].(string); !strings.Contains(reason, "critical priority") {
+		t.Fatalf("p0 did not read as critical in the reason: %q", reason)
+	}
+	if priority := items[0]["signals"].(map[string]any)["priority"]; priority != "critical" {
+		t.Fatalf("signals kept the raw code: %v", priority)
 	}
 }

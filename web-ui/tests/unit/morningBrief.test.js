@@ -374,3 +374,108 @@ describe("briefHealth", () => {
     expect(briefHealth("invented")).toBeNull();
   });
 });
+
+describe("digest row identity", () => {
+  /*
+   * Two completed steps of one initiative share the initiative's ref. Keyed
+   * rendering on ref alone threw `each_key_duplicate` in both the dev and the
+   * production build, so expanding "Plan steps done" took the page down.
+   */
+  const twoSteps = (overrides = {}) =>
+    brief({
+      since_last_look: {
+        since: "2026-10-07T20:12:00Z",
+        total: 2,
+        groups: [
+          {
+            key: "steps",
+            label: "Plan steps done",
+            count: 2,
+            more: 0,
+            items: [
+              {
+                ref: "card:initiative",
+                title: "Draft the brief",
+                href: "/tasks/initiative",
+                step_id: "draft",
+              },
+              {
+                ref: "card:initiative",
+                title: "Review the brief",
+                href: "/tasks/initiative",
+                step_id: "review",
+              },
+            ],
+          },
+        ],
+        ...overrides,
+      },
+    });
+
+  it("gives two steps of one initiative distinct keys", () => {
+    const model = morningBriefModel(twoSteps());
+    const [group] = model.sections.changes.groups;
+    const keys = group.rows.map((row) => row.key);
+    expect(group.rows).toHaveLength(2);
+    expect(new Set(keys).size).toBe(2);
+    expect(group.rows.map((row) => row.stepId)).toEqual(["draft", "review"]);
+  });
+
+  it("keeps keys unique even when the rows are indistinguishable", () => {
+    // A core that sends no step_id, or two genuinely identical rows, must
+    // still render: a duplicate key is a crash, not a cosmetic problem.
+    const model = morningBriefModel(
+      brief({
+        since_last_look: {
+          since: "2026-10-07T20:12:00Z",
+          total: 2,
+          groups: [
+            {
+              key: "steps",
+              label: "Plan steps done",
+              count: 2,
+              more: 0,
+              items: [
+                { ref: "card:initiative", title: "A step", href: "/tasks/x" },
+                { ref: "card:initiative", title: "A step", href: "/tasks/x" },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    const keys = model.sections.changes.groups[0].rows.map((row) => row.key);
+    expect(new Set(keys).size).toBe(2);
+  });
+
+  it("does not collide across groups that share a ref", () => {
+    const model = morningBriefModel(
+      brief({
+        since_last_look: {
+          since: "2026-10-07T20:12:00Z",
+          total: 2,
+          groups: [
+            {
+              key: "completed",
+              label: "Finished",
+              count: 1,
+              more: 0,
+              items: [{ ref: "card:x", title: "Done", href: "/tasks/x" }],
+            },
+            {
+              key: "updated",
+              label: "Updated",
+              count: 1,
+              more: 0,
+              items: [{ ref: "card:x", title: "Done", href: "/tasks/x" }],
+            },
+          ],
+        },
+      }),
+    );
+    const keys = model.sections.changes.groups.flatMap((group) =>
+      group.rows.map((row) => row.key),
+    );
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+});

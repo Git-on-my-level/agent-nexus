@@ -106,11 +106,25 @@ function changesSection(brief, hrefFor) {
     label: asText(group.label),
     count: count(group.count),
     more: count(group.more),
-    rows: rows(group.items).map((item) => ({
+    rows: rows(group.items).map((item, index) => ({
       ref: asText(item.ref),
+      stepId: asText(item.step_id),
       title: asText(item.title),
       href: link(item.href, hrefFor),
       at: asText(item.at),
+      /*
+       * A row's identity, for keyed rendering. Two completed steps of one
+       * initiative share its ref, so keying on ref alone is a duplicate key
+       * and the list throws rather than rendering. step_id separates them;
+       * the index is the last resort for a row with neither, which must
+       * still render rather than take the page down.
+       */
+      key: [
+        asText(group.key),
+        asText(item.ref),
+        asText(item.step_id),
+        index,
+      ].join("#"),
     })),
   }));
   const total = count(source.total);
