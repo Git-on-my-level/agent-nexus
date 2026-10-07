@@ -108,4 +108,18 @@ indexed seeks and the adversarial distant-duplicate prerequisite.
 Production HTTP/worker acceptance remains gated on A's complete canonical source
 capture, external-PM epoch invalidation, independently verified audience/lifecycle/
 projection parity, reviewed receipt writing and full SCA-661 request budgets.
-SCA-665 must merge before B edits its existing handlers. Readers stay disabled.
+#302 is merged; its handlers/tests and #308's stream ownership are preserved.
+Readers stay disabled under `docs/design/scope-phase-two.md`.
+
+The inbox follow-up adds pure canonical payload codecs and a transaction-bound
+point writer in `primitives/scope_feeds*.go`, plus `OrderedReader`/`ReadOrdered`
+for the legacy category/text/ID comparator. BLOB seeks, <=770-byte private keys,
+one bounded RID/canonical-key hydration batch and <=2 KiB encrypted global
+continuations are exercised against SQLite. The mounted HTTP shadow fixture
+proves fixture payload/privacy and ordered-page equivalence; it explicitly
+demonstrates that the integer/RID comparator is insufficient. A 10,000-descendant
+probe runs through D's actual `Runner.LifecycleStep`, with reopen and rollback
+of staged feed/payload/counter writes on checkpoint failure and late lease loss.
+See `proposals/INBOX.md` for concrete integration work and the limits of synthetic
+authority/certificates. A's published trusted adapters are retained; no production
+reader is wired.
