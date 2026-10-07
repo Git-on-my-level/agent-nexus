@@ -5047,6 +5047,7 @@ paths:
     get:
       operationId: streamEvents
       summary: Stream events (SSE)
+      description: Starts at the current workspace head when no known resume ID is supplied. Known IDs resume in chronological timestamp/ID order, reading at most 200 candidate positions per poll. Hidden and nonmatching positions advance only an internal cursor. A `resume` SSE message with empty JSON data indicates another bounded page remains; its optional ID is the last delivered visible event, never a hidden position.
       tags: [events]
       x-anx-surface: canonical
       x-anx-command-id: events.stream
@@ -5054,7 +5055,7 @@ paths:
       x-anx-why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
       x-anx-input-mode: none
       x-anx-streaming: { mode: sse }
-      x-anx-output-envelope: "Each SSE message is `event: …` with JSON data `{ \"event\": <event> }` (see core/docs/http-api.md)."
+      x-anx-output-envelope: "Resource messages use `event: event` with JSON data `{ \"event\": <event> }`. A `resume` control has empty JSON data and is excluded from delivered-event counts (see core/docs/http-api.md)."
       x-anx-error-codes: [auth_required, invalid_request, invalid_token]
       x-anx-concepts: [events]
       x-anx-stability: beta

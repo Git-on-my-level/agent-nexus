@@ -191,7 +191,11 @@ bindings. The field-driven regression must cover every indexed source/column.
 
 Keep authorization separate from lifecycle filtering. Missing records may retain
 legacy semantics, but a known inaccessible record must never be treated as
-public. Never cache visibility decisions for an SSE connection. Shared cached
+public. Never cache visibility decisions for an SSE connection. The event stream creates
+a fresh epoch-validated read snapshot per bounded poll. Its internal
+`event_stream_positions` view exposes only immutable ID/timestamp traversal
+metadata, allowing bounded progress over hidden rows. Never serialize those
+positions; payloads must join the scoped `events` relation before decoding. Shared cached
 projections with inaccessible contributors are unavailable to the reader;
 a reader-filtered projection must never replace canonical derived state.
 

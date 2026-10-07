@@ -5991,12 +5991,13 @@ export const commandRegistry = [
         "path": "/stream/events",
         "operation_id": "streamEvents",
         "summary": "Stream events (SSE)",
+        "description": "Starts at the current workspace head when no known resume ID is supplied. Known IDs resume in chronological timestamp/ID order, reading at most 200 candidate positions per poll. Hidden and nonmatching positions advance only an internal cursor. A `resume` SSE message with empty JSON data indicates another bounded page remains; its optional ID is the last delivered visible event, never a hidden position.",
         "why": "Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.",
         "input_mode": "none",
         "streaming": {
             "mode": "sse"
         },
-        "output_envelope": "Each SSE message is `event: …` with JSON data `{ \"event\": \u003cevent\u003e }` (see core/docs/http-api.md).",
+        "output_envelope": "Resource messages use `event: event` with JSON data `{ \"event\": \u003cevent\u003e }`. A `resume` control has empty JSON data and is excluded from delivered-event counts (see core/docs/http-api.md).",
         "error_codes": [
             "auth_required",
             "invalid_request",

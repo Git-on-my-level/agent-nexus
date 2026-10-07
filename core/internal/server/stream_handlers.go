@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -184,7 +183,11 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	if !ok {
 		return
 	}
-	lastEventID := resolveLastEventID(r)
+	cursor, err := opts.primitiveStore.EventStreamCursor(r.Context(), resolveLastEventID(r))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to initialize event stream")
+		return
+	}
 
 	controller, flusher, ok := prepareSSE(w)
 	if !ok {
@@ -192,22 +195,23 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 
-	cursorEventID := lastEventID
+	lastVisibleID := ""
 	ticker := time.NewTicker(opts.streamPollInterval)
 	defer ticker.Stop()
 
 	for {
-		events, err := listEventsForStream(r, opts, threadID, threadIDs, eventTypes)
+		page, err := opts.primitiveStore.ListEventStreamPage(r.Context(), primitives.EventListFilter{
+			ThreadID: threadID, ThreadIDs: threadIDs, Types: eventTypes,
+		}, cursor)
 		if err != nil {
 			writeSSEErrorEvent(controller, w, flusher, "internal_error", "failed to load events for stream")
 			return
 		}
-		events = filterAccessibleEvents(r, opts, events)
-
-		events = eventsAfterID(events, cursorEventID)
+		// Advance across hidden and nonmatching positions without exposing them.
+		cursor = page.Cursor
 
 		sentAny := false
-		for _, event := range events {
+		for _, event := range page.Events {
 			eventID := strings.TrimSpace(anyString(event["id"]))
 			if eventID == "" {
 				continue
@@ -216,11 +220,18 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 				clearSSEWriteDeadline(controller)
 				return
 			}
-			cursorEventID = eventID
+			lastVisibleID = eventID
 			sentAny = true
 		}
 
-		if !sentAny {
+		if page.HasMore {
+			if err := writeSSEEvent(controller, w, lastVisibleID, "resume", map[string]any{}); err != nil {
+				clearSSEWriteDeadline(controller)
+				return
+			}
+		}
+
+		if !sentAny && !page.HasMore {
 			if err := writeSSEKeepalive(controller, w); err != nil {
 				clearSSEWriteDeadline(controller)
 				return
@@ -488,28 +499,6 @@ func inboxRecordsAfterID(records []inboxStreamRecord, lastEventID string) []inbo
 	return records
 }
 
-func listEventsForStream(r *http.Request, opts handlerOptions, threadID string, threadIDs []string, eventTypes []string) ([]map[string]any, error) {
-	if threadID != "" || len(threadIDs) > 0 {
-		events, err := opts.primitiveStore.ListEvents(r.Context(), primitives.EventListFilter{
-			ThreadID:  threadID,
-			ThreadIDs: threadIDs,
-			Types:     eventTypes,
-		})
-		if err != nil {
-			return nil, err
-		}
-		sortEventsAscending(events)
-		return events, nil
-	}
-
-	events, err := opts.primitiveStore.ListEvents(r.Context(), primitives.EventListFilter{Types: eventTypes})
-	if err != nil {
-		return nil, err
-	}
-	sortEventsAscending(events)
-	return events, nil
-}
-
 func parseEventTypeFilters(w http.ResponseWriter, r *http.Request, opts handlerOptions) ([]string, bool) {
 	values := r.URL.Query()
 	out := make([]string, 0)
@@ -610,38 +599,6 @@ func splitCommaSeparated(raw string) []string {
 		out = append(out, part)
 	}
 	return out
-}
-
-func sortEventsAscending(events []map[string]any) {
-	sort.Slice(events, func(i, j int) bool {
-		leftTS, leftHasTS := parseTimestamp(events[i]["ts"])
-		rightTS, rightHasTS := parseTimestamp(events[j]["ts"])
-		switch {
-		case leftHasTS && rightHasTS:
-			if !leftTS.Equal(rightTS) {
-				return leftTS.Before(rightTS)
-			}
-		case leftHasTS != rightHasTS:
-			return leftHasTS
-		}
-		return anyString(events[i]["id"]) < anyString(events[j]["id"])
-	})
-}
-
-func eventsAfterID(events []map[string]any, lastEventID string) []map[string]any {
-	lastEventID = strings.TrimSpace(lastEventID)
-	if lastEventID == "" {
-		return events
-	}
-	for index, event := range events {
-		if strings.TrimSpace(anyString(event["id"])) == lastEventID {
-			if index+1 >= len(events) {
-				return []map[string]any{}
-			}
-			return events[index+1:]
-		}
-	}
-	return events
 }
 
 func resolveLastEventID(r *http.Request) string {
