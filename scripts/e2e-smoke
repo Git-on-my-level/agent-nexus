@@ -330,7 +330,7 @@ HUMAN_TOKEN="$(json_get "$TMP_DIR/human.json" 'tokens.access_token')"
 TOKEN_EXPIRY="$(node -e 'process.stdout.write(new Date(Date.now()+20*60*1000).toISOString())')"
 curl -fsS -H 'Content-Type: application/json' -H "Authorization: Bearer $HUMAN_TOKEN" -d "{\"label\":\"Smoke host\",\"expires_at\":\"$TOKEN_EXPIRY\"}" "$CORE_BASE_URL/auth/hosts/enrollment-tokens" >"$TMP_DIR/enrollment-token.json"
 ENROLLMENT_TOKEN="$(json_get "$TMP_DIR/enrollment-token.json" 'token')"
-run_cli_json "$TMP_DIR/enroll.json" host enroll --name smoke-host --token "$ENROLLMENT_TOKEN"
+run_cli_json "$TMP_DIR/enroll.json" host enroll --name smoke-host --token="$ENROLLMENT_TOKEN"
 run_cli_json "$TMP_DIR/whoami.json" auth whoami
 run_cli_json "$TMP_DIR/host-token.json" host token --as "$AGENT_NAME"
 run_cli_json "$TMP_DIR/topics-list-before.json" topics list
