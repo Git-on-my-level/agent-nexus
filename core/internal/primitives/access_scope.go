@@ -64,7 +64,14 @@ func accessCTEsWithSnapshot(scope AccessScope, query string, snapshot *denialSna
 		return "NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind='" + kind + "' AND id=" + id + ")"
 	}
 	cleanJSON := func(column string) string {
-		return "NOT EXISTS (SELECT 1 FROM json_each(" + resourceaccess.ReferenceSQLAtoms(column, strings.HasSuffix(column, "_json") || column == "_row.body" || column == "_row.labels") + ") j JOIN _anx_denied_atoms d ON j.value=d.ref COLLATE NOCASE OR d.typed AND " + resourceaccess.TextReferenceMatchSQL("j.value", "d.ref") + ")"
+		// Keep equality and prose probes separate: an OR join scans every denied
+		// spelling for every JSON atom, even when the atom contains no prose ref.
+		// Buckets are conservative candidates; the full boundary matcher remains
+		// authoritative for legacy punctuation, whitespace and Unicode identities.
+		atoms := resourceaccess.ReferenceSQLAtoms(column, strings.HasSuffix(column, "_json") || column == "_row.body" || column == "_row.labels")
+		// CASE skips atom extraction when the consuming statement's epoch-checked
+		// denial relation is empty, including a cached empty request snapshot.
+		return "CASE WHEN EXISTS (SELECT 1 FROM _anx_denied) THEN NOT EXISTS (SELECT 1 FROM json_each(" + atoms + ") j WHERE EXISTS (SELECT 1 FROM _anx_denied_atoms d WHERE d.ref=j.value COLLATE NOCASE) OR EXISTS (SELECT 1 FROM json_each(anx_resource_mention_buckets(CAST(j.value AS BLOB))) b JOIN _anx_denied_prose d ON d.bucket=" + resourceaccess.MentionRefBucketSQL("b.value") + " WHERE " + resourceaccess.TextReferenceMatchSQL("j.value", "d.ref") + ")) ELSE 1 END"
 	}
 	add := func(table, where string) {
 		if !needed[table] {
@@ -145,15 +152,19 @@ func accessCTEsWithSnapshot(scope AccessScope, query string, snapshot *denialSna
 	}
 	// Most indexed resource reads only need denied (kind,id) rows. Unused ref
 	// and atom CTEs still duplicate the closure during SQLite preparation.
-	needsRefs := query == "" || needed["_anx_resource_refs"] || needed["_anx_denied_refs"] || needed["_anx_denied_atoms"] || strings.Contains(graph, "_anx_denied_refs") || strings.Contains(graph, "_anx_denied_atoms")
+	needsRefs := query == "" || needed["_anx_resource_refs"] || needed["_anx_denied_refs"] || needed["_anx_denied_atoms"] || needed["_anx_denied_prose"] || strings.Contains(graph, "_anx_denied_refs") || strings.Contains(graph, "_anx_denied_atoms")
 	if !needsRefs {
 		return deniedGraph + graph
+	}
+	prose := ""
+	if needed["_anx_denied_prose"] || strings.Contains(graph, "_anx_denied_prose") {
+		prose = ", _anx_denied_prose(ref,bucket) AS MATERIALIZED (SELECT ref," + resourceaccess.MentionRefBucketSQL("ref") + " FROM _anx_denied_refs WHERE instr(ref,':')>0)"
 	}
 	return deniedGraph +
 		", " + ownershipRefs("_anx_resource_refs", "_anx_denied") +
 		// One reference to the identities CTE avoids copying the recursive graph
 		// again during SQLite preparation just to emit the document synonym.
-		", _anx_denied_refs(ref) AS MATERIALIZED (SELECT DISTINCT j.value FROM _anx_resource_refs r JOIN json_each(json_array(CASE WHEN r.kind='external_key' OR r.kind='card' AND (r.ref LIKE 'http://%' OR r.ref LIKE 'https://%') THEN r.ref ELSE r.kind||':'||r.ref END,CASE WHEN r.kind='document' THEN 'doc:'||r.ref END)) j WHERE j.value IS NOT NULL), _anx_denied_atoms(ref,typed) AS MATERIALIZED (SELECT ref,1 FROM _anx_denied_refs UNION SELECT id,0 FROM _anx_denied WHERE kind NOT IN ('plan','work_evidence_record','work_evidence_alias','external_key') AND kind NOT LIKE 'filter/%')" + graph
+		", _anx_denied_refs(ref) AS MATERIALIZED (SELECT DISTINCT j.value FROM _anx_resource_refs r JOIN json_each(json_array(CASE WHEN r.kind='external_key' OR r.kind='card' AND (r.ref LIKE 'http://%' OR r.ref LIKE 'https://%') THEN r.ref ELSE r.kind||':'||r.ref END,CASE WHEN r.kind='document' THEN 'doc:'||r.ref END)) j WHERE j.value IS NOT NULL), _anx_denied_atoms(ref,typed) AS MATERIALIZED (SELECT ref,1 FROM _anx_denied_refs UNION SELECT id,0 FROM _anx_denied WHERE kind NOT IN ('plan','work_evidence_record','work_evidence_alias','external_key') AND kind NOT LIKE 'filter/%')" + prose + graph
 }
 
 // Apply relation visibility before limits, aggregates and cursors. SQLite

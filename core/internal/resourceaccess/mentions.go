@@ -80,7 +80,21 @@ func AtomKey(value string) string {
 }
 func AtomKeySQL(value string) string { return "anx_resource_atom_key(CAST(" + value + " AS BLOB))" }
 
+// Projection probes bucket both the kind and identity with the same Unicode
+// simple folding as the final matcher. Truncated kinds only add candidates.
+func MentionRefBucketSQL(value string) string {
+	return "anx_resource_mention_ref_bucket(CAST(" + value + " AS BLOB))"
+}
+
 func init() {
+	sqlite.MustRegisterDeterministicScalarFunction("anx_resource_mention_ref_bucket", 1, func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
+		ref, err := referenceBytes(args[0])
+		if err != nil {
+			return nil, err
+		}
+		kind, id, _ := strings.Cut(ref, ":")
+		return mentionBucket(kind) + ":" + mentionBucket(id), nil
+	})
 	sqlite.MustRegisterDeterministicScalarFunction("anx_resource_atom_key", 1, func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
 		value, err := referenceBytes(args[0])
 		if err != nil {
