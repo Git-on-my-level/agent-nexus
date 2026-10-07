@@ -120,3 +120,33 @@ func (t *Tx) ExecContext(ctx context.Context, q string, args ...any) (sql.Result
 }
 func (t *Tx) Commit() error   { return t.raw.Commit() }
 func (t *Tx) Rollback() error { return t.raw.Rollback() }
+
+// ReadSnapshot keeps one read-only SQLite snapshot while retaining the request's
+// epoch-validated denial cache. It exposes no mutation or raw transaction handle.
+// A cache captured outside this transaction is safe: each consuming statement
+// compares its epoch inside the transaction and falls back to its canonical graph.
+// Business write transactions continue to use BeginTx and canonical checks.
+type ReadSnapshot struct {
+	raw *sql.Tx
+}
+
+func (d *DB) BeginReadSnapshot(ctx context.Context, admissionQuery string) (*ReadSnapshot, error) {
+	// Capture/cache authority before holding a transaction connection, including
+	// pools limited to one connection. No business query is executed here.
+	_, _ = readOnDB(ctx, d.raw, admissionQuery, nil)
+	tx, err := d.raw.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, err
+	}
+	return &ReadSnapshot{raw: tx}, nil
+}
+func (t *ReadSnapshot) QueryContext(ctx context.Context, q string, args ...any) (*sql.Rows, error) {
+	q, args = readOnDB(ctx, t.raw, q, args)
+	return t.raw.QueryContext(ctx, q, args...)
+}
+func (t *ReadSnapshot) QueryRowContext(ctx context.Context, q string, args ...any) *sql.Row {
+	q, args = readOnDB(ctx, t.raw, q, args)
+	return t.raw.QueryRowContext(ctx, q, args...)
+}
+func (t *ReadSnapshot) Commit() error   { return t.raw.Commit() }
+func (t *ReadSnapshot) Rollback() error { return t.raw.Rollback() }

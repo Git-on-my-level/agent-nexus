@@ -174,6 +174,7 @@ type EventCursor struct {
 }
 
 type Store struct {
+	scopeInbox        *scopeInboxRuntime
 	db                *accessDB
 	blob              blob.Backend
 	blobRoot          string

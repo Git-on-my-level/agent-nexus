@@ -37,6 +37,7 @@ import (
 const testBootstrapToken = "bootstrap-token-for-tests"
 
 type authIntegrationOptions struct {
+	scopedInboxReader             bool
 	bootstrapToken                string
 	enableDevActorMode            bool
 	allowPasskeyDevBypass         bool
@@ -103,7 +104,7 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 		t.Fatalf("load schema contract: %v", err)
 	}
 
-	primitiveStore := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+	primitiveStore := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir, primitives.WithScopedInboxReader(options.scopedInboxReader))
 	workspaceID := strings.TrimSpace(options.workspaceID)
 	if workspaceID == "" {
 		workspaceID = "ws_main"
