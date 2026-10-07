@@ -8,8 +8,15 @@ CREATE TABLE scope_inbox_verification_jobs (
  phase TEXT NOT NULL, checkpoint TEXT NOT NULL DEFAULT '{}',
  examined INTEGER NOT NULL DEFAULT 0, canonical_rows INTEGER NOT NULL DEFAULT 0,
  eligible INTEGER NOT NULL DEFAULT 0,
- failure TEXT NOT NULL DEFAULT ''
+ failure TEXT NOT NULL DEFAULT '',
+ lease_owner TEXT NOT NULL DEFAULT '',
+ lease_token INTEGER NOT NULL DEFAULT 0 CHECK(typeof(lease_token)='integer' AND lease_token>=0),
+ lease_until INTEGER NOT NULL DEFAULT 0 CHECK(typeof(lease_until)='integer' AND lease_until>=0),
+ created_at INTEGER NOT NULL DEFAULT 0,
+ finished_at INTEGER NOT NULL DEFAULT 0
 ) WITHOUT ROWID;
+CREATE INDEX scope_inbox_verification_retention ON scope_inbox_verification_jobs(finished_at,id)
+ WHERE finished_at>0;
 CREATE TABLE scope_inbox_verification_scopes (
  job_id TEXT NOT NULL, scope_id TEXT NOT NULL, generation INTEGER NOT NULL,
  role TEXT NOT NULL, membership_generation INTEGER NOT NULL,

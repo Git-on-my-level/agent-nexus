@@ -313,8 +313,9 @@ Cancellation rolls back the checkpoint; reopen resumes it. Source or authority
 changes refuse the old job. Completed cursors without exact comparison receipts
 cannot establish success. `canonical_base_v1` receipts always have
 `serving_eligible=0`, do not mark directory coverage, and do not mint either batch
-or serving certificates. Maintenance scratch retention, supervised scheduling and
-complete HTTP enrichment remain production integration work.
+or serving certificates. A disabled supervisor and bounded scratch cleanup are
+implemented below. Production scheduling and complete HTTP enrichment remain
+integration work.
 
 Here “base rows” means the existing `derived_inbox_items` relation. Complete
 enumeration of that relation does not prove every event/ask/answer source was
@@ -341,5 +342,58 @@ seek the full BLOB/RID range before LIMIT and examine at most S(P+1) candidates.
 These remain repository subtotals with fixture-injected certificates, **not**
 full-request SCA-661 acceptance, production proof minting or hosted enablement.
 The real route/field matrix, all-event canonical capture/rebuild, actual PM hook
-registration, whole enriched-generation proof, supervised worker failure/budget
-and scratch-cleanup tests, and cold/warm/revoked HTTP budgets remain required.
+registration, whole enriched-generation proof, production worker registration and
+whole-work budget evidence, and cold/warm/revoked HTTP budgets remain required.
+
+## Comparison supervision and scratch lifetime
+
+The disabled `StartInboxVerificationWorker` supervises actual base-row comparison
+with a unique attempt owner, integral monotonic database lease token and SQLite
+lease time. Renewal also advances the token, so an old handle cannot regain
+authority after takeover or renewal. The opaque job is its only work selection;
+callers cannot supply rows, checkpoints, certificates, success flags or callbacks.
+The foreground slice convenience API uses the same private runner and lease.
+The default-disabled constructor performs no database work and starts no worker.
+An enabled owner must cancel and join `Close` before closing the database.
+
+The source oracle runs in a **read-only, deferred SQLite snapshot**, including
+when the workspace driver uses `_txlock=immediate` for writes. Expensive legacy
+graph preparation therefore does not acquire the SQLite writer lock. Its bounded
+batch is private to the runner. After closing that snapshot, a short write
+transaction checks every source/authority/directory/shadow/legacy epoch, the
+compiled registry and exact job checkpoint before using the prepared result.
+Any intervening affecting write refuses comparison. Lease checks occur before
+work and after all checkpoint/receipt writes, with expiry or commit failure
+rolling the entire slice back. A savepoint removes partial comparison rows on
+semantic refusal; only the terminal refusal is recorded. Generic SQL errors and
+deadlines leave the checkpoint resumable.
+
+The worker's configurable deadline is at most 50 seconds, below its at-most-one-
+minute lease. These are off-request maintenance limits, not the 50 ms metadata
+migration chunk allowance or the 500 ms HTTP gate. The legacy SQL can still do
+workspace-sized work, consume CPU and retain a read snapshot/WAL while preparing;
+the enumeration cap does not certify whole-work cost. Production scheduling,
+resource contention and rebuild churn still need full-fixture evidence. The
+pinned worker connection disables busy waits only for its transaction and
+restores the prior timeout before returning to serving; failed restoration
+discards the connection. No retry alters a privacy or serving proof gate.
+
+`CancelInboxVerification` explicitly retires unfinished jobs. Completed/refused
+jobs record a terminal timestamp. `PruneInboxVerification` seeks one old terminal
+job through its retention index and deletes at most 64 scratch/receipt/job rows
+per transaction with job-prefix lookups. It does not cascade over a generation,
+delete canonical or shadow rows, or scan for another candidate past a live lease.
+Unfinished crash checkpoints remain available for resume until explicitly
+cancelled. Partially pruned jobs reject old supervisors, and stale release cannot
+clear a successor's lease. Retention scheduling remains unregistered maintenance.
+
+Executable evidence includes 16/160-base-row supervisor completion, concurrent
+and repeated shutdown, cancellation during active SQLite work, actual database
+close/reopen with an abandoned persisted lease, monotonic takeover/renewal and
+overflow refusal, late expiry after both checkpoints and receipt insertion,
+partial-mismatch rollback, deadline interruption and busy-timeout restoration.
+A driver-observed oracle fixture on the actual immediate-lock DSN lets a source
+write commit while comparison is preparing, then requires stale-epoch refusal
+and no receipt. Multi-chunk cleanup preserves active jobs and canonical/shadow
+data. These are maintenance regressions; they do not establish canonical event
+projection completeness, enriched serving proof or full-request acceptance.

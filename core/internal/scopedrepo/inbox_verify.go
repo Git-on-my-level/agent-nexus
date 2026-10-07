@@ -81,7 +81,7 @@ func (s *Store) StartInboxVerification(ctx context.Context, principal, pmActor s
 	if err != nil {
 		return "", err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO scope_inbox_verification_jobs(id,principal,pm_actor_id,source_revision,authority_revision,directory_revision,shadow_revision,legacy_epoch,registry_hash,phase) VALUES(?,?,?,?,?,?,?,?,?,'directory')`, id, principal, pmActor, f.Source, f.Authority, f.Directory, f.Shadow, f.Legacy, f.Registry)
+	_, err = tx.ExecContext(ctx, `INSERT INTO scope_inbox_verification_jobs(id,principal,pm_actor_id,source_revision,authority_revision,directory_revision,shadow_revision,legacy_epoch,registry_hash,phase,created_at) VALUES(?,?,?,?,?,?,?,?,?,'directory',`+inboxVerificationNowSQL+`)`, id, principal, pmActor, f.Source, f.Authority, f.Directory, f.Shadow, f.Legacy, f.Registry)
 	if err != nil {
 		return "", err
 	}
@@ -109,31 +109,32 @@ type inboxVerificationCursor struct {
 }
 
 // RunInboxVerificationSlice examines at most 64 enumeration rows. Every slice
-// atomically saves progress; the caller only supplies an opaque job identity.
-// All canonical and shadow work shares one transaction and all persisted epoch
-// fences are checked before resume and receipt publication. No completed cursor
+// atomically saves progress under a private lease; the caller only supplies an
+// opaque job identity. Long-running maintenance should use the supervised worker.
+// Legacy eligibility is prepared in a read-only snapshot, then accepted only
+// under identical canonical/shadow epochs and job checkpoint in the write
+// transaction. All fences are checked before resume and receipt publication. No completed cursor
 // supplied by another worker can establish completeness.
 func (s *Store) RunInboxVerificationSlice(ctx context.Context, id string) (InboxVerificationProgress, error) {
+	runner, err := newInboxVerificationRunner(s, id, DefaultInboxVerificationWorkerOptions())
+	if err != nil {
+		return InboxVerificationProgress{}, err
+	}
+	lease, err := runner.acquireLease(ctx)
+	if err != nil {
+		return InboxVerificationProgress{}, err
+	}
+	defer runner.releaseLease(lease)
+	return runner.verifySlice(ctx, lease)
+}
+
+// Only the sealed runner calls this helper. It owns the transaction, deadlines,
+// lease checks and failure rollback; neither this helper nor a phase commits.
+func runInboxVerificationSliceTx(ctx context.Context, tx *sql.Tx, id string, prepared *inboxVerificationPrepared) (InboxVerificationProgress, error) {
 	var out InboxVerificationProgress
-	if !feedText(id, 64) {
-		return out, scopes.ErrBudget
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	j, err := loadInboxVerificationJob(ctx, tx, id)
 	if err != nil {
 		return out, err
-	}
-	defer tx.Rollback()
-	var j inboxVerificationJob
-	var raw, failure string
-	err = tx.QueryRowContext(ctx, `SELECT principal,pm_actor_id,source_revision,authority_revision,directory_revision,shadow_revision,legacy_epoch,registry_hash,phase,checkpoint,examined,canonical_rows,eligible,failure FROM scope_inbox_verification_jobs WHERE id=?`, id).Scan(&j.Principal, &j.PM, &j.Fence.Source, &j.Fence.Authority, &j.Fence.Directory, &j.Fence.Shadow, &j.Fence.Legacy, &j.Fence.Registry, &j.Phase, &raw, &j.Examined, &j.Canonical, &j.Eligible, &failure)
-	if err != nil {
-		return out, err
-	}
-	if failure != "" {
-		return out, ErrInboxVerificationMismatch
-	}
-	if json.Unmarshal([]byte(raw), &j.Cursor) != nil {
-		return out, ErrInboxVerificationMismatch
 	}
 	fence, err := inboxVerificationClock(ctx, tx)
 	if err == nil && fence != j.Fence {
@@ -154,7 +155,7 @@ func (s *Store) RunInboxVerificationSlice(ctx context.Context, id string) (Inbox
 		out.Complete = true
 		out.TotalExamined = j.Examined
 		out.Eligible = j.Eligible
-		return out, tx.Commit()
+		return out, nil
 	}
 	switch j.Phase {
 	case "directory":
@@ -162,7 +163,7 @@ func (s *Store) RunInboxVerificationSlice(ctx context.Context, id string) (Inbox
 	case "bindings":
 		out.Examined, err = inboxVerifyBindings(ctx, tx, id, &j)
 	case "canonical":
-		out.Examined, err = inboxVerifyCanonical(ctx, tx, id, &j)
+		out.Examined, err = inboxVerifyCanonical(ctx, tx, id, &j, prepared)
 	case "ordered", "payloads":
 		out.Examined, err = inboxVerifyReverse(ctx, tx, id, &j)
 	case "counters":
@@ -173,16 +174,6 @@ func (s *Store) RunInboxVerificationSlice(ctx context.Context, id string) (Inbox
 		err = ErrInboxVerificationMismatch
 	}
 	if err != nil {
-		// Persist refusal, never partial comparison success. Generic SQL/cancellation
-		// errors roll back so a transient failure can resume the same durable cursor.
-		if errors.Is(err, ErrInboxVerificationMismatch) || errors.Is(err, scopes.ErrBudget) || errors.Is(err, scopes.ErrUpdating) {
-			if _, e := tx.ExecContext(ctx, `UPDATE scope_inbox_verification_jobs SET failure=? WHERE id=?`, err.Error(), id); e != nil {
-				return out, e
-			}
-			if e := tx.Commit(); e != nil {
-				return out, e
-			}
-		}
 		return out, err
 	}
 	j.Examined += int64(out.Examined)
@@ -204,7 +195,26 @@ func (s *Store) RunInboxVerificationSlice(ctx context.Context, id string) (Inbox
 	}
 	out.TotalExamined = j.Examined
 	out.Eligible = j.Eligible
-	return out, tx.Commit()
+	return out, nil
+}
+
+func loadInboxVerificationJob(ctx context.Context, tx *sql.Tx, id string) (inboxVerificationJob, error) {
+	var j inboxVerificationJob
+	var raw, failure string
+	err := tx.QueryRowContext(ctx, `SELECT principal,pm_actor_id,source_revision,authority_revision,directory_revision,shadow_revision,legacy_epoch,registry_hash,phase,checkpoint,examined,canonical_rows,eligible,failure FROM scope_inbox_verification_jobs WHERE id=?`, id).Scan(&j.Principal, &j.PM, &j.Fence.Source, &j.Fence.Authority, &j.Fence.Directory, &j.Fence.Shadow, &j.Fence.Legacy, &j.Fence.Registry, &j.Phase, &raw, &j.Examined, &j.Canonical, &j.Eligible, &failure)
+	if err != nil {
+		return j, err
+	}
+	if failure == "cancelled" {
+		return j, ErrInboxVerificationCancelled
+	}
+	if failure != "" {
+		return j, ErrInboxVerificationMismatch
+	}
+	if json.Unmarshal([]byte(raw), &j.Cursor) != nil {
+		return j, ErrInboxVerificationMismatch
+	}
+	return j, nil
 }
 
 func inboxVerificationNext(j *inboxVerificationJob, phase string) {
@@ -330,7 +340,7 @@ func inboxVerifyBindings(ctx context.Context, tx *sql.Tx, id string, j *inboxVer
 	return len(entries), nil
 }
 
-func inboxVerifyCanonical(ctx context.Context, tx *sql.Tx, id string, j *inboxVerificationJob) (int, error) {
+func prepareInboxVerificationCanonical(ctx context.Context, tx *sql.Tx, j inboxVerificationJob) (*inboxVerificationPrepared, error) {
 	q := `SELECT id,thread_id,category,trigger_at,due_at,has_due_at,source_event_id,source_card_id,generated_at,CASE WHEN length(CAST(data_json AS BLOB))<=16384 THEN data_json END,source_hash FROM main.derived_inbox_items`
 	var args []any
 	if j.Cursor.Generation != 0 {
@@ -340,7 +350,7 @@ func inboxVerifyCanonical(ctx context.Context, tx *sql.Tx, id string, j *inboxVe
 	q += ` ORDER BY id LIMIT 64`
 	rows, err := tx.QueryContext(ctx, q, args...)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	defer rows.Close()
 	var items []primitives.DerivedInboxItem
@@ -350,10 +360,10 @@ func inboxVerifyCanonical(ctx context.Context, tx *sql.Tx, id string, j *inboxVe
 		var hasDue int
 		var raw sql.NullString
 		if err = rows.Scan(&item.ID, &item.ThreadID, &item.Category, &item.TriggerAt, &due, &hasDue, &event, &card, &item.GeneratedAt, &raw, &hash); err != nil {
-			return 0, err
+			return nil, err
 		}
 		if !raw.Valid || !json.Valid([]byte(raw.String)) || hasDue < 0 || hasDue > 1 {
-			return len(items) + 1, ErrInboxVerificationMismatch
+			return nil, ErrInboxVerificationMismatch
 		}
 		item.DueAt = due.String
 		item.SourceEventID = event.String
@@ -363,18 +373,18 @@ func inboxVerifyCanonical(ctx context.Context, tx *sql.Tx, id string, j *inboxVe
 		d := json.NewDecoder(bytes.NewBufferString(raw.String))
 		d.UseNumber()
 		if d.Decode(&item.Data) != nil {
-			return len(items) + 1, ErrInboxVerificationMismatch
+			return nil, ErrInboxVerificationMismatch
 		}
 		items = append(items, item)
 	}
 	if err = rows.Err(); err != nil {
-		return 0, err
+		return nil, err
 	}
 	rows.Close()
 	legacyCtx := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: j.Principal, PMActorID: j.PM})
 	legacySQL, legacyArgs, err := primitives.ScopeInboxLegacyReadSQL(legacyCtx)
 	if err != nil {
-		return len(items), err
+		return nil, err
 	}
 	// Compare one internally enumerated batch against the real legacy relation.
 	// The expensive denial graph is evaluated only off-request and never replaced
@@ -388,26 +398,45 @@ func inboxVerifyCanonical(ctx context.Context, tx *sql.Tx, id string, j *inboxVe
 		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(items)), ",")
 		visible, err := tx.QueryContext(ctx, `SELECT legacy.id FROM (`+legacySQL+`) legacy WHERE legacy.id IN (`+placeholders+`)`, args...)
 		if err != nil {
-			return len(items), err
+			return nil, err
 		}
 		for visible.Next() {
 			var canonicalID string
 			if err = visible.Scan(&canonicalID); err != nil {
 				visible.Close()
-				return len(items), err
+				return nil, err
 			}
 			if eligible[canonicalID] {
 				visible.Close()
-				return len(items), ErrInboxVerificationMismatch
+				return nil, ErrInboxVerificationMismatch
 			}
 			eligible[canonicalID] = true
 		}
 		err = visible.Err()
 		visible.Close()
 		if err != nil {
-			return len(items), err
+			return nil, err
 		}
 	}
+	return &inboxVerificationPrepared{job: j, items: items, eligible: eligible}, nil
+}
+
+type inboxVerificationPrepared struct {
+	job      inboxVerificationJob
+	items    []primitives.DerivedInboxItem
+	eligible map[string]bool
+	failure  error
+}
+
+func inboxVerifyCanonical(ctx context.Context, tx *sql.Tx, id string, j *inboxVerificationJob, prepared *inboxVerificationPrepared) (int, error) {
+	if prepared == nil || prepared.job != *j {
+		return 0, ErrInboxVerificationStale
+	}
+	if prepared.failure != nil {
+		return 0, prepared.failure
+	}
+	items, eligible := prepared.items, prepared.eligible
+	var err error
 	for _, item := range items {
 		j.Cursor.ID = item.ID
 		j.Cursor.Generation = 1
