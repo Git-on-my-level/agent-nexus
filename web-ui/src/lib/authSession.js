@@ -18,6 +18,7 @@
 
 import { get, writable } from "svelte/store";
 
+import { clearWorkCache } from "./workCache.js";
 import { clearWorkspaceViews } from "./workspaceViewCache.js";
 
 import { AuthErrorCode } from "./authErrorCodes.js";
@@ -267,7 +268,11 @@ export function clearAuthSession(
   workspaceSlug = getCurrentWorkspaceSlug(),
   options = {},
 ) {
+  // Both display caches go with the session: a card's title and body are as
+  // much of the workspace as a page snapshot is, and neither should outlive
+  // the identity that was allowed to read it.
   clearWorkspaceViews();
+  clearWorkCache();
   const clearActor = Boolean(options.clearActor);
   const organizationSlug =
     options.organizationSlug ?? getCurrentOrganizationSlug();
@@ -378,7 +383,10 @@ async function runInitializeAuthSession({
       if (generation !== state.generation) return null;
       const nextAgent = result.agent ?? null;
       const agentChanged = !sameAgent(previousAgent, nextAgent);
-      if (!nextAgent && previousAgent) clearWorkspaceViews();
+      if (!nextAgent && previousAgent) {
+        clearWorkspaceViews();
+        clearWorkCache();
+      }
       state.authenticatedAgent = nextAgent;
       state.ready = true;
       if (isInitialHydration || agentChanged) {
@@ -405,7 +413,10 @@ async function runInitializeAuthSession({
         ? previousAgent
         : null;
       const agentChanged = !sameAgent(previousAgent, nextAgent);
-      if (!nextAgent && previousAgent) clearWorkspaceViews();
+      if (!nextAgent && previousAgent) {
+        clearWorkspaceViews();
+        clearWorkCache();
+      }
       state.authenticatedAgent = nextAgent;
       state.ready = true;
       if (isInitialHydration || agentChanged) {

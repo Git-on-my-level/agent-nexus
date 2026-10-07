@@ -1,13 +1,20 @@
 <script>
   import { decisionRowStatus } from "$lib/inboxMailbox.js";
   import { onMount } from "svelte";
+  import { get } from "svelte/store";
   import { page } from "$app/stores";
   import { coreClient } from "$lib/coreClient";
   import {
     liveWorkspaceEvents,
     TASK_LIST_EVENT_TYPES,
   } from "$lib/liveWorkspaceEvents.js";
-  import { authenticatedAgent, initializeAuthSession } from "$lib/authSession";
+  import {
+    authSessionReady,
+    authenticatedAgent,
+    initializeAuthSession,
+    isAuthenticated,
+  } from "$lib/authSession";
+  import { cacheWorkRecord, readWorkSnapshot } from "$lib/workCache.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
@@ -21,7 +28,7 @@
   } from "$lib/actorSession";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
   import AnxRefPreview from "$lib/components/AnxRefPreview.svelte";
-  import AgeBadge from "$lib/components/AgeBadge.svelte";
+  import FreshnessBadge from "$lib/components/FreshnessBadge.svelte";
   import AnxRefChip from "$lib/components/AnxRefChip.svelte";
   import FinePrint from "$lib/components/FinePrint.svelte";
   import HealthBadge from "$lib/components/HealthBadge.svelte";
@@ -53,6 +60,7 @@
     humanizeInstants,
     connectionName,
   } from "$lib/pm/presentation.js";
+  import { freshnessKindForPhase } from "$lib/freshness.js";
   import {
     nextStepModel,
     planHealthModel,
@@ -74,6 +82,13 @@
     observationStatusTone,
   } from "$lib/pm/evidence.js";
   let work = $state(null),
+    /**
+     * True while `work` is the row the list already had rather than the card
+     * read. The page renders it immediately — a title and a status beat a
+     * spinner — and says so where it would otherwise claim a fact it has not
+     * read yet.
+     */
+    workPartial = $state(false),
     observations = $state([]),
     nextCursor = $state(""),
     loading = $state(true),
@@ -119,6 +134,17 @@
       },
       { hasPlan: Boolean(plan), progress: planProgress },
     ),
+  );
+  /*
+   * Finished work gets no freshness badge. The badge is a prompt to go and
+   * look; a delivered card is not asking for anything, so "9d, expected every
+   * 3d" on it would be chasing work that is already done.
+   */
+  let planFreshnessKind = $derived(
+    planHealth.state === "done" ||
+      freshnessKindForPhase(work?.phase, work?.state) === "closed"
+      ? "closed"
+      : "initiative",
   );
   /** "Next" comes from the computed next step, with the plan's own title. */
   let nextStep = $derived(
@@ -172,28 +198,45 @@
    * render through the shared markdown renderer now, and a `card:` written in
    * one of those is the same chip a plan step is.
    */
-  async function loadPlan(ticket, id) {
-    plan = null;
-    planState = null;
-    planRefs = new Map();
-    planReadAt = "";
-    planError = "";
-    let steps = [];
-    try {
-      const result = await coreClient.getCardPlan(id);
-      if (ticket !== requestId) return;
-      steps = Array.isArray(result?.plan?.steps) ? result.plan.steps : [];
-      if (steps.length) {
-        plan = result.plan;
-        planState = result.plan_state ?? null;
-        planReadAt = new Date().toISOString();
-      }
-    } catch {
-      // A card without a plan is the common case, not a failure worth shouting
-      // about; only a card that has one and could not be read is.
-    }
-    if (ticket !== requestId) return;
+  /**
+   * The plan read, issued at once rather than after `work.get`.
+   *
+   * It needs the card id, which the route already has, so waiting for the card
+   * record only bought a second round trip. The plan is applied as soon as it
+   * lands; the refs it names are resolved by `filePlan`, which does need the
+   * card body to know what else to chip.
+   */
+  function loadPlanRequest(ticket, id) {
+    return Promise.resolve()
+      .then(() => coreClient.getCardPlan(id))
+      .then((result) => {
+        if (ticket !== requestId) return [];
+        const steps = Array.isArray(result?.plan?.steps)
+          ? result.plan.steps
+          : [];
+        if (steps.length) {
+          plan = result.plan;
+          planState = result.plan_state ?? null;
+          planReadAt = new Date().toISOString();
+        }
+        return steps;
+      })
+      .catch(() => {
+        // A card without a plan is the common case, not a failure worth
+        // shouting about; only a card that has one and could not be read is.
+        return [];
+      });
+  }
 
+  /**
+   * Every ref the page is about to chip, in one batch resolve: the plan's
+   * steps plus the prose. Chips never fetch for themselves, so a twenty-step
+   * plan whose body also names six tasks is one request rather than
+   * twenty-six.
+   */
+  async function filePlan(ticket, stepsPromise) {
+    const steps = await stepsPromise;
+    if (ticket !== requestId) return;
     const refs = collectPageRefs(
       [
         work?.summary,
@@ -276,7 +319,6 @@
     decisionsError = "";
     refreshing = false;
     notice = "";
-    work = null;
     observations = [];
     decisions = [];
     mirrors = [];
@@ -287,6 +329,25 @@
     planRefs = new Map();
     planReadAt = "";
     planError = "";
+
+    /*
+     * The row the list already had, painted before anything is requested. The
+     * reader clicked a card whose title, status and owner were on screen a
+     * moment ago; making them watch a spinner to see them again is the slowest
+     * part of opening a card that is otherwise one request away.
+     */
+    const snapshot = readWorkSnapshot(id);
+    work = snapshot?.work ?? null;
+    workPartial = Boolean(snapshot && !snapshot.full);
+
+    /*
+     * Everything this page needs, started at once. The plan and the PM
+     * decisions used to wait for `work.get` to come back first, which turned
+     * one round trip into three in sequence — neither of them needs the card
+     * record to be issued, only to be filed.
+     */
+    const planLoaded = loadPlanRequest(ticket, id);
+    const decisionsLoaded = decisionsRequest(ticket);
     const results = await Promise.allSettled([
       coreClient.getWork(id),
       coreClient.listWorkObservations(id, { limit: 30 }),
@@ -294,13 +355,22 @@
     if (ticket !== requestId) return;
     if (results[0].status === "fulfilled") {
       work = results[0].value.work;
+      workPartial = false;
       if (!work) error = "The workspace did not return this task.";
       else {
-        void loadDecisions(ticket, work);
+        cacheWorkRecord(work);
         void loadMirrors(ticket, work);
-        void loadPlan(ticket, id);
+        void fileDecisions(ticket, work, decisionsLoaded);
+        void filePlan(ticket, planLoaded);
       }
-    } else error = errorMessage(results[0].reason);
+    } else {
+      error = errorMessage(results[0].reason);
+      // A failed read must not leave a list row on screen looking like one.
+      work = null;
+      workPartial = false;
+    }
+    // Nothing will file the decisions now, so the panel must stop waiting.
+    if (!work) decisionsLoading = false;
     if (results[1].status === "fulfilled") {
       observations = results[1].value.observations || [];
       nextCursor = results[1].value.next_cursor || "";
@@ -318,49 +388,58 @@
       // The next change or Reload tries again.
     }
   }
-  async function loadDecisions(ticket, loadedWork) {
+  /** Every page of one paginated PM list, in order. */
+  async function readAllPages(read) {
+    const items = [];
+    let cursor;
+    for (let page = 0; page < 10; page += 1) {
+      const result = await read(cursor);
+      items.push(...(result?.items || []));
+      cursor = result?.next_cursor || "";
+      if (!cursor) break;
+    }
+    return items;
+  }
+
+  /**
+   * Decisions and their receipts, both started with the card read rather than
+   * after it. Neither list is filtered by card server-side yet, so the page
+   * reads them and files them itself — but it no longer reads one, then the
+   * other, then waits for the card first.
+   */
+  function decisionsRequest(ticket) {
     decisionsLoading = true;
     decisionsError = "";
     decisions = [];
-    try {
-      const items = [];
-      let cursor;
-      for (let page = 0; page < 10; page += 1) {
-        const result = await coreClient.listPmDecisions({ limit: 200, cursor });
-        items.push(...(result.items || []));
-        cursor = result.next_cursor || "";
-        if (!cursor) break;
-      }
+    return Promise.all([
+      readAllPages((cursor) =>
+        coreClient.listPmDecisions({ limit: 200, cursor }),
+      ),
       // Receipts decide what an answered decision reads as; fail soft.
-      const receipts = [];
-      try {
-        let actionCursor;
-        for (let page = 0; page < 10; page += 1) {
-          const result = await coreClient.listPmActions({
-            limit: 200,
-            cursor: actionCursor,
-          });
-          receipts.push(...(result.items || []));
-          actionCursor = result.next_cursor || "";
-          if (!actionCursor) break;
-        }
-      } catch {
-        // The decision status still renders without receipts.
+      readAllPages((cursor) =>
+        coreClient.listPmActions({ limit: 200, cursor }),
+      ).catch(() => []),
+    ]).catch((err) => {
+      if (ticket === requestId) {
+        decisionsError = errorMessage(err);
+        decisionsLoading = false;
       }
-      if (ticket !== requestId) return;
-      actions = receipts;
-      const ref = workKey(loadedWork);
-      decisions = items
-        .filter((decision) => decision.work_ref === ref)
-        .sort(
-          (a, b) =>
-            Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0),
-        );
-    } catch (err) {
-      if (ticket === requestId) decisionsError = errorMessage(err);
-    } finally {
-      if (ticket === requestId) decisionsLoading = false;
-    }
+      return null;
+    });
+  }
+
+  async function fileDecisions(ticket, loadedWork, request) {
+    const result = await request;
+    if (ticket !== requestId || !result) return;
+    const [items, receipts] = result;
+    actions = receipts;
+    const ref = workKey(loadedWork);
+    decisions = items
+      .filter((decision) => decision.work_ref === ref)
+      .sort(
+        (a, b) => Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0),
+      );
+    decisionsLoading = false;
   }
   async function loadMirrors(ticket, loadedWork) {
     const key = workSourceKey(loadedWork);
@@ -429,6 +508,15 @@
         if (ready && work) void refreshWorkRecord();
       },
     });
+    /*
+     * `initializeAuthSession` always re-reads `/auth/session`, so gating the
+     * first card read on it put a whole round trip in front of every card
+     * open — including one opened from a list the same session had just
+     * loaded. When the session is already hydrated the page reads the card
+     * now and lets the session refresh land behind it; only a cold page waits.
+     */
+    const sessionWarm = get(authSessionReady) && isAuthenticated();
+    if (sessionWarm) ready = true;
     initializeAuthSession({
       fetchFn: globalThis.fetch.bind(globalThis),
       workspaceSlug: $page.params.workspace,
@@ -438,6 +526,7 @@
         if (!disposed) ready = true;
       })
       .catch((err) => {
+        if (sessionWarm) return;
         error = errorMessage(err);
         loading = false;
       });
@@ -482,10 +571,21 @@
           {#if work.source?.native_status}
             <SignalBadge>{work.source.native_status}</SignalBadge>
           {/if}
-          {#if !work.definition_of_done?.length}
+          {#if !workPartial && !work.definition_of_done?.length}
             <!-- A badge, not a sentence: the reader needs the fact, not a
-                 lecture about what a finished run cannot do. -->
+                 lecture about what a finished run cannot do.
+
+                 Only once the card itself has been read: a list row does not
+                 carry acceptance criteria, so claiming there are none from one
+                 would be a warning the page invented. -->
             <SignalBadge tone="warn">No acceptance criteria</SignalBadge>
+          {/if}
+          {#if workPartial}
+            <!-- The list's own row is on screen while the card is read. Say
+                 so rather than letting a partial view pass for the whole. -->
+            <span class="text-micro text-fg-subtle" role="status"
+              >Reading the card…</span
+            >
           {/if}
           <button
             class="ui-prose-link text-micro"
@@ -535,7 +635,16 @@
                   >
                 {/if}
                 {#if planState?.last_movement_at}
-                  <AgeBadge at={planState.last_movement_at} verb="moved" />
+                  <!-- Judged against the three-day initiative cadence, the
+                       same way the Overview tiles are, so the dashboard and
+                       this page cannot disagree about what "3d" means. -->
+                  <FreshnessBadge
+                    at={planState.last_movement_at}
+                    kind={planFreshnessKind}
+                    row={work}
+                    verb="moved"
+                    {now}
+                  />
                 {/if}
               </div>
             </div>

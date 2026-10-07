@@ -139,19 +139,44 @@ export function createWorkspaceResourceLifecycleController(options) {
     if (!runner || !list.length || bulkBusy) return;
     bulkBusy = true;
     options.setError("");
+    /*
+     * A bulk run is not atomic: it stops at the first failure with everything
+     * before it already applied. Reporting only "Archive failed" and leaving
+     * the list untouched told the reader nothing had happened when some of it
+     * had — so the error names how far it got, and the list is re-read either
+     * way so what is on screen is what the server holds.
+     */
+    let done = 0;
+    let failure = "";
     try {
       for (const id of list) {
         await runner(id);
+        done += 1;
       }
       options.clearSelection();
       confirmModal = emptyConfirmModal();
-      await options.reload();
     } catch (e) {
-      options.setError(
-        `${actionLabel(action)} failed: ${e instanceof Error ? e.message : String(e)}`,
-      );
+      const reason = e instanceof Error ? e.message : String(e);
+      failure =
+        done === 0
+          ? `${actionLabel(action)} failed: ${reason}`
+          : `${actionLabel(action)} stopped after ${done} of ${list.length}: ${reason}`;
+      options.setError(failure);
     } finally {
       bulkBusy = false;
+      try {
+        await options.reload();
+      } catch {
+        // The reload's own failure is reported by the list's loader.
+      }
+      /*
+       * Say it again, after the reload. List loaders clear the page error as
+       * they start, so the refresh that proves half the write landed was also
+       * what erased the only sentence explaining it: two documents selected,
+       * one gone, one still there, and nothing on screen about the 500. The
+       * message has to outlive the reload it triggered.
+       */
+      if (failure) options.setError(failure);
     }
   }
 

@@ -1168,8 +1168,8 @@ test("an unreported metric is an em dash with the reason on hover", async ({
   await expect(missing.nth(0)).toHaveText("—");
   // A producer that said "unknown" said something; it is quoted back on hover
   // rather than printed where the number goes.
-  await expect(missing.nth(0)).toHaveAttribute("title", /unknown/);
-  await expect(missing.nth(1)).toHaveAttribute("title", /n\/a/);
+  await expect(missing.nth(0)).toHaveAttribute("data-tooltip", /unknown/);
+  await expect(missing.nth(1)).toHaveAttribute("data-tooltip", /n\/a/);
   await expect(
     strip.locator(".metric-value").filter({ hasText: "unknown" }),
   ).toHaveCount(0);
@@ -1193,6 +1193,6 @@ test("an unreported point in a metric chart reads as a dash, never zero", async 
   const missing = chart.locator(".report-chart [data-unavailable]");
   await expect(missing).toHaveCount(1);
   await expect(missing).toHaveText("—");
-  await expect(missing).toHaveAttribute("title", /not the same as zero/);
+  await expect(missing).toHaveAttribute("data-tooltip", /not the same as zero/);
   await expect(chart).toContainText("— means unavailable, never zero.");
 });

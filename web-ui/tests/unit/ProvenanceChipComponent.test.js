@@ -239,7 +239,7 @@ it("clamps a long principal label without losing the words around it", () => {
   const name = chip.querySelector(".provenance-author");
   expect(name.textContent).toBe(long);
   // Clamped by CSS, so the full label is still in the DOM and in a tooltip.
-  expect(name.getAttribute("title")).toBe(long);
+  expect(name.getAttribute("data-tooltip")).toBe(long);
   expect(chip.textContent).toContain("Written by");
   expect(chip.textContent).toContain("3d ago");
   expect(chip.querySelector("time").textContent).toBe("3d ago");

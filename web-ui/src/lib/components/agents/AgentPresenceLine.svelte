@@ -2,7 +2,12 @@
   import { page } from "$app/stores";
 
   import { agentRegistry, findAgentSummary } from "$lib/actorSession";
-  import { agentPath, formatAge } from "$lib/agentPresence.js";
+  import {
+    agentPath,
+    agentPresentationState,
+    formatAge,
+  } from "$lib/agentPresence.js";
+  import { tooltip } from "$lib/actions/tooltip.js";
   import AgentStateDot from "$lib/components/agents/AgentStateDot.svelte";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
@@ -27,14 +32,14 @@
     data-inbox-presence
   >
     <span class="translate-y-[-1px] self-center"
-      ><AgentStateDot state={agent.state} /></span
+      ><AgentStateDot state={agentPresentationState(agent)} /></span
     >
     <span class="line-clamp-2 min-w-0">
       <a class="text-fg hover:underline" href={workspaceHref(agentPath(agent))}
         >{agent.display_name}</a
       ><span class="text-fg-subtle">{" · "}</span>{#if age}<time
           datetime={agent.last_progress_at}
-          title={formatAbsoluteDateTime(agent.last_progress_at)}
+          use:tooltip={formatAbsoluteDateTime(agent.last_progress_at)}
           >{age === "<1m" ? "just now" : `${age} ago`}</time
         >{": "}{/if}“{note}”
     </span>

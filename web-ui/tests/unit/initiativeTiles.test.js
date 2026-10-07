@@ -334,3 +334,161 @@ describe("inboxWaitingLine", () => {
     expect(inboxWaitingLine(null)).toBeNull();
   });
 });
+
+describe("tile freshness", () => {
+  it("judges a tile's age against the three-day initiative cadence", () => {
+    const fresh = initiativeTileModel(
+      row({ plan_state: planState({ last_movement_at: ago(2 * 3_600_000) }) }),
+      { now: NOW },
+    );
+    expect(fresh.freshness).toMatchObject({ age: "2h", tone: "ok" });
+
+    const late = initiativeTileModel(
+      row({ plan_state: planState({ last_movement_at: ago(5 * 86_400_000) }) }),
+      { now: NOW },
+    );
+    expect(late.freshness).toMatchObject({ age: "5d", tone: "warn" });
+
+    const veryLate = initiativeTileModel(
+      row({ plan_state: planState({ last_movement_at: ago(9 * 86_400_000) }) }),
+      { now: NOW },
+    );
+    expect(veryLate.freshness).toMatchObject({ age: "9d", tone: "danger" });
+  });
+
+  it("drops the Stale pill, because the freshness badge now says it", () => {
+    const tile = initiativeTileModel(
+      row({
+        plan_health: { state: "stale", reason: "No movement for 9 days." },
+        plan_state: planState({ last_movement_at: ago(9 * 86_400_000) }),
+      }),
+      { now: NOW },
+    );
+    expect(tile.health.state).toBe("stale");
+    expect(tile.showHealth).toBe(false);
+    expect(tile.freshness.tone).toBe("danger");
+  });
+
+  it("keeps every other health pill: an age cannot say Blocked", () => {
+    for (const state of ["blocked", "at_risk", "on_track"]) {
+      const tile = initiativeTileModel(
+        row({
+          plan_health: { state, reason: "" },
+          plan_state: planState({ last_movement_at: ago(3_600_000) }),
+        }),
+        { now: NOW },
+      );
+      expect(tile.showHealth).toBe(true);
+    }
+  });
+
+  it("keeps the Stale pill when the badge would contradict it", () => {
+    // Core calls it stale; the last movement is five hours ago, well inside
+    // the three-day expectation. A green badge alone would read as "fine".
+    const tile = initiativeTileModel(
+      row({
+        plan_health: { state: "stale", reason: "No agent has picked it up." },
+        plan_state: planState({ last_movement_at: ago(5 * 3_600_000) }),
+      }),
+      { now: NOW },
+    );
+    expect(tile.freshness.tone).toBe("ok");
+    expect(tile.showHealth).toBe(true);
+  });
+
+  it("keeps the Stale pill when there is no instant to badge instead", () => {
+    const tile = initiativeTileModel(
+      row({
+        plan_health: { state: "stale", reason: "" },
+        plan_state: planState({ last_movement_at: "" }),
+        updated_at: "",
+      }),
+      { now: NOW },
+    );
+    expect(tile.freshness).toBeNull();
+    expect(tile.showHealth).toBe(true);
+  });
+
+  it("reads a projection-supplied cadence when one arrives", () => {
+    const tile = initiativeTileModel(
+      row({
+        update_expectation_hours: 6,
+        plan_state: planState({ last_movement_at: ago(8 * 3_600_000) }),
+      }),
+      { now: NOW },
+    );
+    expect(tile.freshness).toMatchObject({
+      tone: "warn",
+      expectation: "6h",
+    });
+  });
+});
+
+describe("finished initiatives get no freshness badge", () => {
+  /*
+   * A freshness badge is a prompt: it says somebody should go and look. A
+   * delivered initiative is not asking for anything, so a red "9d, expected
+   * every 3d" in the Done fold was the dashboard chasing finished work.
+   */
+  const longAgo = ago(40 * 86_400_000);
+
+  it("shows none when core computes the health as done", () => {
+    const tile = initiativeTileModel(
+      row({
+        plan_health: { state: "done", reason: "Every step is done." },
+        plan_state: planState({
+          last_movement_at: longAgo,
+          progress: { done: 3, total: 3 },
+        }),
+        progress: { done: 3, total: 3 },
+      }),
+      { now: NOW },
+    );
+    expect(tile.health.state).toBe("done");
+    expect(tile.freshness).toBeNull();
+    expect(tile.freshnessKind).toBe("closed");
+  });
+
+  it("shows none when every step is done, whatever the clock says", () => {
+    // Progress alone promotes a tile to done in `planHealthModel`.
+    const tile = initiativeTileModel(
+      row({
+        progress: { done: 5, total: 5 },
+        plan_state: planState({
+          last_movement_at: longAgo,
+          progress: { done: 5, total: 5 },
+        }),
+      }),
+      { now: NOW },
+    );
+    expect(tile.group).toBe(tileGroup("done"));
+    expect(tile.freshness).toBeNull();
+  });
+
+  it("shows none for a cancelled or archived initiative", () => {
+    for (const closed of [
+      { phase: "cancelled" },
+      { phase: "done" },
+      { state: "archived" },
+      { state: "trashed" },
+    ]) {
+      const tile = initiativeTileModel(
+        row({
+          ...closed,
+          plan_state: planState({ last_movement_at: longAgo }),
+        }),
+        { now: NOW },
+      );
+      expect(tile.freshness, JSON.stringify(closed)).toBeNull();
+    }
+  });
+
+  it("still badges an open initiative that has gone quiet", () => {
+    const tile = initiativeTileModel(
+      row({ plan_state: planState({ last_movement_at: longAgo }) }),
+      { now: NOW },
+    );
+    expect(tile.freshnessKind).toBe("initiative");
+    expect(tile.freshness).toMatchObject({ tone: "danger" });
+  });
+});

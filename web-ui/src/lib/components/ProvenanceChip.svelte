@@ -15,6 +15,7 @@
    * by `liveProvenance` / `authoredProvenance` for a surface that is not a
    * report panel.
    */
+  import { tooltip } from "$lib/actions/tooltip.js";
   import { panelProvenance } from "$lib/reportProvenance.js";
 
   let {
@@ -36,12 +37,12 @@
   class={extraClass ? `provenance-chip ${extraClass}` : "provenance-chip"}
   data-anx-provenance={line.state}
   data-anx-provenance-class={line.class}
-  title={line.title}
+  use:tooltip={line.title}
 >
   <span class="provenance-mark" aria-hidden="true"></span><span class="min-w-0"
     >{line.leadBefore ?? line.lead}{#if line.authorLabel}<span
         class="provenance-author"
-        title={line.authorLabel}>{line.authorLabel}</span
+        use:tooltip={line.authorLabel}>{line.authorLabel}</span
       >{/if}{line.leadAfter ?? ""}{#if line.age}<time
         datetime={line.datetime}
         aria-label={line.title}>{line.age}</time
@@ -63,7 +64,6 @@
     font-size: 10px;
     line-height: 1.5;
     overflow-wrap: anywhere;
-    cursor: help;
   }
   .provenance-mark {
     flex: none;

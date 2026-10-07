@@ -15,7 +15,7 @@ import {
   applyResponseOverlay,
   inboxResponseOverlay,
 } from "$lib/inboxResponseQueue.js";
-import { loadInboxSources } from "$lib/inboxSources.js";
+import { loadInboxSources, mergeInboxItems } from "$lib/inboxSources.js";
 
 /**
  * The sidebar's Inbox count: how many rows sit in Needs you.
@@ -62,9 +62,16 @@ export function publishInboxCount(workspace, count, truncated = false) {
 
 async function fetchSources() {
   const results = await loadInboxSources({ withHistory: false });
-  // A count built on a failed source would claim "clear" when it is not;
-  // keep the last number rather than show a wrong one.
-  if (results.slice(0, 4).some((result) => result.status === "rejected")) {
+  /*
+   * A count built on a failed source would claim "clear" when it is not; keep
+   * the last number rather than show a wrong one.
+   *
+   * Completed items (index 4) are in that set, not optional colour: they are
+   * what tells `buildInboxRows` an ask has been answered. Losing them inflates
+   * the count rather than shrinking it, which is the worse direction to be
+   * wrong in.
+   */
+  if (results.slice(0, 5).some((result) => result.status === "rejected")) {
     return null;
   }
   const value = (index, key) => results[index].value?.[key] || [];
@@ -72,7 +79,18 @@ async function fetchSources() {
     decisions: value(0, "items"),
     actions: value(1, "items"),
     work: value(2, "work"),
-    inboxItems: value(3, "items"),
+    /*
+     * Open *and* completed, exactly as the Inbox page merges them.
+     *
+     * A blocked card with an explicit ask is represented by that ask, and it
+     * stays out of Needs you once the ask is answered: the answer released the
+     * human, and the agent still owns moving the card. `buildInboxRows` knows
+     * that only from the completed ask's `responded_at`. Counting from the
+     * open items alone left that map empty, so the card came back — which is
+     * why answering something in the Inbox and then leaving it brought the
+     * badge back for an item the reader had already dealt with.
+     */
+    inboxItems: mergeInboxItems(value(3, "items"), value(4, "items")),
     truncated: results.some(
       (result) =>
         result.status === "fulfilled" &&

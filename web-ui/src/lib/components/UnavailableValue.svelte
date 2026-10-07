@@ -11,6 +11,8 @@
    * it is muted rather than coloured, and it carries the reason as its
    * accessible name so the dash is never all a screen reader gets.
    */
+  import { tooltip } from "$lib/actions/tooltip.js";
+
   let {
     /** Why the value is missing. Shown on hover and read out. */
     reason = "",
@@ -24,9 +26,9 @@
 <span
   class="unavailable {extraClass}"
   data-unavailable
-  {title}
   aria-label={title}
-  role="img">—</span
+  role="img"
+  use:tooltip={title}>—</span
 >
 
 <style>
@@ -34,6 +36,5 @@
     color: var(--fg-subtle, var(--fg-muted));
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
-    cursor: help;
   }
 </style>

@@ -61,8 +61,11 @@
     applyResponseOverlay,
     defaultNotifyMode,
     flushInboxResponse,
+    dismissInboxResponseFailure,
     hasPendingInboxResponse,
+    inboxResponseFailures,
     inboxResponseOverlay,
+    retryInboxResponse,
     onInboxResponseCommitted,
     queueInboxResponse,
     stashInboxRestore,
@@ -154,7 +157,12 @@
       actions,
       receiptsUnavailable,
       work,
-      inboxItems: applyResponseOverlay(inboxItems, $inboxResponseOverlay, now),
+      inboxItems: applyResponseOverlay(
+        inboxItems,
+        $inboxResponseOverlay,
+        now,
+        $inboxResponseFailures,
+      ),
       updates,
       now,
       currentActorId: $selectedActorId || "",
@@ -1384,6 +1392,41 @@
                     source={selected.body}
                     class="text-meta leading-relaxed text-fg [overflow-wrap:anywhere]"
                   />
+                {/if}
+                {#if selected.responseError}
+                  <!--
+                    The send failed and nothing was recorded. The item is still
+                    here, still unanswered, and says why — rather than sliding
+                    back into the list minutes later with no explanation.
+                  -->
+                  <div
+                    class="rounded-md border border-danger bg-danger-soft px-3 py-2"
+                    role="alert"
+                    data-inbox-response-error
+                  >
+                    <p class="text-meta text-fg">
+                      <span class="font-medium text-danger-text"
+                        >Your response was not sent.</span
+                      >
+                      {selected.responseError}
+                    </p>
+                    <p class="mt-1.5 flex flex-wrap items-center gap-3">
+                      <button
+                        class="ui-btn-secondary"
+                        type="button"
+                        onclick={() =>
+                          void retryInboxResponse(selected.item?.id)}
+                        >Retry send</button
+                      >
+                      <button
+                        class="text-micro text-fg-muted hover:text-fg"
+                        type="button"
+                        onclick={() =>
+                          dismissInboxResponseFailure(selected.item?.id)}
+                        >Answer it again instead</button
+                      >
+                    </p>
+                  </div>
                 {/if}
                 {#if needsResponse}
                   <InboxRespondPanel

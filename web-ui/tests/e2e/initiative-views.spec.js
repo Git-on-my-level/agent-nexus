@@ -472,19 +472,53 @@ for (const viewport of [
       "Ref chips everywhere",
     );
 
-    // Health is a compact badge: a glyph, with the full text and core's
-    // reason on hover rather than truncated to "Blo…" in a tile header.
-    const health = tiles.first().locator("[data-health]");
-    await expect(health).toHaveAttribute("data-health", "blocked");
-    await expect(health).toHaveAttribute(
-      "title",
-      "Blocked — A step on the critical path is blocked.",
+    /*
+     * Health and freshness sit on their own line under the title, so a long
+     * initiative name gets the tile's full width. Hovering either is instant:
+     * the sentence is ours (`data-tooltip`), not the browser's slow `title`.
+     */
+    const status = tiles.first().locator("[data-tile-status]");
+    const title = tiles.first().locator(".tile-title");
+    expect((await status.boundingBox()).y).toBeGreaterThan(
+      (await title.boundingBox()).y,
     );
 
-    // The age is a badge: "3h", with the verb and exact instant on hover.
-    const age = tiles.first().locator("time.age-badge");
+    const health = status.locator("[data-health]");
+    await expect(health).toHaveAttribute("data-health", "blocked");
+    await expect(health).toHaveAttribute(
+      "data-tooltip",
+      "Blocked — A step on the critical path is blocked.",
+    );
+    await expect(health).toHaveJSProperty("title", "");
+
+    /*
+     * The age is a freshness badge: "3h" in green, because an initiative is
+     * expected to move every three days and this one moved this morning. The
+     * tooltip carries the expectation, the verb and the exact instant.
+     */
+    const age = tiles.first().locator("[data-freshness]");
     await expect(age).toHaveText("3h");
-    await expect(age).toHaveAttribute("title", /^Moved .*\(3h\)$/);
+    await expect(age).toHaveAttribute("data-freshness", "fresh");
+    await expect(age).toHaveClass(/ui-badge--ok/);
+    await expect(age).toHaveAttribute(
+      "data-tooltip",
+      /^Moved .*\(3h\) — within the expected 3d$/,
+    );
+
+    /*
+     * The stale initiative has not moved in eight days, nearly three times
+     * its expectation: the freshness badge is red and says so, and the
+     * separate "Stale" pill is gone because it said the same thing twice.
+     */
+    const staleTile = tiles.nth(1);
+    const staleAge = staleTile.locator("[data-freshness]");
+    await expect(staleAge).toHaveText("8d");
+    await expect(staleAge).toHaveClass(/ui-badge--danger/);
+    await expect(staleAge).toHaveAttribute(
+      "data-tooltip",
+      /expected every 3d$/,
+    );
+    await expect(staleTile.locator("[data-health]")).toHaveCount(0);
 
     await expect(tiles.nth(1)).toContainText("Agent ergonomics");
     await expect(tiles.nth(1)).toContainText("Lanes");

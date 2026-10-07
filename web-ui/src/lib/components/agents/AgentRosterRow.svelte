@@ -1,9 +1,15 @@
 <script>
   import { goto } from "$app/navigation";
 
+  import { tooltip } from "$lib/actions/tooltip.js";
+
   import AgentBridgeIndicator from "$lib/components/agents/AgentBridgeIndicator.svelte";
   import AgentStateDot from "$lib/components/agents/AgentStateDot.svelte";
-  import { agentRuntimeLabel, taskPath } from "$lib/agentPresence.js";
+  import {
+    agentRuntimeLabel,
+    isQuietAgentState,
+    taskPath,
+  } from "$lib/agentPresence.js";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
 
   /**
@@ -50,9 +56,10 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-  class="agent-row {selected ? 'agent-row--selected' : ''} {model.state ===
-  'stale'
-    ? 'agent-row--stale'
+  class="agent-row {selected ? 'agent-row--selected' : ''} {isQuietAgentState(
+    model.state,
+  )
+    ? 'agent-row--quiet'
     : ''}"
   data-agent-row={agent.handle}
   data-agent-state={model.state}
@@ -115,7 +122,7 @@
           “{model.note.text}”{#if model.note.age}<span class="text-fg-subtle"
               >{" · "}<time
                 datetime={model.note.at}
-                title={formatAbsoluteDateTime(model.note.at)}
+                use:tooltip={formatAbsoluteDateTime(model.note.at)}
                 >{model.note.age === "<1m"
                   ? "just now"
                   : `${model.note.age} ago`}</time
@@ -130,7 +137,10 @@
 
   <div class="agent-row__side">
     {#if model.duration}
-      <p class="text-meta tabular-nums text-fg" title={model.durationTitle}>
+      <p
+        class="text-meta tabular-nums text-fg"
+        use:tooltip={model.durationTitle}
+      >
         {#if model.run}<span class="text-fg-subtle">run{" "}</span
           >{/if}{model.duration}
       </p>
@@ -140,7 +150,7 @@
         class="agent-row__inbox"
         href={askHref}
         data-agent-inbox-link
-        title="Answer in Inbox (I)">Answer in Inbox</a
+        use:tooltip={"Answer in Inbox (I)"}>Answer in Inbox</a
       >
     {:else if model.durationTitle && model.duration}
       <p class="text-micro text-fg-subtle">
@@ -175,7 +185,8 @@
     background: var(--panel-hover);
     box-shadow: inset 2px 0 0 var(--accent);
   }
-  .agent-row--stale {
+  /* Not running and nothing waiting: quieter than the rows that matter. */
+  .agent-row--quiet {
     opacity: 0.72;
   }
   .agent-row__dot {

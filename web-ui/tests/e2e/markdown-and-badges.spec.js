@@ -253,7 +253,7 @@ test("a valid GitHub ref is never not-found, even when the resolve misses it", a
   await expect(chip).toHaveAttribute("href", PR_URL);
 });
 
-test("badges stay compact and keep their full text on hover", async ({
+test("badges stay compact and show their full text at once on hover", async ({
   page,
 }) => {
   test.setTimeout(90_000);
@@ -268,11 +268,34 @@ test("badges stay compact and keep their full text on hover", async ({
   );
   expect(clipped).toBe(false);
 
-  // Age: two characters, with the verb and the exact instant on hover.
-  const age = page.locator("[data-initiative-plan] time.age-badge").first();
+  /*
+   * Age: two characters, green because the plan moved eight hours ago and an
+   * initiative is expected to move every three days. The verb, the exact
+   * instant and the expectation are in the tooltip.
+   */
+  const age = page.locator("[data-initiative-plan] [data-freshness]").first();
   await expect(age).toHaveText("8h");
-  await expect(age).toHaveAttribute("title", /^Moved .*\(8h\)$/);
+  await expect(age).toHaveClass(/ui-badge--ok/);
+  await expect(age).toHaveAttribute(
+    "data-tooltip",
+    /^Moved .*\(8h\) — within the expected 3d$/,
+  );
   await expect(age).toHaveAttribute("datetime", planState.last_movement_at);
+
+  /*
+   * The tooltip itself: the browser's own takes about a second and paints a
+   * question-mark cursor while you wait. Ours is up in a frame or two, and
+   * the cursor is gone.
+   */
+  await expect(page.locator("[data-anx-tooltip]")).toHaveCount(0);
+  await expect(age).toHaveCSS("cursor", "auto");
+  await age.hover();
+  const tip = page.locator("[data-anx-tooltip]");
+  await expect(tip).toBeVisible({ timeout: 300 });
+  await expect(tip).toContainText("within the expected 3d");
+  // And it goes away again when the pointer leaves.
+  await page.mouse.move(0, 0);
+  await expect(tip).toHaveCount(0);
 });
 
 test("the task page is quiet where there is nothing to say", async ({

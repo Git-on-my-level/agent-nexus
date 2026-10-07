@@ -5,6 +5,8 @@ import { deferred, installWorkspaceApi } from "../helpers/workspaceApiMock.js";
 const OVERVIEW = "/o/local/w/local/overview";
 const BEFORE = process.env.OVERVIEW_CAPTURE_BEFORE === "1";
 const NOW = "2026-10-04T12:00:00.000Z";
+/** Two days before NOW: past core's 24h signal staleness. */
+const SILENT_SINCE = "2026-10-02T12:00:00.000Z";
 const report = {
   kind: "anx.visual-report",
   schema_version: 1,
@@ -121,10 +123,13 @@ async function installOverview(
       { board: { id: "old", title: "Old backlog", state: "archived" } },
     ],
     work: [...active, ...archived],
+    // Core sends "stale" for every agent silent beyond 24h. With no work
+    // riding on the silence these read as offline, not as a warning.
     agents: Array.from({ length: 3 }, (_, index) => ({
       id: `agent-${index}`,
       display_name: "claude",
       state: "stale",
+      last_signal_at: SILENT_SINCE,
     })),
     documents: [dashboard.document],
   });
@@ -179,6 +184,7 @@ async function installOverview(
       items: Array.from({ length: 3 }, (_, index) => ({
         id: `agent-${index}`,
         state: truncatedAgents ? "idle" : "stale",
+        last_signal_at: SILENT_SINCE,
       })),
     },
   });
@@ -321,7 +327,10 @@ test("work details stay collapsed until requested and exclude archived counts", 
   await expect(page.locator("[data-overview-cell='nexus:backlog']")).toHaveText(
     "0",
   );
-  await expect(page.locator("[data-overview-agents='stale']")).toContainText(
+  // Three agents with no recent signal and no work: offline, not stale. The
+  // third count only reads "Stale" when a silence has work riding on it.
+  await expect(page.locator("[data-overview-agents='stale']")).toHaveCount(0);
+  await expect(page.locator("[data-overview-agents='offline']")).toContainText(
     "3",
   );
 });

@@ -416,7 +416,11 @@ test("the exact instant is one hover away, and reaches a screen reader", async (
   const report = reportRegion(page);
 
   const live = chip(report, "asks");
-  await expect(live).toHaveAttribute("title", /Read .*Computed from workspace/);
+  // Our tooltip, not the browser's: up in a frame rather than a second.
+  await expect(live).toHaveAttribute(
+    "data-tooltip",
+    /Read .*Computed from workspace/,
+  );
   const authored = chip(report, "milestones").locator("time");
   await expect(authored).toHaveAttribute("datetime", OVERDUE);
   const label = await authored.getAttribute("aria-label");

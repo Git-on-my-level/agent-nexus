@@ -14,7 +14,7 @@
    * top third says "nothing is waiting" in a big empty box has spent a third
    * of the screen on good news.
    */
-  import AgeBadge from "$lib/components/AgeBadge.svelte";
+  import FreshnessBadge from "$lib/components/FreshnessBadge.svelte";
   import HealthBadge from "$lib/components/HealthBadge.svelte";
 
   let {
@@ -24,6 +24,8 @@
     hrefFor = (path) => path,
     /** True while the cross-workspace fan-out is still in flight. */
     loading = false,
+    /** Reference time, injectable so the freshness badges are testable. */
+    now = Date.now(),
   } = $props();
 
   let asks = $derived(band?.asks ?? { rows: [], count: 0 });
@@ -125,9 +127,17 @@
             <span class="urgent__row-title">{tile.title}</span>
           </a>
           <span class="urgent__row-meta">
-            <HealthBadge health={tile.health} variant="pill" />
+            {#if tile.showHealth}
+              <HealthBadge health={tile.health} variant="pill" />
+            {/if}
             {#if tile.movedAt}
-              <AgeBadge at={tile.movedAt} verb="moved" />
+              <FreshnessBadge
+                at={tile.movedAt}
+                kind={tile.freshnessKind}
+                row={tile}
+                verb="moved"
+                {now}
+              />
             {/if}
           </span>
         </li>
@@ -220,12 +230,14 @@
     padding: 0;
     list-style: none;
   }
+  /*
+   * Title on its own line, status underneath. A row used to put the title and
+   * its badges side by side, which cost every title the width of two badges
+   * it was not competing with for attention.
+   */
   .urgent__row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 4px 10px;
+    display: grid;
+    gap: 2px;
     padding: 6px 12px;
     border-top: 1px solid var(--line-subtle);
   }
@@ -234,7 +246,6 @@
   }
   .urgent__link {
     min-width: 0;
-    flex: 1 1 14rem;
     color: var(--fg);
     font-size: 12px;
     text-decoration: none;
@@ -249,7 +260,6 @@
   }
   .urgent__row-meta {
     display: flex;
-    flex: none;
     flex-wrap: wrap;
     align-items: center;
     gap: 6px;

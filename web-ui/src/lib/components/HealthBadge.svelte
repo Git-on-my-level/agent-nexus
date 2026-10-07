@@ -17,6 +17,7 @@
    * Nothing is rendered when core computed no health: an invented "on track"
    * would disagree with the next page load.
    */
+  import { tooltip } from "$lib/actions/tooltip.js";
   import { planHealthTitle } from "$lib/planHealth.js";
 
   let {
@@ -34,9 +35,9 @@
   <span
     class="ui-badge ui-badge--{health.tone} health-badge health-badge--{variant} {extraClass}"
     data-health={health.state}
-    {title}
     aria-label={title}
     role="img"
+    use:tooltip={title}
   >
     <span class="health-badge__glyph" aria-hidden="true">{health.glyph}</span>
     {#if variant === "pill"}
@@ -52,7 +53,6 @@
     /* The point of the compact form: it is never the thing that gets clipped,
        so it never needs an ellipsis. */
     white-space: nowrap;
-    cursor: help;
   }
   /* A square: the glyph carries the meaning and the tooltip carries the words. */
   .health-badge--icon {

@@ -44,7 +44,15 @@
   );
   let agents = $derived(roster?.agents ?? []);
   let summary = $derived(rosterSummary(agents));
-  let groups = $derived(groupAgentsByState(agents));
+  let allGroups = $derived(groupAgentsByState(agents));
+  /*
+   * Identities that have never checked in collapse into one counted group.
+   * They are real rows — an enrolled host agent nobody has run yet — but a
+   * roster that lists them beside working agents spends its first screen on
+   * bookkeeping.
+   */
+  let groups = $derived(allGroups.filter((group) => !group.collapsed));
+  let foldedGroups = $derived(allGroups.filter((group) => group.collapsed));
   let rows = $derived(
     groups.flatMap((group) =>
       group.agents.map((agent) => ({
@@ -148,10 +156,13 @@
 <WorkspacePageShell data-tour="agents-page">
   <WorkspacePageHeader title="Agents">
     {#snippet subtitle()}
-      {#if !loading && summary.total > 0}
+      {#if !loading && (summary.total > 0 || summary.inactiveTotal > 0)}
         <span data-agent-summary>
-          {summary.total}
-          {summary.total === 1 ? "agent" : "agents"}
+          {#if summary.total === 0}
+            <!-- Enrolled, never used. "0 agents" would read as a failed read. -->
+            No agents have checked in yet
+          {:else}{summary.total}
+            {summary.total === 1 ? "agent" : "agents"}{/if}
           {#if summary.working}
             <span class="text-fg-subtle">·</span> {summary.working} working
           {/if}
@@ -164,8 +175,14 @@
           {#if summary.idle}
             <span class="text-fg-subtle">·</span> {summary.idle} idle
           {/if}
+          {#if summary.offline}
+            <span class="text-fg-subtle">·</span> {summary.offline} offline
+          {/if}
           {#if summary.stale}
-            <span class="text-fg-subtle">·</span> {summary.stale} stale
+            <!-- Only a silence with work riding on it: worth the colour. -->
+            <span class="text-fg-subtle">·</span>
+            <span class="font-medium text-warn-text">{summary.stale} stale</span
+            >
           {/if}
         </span>
       {:else if !loading}
@@ -239,6 +256,29 @@
           </div>
         </section>
       {/each}
+      {#each foldedGroups as group (group.key)}
+        <details class="agents-fold" data-agents-fold={group.key}>
+          <summary>
+            {group.label}
+            <span class="tabular-nums">({group.agents.length})</span>
+          </summary>
+          <div
+            class="mt-1.5 overflow-hidden rounded-md border border-line bg-bg-soft"
+          >
+            {#each group.agents as agent (agent.id)}
+              <AgentRosterRow
+                {agent}
+                model={agentRowModel(agent, {
+                  now,
+                  loadedAt: roster?.loadedAt || now,
+                })}
+                href={workspaceHref(agentPath(agent))}
+                {workspaceHref}
+              />
+            {/each}
+          </div>
+        </details>
+      {/each}
       <p
         class="hidden flex-wrap items-center gap-x-3 gap-y-1 px-1 text-micro text-fg-subtle lg:flex"
         data-agents-key-hints
@@ -267,6 +307,20 @@
 </WorkspacePageShell>
 
 <style>
+  /* Never-used identities: present, counted, out of the way. */
+  .agents-fold {
+    border-top: 1px solid var(--line-subtle);
+    padding-top: 0.5rem;
+  }
+  .agents-fold summary {
+    cursor: pointer;
+    padding: 0.25rem 0.25rem;
+    color: var(--fg-muted);
+    font-size: 11px;
+  }
+  .agents-fold summary span {
+    color: var(--fg-subtle);
+  }
   .agents-kbd {
     display: inline-block;
     min-width: 1rem;

@@ -18,7 +18,9 @@
    */
   import { page } from "$app/stores";
 
-  import AgeBadge from "$lib/components/AgeBadge.svelte";
+  import { coreClient } from "$lib/coreClient";
+  import { prefetchWork } from "$lib/workCache.js";
+  import FreshnessBadge from "$lib/components/FreshnessBadge.svelte";
   import HealthBadge from "$lib/components/HealthBadge.svelte";
   import { groupedInitiativeTiles } from "$lib/initiativeTiles.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
@@ -28,6 +30,14 @@
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
+  /*
+   * Pointing at a tile reads the card, so the click has nothing left to wait
+   * for. Costs nothing when the card is already cached or already in flight.
+   */
+  function prefetch(ref) {
+    if (ref) void prefetchWork(ref, coreClient);
+  }
+
   let grouped = $derived(
     groupedInitiativeTiles(items, {
       now,
@@ -43,15 +53,35 @@
       href={tile.href}
       data-initiative-tile={tile.ref}
       data-tile-health={tile.health.state || "unknown"}
+      onpointerenter={() => prefetch(tile.ref)}
+      onfocus={() => prefetch(tile.ref)}
     >
+      <!--
+        Title first, on a line of its own. The status pill and the freshness
+        badge used to sit beside it, which left a long initiative name
+        competing for width with two things that are each two words wide. They
+        get their own line underneath now, where neither squeezes the other.
+      -->
       <span class="tile-head">
         <span class="tile-title">{tile.title}</span>
-        <!-- The mockup's status pill: a short word, not a glyph. It reads at a
-             glance without a hover, and the vocabulary is short enough
-             ("Blocked", "At risk", "Stale", "On track") that it never needs
-             truncating — which was the reason the glyph existed. -->
-        <HealthBadge health={tile.health} variant="pill" />
       </span>
+
+      {#if tile.showHealth || tile.freshness}
+        <span class="tile-status" data-tile-status>
+          {#if tile.showHealth}
+            <HealthBadge health={tile.health} variant="pill" />
+          {/if}
+          {#if tile.freshness}
+            <FreshnessBadge
+              at={tile.movedAt}
+              kind={tile.freshnessKind}
+              row={tile}
+              verb="moved"
+              {now}
+            />
+          {/if}
+        </span>
+      {/if}
 
       {#if tile.excerpt}
         <!-- A plain line. The body is markdown; a tile that rendered it
@@ -118,23 +148,17 @@
         </span>
       {/if}
 
-      <!-- One meta line, the way the mockup writes it: "Next: … · moved 2h
-           ago". Two separate blocks made the tile's last two rows compete. -->
-      <span class="tile-foot">
-        {#if tile.next}
+      <!-- The next step. The age used to share this line; it is a freshness
+           badge on the status line now, next to the state it qualifies. -->
+      {#if tile.next}
+        <span class="tile-foot">
           <span class="tile-next" data-tile-next
             >Next: {tile.next.title}{tile.next.extra
               ? ` +${tile.next.extra}`
               : ""}</span
           >
-        {/if}
-        {#if tile.next && tile.movedAt}
-          <span class="tile-sep" aria-hidden="true">·</span>
-        {/if}
-        {#if tile.movedAt}
-          <AgeBadge at={tile.movedAt} verb="moved" {now} />
-        {/if}
-      </span>
+        </span>
+      {/if}
     </a>
   </li>
 {/snippet}
@@ -239,8 +263,15 @@
   .tile-head {
     display: flex;
     align-items: baseline;
-    justify-content: space-between;
     gap: 8px;
+  }
+  /* The status line: everything that used to crowd the title. */
+  .tile-status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: -6px;
   }
   .tile-title {
     min-width: 0;
@@ -325,9 +356,6 @@
   }
   .tile-count {
     font-variant-numeric: tabular-nums;
-  }
-  .tile-sep {
-    color: var(--fg-subtle, var(--fg-muted));
   }
   .tile-foot {
     gap: 3px 6px;
