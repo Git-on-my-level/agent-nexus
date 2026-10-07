@@ -142,6 +142,8 @@ type PrimitiveStore interface {
 	ListRecentEventsByThread(ctx context.Context, threadID string, limit int) ([]map[string]any, error)
 	ListEvents(ctx context.Context, filter primitives.EventListFilter) ([]map[string]any, error)
 	ListEventsPage(ctx context.Context, filter primitives.EventListFilter) (primitives.EventPage, error)
+	EventStreamCursor(ctx context.Context, lastEventID string) (primitives.EventCursor, error)
+	ListEventStreamPage(ctx context.Context, filter primitives.EventListFilter, cursor primitives.EventCursor) (primitives.EventStreamPage, error)
 	ListHomeUnread(ctx context.Context, readerID string) ([]primitives.HomeUnreadGroup, int, error)
 	MarkHomeRead(ctx context.Context, readerID string, groupRefs []string) error
 	MarkHomeReadAt(ctx context.Context, readerID string, groupRefs []string, expected map[string]primitives.EventCursor) error

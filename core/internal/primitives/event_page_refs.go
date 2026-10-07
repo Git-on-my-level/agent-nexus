@@ -27,7 +27,7 @@ func withBatchPublicRefs(ctx context.Context, q interface {
 		switch v := value.(type) {
 		case string:
 			kind, id, ok := normalizeTypedRef(v)
-			if !ok || id == "" || resourceTables[kind] == "" {
+			if !ok || id == "" || (resourceTables[kind] == "" && kind != "document_revision" && kind != "card_revision") {
 				return
 			}
 			key := makeTypedRef(kind, id)
@@ -76,7 +76,13 @@ func withBatchPublicRefs(ctx context.Context, q interface {
 	sort.Strings(keys)
 	for _, kind := range keys {
 		ids, _ := json.Marshal(grouped[kind])
-		rows, err := q.QueryContext(ctx, `SELECT id,handle FROM `+resourceTables[kind]+` WHERE id IN (SELECT value FROM json_each(?))`, string(ids))
+		query := `SELECT id,handle FROM ` + resourceTables[kind] + ` WHERE id IN (SELECT value FROM json_each(?))`
+		if kind == "document_revision" {
+			query = `SELECT r.revision_id,COALESCE(d.handle,d.id,r.document_id)||'-r'||r.revision_number FROM document_revisions r LEFT JOIN documents d ON d.id=r.document_id WHERE r.revision_id IN (SELECT value FROM json_each(?))`
+		} else if kind == "card_revision" {
+			query = `SELECT r.revision_id,COALESCE(c.handle,c.id)||'-r'||r.revision_number FROM card_revisions r JOIN cards c ON c.id=r.card_id WHERE r.revision_id IN (SELECT value FROM json_each(?))`
+		}
+		rows, err := q.QueryContext(eventPageRefScope(ctx, kind, grouped[kind]), query, string(ids))
 		if err != nil {
 			return ctx, err
 		}
