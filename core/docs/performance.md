@@ -172,6 +172,23 @@ unrelated view definitions do not affect it. Actual SQL is always used
 for EXPLAIN; normalization never changes execution. New SQL or findings require
 reviewing a new entry. There are no table-wide or route-wide plan exemptions.
 
+The two compiler gates must use the same internal epoch table and value.
+Receipt snapshots use `receipt_access_epoch`; ordinary snapshots use
+`resource_access_epoch`. The table name stays in the fingerprint. Mixed tables
+or additional gates retain their exact literals.
+
+Receipt-stream cases retain the private-thread 200/404 case and add a public
+thread for both principals. Initial and fresh payloads must have valid receipt
+IDs and digests; comments and empty flushes cannot complete a receipt sample.
+Two fixed control records change only delivery timestamps between polls, keeping
+receipt ancestry and cardinality stable across five warm requests. The subject
+cleanup runs after all seven requests. The independent cache control verifies
+cold acquisition, warm reuse, stale-candidate validation after a trigger-backed
+write, and acquisition through a second fresh pool. Both authorization epochs
+must advance for post-invalidation receipt requests. Sparse receipt cardinality
+does not certify the metadata query's full receipt-table scan or dense ancestry;
+its exact plan exception states that limitation under SCA-665.
+
 `performance_budget_allowlist.json` records finite baselines for existing hazards
 on main, per method/path/case/principal/cache phase, with linked repair justification. Standard budgets
 remain the default for every new route. Baselines retain query/row ceilings,
@@ -198,6 +215,11 @@ lookup. These are existing main hazards linked to SCA-663, not permission to
 add repeated lookups. Diagnostic probes provide completed baseline evidence
 but intentionally fail; normal mode and CI must independently pass status,
 privacy, count, stream and exact-plan checks.
+
+Round-two isolation preserves all previously reviewed warm ceilings numerically.
+Cold and post-invalidation caps are measured separately and cannot widen warm
+assertions. Shard weights combine prior CI measurements with the initial public
+receipt probe; weights are scheduling estimates, never request allowances.
 
 Every remaining route exception carries `core_source_sha256`: a fingerprint of core runtime
 Go, module dependencies, local replacement modules, fixture/performance-harness
