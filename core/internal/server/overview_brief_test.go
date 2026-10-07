@@ -92,6 +92,61 @@ func TestBriefRanksBlockingWorkAboveAgeAndPriority(t *testing.T) {
 	}
 }
 
+func TestBriefRankPrecedenceDoesNotInvertAcrossTiers(t *testing.T) {
+	gate := briefCard("card:gate", "Approve the pricing change", "in_progress", 2*time.Hour, map[string]any{"priority": "p3"})
+	stacked := briefCard("card:stacked", "Confirm the logo", "blocked", 40*24*time.Hour, map[string]any{"priority": "p0", "due_at": briefAt(48 * time.Hour)})
+	aged := briefCard("card:aged", "Rename the folder", "in_progress", 40*24*time.Hour, nil)
+	overdue := briefCard("card:overdue", "Sign the renewal", "in_progress", time.Hour, map[string]any{"due_at": briefAt(2 * time.Hour)})
+	work := []map[string]any{
+		gate,
+		stacked,
+		aged,
+		overdue,
+		briefCard("card:waiting", "Build the page", "in_progress", time.Hour, map[string]any{"relations": briefDependsOn("card:gate")}),
+	}
+	in := briefInputs{now: briefNow, workAvailable: true, work: work, needsOK: true, dependents: briefDependents(work), signals: map[string]briefSignal{}}
+	in.recordWorkSignals(work)
+	in.needsRows = []map[string]any{
+		briefNeedsRow("task:card:stacked", "Confirm the logo"),
+		briefNeedsRow("task:card:aged", "Rename the folder"),
+		briefNeedsRow("task:card:overdue", "Sign the renewal"),
+		briefNeedsRow("task:card:gate", "Approve the pricing change"),
+	}
+
+	items := briefItems(t, briefSection(t, buildOverviewBrief(in), "decisions"))
+	if len(items) != 4 {
+		t.Fatalf("expected four ranked rows: %v", items)
+	}
+	order := []string{items[0]["id"].(string), items[1]["id"].(string), items[2]["id"].(string), items[3]["id"].(string)}
+	want := []string{"task:card:gate", "task:card:stacked", "task:card:overdue", "task:card:aged"}
+	for i := range want {
+		if order[i] != want[i] {
+			t.Fatalf("precedence inverted: got %v want %v", order, want)
+		}
+	}
+}
+
+func TestBriefWorkPriorityP0OutranksP3(t *testing.T) {
+	work := []map[string]any{
+		briefCard("card:nit", "Fix the typo", "in_progress", time.Hour, map[string]any{"priority": "p3"}),
+		briefCard("card:gate", "Approve the pricing change", "in_progress", time.Hour, map[string]any{"priority": "p0"}),
+	}
+	in := briefInputs{now: briefNow, workAvailable: true, work: work, needsOK: true, dependents: briefDependents(work), signals: map[string]briefSignal{}}
+	in.recordWorkSignals(work)
+	in.needsRows = []map[string]any{
+		briefNeedsRow("task:card:nit", "Fix the typo"),
+		briefNeedsRow("task:card:gate", "Approve the pricing change"),
+	}
+
+	items := briefItems(t, briefSection(t, buildOverviewBrief(in), "decisions"))
+	if items[0]["id"] != "task:card:gate" {
+		t.Fatalf("p0 did not outrank p3: %v", items)
+	}
+	if reason := items[0]["reason"].(string); !strings.Contains(reason, "p0 priority") {
+		t.Fatalf("p0 missing from reason: %q", reason)
+	}
+}
+
 func TestBriefDecisionReasonNamesOverdueAndAge(t *testing.T) {
 	work := []map[string]any{
 		briefCard("card:late", "Sign the renewal", "blocked", 72*time.Hour, map[string]any{"due_at": briefAt(48 * time.Hour), "priority": "critical"}),
@@ -238,6 +293,32 @@ func TestBriefSinceLastLookGroupsAndSeparatesFirstVisit(t *testing.T) {
 	first := briefSection(t, buildOverviewBrief(in), "since_last_look")
 	if first["first_visit"] != true || first["total"] != 0 {
 		t.Fatalf("no baseline must read as a first visit, not as no change: %v", first)
+	}
+}
+
+func TestBriefSinceLastLookTreatsEditsAsUpdatesNotTransitions(t *testing.T) {
+	since := briefAt(12 * time.Hour)
+	work := []map[string]any{
+		briefCard("card:done", "Shipped the proxy", "done", 2*time.Hour, nil),
+		briefCard("card:blocked", "Lost the credential", "blocked", time.Hour, nil),
+		briefCard("card:fresh-done", "Shipped today", "done", 3*time.Hour, nil),
+		briefCard("card:fresh-blocked", "Just blocked", "blocked", time.Hour, nil),
+	}
+	in := briefInputs{
+		now:         briefNow,
+		since:       &since,
+		work:        work,
+		needsOK:     true,
+		signals:     map[string]briefSignal{},
+		priorPhases: map[string]string{"card:done": "done", "card:blocked": "blocked"},
+	}
+	section := briefSection(t, buildOverviewBrief(in), "since_last_look")
+	counts := map[string]int{}
+	for _, group := range section["groups"].([]map[string]any) {
+		counts[group["key"].(string)] = group["count"].(int)
+	}
+	if counts["completed"] != 1 || counts["newly_blocked"] != 1 || counts["updated"] != 2 {
+		t.Fatalf("edits were counted as transitions: %v", counts)
 	}
 }
 

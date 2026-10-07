@@ -35,6 +35,21 @@ const briefSectionLimit = 5
 // Window for the machine section's throughput number.
 const briefThroughputWindow = 24 * time.Hour
 
+/*
+Rank places so documented precedence always holds: blocking, then due,
+then critical/high, then a blocked phase, then age. Additive 1000 / 600 /
+320 / 150 / hours inverted that order because age's 30-day cap (720) is
+larger than overdue, critical and blocked, and one blocker (1000) lost to
+a stacked old + overdue + critical row.
+*/
+const (
+	briefAgeCapHours   = 720
+	briefBlockedPlace  = 1_000
+	briefPriorityPlace = 10_000
+	briefDuePlace      = 100_000_000
+	briefBlockPlace    = 1_000_000_000
+)
+
 // Severity order for the at-risk section, worst first.
 var briefRiskOrder = map[string]int{"blocked": 0, "at_risk": 1, "stale": 2}
 
@@ -74,6 +89,7 @@ type briefInputs struct {
 	rosterTruncated  bool
 	newAsks          []map[string]any
 	dependents       map[string]int
+	priorPhases      map[string]string
 	/*
 	 * Whether this request produced the visit work snapshot the brief reads.
 	 * A store that answers Overview without one can still rank the needs_you
@@ -175,13 +191,13 @@ func briefAge(d time.Duration) string {
 
 func briefPriorityWeight(priority string) int {
 	switch strings.ToLower(strings.TrimSpace(priority)) {
-	case "critical", "urgent":
+	case "critical", "urgent", "p0":
 		return 320
-	case "high":
+	case "high", "p1":
 		return 200
-	case "medium", "normal":
+	case "medium", "normal", "p2":
 		return 80
-	case "low":
+	case "low", "p3":
 		return 20
 	}
 	return 0
@@ -207,21 +223,23 @@ func briefRank(signal briefSignal, now time.Time) (int, string, map[string]any) 
 	facts := map[string]any{"kind": signal.Kind, "blocks": signal.Blocks}
 
 	if signal.Blocks > 0 {
-		score += 1000 * signal.Blocks
+		score += briefBlockPlace * signal.Blocks
 		parts = append(parts, "blocks "+strconv.Itoa(signal.Blocks)+briefPlural(signal.Blocks, " card", " cards"))
 	}
+	dueRank := 0
 	if due, ok := briefParseTime(signal.DueAt); ok {
 		facts["due_at"] = due.Format(time.RFC3339Nano)
 		if now.After(due) {
-			score += 600
+			dueRank = 2
 			parts = append(parts, "overdue "+briefAge(now.Sub(due)))
 		} else if due.Sub(now) <= 48*time.Hour {
-			score += 300
+			dueRank = 1
 			parts = append(parts, "due in "+briefAge(due.Sub(now)))
 		}
 	}
+	score += dueRank * briefDuePlace
 	if weight := briefPriorityWeight(signal.Priority); weight >= 200 {
-		score += weight
+		score += weight * briefPriorityPlace
 		facts["priority"] = strings.ToLower(signal.Priority)
 		parts = append(parts, strings.ToLower(signal.Priority)+" priority")
 	} else {
@@ -231,7 +249,7 @@ func briefRank(signal briefSignal, now time.Time) (int, string, map[string]any) 
 		}
 	}
 	if signal.Phase == "blocked" {
-		score += 150
+		score += briefBlockedPlace
 		facts["phase"] = "blocked"
 		parts = append(parts, "blocked")
 	}
@@ -241,8 +259,8 @@ func briefRank(signal briefSignal, now time.Time) (int, string, map[string]any) 
 			age = 0
 		}
 		hours := int(age.Hours())
-		if hours > 720 {
-			hours = 720
+		if hours > briefAgeCapHours {
+			hours = briefAgeCapHours
 		}
 		score += hours
 		facts["age_hours"] = int(age.Hours())
@@ -343,7 +361,13 @@ func briefSinceLastLook(in briefInputs) map[string]any {
 		}
 		ref := anyString(w["ref"])
 		item := map[string]any{"ref": ref, "title": anyString(w["title"]), "href": briefTaskHref(ref), "at": at.Format(time.RFC3339Nano)}
-		switch anyString(w["phase"]) {
+		phase := anyString(w["phase"])
+		prior, known := in.priorPhases[anyString(w["id"])]
+		if known && prior == phase {
+			add("updated", item)
+			continue
+		}
+		switch phase {
 		case "done":
 			add("completed", item)
 		case "cancelled":
