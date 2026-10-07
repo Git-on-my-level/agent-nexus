@@ -25,4 +25,25 @@ runs:
     # Browser archives do not contain the runner's apt-installed libraries.
     - name: Install Chromium system dependencies
       shell: bash
-      run: pnpm -C web-ui exec playwright install-deps chromium
+      run: |
+        printf '%s\n' \
+          'Acquire::http::Timeout "30";' \
+          'Acquire::https::Timeout "30";' \
+          'Acquire::Retries "3";' \
+          | sudo tee /etc/apt/apt.conf.d/99timeouts >/dev/null
+
+        for attempt in 1 2 3; do
+          echo "Installing Chromium system dependencies (attempt ${attempt}/3)..."
+          if timeout 240 pnpm -C web-ui exec playwright install-deps chromium; then
+            exit 0
+          else
+            status=$?
+          fi
+
+          if [[ "$attempt" -eq 3 ]]; then
+            echo "::error::Failed to install Chromium system dependencies after 3 attempts."
+            exit "$status"
+          fi
+
+          echo "::warning::Chromium system dependency installation failed (exit ${status}); retrying."
+        done
