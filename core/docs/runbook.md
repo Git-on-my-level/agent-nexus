@@ -17,61 +17,61 @@ repo and live in the private `agent-nexus-saas/controlplane` repo.
 `anx-core` reads configuration from flags (highest priority) and environment
 variables.
 
-| Purpose | Flag | Env | Default |
-|---|---|---|---|
-| Workspace root (SQLite + artifacts) | `--workspace-root` | `ANX_WORKSPACE_ROOT` | `.anx-workspace` |
-| Blob backend selector | `--blob-backend` | `ANX_BLOB_BACKEND` | `filesystem` |
-| Filesystem/object blob root | `--blob-root` | `ANX_BLOB_ROOT` | workspace `artifacts/content/` |
-| Listen host | `--host` | `ANX_HOST` | `127.0.0.1` |
-| Listen port | `--port` | `ANX_PORT` | `8000` |
-| Full listen address (overrides host+port) | `--listen-addr` | `ANX_LISTEN_ADDR` | unset |
-| Schema path | `--schema-path` | `ANX_SCHEMA_PATH` | `../contracts/anx-schema.yaml` |
-| Core instance identifier | `--core-instance-id` | `ANX_CORE_INSTANCE_ID` | `core-local` |
-| Core base URL for wake-packet links | n/a | `ANX_CORE_BASE_URL` | derived from listen address |
-| Public workspace web UI URL for host enrollment (for example `https://example.com/o/acme/w/main`) | `--public-web-ui-workspace-url` | `ANX_PUBLIC_WEB_UI_WORKSPACE_URL` | unset; enrollment returns the code without a link |
-| Durable workspace id for wake routing | n/a | `ANX_WORKSPACE_ID` | `ws_main` |
-| Workspace display name for wake packets | n/a | `ANX_WORKSPACE_NAME` | `Main` |
-| Answer wake quiet window per requesting agent | n/a | `ANX_ANSWER_WAKE_QUIET_WINDOW` | `60s` |
-| Flush answer wake when no asks remain | n/a | `ANX_ANSWER_WAKE_FLUSH_WHEN_NO_OPEN_ASKS` | `true` |
-| Enable embedded wake-routing sidecar | n/a | `ANX_SIDECAR_ROUTER_ENABLED` | `true` |
-| Embedded router state path | n/a | `ANX_SIDECAR_ROUTER_STATE_PATH` | `<workspace-root>/router/router-state.json` |
-| Embedded router poll interval | n/a | `ANX_SIDECAR_ROUTER_POLL_INTERVAL` | `1s` |
-| Embedded router principal cache TTL | n/a | `ANX_SIDECAR_ROUTER_PRINCIPAL_CACHE_TTL` | `60s` |
-| Bootstrap token for first principal registration | n/a | `ANX_BOOTSTRAP_TOKEN` | unset |
-| Selected PM agent actor (claim/complete/fail when set) | n/a | `ANX_PM_AGENT_ACTOR_ID` | unset |
-| Selected PM agent handle (wake-bridge path only) | n/a | `ANX_PM_AGENT_HANDLE` | unset |
-| PM runner lease TTL (renew at a cadence strictly less than TTL/2) | n/a | `ANX_PM_LEASE_TTL` | `60s` (range `1s`–`10m`) |
-| PM turn wall time (queued runner and wake dispatch) | n/a | `ANX_PM_TURN_TIMEOUT` | `2m` (max `10m`) |
-| PM turn response byte cap | n/a | `ANX_PM_MAX_OUTPUT_BYTES` | `16000` |
-| Enable wake-routing PM bridge | n/a | `ANX_PM_BRIDGE_ENABLED` | `false` |
-| Attest an independently enforced PM capability envelope | n/a | `ANX_PM_RUNTIME_ENVELOPE_ENFORCED` | `false` |
-| Telegram webhook secret (≥32 chars) | n/a | `ANX_PM_TELEGRAM_WEBHOOK_SECRET` | unset |
-| Telegram bot id (tenant) | n/a | `ANX_PM_TELEGRAM_BOT_ID` | unset |
-| Telegram bot token (outbound only) | n/a | `ANX_PM_TELEGRAM_BOT_TOKEN` | unset |
-| Telegram Bot API base (fakes/tests only) | n/a | `ANX_PM_TELEGRAM_API_BASE` | `https://api.telegram.org` |
-| Discord application public key (32-byte hex) | n/a | `ANX_PM_DISCORD_PUBLIC_KEY` | unset |
-| Discord application id | n/a | `ANX_PM_DISCORD_APPLICATION_ID` | unset |
-| Discord bot token (outbound only) | n/a | `ANX_PM_DISCORD_BOT_TOKEN` | unset |
-| Discord REST API base (fakes/tests only) | n/a | `ANX_PM_DISCORD_API_BASE` | `https://discord.com/api/v10` |
-| WebAuthn RP ID | n/a | `ANX_WEBAUTHN_RPID` | derived from browser origin host |
-| WebAuthn origin | n/a | `ANX_WEBAUTHN_ORIGIN` | derived from browser request origin |
-| WebAuthn allowed origins | n/a | `ANX_WEBAUTHN_ALLOWED_ORIGINS` | unset |
-| WebAuthn RP display name | n/a | `ANX_WEBAUTHN_RP_DISPLAY_NAME` | `Agent Nexus` |
-| CORS allowed origins | n/a | `ANX_CORS_ALLOWED_ORIGINS` | unset (CORS disabled) |
-| Enforce local workspace quotas on writes | `--enforce-local-quotas` | `ANX_ENFORCE_LOCAL_QUOTAS` | `false` |
-| Workspace storage quota (blob bytes plus SQLite bytes when measurable) | n/a | `ANX_WORKSPACE_MAX_BLOB_BYTES` | `1073741824` |
-| Workspace artifact quota | n/a | `ANX_WORKSPACE_MAX_ARTIFACTS` | `100000` |
-| Workspace document quota | n/a | `ANX_WORKSPACE_MAX_DOCUMENTS` | `50000` |
-| Workspace revision quota | n/a | `ANX_WORKSPACE_MAX_REVISIONS` | `250000` |
-| Max upload size per workspace write | n/a | `ANX_WORKSPACE_MAX_UPLOAD_BYTES` | `8388608` |
-| Default JSON request body cap | n/a | `ANX_REQUEST_BODY_LIMIT_BYTES` | `1048576` |
-| Auth request body cap | n/a | `ANX_AUTH_REQUEST_BODY_LIMIT_BYTES` | `262144` |
-| Large content request body cap | n/a | `ANX_CONTENT_REQUEST_BODY_LIMIT_BYTES` | `8388608` |
-| Auth route rate limit per minute | n/a | `ANX_AUTH_ROUTE_RATE_LIMIT_PER_MINUTE` | `600` |
-| Auth route burst | n/a | `ANX_AUTH_ROUTE_RATE_BURST` | `100` |
-| Write route rate limit per minute | n/a | `ANX_WRITE_ROUTE_RATE_LIMIT_PER_MINUTE` | `1200` |
-| Write route burst | n/a | `ANX_WRITE_ROUTE_RATE_BURST` | `200` |
-| Graceful shutdown timeout | n/a | `ANX_SHUTDOWN_TIMEOUT` | `15s` |
+| Purpose                                                                                           | Flag                            | Env                                       | Default                                           |
+| ------------------------------------------------------------------------------------------------- | ------------------------------- | ----------------------------------------- | ------------------------------------------------- |
+| Workspace root (SQLite + artifacts)                                                               | `--workspace-root`              | `ANX_WORKSPACE_ROOT`                      | `.anx-workspace`                                  |
+| Blob backend selector                                                                             | `--blob-backend`                | `ANX_BLOB_BACKEND`                        | `filesystem`                                      |
+| Filesystem/object blob root                                                                       | `--blob-root`                   | `ANX_BLOB_ROOT`                           | workspace `artifacts/content/`                    |
+| Listen host                                                                                       | `--host`                        | `ANX_HOST`                                | `127.0.0.1`                                       |
+| Listen port                                                                                       | `--port`                        | `ANX_PORT`                                | `8000`                                            |
+| Full listen address (overrides host+port)                                                         | `--listen-addr`                 | `ANX_LISTEN_ADDR`                         | unset                                             |
+| Schema path                                                                                       | `--schema-path`                 | `ANX_SCHEMA_PATH`                         | `../contracts/anx-schema.yaml`                    |
+| Core instance identifier                                                                          | `--core-instance-id`            | `ANX_CORE_INSTANCE_ID`                    | `core-local`                                      |
+| Core base URL for wake-packet links                                                               | n/a                             | `ANX_CORE_BASE_URL`                       | derived from listen address                       |
+| Public workspace web UI URL for host enrollment (for example `https://example.com/o/acme/w/main`) | `--public-web-ui-workspace-url` | `ANX_PUBLIC_WEB_UI_WORKSPACE_URL`         | unset; enrollment returns the code without a link |
+| Durable workspace id for wake routing                                                             | n/a                             | `ANX_WORKSPACE_ID`                        | `ws_main`                                         |
+| Workspace display name for wake packets                                                           | n/a                             | `ANX_WORKSPACE_NAME`                      | `Main`                                            |
+| Answer wake quiet window per requesting agent                                                     | n/a                             | `ANX_ANSWER_WAKE_QUIET_WINDOW`            | `60s`                                             |
+| Flush answer wake when no asks remain                                                             | n/a                             | `ANX_ANSWER_WAKE_FLUSH_WHEN_NO_OPEN_ASKS` | `true`                                            |
+| Enable embedded wake-routing sidecar                                                              | n/a                             | `ANX_SIDECAR_ROUTER_ENABLED`              | `true`                                            |
+| Embedded router state path                                                                        | n/a                             | `ANX_SIDECAR_ROUTER_STATE_PATH`           | `<workspace-root>/router/router-state.json`       |
+| Embedded router poll interval                                                                     | n/a                             | `ANX_SIDECAR_ROUTER_POLL_INTERVAL`        | `1s`                                              |
+| Embedded router principal cache TTL                                                               | n/a                             | `ANX_SIDECAR_ROUTER_PRINCIPAL_CACHE_TTL`  | `60s`                                             |
+| Bootstrap token for first principal registration                                                  | n/a                             | `ANX_BOOTSTRAP_TOKEN`                     | unset                                             |
+| Selected PM agent actor (claim/complete/fail when set)                                            | n/a                             | `ANX_PM_AGENT_ACTOR_ID`                   | unset                                             |
+| Selected PM agent handle (wake-bridge path only)                                                  | n/a                             | `ANX_PM_AGENT_HANDLE`                     | unset                                             |
+| PM runner lease TTL (renew at a cadence strictly less than TTL/2)                                 | n/a                             | `ANX_PM_LEASE_TTL`                        | `60s` (range `1s`–`10m`)                          |
+| PM turn wall time (queued runner and wake dispatch)                                               | n/a                             | `ANX_PM_TURN_TIMEOUT`                     | `2m` (max `10m`)                                  |
+| PM turn response byte cap                                                                         | n/a                             | `ANX_PM_MAX_OUTPUT_BYTES`                 | `16000`                                           |
+| Enable wake-routing PM bridge                                                                     | n/a                             | `ANX_PM_BRIDGE_ENABLED`                   | `false`                                           |
+| Attest an independently enforced PM capability envelope                                           | n/a                             | `ANX_PM_RUNTIME_ENVELOPE_ENFORCED`        | `false`                                           |
+| Telegram webhook secret (≥32 chars)                                                               | n/a                             | `ANX_PM_TELEGRAM_WEBHOOK_SECRET`          | unset                                             |
+| Telegram bot id (tenant)                                                                          | n/a                             | `ANX_PM_TELEGRAM_BOT_ID`                  | unset                                             |
+| Telegram bot token (outbound only)                                                                | n/a                             | `ANX_PM_TELEGRAM_BOT_TOKEN`               | unset                                             |
+| Telegram Bot API base (fakes/tests only)                                                          | n/a                             | `ANX_PM_TELEGRAM_API_BASE`                | `https://api.telegram.org`                        |
+| Discord application public key (32-byte hex)                                                      | n/a                             | `ANX_PM_DISCORD_PUBLIC_KEY`               | unset                                             |
+| Discord application id                                                                            | n/a                             | `ANX_PM_DISCORD_APPLICATION_ID`           | unset                                             |
+| Discord bot token (outbound only)                                                                 | n/a                             | `ANX_PM_DISCORD_BOT_TOKEN`                | unset                                             |
+| Discord REST API base (fakes/tests only)                                                          | n/a                             | `ANX_PM_DISCORD_API_BASE`                 | `https://discord.com/api/v10`                     |
+| WebAuthn RP ID                                                                                    | n/a                             | `ANX_WEBAUTHN_RPID`                       | derived from browser origin host                  |
+| WebAuthn origin                                                                                   | n/a                             | `ANX_WEBAUTHN_ORIGIN`                     | derived from browser request origin               |
+| WebAuthn allowed origins                                                                          | n/a                             | `ANX_WEBAUTHN_ALLOWED_ORIGINS`            | unset                                             |
+| WebAuthn RP display name                                                                          | n/a                             | `ANX_WEBAUTHN_RP_DISPLAY_NAME`            | `Agent Nexus`                                     |
+| CORS allowed origins                                                                              | n/a                             | `ANX_CORS_ALLOWED_ORIGINS`                | unset (CORS disabled)                             |
+| Enforce local workspace quotas on writes                                                          | `--enforce-local-quotas`        | `ANX_ENFORCE_LOCAL_QUOTAS`                | `false`                                           |
+| Workspace storage quota (blob bytes plus canonical row content when measurable)                   | n/a                             | `ANX_WORKSPACE_MAX_BLOB_BYTES`            | `1073741824`                                      |
+| Workspace artifact quota                                                                          | n/a                             | `ANX_WORKSPACE_MAX_ARTIFACTS`             | `100000`                                          |
+| Workspace document quota                                                                          | n/a                             | `ANX_WORKSPACE_MAX_DOCUMENTS`             | `50000`                                           |
+| Workspace revision quota                                                                          | n/a                             | `ANX_WORKSPACE_MAX_REVISIONS`             | `250000`                                          |
+| Max upload size per workspace write                                                               | n/a                             | `ANX_WORKSPACE_MAX_UPLOAD_BYTES`          | `8388608`                                         |
+| Default JSON request body cap                                                                     | n/a                             | `ANX_REQUEST_BODY_LIMIT_BYTES`            | `1048576`                                         |
+| Auth request body cap                                                                             | n/a                             | `ANX_AUTH_REQUEST_BODY_LIMIT_BYTES`       | `262144`                                          |
+| Large content request body cap                                                                    | n/a                             | `ANX_CONTENT_REQUEST_BODY_LIMIT_BYTES`    | `8388608`                                         |
+| Auth route rate limit per minute                                                                  | n/a                             | `ANX_AUTH_ROUTE_RATE_LIMIT_PER_MINUTE`    | `600`                                             |
+| Auth route burst                                                                                  | n/a                             | `ANX_AUTH_ROUTE_RATE_BURST`               | `100`                                             |
+| Write route rate limit per minute                                                                 | n/a                             | `ANX_WRITE_ROUTE_RATE_LIMIT_PER_MINUTE`   | `1200`                                            |
+| Write route burst                                                                                 | n/a                             | `ANX_WRITE_ROUTE_RATE_BURST`              | `200`                                             |
+| Graceful shutdown timeout                                                                         | n/a                             | `ANX_SHUTDOWN_TIMEOUT`                    | `15s`                                             |
 
 ### Optional: heartbeat publisher and account status (env contract)
 
@@ -330,6 +330,16 @@ Self-hosted workspaces have no capacity quotas by default. Usage counters and
 apply only when explicitly opting in with `ANX_ENFORCE_LOCAL_QUOTAS=true` (or
 `--enforce-local-quotas`). External deployment policy may instead set the generic
 `ANX_WORKSPACE_ACCESS_MODE`; this is independent of local quotas.
+
+Storage quotas count deduplicated blob bytes plus the byte lengths of stored
+canonical content row values. Rebuildable authorization/search indexes, projections,
+SQLite allocation, WAL and shared-memory files are excluded. `db_bytes` still
+reports physical SQLite file sizes for operations; it is not added to
+`storage_bytes`. Canonical content measurement is cached for 30 seconds, so
+quota enforcement can lag cumulative database-content growth within that window.
+Blob accounting remains immediate. Reader summaries and quota errors measure
+only visible content rows and never reuse the canonical cache. Stores without
+a configured database path retain blob-only accounting.
 
 Technical limits stay active in both modes: `ANX_REQUEST_BODY_LIMIT_BYTES`,
 `ANX_AUTH_REQUEST_BODY_LIMIT_BYTES`, `ANX_CONTENT_REQUEST_BODY_LIMIT_BYTES`,

@@ -14,7 +14,7 @@ type Option func(*Store)
 
 type WorkspaceQuota struct {
 	// MaxBlobBytes is the historical env/JSON name. Enforcement now applies it
-	// to combined storage bytes when a database path is configured.
+	// to blob bytes plus canonical content bytes when a database path is configured.
 	MaxBlobBytes   int64 `json:"max_blob_bytes"`
 	MaxArtifacts   int64 `json:"max_artifacts"`
 	MaxDocuments   int64 `json:"max_documents"`
@@ -71,6 +71,7 @@ type workspaceUsage struct {
 	blobBytes     int64
 	blobObjects   int64
 	dbBytes       int64
+	contentBytes  int64
 	artifacts     int64
 	documents     int64
 	revisions     int64
@@ -171,7 +172,7 @@ func (s *Store) checkWorkspaceWriteQuota(ctx context.Context, uploadBytes int64,
 		}
 	}
 
-	usage, err := s.currentWorkspaceUsage(CanonicalMaintenanceContext(ctx), s.quota.MaxBlobBytes > 0)
+	usage, err := s.workspaceQuotaUsage(CanonicalMaintenanceContext(ctx))
 	if err != nil {
 		return err
 	}
@@ -228,6 +229,43 @@ func (s *Store) checkWorkspaceWriteQuota(ctx context.Context, uploadBytes int64,
 	return nil
 }
 
+// The write path loads only enabled metrics. In particular a storage-only
+// policy must not count every event/revision or stat SQLite files per append.
+func (s *Store) workspaceQuotaUsage(ctx context.Context) (workspaceUsage, error) {
+	var usage workspaceUsage
+	var err error
+	if s.quota.MaxBlobBytes > 0 {
+		blobs, loadErr := s.loadBlobUsageTotals(ctx)
+		if loadErr != nil {
+			return usage, loadErr
+		}
+		usage.blobBytes = blobs.Bytes
+		usage.contentBytes, err = s.databaseContentUsageBytes(ctx)
+		if err != nil {
+			return usage, err
+		}
+	}
+	for _, metric := range []struct {
+		enabled bool
+		table   string
+		total   *int64
+	}{
+		{s.quota.MaxArtifacts > 0, "artifacts", &usage.artifacts},
+		{s.quota.MaxDocuments > 0, "documents", &usage.documents},
+		{s.quota.MaxRevisions > 0, "document_revisions", &usage.docRevisions},
+		{s.quota.MaxRevisions > 0, "card_revisions", &usage.cardRevisions},
+	} {
+		if metric.enabled {
+			*metric.total, err = countTableRows(ctx, s.db, metric.table)
+			if err != nil {
+				return usage, err
+			}
+		}
+	}
+	usage.revisions = usage.docRevisions + usage.cardRevisions
+	return usage, nil
+}
+
 func (s *Store) currentWorkspaceUsage(ctx context.Context, includeBlobBytes bool) (workspaceUsage, error) {
 	if s == nil || s.db == nil {
 		return workspaceUsage{}, fmt.Errorf("primitives store database is not initialized")
@@ -247,6 +285,12 @@ func (s *Store) currentWorkspaceUsage(ctx context.Context, includeBlobBytes bool
 		return workspaceUsage{}, fmt.Errorf("measure database usage: %w", err)
 	}
 	usage.dbBytes = dbBytes
+	if includeBlobBytes {
+		usage.contentBytes, err = s.databaseContentUsageBytes(ctx)
+		if err != nil {
+			return workspaceUsage{}, fmt.Errorf("measure content usage: %w", err)
+		}
+	}
 
 	if usage.artifacts, err = countTableRows(ctx, s.db, "artifacts"); err != nil {
 		return workspaceUsage{}, err
@@ -269,7 +313,7 @@ func (s *Store) currentWorkspaceUsage(ctx context.Context, includeBlobBytes bool
 }
 
 func (u workspaceUsage) storageBytes() int64 {
-	return u.blobBytes + u.dbBytes
+	return u.blobBytes + u.contentBytes
 }
 
 func (s *Store) GetWorkspaceUsageSummary(ctx context.Context) (WorkspaceUsageSummary, error) {
