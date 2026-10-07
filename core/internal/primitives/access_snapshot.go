@@ -36,13 +36,14 @@ var readDenials = struct {
 func cachedReadDenial(db *sql.DB, scope AccessScope) *denialSnapshot {
 	readDenials.Lock()
 	defer readDenials.Unlock()
-	for i := len(readDenials.keys) - 1; i >= 0; i-- {
-		key := readDenials.keys[i]
-		if key.db == db && key.scope == scope {
-			return readDenials.rows[key]
+	var newest *denialSnapshot
+	// Captures can finish out of order; insertion order is not epoch order.
+	for _, key := range readDenials.keys {
+		if key.db == db && key.scope == scope && (newest == nil || key.epoch > newest.epoch) {
+			newest = readDenials.rows[key]
 		}
 	}
-	return nil
+	return newest
 }
 
 func rememberReadDenial(db *sql.DB, scope AccessScope, snapshot *denialSnapshot) {

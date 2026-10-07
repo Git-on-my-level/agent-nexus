@@ -1,11 +1,61 @@
 package primitives
 
 import (
+	"agent-nexus-core/internal/resourceaccess"
 	"agent-nexus-core/internal/storage"
 	"context"
 	"errors"
 	"testing"
 )
+
+func TestResourceAccessReadCachePrefersNewestEpochAfterDelayedFill(t *testing.T) {
+	ctx := context.Background()
+	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	doc, _, err := s.CreateDocument(ctx, "owner", map[string]any{"title": "cache order control"}, "body", "text", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := AccessScope{ActorID: "reader"}
+	olderRequest := WithRequestAccessScope(ctx, scope)
+	policy, _ := resourceaccess.PolicyFrom(olderRequest)
+	// Capture through the actual SQL path without publishing to the shared
+	// cache yet, as if this request's fill completed after a newer request.
+	query, args := policy.ReadOnDB(olderRequest, struct{ resourceaccess.QueryRower }{ws.DB()}, `SELECT id FROM documents WHERE id=?`, []any{doc["id"]})
+	var id string
+	if err = ws.DB().QueryRowContext(olderRequest, query, args...).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	older := denialSnapshotFrom(olderRequest)
+	if older == nil {
+		t.Fatal("older request did not capture a denial snapshot")
+	}
+	if _, err = s.PatchThread(ctx, "owner", doc["thread_id"].(string), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	newerRequest := WithRequestAccessScope(ctx, scope)
+	if s.CanAccessResource(newerRequest, "document", doc["id"].(string)) {
+		t.Fatal("new ownership exposed the private document")
+	}
+	newer := denialSnapshotFrom(newerRequest)
+	if newer == nil || newer.epoch <= older.epoch {
+		t.Fatal("ownership change did not capture a newer epoch")
+	}
+	rememberReadDenial(ws.DB(), scope, older)
+	for i := 0; i < 3; i++ {
+		request := WithRequestAccessScope(ctx, scope)
+		if s.CanAccessResource(request, "document", doc["id"].(string)) {
+			t.Fatal("delayed old capture exposed the private document")
+		}
+		if denialSnapshotFrom(request) != newer {
+			t.Fatal("delayed old fill caused a rebuild instead of reusing the current closure")
+		}
+	}
+}
 
 func TestResourceAccessReadCacheSeparatesDatabaseAndPMScope(t *testing.T) {
 	ctx := context.Background()
