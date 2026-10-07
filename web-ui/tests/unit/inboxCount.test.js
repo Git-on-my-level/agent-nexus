@@ -13,6 +13,7 @@ vi.mock("../../src/lib/inboxSources.js", () => ({
 }));
 vi.mock("../../src/lib/liveWorkspaceEvents.js", () => ({
   liveWorkspaceEvents: () => () => {},
+  liveInboxChanges: () => () => {},
 }));
 
 import {
