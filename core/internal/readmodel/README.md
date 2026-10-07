@@ -1,9 +1,10 @@
 # Bounded read-model kernel
 
-Stream B remains disabled and unwired. A's `c86cf596` feed dependency is integrated;
-`Store.ReadFeed` is exercised only through test adapters. Both production import
-guards remain unchanged. No HTTP routes, serving constructors or migrations are
-registered, and existing authorization remains authoritative.
+Stream B remains disabled and unwired. Main's #307 feed dependency and A's
+`4e9f0c12` trusted adapters are integrated. The kernel retains A's exact two-file
+adapter exception; the independent repository guard still rejects every live
+consumer. No HTTP routes, serving constructors or migrations are registered,
+and existing authorization remains authoritative.
 
 `Read` seeks at most P+1 keys per exact authorized stream, rejects duplicate RIDs
 throughout admission (including lookahead), heap-merges, and hydrates at most P
