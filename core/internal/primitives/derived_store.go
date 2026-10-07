@@ -18,6 +18,7 @@ type DerivedInboxListFilter struct {
 	RecipientActorID        string
 	ThreadID                string
 	Limit                   int
+	ActiveNotifications     bool
 	BeforeCategory          int
 	BeforeTrigger, BeforeID string
 }
@@ -169,8 +170,7 @@ func (s *Store) ListDerivedInboxItems(ctx context.Context, filter DerivedInboxLi
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
 
-	query := `SELECT id, thread_id, category, trigger_at, due_at, has_due_at, source_event_id, source_card_id, generated_at, data_json, source_hash
-		FROM derived_inbox_items`
+	projection := `SELECT id, thread_id, category, trigger_at, due_at, has_due_at, source_event_id, source_card_id, generated_at, data_json, source_hash FROM derived_inbox_items i`
 	args := []any{filter.RecipientActorID}
 	clauses := []string{"(COALESCE(json_extract(data_json,'$.recipient_actor_id'),'')='' OR json_extract(data_json,'$.recipient_actor_id')=?)", currentReportReviewSQL}
 	if threadID := strings.TrimSpace(filter.ThreadID); threadID != "" {
@@ -178,17 +178,43 @@ func (s *Store) ListDerivedInboxItems(ctx context.Context, filter DerivedInboxLi
 		args = append(args, threadID)
 	}
 	rank := `CASE anx_unicode_trim(category) WHEN 'escalate' THEN 0 WHEN 'ask' THEN 1 WHEN 'review' THEN 2 ELSE 99 END`
-	if filter.BeforeID != "" {
-		clauses = append(clauses, `((`+rank+`)>? OR ((`+rank+`)=? AND (trigger_at<? OR (trigger_at=? AND id>?))))`)
-		args = append(args, filter.BeforeCategory, filter.BeforeCategory, filter.BeforeTrigger, filter.BeforeTrigger, filter.BeforeID)
+	if filter.ActiveNotifications {
+		clauses = append(clauses, "i.lifecycle_hidden=0")
 	}
-	if len(clauses) > 0 {
-		query += " WHERE " + strings.Join(clauses, " AND ")
-	}
-	query += " ORDER BY " + rank + ",trigger_at DESC,id ASC"
-	if filter.Limit > 0 {
-		query += " LIMIT ?"
-		args = append(args, filter.Limit+1)
+	base := projection + " WHERE " + strings.Join(clauses, " AND ")
+	order := " ORDER BY " + rank + ",trigger_at DESC,id ASC"
+	query := base + order
+	if filter.BeforeID != "" && filter.Limit > 0 {
+		// Mixed ASC/DESC ordering cannot use a single row-value comparison.
+		// Disjoint ranges each seek the index and return at most one page;
+		// the final merge sorts only that bounded union, never earlier prefixes.
+		ranges := []struct {
+			where string
+			args  []any
+		}{
+			{rank + "=? AND trigger_at=? AND id>?", []any{filter.BeforeCategory, filter.BeforeTrigger, filter.BeforeID}},
+			{rank + "=? AND trigger_at<?", []any{filter.BeforeCategory, filter.BeforeTrigger}},
+			{rank + ">?", []any{filter.BeforeCategory}},
+		}
+		parts := []string{}
+		bound := []any{}
+		for _, span := range ranges {
+			parts = append(parts, "SELECT * FROM ("+base+" AND ("+span.where+")"+order+" LIMIT ?)")
+			bound = append(bound, args...)
+			bound = append(bound, span.args...)
+			bound = append(bound, filter.Limit+1)
+		}
+		query = "SELECT * FROM (" + strings.Join(parts, " UNION ALL ") + ")" + order + " LIMIT ?"
+		args = append(bound, filter.Limit+1)
+	} else {
+		if filter.BeforeID != "" {
+			query = base + ` AND ((` + rank + `)>? OR ((` + rank + `)=? AND (trigger_at<? OR (trigger_at=? AND id>?))))` + order
+			args = append(args, filter.BeforeCategory, filter.BeforeCategory, filter.BeforeTrigger, filter.BeforeTrigger, filter.BeforeID)
+		}
+		if filter.Limit > 0 {
+			query += " LIMIT ?"
+			args = append(args, filter.Limit+1)
+		}
 	}
 
 	rows, err := s.db.QueryContext(ctx, query, args...)

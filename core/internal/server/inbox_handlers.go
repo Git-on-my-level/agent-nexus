@@ -340,25 +340,17 @@ func loadOpenInbox(r *http.Request, opts handlerOptions, now time.Time) (map[str
 	return map[string]any{"status": "open", "items": items, "generated_at": now.Format(time.RFC3339Nano), "projection_freshness": freshness, "next_cursor": next, "has_more": more}, nil
 }
 
-// Streams need the complete authorized state on every poll. Page candidates
-// before enrichment, and advance even when lifecycle filtering hides a page.
-func loadOpenInboxItems(r *http.Request, opts handlerOptions) ([]map[string]any, error) {
-	filter := primitives.DerivedInboxListFilter{Limit: 100}
-	items := []map[string]any{}
-	for {
-		page := &inboxReadPage{}
-		batch, err := loadVisibleInboxItemsFiltered(r, opts, true, filter, page)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, batch...)
-		if !page.More {
-			return items, nil
-		}
-		filter.BeforeCategory = primitives.InboxCategoryRank(page.Last.Category)
-		filter.BeforeTrigger = page.Last.TriggerAt
-		filter.BeforeID = page.Last.ID
-	}
+const inboxStreamTickLimit = 200
+
+// One bounded, freshly authorized page per tick. The long-lived stream never
+// retains a read snapshot; SQL validates the new tick's snapshot on every read.
+func loadInboxStreamPage(r *http.Request, opts handlerOptions, filter primitives.DerivedInboxListFilter) ([]map[string]any, inboxReadPage, error) {
+	filter.Limit = inboxStreamTickLimit
+	filter.ActiveNotifications = true
+	tick := r.WithContext(primitives.WithReadTickSnapshot(r.Context()))
+	page := inboxReadPage{}
+	items, err := loadVisibleInboxItemsFiltered(tick, opts, true, filter, &page)
+	return items, page, err
 }
 
 // Overview uses an explicit truncated window of the same authorized state.
@@ -494,7 +486,7 @@ func loadVisibleInboxItemsFiltered(r *http.Request, opts handlerOptions, notific
 	// Authorization is already applied by the scoped inbox relation. Lifecycle
 	// filtering is only needed for ordinary notifications; requests keep their
 	// own response/withdrawal lifecycle when linked context is archived.
-	if notifications {
+	if notifications && !filter.ActiveNotifications {
 		if store, ok := opts.primitiveStore.(interface {
 			HiddenSubjectRefs(context.Context) (map[string]bool, error)
 		}); ok {

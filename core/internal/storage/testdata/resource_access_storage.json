@@ -266,6 +266,7 @@
       "generated_at": "scope:inbox",
       "has_due_at": "scope:inbox",
       "id": "scope:inbox",
+      "lifecycle_hidden": "scope:inbox",
       "source_card_id": "ownership:inbox",
       "source_event_id": "ownership:inbox",
       "source_hash": "scope:inbox",
@@ -468,6 +469,23 @@
       "response_json": "scope:replay",
       "response_status": "scope:replay",
       "scope": "scope:replay"
+    },
+    "inbox_hidden_subject_refs": {
+      "owner_id": "internal:reader-snapshot",
+      "owner_kind": "internal:reader-snapshot",
+      "ref": "internal:reader-snapshot"
+    },
+    "inbox_lifecycle_dirty": {
+      "inbox_id": "internal:reader-snapshot"
+    },
+    "inbox_lifecycle_refs": {
+      "inbox_id": "internal:reader-snapshot",
+      "ref": "internal:reader-snapshot"
+    },
+    "inbox_lifecycle_subjects": {
+      "owner_id": "internal:reader-snapshot",
+      "owner_kind": "internal:reader-snapshot",
+      "ref": "internal:reader-snapshot"
     },
     "observation_investigation_specs": {
       "id": "configuration:operator-investigation",
@@ -1298,7 +1316,7 @@
     "../primitives/derived_store.go:*Store:GetDerivedTopicProjection": "1af2e94a6353543eb4d33972a33552475526e361c5cd5d15b870ed0beaa78293",
     "../primitives/derived_store.go:*Store:GetDerivedTopicProjectionQueueStats": "0f6e5dc2154a4e0b09e5feb6679ff040d12ecb49e2343a820059a2706ddae18f",
     "../primitives/derived_store.go:*Store:GetTopicProjectionRefreshStatuses": "4cc476d7e070539fe470e4a84082d9f1186dd3694f554845510c25f21e083001",
-    "../primitives/derived_store.go:*Store:ListDerivedInboxItems": "40cc6ce00b83be99253adfac0bb9d981281fad4570fdbea31d0ab64850784058",
+    "../primitives/derived_store.go:*Store:ListDerivedInboxItems": "a63efc31f957998f68cb0d70a821a53fec964080530d2b5284443184437ad0fa",
     "../primitives/derived_store.go:*Store:ListDerivedTopicProjectionDirtyEntries": "6b4da2a7aa625050385307cdc4b847f002919d6ee594651a62e30c808052406a",
     "../primitives/derived_store.go:*Store:ListDerivedTopicProjections": "9c9b8f27d443d2940001a8168d72c4b421994d349577d15a53155cc07c735521",
     "../primitives/derived_store.go:*Store:MarkDerivedTopicProjectionDirty": "198fab867b9b6f7d45a8daa568989520b8cfda7c77d1079f4549c93bd3e9819a",
@@ -1858,10 +1876,9 @@
     "../server/inbox_handlers.go:handleRebuildDerived": "605ef9fc6f13d4615ffa500e9d4684ee4a8c2cb08cf0700b74ea22faaa883669",
     "../server/inbox_handlers.go:loadInboxPage": "1daccc2e626b7e3a5a0879bca6576229d2f22e83fb44e1d4bf6e9b56c358a52c",
     "../server/inbox_handlers.go:loadOpenInbox": "5bb37f9d4609f633aab95a06ecc6db184a4c1ba975d6f0fbf3e9d9df1eefdc08",
-    "../server/inbox_handlers.go:loadOpenInboxItems": "5f379b80f9c19c461208de45f3aee719fac650b67d0dcfea77fe2a840aba61ea",
     "../server/inbox_handlers.go:loadOverviewInboxItems": "fb6a687149fe58a9e0729e4f219265429832626d32ded644f982c2cce072a264",
     "../server/inbox_handlers.go:loadVisibleInboxItems": "4465bb9bb7157a184365a017efc83a17bae49f54ef5fed08a33618efd7f51ac6",
-    "../server/inbox_handlers.go:loadVisibleInboxItemsFiltered": "194436666cd3ef73b7e9037debb6de3a52ef897f37f0e559c50213cea993c1a1",
+    "../server/inbox_handlers.go:loadVisibleInboxItemsFiltered": "0cce320d0bf8e299d8f5c74d7ed0187618defde115b90871d1403c10adce4170",
     "../server/inbox_subject_access.go:inboxItemAccessible": "513570a3fdb1b97d6db0227b7c94dbd6a5a166027f3596099051fbec3bba4a8f",
     "../server/inbox_subject_access.go:inboxSubjectRefAccessible": "d713a8a05f395131ec81334bdb4ad3bdaa93d8c9fe0e2f3cbad404768d5f69e3",
     "../server/markdown_hygiene.go:*markdownHygieneCollector:normalizeField": "97b553603a974434b6ee033a9ec6adfe62a2a1879fadbf3b201b3bbf6cf6f960",
@@ -2016,7 +2033,7 @@
     "../server/stream_handlers.go:eventActorIDsForKind": "728326f05609e5aa9b1c038ad58c700a2095dfbac9c7ed67b4d539ecf1940a86",
     "../server/stream_handlers.go:handleAgentNotificationReceiptsStream": "a8cb94c709fa1a12f7e523f4b492ca075f74f3064d0e171a40c087b1158d5d8e",
     "../server/stream_handlers.go:handleEventsStream": "0ec3e7f4ee2e9d9a3d79088db65a09781066e4ed94a8dcfd8a005b29af9c3969",
-    "../server/stream_handlers.go:handleInboxStream": "e8dbf7414c9ff01684b1c008fd6a137272d071aef68106d4aed325c38ec691e1",
+    "../server/stream_handlers.go:handleInboxStream": "2069bf8df688ebd76e4c9bd245f892ddeaf58a78d8aa6d6a51e5f7beb3c5c006",
     "../server/stream_handlers.go:handleListEvents": "bc86466808b5f652ae07736e56abcd6c2dad8e19b14c687b03a751eac81eab79",
     "../server/stream_handlers.go:listEventsForStream": "49db78f6a0a0a824dc21419297685ab22170f7d18bf5452ed09b528a8d6370b7",
     "../server/stream_handlers.go:parseBackingScope": "4394df739ced72916f52a9e948a58af345a9f4e3386e0a744e16a066dca09c87",
@@ -2115,7 +2132,7 @@
     "../storage/migrations.go:migration25BackfillHandles": "0b1a8866c4541f58041168cea6b043ee880a43a3afe56eca68a658ffe31fa3b6",
     "../storage/migrations.go:migration25HandleExpressions": "8981e5f9b2e01ce392b77c0763fa38a47b68b5ca20d4cadcf0d7795952dc84c8",
     "../storage/migrations.go:migration25UniqueHandle": "6bed0b1e2baf92af71deb2b6a7f9e281bd75894a80f37d4bbbb09e632befe7d3",
-    "../storage/migrations.go:migrations": "430af9abdf476651630f5979bb92768ba8f7bba7071ba72bce03fc612b56dc77",
+    "../storage/migrations.go:migrations": "bd3d370d8328b35ec5cbfb7b646b63208b6fe8aa194f77eb7853da07cb70362a",
     "../storage/migrations.go:repairLegacyReferenceAccess": "03b66e0fb21f24a185a0127b607c51d9760f17b8abfbe904451d093c732ac5ab",
     "../storage/migrations.go:repairNULReferenceAccess": "7579edda9e055e69a0e88914fcd02f919d26c1f02a5b456a6ac3bf25f422fed9",
     "../storage/migrations.go:sqliteTableExists": "c0fa57bdf9800dd6002c1c4dcfcb6ab9f2a889101a7f21b61f434439a39a3ac4",
@@ -2144,7 +2161,11 @@
     "../testsql/counter.go:*countedConn:QueryContext": "a5acc55a5b29fd19d4c3a54f7ae9a190862a716406f7c8a3d5f2b0eb90d6f741",
     "../testsql/counter.go:*countedStmt:ExecContext": "e2488b01750b887b043380007c83f1a465a9570d9fbfa1a50a152836339e2acd",
     "../testsql/counter.go:*countedStmt:Query": "552d3c61ed8492bce2343d48841315f51cfdbd29a3ebe9c4bd3388ab99e2b439",
-    "../testsql/counter.go:*countedStmt:QueryContext": "7074fd7cc6d9ce1009e88c7ebd48eadb6152a536660b05b3dacfb62d1a48e42d"
+    "../testsql/counter.go:*countedStmt:QueryContext": "7074fd7cc6d9ce1009e88c7ebd48eadb6152a536660b05b3dacfb62d1a48e42d",
+    "../primitives/access_snapshot.go:WithReadTickSnapshot": "7cf6c00f0fd59b06120b8721ecf18433e5b33e4c97d258d5ac39ca2b3caf6b7e",
+    "../server/inbox_handlers.go:loadInboxStreamPage": "dae22369b501350b38f2125837ddf3e113f63a4bf3614afabfb640fa3d626a67",
+    "../storage/inbox_lifecycle.go:indexInboxLifecycle": "0f48b0a3c035554eaed7490f83f674985e17dc8b1470d5b61d5282f9ce8f6ac9",
+    "../storage/inbox_lifecycle.go:replaceInboxLifecycleTrigger": "0ae80a564dd68b62eaffbd8dc585cc2946a0e51578cfc6c68c36a079a5a85d54"
   },
   "external_key_publications": {
     "work_evidence_record": ["evidence_json"],

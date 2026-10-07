@@ -112,6 +112,65 @@ async function mockPmSurfaces(page) {
   });
 }
 
+test("inbox qualifies partial stream state and resumes before clearing it", async ({
+  page,
+}) => {
+  await page.route(/\/actors(?:\?.*)?$/, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        actors: [
+          { id: "actor-e2e", display_name: "Inbox Reader", kind: "human" },
+        ],
+      }),
+    }),
+  );
+  await page.addInitScript(() => {
+    localStorage.setItem("anx_ui_actor_id:local", "actor-e2e");
+    localStorage.setItem("workspaceTourSeen.local", "1");
+  });
+  await mockPmSurfaces(page);
+  await page.route(isInboxListProjectionUrl, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ items: [], status: "open" }),
+    }),
+  );
+  let connections = 0;
+  let resumed = "";
+  let complete;
+  const completion = new Promise((resolve) => {
+    complete = resolve;
+  });
+  await page.route(/\/stream\/inbox(?:\?.*)?$/, async (route) => {
+    connections += 1;
+    resumed =
+      new URL(route.request().url()).searchParams.get("last_event_id") || "";
+    const partial = connections === 1;
+    const cursor = partial ? "progress-cursor" : "";
+    if (!partial) await completion;
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: `id: inbox-page:${cursor}\nevent: inbox_page\ndata: ${JSON.stringify({ partial, resume_cursor: cursor })}\n\n`,
+    });
+  });
+  await page.goto("/o/local/w/local/inbox");
+  const qualification = page.getByText(
+    "Not everything is loaded; the counts are lower bounds.",
+  );
+  try {
+    await expect(qualification).toBeVisible();
+    await expect.poll(() => connections).toBeGreaterThan(1);
+    expect(resumed).toBe("inbox-page:progress-cursor");
+  } finally {
+    complete();
+  }
+  await expect(qualification).toHaveCount(0);
+});
+
 test("inbox triage lists actionable rows and responding removes an item", async ({
   page,
 }) => {

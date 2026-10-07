@@ -123,8 +123,10 @@ inheritance at write time and on identity/alias/revision changes, including targ
 created after the prose. Reads traverse materialized mention edges and fixed-size
 exact-atom keys. Regular GET requests reuse an immutable denial snapshot only when
 the authorization epoch still matches within the consuming statement; a mismatch
-falls back to the canonical graph. Rebinding a scope clears its request state. Streams and
-transactional reads never use that request cache.
+falls back to the canonical graph. Rebinding a scope clears its request state.
+Inbox SSE starts a new epoch-validated read boundary on every tick and retains
+no request snapshot across ticks. Other streams and transactional reads evaluate
+the canonical graph directly.
 Migration 62 backfills PM and inbox provenance and repairs virtual revision
 identities when a parent arrives after its revisions. PM initialization installs
 its body-reference triggers atomically with the table; retain separate `(kind,id)`

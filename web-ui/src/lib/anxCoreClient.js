@@ -1234,6 +1234,14 @@ export function createAnxCoreClient(options = {}) {
       });
       await consumeSSEStream(response, { onEvent, signal });
     },
+    streamInboxItems: async ({ lastEventId, signal, onEvent } = {}) => {
+      const response = await invokeDirectRaw("/stream/inbox", {
+        query: { last_event_id: lastEventId },
+        accept: "text/event-stream",
+        signal,
+      });
+      await consumeSSEStream(response, { onEvent, signal });
+    },
     streamNotificationReceipts: async ({
       threadId,
       lastEventId,

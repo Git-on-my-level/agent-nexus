@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"agent-nexus-core/internal/testsql"
 )
@@ -40,8 +41,8 @@ func TestInboxStreamDeliversAllAuthorizedItemsAcrossPages(t *testing.T) {
 				if _, err := store.ArchiveThread(ctx, owner.ActorID, hidden); err != nil {
 					t.Fatal(err)
 				}
-				// The entire first candidate page disappears during lifecycle
-				// filtering. Continuation must use its raw last row, not payloads.
+				// Hidden notifications precede the asks but are excluded by the
+				// indexed lifecycle predicate before LIMIT or enrichment.
 				for i := 0; i < 100; i++ {
 					item := streamPrivacyInboxItem(public, fmt.Sprintf("hidden-%03d", i), "Archived notification")
 					item.Category = "escalate"
@@ -55,12 +56,12 @@ func TestInboxStreamDeliversAllAuthorizedItemsAcrossPages(t *testing.T) {
 			seedStreamPrivacyInbox(t, store, private, streamPrivacyInboxItem(private, "private-ask", "Private page secret"))
 
 			// Measure the same loader on the production store/driver: each
-			// selector may decode only 100 candidates plus its lookahead.
+			// selector may decode only 200 visible candidates plus lookahead.
 			counted, counter := testsql.Open("file:" + env.workspace.Layout().DatabasePath)
 			defer counted.Close()
 			measured := primitives.NewTestStore(counted, env.workspace.Layout().ArtifactContentDir)
 			req := httptest.NewRequest("GET", "/stream/inbox", nil).WithContext(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: reader.ActorID}))
-			loaded, err := loadOpenInboxItems(req, handlerOptions{primitiveStore: measured})
+			loaded, page, err := loadInboxStreamPage(req, handlerOptions{primitiveStore: measured}, primitives.DerivedInboxListFilter{})
 			if err != nil || len(loaded) != len(want) {
 				t.Fatalf("complete stream snapshot: got %d items, err %v; want %d", len(loaded), err, len(want))
 			}
@@ -68,17 +69,13 @@ func TestInboxStreamDeliversAllAuthorizedItemsAcrossPages(t *testing.T) {
 			for _, statement := range counter.Statements() {
 				if strings.Contains(statement.SQL, "SELECT id, thread_id, category, trigger_at") {
 					pages++
-					if statement.Rows > 101 || !strings.Contains(statement.SQL, "LIMIT ?") {
+					if statement.Rows > 201 || !strings.Contains(statement.SQL, "LIMIT ?") {
 						t.Fatalf("unbounded inbox selector: %d returned rows", statement.Rows)
 					}
 				}
 			}
-			wantPages := 2
-			if hiddenPage {
-				wantPages = 3
-			}
-			if pages != wantPages {
-				t.Fatalf("inbox selector pages: got %d, want %d", pages, wantPages)
+			if pages != 1 || page.More {
+				t.Fatalf("inbox selector: got %d pages, partial %t; want one complete page", pages, page.More)
 			}
 
 			resp := openAuthenticatedPrivacyStream(t, env.server.URL+"/stream/inbox", reader.AccessToken, "")
@@ -184,4 +181,139 @@ func TestOpenInboxPagesKeepRankOrderAndPrincipalScope(t *testing.T) {
 	if len(seen) != 104 {
 		t.Fatalf("lost items: %d", len(seen))
 	}
+}
+
+func TestInboxStreamContinuationSeeksIndex(t *testing.T) {
+	requireIntegrationTest(t)
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	s := env.primitiveStore.(*primitives.Store)
+	thread := seedStreamPrivacyThread(t, s, "owner", false)
+	items := []primitives.DerivedInboxItem{}
+	for i := 0; i < 405; i++ {
+		item := streamPrivacyInboxItem(thread, fmt.Sprintf("seek-%03d", i), "Visible")
+		item.Category = []string{"escalate", "ask", "review"}[i%3]
+		items = append(items, item)
+	}
+	seedStreamPrivacyInbox(t, s, thread, items...)
+	db, counter := testsql.Open("file:" + env.workspace.Layout().DatabasePath)
+	defer db.Close()
+	store := primitives.NewTestStore(db, env.workspace.Layout().ArtifactContentDir)
+	req := httptest.NewRequest("GET", "/stream/inbox", nil).WithContext(primitives.WithAccessScope(context.Background(), primitives.AccessScope{ActorID: "reader"}))
+	_, first, err := loadInboxStreamPage(req, handlerOptions{primitiveStore: store}, primitives.DerivedInboxListFilter{})
+	if err != nil || !first.More {
+		t.Fatalf("first page: %v %+v", err, first)
+	}
+	counter.Reset()
+	rows, page, err := loadInboxStreamPage(req, handlerOptions{primitiveStore: store}, primitives.DerivedInboxListFilter{BeforeCategory: primitives.InboxCategoryRank(first.Last.Category), BeforeTrigger: first.Last.TriggerAt, BeforeID: first.Last.ID})
+	if err != nil || len(rows) != 200 || !page.More {
+		t.Fatalf("continuation: %v rows=%d page=%+v", err, len(rows), page)
+	}
+	statements := counter.Statements()
+	selector := statements[len(statements)-1]
+	plan, err := db.Query("EXPLAIN QUERY PLAN "+selector.SQL, selector.Args...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer plan.Close()
+	seeks := 0
+	for plan.Next() {
+		var id, parent, unused int
+		var detail string
+		if err := plan.Scan(&id, &parent, &unused, &detail); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(detail, "idx_inbox_category_page") {
+			t.Log(detail)
+			if !strings.Contains(detail, "SEARCH") {
+				t.Fatalf("continuation revisits prefixes: %s", detail)
+			}
+			seeks++
+		}
+	}
+	if err := plan.Err(); err != nil || seeks != 3 {
+		t.Fatalf("range seeks=%d err=%v; want three disjoint seeks", seeks, err)
+	}
+}
+
+func TestInboxStreamPartialResumeAndFreshRevocation(t *testing.T) {
+	requireIntegrationTest(t)
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	ctx := context.Background()
+	reader := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "partial-reader", "partial-actor", "partial-reader", "partial-token")
+	other := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "other-reader", "other-actor", "other-reader", "other-token")
+	s := env.primitiveStore.(*primitives.Store)
+	thread := seedStreamPrivacyThread(t, s, reader.ActorID, false)
+	private := seedStreamPrivacyThread(t, s, "owner", true)
+	items := []primitives.DerivedInboxItem{}
+	for i := 0; i < 405; i++ {
+		items = append(items, streamPrivacyInboxItem(thread, fmt.Sprintf("partial-%03d", i), "Visible"))
+	}
+	seedStreamPrivacyInbox(t, s, thread, items...)
+	seedStreamPrivacyInbox(t, s, private, streamPrivacyInboxItem(private, "private", "Secret"))
+	readPage := func(events <-chan sseEvent, want int, partial bool) string {
+		t.Helper()
+		timer := time.NewTimer(5 * time.Second)
+		defer timer.Stop()
+		seen := map[string]bool{}
+		for {
+			select {
+			case event, ok := <-events:
+				if !ok {
+					t.Fatal("stream closed before progress")
+				}
+				switch event.Event {
+				case "inbox_item":
+					item := event.Data["item"].(map[string]any)
+					id := anyString(item["id"])
+					if !strings.HasPrefix(id, "partial-") || seen[id] {
+						t.Fatalf("unauthorized or repeated item in tick: %s", id)
+					}
+					seen[id] = true
+				case "inbox_page":
+					if len(seen) != want || event.Data["partial"] != partial || (partial && anyString(event.Data["resume_cursor"]) == "") {
+						t.Fatalf("tick items=%d progress=%+v; want %d partial=%t", len(seen), event, want, partial)
+					}
+					return event.ID
+				default:
+					t.Fatalf("unexpected event: %+v", event)
+				}
+			case <-timer.C:
+				t.Fatal("stream page timed out")
+			}
+		}
+	}
+	resp := openAuthenticatedPrivacyStream(t, env.server.URL+"/stream/inbox", reader.AccessToken, "")
+	events, stop := startSSEReader(resp.Body)
+	cursor := readPage(events, 200, true)
+	readPage(events, 200, true)
+	readPage(events, 5, false)
+	stop()
+	// A reconnect starts after the progress boundary and preserves the cap.
+	resp = openAuthenticatedPrivacyStream(t, env.server.URL+"/stream/inbox", reader.AccessToken, cursor)
+	events, stop = startSSEReader(resp.Body)
+	readPage(events, 200, true)
+	// Revoke between ticks on this same open connection. A read snapshot must
+	// never survive into the poll that would otherwise emit the last five.
+	if _, err := env.workspace.DB().Exec(`UPDATE threads SET body_json=json_set(body_json,'$.pm_actor_id','owner') WHERE id=?`, thread); err != nil {
+		t.Fatal(err)
+	}
+	readPage(events, 0, false)
+	stop()
+	request, _ := http.NewRequest("GET", env.server.URL+"/stream/inbox", nil)
+	request.Header.Set("Authorization", "Bearer "+other.AccessToken)
+	request.Header.Set("Last-Event-ID", cursor)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("accepted another principal's cursor: %d", response.StatusCode)
+	}
+	// Use the same resume boundary after changing authority: the new poll must
+	// reject every now-private item, even though a previous tick cached access.
+	resp = openAuthenticatedPrivacyStream(t, env.server.URL+"/stream/inbox", reader.AccessToken, cursor)
+	events, stop = startSSEReader(resp.Body)
+	defer stop()
+	readPage(events, 0, false)
 }

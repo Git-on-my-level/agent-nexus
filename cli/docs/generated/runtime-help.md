@@ -3165,7 +3165,7 @@ Generated Help: inbox stream
 - Stability: `beta`
 - Input mode: `none`
 - Why: Server-sent events feed of inbox projection updates.
-- Output: SSE `inbox_item` events with JSON payloads.
+- Output: SSE `inbox_item` events and `inbox_page` progress with partial/resume_cursor.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `inbox`
 - Adjacent commands: `inbox get`, `inbox list`, `inbox respond`, `inbox summary`
@@ -3191,7 +3191,7 @@ Generated Help: inbox tail
 - Stability: `beta`
 - Input mode: `none`
 - Why: Server-sent events feed of inbox projection updates.
-- Output: SSE `inbox_item` events with JSON payloads.
+- Output: SSE `inbox_item` events and `inbox_page` progress with partial/resume_cursor.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `inbox`
 - Adjacent commands: `inbox get`, `inbox list`, `inbox respond`, `inbox summary`
