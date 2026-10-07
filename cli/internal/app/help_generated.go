@@ -253,13 +253,14 @@ var localHelperTopics = []localHelperTopic{
 	{
 		Path:        "boards patch",
 		Summary:     "Patch Board metadata from JSON or set its role with --role.",
-		JSONShape:   "JSON body `{ patch }`; --role alone builds `{ patch: { role } }`.",
-		Composition: "Uses boards.patch. Empty --role clears the role; omission preserves it.",
+		JSONShape:   "JSON body `{ patch, if_updated_at }`; --role alone builds `{ patch: { role }, if_updated_at }`.",
+		Composition: "Uses boards.patch. An applied --role patch without --from-file fetches the Board and uses its updated_at unless --if-updated-at is supplied; --dry-run makes no requests. Empty --role clears the role; omission preserves it.",
 		Examples:    []string{"anx boards patch board:initiatives --role initiatives", "anx boards patch board:launch --from-file board-patch.json"},
 		Flags: []localHelperFlag{
 			{Name: "--board-id <board-id>", Description: "Board ref, handle or id."},
 			{Name: "--role <role>", Description: "Board role; initiatives selects Overview cards; empty clears."},
-			{Name: "--from-file <path>", Description: "JSON request body; explicit --role overrides it."},
+			{Name: "--if-updated-at <timestamp>", Description: "Optimistic concurrency token; when omitted with --role and no --from-file, discovered from boards get. Cannot be empty."},
+			{Name: "--from-file <path>", Description: "JSON request body; explicit --role and --if-updated-at override its fields."},
 			{Name: "--dry-run", Description: "Render request without sending it."},
 		},
 	},
