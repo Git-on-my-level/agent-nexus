@@ -98,8 +98,10 @@ writes. The preview uses a populated fleet-health panel; saved reports cover liv
 Secret cardinality and document/card revision histories are shallow;
 those fanout dimensions need dedicated scale fixtures when changed.
 
-Each case/principal executes seven measured requests: one independently isolated
-first read, five warm reads, and one read after invalidation of that same pool.
+Each case/principal executes one independently isolated first read, five warm
+reads, and one read after invalidation of a previously warmed pool. The local
+unpartitioned matrix uses the same pool for all seven. CI uses the separately
+measured preparation described below and records eight requests per subject.
 The warm median must meet the 500 ms ordinary latency reference; nearest-rank
 p95 and the maximum are reported separately. A loose secondary maximum (four
 times the reference, at least five seconds) bounds stalls and supplies deadlines.
@@ -116,12 +118,28 @@ coverage before fixture setup. Select a local shard with
 `ANX_PERFORMANCE_SHARD=1` (values 1–4); omitting it runs the full matrix. Every
 shard uploads its actual executed report. `scripts/check-performance-shards.py`
 requires four distinct, current-source reports, all 109+ cases, both principals,
-exactly five warm and one first-read/invalidation samples, valid metrics,
+exactly five warm and one first-read/invalidation samples, plus the measured
+post-invalidation preparation in the correct order, valid metrics,
 effective per-state limits, and successful case completions. Missing, duplicate,
 stale, partial and zero-test reports fail. The separate legacy job retains both
 25-sample authorization regressions, prepare-size/time checks, cache controls,
 native-counter controls and startup measurements without repeating them in each
 route shard.
+
+Each CI shard compiles once and runs three independent workers with
+`GOMAXPROCS=1` on the standard four-CPU runner. Two workers partition whole cases
+for the first read and five warm requests. The third runs every case's
+post-invalidation request on its own pool, first capturing and validating its
+fresh cache-warming request against the first-read limits, then performing the
+real epoch-changing write. That extra preparation is measured in the artifact;
+no costly cold setup is hidden. Both principals remain in the same shard, and
+workers never share an authorization cache. `ANX_PERFORMANCE_WORKER=1`, `2` or
+`3` selects a selected shard's worker for local iteration.
+CI waits for all processes, preserves their exit results and logs, and merges
+their reports without manufacturing successful case completions. The coverage
+job verifies each sample's worker assignment as well as the full shard union.
+Measured weights guide balancing; actual CI timings remain the runtime evidence,
+since an indivisible slow case can dominate one worker.
 
 Every read has an ordinary 50,000-VM-instruction ceiling alongside 100 statements
 and 1,024 returned rows. `sqlite3_stmt_status` counters include indexed aggregate

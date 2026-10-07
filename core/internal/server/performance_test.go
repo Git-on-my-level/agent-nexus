@@ -357,6 +357,8 @@ func TestPerformanceRoutes(t *testing.T) {
 	allBudgets := budgets
 	shard, shardCount := performanceShardSelection(t)
 	budgets = performanceShardBudgets(t, budgets, shard, shardCount)
+	worker, workerCount := performanceWorkerSelection(t, shard)
+	budgets = performanceWorkerBudgets(t, allBudgets, budgets, worker, workerCount)
 	diagnostic := os.Getenv("ANX_PERFORMANCE_DIAGNOSTIC") == "1"
 	if diagnostic {
 		t.Error("diagnostic sampling is not an acceptance run")
@@ -414,14 +416,16 @@ func TestPerformanceRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 	report := struct {
-		SourceHash string                    `json:"core_source_sha256"`
-		Diagnostic bool                      `json:"diagnostic"`
-		Shard      int                       `json:"shard"`
-		ShardCount int                       `json:"shard_count"`
-		Completed  []string                  `json:"completed"`
-		Plans      map[string]map[string]any `json:"plans"`
-		Samples    []map[string]any          `json:"samples"`
-	}{SourceHash: sourceHash, Diagnostic: diagnostic, Shard: shard, ShardCount: shardCount, Plans: map[string]map[string]any{}}
+		SourceHash  string                    `json:"core_source_sha256"`
+		Diagnostic  bool                      `json:"diagnostic"`
+		Shard       int                       `json:"shard"`
+		ShardCount  int                       `json:"shard_count"`
+		Worker      int                       `json:"worker"`
+		WorkerCount int                       `json:"worker_count"`
+		Completed   []string                  `json:"completed"`
+		Plans       map[string]map[string]any `json:"plans"`
+		Samples     []map[string]any          `json:"samples"`
+	}{SourceHash: sourceHash, Diagnostic: diagnostic, Shard: shard, ShardCount: shardCount, Worker: worker, WorkerCount: workerCount, Plans: map[string]map[string]any{}}
 	persistReport := func() {
 		if path := reportPath; path != "" {
 			b, err := json.MarshalIndent(report, "", "  ")
@@ -461,7 +465,13 @@ func TestPerformanceRoutes(t *testing.T) {
 				original := b
 				defer func() {
 					if !t.Failed() {
-						report.Completed = append(report.Completed, performanceCaseKey(original.Method, original.Path, original.Case)+" "+label)
+						suffix := ""
+						if worker == 3 {
+							suffix = " post-invalidation"
+						} else if worker != 0 {
+							suffix = " first-and-warm"
+						}
+						report.Completed = append(report.Completed, performanceCaseKey(original.Method, original.Path, original.Case)+" "+label+suffix)
 					}
 				}()
 				path := env.replace.Replace(b.Path)
@@ -484,6 +494,9 @@ func TestPerformanceRoutes(t *testing.T) {
 				// the established median policy; cold and invalidated work have their
 				// own deterministic ceilings and loose secondary deadlines.
 				for sample := 0; sample < 7; sample++ {
+					if (worker == 1 || worker == 2) && sample == 6 || worker == 3 && sample > 0 && sample < 6 {
+						continue
+					}
 					phase := "warm"
 					if sample == 0 {
 						phase = "first_read"
@@ -497,6 +510,9 @@ func TestPerformanceRoutes(t *testing.T) {
 						t.Logf("%s existing baseline exception %s: %s", phase, e.Issue, e.Reason)
 					}
 					policy := "one-first-read/five-warm/one-post-invalidation"
+					if worker != 0 {
+						policy = "one-first-read/five-warm/measured-post-preparation/one-post-invalidation"
+					}
 					deadlineBudget := performanceMaxSample(b.LatencyMS)
 					if diagnostic {
 						deadlineBudget = 60 * time.Minute // diagnostic evidence only; never an acceptance allowance
@@ -561,6 +577,10 @@ func TestPerformanceRoutes(t *testing.T) {
 					report.Samples = append(report.Samples, map[string]any{"method": b.Method, "path": b.Path, "case": b.Case, "principal": label, "sample": sample, "measured": true, "cache_phase": phase, "invalidation_epoch_before": beforeEpoch, "invalidation_epoch_after": afterEpoch, "sampling_policy": policy, "fixture_policy": fixturePolicy, "elapsed_ms": float64(elapsed) / float64(time.Millisecond), "queries": queries, "rows": rows, "vm_steps": work.VMSteps, "fullscan_steps": work.FullScanSteps, "sorts": work.Sorts, "autoindex_rows": work.AutoIndexRows, "status": w.Code, "deadline_exceeded": deadline, "stream_polls": w.polls})
 					cancel()
 					lastSample := report.Samples[len(report.Samples)-1]
+					lastSample["worker"] = worker
+					if worker == 3 && sample == 0 {
+						lastSample["cache_phase"] = "post_preparation"
+					}
 					lastSample["receipt_invalidation_epoch_before"], lastSample["receipt_invalidation_epoch_after"] = beforeReceiptEpoch, afterReceiptEpoch
 					durations[phase] = append(durations[phase], elapsed)
 					for _, s := range statements {
@@ -647,6 +667,9 @@ func TestPerformanceRoutes(t *testing.T) {
 					}
 				}
 				for _, phase := range []string{"first_read", "warm", "post_invalidation"} {
+					if len(durations[phase]) == 0 {
+						continue
+					}
 					b := original
 					if e, ok := baseline[performanceBaselineKey(b.Method, b.Path, b.Case, label, phase)]; ok {
 						b.LatencyMS = e.LatencyMS

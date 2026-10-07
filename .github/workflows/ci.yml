@@ -188,21 +188,40 @@ jobs:
       - name: Scale route and query-plan shard
         working-directory: core
         env:
-          GOMAXPROCS: "2"
           ANX_PERFORMANCE_TEST: "1"
           ANX_PERFORMANCE_SHARD: ${{ matrix.shard }}
-          ANX_PERFORMANCE_REPORT: ${{ github.workspace }}/.tmp/performance/route-report.json
         run: |
           mkdir -p ../.tmp/performance
           rm -f ../.tmp/performance/route-report.json
-          go test -p=1 -parallel=1 -timeout=20m -count=1 -v ./internal/server -run '^TestPerformanceRoutes$'
+          go test -c -o ../.tmp/performance/route-tests ./internal/server
+          pids=()
+          for worker in 1 2 3; do
+            worker_dir="${GITHUB_WORKSPACE}/.tmp/performance/workers/worker-${worker}"
+            mkdir -p "$worker_dir"
+            (
+              cd internal/server
+              GOMAXPROCS=1 ANX_PERFORMANCE_WORKER="$worker" ANX_PERFORMANCE_REPORT="$worker_dir/worker-report.json" \
+                "${GITHUB_WORKSPACE}/.tmp/performance/route-tests" -test.parallel=1 -test.timeout=20m -test.count=1 -test.v -test.run='^TestPerformanceRoutes$'
+            ) > "$worker_dir/worker.log" 2>&1 &
+            pids+=("$!")
+          done
+          result=0
+          for pid in "${pids[@]}"; do
+            if wait "$pid"; then :; else result=1; fi
+          done
+          cat ../.tmp/performance/workers/worker-*/worker.log
+          python3 ../scripts/check-performance-shards.py ../.tmp/performance/workers --merge-workers ../.tmp/performance/route-report.json
+          exit "$result"
 
       - name: Upload this shard's executed samples and SQL plans
         if: always()
         uses: actions/upload-artifact@v7.0.0
         with:
           name: core-performance-routes-${{ matrix.shard }}
-          path: .tmp/performance/route-report.json
+          path: |
+            .tmp/performance/route-report.json
+            .tmp/performance/workers/**/worker-report.json
+            .tmp/performance/workers/**/worker.log
           include-hidden-files: true
           if-no-files-found: error
 
