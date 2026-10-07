@@ -287,7 +287,7 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 		return
 	}
 
-	payload, err := loadOpenInbox(r, opts, now)
+	payload, err := loadOpenInbox(w, r, opts, now)
 	if errors.Is(err, primitives.ErrInvalidCursor) {
 		writeError(w, 400, "invalid_request", "invalid open inbox pagination")
 		return
@@ -299,7 +299,8 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 	writeJSON(w, http.StatusOK, payload)
 }
 
-func loadOpenInbox(r *http.Request, opts handlerOptions, now time.Time) (map[string]any, error) {
+func loadOpenInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions, now time.Time) (map[string]any, error) {
+	stage := time.Now()
 	var threadIDs []string
 	var err error
 	if sampler, ok := opts.primitiveStore.(interface {
@@ -317,14 +318,20 @@ func loadOpenInbox(r *http.Request, opts handlerOptions, now time.Time) (map[str
 	if err != nil {
 		return nil, err
 	}
+	addServerTiming(w, "threads", stage)
+	stage = time.Now()
 	states, err := loadTopicProjectionStates(r.Context(), opts, threadIDs)
+	addServerTiming(w, "topic_projections", stage)
 	if err != nil {
 		return nil, err
 	}
+	stage = time.Now()
 	items, next, more, err := loadInboxPage(r, opts)
+	addServerTiming(w, "inbox", stage)
 	if err != nil {
 		return nil, err
 	}
+	stage = time.Now()
 	freshness := aggregateTopicProjectionFreshness(states, threadIDs)
 	if summary, ok := opts.primitiveStore.(interface {
 		InboxFreshnessSummary(context.Context) (int, int, error)
@@ -337,6 +344,7 @@ func loadOpenInbox(r *http.Request, opts handlerOptions, now time.Time) (map[str
 		freshness["status"] = []string{"current", "missing", "pending", "error"}[rank]
 		freshness["truncated"] = count > len(threadIDs)
 	}
+	addServerTiming(w, "freshness", stage)
 	return map[string]any{"status": "open", "items": items, "generated_at": now.Format(time.RFC3339Nano), "projection_freshness": freshness, "next_cursor": next, "has_more": more}, nil
 }
 

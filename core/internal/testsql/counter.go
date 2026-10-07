@@ -104,7 +104,6 @@ func (c *Counter) Reset()       { c.queries.Store(0); c.mu.Lock(); c.statements 
 // Open wraps each connection and prepared statement, counting QueryContext and
 // QueryRowContext alike. Each test gets its own counter and connection pool.
 func Open(dsn string) (*sql.DB, *Counter) {
-	counter := &Counter{}
 	// Wrap the registered runtime driver, including its deterministic functions,
 	// instead of creating a bare driver that omits production query behavior.
 	runtimeDB, err := sql.Open("sqlite", dsn)
@@ -113,7 +112,14 @@ func Open(dsn string) (*sql.DB, *Counter) {
 	}
 	runtimeDriver := runtimeDB.Driver()
 	_ = runtimeDB.Close()
-	db := sql.OpenDB(&connector{dsn: dsn, underlying: runtimeDriver, counter: counter})
+	return OpenDriver(dsn, runtimeDriver)
+}
+
+// OpenDriver composes statement timings with another real SQLite instrumenter,
+// such as perfguard's VM-work capture, without replacing production execution.
+func OpenDriver(dsn string, underlying driver.Driver) (*sql.DB, *Counter) {
+	counter := &Counter{}
+	db := sql.OpenDB(&connector{dsn: dsn, underlying: underlying, counter: counter})
 	db.SetMaxOpenConns(1)
 	return db, counter
 }
