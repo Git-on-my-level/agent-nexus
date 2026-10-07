@@ -248,7 +248,8 @@ func requireAccessibleValues(ctx context.Context, q queryRower, values any) erro
 	}
 	// Requests with no reference atoms (health, identity and collection reads)
 	// cannot reference private resources. Avoid even opening the denial graph.
-	if resourceaccess.ContentReferenceAtomsJSON(string(encoded), "structured") == "[]" {
+	atoms := string(resourceaccess.ContentReferenceAtomsJSON(string(encoded), "structured"))
+	if atoms == "[]" {
 		return nil
 	}
 	// This check uses the mutation's own transaction snapshot. Without denied
@@ -263,15 +264,29 @@ func requireAccessibleValues(ctx context.Context, q queryRower, values any) erro
 	}
 	var denied bool
 	query := `SELECT EXISTS (
- SELECT 1 FROM json_each(anx_resource_json_refs(CAST(? AS BLOB))) j JOIN _anx_denied_atoms d
- ON j.value=d.ref COLLATE NOCASE OR d.typed AND ` + resourceaccess.TextReferenceMatchSQL("j.value", "d.ref") + `)`
-	args := []any{string(encoded)}
-	if policy, ok := resourceaccess.PolicyFrom(ctx); !mutation && ok && policy.ReadOnDB != nil {
+ SELECT 1 FROM json_each(anx_resource_json_refs(CAST(? AS BLOB))) j CROSS JOIN _anx_denied_atoms d
+ WHERE j.value=d.ref COLLATE NOCASE
+ UNION ALL
+ SELECT 1 FROM json_each(anx_resource_json_refs(CAST(? AS BLOB))) j CROSS JOIN _anx_denied_atoms d
+ WHERE ` + resourceaccess.TextReferenceCandidateSQL("j.value") + ` AND d.typed AND ` + resourceaccess.TextReferenceMatchSQL("j.value", "d.ref") + `)`
+	// Separate exact equality from prose matching so SQLite can build an
+	// automatic index on the materialized denied atoms instead of scanning
+	// every denied identity for every scalar in the submitted snapshot.
+	args := []any{string(encoded), string(encoded)}
+	if !strings.Contains(atoms, `"$anx-ref-text$`) {
+		query = exactValueCheckSQL()
+		args = []any{atoms, atoms, atoms, atoms, atoms, atoms}
+	}
+	visit, _ := ctx.Value(overviewVisitValidationKey{}).(bool)
+	useSnapshot := !mutation || visit && denialSnapshotFrom(ctx) != nil
+	if policy, ok := resourceaccess.PolicyFrom(ctx); useSnapshot && ok && policy.ReadOnDB != nil {
 		// Read selector checks share the request closure, still validating its
-		// epoch inside this statement. All writes use their current graph.
+		// epoch inside this statement. The visit ledger also checks that epoch
+		// in its own write transaction, falling back on any change or missing
+		// epoch. Ordinary business writes use their current graph directly.
 		query, args = policy.ReadOnDB(ctx, q, query, args)
 	} else {
-		query = `WITH RECURSIVE ` + accessCTEs(scope, "") + ` ` + query
+		query = `WITH RECURSIVE ` + accessCTEs(scope, query) + ` ` + query
 	}
 	if err = q.QueryRowContext(ctx, query, args...).Scan(&denied); err != nil {
 		return err
