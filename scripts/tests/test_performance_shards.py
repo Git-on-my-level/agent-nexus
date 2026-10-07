@@ -39,6 +39,7 @@ class ExecutedCoverageTests(unittest.TestCase):
                 shard_count=4,
                 worker_count=3,
                 workers=[1, 2, 3],
+                worker_gomaxprocs={"1": 2, "2": 2, "3": 1},
                 core_source_sha256=self.hash,
                 samples=[],
                 completed=[],
@@ -168,6 +169,9 @@ class ExecutedCoverageTests(unittest.TestCase):
         def missing_worker(reports):
             reports[0]["workers"] = [1]
 
+        def wrong_cpu_policy(reports):
+            reports[0]["worker_gomaxprocs"]["1"] = 1
+
         def wrong_worker(reports):
             reports[0]["samples"][0]["worker"] = 3 - reports[0]["samples"][0]["worker"]
 
@@ -191,6 +195,7 @@ class ExecutedCoverageTests(unittest.TestCase):
             no_invalidation,
             no_receipt_invalidation,
             missing_worker,
+            wrong_cpu_policy,
             wrong_worker,
             reordered_invalidation,
         ):
@@ -227,6 +232,7 @@ class ExecutedCoverageTests(unittest.TestCase):
         for worker in (1, 2, 3):
             fragment = copy.deepcopy(report)
             fragment["worker"] = worker
+            fragment["gomaxprocs"] = 1 if worker == 3 else 2
             fragment["samples"] = [
                 s for s in fragment["samples"] if s["worker"] == worker
             ]
@@ -246,6 +252,10 @@ class ExecutedCoverageTests(unittest.TestCase):
         duplicate[1]["worker"] = 1
         with self.assertRaises(AssertionError):
             coverage.merge_workers(self.routes, self.weights, duplicate, self.hash)
+        bad_cpu = copy.deepcopy(fragments)
+        bad_cpu[0]["gomaxprocs"] = 1
+        with self.assertRaises(AssertionError):
+            coverage.merge_workers(self.routes, self.weights, bad_cpu, self.hash)
         fragments[0]["completed"].pop()
         merged = coverage.merge_workers(self.routes, self.weights, fragments, self.hash)
         with self.assertRaises(AssertionError):

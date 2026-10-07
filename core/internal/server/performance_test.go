@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -422,10 +423,11 @@ func TestPerformanceRoutes(t *testing.T) {
 		ShardCount  int                       `json:"shard_count"`
 		Worker      int                       `json:"worker"`
 		WorkerCount int                       `json:"worker_count"`
+		MaxProcs    int                       `json:"gomaxprocs"`
 		Completed   []string                  `json:"completed"`
 		Plans       map[string]map[string]any `json:"plans"`
 		Samples     []map[string]any          `json:"samples"`
-	}{SourceHash: sourceHash, Diagnostic: diagnostic, Shard: shard, ShardCount: shardCount, Worker: worker, WorkerCount: workerCount, Plans: map[string]map[string]any{}}
+	}{SourceHash: sourceHash, Diagnostic: diagnostic, Shard: shard, ShardCount: shardCount, Worker: worker, WorkerCount: workerCount, MaxProcs: runtime.GOMAXPROCS(0), Plans: map[string]map[string]any{}}
 	persistReport := func() {
 		if path := reportPath; path != "" {
 			b, err := json.MarshalIndent(report, "", "  ")

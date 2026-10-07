@@ -72,6 +72,7 @@ def merge_workers(routes, weights, reports, expected_hash):
         shard_count=4,
         worker_count=3,
         workers=[1, 2, 3],
+        worker_gomaxprocs={"1": 2, "2": 2, "3": 1},
         samples=[],
         completed=[],
         plans={},
@@ -83,6 +84,10 @@ def merge_workers(routes, weights, reports, expected_hash):
             and report["core_source_sha256"] == expected_hash
         ), "stale worker"
         assert report["samples"], "empty worker execution"
+        assert (
+            type(report["gomaxprocs"]) is int
+            and report["gomaxprocs"] == out["worker_gomaxprocs"][str(report["worker"])]
+        ), "wrong worker CPU policy"
         for sample in report["samples"]:
             assert (
                 sample["worker"] == report["worker"] == sample_worker(sample, workers)
@@ -193,6 +198,11 @@ def validate(routes, weights, allowances, reports, expected_hash):
             2,
             3,
         ], "missing isolated workers"
+        assert report["worker_gomaxprocs"] == {
+            "1": 2,
+            "2": 2,
+            "3": 1,
+        }, "wrong worker CPU policy"
         workers = worker_assignments(routes, weights, shard)
         durations = {}
         sequences = {}

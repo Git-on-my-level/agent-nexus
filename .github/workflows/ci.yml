@@ -198,10 +198,16 @@ jobs:
           for worker in 1 2 3; do
             worker_dir="${GITHUB_WORKSPACE}/.tmp/performance/workers/worker-${worker}"
             mkdir -p "$worker_dir"
+            worker_gomax=2
+            worker_niceness=0
+            if [ "$worker" = 3 ]; then
+              worker_gomax=1
+              worker_niceness=10
+            fi
             (
               cd internal/server
-              GOMAXPROCS=1 ANX_PERFORMANCE_WORKER="$worker" ANX_PERFORMANCE_REPORT="$worker_dir/worker-report.json" \
-                "${GITHUB_WORKSPACE}/.tmp/performance/route-tests" -test.parallel=1 -test.timeout=20m -test.count=1 -test.v -test.run='^TestPerformanceRoutes$'
+              GOMAXPROCS="$worker_gomax" ANX_PERFORMANCE_WORKER="$worker" ANX_PERFORMANCE_REPORT="$worker_dir/worker-report.json" \
+                nice -n "$worker_niceness" "${GITHUB_WORKSPACE}/.tmp/performance/route-tests" -test.parallel=1 -test.timeout=20m -test.count=1 -test.v -test.run='^TestPerformanceRoutes$'
             ) > "$worker_dir/worker.log" 2>&1 &
             pids+=("$!")
           done
