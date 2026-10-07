@@ -277,11 +277,13 @@
       "generated_at": "scope:inbox",
       "has_due_at": "scope:inbox",
       "id": "scope:inbox",
+      "lifecycle_hidden": "scope:inbox",
       "source_card_id": "ownership:inbox",
       "source_event_id": "ownership:inbox",
       "source_hash": "scope:inbox",
       "thread_id": "ownership:inbox",
-      "trigger_at": "scope:inbox"
+      "trigger_at": "scope:inbox",
+      "lifecycle_ready": "scope:inbox"
     },
     "derived_topic_dirty_queue": {
       "dirty_at": "parent:thread",
@@ -483,6 +485,23 @@
       "response_json": "scope:replay",
       "response_status": "scope:replay",
       "scope": "scope:replay"
+    },
+    "inbox_hidden_subject_refs": {
+      "owner_id": "internal:reader-snapshot",
+      "owner_kind": "internal:reader-snapshot",
+      "ref": "internal:reader-snapshot"
+    },
+    "inbox_lifecycle_dirty": {
+      "inbox_id": "internal:reader-snapshot"
+    },
+    "inbox_lifecycle_refs": {
+      "inbox_id": "internal:reader-snapshot",
+      "ref": "internal:reader-snapshot"
+    },
+    "inbox_lifecycle_subjects": {
+      "owner_id": "internal:reader-snapshot",
+      "owner_kind": "internal:reader-snapshot",
+      "ref": "internal:reader-snapshot"
     },
     "observation_investigation_specs": {
       "id": "configuration:operator-investigation",
@@ -819,12 +838,19 @@
       "singleton": "parent:document",
       "updated_at": "parent:document",
       "updated_by": "parent:document"
+    },
+    "inbox_lifecycle_job": {
+      "cursor": "internal:reader-snapshot",
+      "done": "internal:reader-snapshot",
+      "owners_ready": "internal:reader-snapshot",
+      "phase": "internal:reader-snapshot",
+      "singleton": "internal:reader-snapshot"
     }
   },
   "writers": {
     "../../cmd/anx-core/blob_backend.go:buildBlobBackend": "67d76e06af1489a62a7c6f2a42bb1bdcb01fc6f02876aab8b12b4a58efaf58f2",
     "../../cmd/anx-core/blob_backend.go:buildBlobBackendWithS3Factory": "d235c8a1b4b00f392770a6ba176a77a4614e2c2d2b56331445799433f5d768b2",
-    "../../cmd/anx-core/main.go:main": "e30034fe94de019d6780428cabbccfffd9e78d3a47fdeb68b87723c5d5da8d07",
+    "../../cmd/anx-core/main.go:main": "e544a0b0fd564371962c351e61c22f63400e7966a26857eb56b015f4725b7cca",
     "../../cmd/anx-observe/main.go:main": "11902d53cdccbc84a5be497089204cb4de0e46d14708501a1e5a4ca0fdb1a9c6",
     "../../cmd/anx-observe/main.go:run": "479de147c4b40d06e09c347a034e6eb03fcd038b6b195fc55f67c2f611404d87",
     "../../cmd/anx-observe/main.go:type:config": "2e5c0845b6c053359b50c772d82a451dacbed97f0108a5389d1279c079e56bcc",
@@ -1328,11 +1354,11 @@
     "../primitives/content_usage.go:*Store:measureDatabaseContentUsageBytes": "1c0b3c6181edfd5a03402b7776b83b7cf5893cde4694eb67044cb14f7401afa2",
     "../primitives/decision_work_snapshots.go:*Store:decisionWorkSnapshots": "ece2ffff2595c977b23f759c27596437684d334eb75fae75b655bc22b1743c29",
     "../primitives/derived_store.go:*Store:ClearDerivedTopicProjectionDirty": "d139851acff76a714182ad178238a2005c5d869d0377860b4de1595cec1ae5b4",
-    "../primitives/derived_store.go:*Store:GetDerivedInboxItem": "4a83158ca08b5603a83e114a60ebeb1e36e02ac8a4fe61258671962195368714",
+    "../primitives/derived_store.go:*Store:GetDerivedInboxItem": "6fe40ca0cd9dbf3319f71494f28ae842084aa05db99a29d4200d20ec2849419f",
     "../primitives/derived_store.go:*Store:GetDerivedTopicProjection": "1af2e94a6353543eb4d33972a33552475526e361c5cd5d15b870ed0beaa78293",
     "../primitives/derived_store.go:*Store:GetDerivedTopicProjectionQueueStats": "0f6e5dc2154a4e0b09e5feb6679ff040d12ecb49e2343a820059a2706ddae18f",
     "../primitives/derived_store.go:*Store:GetTopicProjectionRefreshStatuses": "4cc476d7e070539fe470e4a84082d9f1186dd3694f554845510c25f21e083001",
-    "../primitives/derived_store.go:*Store:ListDerivedInboxItems": "40cc6ce00b83be99253adfac0bb9d981281fad4570fdbea31d0ab64850784058",
+    "../primitives/derived_store.go:*Store:ListDerivedInboxItems": "6b9191be18ac53afa1f1df612b63cfe9a8c8dac674e4c91d1b7e8b9db6b4b7c4",
     "../primitives/derived_store.go:*Store:ListDerivedTopicProjectionDirtyEntries": "6b4da2a7aa625050385307cdc4b847f002919d6ee594651a62e30c808052406a",
     "../primitives/derived_store.go:*Store:ListDerivedTopicProjections": "9c9b8f27d443d2940001a8168d72c4b421994d349577d15a53155cc07c735521",
     "../primitives/derived_store.go:*Store:MarkDerivedTopicProjectionDirty": "198fab867b9b6f7d45a8daa568989520b8cfda7c77d1079f4549c93bd3e9819a",
@@ -1412,7 +1438,7 @@
     "../primitives/inbox_freshness.go:*Store:InboxFreshnessSummary": "3fd1d86df2a149457afd23038a495c7b52e997e0ec0194a4ce77b708847cf189",
     "../primitives/inbox_freshness.go:*Store:InboxThreadIDs": "601c790e705086edfea252c7a8ef8856da4427e8e43721f44a1f098be8dfe5b0",
     "../primitives/inbox_reads.go:*Store:ListInboxThreadIDs": "27af2ec8419448b97c3d4e0a088433a6a216828ebc1843510c097d9ab8de8ffb",
-    "../primitives/inbox_reads.go:*Store:ReadInbox": "7d3e352997d22476dea57f1eeeb27c86fc34a25e3b1ffeb53986d357955ae47e",
+    "../primitives/inbox_reads.go:*Store:ReadInbox": "3a513cb5d0cef83f9b377ab2820641563db362918221b6c5d9b9dd4bfc38eb9d",
     "../primitives/inbox_subject_access.go:*Store:InboxThreadAccessOwners": "fe4dd6152ad79ed857513f4b7b2ccd43a736c1586d919c847d2b191efeaa8fee",
     "../primitives/overview.go:*Store:DashboardReports": "3b8de1bc1f201a1234fc6e76678cb9ee541a43087b47e619c8d62b69512f1bbe",
     "../primitives/overview.go:*Store:DashboardReportsPage": "5e3a6ba1d32ce90e81e86a9943339a2afb52a4e57f15c26533617722bc038ff5",
@@ -2011,10 +2037,9 @@
     "../server/inbox_handlers.go:handleRebuildDerived": "605ef9fc6f13d4615ffa500e9d4684ee4a8c2cb08cf0700b74ea22faaa883669",
     "../server/inbox_handlers.go:loadInboxPage": "1daccc2e626b7e3a5a0879bca6576229d2f22e83fb44e1d4bf6e9b56c358a52c",
     "../server/inbox_handlers.go:loadOpenInbox": "5bb37f9d4609f633aab95a06ecc6db184a4c1ba975d6f0fbf3e9d9df1eefdc08",
-    "../server/inbox_handlers.go:loadOpenInboxItems": "5378ea0cae499ce2e00c6fa9e43aa731894ddeda55fef10d98be29b247ca8d3b",
     "../server/inbox_handlers.go:loadOverviewInboxItems": "fb6a687149fe58a9e0729e4f219265429832626d32ded644f982c2cce072a264",
     "../server/inbox_handlers.go:loadVisibleInboxItems": "4465bb9bb7157a184365a017efc83a17bae49f54ef5fed08a33618efd7f51ac6",
-    "../server/inbox_handlers.go:loadVisibleInboxItemsFiltered": "194436666cd3ef73b7e9037debb6de3a52ef897f37f0e559c50213cea993c1a1",
+    "../server/inbox_handlers.go:loadVisibleInboxItemsFiltered": "63dd0bec0d931d2c6aa88eb3c0daa2e832ad63c8fb48767c82f60d90cbcad4ec",
     "../server/inbox_subject_access.go:inboxItemAccessible": "513570a3fdb1b97d6db0227b7c94dbd6a5a166027f3596099051fbec3bba4a8f",
     "../server/inbox_subject_access.go:inboxSubjectRefAccessible": "d713a8a05f395131ec81334bdb4ad3bdaa93d8c9fe0e2f3cbad404768d5f69e3",
     "../server/markdown_hygiene.go:*markdownHygieneCollector:normalizeField": "97b553603a974434b6ee033a9ec6adfe62a2a1879fadbf3b201b3bbf6cf6f960",
@@ -2169,7 +2194,7 @@
     "../server/stream_handlers.go:eventActorIDsForKind": "728326f05609e5aa9b1c038ad58c700a2095dfbac9c7ed67b4d539ecf1940a86",
     "../server/stream_handlers.go:handleAgentNotificationReceiptsStream": "fa67a5fa2847d408d53eff5aa726fc85f13543a503826649a500ef30921293fe",
     "../server/stream_handlers.go:handleEventsStream": "73baf8dc75843e4147e1cd317568aa1d990329d866a7a4167e9dae4845962669",
-    "../server/stream_handlers.go:handleInboxStream": "e8dbf7414c9ff01684b1c008fd6a137272d071aef68106d4aed325c38ec691e1",
+    "../server/stream_handlers.go:handleInboxStream": "13c496b6e902bf80278f6c00b728567a721ab6f6bc05f083b5b84e8e1d326bee",
     "../server/stream_handlers.go:handleListEvents": "bc86466808b5f652ae07736e56abcd6c2dad8e19b14c687b03a751eac81eab79",
     "../server/stream_handlers.go:parseBackingScope": "4394df739ced72916f52a9e948a58af345a9f4e3386e0a744e16a066dca09c87",
     "../server/stream_handlers.go:parseEventGroupFilters": "9996cf20b7802dd1a196d05d923ba5c1b95ce73390640b07d99cacf154bc73c7",
@@ -2268,7 +2293,7 @@
     "../storage/migrations.go:migration25BackfillHandles": "0b1a8866c4541f58041168cea6b043ee880a43a3afe56eca68a658ffe31fa3b6",
     "../storage/migrations.go:migration25HandleExpressions": "8981e5f9b2e01ce392b77c0763fa38a47b68b5ca20d4cadcf0d7795952dc84c8",
     "../storage/migrations.go:migration25UniqueHandle": "6bed0b1e2baf92af71deb2b6a7f9e281bd75894a80f37d4bbbb09e632befe7d3",
-    "../storage/migrations.go:migrations": "0b2b6e14b16da163dcb861b39228d0fabb5793ba2f80ebee704565eb67318af0",
+    "../storage/migrations.go:migrations": "dec4bba03ad3dbde496f19257598036106891dd760214d918bed8a9711098a2e",
     "../storage/migrations.go:repairLegacyReferenceAccess": "03b66e0fb21f24a185a0127b607c51d9760f17b8abfbe904451d093c732ac5ab",
     "../storage/migrations.go:repairNULReferenceAccess": "7579edda9e055e69a0e88914fcd02f919d26c1f02a5b456a6ac3bf25f422fed9",
     "../storage/migrations.go:sqliteTableExists": "c0fa57bdf9800dd6002c1c4dcfcb6ab9f2a889101a7f21b61f434439a39a3ac4",
@@ -2291,7 +2316,7 @@
     "../storage/series_rollups.go:seriesLiveDailyInsertSQL": "3c9fd56c804aa4274e20bf10e6355bf7998235353b8bb4f99e931999c1c1b6be",
     "../storage/series_rollups.go:seriesLiveDailyTableSQL": "c32b0794d6521bc488af84cd189a7ef8a9bce8dd304368fcb11ea13fc612a84e",
     "../storage/series_rollups.go:seriesLiveDailyUpdateSQL": "af01489a464623be9bb38b7a1642b2bea4ea6b9a7b7dca4ba7c7abf522c32f28",
-    "../storage/workspace.go:InitializeWorkspace": "b2bf998ed3359870c84217984e984478b352b1ad30547b62b8036833e792bb28",
+    "../storage/workspace.go:InitializeWorkspace": "7bcdef5bd6ccc8c665fe7fa601d844d1e26533d3e5bb005442db6cfe0d2909ba",
     "../storage/workspace.go:sqliteDSN": "657b24a5c4048f37634b9530f18e3aef82a44d24bf012430f8df28e7ee364de5",
     "../testsql/counter.go:*countedConn:ExecContext": "19b105025025cd75a56e6a8f55e870f8a82976666fc26612ded2ec71d4a01ce4",
     "../testsql/counter.go:*countedConn:Prepare": "03a0f60bbd8b85cf42b7d819b81452083fb9d40899bbf4d6d3232d9843292e18",
@@ -2299,7 +2324,14 @@
     "../testsql/counter.go:*countedConn:QueryContext": "a5acc55a5b29fd19d4c3a54f7ae9a190862a716406f7c8a3d5f2b0eb90d6f741",
     "../testsql/counter.go:*countedStmt:ExecContext": "e2488b01750b887b043380007c83f1a465a9570d9fbfa1a50a152836339e2acd",
     "../testsql/counter.go:*countedStmt:Query": "552d3c61ed8492bce2343d48841315f51cfdbd29a3ebe9c4bd3388ab99e2b439",
-    "../testsql/counter.go:*countedStmt:QueryContext": "7074fd7cc6d9ce1009e88c7ebd48eadb6152a536660b05b3dacfb62d1a48e42d"
+    "../testsql/counter.go:*countedStmt:QueryContext": "7074fd7cc6d9ce1009e88c7ebd48eadb6152a536660b05b3dacfb62d1a48e42d",
+    "../primitives/access_snapshot.go:WithReadTickSnapshot": "7cf6c00f0fd59b06120b8721ecf18433e5b33e4c97d258d5ac39ca2b3caf6b7e",
+    "../server/inbox_handlers.go:loadInboxStreamPage": "dae22369b501350b38f2125837ddf3e113f63a4bf3614afabfb640fa3d626a67",
+    "../storage/inbox_lifecycle.go:indexInboxLifecycle": "c27840de54b6ad0e928398e6c3f1957e9d91001f86a32febd0b8ee202628c6a3",
+    "../storage/inbox_lifecycle.go:replaceInboxLifecycleTrigger": "0ae80a564dd68b62eaffbd8dc585cc2946a0e51578cfc6c68c36a079a5a85d54",
+    "../storage/inbox_lifecycle.go:*Workspace:MaintainInboxLifecycleBatch": "2b76e37dc43b3e506fdb713b006a6f23aec0ed06aaff20611d81a7e5fb1dc464",
+    "../storage/inbox_lifecycle.go:*Workspace:RunInboxLifecycleMaintenance": "4fcfe08d16be35730e1d92d691e78b1849dcb730689822b2d07b0db37bd1ff96",
+    "../storage/inbox_lifecycle.go:reconcileInboxLifecyclePreview": "ed42312d76e9c88c888f152f46b41adcf145d8788319e4f8de787940db7c19d0"
   },
   "external_key_publications": {
     "work_evidence_record": ["evidence_json"],

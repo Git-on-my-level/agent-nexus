@@ -53,7 +53,10 @@
     invalidateInboxContext,
     loadInboxContext,
   } from "$lib/inboxContext.js";
-  import { liveWorkspaceEvents } from "$lib/liveWorkspaceEvents.js";
+  import {
+    liveWorkspaceEvents,
+    liveInboxChanges,
+  } from "$lib/liveWorkspaceEvents.js";
   import { claimInboxCount, publishInboxCount } from "$lib/inboxCount.js";
   import {
     applyResponseOverlay,
@@ -106,6 +109,7 @@
   let selectionRequest = 0;
   let ready = $state(false);
   let truncated = $state(false);
+  let streamPartial = $state(false);
   let receiptsUnavailable = $state(false);
   let noticeElement = $state(null);
   let detailPane = $state(null);
@@ -940,7 +944,11 @@
   $effect(() => {
     if (!ready) return;
     const count = rows.filter((row) => row.mailbox === "needs-you").length;
-    publishInboxCount($page.params.workspace, count, truncated);
+    publishInboxCount(
+      $page.params.workspace,
+      count,
+      truncated || streamPartial,
+    );
   });
 
   onMount(() => {
@@ -949,6 +957,15 @@
     const stopLive = liveWorkspaceEvents({
       client: coreClient,
       onChange: () => scheduleLiveRefresh(),
+    });
+    const stopInbox = liveInboxChanges({
+      client: coreClient,
+      onChange: (changes) => {
+        for (const change of changes) {
+          if (change.type === "inbox_page") streamPartial = change.partial;
+        }
+        scheduleLiveRefresh();
+      },
     });
     const stopCommitted = onInboxResponseCommitted(() => scheduleLiveRefresh());
     const timer = setInterval(() => {
@@ -965,6 +982,7 @@
       clearInterval(timer);
       clearTimeout(liveTimer);
       stopLive();
+      stopInbox();
       stopCommitted();
       releaseCount();
       document.removeEventListener("visibilitychange", onVisible);
@@ -1025,7 +1043,7 @@
         href={href({ mailbox: key, item: "" })}
         aria-current={mailbox === key ? "page" : undefined}
         >{title}{#if counts[key]}<span class="ml-1.5 text-micro text-fg-subtle"
-            >{counts[key]}{truncated ? "+" : ""}</span
+            >{counts[key]}{truncated || streamPartial ? "+" : ""}</span
           >{/if}</a
       >
     {/each}
@@ -1044,7 +1062,7 @@
         >
       </span>
     {/if}
-    {#if truncated}
+    {#if truncated || streamPartial}
       <span class="ml-2 text-micro text-fg-subtle"
         >Not everything is loaded; the counts are lower bounds.</span
       >

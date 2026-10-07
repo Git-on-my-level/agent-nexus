@@ -17006,12 +17006,13 @@
           "path": "/stream/inbox",
           "operation_id": "streamInboxItems",
           "summary": "Stream inbox items (SSE)",
+          "description": "Delivers at most 200 authorized, lifecycle-visible items per poll and continues from an indexed keyset boundary on the next poll. An inbox_page event reports partial=true and resume_cursor when more authorized items remain; partial=false ends that sweep. Progress event IDs can be supplied as Last-Event-ID to resume after reconnect. Consumers merge items by ID and qualify counts while partial is true. Items may repeat in subsequent sweeps; authorization is refreshed every poll. No hidden item counts or positions are exposed.",
           "why": "Server-sent events feed of inbox projection updates.",
           "input_mode": "none",
           "streaming": {
             "mode": "sse"
           },
-          "output_envelope": "SSE `inbox_item` events with JSON payloads.",
+          "output_envelope": "SSE `inbox_item` events and `inbox_page` progress with partial/resume_cursor.",
           "error_codes": [
             "auth_required",
             "invalid_request",
