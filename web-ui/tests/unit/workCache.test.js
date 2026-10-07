@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { clearAuthSession } from "../../src/lib/authSession.js";
+import {
+  setCurrentOrganizationSlug,
+  setCurrentWorkspaceSlug,
+} from "../../src/lib/workspaceContext.js";
 import {
   cacheWorkRecord,
   clearWorkCache,
@@ -8,7 +13,14 @@ import {
   primeWorkSummary,
   readWorkSnapshot,
   workCacheKeys,
+  workCacheScope,
 } from "../../src/lib/workCache.js";
+
+/** Put the browser in a workspace, the way the shell does on navigation. */
+function inWorkspace(org, workspace) {
+  setCurrentOrganizationSlug(org);
+  setCurrentWorkspaceSlug(workspace);
+}
 
 const row = (overrides = {}) => ({
   id: "0199a1e1-0000-7000-8000-000000000001",
@@ -19,8 +31,13 @@ const row = (overrides = {}) => ({
   ...overrides,
 });
 
+beforeEach(() => {
+  inWorkspace("acme", "local");
+});
+
 afterEach(() => {
   clearWorkCache();
+  inWorkspace("", "");
   vi.useRealTimers();
 });
 
@@ -122,5 +139,86 @@ describe("prefetchWork", () => {
     await expect(
       prefetchWork("card:tune-combat", { getWork }),
     ).resolves.toBeNull();
+  });
+});
+
+describe("workspace scoping", () => {
+  /*
+   * Card handles are unique within a workspace, not across them. Keyed on the
+   * handle alone, a card read in one workspace was painted under another
+   * workspace's name while that workspace's own read was still in flight.
+   */
+  it("does not answer another workspace's question", () => {
+    cacheWorkRecord(row({ title: "Local release" }));
+    expect(readWorkSnapshot("card:tune-combat")?.work.title).toBe(
+      "Local release",
+    );
+
+    inWorkspace("acme", "other");
+    expect(readWorkSnapshot("card:tune-combat")).toBeNull();
+
+    // And the other workspace's own copy of the same handle is its own.
+    cacheWorkRecord(row({ title: "Other release" }));
+    expect(readWorkSnapshot("card:tune-combat")?.work.title).toBe(
+      "Other release",
+    );
+
+    inWorkspace("acme", "local");
+    expect(readWorkSnapshot("card:tune-combat")?.work.title).toBe(
+      "Local release",
+    );
+  });
+
+  it("separates workspaces of the same name in different organizations", () => {
+    cacheWorkRecord(row({ title: "Acme release" }));
+    inWorkspace("globex", "local");
+    expect(readWorkSnapshot("card:tune-combat")).toBeNull();
+  });
+
+  it("prefetches the same handle once per workspace, not once in total", async () => {
+    const getWork = vi.fn().mockResolvedValue({ work: row() });
+    await prefetchWork("card:tune-combat", { getWork });
+    expect(getWork).toHaveBeenCalledTimes(1);
+    // Cached here, so no second read...
+    await prefetchWork("card:tune-combat", { getWork });
+    expect(getWork).toHaveBeenCalledTimes(1);
+    // ...but the other workspace has not been asked at all.
+    inWorkspace("acme", "other");
+    await prefetchWork("card:tune-combat", { getWork });
+    expect(getWork).toHaveBeenCalledTimes(2);
+  });
+
+  it("files a prefetch that lands after a workspace switch under neither", async () => {
+    let settle;
+    const getWork = vi.fn(
+      () => new Promise((resolve) => (settle = () => resolve({ work: row() }))),
+    );
+    const inFlight = prefetchWork("card:tune-combat", { getWork });
+    // The read is issued a microtask later; let it start before switching.
+    await Promise.resolve();
+    expect(getWork).toHaveBeenCalledTimes(1);
+    // The reader moves on before the answer arrives.
+    inWorkspace("acme", "other");
+    settle();
+    await inFlight;
+    expect(readWorkSnapshot("card:tune-combat")).toBeNull();
+    inWorkspace("acme", "local");
+    expect(readWorkSnapshot("card:tune-combat")).toBeNull();
+  });
+
+  it("goes with the session, like every other display cache", () => {
+    // A card's title and body are as much of the workspace as a page snapshot
+    // is; neither should outlive the identity that was allowed to read it.
+    cacheWorkRecord(row());
+    expect(readWorkSnapshot("card:tune-combat")).not.toBeNull();
+    clearAuthSession("local", { organizationSlug: "acme" });
+    expect(readWorkSnapshot("card:tune-combat")).toBeNull();
+  });
+
+  it("caches nothing at all when no workspace can be resolved", () => {
+    inWorkspace("", "");
+    expect(workCacheScope()).toBe("");
+    cacheWorkRecord(row());
+    expect(readWorkSnapshot("card:tune-combat")).toBeNull();
   });
 });

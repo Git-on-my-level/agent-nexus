@@ -61,10 +61,37 @@ export const inboxResponseFailures = writable(
 let sequence = 0;
 /** @type {null | { id: number, itemId: string, request: object, message: string, restore: any, timer: any, deadline: number }} */
 let pending = null;
-/** @type {null | { id: number, itemId: string, request: object, message: string, restore: any }} */
-let failed = null;
+/**
+ * Responses whose commit failed, by inbox item id, holding what it would take
+ * to send each one again.
+ *
+ * One slot was not enough. The mark on the row is per item, so a reader could
+ * see "Not sent" and a Retry on A, answer B, come back, click Retry on A and
+ * have nothing happen at all: answering B had cleared the only slot while A's
+ * error and its button stayed on screen. A button that does nothing is worse
+ * than no button.
+ *
+ * Insertion order is kept, so the no-argument form (the toast's Retry, which
+ * is only ever about the newest failure) resends the most recent one.
+ *
+ * @type {Map<string, { id: number, itemId: string, request: object, message: string, restore: any }>}
+ */
+const failedByItem = new Map();
 let toastTimer = null;
 const committedListeners = new Set();
+
+/** Drop the mark and the resend payload for one item. */
+function forgetFailure(itemId) {
+  failedByItem.delete(itemId);
+  setFailure(itemId, null);
+}
+
+/** The newest failure, for callers that do not name an item. */
+function newestFailure() {
+  let last = null;
+  for (const entry of failedByItem.values()) last = entry;
+  return last;
+}
 
 function setFailure(itemId, value) {
   inboxResponseFailures.update((current) => {
@@ -114,8 +141,8 @@ export function queueInboxResponse({ itemId, request, message, restore }) {
     throw new Error("queueInboxResponse requires a valid outcome");
   }
   if (pending) void commit(pending);
-  failed = null;
-  setFailure(id, null);
+  // Only this item's failure: answering B must not disarm Retry on A.
+  forgetFailure(id);
   const entry = {
     id: ++sequence,
     itemId: id,
@@ -153,7 +180,7 @@ export function undoInboxResponse() {
   pending = null;
   clearTimeout(entry.timer);
   setOverlay(entry.itemId, null);
-  setFailure(entry.itemId, null);
+  forgetFailure(entry.itemId);
   showToast(null);
   return {
     itemId: entry.itemId,
@@ -180,11 +207,17 @@ export function flushInboxResponse() {
  */
 export function retryInboxResponse(itemId = "") {
   const want = String(itemId ?? "").trim();
+  const failed = want ? failedByItem.get(want) : newestFailure();
   if (!failed) return Promise.resolve();
-  if (want && failed.itemId !== want) return Promise.resolve();
   const entry = { ...failed, deadline: Date.now(), timer: null };
-  failed = null;
-  setFailure(entry.itemId, null);
+  forgetFailure(entry.itemId);
+  /*
+   * A response still inside its undo window is committed first. Only one can
+   * be `pending`, and overwriting it would strand it: its timer would fire on
+   * an entry the queue no longer recognises and send nothing. This is what
+   * `queueInboxResponse` does with a superseded response, for the same reason.
+   */
+  if (pending) void commit(pending);
   pending = entry;
   setOverlay(entry.itemId, {
     status: "pending",
@@ -198,13 +231,13 @@ export function retryInboxResponse(itemId = "") {
 /** Give up on a failed response: the item stays unanswered, visibly so. */
 export function dismissInboxResponseFailure(itemId = "") {
   const want = String(itemId ?? "").trim();
-  if (failed && (!want || failed.itemId === want)) {
-    setFailure(failed.itemId, null);
-    failed = null;
-    showToast(null);
-    return;
-  }
-  if (want) setFailure(want, null);
+  const target = want || newestFailure()?.itemId || "";
+  if (!target) return;
+  forgetFailure(target);
+  // The toast only ever shows one failure; retire it when that is this one.
+  inboxResponseToast.update((toast) =>
+    toast?.state === "failed" && toast.itemId === target ? null : toast,
+  );
 }
 
 export function dismissInboxResponseToast() {
@@ -231,7 +264,7 @@ async function commit(entry) {
       entry.itemId,
       entry.request,
     );
-    setFailure(entry.itemId, null);
+    forgetFailure(entry.itemId);
     setOverlay(entry.itemId, {
       status: "committed",
       response_text: String(entry.request?.response_text ?? ""),
@@ -272,13 +305,13 @@ async function commit(entry) {
       response_text: String(entry.request?.response_text ?? ""),
       at: new Date().toISOString(),
     });
-    failed = {
+    failedByItem.set(entry.itemId, {
       id: entry.id,
       itemId: entry.itemId,
       request: entry.request,
       message: entry.message,
       restore: entry.restore,
-    };
+    });
     showToast({
       id: entry.id,
       itemId: entry.itemId,
@@ -361,7 +394,7 @@ export function takeInboxRestore(itemId) {
 export function resetInboxResponseQueue() {
   if (pending) clearTimeout(pending.timer);
   pending = null;
-  failed = null;
+  failedByItem.clear();
   clearTimeout(toastTimer);
   toastTimer = null;
   committedListeners.clear();

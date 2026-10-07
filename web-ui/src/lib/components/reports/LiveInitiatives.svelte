@@ -74,7 +74,7 @@
           {#if tile.freshness}
             <FreshnessBadge
               at={tile.movedAt}
-              kind="initiative"
+              kind={tile.freshnessKind}
               row={tile}
               verb="moved"
               {now}

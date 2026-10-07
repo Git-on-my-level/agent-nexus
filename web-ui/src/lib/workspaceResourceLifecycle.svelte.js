@@ -147,6 +147,7 @@ export function createWorkspaceResourceLifecycleController(options) {
      * way so what is on screen is what the server holds.
      */
     let done = 0;
+    let failure = "";
     try {
       for (const id of list) {
         await runner(id);
@@ -156,11 +157,11 @@ export function createWorkspaceResourceLifecycleController(options) {
       confirmModal = emptyConfirmModal();
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
-      options.setError(
+      failure =
         done === 0
           ? `${actionLabel(action)} failed: ${reason}`
-          : `${actionLabel(action)} stopped after ${done} of ${list.length}: ${reason}`,
-      );
+          : `${actionLabel(action)} stopped after ${done} of ${list.length}: ${reason}`;
+      options.setError(failure);
     } finally {
       bulkBusy = false;
       try {
@@ -168,6 +169,14 @@ export function createWorkspaceResourceLifecycleController(options) {
       } catch {
         // The reload's own failure is reported by the list's loader.
       }
+      /*
+       * Say it again, after the reload. List loaders clear the page error as
+       * they start, so the refresh that proves half the write landed was also
+       * what erased the only sentence explaining it: two documents selected,
+       * one gone, one still there, and nothing on screen about the 500. The
+       * message has to outlive the reload it triggered.
+       */
+      if (failure) options.setError(failure);
     }
   }
 

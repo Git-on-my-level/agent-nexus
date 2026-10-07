@@ -60,6 +60,7 @@
     humanizeInstants,
     connectionName,
   } from "$lib/pm/presentation.js";
+  import { freshnessKindForPhase } from "$lib/freshness.js";
   import {
     nextStepModel,
     planHealthModel,
@@ -133,6 +134,17 @@
       },
       { hasPlan: Boolean(plan), progress: planProgress },
     ),
+  );
+  /*
+   * Finished work gets no freshness badge. The badge is a prompt to go and
+   * look; a delivered card is not asking for anything, so "9d, expected every
+   * 3d" on it would be chasing work that is already done.
+   */
+  let planFreshnessKind = $derived(
+    planHealth.state === "done" ||
+      freshnessKindForPhase(work?.phase, work?.state) === "closed"
+      ? "closed"
+      : "initiative",
   );
   /** "Next" comes from the computed next step, with the plan's own title. */
   let nextStep = $derived(
@@ -628,7 +640,7 @@
                        this page cannot disagree about what "3d" means. -->
                   <FreshnessBadge
                     at={planState.last_movement_at}
-                    kind="initiative"
+                    kind={planFreshnessKind}
                     row={work}
                     verb="moved"
                     {now}

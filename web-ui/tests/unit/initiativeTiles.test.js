@@ -423,3 +423,72 @@ describe("tile freshness", () => {
     });
   });
 });
+
+describe("finished initiatives get no freshness badge", () => {
+  /*
+   * A freshness badge is a prompt: it says somebody should go and look. A
+   * delivered initiative is not asking for anything, so a red "9d, expected
+   * every 3d" in the Done fold was the dashboard chasing finished work.
+   */
+  const longAgo = ago(40 * 86_400_000);
+
+  it("shows none when core computes the health as done", () => {
+    const tile = initiativeTileModel(
+      row({
+        plan_health: { state: "done", reason: "Every step is done." },
+        plan_state: planState({
+          last_movement_at: longAgo,
+          progress: { done: 3, total: 3 },
+        }),
+        progress: { done: 3, total: 3 },
+      }),
+      { now: NOW },
+    );
+    expect(tile.health.state).toBe("done");
+    expect(tile.freshness).toBeNull();
+    expect(tile.freshnessKind).toBe("closed");
+  });
+
+  it("shows none when every step is done, whatever the clock says", () => {
+    // Progress alone promotes a tile to done in `planHealthModel`.
+    const tile = initiativeTileModel(
+      row({
+        progress: { done: 5, total: 5 },
+        plan_state: planState({
+          last_movement_at: longAgo,
+          progress: { done: 5, total: 5 },
+        }),
+      }),
+      { now: NOW },
+    );
+    expect(tile.group).toBe(tileGroup("done"));
+    expect(tile.freshness).toBeNull();
+  });
+
+  it("shows none for a cancelled or archived initiative", () => {
+    for (const closed of [
+      { phase: "cancelled" },
+      { phase: "done" },
+      { state: "archived" },
+      { state: "trashed" },
+    ]) {
+      const tile = initiativeTileModel(
+        row({
+          ...closed,
+          plan_state: planState({ last_movement_at: longAgo }),
+        }),
+        { now: NOW },
+      );
+      expect(tile.freshness, JSON.stringify(closed)).toBeNull();
+    }
+  });
+
+  it("still badges an open initiative that has gone quiet", () => {
+    const tile = initiativeTileModel(
+      row({ plan_state: planState({ last_movement_at: longAgo }) }),
+      { now: NOW },
+    );
+    expect(tile.freshnessKind).toBe("initiative");
+    expect(tile.freshness).toMatchObject({ tone: "danger" });
+  });
+});

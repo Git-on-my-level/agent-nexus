@@ -17,7 +17,27 @@
  *
  * Browser-only, memory-only, 30 seconds, bounded, and never an authorization
  * source — the same contract `workspaceViewCache` holds for page snapshots.
+ *
+ * ## Every entry is scoped to the workspace it was read under
+ *
+ * Card handles are unique within a workspace, not across them: `card:release`
+ * exists in both. Keyed on the handle alone, reading a card in one workspace
+ * and opening the same handle in another painted the first workspace's title
+ * and body under the second one's name while the real read was in flight —
+ * showing a reader content from a workspace they had navigated away from.
+ *
+ * The scope is resolved the same way `coreClient` resolves its routing headers
+ * (`coreClientRequestHeaders.js`): the workspace context store, falling back to
+ * the URL. Deriving it the same way is the point — an entry can then only be
+ * read back under exactly the routing scope that produced it, so the cache
+ * cannot answer a question the request would have sent somewhere else.
  */
+
+import {
+  getCurrentOrganizationSlug,
+  getCurrentWorkspaceSlug,
+} from "$lib/workspaceContext";
+import { APP_BASE_PATH, parseWorkspaceRouteSlugs } from "$lib/workspacePaths";
 
 const TTL_MS = 30_000;
 const MAX_ENTRIES = 60;
@@ -30,9 +50,38 @@ const inflight = new Map();
 const asText = (value) => String(value ?? "").trim();
 
 /**
+ * The workspace this browser is currently talking to, as `org/workspace`.
+ *
+ * Resolved exactly as `buildCoreRequestContextHeaders` resolves it, so the
+ * cache's scope and the request's routing can never disagree. An unresolvable
+ * scope returns `""`, which {@link scoped} treats as "do not cache": a read
+ * nobody can attribute to a workspace is not one to hand back later.
+ */
+export function workCacheScope() {
+  const org = asText(getCurrentOrganizationSlug());
+  const workspace = asText(getCurrentWorkspaceSlug());
+  if (org && workspace) return `${org}/${workspace}`;
+  const fromUrl = parseWorkspaceRouteSlugs(
+    globalThis.location?.pathname ?? "/",
+    APP_BASE_PATH,
+  );
+  const urlOrg = org || asText(fromUrl.organizationSlug);
+  const urlWorkspace = workspace || asText(fromUrl.workspaceSlug);
+  return urlOrg && urlWorkspace ? `${urlOrg}/${urlWorkspace}` : "";
+}
+
+/** A key namespaced to its workspace, or "" when there is no workspace. */
+function scoped(key, scope) {
+  const name = asText(key);
+  return scope && name ? `${scope}\u0000${name}` : "";
+}
+
+/**
  * Every handle the router might name this card by. `/tasks/{workId}` takes a
  * ref, a bare handle or an id, so a snapshot primed from a list row has to be
  * findable under all three.
+ *
+ * These are the unscoped names; {@link scoped} prefixes the workspace.
  */
 export function workCacheKeys(work) {
   const ref = asText(work?.ref);
@@ -55,12 +104,20 @@ function prune(now) {
 
 function write(work, full, now) {
   if (typeof window === "undefined" || !work) return;
+  const scope = workCacheScope();
+  // No resolvable workspace, nothing to attribute the card to: do not cache.
+  if (!scope) return;
   const keys = workCacheKeys(work);
   if (!keys.length) return;
   prune(now);
-  for (const key of keys) {
+  for (const name of keys) {
+    const key = scoped(name, scope);
     const existing = entries.get(key);
-    // A full record is never downgraded to a list row by a later prime.
+    /*
+     * Within one workspace a full record is strictly more than a list row, so
+     * a later prime never downgrades it. Across workspaces this cannot arise:
+     * the same handle in two workspaces is two keys.
+     */
     if (existing?.full && !full) continue;
     entries.delete(key);
     entries.set(key, { work, full, at: now });
@@ -87,13 +144,17 @@ export function cacheWorkRecord(work, now = Date.now()) {
  */
 export function readWorkSnapshot(id, now = Date.now()) {
   if (typeof window === "undefined") return null;
-  const key = asText(id);
-  if (!key) return null;
-  const entry = entries.get(key) ?? entries.get(key.replace(/^card:/, ""));
+  const scope = workCacheScope();
+  const name = asText(id);
+  if (!scope || !name) return null;
+  const entry =
+    entries.get(scoped(name, scope)) ??
+    entries.get(scoped(name.replace(/^card:/, ""), scope));
   if (!entry) return null;
   if (now - entry.at >= TTL_MS) {
-    for (const candidate of workCacheKeys(entry.work))
-      entries.delete(candidate);
+    for (const candidate of workCacheKeys(entry.work)) {
+      entries.delete(scoped(candidate, scope));
+    }
     return null;
   }
   return { work: entry.work, full: entry.full };
@@ -109,16 +170,25 @@ export function readWorkSnapshot(id, now = Date.now()) {
  * @param {{ getWork: (id: string) => Promise<{work?: object}> }} client
  */
 export function prefetchWork(id, client) {
-  const key = asText(id);
-  if (!key || typeof window === "undefined") return Promise.resolve(null);
-  if (readWorkSnapshot(key)?.full) return Promise.resolve(null);
+  const name = asText(id);
+  if (!name || typeof window === "undefined") return Promise.resolve(null);
+  const scope = workCacheScope();
+  if (!scope) return Promise.resolve(null);
+  if (readWorkSnapshot(name)?.full) return Promise.resolve(null);
+  // In flight is scoped too: the same handle in two workspaces is two reads.
+  const key = scoped(name, scope);
   const existing = inflight.get(key);
   if (existing) return existing;
   const promise = Promise.resolve()
-    .then(() => client.getWork(key))
+    .then(() => client.getWork(name))
     .then((result) => {
       const work = result?.work ?? null;
-      if (work) cacheWorkRecord(work);
+      /*
+       * File it under the scope the read was issued in, not whatever is
+       * current now: a reader who switched workspaces mid-flight must not have
+       * the answer to the old question filed against the new one.
+       */
+      if (work && workCacheScope() === scope) cacheWorkRecord(work);
       return work;
     })
     .catch(() => null)

@@ -48,7 +48,8 @@
   let movedAt = $derived(
     work?.freshness?.last_observed_at || work?.updated_at || "",
   );
-  let freshnessKind = $derived(freshnessKindForPhase(work?.phase));
+  // Phase and lifecycle both end a card: done, cancelled, archived, trashed.
+  let freshnessKind = $derived(freshnessKindForPhase(work?.phase, work?.state));
   let blocked = $derived(work?.phase === "blocked");
   // A read that is failing is worth a badge: the reader cannot tell from
   // the column that this card's evidence is going stale.

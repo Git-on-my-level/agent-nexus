@@ -276,6 +276,72 @@ describe("inbox response queue", () => {
     });
   });
 
+  it("still retries A after B has been answered", async () => {
+    /*
+     * The blocker: one global retry slot. A failed, the row kept its error and
+     * its Retry, and then answering B silently emptied the slot — so Retry on
+     * A sent nothing at all while still looking like a live button.
+     */
+    client.respondInboxItem.mockRejectedValueOnce(new Error("quota exceeded"));
+    queueInboxResponse({ itemId: "inbox:a", request, message: "A" });
+    await flushInboxResponse();
+    expect(get(inboxResponseFailures)["inbox:a"]).toBeDefined();
+
+    client.respondInboxItem.mockResolvedValue({});
+    queueInboxResponse({ itemId: "inbox:b", request, message: "B" });
+    await flushInboxResponse();
+
+    const before = client.respondInboxItem.mock.calls.length;
+    await retryInboxResponse("inbox:a");
+    const sent = client.respondInboxItem.mock.calls.slice(before);
+    expect(sent).toHaveLength(1);
+    expect(sent[0][0]).toBe("inbox:a");
+    expect(get(inboxResponseFailures)["inbox:a"]).toBeUndefined();
+  });
+
+  it("keeps one failure per item, and retries each on its own", async () => {
+    client.respondInboxItem.mockRejectedValue(new Error("quota exceeded"));
+    queueInboxResponse({ itemId: "inbox:a", request, message: "A" });
+    await flushInboxResponse();
+    queueInboxResponse({ itemId: "inbox:b", request, message: "B" });
+    await flushInboxResponse();
+    const failures = get(inboxResponseFailures);
+    expect(Object.keys(failures).sort()).toEqual(["inbox:a", "inbox:b"]);
+
+    client.respondInboxItem.mockResolvedValue({});
+    await retryInboxResponse("inbox:b");
+    // B is sent and cleared; A is still waiting for its own Retry.
+    expect(get(inboxResponseFailures)["inbox:b"]).toBeUndefined();
+    expect(get(inboxResponseFailures)["inbox:a"]).toBeDefined();
+
+    const before = client.respondInboxItem.mock.calls.length;
+    await retryInboxResponse("inbox:a");
+    expect(client.respondInboxItem.mock.calls.slice(before)[0][0]).toBe(
+      "inbox:a",
+    );
+  });
+
+  it("does not strand a waiting response when a retry goes out", async () => {
+    /*
+     * Only one response can be `pending`. A retry that overwrote it would
+     * leave the waiting one on a timer the queue no longer recognises, and it
+     * would never be sent — losing a write to fix a different one.
+     */
+    client.respondInboxItem.mockRejectedValueOnce(new Error("quota exceeded"));
+    queueInboxResponse({ itemId: "inbox:a", request, message: "A" });
+    await flushInboxResponse();
+
+    client.respondInboxItem.mockResolvedValue({});
+    queueInboxResponse({ itemId: "inbox:b", request, message: "B" });
+    // B is still inside its undo window when A is retried.
+    await retryInboxResponse("inbox:a");
+    await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS * 2);
+
+    const sentTo = client.respondInboxItem.mock.calls.map(([id]) => id);
+    expect(sentTo).toContain("inbox:b");
+    expect(sentTo.filter((id) => id === "inbox:b")).toHaveLength(1);
+  });
+
   it("will not let one row's Retry resend another row's response", async () => {
     client.respondInboxItem.mockRejectedValue(new Error("quota exceeded"));
     queueInboxResponse({ itemId: "inbox:a", request, message: "A" });
