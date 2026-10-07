@@ -30,9 +30,16 @@ runs:
           'Acquire::http::Timeout "30";' \
           'Acquire::https::Timeout "30";' \
           'Acquire::Retries "3";' \
+          'DPkg::Lock::Timeout "60";' \
           | sudo tee /etc/apt/apt.conf.d/99timeouts >/dev/null
 
         for attempt in 1 2 3; do
+          if [[ "$attempt" -gt 1 ]]; then
+            echo "Cleaning up apt/dpkg state before retry ${attempt}..."
+            sudo pkill -f 'apt-get|dpkg' || true
+            sudo dpkg --configure -a || true
+          fi
+
           echo "Installing Chromium system dependencies (attempt ${attempt}/3)..."
           if timeout 240 pnpm -C web-ui exec playwright install-deps chromium; then
             exit 0
