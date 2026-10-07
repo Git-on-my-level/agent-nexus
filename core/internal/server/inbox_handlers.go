@@ -486,7 +486,13 @@ func loadVisibleInboxItemsFiltered(r *http.Request, opts handlerOptions, notific
 	// Authorization is already applied by the scoped inbox relation. Lifecycle
 	// filtering is only needed for ordinary notifications; requests keep their
 	// own response/withdrawal lifecycle when linked context is archived.
-	if notifications && !filter.ActiveNotifications {
+	pendingLifecycle := map[string]bool{}
+	for _, item := range projected {
+		if !item.LifecycleReady {
+			pendingLifecycle[item.ID] = true
+		}
+	}
+	if notifications && (!filter.ActiveNotifications || len(pendingLifecycle) > 0) {
 		if store, ok := opts.primitiveStore.(interface {
 			HiddenSubjectRefs(context.Context) (map[string]bool, error)
 		}); ok {
@@ -497,6 +503,9 @@ func loadVisibleInboxItemsFiltered(r *http.Request, opts handlerOptions, notific
 			}); ok {
 				refs := []string{}
 				for _, item := range payloadItems {
+					if filter.ActiveNotifications && !pendingLifecycle[anyString(item["id"])] {
+						continue
+					}
 					if canonicalHumanAttentionKind(anyString(item["kind"])) == "" {
 						related, _ := extractStringSlice(item["related_refs"])
 						refs = append(refs, related...)
@@ -511,6 +520,10 @@ func loadVisibleInboxItemsFiltered(r *http.Request, opts handlerOptions, notific
 			}
 			visible := payloadItems[:0]
 			for _, item := range payloadItems {
+				if filter.ActiveNotifications && !pendingLifecycle[anyString(item["id"])] {
+					visible = append(visible, item)
+					continue
+				}
 				if canonicalHumanAttentionKind(anyString(item["kind"])) != "" {
 					visible = append(visible, item)
 					continue

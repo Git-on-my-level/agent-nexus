@@ -84,6 +84,13 @@ func TestInboxStreamIndexedLifecycleMatchesPayloadRules(t *testing.T) {
 			t.Fatalf("dirty state leaked outside mutation: %d %v", dirty, err)
 		}
 	}
+	// Incomplete projection must retain the legacy visible/hidden lifecycle.
+	if _, err = env.workspace.DB().Exec(`UPDATE inbox_lifecycle_job SET phase=0,cursor='',owners_ready=0,done=0`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = env.workspace.DB().Exec(`UPDATE derived_inbox_items SET lifecycle_ready=0`); err != nil {
+		t.Fatal(err)
+	}
 	check("active")
 	for _, mutation := range []struct {
 		name, query string
@@ -114,4 +121,19 @@ func TestInboxStreamIndexedLifecycleMatchesPayloadRules(t *testing.T) {
 		}
 		check(mutation.name)
 	}
+	for pass := 0; pass < 100; pass++ {
+		done, err := env.workspace.MaintainInboxLifecycleBatch(ctx, 2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		check("maintenance partial")
+		if done {
+			break
+		}
+		if pass == 99 {
+			t.Fatal("maintenance did not finish")
+		}
+	}
+	check("maintenance complete")
+
 }

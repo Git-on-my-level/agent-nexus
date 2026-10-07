@@ -593,6 +593,7 @@ func main() {
 	serverErr := make(chan error, 1)
 	maintenanceCtx, maintenanceCancel := context.WithCancel(context.Background())
 	defer maintenanceCancel()
+	go workspace.RunInboxLifecycleMaintenance(maintenanceCtx, func(err error) { fmt.Fprintf(os.Stderr, "inbox lifecycle maintenance: %v\n", err) })
 	if projectionMode == server.ProjectionModeBackground {
 		go projectionMaintainer.Run(maintenanceCtx)
 	}

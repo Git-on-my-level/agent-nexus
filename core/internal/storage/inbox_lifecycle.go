@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Lifecycle is a rebuildable projection, never an authorization grant. Keep it
@@ -25,24 +26,28 @@ func indexInboxLifecycle(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 	}
+	ready, err := sqliteTableHasColumn(ctx, tx, "derived_inbox_items", "lifecycle_ready")
+	if err != nil {
+		return err
+	}
+	if !ready {
+		if _, err = tx.ExecContext(ctx, `ALTER TABLE derived_inbox_items ADD COLUMN lifecycle_ready INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
 	statements := []string{
-		`CREATE INDEX IF NOT EXISTS idx_work_metadata_project_ref ON work_metadata(json_extract(metadata_json,'$.project_ref'),card_id)`,
+
 		`CREATE TABLE IF NOT EXISTS inbox_lifecycle_refs(inbox_id TEXT NOT NULL,ref TEXT NOT NULL,PRIMARY KEY(inbox_id,ref)) WITHOUT ROWID`,
 		`CREATE INDEX IF NOT EXISTS idx_inbox_lifecycle_ref ON inbox_lifecycle_refs(ref,inbox_id)`,
 		`CREATE TABLE IF NOT EXISTS inbox_hidden_subject_refs(owner_kind TEXT NOT NULL,owner_id TEXT NOT NULL,ref TEXT NOT NULL,PRIMARY KEY(owner_kind,owner_id,ref)) WITHOUT ROWID`,
 		`CREATE INDEX IF NOT EXISTS idx_inbox_hidden_subject_ref ON inbox_hidden_subject_refs(ref)`,
 		`CREATE TABLE IF NOT EXISTS inbox_lifecycle_dirty(inbox_id TEXT PRIMARY KEY) WITHOUT ROWID`,
-		`DELETE FROM inbox_lifecycle_dirty`,
+		`CREATE TABLE IF NOT EXISTS inbox_lifecycle_job(singleton INTEGER PRIMARY KEY CHECK(singleton=1),phase INTEGER NOT NULL DEFAULT 0,cursor TEXT NOT NULL DEFAULT '',owners_ready INTEGER NOT NULL DEFAULT 0,done INTEGER NOT NULL DEFAULT 0)`,
+		`INSERT OR IGNORE INTO inbox_lifecycle_job(singleton,phase,owners_ready,done) SELECT 1,CASE WHEN populated THEN 0 ELSE 5 END,NOT populated,NOT populated FROM (SELECT (EXISTS(SELECT 1 FROM boards LIMIT 1) OR EXISTS(SELECT 1 FROM documents LIMIT 1) OR EXISTS(SELECT 1 FROM threads LIMIT 1) OR EXISTS(SELECT 1 FROM topics LIMIT 1) OR EXISTS(SELECT 1 FROM cards LIMIT 1) OR EXISTS(SELECT 1 FROM derived_inbox_items LIMIT 1)) AS populated)`,
+		`DROP TRIGGER IF EXISTS access_epoch_derived_inbox_items_update`,
+		`CREATE TRIGGER access_epoch_derived_inbox_items_update AFTER UPDATE OF id,thread_id,category,trigger_at,due_at,has_due_at,source_event_id,source_card_id,generated_at,data_json,source_hash ON derived_inbox_items BEGIN UPDATE resource_access_epoch SET version=version+1 WHERE singleton=1; END`,
 		`DROP VIEW IF EXISTS inbox_lifecycle_subjects`,
 		inboxLifecycleSubjectsView(),
-		`DELETE FROM inbox_lifecycle_refs`,
-		`INSERT OR IGNORE INTO inbox_lifecycle_refs ` + inboxLifecycleRefsSQL("1=1"),
-		`DELETE FROM inbox_hidden_subject_refs`,
-		`INSERT OR IGNORE INTO inbox_hidden_subject_refs SELECT owner_kind,owner_id,ref FROM inbox_lifecycle_subjects`,
-		`UPDATE derived_inbox_items SET lifecycle_hidden=` + inboxLifecycleHiddenSQL(),
-		`CREATE INDEX IF NOT EXISTS idx_inbox_all_category_page ON derived_inbox_items(CASE anx_unicode_trim(category) WHEN 'escalate' THEN 0 WHEN 'ask' THEN 1 WHEN 'review' THEN 2 ELSE 99 END,trigger_at DESC,id ASC)`,
-		`DROP INDEX IF EXISTS idx_inbox_category_page`,
-		`CREATE INDEX idx_inbox_category_page ON derived_inbox_items(CASE anx_unicode_trim(category) WHEN 'escalate' THEN 0 WHEN 'ask' THEN 1 WHEN 'review' THEN 2 ELSE 99 END,trigger_at DESC,id ASC) WHERE lifecycle_hidden=0`,
 	}
 	for _, q := range statements {
 		if _, err = tx.ExecContext(ctx, q); err != nil {
@@ -56,7 +61,7 @@ func indexInboxLifecycle(ctx context.Context, tx *sql.Tx) error {
 		}
 		body := `DELETE FROM inbox_lifecycle_refs WHERE inbox_id=NEW.id;
  INSERT OR IGNORE INTO inbox_lifecycle_refs ` + inboxLifecycleRefsSQL("i.id=NEW.id") + `;
- UPDATE derived_inbox_items SET lifecycle_hidden=` + inboxLifecycleHiddenSQL() + ` WHERE id=NEW.id;`
+ UPDATE derived_inbox_items SET lifecycle_hidden=` + inboxLifecycleHiddenSQL() + `,lifecycle_ready=(SELECT owners_ready FROM inbox_lifecycle_job WHERE singleton=1) WHERE id=NEW.id;`
 		if strings.HasPrefix(event, "UPDATE") {
 			body = `DELETE FROM inbox_lifecycle_refs WHERE inbox_id=OLD.id;` + body
 		}
@@ -91,7 +96,7 @@ func indexInboxLifecycle(ctx context.Context, tx *sql.Tx) error {
  DELETE FROM inbox_hidden_subject_refs WHERE ` + owners + `;
  INSERT OR IGNORE INTO inbox_hidden_subject_refs SELECT owner_kind,owner_id,ref FROM inbox_lifecycle_subjects WHERE ` + owners + `;
  INSERT OR IGNORE INTO inbox_lifecycle_dirty SELECT r.inbox_id FROM inbox_lifecycle_refs r JOIN inbox_hidden_subject_refs h ON h.ref=r.ref WHERE ` + owners + `;
- UPDATE derived_inbox_items SET lifecycle_hidden=` + inboxLifecycleHiddenSQL() + ` WHERE id IN (SELECT inbox_id FROM inbox_lifecycle_dirty);
+ UPDATE derived_inbox_items SET lifecycle_hidden=` + inboxLifecycleHiddenSQL() + `,lifecycle_ready=(SELECT owners_ready FROM inbox_lifecycle_job WHERE singleton=1) WHERE id IN (SELECT inbox_id FROM inbox_lifecycle_dirty);
  DELETE FROM inbox_lifecycle_dirty;`
 			triggerEvent := event
 			if event == "UPDATE" {
@@ -108,6 +113,22 @@ func indexInboxLifecycle(ctx context.Context, tx *sql.Tx) error {
 			if err = replaceInboxLifecycleTrigger(ctx, tx, "inbox_lifecycle_"+source.table+"_"+strings.ToLower(event), triggerEvent, source.table, body); err != nil {
 				return err
 			}
+		}
+	}
+	// The existing identity projection depends only on inbox ID. Avoid deleting
+	// and reinserting that identity (and bumping the ownership epoch) when only
+	// lifecycle maintenance columns change. Preserve the canonical trigger body.
+	var identityTrigger string
+	err = tx.QueryRowContext(ctx, `SELECT sql FROM sqlite_master WHERE type='trigger' AND name='mention_identity_derived_inbox_items_update'`).Scan(&identityTrigger)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	if err == nil && strings.Contains(identityTrigger, "AFTER UPDATE ON derived_inbox_items") {
+		if _, err = tx.ExecContext(ctx, `DROP TRIGGER mention_identity_derived_inbox_items_update`); err != nil {
+			return err
+		}
+		if _, err = tx.ExecContext(ctx, strings.Replace(identityTrigger, "AFTER UPDATE ON derived_inbox_items", "AFTER UPDATE OF id ON derived_inbox_items", 1)); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -149,4 +170,128 @@ func inboxLifecycleSubjectsView() string {
 		parts = append(parts, `SELECT '`+resource.kind+`' AS owner_kind,r.id AS owner_id,j.value AS ref FROM `+resource.table+` r,json_each(json_array('`+resource.kind+`:'||r.id,CASE WHEN COALESCE(`+handle+`,'')<>'' THEN '`+resource.kind+`:'||`+handle+` END,CASE WHEN COALESCE(`+thread+`,'')<>'' THEN 'thread:'||`+thread+` END)) j WHERE j.value IS NOT NULL AND (`+hidden+`)`)
 	}
 	return `CREATE VIEW inbox_lifecycle_subjects AS ` + strings.Join(parts, " UNION ALL ")
+}
+
+// MaintainInboxLifecycleBatch advances a durable keyset cursor in a short write
+// transaction. Startup installs only empty-table DDL and triggers; readiness is
+// independent of this maintenance. Pending rows use canonical lifecycle reads.
+func (w *Workspace) MaintainInboxLifecycleBatch(ctx context.Context, limit int) (bool, error) {
+	if limit < 1 || limit > 200 {
+		limit = 200
+	}
+	tx, err := w.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	var phase, done int
+	var cursor string
+	if err = tx.QueryRowContext(ctx, `SELECT phase,cursor,done FROM inbox_lifecycle_job WHERE singleton=1`).Scan(&phase, &cursor, &done); err != nil {
+		return false, err
+	}
+	if done != 0 {
+		return true, nil
+	}
+	sources := []struct{ table, kind string }{{"boards", "board"}, {"documents", "document"}, {"threads", "thread"}, {"topics", "topic"}, {"cards", "card"}, {"derived_inbox_items", "inbox"}}
+	source := sources[phase]
+	rows, err := tx.QueryContext(ctx, "SELECT id FROM "+source.table+" WHERE id>? ORDER BY id LIMIT ?", cursor, limit)
+	if err != nil {
+		return false, err
+	}
+	ids := []any{}
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			rows.Close()
+			return false, err
+		}
+		ids = append(ids, id)
+		cursor = id
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return false, err
+	}
+	if len(ids) > 0 {
+		marks := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+		if source.kind == "inbox" {
+			if _, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO inbox_lifecycle_refs `+inboxLifecycleRefsSQL("i.id IN ("+marks+")"), append(append([]any{}, ids...), ids...)...); err != nil {
+				return false, err
+			}
+			_, err = tx.ExecContext(ctx, `UPDATE derived_inbox_items SET lifecycle_hidden=`+inboxLifecycleHiddenSQL()+`,lifecycle_ready=1 WHERE id IN (`+marks+`)`, ids...)
+		} else {
+			_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO inbox_hidden_subject_refs SELECT owner_kind,owner_id,ref FROM inbox_lifecycle_subjects WHERE owner_kind='`+source.kind+`' AND owner_id IN (`+marks+`)`, ids...)
+		}
+		if err != nil {
+			return false, err
+		}
+	}
+	if len(ids) < limit {
+		phase++
+		cursor = ""
+	}
+	done = 0
+	if phase == len(sources) {
+		done = 1
+		phase = len(sources) - 1
+	}
+	ownersReady := 0
+	if phase >= len(sources)-1 {
+		ownersReady = 1
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE inbox_lifecycle_job SET phase=?,cursor=?,owners_ready=?,done=? WHERE singleton=1`, phase, cursor, ownersReady, done); err != nil {
+		return false, err
+	}
+	if err = tx.Commit(); err != nil {
+		return false, err
+	}
+	return done != 0, nil
+}
+
+// RunInboxLifecycleMaintenance is owned by the server's maintenance context.
+// Cancellation interrupts the current batch; committed cursors survive restart.
+func (w *Workspace) RunInboxLifecycleMaintenance(ctx context.Context, report func(error)) {
+	timer := time.NewTicker(50 * time.Millisecond)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+			done, err := w.MaintainInboxLifecycleBatch(ctx, 200)
+			if err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				if report != nil {
+					report(err)
+				}
+			} else if done {
+				return
+			}
+		}
+	}
+}
+
+// Unreleased67 previews may already be marked applied without the readiness
+// column. Reconcile only missing metadata, never rebuild their populated state.
+func reconcileInboxLifecyclePreview(ctx context.Context, db *sql.DB) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	exists, err := sqliteTableExists(ctx, tx, "derived_inbox_items")
+	if err != nil || !exists {
+		return err
+	}
+	ready, err := sqliteTableHasColumn(ctx, tx, "derived_inbox_items", "lifecycle_ready")
+	if err != nil || ready {
+		return err
+	}
+	if err = indexInboxLifecycle(ctx, tx); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

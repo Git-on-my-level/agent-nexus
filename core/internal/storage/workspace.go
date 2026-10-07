@@ -87,6 +87,11 @@ func InitializeWorkspace(ctx context.Context, workspaceRoot string) (*Workspace,
 		return nil, err
 	}
 
+	if err := reconcileInboxLifecyclePreview(ctx, db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+
 	succeeded = true
 	return &Workspace{layout: layout, db: db, processLock: processLock}, nil
 }
