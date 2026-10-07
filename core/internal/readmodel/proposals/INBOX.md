@@ -86,8 +86,12 @@ request 645 SQL/1,510 rows) fail 500 ms /100 SQL/1,024 rows. A's new batch
 repository subtotal is 7 SQL/527 rows. Its SCA-661 preparation probes still fail:
 1x cold/revoked 1.128s/0.962s, 10x 47.914s/45.025s, dominated by legacy denial
 construction. See `docs/design/scope-batch-evidence.md`; those probes omit full
-HTTP/count/fallback acceptance. BLOB batching, disjointness, legacy preparation,
-notification/freshness enrichment and all HTTP overhead must pass together.
+HTTP/count/fallback acceptance. The coordinator has stopped graph-on-request
+bridge certification: certify legacy equivalence off-request, then serve certified
+inbox generations under bounded scope authority. BLOB batching, disjointness,
+notification/freshness enrichment and all HTTP overhead must pass together
+without hidden legacy graph construction. Measure missing/stale-proof fallback
+rate and complete latency separately; see the revised phase-two plan.
 
 A's dispatcher isolation, trusted provenance and hook-SQL allowlisting, complete
 capture/receipt/epoch coverage, C's derivation/INFO wiring, D's supervised loader,

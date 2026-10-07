@@ -21,18 +21,20 @@ proof gates are in [the phase-two implementation plan](scope-phase-two.md).
    authoritative. Remove automatic legacy blob backfill before listen; unknown
    manifests remain denied, and missing historical content is unavailable with
    no retry worker. No production reader uses a partly backfilled table.
-2. **Read models first, when proven equivalent:** build inbox/work/Overview feeds
-   and synchronous counter deltas in the background. Enable a scope generation
-   only after its audience, lifecycle and projection parity are verified. Keep
-   current authorization during this bridge. The verified generation must prove
-   uniform legacy visibility within each selected scope before paging and counts;
-   no post-LIMIT privacy filter or scan-until-P loop is allowed. A generation
-   without that proof stays on the old reader and makes no new cost claim.
-   If legacy authorization preparation still exceeds SCA-661 budgets, do not
-   claim a speed win or enable that bridge reader; SCA-665 remains the early fix.
+2. **Inbox scope authority first, when proven equivalent:** construct and verify
+   the complete generation off-request against existing policy. Certified inbox
+   requests use only bounded scope/grant/proof admission, never legacy denial
+   construction. Missing/stale proof retains legacy fallback with measured
+   coverage and latency. The current graph-on-request bridge fails cold/revoked
+   scale gates and will not receive further certification work. Follow the
+   phase-two plan for complete capture/invalidation, closed inbox computation,
+   exact field/count parity and mixed-selection fallback before enablement.
+   Overview follows inbox; no general scope semantics change is implied.
 3. **Complete semantic cutover:** all canonical writes, guarded references,
-   explicit publication, search, SSE and derivation analyzer enforcement must be
-   ready together before selecting the new authority. Retire the graph only after
+   explicit publication, search, SSE and full derivation analyzer enforcement
+   must be ready before general new-authority selection. The preceding inbox-only
+   serving exception preserves legacy semantics through persisted parity proof
+   and its own mandatory isolation/provenance gates. Retire the graph only after
    privacy, query cost, migration interruption and forward-binary recovery gates.
 
 Thin-prototype tests become production regressions in their owning streams. They
