@@ -239,6 +239,12 @@ UI_ORG_SLUG="${ANX_DEFAULT_ORGANIZATION:-local}"
   cd "$ROOT_DIR/cli"
   go build -o "$CLI_BIN" ./cmd/anx )
 
+# Exercise host enrollment flag parsing with a token that begins with a hyphen.
+# --plan keeps this regression check local and avoids sending the token anywhere.
+HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" host enroll \
+  --name smoke-token-parser --token=-smoke-leading-hyphen --plan \
+  >"$TMP_DIR/token-flag-regression.json"
+
 EXPECTED_VERSION="$("${ROOT_DIR}/scripts/read-version.sh")"
 MIN_CLI_VERSION="$(sed -n 's/^const MinCompatibleCLI = "\([^"]*\)"$/\1/p' "${ROOT_DIR}/core/internal/buildinfo/compatibility.go")"
 if [[ -z "${MIN_CLI_VERSION}" ]]; then
@@ -330,7 +336,7 @@ HUMAN_TOKEN="$(json_get "$TMP_DIR/human.json" 'tokens.access_token')"
 TOKEN_EXPIRY="$(node -e 'process.stdout.write(new Date(Date.now()+20*60*1000).toISOString())')"
 curl -fsS -H 'Content-Type: application/json' -H "Authorization: Bearer $HUMAN_TOKEN" -d "{\"label\":\"Smoke host\",\"expires_at\":\"$TOKEN_EXPIRY\"}" "$CORE_BASE_URL/auth/hosts/enrollment-tokens" >"$TMP_DIR/enrollment-token.json"
 ENROLLMENT_TOKEN="$(json_get "$TMP_DIR/enrollment-token.json" 'token')"
-run_cli_json "$TMP_DIR/enroll.json" host enroll --name smoke-host --token "$ENROLLMENT_TOKEN"
+run_cli_json "$TMP_DIR/enroll.json" host enroll --name smoke-host --token="$ENROLLMENT_TOKEN"
 run_cli_json "$TMP_DIR/whoami.json" auth whoami
 run_cli_json "$TMP_DIR/host-token.json" host token --as "$AGENT_NAME"
 run_cli_json "$TMP_DIR/topics-list-before.json" topics list
