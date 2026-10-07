@@ -332,7 +332,7 @@ const adapterCommandTable = [
     "workspace.dashboard.list",
     (filters = {}) => ({ options: q(filters) }),
   ],
-  ["getOverview", "overview.get", () => ({})],
+  ["getOverview", "overview.get", (filters = {}) => ({ options: q(filters) })],
   [
     "setWorkspaceDashboard",
     "workspace.dashboard.set",

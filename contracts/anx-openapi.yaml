@@ -4874,6 +4874,12 @@ paths:
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
       x-anx-concepts: [home, documents, cards]
       x-anx-stability: beta
+      parameters:
+        - name: work_view
+          in: query
+          required: false
+          schema: { type: string, enum: [full, summary], default: full }
+          description: Summary returns compact work items for Overview tiles, retaining identity, source, phase, owner, freshness and next-step fields plus blocker_count. Full is backward compatible; read /work/{card_ref} for complete work details.
       responses:
         '200':
           description: Workspace projection
@@ -11893,7 +11899,7 @@ components:
             human_count: { type: integer }
             items: { type: array, items: { $ref: '#/components/schemas/Work' } }
             truncated: { type: boolean }
-          description: Visible active work from at most 100 open and 100 closed visit candidates, prioritizing open work; counts describe the bounded visible set. Use /work to page through further initiatives.
+          description: Visible active work from at most 100 open and 100 closed visit candidates, prioritizing open work; counts describe the bounded visible set. With work_view=summary, optional full-detail fields are omitted from items. Use /work to page through further initiatives and /work/{card_ref} for full details.
         initiatives:
           type: object
           required: [status, count, items]

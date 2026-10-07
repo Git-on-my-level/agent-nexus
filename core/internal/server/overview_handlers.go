@@ -85,6 +85,14 @@ func handleSetWorkspaceDashboard(w http.ResponseWriter, r *http.Request, opts ha
 }
 
 func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+	view := r.URL.Query().Get("work_view")
+	if view != "" && view != "full" && view != "summary" {
+		writeError(w, 400, "invalid_request", "work_view must be full or summary")
+		return
+	}
+	if view == "summary" {
+		r = r.WithContext(primitives.WithOverviewWorkSummary(r.Context()))
+	}
 	store, ok := opts.primitiveStore.(overviewStore)
 	if !ok {
 		writeError(w, 503, "overview_unavailable", "overview store is not configured")
@@ -235,5 +243,10 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		addServerTiming(w, "visit", stage)
 	}
 	w.Header().Set("Cache-Control", "no-store")
+	if view == "summary" {
+		for i, item := range public {
+			public[i] = compactOverviewWork(item)
+		}
+	}
 	writeJSON(w, 200, payload)
 }
