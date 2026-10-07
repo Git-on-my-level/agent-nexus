@@ -7531,12 +7531,12 @@ paths:
         - name: last_event_id
           in: query
           required: false
-          description: Resume after this receipt stream event id (alternative to `Last-Event-ID` header).
+          description: Resume after this receipt stream event id (alternative to the `Last-Event-ID` header; the header wins when both are set). A currently visible untrashed receipt continues after that receipt in snapshot order. Private, unknown, and trashed ids are indistinguishable and start at the current head, without replaying earlier receipts.
           schema: { type: string }
         - name: Last-Event-ID
           in: header
           required: false
-          description: SSE standard resume header (alternative to `last_event_id` query).
+          description: SSE resume header (preferred over the `last_event_id` query). A currently visible untrashed receipt continues after that receipt in snapshot order. Private, unknown, and trashed ids are indistinguishable and start at the current head, without replaying earlier receipts.
           schema: { type: string }
       responses:
         '200':

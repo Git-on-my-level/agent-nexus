@@ -1,12 +1,14 @@
 package server
 
 import (
+	"context"
 	"crypto/sha1"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -304,6 +306,8 @@ func handleInboxStream(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	}
 }
 
+var errReceiptStreamDenied = errors.New("receipt stream thread denied")
+
 func handleAgentNotificationReceiptsStream(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
@@ -325,71 +329,142 @@ func handleAgentNotificationReceiptsStream(w http.ResponseWriter, r *http.Reques
 	}
 
 	lastEventID := resolveLastEventID(r)
+	cursor, err := opts.primitiveStore.ReceiptStreamCursor(r.Context(), threadID, lastEventID, func(wakeup primitives.AgentWakeup) bool {
+		return receiptStreamEventID(wakeup) == lastEventID
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to initialize agent notification receipt stream")
+		return
+	}
+
 	controller, flusher, ok := prepareSSE(w)
 	if !ok {
 		writeError(w, http.StatusInternalServerError, "stream_unavailable", "streaming is not supported by this server")
 		return
 	}
 
+	// Only the handler writes SSE frames. One scanner keeps page reads from
+	// postponing keepalives. Requests never overlap, and each chunk examines a
+	// fixed number of candidates. The database connection is released between pages.
+	scanCtx, cancelScan := context.WithCancel(r.Context())
+	requests := make(chan struct{}, 1)
+	type scanResult struct {
+		page primitives.ReceiptStreamPage
+		err  error
+	}
+	results := make(chan scanResult)
+	scanDone := make(chan struct{})
+	go func() {
+		defer close(scanDone)
+		for {
+			select {
+			case <-scanCtx.Done():
+				return
+			case <-requests:
+			}
+			var result scanResult
+			for candidates := 0; candidates < primitives.ReceiptStreamChunkCandidateBudget; candidates += primitives.ReceiptStreamPageSize {
+				if scanCtx.Err() != nil {
+					result.err = scanCtx.Err()
+					break
+				}
+				if !threadAccessible(r, opts, threadID) {
+					result.err = errReceiptStreamDenied
+					break
+				}
+				result.page, result.err = opts.primitiveStore.ListReceiptStreamPage(scanCtx, threadID, cursor)
+				if result.err != nil {
+					break
+				}
+				cursor = result.page.Cursor
+				if len(result.page.Wakeups) != 0 || !result.page.HasMore {
+					break
+				}
+			}
+			select {
+			case <-scanCtx.Done():
+				return
+			case results <- result:
+			}
+		}
+	}()
+	defer func() { cancelScan(); <-scanDone }()
+
 	lastDigestByWakeup := map[string]string{}
-	firstPoll := true
 	ticker := time.NewTicker(opts.streamPollInterval)
 	defer ticker.Stop()
-
-	for {
-		// A long-lived connection must stop exposing receipts if access changes.
-		if !threadAccessible(r, opts, threadID) {
-			writeSSEErrorEvent(controller, w, flusher, "not_found", "thread not found")
-			return
-		}
-		wakeups, err := opts.primitiveStore.ListAgentWakeups(r.Context(), primitives.AgentWakeupListFilter{
-			ThreadID: threadID,
-			Order:    "asc",
-		})
-		if err != nil {
-			writeSSEErrorEvent(controller, w, flusher, "internal_error", "failed to load agent notification receipts for stream")
-			return
-		}
-		allRecords := buildAgentNotificationReceiptStreamRecords(wakeups)
-		records := allRecords
-		if firstPoll {
-			records = notificationReceiptRecordsAfterID(records, lastEventID)
-			firstPoll = false
-		}
-
-		sentAny := false
-		currentDigestByWakeup := make(map[string]string, len(allRecords))
-		for _, record := range allRecords {
-			currentDigestByWakeup[record.wakeupID] = record.digest
-		}
-		for _, record := range records {
-			previousDigest, seen := lastDigestByWakeup[record.wakeupID]
-			if seen && previousDigest == record.digest {
-				continue
-			}
-
-			if err := writeSSEEvent(controller, w, record.eventID, "notification_receipt", map[string]any{"receipt": record.data}); err != nil {
-				clearSSEWriteDeadline(controller)
-				return
-			}
-			sentAny = true
-		}
-		lastDigestByWakeup = currentDigestByWakeup
-
-		if !sentAny {
-			if err := writeSSEKeepalive(controller, w); err != nil {
-				clearSSEWriteDeadline(controller)
-				return
-			}
+	keepalive := func() bool {
+		if err := writeSSEKeepalive(controller, w); err != nil {
+			clearSSEWriteDeadline(controller)
+			return false
 		}
 		flushSSE(controller, flusher)
-
+		return true
+	}
+	if !keepalive() {
+		return
+	}
+	requests <- struct{}{}
+	scanning := true
+	for {
 		select {
 		case <-r.Context().Done():
 			return
 		case <-ticker.C:
+			if !keepalive() {
+				return
+			}
+			if !scanning {
+				requests <- struct{}{}
+				scanning = true
+			}
+		case result := <-results:
+			scanning = false
+			if r.Context().Err() != nil {
+				return
+			}
+			if result.err != nil {
+				if errors.Is(result.err, errReceiptStreamDenied) {
+					writeSSEErrorEvent(controller, w, flusher, "not_found", "thread not found")
+					return
+				}
+				if errors.Is(result.err, context.Canceled) {
+					return
+				}
+				writeSSEErrorEvent(controller, w, flusher, "internal_error", "failed to load agent notification receipts for stream")
+				return
+			}
+			sentAny := false
+			for _, record := range buildAgentNotificationReceiptStreamRecords(result.page.Wakeups) {
+				previous, seen := lastDigestByWakeup[record.wakeupID]
+				lastDigestByWakeup[record.wakeupID] = record.digest
+				if seen && previous == record.digest {
+					continue
+				}
+				if err := writeSSEEvent(controller, w, record.eventID, "notification_receipt", map[string]any{"receipt": record.data}); err != nil {
+					clearSSEWriteDeadline(controller)
+					return
+				}
+				sentAny = true
+			}
+			if sentAny {
+				flushSSE(controller, flusher)
+			}
+			if result.page.HasMore {
+				runtime.Gosched()
+				requests <- struct{}{}
+				scanning = true
+			}
 		}
 	}
+}
+
+func receiptStreamEventID(wakeup primitives.AgentWakeup) string {
+	records := buildAgentNotificationReceiptStreamRecords([]primitives.AgentWakeup{wakeup})
+	if len(records) == 0 {
+		return ""
+	}
+	return records[0].eventID
 }
 
 type inboxStreamRecord struct {
@@ -452,22 +527,6 @@ func buildAgentNotificationReceiptStreamRecords(wakeups []primitives.AgentWakeup
 			digest:   digest,
 			data:     payload,
 		})
-	}
-	return records
-}
-
-func notificationReceiptRecordsAfterID(records []notificationReceiptStreamRecord, lastEventID string) []notificationReceiptStreamRecord {
-	lastEventID = strings.TrimSpace(lastEventID)
-	if lastEventID == "" {
-		return records
-	}
-	for index, record := range records {
-		if record.eventID == lastEventID {
-			if index+1 >= len(records) {
-				return []notificationReceiptStreamRecord{}
-			}
-			return records[index+1:]
-		}
 	}
 	return records
 }

@@ -543,22 +543,6 @@ func TestAgentNotificationReceiptsStreamTracksWakeupStatus(t *testing.T) {
 	}
 }
 
-func TestNotificationReceiptRecordsAfterIDResumesAfterCursor(t *testing.T) {
-	requireIntegrationTest(t)
-	records := []notificationReceiptStreamRecord{
-		{eventID: "receipt:wake-1@aaa", wakeupID: "wake-1", digest: "aaa"},
-		{eventID: "receipt:wake-2@bbb", wakeupID: "wake-2", digest: "bbb"},
-	}
-	got := notificationReceiptRecordsAfterID(records, "receipt:wake-2@bbb")
-	if len(got) != 0 {
-		t.Fatalf("expected no replay when cursor is latest record, got %#v", got)
-	}
-	got = notificationReceiptRecordsAfterID(records, "receipt:wake-1@aaa")
-	if len(got) != 1 || got[0].eventID != "receipt:wake-2@bbb" {
-		t.Fatalf("expected records after first id, got %#v", got)
-	}
-}
-
 type notificationTestAgent struct {
 	AccessToken string
 	ActorID     string
