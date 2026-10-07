@@ -32,8 +32,9 @@ func exactValueCheckSQL() string {
  AND NOT (i.kind='card' AND (i.ref LIKE 'http://%' OR i.ref LIKE 'https://%'))
  UNION ALL
  SELECT 1 FROM json_each(?) j CROSS JOIN main.resource_access_identities i
- JOIN _anx_denied d ON d.kind='card' AND d.kind=i.kind AND d.id=i.resource_id
- WHERE i.kind='card' AND (i.ref LIKE 'http://%' OR i.ref LIKE 'https://%')
+ JOIN _anx_denied d ON d.kind=i.kind AND d.id=i.resource_id
+ WHERE i.kind IN ('card','external_key')
+ AND (i.kind='external_key' OR i.ref LIKE 'http://%' OR i.ref LIKE 'https://%')
  AND ` + resourceaccess.AtomKeySQL("i.ref") + `=` + resourceaccess.AtomKeySQL("j.value") + `
  UNION ALL
  SELECT 1 FROM json_each(?) j CROSS JOIN main.work_metadata m
