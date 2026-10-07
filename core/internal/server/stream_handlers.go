@@ -365,12 +365,15 @@ func handleInboxStream(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			}
 			sentAny = true
 		}
-		lastDigestByItem = currentDigestByItem
+		// Retain earlier pages so the next sweep can suppress unchanged items.
+		for itemID, digest := range currentDigestByItem {
+			lastDigestByItem[itemID] = digest
+		}
 		if page.More {
 			filter.BeforeCategory = primitives.InboxCategoryRank(page.Last.Category)
 			filter.BeforeTrigger = page.Last.TriggerAt
 			filter.BeforeID = page.Last.ID
-			partialSweep = true
+			partialSweep = partialSweep || sentAny
 		} else {
 			filter = primitives.DerivedInboxListFilter{}
 		}

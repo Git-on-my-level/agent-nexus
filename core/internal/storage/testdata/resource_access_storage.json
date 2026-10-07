@@ -2191,7 +2191,7 @@
     "../server/stream_handlers.go:eventActorIDsForKind": "728326f05609e5aa9b1c038ad58c700a2095dfbac9c7ed67b4d539ecf1940a86",
     "../server/stream_handlers.go:handleAgentNotificationReceiptsStream": "fa67a5fa2847d408d53eff5aa726fc85f13543a503826649a500ef30921293fe",
     "../server/stream_handlers.go:handleEventsStream": "73baf8dc75843e4147e1cd317568aa1d990329d866a7a4167e9dae4845962669",
-    "../server/stream_handlers.go:handleInboxStream": "2069bf8df688ebd76e4c9bd245f892ddeaf58a78d8aa6d6a51e5f7beb3c5c006",
+    "../server/stream_handlers.go:handleInboxStream": "13c496b6e902bf80278f6c00b728567a721ab6f6bc05f083b5b84e8e1d326bee",
     "../server/stream_handlers.go:handleListEvents": "bc86466808b5f652ae07736e56abcd6c2dad8e19b14c687b03a751eac81eab79",
     "../server/stream_handlers.go:parseBackingScope": "4394df739ced72916f52a9e948a58af345a9f4e3386e0a744e16a066dca09c87",
     "../server/stream_handlers.go:parseEventGroupFilters": "9996cf20b7802dd1a196d05d923ba5c1b95ce73390640b07d99cacf154bc73c7",

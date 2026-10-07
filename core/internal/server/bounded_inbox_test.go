@@ -104,6 +104,65 @@ func TestInboxStreamDeliversAllAuthorizedItemsAcrossPages(t *testing.T) {
 	}
 }
 
+func TestInboxStreamGoesIdleAfterMultiPageDelivery(t *testing.T) {
+	requireIntegrationTest(t)
+	h := newMetaStreamTestHarness(t, WithStreamPollInterval(20*time.Millisecond))
+	store := h.primitiveStore.(*primitives.Store)
+	thread := seedStreamPrivacyThread(t, store, "idle-owner", false)
+	items := make([]primitives.DerivedInboxItem, 405)
+	for i := range items {
+		items[i] = streamPrivacyInboxItem(thread, fmt.Sprintf("idle-%03d", i), "Unchanged")
+	}
+	seedStreamPrivacyInbox(t, store, thread, items...)
+	resp := openSSEStream(t, h.baseURL+"/stream/inbox", "")
+	events, stop := startSSEReader(resp.Body)
+	defer stop()
+	seen := map[string]bool{}
+	complete := false
+	for !complete {
+		event := awaitSSEEvent(t, events, 5*time.Second)
+		switch event.Event {
+		case "inbox_item":
+			item := event.Data["item"].(map[string]any)
+			id := anyString(item["id"])
+			if !strings.HasPrefix(id, "idle-") || seen[id] {
+				t.Fatalf("unexpected or repeated initial item: %s", id)
+			}
+			seen[id] = true
+		case "inbox_page":
+			if event.Data["partial"] == false {
+				if len(seen) != len(items) {
+					t.Fatalf("initial delivery: got %d items, want %d", len(seen), len(items))
+				}
+				complete = true
+			}
+		default:
+			t.Fatalf("unexpected event: %+v", event)
+		}
+	}
+	// Cover several complete sweeps, not just the next page. Keepalive
+	// comments are allowed; unchanged item and progress frames are not.
+	select {
+	case event := <-events:
+		t.Fatalf("idle inbox emitted a frame after complete delivery: %+v", event)
+	case <-time.After(400 * time.Millisecond):
+	}
+	// Remembered digests must still allow a changed item on an earlier page.
+	items[0].Data["body"] = "Changed"
+	seedStreamPrivacyInbox(t, store, thread, items...)
+	for {
+		event := awaitSSEEvent(t, events, 5*time.Second)
+		if event.Event == "inbox_page" {
+			continue
+		}
+		item, ok := event.Data["item"].(map[string]any)
+		if event.Event != "inbox_item" || !ok || anyString(item["id"]) != items[0].ID || anyString(item["body"]) != "Changed" {
+			t.Fatalf("expected only the changed item: %+v", event)
+		}
+		break
+	}
+}
+
 func TestOpenInboxPagesKeepRankOrderAndPrincipalScope(t *testing.T) {
 	if testing.Short() {
 		t.Skip("full HTTP/storage fixture")
