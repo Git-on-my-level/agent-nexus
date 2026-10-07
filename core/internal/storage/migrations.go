@@ -1024,7 +1024,9 @@ var migrations = []migration{
 	{Version: 64, AfterApply: applyMigration64BoardRole},
 	{Version: 65, AfterApply: applyMigration65EvidenceIndex},
 	{Version: 66, AfterApply: indexBoundedOverviewReads},
-	{Version: 67, AfterApply: indexInboxLifecycle},
+	{Version: 68, AfterApply: indexBoundedEventStreamReads},
+	// Migration 69 is reserved for #312.
+	{Version: 70, AfterApply: indexInboxLifecycle},
 }
 
 func repairNULReferenceAccess(ctx context.Context, tx *sql.Tx) error {

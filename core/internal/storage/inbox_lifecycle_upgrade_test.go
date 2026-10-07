@@ -31,7 +31,7 @@ func TestInboxLifecycleUpgradeDoesNotBackfillAtStartup(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// Remove only67's objects/columns to model a genuine66-era database.
+			// Remove only 70's objects/columns to model main's pre-inbox schema.
 			rows, err := w.DB().Query(`SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'inbox_lifecycle_%'`)
 			if err != nil {
 				t.Fatal(err)
@@ -55,7 +55,7 @@ func TestInboxLifecycleUpgradeDoesNotBackfillAtStartup(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			for _, q := range []string{`DROP VIEW inbox_lifecycle_subjects`, `DROP TABLE inbox_lifecycle_refs`, `DROP TABLE inbox_hidden_subject_refs`, `DROP TABLE inbox_lifecycle_dirty`, `DROP TABLE inbox_lifecycle_job`, `ALTER TABLE derived_inbox_items DROP COLUMN lifecycle_ready`, `ALTER TABLE derived_inbox_items DROP COLUMN lifecycle_hidden`, `DELETE FROM schema_migrations WHERE version=67`} {
+			for _, q := range []string{`DROP VIEW inbox_lifecycle_subjects`, `DROP TABLE inbox_lifecycle_refs`, `DROP TABLE inbox_hidden_subject_refs`, `DROP TABLE inbox_lifecycle_dirty`, `DROP TABLE inbox_lifecycle_job`, `ALTER TABLE derived_inbox_items DROP COLUMN lifecycle_ready`, `ALTER TABLE derived_inbox_items DROP COLUMN lifecycle_hidden`, `DELETE FROM schema_migrations WHERE version=70`} {
 				if _, err = w.DB().Exec(q); err != nil {
 					t.Fatal(err)
 				}

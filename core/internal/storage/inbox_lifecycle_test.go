@@ -2,6 +2,7 @@ package storage_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"agent-nexus-core/internal/primitives"
@@ -33,7 +34,7 @@ func TestInboxLifecycleMigrationBackfillsAndReplays(t *testing.T) {
 			`UPDATE inbox_lifecycle_job SET phase=0,cursor='',owners_ready=0,done=0`,
 			`DELETE FROM inbox_lifecycle_refs`,
 			`DELETE FROM inbox_hidden_subject_refs`,
-			`DELETE FROM schema_migrations WHERE version=67`,
+			`DELETE FROM schema_migrations WHERE version=70`,
 		} {
 			if _, err = w.DB().Exec(query); err != nil {
 				t.Fatal(err)
@@ -82,13 +83,29 @@ func TestInboxLifecycleMigrationBackfillsAndReplays(t *testing.T) {
 }
 
 func TestInboxLifecycleAppliedPreviewGetsReadinessMetadata(t *testing.T) {
+	for _, version := range []int{67, 70} {
+		t.Run(fmt.Sprint(version), func(t *testing.T) {
+			testInboxLifecycleAppliedPreviewGetsReadinessMetadata(t, version)
+		})
+	}
+}
+
+func testInboxLifecycleAppliedPreviewGetsReadinessMetadata(t *testing.T, version int) {
+	t.Helper()
 	ctx := context.Background()
 	root := t.TempDir()
 	w, err := storage.InitializeWorkspace(ctx, root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Keep67 applied while restoring the previous preview's column shape.
+	// Keep the preview's migration marker and #312's reserved 69 while restoring
+	// the old column shape. Neither marker may suppress migration 70.
+	if _, err = w.DB().Exec(`UPDATE schema_migrations SET version=? WHERE version=70`, version); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = w.DB().Exec(`INSERT INTO schema_migrations(version,applied_at) VALUES(69,CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatal(err)
+	}
 	rows, err := w.DB().Query(`SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'inbox_lifecycle_%'`)
 	if err != nil {
 		t.Fatal(err)
@@ -121,7 +138,10 @@ func TestInboxLifecycleAppliedPreviewGetsReadinessMetadata(t *testing.T) {
 	if err = w.DB().QueryRow(`SELECT COUNT(*) FROM pragma_table_info('derived_inbox_items') WHERE name='lifecycle_ready'`).Scan(&count); err != nil || count != 1 {
 		t.Fatalf("preview not reconciled: count=%d err=%v", count, err)
 	}
-	if err = w.DB().QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version=67`).Scan(&count); err != nil || count != 1 {
+	if err = w.DB().QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version=70`).Scan(&count); err != nil || count != 1 {
 		t.Fatalf("migration history changed: count=%d err=%v", count, err)
+	}
+	if err = w.DB().QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version IN (?,69)`, version).Scan(&count); err != nil || count != 2 {
+		t.Fatalf("existing migration markers changed: count=%d err=%v", count, err)
 	}
 }

@@ -128,7 +128,7 @@ TOKEN_EXPIRY="$(python3 -c 'import datetime; print((datetime.datetime.now(dateti
 ENROLLMENT_RESPONSE=$(curl -fsS -H 'content-type: application/json' -H "authorization: Bearer $HUMAN_TOKEN" -X POST \
   -d "{\"label\":\"Hosted smoke host\",\"expires_at\":\"$TOKEN_EXPIRY\"}" "$CORE_BASE_URL/auth/hosts/enrollment-tokens")
 ENROLLMENT_TOKEN="$(json_get "$ENROLLMENT_RESPONSE" token)"
-"$CLI_BIN" --json --base-url "$CORE_BASE_URL" --config-dir "$CONFIG_DIR" host enroll --name hosted-smoke --token "$ENROLLMENT_TOKEN" >"$TMP_DIR/host-enroll.json"
+"$CLI_BIN" --json --base-url "$CORE_BASE_URL" --config-dir "$CONFIG_DIR" host enroll --name hosted-smoke --token="$ENROLLMENT_TOKEN" >"$TMP_DIR/host-enroll.json"
 stop_background_process "$CORE_PID"
 unset ANX_ALLOW_PASSKEY_DEV_BYPASS
 rm -f "$WORKSPACE_ROOT/.anx-dev-insecure-auth"

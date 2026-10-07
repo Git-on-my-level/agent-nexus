@@ -5991,12 +5991,13 @@ export const commandRegistry = [
         "path": "/stream/events",
         "operation_id": "streamEvents",
         "summary": "Stream events (SSE)",
+        "description": "Starts at the current workspace head unless the supplied resume ID identifies a currently authorized-visible, untrashed event. Hidden, trashed and unknown IDs behave identically. Accepted IDs resume in chronological timestamp/ID order. Each scan reads pages of 200 candidates in chunks of at most 2000 candidates. Chunks with remaining positions continue immediately, yielding between chunks without waiting for the poll timer. Each chunk decodes at most one visible page; the scanner returns to normal polling only after reaching the head. Hidden and nonmatching positions advance only a connection-local cursor. Keepalive comments follow the polling timer regardless of hidden activity. A `resume` SSE marker with empty JSON data follows every 200 delivered visible events and repeats that visible ID; it does not indicate hidden backlog or carry internal progress.",
         "why": "Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.",
         "input_mode": "none",
         "streaming": {
             "mode": "sse"
         },
-        "output_envelope": "Each SSE message is `event: …` with JSON data `{ \"event\": \u003cevent\u003e }` (see core/docs/http-api.md).",
+        "output_envelope": "Resource messages use `event: event` with JSON data `{ \"event\": \u003cevent\u003e }`. A `resume` control has empty JSON data and is excluded from delivered-event counts (see core/docs/http-api.md).",
         "error_codes": [
             "auth_required",
             "invalid_request",

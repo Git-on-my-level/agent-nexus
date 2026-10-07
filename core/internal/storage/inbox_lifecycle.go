@@ -274,7 +274,7 @@ func (w *Workspace) RunInboxLifecycleMaintenance(ctx context.Context, report fun
 	}
 }
 
-// Unreleased67 previews may already be marked applied without the readiness
+// Earlier unreleased inbox previews may be marked applied without the readiness
 // column. Reconcile only missing metadata, never rebuild their populated state.
 func reconcileInboxLifecyclePreview(ctx context.Context, db *sql.DB) error {
 	tx, err := db.BeginTx(ctx, nil)

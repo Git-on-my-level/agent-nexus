@@ -1427,12 +1427,29 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 		)
 		return result, "boards get", callErr
 	case "patch":
-		id, body, dryRun, err := a.parseIDAndBodyInputWithOptions(args[1:], "board-id", "board id", "boards patch", jsonBodyInputOptions{allowDryRun: true})
+		id, body, dryRun, discoverUpdatedAt, err := a.parseIDAndBodyInputWithMetadata(args[1:], "board-id", "board id", "boards patch", jsonBodyInputOptions{allowDryRun: true})
 		if err != nil {
 			return nil, "boards patch", err
 		}
 		if dryRun {
 			return dryRunResult("boards patch", "boards.patch", map[string]string{"board_id": id}, nil, body), "boards patch", nil
+		}
+		if discoverUpdatedAt {
+			boardResult, getErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "boards get", "boards.get", "board_id", id, boardIDLookupSpec, nil, nil)
+			if getErr != nil {
+				return nil, "boards patch", getErr
+			}
+			boardBody := extractNestedMap(asMap(boardResult.Data), "body")
+			board := extractNestedMap(boardBody, "board")
+			updatedAt := strings.TrimSpace(anyString(board["updated_at"]))
+			if updatedAt == "" {
+				return nil, "boards patch", errnorm.Usage("invalid_request", "boards get response did not include board.updated_at; retry with --if-updated-at <updated_at>")
+			}
+			bodyMap, ok := body.(map[string]any)
+			if !ok {
+				return nil, "boards patch", errnorm.Usage("invalid_request", "board patch body must be an object")
+			}
+			bodyMap["if_updated_at"] = updatedAt
 		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(
 			ctx,
@@ -2861,16 +2878,22 @@ func (a *App) parseIDAndBodyInput(args []string, idFlag string, idLabel string, 
 }
 
 func (a *App) parseIDAndBodyInputWithOptions(args []string, idFlag string, idLabel string, commandName string, options jsonBodyInputOptions) (string, any, bool, error) {
+	id, body, dryRun, _, err := a.parseIDAndBodyInputWithMetadata(args, idFlag, idLabel, commandName, options)
+	return id, body, dryRun, err
+}
+
+func (a *App) parseIDAndBodyInputWithMetadata(args []string, idFlag string, idLabel string, commandName string, options jsonBodyInputOptions) (string, any, bool, bool, error) {
 	// Board role edits support the documented `boards patch <board> --role ...` form.
 	if commandName == "boards patch" && len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		args = append(append([]string{}, args[1:]...), args[0])
 	}
 	fs := newSilentFlagSet(commandName)
-	var idArgFlag, fromFileFlag, contentFileFlag, roleFlag trackedString
+	var idArgFlag, fromFileFlag, contentFileFlag, roleFlag, ifUpdatedAtFlag trackedString
 	var dryRunFlag trackedBool
 	fs.Var(&idArgFlag, idFlag, idLabel)
 	if commandName == "boards patch" {
 		fs.Var(&roleFlag, "role", "Board role; empty clears")
+		fs.Var(&ifUpdatedAtFlag, "if-updated-at", "Board updated_at concurrency token; use boards get when omitted")
 	}
 	fs.Var(&fromFileFlag, "from-file", "Advanced JSON body from file path or stdin with -")
 	if options.allowContentFile {
@@ -2880,7 +2903,7 @@ func (a *App) parseIDAndBodyInputWithOptions(args []string, idFlag string, idLab
 		fs.Var(&dryRunFlag, "dry-run", "Validate and render request without sending the mutation")
 	}
 	if err := fs.Parse(args); err != nil {
-		return "", nil, false, errnorm.Usage("invalid_flags", err.Error())
+		return "", nil, false, false, errnorm.Usage("invalid_flags", err.Error())
 	}
 	positionals := fs.Args()
 	id := strings.TrimSpace(idArgFlag.value)
@@ -2889,15 +2912,18 @@ func (a *App) parseIDAndBodyInputWithOptions(args []string, idFlag string, idLab
 		positionals = positionals[1:]
 	}
 	if err := validateID(id, idLabel); err != nil {
-		return "", nil, false, err
+		return "", nil, false, false, err
 	}
 	if len(positionals) > 0 {
-		return "", nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
+		return "", nil, false, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 	}
 	fromFile := strings.TrimSpace(fromFileFlag.value)
 	contentFile := strings.TrimSpace(contentFileFlag.value)
 	if !options.allowContentFile {
 		contentFile = ""
+	}
+	if commandName == "boards patch" && ifUpdatedAtFlag.set && strings.TrimSpace(ifUpdatedAtFlag.value) == "" {
+		return "", nil, false, false, errnorm.Usage("invalid_request", "--if-updated-at must not be empty")
 	}
 	var payload []byte
 	var err error
@@ -2909,41 +2935,49 @@ func (a *App) parseIDAndBodyInputWithOptions(args []string, idFlag string, idLab
 		payload, err = a.readBodyInput(fromFile)
 	}
 	if err != nil {
-		return "", nil, false, err
+		return "", nil, false, false, err
 	}
 	if len(payload) == 0 {
 		if options.allowContentOnly && contentFile != "" {
 			body := map[string]any{"content_type": "text"}
 			rawBody, err := a.applyContentFileOverride(body, contentFile, commandName)
 			if err != nil {
-				return "", nil, false, err
+				return "", nil, false, false, err
 			}
-			return id, rawBody, dryRunFlag.set && dryRunFlag.value, nil
+			return id, rawBody, dryRunFlag.set && dryRunFlag.value, false, nil
 		}
-		return "", nil, false, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body is required for `anx %s` (provide stdin or --from-file)", commandName))
+		return "", nil, false, false, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body is required for `anx %s` (provide stdin or --from-file)", commandName))
 	}
 	body, err := decodeJSONPayload(payload)
 	if err != nil {
-		return "", nil, false, err
+		return "", nil, false, false, err
 	}
 	if roleFlag.set {
 		object, ok := body.(map[string]any)
 		if !ok {
-			return "", nil, false, errnorm.Usage("invalid_request", "board patch body must be an object")
+			return "", nil, false, false, errnorm.Usage("invalid_request", "board patch body must be an object")
 		}
 		patch, ok := object["patch"].(map[string]any)
 		if !ok {
-			return "", nil, false, errnorm.Usage("invalid_request", "board patch body must include patch object")
+			return "", nil, false, false, errnorm.Usage("invalid_request", "board patch body must include patch object")
 		}
 		patch["role"] = strings.TrimSpace(roleFlag.value)
+	}
+	if commandName == "boards patch" && ifUpdatedAtFlag.set {
+		object, ok := body.(map[string]any)
+		if !ok {
+			return "", nil, false, false, errnorm.Usage("invalid_request", "board patch body must be an object")
+		}
+		object["if_updated_at"] = strings.TrimSpace(ifUpdatedAtFlag.value)
 	}
 	if options.allowContentFile {
 		body, err = a.applyContentFileOverride(body, contentFile, commandName)
 		if err != nil {
-			return "", nil, false, err
+			return "", nil, false, false, err
 		}
 	}
-	return id, body, dryRunFlag.set && dryRunFlag.value, nil
+	discoverUpdatedAt := commandName == "boards patch" && roleFlag.set && fromFile == "" && !ifUpdatedAtFlag.set
+	return id, body, dryRunFlag.set && dryRunFlag.value, discoverUpdatedAt, nil
 }
 
 func (a *App) parseBoardCardBoardScopedTarget(args []string, commandName string) (string, string, error) {

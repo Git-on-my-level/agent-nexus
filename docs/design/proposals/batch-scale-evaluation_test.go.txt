@@ -1,0 +1,167 @@
+// Evaluation-only harness: copy to scopedrepo with SCA-661 perfguard at db826a45.
+package scopedrepo_test
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"testing"
+	"time"
+
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/resourceaccess"
+	"agent-nexus-core/internal/scopedrepo"
+	"agent-nexus-core/internal/scopes"
+	"agent-nexus-core/internal/storage"
+	"agent-nexus-core/internal/testutil/perfguard"
+)
+
+func TestBatchSCA661Evaluation(t *testing.T) {
+	for _, scale := range []int{1, 10} {
+		t.Run(fmt.Sprintf("%dx", scale), func(t *testing.T) {
+			ctx := context.Background()
+			ws, e := storage.InitializeWorkspace(ctx, t.TempDir())
+			must(t, e)
+			defer ws.Close()
+			// Only corpus cardinality changes; no route budget or allowance pins change.
+			perfguard.Rows = 4096 * scale
+			perfguard.PMRows = 1024 * scale
+			must(t, perfguard.Seed(ctx, ws.DB(), ws.Layout().ArtifactContentDir, "owner", time.Now().UTC()))
+			db, c, e := perfguard.Open(ws.Layout().DatabasePath)
+			must(t, e)
+			defer db.Close()
+			db.SetMaxOpenConns(1)
+			repo := scopedrepo.New(db)
+			must(t, repo.Initialize(ctx))
+			must(t, repo.InitializeFeedSchema(ctx))
+			var epoch int64
+			must(t, db.QueryRow(`SELECT version FROM resource_access_epoch WHERE singleton=1`).Scan(&epoch))
+			request := scopes.RequestSelection{Principal: "stranger"}
+			var streams []scopes.Stream
+			tx, e := db.Begin()
+			must(t, e)
+			run := func(q string, args ...any) { _, e := tx.Exec(q, args...); must(t, e) }
+			for i := 0; i < 64; i++ {
+				id := fmt.Sprintf("batch-%02d", i)
+				request.ScopeIDs = append(request.ScopeIDs, scopes.ID(id))
+				run(`INSERT INTO scope_domains VALUES(?,'active',1)`, id)
+				run(`INSERT INTO scope_memberships VALUES('stranger',?,'reader',1)`, id)
+				run(`INSERT INTO scope_feed_generations VALUES(?,1,1,1,1,1,?)`, id, epoch)
+				for j := 0; j < 4; j++ {
+					audience := fmt.Sprintf("audience-%d", j)
+					streams = append(streams, scopes.Stream{Scope: scopes.ID(id), Family: "inbox", Audience: audience})
+					run(`INSERT INTO scope_feed_bindings VALUES('stranger',?,1,'inbox',?,1,1)`, id, audience)
+					for n := 0; n < 101; n++ {
+						resource := fmt.Sprintf("row-%d-%d-%d", i, j, n)
+						run(`INSERT INTO scope_resources VALUES(?,'event',?,?,1)`, id, resource, resource)
+						var rid int64
+						must(t, tx.QueryRow(`SELECT rid FROM scope_resource_rids WHERE scope_id=? AND resource_id=?`, id, resource).Scan(&rid))
+						run(`INSERT INTO scope_feed VALUES(?,1,'inbox',?,?,?,1)`, id, audience, n*256+i*4+j, rid)
+						run(`INSERT INTO scope_feed_payloads VALUES(?,1,'inbox',?,?,1,'{"status":"open"}')`, id, audience, rid)
+					}
+					for _, b := range []string{"one", "two", "three", "four"} {
+						run(`INSERT INTO scope_counters VALUES(?,1,'inbox',?,?,101)`, id, audience, b)
+					}
+				}
+			}
+			must(t, tx.Commit())
+			installTestOnlyProof(t, db, repo, request, streams)
+			for _, mode := range []string{"cold", "warm", "revoked"} {
+				if mode == "revoked" {
+					must(t, exec(db, `UPDATE resource_access_epoch SET version=version+1`))
+				}
+				scoped := primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: "stranger"})
+				totalSQL, totalRows := 0, 0
+				start := time.Now()
+				phase := func(name string, fn func() error) {
+					c.Start()
+					p := time.Now()
+					e := fn()
+					_, q, n := c.Stop()
+					totalSQL += q
+					totalRows += n
+					t.Logf("scale=%d mode=%s phase=%s sql=%d rows=%d elapsed=%s", scale, mode, name, q, n, time.Since(p))
+					must(t, e)
+				}
+				phase("directory", func() error {
+					page, e := repo.Directory(scoped, "stranger", "", 64)
+					if e == nil && len(page.Bindings) != 64 {
+						t.Fatal(page)
+					}
+					return e
+				})
+				phase("legacy-denial", func() error {
+					rows, e := resourceaccess.NewDB(db).QueryContext(scoped, `SELECT id FROM cards ORDER BY id LIMIT 1`)
+					if e != nil {
+						return e
+					}
+					for rows.Next() {
+					}
+					e = rows.Err()
+					rows.Close()
+					return e
+				})
+				c.Start()
+				admissionStart := time.Now()
+				var items []scopedrepo.FeedItem
+				var counts map[string]int64
+				e = repo.ReadBatchFeed(scoped, request, streams, func(r scopedrepo.BatchFeedReader) error {
+					_, q, n := c.Stop()
+					totalSQL += q
+					totalRows += n
+					t.Logf("scale=%d mode=%s phase=admission sql=%d rows=%d elapsed=%s", scale, mode, q, n, time.Since(admissionStart))
+					var refs []scopedrepo.FeedReference
+					phase("candidates", func() error {
+						var e error
+						refs, e = r.Candidates(make([]*scopedrepo.FeedKey, 256), 100)
+						if e == nil && len(refs) != 101 {
+							t.Fatal(len(refs))
+						}
+						return e
+					})
+					phase("hydrate", func() error { var e error; items, e = r.Hydrate(refs[:100]); return e })
+					phase("counters", func() error { var e error; counts, e = r.Buckets([]string{"one", "two", "three", "four"}); return e })
+					return nil
+				})
+				if mode == "revoked" {
+					_, q, n := c.Stop()
+					totalSQL += q
+					totalRows += n
+					t.Logf("scale=%d mode=%s phase=admission sql=%d rows=%d elapsed=%s", scale, mode, q, n, time.Since(admissionStart))
+					if !errors.Is(e, scopes.ErrUpdating) {
+						t.Fatal(e)
+					}
+					phase("legacy-fallback", func() error {
+						rows, e := resourceaccess.NewDB(db).QueryContext(scoped, `SELECT data_json FROM derived_inbox_items ORDER BY trigger_at DESC,id LIMIT 100`)
+						if e != nil {
+							return e
+						}
+						for rows.Next() {
+							var data string
+							if e = rows.Scan(&data); e != nil {
+								rows.Close()
+								return e
+							}
+							items = append(items, scopedrepo.FeedItem{Data: json.RawMessage(data)})
+						}
+						e = rows.Err()
+						rows.Close()
+						return e
+					})
+				} else {
+					must(t, e)
+				}
+				phase("serialize", func() error {
+					_, e := json.Marshal(struct {
+						Items  []scopedrepo.FeedItem
+						Counts map[string]int64
+					}{items, counts})
+					return e
+				})
+				elapsed := time.Since(start)
+				t.Logf("COMPLETE PREPARATION PROBE scale=%d mode=%s sql=%d rows=%d elapsed=%s gatesPass=%v; NOT HTTP parity or production proof", scale, mode, totalSQL, totalRows, elapsed, totalSQL <= 100 && totalRows <= 1024 && elapsed <= 500*time.Millisecond)
+			}
+		})
+	}
+}
