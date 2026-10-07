@@ -610,6 +610,7 @@ type ReportWorkFilter struct {
 	CardIDs                 []string
 	CardLifecycleOnly       bool
 	skipOwnerContext        bool
+	overviewSummary         bool
 }
 type ReportWorkBoard struct {
 	Title, ThreadID, PrivateOwner, Role string
@@ -802,6 +803,12 @@ func reportWorkSQL(filter ReportWorkFilter, candidatesOnly bool) (string, []any)
 		} else {
 			projection = strings.ReplaceAll(projection, "m.latest_observation_id", "selected.latest_observation_id")
 		}
+	}
+	if filter.overviewSummary {
+		// Keep summary text for initiative/Needs-you derivation, and all source,
+		// observation and plan inputs. These full-card arrays are not inputs to
+		// Overview tiles or visit snapshots; scoped canonical checks remain intact.
+		projection = strings.NewReplacer("c.definition_of_done_json", "'[]'", "c.resolution_refs_json", "'[]'", "c.refs_json", "'[]'", "c.provenance_json", "'{}'").Replace(projection)
 	}
 	return prefix + projection, args
 }

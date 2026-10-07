@@ -184,6 +184,13 @@ func withRequestAccessEpoch(ctx context.Context, scope AccessScope, epochTable s
 	ctx = context.WithValue(ctx, denialRequestKey{}, state)
 	p, _ := resourceaccess.PolicyFrom(ctx)
 	p.ReadOnDB = func(c context.Context, db resourceaccess.QueryRower, query string, args []any) (string, []any) {
+		if pin, ok := c.Value(pinnedDenialKey{}).(pinnedDenial); ok && pin.db == db && pin.scope == scope && epochTable == "resource_access_epoch" && resourceaccess.AnonymousSQLParameters(query) {
+			bound := append([]any{pin.snapshot.rows}, args...)
+			if accessCTEs(scope, query) == "" {
+				return scopeRead(c, query), args
+			}
+			return scopeReadSnapshot(c, query, pin.snapshot, true), bound
+		}
 		// Identity/service SQL with no resource relation needs no closure.
 		if accessCTEs(scope, query) == "" {
 			return scopeRead(c, query), args

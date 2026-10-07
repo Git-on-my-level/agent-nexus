@@ -71,20 +71,23 @@ it("preserves the backend plan geometry and visit digest wire fixtures", async (
     truncated: true,
   };
   const result = await loadOverview({
-    getOverview: async () => ({
-      work: {
-        status: "ok",
-        items: [],
-        total: 0,
-        human_count: 0,
-        truncated: true,
-      },
-      initiatives,
-      since_you_last_looked: digest,
-      needs_you: { status: "ok", rows: [], count: 0 },
-      dashboard: { status: "ok", reports: [] },
-      agents: { status: "unavailable" },
-    }),
+    getOverview: async (filters) => {
+      expect(filters).toEqual({ work_view: "summary" });
+      return {
+        work: {
+          status: "ok",
+          items: [],
+          total: 0,
+          human_count: 0,
+          truncated: true,
+        },
+        initiatives,
+        since_you_last_looked: digest,
+        needs_you: { status: "ok", rows: [], count: 0 },
+        dashboard: { status: "ok", reports: [] },
+        agents: { status: "unavailable" },
+      };
+    },
   });
   expect(result.initiatives).toBe(initiatives);
   expect(result.sinceYouLastLooked).toBe(digest);

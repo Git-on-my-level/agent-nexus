@@ -247,7 +247,7 @@ func TestOverviewDenseAccessWorkspaceLatency(t *testing.T) {
 			primitives.WithScopedInboxReader(true)(store)
 		}
 		t.Run(mode, func(t *testing.T) {
-			for _, path := range []string{"/inbox", "/overview"} {
+			for _, path := range []string{"/inbox", "/overview", "/overview?work_view=summary"} {
 				t.Run(path, func(t *testing.T) {
 					var samples []time.Duration
 					for i := 0; i < 7; i++ {
@@ -293,7 +293,7 @@ func TestOverviewDenseAccessWorkspaceLatency(t *testing.T) {
 						if path == "/inbox" && len(payload["items"].([]any)) != 12 {
 							t.Fatal("fixture lost visible inbox items")
 						}
-						if path == "/overview" && len(payload["work"].(map[string]any)["items"].([]any)) != 100 {
+						if strings.HasPrefix(path, "/overview") && len(payload["work"].(map[string]any)["items"].([]any)) != 100 {
 							t.Fatal("fixture lost visible work window")
 						}
 						logRequestSQLTiming(t, counter, elapsed, len(body), strings.Join(resp.Header.Values("Server-Timing"), ", "))
