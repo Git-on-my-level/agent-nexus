@@ -37,7 +37,7 @@ func TestCanonicalPayloadPrivacyAcrossEventSurfaces(t *testing.T) {
 		}
 		return event
 	}
-	appendAsk("Visible payload ask", "thread:"+tid, nil)
+	visible := appendAsk("Visible payload ask", "thread:"+tid, nil)
 	hidden := []map[string]any{appendAsk("Confidential subject ask", anyString(card["ref"]), nil), appendAsk("Confidential related ask", "thread:"+tid, []string{anyString(card["ref"])})}
 	// Rebuild from canonical events, rather than inserting prefiltered inbox rows.
 	if err = refreshDerivedTopicProjection(ctx, handlerOptions{primitiveStore: store}, tid, time.Now().UTC(), owner.ActorID); err != nil {
@@ -83,6 +83,7 @@ func TestCanonicalPayloadPrivacyAcrossEventSurfaces(t *testing.T) {
 	defer cancel()
 	req, _ := http.NewRequestWithContext(streamCtx, "GET", env.server.URL+"/stream/events?thread_id="+tid+"&type=human_attention_requested", nil)
 	req.Header.Set("Authorization", "Bearer "+reader.AccessToken)
+	req.Header.Set("Last-Event-ID", anyString(visible["id"]))
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -91,8 +92,8 @@ func TestCanonicalPayloadPrivacyAcrossEventSurfaces(t *testing.T) {
 	frames := bufio.NewReader(resp.Body)
 	first := round4SSEFrame(t, frames)
 	round4NoSecrets(t, "initial SSE", first, secrets)
-	if !strings.Contains(first, "Visible payload ask") {
-		t.Fatal(first)
+	if strings.Contains(first, "data:") {
+		t.Fatalf("resume replayed history: %s", first)
 	}
 	appendAsk("Confidential incremental ask", anyString(card["ref"]), nil)
 	next := round4SSEFrame(t, frames)

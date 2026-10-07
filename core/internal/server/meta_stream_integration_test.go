@@ -209,11 +209,14 @@ func TestEventsStreamResumesFromLastEventID(t *testing.T) {
 	resp := openSSEStream(t, h.baseURL+"/stream/events?thread_id=thread-stream-1", "")
 	reader, stop := startSSEReader(resp.Body)
 	defer stop()
-
-	first := awaitSSEEvent(t, reader, 2*time.Second)
-	second := awaitSSEEvent(t, reader, 2*time.Second)
-	if first.ID != firstEventID || second.ID != secondEventID {
-		t.Fatalf("unexpected initial stream order: first=%q second=%q expected=(%q,%q)", first.ID, second.ID, firstEventID, secondEventID)
+	select {
+	case history := <-reader:
+		t.Fatalf("new stream replayed history: %#v", history)
+	case <-time.After(100 * time.Millisecond):
+	}
+	thirdEventID := appendEventForTest(t, h.baseURL, "actor-1", "thread-stream-1", "event three")
+	if event := awaitSSEEvent(t, reader, 2*time.Second); event.ID != thirdEventID {
+		t.Fatalf("new stream did not deliver append: %#v", event)
 	}
 
 	resumeResp := openSSEStream(t, h.baseURL+"/stream/events?thread_id=thread-stream-1", firstEventID)
@@ -225,6 +228,9 @@ func TestEventsStreamResumesFromLastEventID(t *testing.T) {
 		t.Fatalf("expected resumed stream to continue after last event id, got %q want %q", resumed.ID, secondEventID)
 	}
 
+	if event := awaitSSEEvent(t, resumeReader, 2*time.Second); event.ID != thirdEventID {
+		t.Fatalf("resume lost append: %#v", event)
+	}
 	select {
 	case duplicate := <-resumeReader:
 		t.Fatalf("unexpected duplicate event after resume with no new writes: %#v", duplicate)

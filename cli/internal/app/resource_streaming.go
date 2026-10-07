@@ -83,6 +83,11 @@ func (a *App) runTailStream(ctx context.Context, cfg config.Resolved, commandNam
 			if strings.TrimSpace(event.ID) != "" {
 				cursor = strings.TrimSpace(event.ID)
 			}
+			// Bounded event pages can signal more work without delivering a
+			// resource. Preserve resume IDs but count/output only real events.
+			if commandID == "events.stream" && event.Type == "resume" {
+				continue
+			}
 			if err := a.writeStreamEvent(commandName, commandID, event, authCfg.JSON); err != nil {
 				_ = resp.Body.Close()
 				return nil, err

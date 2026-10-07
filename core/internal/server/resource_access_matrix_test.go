@@ -100,6 +100,10 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 	owner := seedHumanPrincipalForLockoutTest(t, ctx, db, "matrix-owner", "matrix-owner-actor", "matrix-owner", "matrix-owner-token")
 	stranger := seedHumanPrincipalForLockoutTest(t, ctx, db, "matrix-stranger", "matrix-stranger-actor", "matrix-stranger", "matrix-stranger-token")
 	agent := seedMachinePrincipalForLockoutTest(t, ctx, db, "matrix-agent", "matrix-agent-actor", "matrix.agent", "matrix-agent-token")
+	// Resume provenance must be visible to every tested principal.
+	if _, err := db.Exec(`INSERT INTO events(id,type,ts,actor_id,refs_json,payload_json) VALUES('matrix-stream-anchor','message_posted','2000-01-01T00:00:00Z','owner','[]','{}')`); err != nil {
+		t.Fatal(err)
+	}
 	board, err := store.CreateBoard(ctx, owner.ActorID, map[string]any{"title": "Confidential board sentinel"})
 	if err != nil {
 		t.Fatal(err)
@@ -249,6 +253,11 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 					}
 					req.Header.Set("Authorization", "Bearer "+principal.AccessToken)
 					req.Header.Set("Content-Type", "application/json")
+					if p.Path == "/stream/events" {
+						// Resume the seeded fixture: a fresh connection starts at
+						// head, while this matrix must exercise visible replay too.
+						req.Header.Set("Last-Event-ID", "matrix-stream-anchor")
+					}
 					if p.Path == "/artifacts/attachments" {
 						var multipartBody bytes.Buffer
 						mw := multipart.NewWriter(&multipartBody)

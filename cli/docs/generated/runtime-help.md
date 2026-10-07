@@ -2906,7 +2906,7 @@ Generated Help: events stream
 - Stability: `beta`
 - Input mode: `none`
 - Why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
-- Output: Each SSE message is `event: …` with JSON data `{ "event": <event> }` (see core/docs/http-api.md).
+- Output: Resource messages use `event: event` with JSON data `{ "event": <event> }`. A `resume` control has empty JSON data and is excluded from delivered-event counts (see core/docs/http-api.md).
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `events`
 - Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events list`, `debug events restore`, `debug events trash`, `debug events unarchive`
@@ -2932,7 +2932,7 @@ Generated Help: events tail
 - Stability: `beta`
 - Input mode: `none`
 - Why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
-- Output: Each SSE message is `event: …` with JSON data `{ "event": <event> }` (see core/docs/http-api.md).
+- Output: Resource messages use `event: event` with JSON data `{ "event": <event> }`. A `resume` control has empty JSON data and is excluded from delivered-event counts (see core/docs/http-api.md).
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `events`
 - Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events list`, `debug events restore`, `debug events trash`, `debug events unarchive`

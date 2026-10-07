@@ -78,6 +78,9 @@ func TestResourceAccessCommonReadPerformance(t *testing.T) {
 		if table == 0 {
 			count = 20
 		}
+		if table == 1 {
+			count = 10001
+		}
 		if table == 4 {
 			count = 4096
 		}
@@ -202,6 +205,86 @@ func TestResourceAccessCommonReadPerformance(t *testing.T) {
 	measuredServer := httptest.NewServer(NewHandler("test", WithPrimitiveStore(measuredStore), WithAuthStore(measuredAuth), WithActorRegistry(actors.NewStore(counted)), WithRunStore(commandcenter.NewStore(counted, commandcenter.SQLIdentities{DB: counted})), WithPMRuntime(runtime), WithSchemaContract(contract)))
 	t.Cleanup(measuredServer.Close)
 	env.server = measuredServer
+	t.Run("event-stream-10k", func(t *testing.T) {
+		scope := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: stranger.ActorID})
+		// The former handler loaded this entire collection on every tick and
+		// only then discarded rows through Last-Event-ID.
+		counter.Reset()
+		start := time.Now()
+		baseline, err := measuredStore.ListEvents(scope, primitives.EventListFilter{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("before: tick=%s statements=%d returned_rows=%d events=%d", time.Since(start), counter.Count(), counter.ReturnedRows(), len(baseline))
+		cursor := primitives.EventCursor{TS: "2026-01-01T00:00:00Z", ID: fmt.Sprintf("%08x-row-1", 9800)}
+		for i := 0; i < 3; i++ {
+			counter.Reset()
+			start = time.Now()
+			tickCursor := cursor
+			if i == 0 {
+				tickCursor.ID = "00000000-row-1"
+			}
+			page, err := measuredStore.ListEventStreamPage(scope, primitives.EventListFilter{}, tickCursor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(page.Events) != 200 {
+				t.Fatalf("page events=%d", len(page.Events))
+			}
+			elapsed := time.Since(start)
+			t.Logf("after tick %d: tick=%s statements=%d returned_rows=%d", i, elapsed, counter.Count(), counter.ReturnedRows())
+			if counter.Count() > 8 || counter.ReturnedRows() > 700 {
+				t.Fatalf("unbounded page: statements=%d rows=%d", counter.Count(), counter.ReturnedRows())
+			}
+			if elapsed > 500*time.Millisecond {
+				t.Fatalf("tick=%s exceeds 500ms", elapsed)
+			}
+			if i == 0 {
+				for _, statement := range counter.Statements() {
+					if !strings.Contains(statement.SQL, "stream_candidates AS MATERIALIZED") {
+						continue
+					}
+					rows, err := counted.Query("EXPLAIN QUERY PLAN "+statement.SQL, statement.Args...)
+					if err != nil {
+						t.Fatal(err)
+					}
+					var details []string
+					for rows.Next() {
+						var a, b, c int
+						var detail string
+						if err := rows.Scan(&a, &b, &c, &detail); err != nil {
+							t.Fatal(err)
+						}
+						details = append(details, detail)
+					}
+					err = rows.Err()
+					rows.Close()
+					if err != nil {
+						t.Fatal(err)
+					}
+					plan := strings.Join(details, "; ")
+					t.Logf("event stream position plan: %s", strings.Join(details[:min(10, len(details))], "; "))
+					if !strings.Contains(plan, "SEARCH events USING INDEX idx_events_stream_order (<expr>=? AND id>?)") || !strings.Contains(plan, "SEARCH events USING INDEX idx_events_stream_order (<expr>>?)") {
+						t.Fatalf("stream lost indexed seek: %s", plan)
+					}
+				}
+			}
+		}
+		head, err := measuredStore.EventStreamCursor(scope, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		counter.Reset()
+		start = time.Now()
+		page, err := measuredStore.ListEventStreamPage(scope, primitives.EventListFilter{}, head)
+		if err != nil || len(page.Events) != 0 {
+			t.Fatalf("idle tick: %+v %v", page, err)
+		}
+		t.Logf("idle tick=%s statements=%d returned_rows=%d", time.Since(start), counter.Count(), counter.ReturnedRows())
+		if counter.Count() > 2 || counter.ReturnedRows() > 1 {
+			t.Fatal("idle tick scanned history")
+		}
+	})
 	t.Run("pm-point", func(t *testing.T) {
 		db := resourceaccess.NewDB(env.workspace.DB())
 		scope := primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: stranger.ActorID})
