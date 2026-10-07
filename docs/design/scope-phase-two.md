@@ -240,3 +240,97 @@ old-policy audience/lifecycle/payload/counter comparison and global disjointness
 to that snapshot before minting. The unchanged no-serving guard remains the
 production barrier. HTTP selection, exact full-request budgets, dispatcher and
 hook sealing remain prerequisites; the batch subtotal does not satisfy them.
+
+## Disabled inbox integration checkpoint
+
+The ordered repository now consumes the canonical inbox BLOB comparator directly.
+`scope_inbox_order` is the inbox comparator; it is not a second permanent inbox
+copy beside an integer feed. No inbox writer or serving schema is registered yet.
+The repository validates private RID, canonical key and version in one hydration
+batch. Its ordered adapter validates the full typed inbox envelope, then detaches
+only the original item JSON so unknown fields and exact numeric bytes survive.
+The cursor binds the current proof/source snapshot and encrypts the private key.
+
+`InboxDispatcher.Read` is a fixed render computation: principal, page size and
+continuation are its only request inputs. It accepts no caller-selected scope,
+audience, SQL, projector or callback. It discovers the own directory and current
+inbox bindings in the same SQLite transaction as admission, candidates,
+hydration and counters. Directory discovery reads at most 65 membership rows;
+each of at most 64 current-generation inbox binding branches stops at five rows.
+Exceeding the new repository's 64-scope/256-stream bound sends the
+whole response through legacy rather than silently truncating its counts.
+
+Batch selection proof is necessary but insufficient. The dispatcher additionally
+requires `scope_inbox_serving_receipts`, bound to the same snapshot, compiled
+registry hash, canonical/authority/directory revisions, schema cookie and
+independently recorded directory coverage. Discovery, enrichment and derivation
+versions must all match the reviewed implementation. There is **no production
+writer for this receipt**. A base-row comparison cannot create it. Missing/stale
+proof reports an internal whole-response fallback; denial, corruption, invalid
+continuation and SQL errors return no data. Internal request/scope fallback
+counters have no principal labels and are not HTTP response fields. Their latency
+covers the dispatcher only; future route wiring must measure legacy fallback and
+the entire request, including authentication and enrichment.
+
+`InstallScopeInboxInvalidation` derives 56 watched tables from executable
+ownership/filter/publication registries plus inbox, authority, enrichment and
+scope-directory dependencies. All INSERT/UPDATE/DELETE operations conservatively
+advance source, authority and directory revisions and the selection proof clock,
+and clear directory coverage. Installation validates actual columns and binds a
+compiled registry digest and SQLite schema cookie. Late PM schema installation is
+explicitly incomplete until reconciliation occurs in its table-creation
+transaction. Dropping/changing a trigger or table invalidates admission. This is
+unregistered maintenance DDL: it must run after all shadow/verifier tables are
+installed and cannot be selected by a startup constructor yet.
+
+The conservative invalidation cost is **two clock-row updates per watched row
+trigger invocation**, multiplied by existing legacy index cascades. Actual
+fixtures produced 70 clock advances for an owner mutation, 46 for a mention
+mutation and 18 for a PM body mutation. These are diagnostic observations, not a
+constant bound on an entire canonical write. No new corpus scan is introduced by
+the invalidation hook, but existing graph writes can still expand with workspace
+size. Review a less amplified invalidation/rebuild strategy before registering it
+on production writes; no write-budget or storage-overhead gate is waived.
+
+The off-request verifier uses current `derived_inbox_items` base rows and the fixed legacy
+eligibility relation, not caller-authored payloads or flags. It discovers the own
+directory/bindings, compares eligible canonical envelopes/order/private identity,
+reverse-enumerates the staged generation to reject extras and RID duplication,
+and checks exact total/category counters. Every durable slice enumerates at most
+64 rows and fences canonical/authority/directory/shadow/legacy revisions. This is
+a **source-row chunk bound**, not a bound on total database work or duration:
+legacy policy and lifecycle comparison remain expensive off-request operations.
+Cancellation rolls back the checkpoint; reopen resumes it. Source or authority
+changes refuse the old job. Completed cursors without exact comparison receipts
+cannot establish success. `canonical_base_v1` receipts always have
+`serving_eligible=0`, do not mark directory coverage, and do not mint either batch
+or serving certificates. Maintenance scratch retention, supervised scheduling and
+complete HTTP enrichment remain production integration work.
+
+Here “base rows” means the existing `derived_inbox_items` relation. Complete
+enumeration of that relation does not prove every event/ask/answer source was
+projected into it, external-PM source completeness, or mounted route
+enrichment/freshness. All-event source coverage and actual directory coverage
+must be established separately before a serving receipt can be minted.
+
+Registered hook execution rejects unknown concrete implementations before any
+callback and admits only the exact reviewed identity query and six delta writes.
+Transaction control, compound/altered SQL and arbitrary queries poison the proxy;
+ignored failures roll back the source transaction. The older generic hook API is
+still a disabled test adapter. SQL sealing does not establish provenance for its
+trusted Capture callback. Live hook registration still needs actual canonical
+capture and direct/implicit derivation negatives. The kernel import gate now uses
+a closed pure-library/type allowlist so a new helper package cannot acquire raw
+authority transitively. The independent foundation gate still rejects **every**
+live repository consumer; no HTTP handler or migration exception was added.
+
+Synthetic maximum-selection evidence covers 64 scopes, 256 audiences, P=100 and
+10,000 irrelevant bindings: the ordered repository returns 527 rows in seven SQL
+reads; the fixed dispatcher returns 848 rows in ten SQL reads. Directory branches
+seek exact principal/scope/current-generation/family prefixes; ordered branches
+seek the full BLOB/RID range before LIMIT and examine at most S(P+1) candidates.
+These remain repository subtotals with fixture-injected certificates, **not**
+full-request SCA-661 acceptance, production proof minting or hosted enablement.
+The real route/field matrix, all-event canonical capture/rebuild, actual PM hook
+registration, whole enriched-generation proof, supervised worker failure/budget
+and scratch-cleanup tests, and cold/warm/revoked HTTP budgets remain required.

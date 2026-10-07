@@ -20,6 +20,17 @@ type hookExecutor struct {
 	failure error
 }
 
+func registeredHookWrite(query string) bool {
+	switch query {
+	case readmodel.InsertFeed, readmodel.DeleteFeed,
+		readmodel.InsertPayload, readmodel.DeletePayload,
+		readmodel.IncrementCounter, readmodel.DecrementCounter:
+		return true
+	default:
+		return false
+	}
+}
+
 func (e *hookExecutor) Exec(ctx context.Context, q string, args ...any) (int64, error) {
 	if e.failure != nil {
 		return 0, e.failure

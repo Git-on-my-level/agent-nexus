@@ -40,7 +40,7 @@ func TestReadModelNotServing(t *testing.T) {
 				if name == "agent-nexus-core/internal/readmodel" && !trustedRepositoryAdapter(path) {
 					t.Errorf("read-model bridge not approved for production consumption: %s", path)
 				}
-				if inKernelTree(path) && (name == "database/sql" || name == "agent-nexus-core/internal/storage" || name == "agent-nexus-core/internal/scopedrepo") {
+				if inKernelTree(path) && !kernelImportAllowed(name) {
 					t.Errorf("read-model kernel must not acquire raw storage/authority: %s", path)
 				}
 			}
@@ -52,12 +52,36 @@ func TestReadModelNotServing(t *testing.T) {
 	}
 }
 
-// These two adapters remain unreachable from serving: scopedrepo's independent
+// A deny-list of raw handles misses helper packages that acquire them on the
+// kernel's behalf. The closed computation tree admits only its immutable scope
+// types and these pure/cryptographic standard-library operations. New helper
+// packages cannot add a transitive factory or filesystem/network ingress.
+func kernelImportAllowed(name string) bool {
+	switch name {
+	case "agent-nexus-core/internal/scopes", "bytes", "container/heap", "context",
+		"crypto/aes", "crypto/cipher", "crypto/rand", "crypto/sha256",
+		"encoding/base64", "encoding/json", "errors", "fmt", "math", "sort",
+		"strings", "time", "unicode/utf8":
+		return true
+	default:
+		return false
+	}
+}
+
+func TestKernelCannotAcquireIndirectFactories(t *testing.T) {
+	for _, name := range []string{"database/sql", "agent-nexus-core/internal/primitives", "agent-nexus-core/internal/storage", "agent-nexus-core/internal/scopedrepo", "agent-nexus-core/internal/pm", "os", "net/http", "unsafe", "C", "agent-nexus-core/internal/readmodel/nested"} {
+		if kernelImportAllowed(name) {
+			t.Fatal("indirect or direct authority ingress admitted", name)
+		}
+	}
+}
+
+// These exact adapters and fixed inbox computation remain unreachable from serving: scopedrepo's independent
 // TestFoundationNotServing rejects every production import of that package.
 // This admits the reviewed dependency edge, not a handler or constructor.
 func trustedRepositoryAdapter(path string) bool {
 	switch filepath.ToSlash(filepath.Clean(path)) {
-	case "../scopedrepo/readmodel_adapter.go", "../scopedrepo/readmodel_hook.go":
+	case "../scopedrepo/readmodel_adapter.go", "../scopedrepo/readmodel_hook.go", "../scopedrepo/feed_ordered_adapter.go", "../scopedrepo/inbox_dispatch.go":
 		return true
 	default:
 		return false
@@ -68,6 +92,8 @@ func TestTrustedAdapterBoundaryIsExact(t *testing.T) {
 	for path, want := range map[string]bool{
 		"../scopedrepo/readmodel_adapter.go":     true,
 		"../scopedrepo/readmodel_hook.go":        true,
+		"../scopedrepo/feed_ordered_adapter.go":  true,
+		"../scopedrepo/inbox_dispatch.go":        true,
 		"../scopedrepo/other.go":                 false,
 		"../server/readmodel_adapter.go":         false,
 		"../scopedrepo/nested/readmodel_hook.go": false,

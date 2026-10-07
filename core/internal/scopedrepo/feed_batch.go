@@ -39,6 +39,20 @@ type batchFeedReader struct {
 // absent/stale/malformed proof returns ErrUpdating without calling fn. No API
 // accepts a caller-authored certificate. No production code can mint one yet.
 func (s *Store) ReadBatchFeed(ctx context.Context, request scopes.RequestSelection, streams []scopes.Stream, fn func(BatchFeedReader) error) error {
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err = s.readBatchFeedTx(ctx, tx, request, streams, fn); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// The inbox dispatcher uses this private entry point so directory discovery,
+// authority, proof, candidates and counters consume one SQLite snapshot.
+func (s *Store) readBatchFeedTx(ctx context.Context, tx *sql.Tx, request scopes.RequestSelection, streams []scopes.Stream, fn func(BatchFeedReader) error) error {
 	if fn == nil || len(request.ScopeIDs) < 1 || len(request.ScopeIDs) > scopes.MaxScopes || !feedText(request.Principal, 512) {
 		return scopes.ErrBudget
 	}
@@ -62,11 +76,6 @@ func (s *Store) ReadBatchFeed(ctx context.Context, request scopes.RequestSelecti
 			return scopes.ErrBudget
 		}
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
 	authorities, err := batchAuthorities(ctx, tx, request.Principal, ids)
 	if err != nil {
 		return err
@@ -131,7 +140,7 @@ func (s *Store) ReadBatchFeed(ctx context.Context, request scopes.RequestSelecti
 	if err = r.close(); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return nil
 }
 
 func batchAuthorities(ctx context.Context, tx *sql.Tx, principal string, ids []scopes.ID) ([]feedAuthority, error) {
