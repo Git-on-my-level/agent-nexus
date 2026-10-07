@@ -162,7 +162,10 @@ export function startInboxCount(workspace) {
     };
     const current = get(inboxNeedsYouCount);
     if (current.workspace !== key) publishInboxCount(key, null);
-    void run();
+    // Let the route mount and claim its count before starting five background
+    // reads. On other pages these badge reads should follow the primary data,
+    // rather than competing for core's SQLite connection on first paint.
+    schedule();
   }
   return () => {
     if (!controller || controller.workspace !== key) return;

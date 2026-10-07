@@ -352,6 +352,10 @@ test("inbox loads after hard refresh when workspace bootstrap is delayed", async
 }) => {
   const actorId = "actor-e2e";
   let inboxRequestCount = 0;
+  let sessionReads = 0;
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/auth/session") sessionReads++;
+  });
 
   await page.addInitScript((selectedActorId) => {
     window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
@@ -418,6 +422,7 @@ test("inbox loads after hard refresh when workspace bootstrap is delayed", async
 
   await expect.poll(() => inboxRequestCount).toBeGreaterThan(0);
   await expect(page.getByTestId("inbox-row-inbox-refresh-001")).toBeVisible();
+  expect(sessionReads).toBe(1);
 });
 
 test("inbox mailbox filters reduce visible rows", async ({ page }) => {
