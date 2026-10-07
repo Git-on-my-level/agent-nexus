@@ -1007,6 +1007,8 @@
     "../commandcenter/store.go:*Store:UpsertRun": "a4dddefac05aceeefff01bbd18e9b46067d1c37d6ab78dca7c70419ca31411eb",
     "../commandcenter/store.go:type:Presence": "ff1db34cf3bb87d2ad6edf36de204b47ea69fa56ddf73e87cf5a240f470be8ab",
     "../commandcenter/store.go:type:Run": "1f40bd11b46869a87420b4e7f7abd2eddd017d96a1e83c6c9898460ffa378c10",
+    "../foreignvar/load.go:checkListed": "e24c99e82ebec052902440b91fbbde63b0c259ecff485c360a98d3868f6b195b",
+    "../foreignvar/load.go:checkPatterns": "38b74ba07a1ad36a44eee420dd2a4d1b74ec5e99973744e9cba076dd58e64957",
     "../handles/handles.go:Candidate": "b03a9322985aa39b7a00cb206a5a630fcf55276a9af264797f57e3bf780fcfff",
     "../handles/handles.go:Fallback": "b8b263a203388de954d375f51399f917b1f1ebbb6dc57bd442fdad42970ec999",
     "../heartbeat/heartbeat.go:*Publisher:Run": "29e1ff9bb0d585b97cd3c1cae364a58576195eaf0baf0a00fa395106a7b8fe55",
