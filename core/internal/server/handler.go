@@ -58,6 +58,8 @@ type PrimitiveStore interface {
 	UpsertAgentWakeup(ctx context.Context, wakeup primitives.AgentWakeup) (primitives.AgentWakeup, error)
 	GetAgentWakeup(ctx context.Context, wakeupID string) (primitives.AgentWakeup, error)
 	ListAgentWakeups(ctx context.Context, filter primitives.AgentWakeupListFilter) ([]primitives.AgentWakeup, error)
+	ReceiptStreamCursor(ctx context.Context, threadID string, lastEventID string, accept func(primitives.AgentWakeup) bool) (primitives.ReceiptStreamCursor, error)
+	ListReceiptStreamPage(ctx context.Context, threadID string, cursor primitives.ReceiptStreamCursor) (primitives.ReceiptStreamPage, error)
 	ClaimAgentWakeup(ctx context.Context, wakeupID string, targetActorID string, bridgeInstanceID string) (primitives.AgentWakeup, error)
 	CompleteAgentWakeup(ctx context.Context, wakeupID string, targetActorID string, bridgeInstanceID string) (primitives.AgentWakeup, error)
 	FailAgentWakeup(ctx context.Context, wakeupID string, targetActorID string, bridgeInstanceID string, reason string) (primitives.AgentWakeup, error)

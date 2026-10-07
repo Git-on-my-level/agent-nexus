@@ -8,27 +8,10 @@ import (
 	"agent-nexus-core/internal/resourceaccess"
 )
 
-type denialTarget struct{ kind, id string }
 type eventPageTargetsKey struct{}
 type eventPageTargets struct {
 	kind string
 	ids  []string
-}
-
-// Index once when a closure enters the bounded shared cache, rather than
-// decoding every denied resource again on each warm stream poll.
-func (s *denialSnapshot) prepareTargetIndex() {
-	s.indexOnce.Do(func() {
-		var rows [][2]string
-		if json.Unmarshal([]byte(s.rows), &rows) != nil {
-			return
-		}
-		index := make(map[denialTarget]struct{}, len(rows))
-		for _, row := range rows {
-			index[denialTarget{row[0], row[1]}] = struct{}{}
-		}
-		s.targetIndex = index
-	})
 }
 
 func (s *denialSnapshot) targetRows(kind string, ids []string) (string, bool) {
