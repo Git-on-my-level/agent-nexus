@@ -82,7 +82,7 @@ func withBatchPublicRefs(ctx context.Context, q interface {
 		} else if kind == "card_revision" {
 			query = `SELECT r.revision_id,COALESCE(c.handle,c.id)||'-r'||r.revision_number FROM card_revisions r JOIN cards c ON c.id=r.card_id WHERE r.revision_id IN (SELECT value FROM json_each(?))`
 		}
-		rows, err := q.QueryContext(ctx, query, string(ids))
+		rows, err := q.QueryContext(eventPageRefScope(ctx, kind, grouped[kind]), query, string(ids))
 		if err != nil {
 			return ctx, err
 		}

@@ -233,7 +233,7 @@ func TestResourceAccessCommonReadPerformance(t *testing.T) {
 			}
 			elapsed := time.Since(start)
 			t.Logf("after tick %d: tick=%s statements=%d returned_rows=%d", i, elapsed, counter.Count(), counter.ReturnedRows())
-			if counter.Count() > 8 || counter.ReturnedRows() > 500 {
+			if counter.Count() > 8 || counter.ReturnedRows() > 700 {
 				t.Fatalf("unbounded page: statements=%d rows=%d", counter.Count(), counter.ReturnedRows())
 			}
 			if elapsed > 500*time.Millisecond {

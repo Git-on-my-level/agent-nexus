@@ -44,11 +44,6 @@ func (s *Store) EventStreamCursor(ctx context.Context, lastEventID string) (Even
 // internal cursor, but their payloads are never loaded or decoded. The extra
 // position is a has-more probe and is revisited on the next tick.
 func (s *Store) ListEventStreamPage(ctx context.Context, filter EventListFilter, cursor EventCursor) (EventStreamPage, error) {
-	if scope, ok := accessScopeFrom(ctx); ok {
-		// Fresh tick-local state; shared denials retain in-statement epoch
-		// validation and canonical fallback after concurrent permission changes.
-		ctx = WithRequestAccessScope(ctx, scope)
-	}
 	// Bound each index range before merging it. Ordering an unbounded UNION
 	// branch by its constant expression key makes SQLite sort every timestamp
 	// tie, even when the outer LIMIT is small.
@@ -63,10 +58,41 @@ func (s *Store) ListEventStreamPage(ctx context.Context, filter EventListFilter,
 	), stream_candidates AS MATERIALIZED (
 		SELECT * FROM stream_same UNION ALL SELECT * FROM stream_later
 		ORDER BY sort_key,id LIMIT ?
-	) SELECT p.ts,p.id,e.id,COALESCE(e.handle,''),e.type,e.ts,e.actor_id,e.thread_id,e.refs_json,e.payload_json,
-		e.archived_at,e.archived_by,e.trashed_at,e.trashed_by,e.trash_reason
-		FROM stream_candidates p LEFT JOIN events e ON e.id=p.id AND COALESCE(e.trashed_at,'')=''`
+	) SELECT ts,id FROM stream_candidates ORDER BY sort_key,id`
 	args := []any{cursor.TS, cursor.ID, EventStreamPageSize + 1, cursor.TS, EventStreamPageSize + 1, EventStreamPageSize + 1}
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return EventStreamPage{}, err
+	}
+	page := EventStreamPage{Cursor: cursor, Events: []map[string]any{}}
+	ids := []string{}
+	for rows.Next() {
+		var position EventCursor
+		if err := rows.Scan(&position.TS, &position.ID); err != nil {
+			rows.Close()
+			return EventStreamPage{}, err
+		}
+		if len(ids) == EventStreamPageSize {
+			page.HasMore = true
+			continue
+		}
+		ids = append(ids, position.ID)
+		page.Cursor = position
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return EventStreamPage{}, err
+	}
+	if len(ids) == 0 {
+		return page, nil
+	}
+	ctx = withEventPageAccessScope(ctx, ids)
+	keys, _ := json.Marshal(ids)
+	query = `SELECT e.id,COALESCE(e.handle,''),e.type,e.ts,e.actor_id,e.thread_id,e.refs_json,e.payload_json,
+		e.archived_at,e.archived_by,e.trashed_at,e.trashed_by,e.trash_reason
+		FROM events e WHERE e.id IN (SELECT value FROM json_each(?)) AND COALESCE(e.trashed_at,'')=''`
+	args = []any{string(keys)}
 	if ids := eventFilterIDs(filter.ThreadID, filter.ThreadIDs); len(ids) > 0 {
 		query += ` AND e.thread_id IN (` + placeholders(len(ids)) + `)`
 		for _, id := range ids {
@@ -91,33 +117,19 @@ func (s *Store) ListEventStreamPage(ctx context.Context, filter EventListFilter,
 			OR t.id IN (SELECT substr(value,8) FROM json_each(e.refs_json) WHERE value LIKE 'thread:%')))`
 		args = append(args, scope.ActorID)
 	}
-	query += ` ORDER BY anx_timestamp_key(p.ts),p.id`
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	query += ` ORDER BY anx_timestamp_key(e.ts),e.id`
+	rows, err = s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return EventStreamPage{}, err
 	}
-	page := EventStreamPage{Cursor: cursor, Events: []map[string]any{}}
 	stored := []storedEventRow{}
-	positions := 0
 	for rows.Next() {
-		var ts, id string
-		var eid, handle, kind, ets, actor, refs, payload sql.NullString
 		var row storedEventRow
-		if err := rows.Scan(&ts, &id, &eid, &handle, &kind, &ets, &actor, &row.thread, &refs, &payload,
+		if err := rows.Scan(&row.id, &row.handle, &row.kind, &row.ts, &row.actor, &row.thread, &row.refs, &row.payload,
 			&row.archivedAt, &row.archivedBy, &row.trashedAt, &row.trashedBy, &row.trashReason); err != nil {
 			rows.Close()
 			return EventStreamPage{}, err
 		}
-		positions++
-		if positions > EventStreamPageSize {
-			page.HasMore = true
-			continue
-		}
-		page.Cursor = EventCursor{TS: ts, ID: id}
-		if !eid.Valid {
-			continue
-		}
-		row.id, row.handle, row.kind, row.ts, row.actor, row.refs, row.payload = eid.String, handle.String, kind.String, ets.String, actor.String, refs.String, payload.String
 		stored = append(stored, row)
 	}
 	err = rows.Err()

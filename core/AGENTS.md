@@ -195,7 +195,10 @@ public. Never cache visibility decisions for an SSE connection. The event stream
 a fresh epoch-validated read snapshot per bounded poll. Its internal
 `event_stream_positions` view exposes only immutable ID/timestamp traversal
 metadata, allowing bounded progress over hidden rows. Never serialize those
-positions; payloads must join the scoped `events` relation before decoding. Shared cached
+positions; payloads must load through the scoped `events` relation before decoding.
+The event pager alone may narrow cached denial bindings to its explicit page keys
+and batch-reference keys; parent denial propagation and the consuming statement's
+epoch fallback must remain intact. Never reuse that context for a general read. Shared cached
 projections with inaccessible contributors are unavailable to the reader;
 a reader-filtered projection must never replace canonical derived state.
 

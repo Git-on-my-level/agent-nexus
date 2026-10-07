@@ -2,10 +2,13 @@ package primitives
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
+	"agent-nexus-core/internal/resourceaccess"
 	"agent-nexus-core/internal/storage"
 	"agent-nexus-core/internal/testsql"
 )
@@ -163,12 +166,182 @@ func TestEventStreamBatchesRevisionRefs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(page.Events) != 200 || counter.Count() != 3 || counter.ReturnedRows() != 202 {
+	if len(page.Events) != 200 || counter.Count() != 4 || counter.ReturnedRows() != 402 {
 		t.Fatalf("revision N+1: events=%d reads=%d rows=%d", len(page.Events), counter.Count(), counter.ReturnedRows())
 	}
 	for _, e := range page.Events {
 		if e["payload"].(map[string]any)["revision_ref"] != "document_revision:doc-handle-r1" {
 			t.Fatalf("revision presentation: %+v", e)
 		}
+	}
+	// Inspect the actual scoped statements, including relation rewriting and
+	// narrowed denial bindings, rather than only the metadata traversal plan.
+	counter.Reset()
+	if _, err := s.ListEventStreamPage(WithAccessScope(ctx, AccessScope{ActorID: "reader"}), EventListFilter{}, EventCursor{}); err != nil {
+		t.Fatal(err)
+	}
+	checked := 0
+	for _, statement := range counter.Statements() {
+		if !strings.Contains(statement.SQL, "SELECT kind,id FROM _anx_fresh_denied UNION SELECT") {
+			continue
+		}
+		rows, err := db.Query("EXPLAIN QUERY PLAN "+statement.SQL, statement.Args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var details []string
+		for rows.Next() {
+			var a, b, c int
+			var detail string
+			if err := rows.Scan(&a, &b, &c, &detail); err != nil {
+				rows.Close()
+				t.Fatal(err)
+			}
+			details = append(details, detail)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		plan := strings.Join(details, "; ")
+		var expected string
+		switch {
+		case strings.Contains(statement.SQL, "FROM events e WHERE"):
+			expected = "SEARCH _row USING INDEX sqlite_autoindex_events_1 (id=?)"
+		case strings.Contains(statement.SQL, "FROM card_revisions r JOIN"):
+			expected = "SEARCH _row USING INDEX sqlite_autoindex_card_revisions_1 (revision_id=?)"
+		case strings.Contains(statement.SQL, "FROM document_revisions r LEFT JOIN"):
+			expected = "SEARCH _row USING INDEX sqlite_autoindex_document_revisions_1 (revision_id=?)"
+		}
+		if expected == "" || !strings.Contains(plan, expected) || strings.Contains(plan, "SCAN _row") {
+			t.Fatalf("scoped page lost primary-key lookups: %s", plan)
+		}
+		var lookups []string
+		for _, detail := range details {
+			if strings.Contains(detail, "SEARCH _row") {
+				lookups = append(lookups, detail)
+			}
+		}
+		t.Logf("scoped event page lookups: %s", strings.Join(lookups, "; "))
+		checked++
+	}
+	if checked != 3 {
+		t.Fatalf("scoped payload and two revision batches: got %d statements", checked)
+	}
+}
+
+func TestEventStreamWarmHiddenPageCostIsIndependentOfDenialHistory(t *testing.T) {
+	for _, total := range []int{1000, 10000} {
+		t.Run(fmt.Sprint(total), func(t *testing.T) {
+			ctx := context.Background()
+			ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer ws.Close()
+			if _, err := ws.DB().Exec(`INSERT INTO threads(id,updated_at,updated_by,body_json) VALUES('private','now','owner','{"pm_actor_id":"owner"}')`); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := ws.DB().Exec(`WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<?)
+				INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json)
+				SELECT printf('%06d',i),'message_posted','2026-01-01T00:00:00Z','owner','private','[]','{}' FROM n`, total); err != nil {
+				t.Fatal(err)
+			}
+			db, counter := testsql.Open("file:" + ws.Layout().DatabasePath)
+			defer db.Close()
+			s := NewTestStore(db, ws.Layout().ArtifactContentDir)
+			scope := WithAccessScope(ctx, AccessScope{ActorID: "reader"})
+			// Cold capture builds the canonical closure and its shared lookup once.
+			if _, err := s.ListEventStreamPage(scope, EventListFilter{}, EventCursor{}); err != nil {
+				t.Fatal(err)
+			}
+			cursor := EventCursor{}
+			for tick := 0; tick < 3; tick++ {
+				counter.Reset()
+				start := time.Now()
+				page, err := s.ListEventStreamPage(scope, EventListFilter{}, cursor)
+				elapsed := time.Since(start)
+				if err != nil || len(page.Events) != 0 || !page.HasMore || page.Cursor.ID != fmt.Sprintf("%06d", (tick+1)*200) {
+					t.Fatalf("hidden traversal: %+v %v", page, err)
+				}
+				if counter.Count() != 3 || counter.ReturnedRows() != 202 || elapsed > 500*time.Millisecond {
+					t.Fatalf("hidden tick: %s statements=%d rows=%d", elapsed, counter.Count(), counter.ReturnedRows())
+				}
+				bound := false
+				for _, statement := range counter.Statements() {
+					if !strings.Contains(statement.SQL, "SELECT kind,id FROM _anx_fresh_denied UNION SELECT") {
+						continue
+					}
+					var denied [][2]string
+					if err := json.Unmarshal([]byte(statement.Args[0].(string)), &denied); err != nil || len(denied) != 200 {
+						t.Fatalf("denial binding includes history: %d %v", len(denied), err)
+					}
+					bound = true
+				}
+				if !bound {
+					t.Fatal("did not exercise narrowed cached denial binding")
+				}
+				t.Logf("hidden=%d tick=%d elapsed=%s statements=%d rows=%d denied_bindings=200", total, tick, elapsed, counter.Count(), counter.ReturnedRows())
+				cursor = page.Cursor
+			}
+		})
+	}
+}
+
+func TestEventStreamNarrowedSnapshotFallsBackOnConcurrentParentRevocation(t *testing.T) {
+	ctx := context.Background()
+	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	doc, _, err := s.CreateDocument(ctx, "owner", map[string]any{"id": "doc", "title": "source"}, "body", "text", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var revision string
+	if err := ws.DB().QueryRow(`SELECT revision_id FROM document_revisions WHERE document_id='doc'`).Scan(&revision); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ws.DB().Exec(`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) VALUES('event','message_posted','2026-01-01T00:00:00Z','owner',?,'[]','{}')`, doc["thread_id"]); err != nil {
+		t.Fatal(err)
+	}
+	pageCtx := withEventPageAccessScope(WithAccessScope(ctx, AccessScope{ActorID: "reader"}), []string{"event"})
+	refCtx := eventPageRefScope(pageCtx, "document_revision", []string{revision})
+	db := resourceaccess.NewDB(ws.DB())
+	assertVisible := func(want int) {
+		t.Helper()
+		var events, revisions int
+		if err := db.QueryRowContext(pageCtx, `SELECT count(*) FROM events WHERE id='event'`).Scan(&events); err != nil {
+			t.Fatal(err)
+		}
+		if err := db.QueryRowContext(refCtx, `SELECT count(*) FROM document_revisions r JOIN documents d ON d.id=r.document_id WHERE r.revision_id=?`, revision).Scan(&revisions); err != nil {
+			t.Fatal(err)
+		}
+		if events != want || revisions != want {
+			t.Fatalf("events=%d revisions=%d want=%d", events, revisions, want)
+		}
+	}
+	assertVisible(1)
+	first := denialSnapshotFrom(pageCtx)
+	for _, owner := range []string{"owner", "", "owner"} {
+		if _, err := s.PatchThread(ctx, "owner", doc["thread_id"].(string), map[string]any{"pm_actor_id": owner}, nil); err != nil {
+			t.Fatal(err)
+		}
+		want := 0
+		if owner == "" {
+			want = 1
+		}
+		assertVisible(want)
+		if denialSnapshotFrom(pageCtx) != first {
+			t.Fatal("expected SQL epoch fallback on the existing page snapshot")
+		}
+		// A fresh page must also honor inherited event/revision denial keys.
+		pageCtx = withEventPageAccessScope(WithAccessScope(ctx, AccessScope{ActorID: "reader"}), []string{"event"})
+		refCtx = eventPageRefScope(pageCtx, "document_revision", []string{revision})
+		assertVisible(want)
+		first = denialSnapshotFrom(pageCtx)
 	}
 }
