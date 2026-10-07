@@ -145,6 +145,7 @@ export function classifyWorkspaceProxyPathShape(pathname) {
  * @param {string} pathname Stripped app path starting with `/ws/`
  */
 export async function proxyToControlPlaneWorkspace(event, pathname) {
+  const started = performance.now();
   const controlPlaneBaseUrl = normalizeBaseUrl(privateEnv.ANX_CONTROL_BASE_URL);
   if (!controlPlaneBaseUrl) {
     return new Response(
@@ -296,6 +297,12 @@ export async function proxyToControlPlaneWorkspace(event, pathname) {
   responseHeaders.delete("content-encoding");
   responseHeaders.delete("content-length");
   responseHeaders.set("X-ANX-UI-Version", CURRENT_VERSION);
+  // Inclusive upstream-header latency. Compare with core's phase timings to
+  // isolate the proxy/network portion in the browser's request waterfall.
+  responseHeaders.append(
+    "Server-Timing",
+    `bff;dur=${(performance.now() - started).toFixed(3)}`,
+  );
 
   return new Response(upstreamResponse.body, {
     status: upstreamResponse.status,

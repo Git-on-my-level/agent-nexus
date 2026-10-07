@@ -495,6 +495,7 @@ func TestResourceAccessCommonReadPerformance(t *testing.T) {
 					logReadPlans(t, counted, counter.Statements())
 				}
 				if i == 2 {
+					logRequestSQLTiming(t, counter, time.Since(start), len(body), strings.Join(resp.Header.Values("Server-Timing"), ", "))
 					t.Logf("warm statements=%d returned_rows=%d duration=%s", counter.Count(), counter.ReturnedRows(), time.Since(start))
 					for _, q := range counter.Statements() {
 						if q.Elapsed > 25*time.Millisecond {

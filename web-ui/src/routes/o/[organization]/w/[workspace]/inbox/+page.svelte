@@ -14,7 +14,6 @@
   } from "$lib/actorSession";
   import {
     authenticatedAgent,
-    initializeAuthSession,
     isHumanWorkspacePrincipal,
   } from "$lib/authSession";
   import { restartSession } from "$lib/workspaceBootstrap";
@@ -387,11 +386,10 @@
       actionError = "";
     }
     try {
-      await initializeAuthSession({
-        fetchFn: globalThis.fetch.bind(globalThis),
-        workspaceSlug: $page.params.workspace,
-        authDriver: "inbox",
-      });
+      // The workspace shell mounts this page only after session bootstrap.
+      // Refreshing it here adds a serial identity round trip on navigation
+      // and every live reload. Each source request still authenticates in core;
+      // session maintenance and recovery belong to the shell and proxy.
       const results = await loadInboxSources();
       if (ticket !== requestId) return;
       let nextError = "";

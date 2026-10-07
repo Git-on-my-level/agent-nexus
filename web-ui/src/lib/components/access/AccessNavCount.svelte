@@ -29,7 +29,16 @@
       clearPendingAccessCount();
       return;
     }
-    return startPendingAccessCount(workspace);
+    const key = workspace;
+    let stop = () => {};
+    // Access owns its primary reads; this secondary badge follows first paint.
+    const timer = setTimeout(() => {
+      stop = startPendingAccessCount(key);
+    }, 1500);
+    return () => {
+      clearTimeout(timer);
+      stop();
+    };
   });
 
   let snapshot = $derived(

@@ -690,6 +690,11 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			opts.routeObserver(pattern, classify)
 		}
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+			started := time.Now()
+			timed := r.Method == http.MethodGet && (r.URL.Path == "/overview" || r.URL.Path == "/inbox" || r.URL.Path == "/inbox/summary")
+			if timed {
+				w = &serverTimingWriter{ResponseWriter: w, started: started}
+			}
 			requirement := enrichRouteMutationPolicy(r, classify(r))
 			if !enforceRouteAccess(w, r, opts, requirement) {
 				return
@@ -721,6 +726,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			}
 			if attributed && !attachRunAttribution(w, r, opts) {
 				return
+			}
+			if timed {
+				addServerTiming(w, "auth", started)
 			}
 			handler(w, r)
 		})
@@ -2879,11 +2887,15 @@ func writeError(w http.ResponseWriter, status int, code string, message string) 
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload map[string]any) {
+	started := time.Now()
 	body, err := json.Marshal(payload)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte(`{"error":{"code":"internal_error","message":"failed to encode response","recoverable":false,"hint":"Retry once; if it persists, escalate with logs and request context."}}`))
 		return
+	}
+	if w.Header().Get("Server-Timing") != "" {
+		addServerTiming(w, "serialize", started)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

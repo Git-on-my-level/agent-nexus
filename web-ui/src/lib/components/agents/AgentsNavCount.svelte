@@ -11,7 +11,17 @@
 
   $effect(() => {
     if (!enabled || !workspace) return;
-    return startAgentRoster(workspace);
+    const key = workspace;
+    let stop = () => {};
+    // The Agents page starts its own roster immediately. A navigation badge
+    // should follow the primary view's reads rather than compete with them.
+    const timer = setTimeout(() => {
+      stop = startAgentRoster(key);
+    }, 1500);
+    return () => {
+      clearTimeout(timer);
+      stop();
+    };
   });
 
   let count = $derived(

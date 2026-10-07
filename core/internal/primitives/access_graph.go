@@ -80,30 +80,29 @@ func ownershipClosure(name, roots string, owner bool) string {
 		terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.work_metadata m ON d.kind='card' AND m.card_id=d.id JOIN main."+e.table+" e ON e.target_key="+resourceaccess.AtomKeySQL("json_extract(m.metadata_json,'$.source.url')")+" WHERE m.authority<>'nexus'"+e.where)
 		terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_tombstones r ON r.kind=d.kind AND r.id=d.id JOIN main."+e.table+" e ON e.target_key="+resourceaccess.AtomKeySQL("r.ref")+" WHERE (r.ref LIKE 'http://%' OR r.ref LIKE 'https://%')"+e.where)
 	}
+	// The atomically maintained identity index already contains live handles,
+	// virtual revision handles, historical aliases and tombstones. One indexed
+	// probe replaces a recursive UNION arm per spelling source. SQLite copies
+	// every arm while preparing each scoped relation, even on an epoch cache hit.
+	refs("JOIN main.resource_access_identities r ON r.kind=d.kind AND r.resource_id=d.id", "r.ref")
+	// Empty legacy handles are intentionally absent from the identity index.
+	// Preserve their conservative ref-edge inheritance without one UNION arm
+	// per canonical table. NULL handles never matched the old equality probe.
+	emptyHandle := "CASE d.kind"
 	for _, kind := range []string{"thread", "board", "card", "topic", "document", "event", "artifact"} {
-		refs("JOIN main."+resourceTables[kind]+" r ON d.kind='"+kind+"' AND r.id=d.id", "r.handle")
+		emptyHandle += " WHEN '" + kind + "' THEN (SELECT handle FROM main." + resourceTables[kind] + " WHERE id=d.id)"
 	}
-	for _, kind := range []string{"card", "document"} {
-		refs("JOIN main."+kind+"_revisions r ON d.kind='"+kind+"_revision' AND r.revision_id=d.id JOIN main."+resourceTables[kind]+" p ON p.id=r."+kind+"_id", "COALESCE(NULLIF(p.handle,''),p.id)||'-r'||r.revision_number")
-	}
-	refs("JOIN main.resource_handle_aliases r ON r.resource_type=d.kind AND r.resource_id=d.id", "r.alias_handle")
-	refs("JOIN main.resource_access_tombstones r ON r.kind=d.kind AND r.id=d.id", "r.ref")
+	emptyHandle += " END"
+	emptyRef := "((" + emptyHandle + ")='' OR EXISTS(SELECT 1 FROM main.resource_handle_aliases r WHERE r.resource_type=d.kind AND r.resource_id=d.id AND r.alias_handle='') OR EXISTS(SELECT 1 FROM main.resource_access_tombstones r WHERE r.kind=d.kind AND r.id=d.id AND r.ref=''))"
+	validKind := "d.kind NOT LIKE 'filter/%' AND d.kind NOT IN ('work_evidence_record','work_evidence_alias','external_key')"
+	terms = append(terms, "SELECT e.source_type,e.source_id"+carry+" FROM "+name+" d JOIN main.ref_edges e INDEXED BY idx_ref_edges_access_cover ON e.target_type=d.kind AND e.target_id='' AND e.edge_type='ref' WHERE "+validKind+" AND "+emptyRef)
+	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_exact_edges e ON e.target_key="+resourceaccess.AtomKeySQL("(d.kind||':')")+" WHERE "+validKind+" AND "+emptyRef)
 	// Prose ownership is resolved atomically at writes, including new/renamed
 	// identities matching older text. Reads never inspect stored mention text.
 	terms = append(terms, "SELECT m.source_kind,m.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_identities i ON i.kind=d.kind AND i.resource_id=d.id JOIN main.resource_access_mentions m ON m.identity_id=i.identity_id")
-	for _, ref := range []string{"d.id", "r.handle"} {
-		join := ""
-		if ref == "r.handle" {
-			join = "JOIN main.topics r ON r.id=d.id"
-		}
-		terms = append(terms, "SELECT 'card',m.card_id"+carry+" FROM "+name+" d "+join+" JOIN main.work_metadata m ON d.kind='topic' AND "+resourceaccess.ReferenceSQL("json_extract(m.metadata_json,'$.project_ref')")+"=('topic:'||"+ref+") COLLATE NOCASE")
-	}
-	for _, alias := range []struct{ table, condition, column string }{
-		{"resource_handle_aliases", "r.resource_type=d.kind AND r.resource_id=d.id", "alias_handle"},
-		{"resource_access_tombstones", "r.kind=d.kind AND r.id=d.id", "ref"},
-	} {
-		terms = append(terms, "SELECT 'card',m.card_id"+carry+" FROM "+name+" d JOIN main."+alias.table+" r ON "+alias.condition+" JOIN main.work_metadata m ON d.kind='topic' AND "+resourceaccess.ReferenceSQL("json_extract(m.metadata_json,'$.project_ref')")+"=('topic:'||r."+alias.column+") COLLATE NOCASE")
-	}
+	terms = append(terms, "SELECT 'card',m.card_id"+carry+" FROM "+name+" d JOIN main.work_metadata m ON d.kind='topic' AND "+resourceaccess.ReferenceSQL("json_extract(m.metadata_json,'$.project_ref')")+"=('topic:'||d.id) COLLATE NOCASE")
+	terms = append(terms, "SELECT 'card',m.card_id"+carry+" FROM "+name+" d JOIN main.resource_access_identities r ON r.kind=d.kind AND r.resource_id=d.id JOIN main.work_metadata m ON d.kind='topic' AND "+resourceaccess.ReferenceSQL("json_extract(m.metadata_json,'$.project_ref')")+"=('topic:'||r.ref) COLLATE NOCASE")
+	terms = append(terms, "SELECT 'card',m.card_id"+carry+" FROM "+name+" d JOIN main.work_metadata m ON d.kind='topic' AND "+resourceaccess.ReferenceSQL("json_extract(m.metadata_json,'$.project_ref')")+"='topic:' COLLATE NOCASE WHERE "+emptyRef)
 	return name + "(" + columns + ") AS MATERIALIZED (" + strings.Join(terms, " UNION ") + ")"
 }
 
