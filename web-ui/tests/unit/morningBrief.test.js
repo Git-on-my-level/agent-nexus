@@ -281,6 +281,52 @@ describe("morningBriefModel", () => {
     expect(machine.message).toBe("Agent presence could not be loaded.");
   });
 
+  it("reports a failed risk read instead of nothing off track", () => {
+    const model = morningBriefModel(
+      brief({
+        at_risk: {
+          status: "unavailable",
+          message: "Risk could not be computed for this reader.",
+          count: 0,
+          items: [],
+        },
+      }),
+    );
+    expect(model.sections.risk.status).toBe("unavailable");
+    expect(model.sections.risk.message).toBe(
+      "Risk could not be computed for this reader.",
+    );
+    expect(model.sections.risk.empty).toBeUndefined();
+    expect(model.sections.risk.rows).toEqual([]);
+  });
+
+  it("omits finished rather than reporting zero when throughput is unavailable", () => {
+    const model = morningBriefModel(
+      brief({
+        machine: {
+          status: "ok",
+          roster_status: "ok",
+          throughput_status: "unavailable",
+          working: 2,
+          waiting: 0,
+          stuck: 0,
+          finished_24h: null,
+          agents_finished_24h: null,
+          href: "/agents",
+          stuck_items: [],
+        },
+      }),
+    );
+    const machine = model.sections.machine;
+    expect(machine.throughputDown).toBe(true);
+    expect(machine.stats.map((stat) => stat.key)).toEqual([
+      "working",
+      "waiting",
+      "stuck",
+    ]);
+    expect(machine.message).toBe("Throughput could not be computed.");
+  });
+
   it("reports a failed decisions read instead of an empty ranking", () => {
     const model = morningBriefModel(
       brief({

@@ -175,7 +175,15 @@
             >
           {/if}
         </header>
-        {#if risk.empty}
+        {#if risk.status === "unavailable"}
+          <p
+            class="brief__note brief__note--warn"
+            role="status"
+            data-brief-empty="risk"
+          >
+            {risk.message}
+          </p>
+        {:else if risk.empty}
           <p class="brief__note" data-brief-empty="risk">{risk.emptyLine}</p>
         {:else}
           <ul class="brief__rows">
@@ -216,11 +224,14 @@
             </li>
           {/each}
         </ul>
-        {#if machine.rosterDown}
+        {#if machine.rosterDown || machine.throughputDown}
           <p
             class="brief__note brief__note--warn"
             role="status"
-            data-brief-roster-down
+            data-brief-roster-down={machine.rosterDown ? "true" : undefined}
+            data-brief-throughput-down={machine.throughputDown
+              ? "true"
+              : undefined}
           >
             {machine.message}
           </p>

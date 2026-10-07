@@ -145,6 +145,15 @@ function changesSection(brief, hrefFor) {
 
 function riskSection(brief, hrefFor) {
   const source = brief?.at_risk ?? {};
+  if (asText(source.status) === "unavailable") {
+    return {
+      key: "risk",
+      title: "At risk",
+      status: "unavailable",
+      message: asText(source.message) || "Risk could not be loaded.",
+      rows: [],
+    };
+  }
   const total = count(source.count);
   return {
     key: "risk",
@@ -185,6 +194,7 @@ function machineSection(brief, hrefFor) {
   const source = brief?.machine ?? {};
   const hours = count(brief?.throughput_hours) || 24;
   const rosterDown = asText(source.roster_status) === "unavailable";
+  const throughputDown = asText(source.throughput_status) === "unavailable";
   /*
    * Four numbers, and only the last one is allowed to be loud. "Stuck" means
    * an agent is holding work and has gone quiet; offline agents are the normal
@@ -203,11 +213,13 @@ function machineSection(brief, hrefFor) {
       },
     );
   }
-  stats.push({
-    key: "finished",
-    label: `Finished in ${hours}h`,
-    value: count(source.finished_24h),
-  });
+  if (!throughputDown) {
+    stats.push({
+      key: "finished",
+      label: `Finished in ${hours}h`,
+      value: count(source.finished_24h),
+    });
+  }
   if (!rosterDown) {
     stats.push({
       key: "stuck",
@@ -221,9 +233,12 @@ function machineSection(brief, hrefFor) {
     title: "Machine",
     status: "ok",
     rosterDown,
+    throughputDown,
     message: rosterDown
       ? asText(source.message) || "Agent presence could not be loaded."
-      : "",
+      : throughputDown
+        ? "Throughput could not be computed."
+        : "",
     stats,
     agentsFinished: count(source.agents_finished_24h),
     truncated: source.truncated === true || source.roster_truncated === true,

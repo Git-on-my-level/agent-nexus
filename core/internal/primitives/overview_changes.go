@@ -24,10 +24,11 @@ type OverviewChange struct {
 	TS     string `json:"ts,omitempty"`
 }
 type OverviewChanges struct {
-	Since       *string          `json:"since"`
-	GeneratedAt string           `json:"generated_at"`
-	Items       []OverviewChange `json:"items"`
-	Truncated   bool             `json:"truncated"`
+	Since       *string           `json:"since"`
+	GeneratedAt string            `json:"generated_at"`
+	Items       []OverviewChange  `json:"items"`
+	Truncated   bool              `json:"truncated"`
+	PriorPhases map[string]string `json:"-"`
 }
 
 func (d *OverviewChanges) Add(item OverviewChange) {
@@ -44,6 +45,7 @@ func (d *OverviewChanges) Add(item OverviewChange) {
 
 type visitState struct {
 	Health string            `json:"health"`
+	Phase  string            `json:"phase,omitempty"`
 	Steps  map[string]string `json:"steps"`
 }
 
@@ -54,7 +56,7 @@ type overviewVisitValidationKey struct{}
 func overviewSnapshot(work []map[string]any) map[string]visitState {
 	out := map[string]visitState{}
 	for _, w := range work {
-		v := visitState{Health: anyStringValue(initiativeHealth(w)["status"]), Steps: map[string]string{}}
+		v := visitState{Health: anyStringValue(initiativeHealth(w)["status"]), Phase: anyStringValue(w["phase"]), Steps: map[string]string{}}
 		if state, ok := w["plan_state"].(plans.State); ok {
 			p := w["plan"].(plans.Plan)
 			for i, step := range state.Steps {
@@ -107,6 +109,10 @@ func (s *Store) OverviewChanges(ctx context.Context, principal string, work []ma
 	before := map[string]visitState{}
 	if err = json.Unmarshal([]byte(raw), &before); err != nil {
 		return out, err
+	}
+	out.PriorPhases = make(map[string]string, len(before))
+	for id, state := range before {
+		out.PriorPhases[id] = state.Phase
 	}
 	for _, w := range work {
 		old, known := before[anyStringValue(w["id"])]

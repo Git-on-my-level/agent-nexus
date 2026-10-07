@@ -147,7 +147,7 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			return
 		}
 		payload["since_you_last_looked"] = digest
-		brief.since, brief.changes, brief.changesTruncated = digest.Since, digest.Items, digest.Truncated
+		brief.since, brief.changes, brief.changesTruncated, brief.priorPhases = digest.Since, digest.Items, digest.Truncated, digest.PriorPhases
 		addServerTiming(w, "changes", stage)
 	}
 	work := payload["work"].(map[string]any)
