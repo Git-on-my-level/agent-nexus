@@ -41,8 +41,9 @@ the eventual minimal handler switch.
 4. Adapt the authenticated, transaction-bound repository to
    `readmodel.OrderedReader`. Admit tuples using the entire `(order_key,rid)`
    range before LIMIT; never fetch an integer-key page and then sort/filter it.
-   A's `ReadBatchFeed` now supplies proof-bound batched authority/candidates;
-   extend its integer comparator to this BLOB shape under A's ownership. Bind
+   A's `ReadOrderedBatchFeed` and `AdaptOrderedReadModel` now supply the
+   integrated BLOB/private-RID capability; the HTTP fixture exercises that
+   capability directly, without the earlier test-only SQL adapter. Bind
    trusted ordered cursor decoding to `Snapshot.Binding` and retain directory
    coverage. Its persisted selection proof must cover complete old-policy
    audience/lifecycle/payload/counters and entire-generation RID disjointness;
@@ -78,15 +79,21 @@ The mounted authenticated `/inbox` probe covers owner, stranger and agent with
 private/public boards and wrong-audience domination. It proves captured payload
 equivalence, explicitly rejects the integer/RID comparator as an enablement
 proof, and exercises BLOB seeks + one exact batched RID hydration per page in a
-test-only pinned SQL adapter. The adapter uses synthetic fixture authority and
-receipts; this is not production dispatcher isolation or uniform-scope proof.
+real `ReadOrderedBatchFeed`/`AdaptOrderedReadModel` capability. It uses synthetic
+fixture selection receipts; this is not serving certification or uniform-scope
+proof. The real `InboxDispatcher` returns whole-response missing-proof, no-directory
+and >64-directory fallback outcomes without partial items/counts, with diagnostics
+accounted, while the mounted legacy route retains every canonical item/count.
+This exercises the dispatch library; route selection and full fallback latency
+still need production integration.
 The 65-canonical-source mounted HTTP oracle exercises page order, summary
 counts and dirty/error freshness for sources with no inbox rows. It demonstrates
 that the old selected-only snapshot can omit a canonical source while claiming
 no more scopes. Missing proof/directory, >64 selection, mixed transition, revoked
 membership and an out-of-selection canonical mutation all refuse the repository
-batch callback. The mounted legacy route retains the whole result. This is not
-a test of a production mixed-selection fallback dispatcher: none exists yet.
+batch callback. The real dispatch library reports whole-response fallback and the mounted legacy
+route retains the whole result. This is not a switched production HTTP route or
+a full fallback/enrichment proof.
 
 The canonical point mutation probe covers real `derived_inbox_items`, the
 published canonical hook, source/registry/feed/payload/counter commit and full

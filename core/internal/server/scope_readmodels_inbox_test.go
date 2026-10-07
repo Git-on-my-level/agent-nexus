@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"reflect"
 	"testing"
-	"time"
 
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/readmodel"
@@ -38,7 +37,7 @@ func TestScopeInboxHTTPShadowHydrationPrivacyAndOrderingGate(t *testing.T) {
 	if err := repo.InitializeFeedSchema(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(primitives.ScopeInboxOrderSchemaProposal); err != nil {
+	if err := repo.InitializeInboxOrderSchema(ctx); err != nil {
 		t.Fatal(err)
 	}
 	identities := map[string]scopes.ResourceIdentity{}
@@ -181,7 +180,13 @@ func TestScopeInboxHTTPShadowHydrationPrivacyAndOrderingGate(t *testing.T) {
 				streams = append(streams, scopes.Stream{Scope: id, Family: "inbox", Audience: "all"})
 			}
 			var shadow []map[string]any
+			var authorityBinding string
 			err = repo.ReadFeed(ctx, scopes.RequestSelection{Principal: principal.id, ScopeIDs: principal.selected}, streams, func(r scopedrepo.FeedReader) error {
+				snapshot, err := r.Snapshot()
+				if err != nil {
+					return err
+				}
+				authorityBinding = snapshot.Binding
 				var refs []scopedrepo.FeedReference
 				for stream := range streams {
 					cs, err := r.Candidates(stream, nil, 100)
@@ -222,20 +227,11 @@ func TestScopeInboxHTTPShadowHydrationPrivacyAndOrderingGate(t *testing.T) {
 			if reflect.DeepEqual(body.Items, shadow) {
 				t.Fatal("integer/RID order unexpectedly satisfies legacy inbox comparator")
 			}
-			// Exercise B's BLOB-key pipeline with a test-only SQL adapter. This
-			// is a pinned fixture transaction, not A's production dispatcher or
-			// uniform visibility certificate. The A FeedReader still lacks this
-			// typed comparator/private mapping capability and remains unwired.
-			tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-			if err != nil {
+			// Inject only a test selection receipt, obtained through the actual
+			// public snapshot API. No serving/enrichment receipt is minted here.
+			if _, err := db.Exec(`INSERT OR REPLACE INTO scope_feed_selection_proofs SELECT ?,revision,1,1,1,1,1,1,1,1 FROM scope_feed_proof_clock WHERE singleton=1`, authorityBinding); err != nil {
 				t.Fatal(err)
 			}
-			defer tx.Rollback()
-			snapshot := readmodel.Snapshot{Binding: "ordered-fixture:" + principal.id, Streams: streams, AsOf: time.Now().UTC()}
-			for _, id := range principal.selected {
-				snapshot.Scopes = append(snapshot.Scopes, readmodel.Scope{ID: id, Generation: 1, Availability: readmodel.Available, Ready: true})
-			}
-			reader := scopeInboxOrderedProbe{tx: tx, snapshot: snapshot, enrich: enrich}
 			codec, err := readmodel.NewCursorCodec(make([]byte, 32))
 			if err != nil {
 				t.Fatal(err)
@@ -243,120 +239,40 @@ func TestScopeInboxHTTPShadowHydrationPrivacyAndOrderingGate(t *testing.T) {
 			var ordered []map[string]any
 			cursor := ""
 			for pages := 0; pages < 10; pages++ {
-				page, err := readmodel.ReadOrdered(ctx, reader, codec, 3, cursor)
+				var page readmodel.Page
+				err := repo.ReadOrderedBatchFeed(ctx, scopes.RequestSelection{Principal: principal.id, ScopeIDs: principal.selected}, streams, func(r scopedrepo.OrderedBatchFeedReader) error {
+					var err error
+					page, err = readmodel.ReadOrdered(ctx, scopedrepo.AdaptOrderedReadModel(r, scopes.DirectoryPage{}, ""), codec, 3, cursor)
+					return err
+				})
 				if err != nil {
 					t.Fatal(err)
 				}
+				var payloads []map[string]any
 				for _, item := range page.Items {
-					var payload map[string]any
-					if err := json.Unmarshal(item.Data, &payload); err != nil {
+					canonical, err := primitives.DecodeScopeInboxRow(item.Data)
+					if err != nil {
 						t.Fatal(err)
 					}
-					ordered = append(ordered, payload)
+					payloads = append(payloads, payloadFromDerivedInboxItem(canonical))
 				}
+				if err := enrich(payloads); err != nil {
+					t.Fatal(err)
+				}
+				ordered = append(ordered, payloads...)
 				cursor = page.NextCursor
 				if cursor == "" {
 					break
 				}
 			}
 			if cursor != "" || !reflect.DeepEqual(body.Items, ordered) {
-				t.Fatal("ordered pipeline lost HTTP payload/order parity")
+				t.Fatalf("ordered pipeline lost HTTP payload/order parity: cursor=%q\nHTTP=%#v\nordered=%#v", cursor, body.Items, ordered)
 			}
-			// Ordering parity deliberately remains a failing enablement gate. This
-			// negative prevents the payload parity probe from authorizing cutover.
+			// This proves the integrated BLOB/private-RID adapter against the
+			// mounted oracle. Synthetic selection proof and fixture enrichment
+			// still cannot authorize serving or establish canonical completeness.
 		})
 	}
-}
-
-type scopeInboxOrderedProbe struct {
-	tx       *sql.Tx
-	snapshot readmodel.Snapshot
-	enrich   func([]map[string]any) error
-}
-
-func (p scopeInboxOrderedProbe) Snapshot(context.Context) (readmodel.Snapshot, error) {
-	return p.snapshot, nil
-}
-func (p scopeInboxOrderedProbe) OrderedCandidates(ctx context.Context, stream int, after *readmodel.OrderedKey, limit int) ([]readmodel.OrderedCandidate, error) {
-	s := p.snapshot.Streams[stream]
-	q := primitives.ScopeInboxOrderStartProposal
-	args := []any{s.Scope, 1, s.Family, s.Audience}
-	if after != nil {
-		q = primitives.ScopeInboxOrderAfterProposal
-		args = append(args, after.Order, after.RID)
-	}
-	args = append(args, limit)
-	rows, err := p.tx.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var result []readmodel.OrderedCandidate
-	for rows.Next() {
-		var c readmodel.OrderedCandidate
-		if err := rows.Scan(&c.Key.Order, &c.Key.RID, &c.Version); err != nil {
-			return nil, err
-		}
-		result = append(result, c)
-	}
-	return result, rows.Err()
-}
-func (p scopeInboxOrderedProbe) HydrateOrdered(ctx context.Context, refs []readmodel.OrderedReference) ([]readmodel.Item, error) {
-	q, args, err := readmodel.OrderedHydrationProposal(p.snapshot, refs)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := p.tx.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var result []readmodel.Item
-	var payloads []map[string]any
-	for rows.Next() {
-		var ord int
-		var opaque, canonical string
-		var version int64
-		var data []byte
-		if err := rows.Scan(&ord, &opaque, &canonical, &version, &data); err != nil {
-			return nil, err
-		}
-		if ord != len(result) || ord >= len(refs) || version != refs[ord].Candidate.Version {
-			return nil, readmodel.ErrProjection
-		}
-		ref := refs[ord]
-		stream := p.snapshot.Streams[ref.Stream]
-		i := scopes.ResourceIdentity{ScopeID: stream.Scope, Kind: "inbox", ResourceID: opaque, CanonicalID: canonical, RID: ref.Candidate.Key.RID, CanonicalVersion: version}
-		item, err := primitives.DecodeScopeInbox(i, data)
-		if err != nil {
-			return nil, err
-		}
-		payload := payloadFromDerivedInboxItem(item)
-		payloads = append(payloads, payload)
-		result = append(result, readmodel.Item{Ref: "inbox:" + opaque})
-	}
-	if len(result) != len(refs) {
-		return nil, readmodel.ErrProjection
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if p.enrich != nil {
-		if err := p.enrich(payloads); err != nil {
-			return nil, err
-		}
-	}
-	for n, payload := range payloads {
-		raw, err := json.Marshal(payload)
-		if err != nil {
-			return nil, err
-		}
-		result[n].Data = raw
-	}
-	return result, nil
 }
 
 type inboxMutationHook func(context.Context, scopedrepo.MutationTx, scopes.CanonicalMutation) error

@@ -14,6 +14,7 @@ import (
 
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/readmodel"
 	"agent-nexus-core/internal/scopedrepo"
 	"agent-nexus-core/internal/scopes"
 )
@@ -124,6 +125,14 @@ func TestScopeInboxHTTPDirectoryCompletenessAndRefusalMatrix(t *testing.T) {
 	if err := repo.InitializeFeedSchema(ctx); err != nil {
 		t.Fatal(err)
 	}
+	if err := repo.InitializeInboxDispatcherSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	codec, err := readmodel.NewCursorCodec(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dispatcher := scopedrepo.NewInboxDispatcher(repo, codec)
 	var ids []scopes.ID
 	var streams []scopes.Stream
 	var newlyEligibleThread string
@@ -205,6 +214,19 @@ func TestScopeInboxHTTPDirectoryCompletenessAndRefusalMatrix(t *testing.T) {
 			t.Fatal("canonical count included only selected scopes", summary)
 		}
 	}
+	assertDispatchFallback := func(t *testing.T, reason scopedrepo.InboxFallback) {
+		t.Helper()
+		before := dispatcher.Diagnostics()
+		result, err := dispatcher.Read(ctx, owner.AgentID, 23, "")
+		if err != nil || result.Fallback != reason || len(result.Page.Items) != 0 || len(result.Counts) != 0 {
+			t.Fatal("dispatcher exposed partial output before proof", result, err)
+		}
+		after := dispatcher.Diagnostics()
+		if after.Requests != before.Requests+1 || after.FallbackRequests != before.FallbackRequests+1 {
+			t.Fatal("whole-response fallback was not accounted")
+		}
+		assertWholeOracle(t)
+	}
 	refuse := func(t *testing.T, req scopes.RequestSelection, ss []scopes.Stream, want error) {
 		t.Helper()
 		called := false
@@ -212,7 +234,7 @@ func TestScopeInboxHTTPDirectoryCompletenessAndRefusalMatrix(t *testing.T) {
 		if called || !errors.Is(err, want) {
 			t.Fatalf("unsafe admission: callback=%v error=%v want=%v", called, err, want)
 		}
-		assertWholeOracle(t)
+		assertDispatchFallback(t, scopedrepo.InboxProofUnavailable)
 	}
 	t.Run("missing proof", func(t *testing.T) { refuse(t, request, streams, scopes.ErrUpdating) })
 	t.Run("missing directory", func(t *testing.T) {
@@ -288,5 +310,20 @@ func TestScopeInboxHTTPDirectoryCompletenessAndRefusalMatrix(t *testing.T) {
 		}
 		assertFreshness("error")
 		assertWholeOracle(t)
+	})
+	t.Run("actual directory over 64 retains complete legacy response", func(t *testing.T) {
+		if _, err := db.Exec(`INSERT INTO scope_domains VALUES('directory-scope-64','active',1)`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`INSERT INTO scope_memberships VALUES(?,'directory-scope-64','reader',1)`, owner.AgentID); err != nil {
+			t.Fatal(err)
+		}
+		assertDispatchFallback(t, scopedrepo.InboxDirectoryBudget)
+	})
+	t.Run("no directory retains complete legacy response", func(t *testing.T) {
+		if _, err := db.Exec(`DELETE FROM scope_memberships WHERE principal=?`, owner.AgentID); err != nil {
+			t.Fatal(err)
+		}
+		assertDispatchFallback(t, scopedrepo.InboxNoDirectory)
 	})
 }
