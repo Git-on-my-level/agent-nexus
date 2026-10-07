@@ -54,6 +54,9 @@ func accessCTEs(scope AccessScope, query string) string {
 	return accessCTEsWithSnapshot(scope, query, nil)
 }
 func accessCTEsWithSnapshot(scope AccessScope, query string, snapshot *denialSnapshot) string {
+	return accessSnapshotCTEs(scope, query, snapshot, false)
+}
+func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapshot, pinned bool) string {
 	needed := map[string]bool{}
 	for _, token := range sqlIdentifiers.FindAllString(query, -1) {
 		needed[strings.ToLower(token)] = true
@@ -140,15 +143,24 @@ func accessCTEsWithSnapshot(scope AccessScope, query string, snapshot *denialSna
 	if !needsGraph {
 		return ""
 	}
-	deniedGraph := ownershipClosure("_anx_denied", deniedRootSQL(scope), false)
+	deniedGraph := ""
+	if snapshot == nil {
+		deniedGraph = ownershipClosure("_anx_denied", deniedRootSQL(scope), false)
+	}
 	if snapshot != nil {
 		epoch := fmt.Sprint(snapshot.epoch)
 		current := "COALESCE((SELECT version FROM main.resource_access_epoch WHERE singleton=1),-1)"
 		if snapshot.epochTable == "receipt_access_epoch" {
 			current = "COALESCE((SELECT version FROM main.receipt_access_epoch WHERE singleton=1),-1)"
 		}
-		roots := "SELECT * FROM (" + deniedRootSQL(scope) + ") WHERE " + current + "<>" + epoch
-		deniedGraph = ownershipClosure("_anx_fresh_denied", roots, false) + ", _anx_denied(kind,id) AS MATERIALIZED (SELECT kind,id FROM _anx_fresh_denied UNION SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]') FROM json_each(?) WHERE " + current + "=" + epoch + ")"
+		if pinned {
+			// Admission established this epoch in the SAME read-only transaction.
+			// SQLite cannot change it until rollback; ordinary reads retain fallback.
+			deniedGraph = "_anx_denied(kind,id) AS MATERIALIZED (SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]') FROM json_each(?) WHERE " + current + "=" + epoch + ")"
+		} else {
+			roots := "SELECT * FROM (" + deniedRootSQL(scope) + ") WHERE " + current + "<>" + epoch
+			deniedGraph = ownershipClosure("_anx_fresh_denied", roots, false) + ", _anx_denied(kind,id) AS MATERIALIZED (SELECT kind,id FROM _anx_fresh_denied UNION SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]') FROM json_each(?) WHERE " + current + "=" + epoch + ")"
+		}
 	}
 	// Most indexed resource reads only need denied (kind,id) rows. Unused ref
 	// and atom CTEs still duplicate the closure during SQLite preparation.
@@ -176,6 +188,9 @@ func scopeRead(ctx context.Context, query string) string {
 }
 
 func scopeReadWithSnapshot(ctx context.Context, query string, snapshot *denialSnapshot) string {
+	return scopeReadSnapshot(ctx, query, snapshot, false)
+}
+func scopeReadSnapshot(ctx context.Context, query string, snapshot *denialSnapshot, pinned bool) string {
 	scope, scoped := accessScopeFrom(ctx)
 	if !scoped {
 		return query
@@ -187,7 +202,7 @@ func scopeReadWithSnapshot(ctx context.Context, query string, snapshot *denialSn
 		q = strings.ReplaceAll(q, " INDEXED BY "+index, "")
 	}
 	upper := strings.ToUpper(q)
-	graph := accessCTEsWithSnapshot(scope, q, snapshot)
+	graph := accessSnapshotCTEs(scope, q, snapshot, pinned)
 	prefix := "WITH RECURSIVE " + graph
 	if fields := strings.Fields(upper); len(fields) > 0 {
 		switch fields[0] {

@@ -44,6 +44,39 @@ func readOnDB(ctx context.Context, q QueryRower, query string, args []any) (stri
 type DB struct{ raw *sql.DB }
 type Tx struct{ raw *sql.Tx }
 
+type pinnedReadKey struct{}
+type pinnedRead struct {
+	db *sql.DB
+	tx *sql.Tx
+}
+
+// PinReads routes reads of this database through one read-only snapshot. The
+// policy owner admits that snapshot before it is exposed. Business mutations
+// continue using ordinary transactions and their current canonical policy.
+func (d *DB) PinReads(ctx context.Context, admit func(context.Context, QueryRower) (context.Context, error)) (context.Context, func(), error) {
+	_, _ = readOnDB(ctx, d.raw, "SELECT id FROM cards", nil)
+	tx, err := d.raw.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return ctx, nil, err
+	}
+	next, err := admit(ctx, tx)
+	if err != nil {
+		_ = tx.Rollback()
+		return ctx, nil, err
+	}
+	return context.WithValue(next, pinnedReadKey{}, pinnedRead{d.raw, tx}), func() { _ = tx.Rollback() }, nil
+}
+
+func (d *DB) readHandle(ctx context.Context) interface {
+	QueryRower
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+} {
+	if pin, ok := ctx.Value(pinnedReadKey{}).(pinnedRead); ok && pin.db == d.raw {
+		return pin.tx
+	}
+	return d.raw
+}
+
 func NewDB(raw *sql.DB) *DB {
 	if raw == nil {
 		return nil
@@ -51,12 +84,14 @@ func NewDB(raw *sql.DB) *DB {
 	return &DB{raw: raw}
 }
 func (d *DB) QueryContext(ctx context.Context, q string, args ...any) (*sql.Rows, error) {
-	q, args = readOnDB(ctx, d.raw, q, args)
-	return d.raw.QueryContext(ctx, q, args...)
+	handle := d.readHandle(ctx)
+	q, args = readOnDB(ctx, handle, q, args)
+	return handle.QueryContext(ctx, q, args...)
 }
 func (d *DB) QueryRowContext(ctx context.Context, q string, args ...any) *sql.Row {
-	q, args = readOnDB(ctx, d.raw, q, args)
-	return d.raw.QueryRowContext(ctx, q, args...)
+	handle := d.readHandle(ctx)
+	q, args = readOnDB(ctx, handle, q, args)
+	return handle.QueryRowContext(ctx, q, args...)
 }
 func (d *DB) CheckValues(ctx context.Context, values any) error {
 	if err := ValidateText(values); err != nil {

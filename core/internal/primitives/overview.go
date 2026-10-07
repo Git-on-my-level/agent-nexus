@@ -301,10 +301,10 @@ func (s *Store) overviewWork(ctx context.Context, visible func(string, string) b
 		visible = nil
 	}
 	closed := false
-	page, err := s.ListReportWork(ctx, ReportWorkFilter{Limit: 100, IncludeClosed: true, OverviewClosed: &closed, skipOwnerContext: scoped})
+	page, err := s.ListReportWork(ctx, ReportWorkFilter{Limit: 100, IncludeClosed: true, OverviewClosed: &closed, skipOwnerContext: scoped, overviewSummary: overviewWorkSummary(ctx)})
 	if err == nil && includeClosed {
 		closed = true
-		history, e := s.ListReportWork(ctx, ReportWorkFilter{Limit: 100, IncludeClosed: true, OverviewClosed: &closed, skipOwnerContext: scoped})
+		history, e := s.ListReportWork(ctx, ReportWorkFilter{Limit: 100, IncludeClosed: true, OverviewClosed: &closed, skipOwnerContext: scoped, overviewSummary: overviewWorkSummary(ctx)})
 		if e != nil {
 			return nil, false, nil, e
 		}

@@ -446,7 +446,7 @@ export async function loadPendingReports(client, pending = [], existing = []) {
 
 /** The core snapshot is shared with `anx overview --json`. */
 export async function loadOverview(client, { now = Date.now() } = {}) {
-  const snapshot = await client.getOverview();
+  const snapshot = await client.getOverview({ work_view: "summary" });
   const records = dedupeWorkBySource(snapshot.work.items).records;
   const blocked = records.filter((item) => item.phase === "blocked");
   return {
