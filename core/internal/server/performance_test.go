@@ -386,8 +386,53 @@ func TestPerformanceRoutes(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	sourceHash, err := performanceRuntimeSourceHash("../../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stageDir := os.Getenv("ANX_PERFORMANCE_STAGE_BARRIER")
+	schedule := performanceStageSchedule{Policy: "independent"}
+	ownerPublished := false
+	waitOwners := func() {
+		deadline := time.Now().Add(20 * time.Minute)
+		if testDeadline, ok := t.Deadline(); ok && testDeadline.Before(deadline) {
+			deadline = testDeadline
+		}
+		ctx, cancel := context.WithDeadline(context.Background(), deadline)
+		defer cancel()
+		var err error
+		schedule, err = waitPerformanceOwnerStages(ctx, stageDir, sourceHash)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, stage := range schedule.Owners {
+			if !stage.Success {
+				t.Errorf("authorized stage failed in worker %d", stage.Worker)
+			}
+		}
+	}
+	if stageDir != "" {
+		if !filepath.IsAbs(stageDir) || worker < 1 || worker > 3 || selector != "" {
+			t.Fatal("stage barrier requires an absolute directory and a complete isolated worker")
+		}
+		if err := os.MkdirAll(stageDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if worker == 3 {
+			waitOwners() // Delay fixture setup and its GC as well as measured post reads.
+		} else {
+			defer func() {
+				if !ownerPublished {
+					if err := publishPerformanceOwnerStage(stageDir, sourceHash, worker, false); err != nil {
+						t.Error(err)
+					}
+				}
+			}()
+		}
+	}
 	allowed := performancePlanExceptions(t)
-	baseline := performanceBaselineBudgets(t, allBudgets)                     // expire pins before the costly corpus
+	baseline := performanceBaselineBudgets(t, allBudgets) // expire pins before the costly corpus
+	fixtureStarted := time.Now().UnixNano()
 	env := preparePerformanceStreamCases(t, newPerformanceEnv(t), allBudgets) // every shard retains the complete privacy selector set
 	for _, selector := range []string{"{board_id}", "{card_id}", "{document_id}", "{artifact_id}", "{event_id}", "{thread_id}", "{topic_id}", "{conversation_id}", "{decision_id}", "{action_id}", "{turn_id}"} {
 		if value := env.replace.Replace(selector); value == "" || value == selector {
@@ -412,22 +457,20 @@ func TestPerformanceRoutes(t *testing.T) {
 	}
 	checked := map[string]bool{}
 	reported := map[string]bool{}
-	sourceHash, err := performanceRuntimeSourceHash("../../..")
-	if err != nil {
-		t.Fatal(err)
-	}
 	report := struct {
-		SourceHash  string                    `json:"core_source_sha256"`
-		Diagnostic  bool                      `json:"diagnostic"`
-		Shard       int                       `json:"shard"`
-		ShardCount  int                       `json:"shard_count"`
-		Worker      int                       `json:"worker"`
-		WorkerCount int                       `json:"worker_count"`
-		MaxProcs    int                       `json:"gomaxprocs"`
-		Completed   []string                  `json:"completed"`
-		Plans       map[string]map[string]any `json:"plans"`
-		Samples     []map[string]any          `json:"samples"`
-	}{SourceHash: sourceHash, Diagnostic: diagnostic, Shard: shard, ShardCount: shardCount, Worker: worker, WorkerCount: workerCount, MaxProcs: runtime.GOMAXPROCS(0), Plans: map[string]map[string]any{}}
+		SourceHash     string                    `json:"core_source_sha256"`
+		Diagnostic     bool                      `json:"diagnostic"`
+		Shard          int                       `json:"shard"`
+		ShardCount     int                       `json:"shard_count"`
+		Worker         int                       `json:"worker"`
+		WorkerCount    int                       `json:"worker_count"`
+		MaxProcs       int                       `json:"gomaxprocs"`
+		Schedule       *performanceStageSchedule `json:"stage_schedule"`
+		FixtureStarted int64                     `json:"fixture_started_unix_ns"`
+		Completed      []string                  `json:"completed"`
+		Plans          map[string]map[string]any `json:"plans"`
+		Samples        []map[string]any          `json:"samples"`
+	}{SourceHash: sourceHash, Diagnostic: diagnostic, Shard: shard, ShardCount: shardCount, Worker: worker, WorkerCount: workerCount, MaxProcs: runtime.GOMAXPROCS(0), Schedule: &schedule, FixtureStarted: fixtureStarted, Plans: map[string]map[string]any{}}
 	persistReport := func() {
 		if path := reportPath; path != "" {
 			b, err := json.MarshalIndent(report, "", "  ")
@@ -444,6 +487,7 @@ func TestPerformanceRoutes(t *testing.T) {
 	}
 	defer persistReport()
 
+	ownersSucceeded := true
 	for pi, principal := range env.principals {
 		label := "authorized"
 		if pi == 1 {
@@ -456,7 +500,7 @@ func TestPerformanceRoutes(t *testing.T) {
 			routeEnv, routePrincipal := env, principal
 			fixturePolicy := "fresh-pool-and-handler-per-case-principal/shared-4096-distinct-thread-corpus"
 
-			t.Run(label+"/"+performanceCaseKey(b.Method, b.Path, b.Case), func(t *testing.T) {
+			passed := t.Run(label+"/"+performanceCaseKey(b.Method, b.Path, b.Case), func(t *testing.T) {
 				env, principal := routeEnv, routePrincipal
 				defer persistReport()
 				env.setupHandler = env.handler
@@ -562,7 +606,8 @@ func TestPerformanceRoutes(t *testing.T) {
 					env.capture.Start()
 					start := time.Now()
 					env.handler.ServeHTTP(w, req)
-					elapsed := time.Since(start)
+					finished := time.Now()
+					elapsed := finished.Sub(start)
 					statements, queries, rows := env.capture.Stop()
 					if w.receiptStream && phase == "warm" && w.Code == http.StatusOK {
 						for _, statement := range statements {
@@ -576,7 +621,7 @@ func TestPerformanceRoutes(t *testing.T) {
 						t.Fatalf("SQLite work counters: %v", err)
 					}
 					deadline := ctx.Err() == context.DeadlineExceeded
-					report.Samples = append(report.Samples, map[string]any{"method": b.Method, "path": b.Path, "case": b.Case, "principal": label, "sample": sample, "measured": true, "cache_phase": phase, "invalidation_epoch_before": beforeEpoch, "invalidation_epoch_after": afterEpoch, "sampling_policy": policy, "fixture_policy": fixturePolicy, "elapsed_ms": float64(elapsed) / float64(time.Millisecond), "queries": queries, "rows": rows, "vm_steps": work.VMSteps, "fullscan_steps": work.FullScanSteps, "sorts": work.Sorts, "autoindex_rows": work.AutoIndexRows, "status": w.Code, "deadline_exceeded": deadline, "stream_polls": w.polls})
+					report.Samples = append(report.Samples, map[string]any{"method": b.Method, "path": b.Path, "case": b.Case, "principal": label, "sample": sample, "measured": true, "cache_phase": phase, "invalidation_epoch_before": beforeEpoch, "invalidation_epoch_after": afterEpoch, "sampling_policy": policy, "fixture_policy": fixturePolicy, "request_started_unix_ns": start.UnixNano(), "request_finished_unix_ns": finished.UnixNano(), "elapsed_ms": float64(elapsed) / float64(time.Millisecond), "queries": queries, "rows": rows, "vm_steps": work.VMSteps, "fullscan_steps": work.FullScanSteps, "sorts": work.Sorts, "autoindex_rows": work.AutoIndexRows, "status": w.Code, "deadline_exceeded": deadline, "stream_polls": w.polls})
 					cancel()
 					lastSample := report.Samples[len(report.Samples)-1]
 					lastSample["worker"] = worker
@@ -684,6 +729,16 @@ func TestPerformanceRoutes(t *testing.T) {
 				}
 
 			})
+			if pi == 0 && !passed {
+				ownersSucceeded = false
+			}
+		}
+		if pi == 0 && stageDir != "" && worker != 3 {
+			if err := publishPerformanceOwnerStage(stageDir, sourceHash, worker, ownersSucceeded); err != nil {
+				t.Fatal(err)
+			}
+			ownerPublished = true
+			waitOwners()
 		}
 	}
 }

@@ -140,7 +140,13 @@ workers never share an authorization cache. `ANX_PERFORMANCE_WORKER=1`, `2` or
 CI waits for all processes, preserves their exit results and logs, and merges
 their reports without manufacturing successful case completions. The coverage
 job verifies each sample's worker assignment as well as the full shard union.
-Reports record and validate the actual Go CPU settings.
+Reports record and validate the actual Go CPU settings. Both warm workers finish authorized reads before either starts denied reads.
+The post worker waits before constructing its fixture, preventing heavy denial
+setup and GC from competing with owner timing checks. Atomic markers include
+source, worker, completion time and stage outcome; failure releases peers with
+its failed outcome intact. Waits are bounded by the test deadline, recorded
+in artifacts and excluded from request timings. Coverage checks actual request
+and fixture timestamps against every stage release. CI clears markers before launch.
 Measured weights guide balancing; actual CI timings remain the runtime evidence,
 since an indivisible slow case can dominate one worker.
 

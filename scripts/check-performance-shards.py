@@ -52,6 +52,58 @@ def limit_phase(phase):
     return "first_read" if phase == "post_preparation" else phase
 
 
+def validate_stage_schedule(report, expected_hash, require_success):
+    schedules = report["worker_stage_schedules"]
+    fixtures = report["worker_fixture_started_unix_ns"]
+    assert set(schedules) == set(fixtures) == {"1", "2", "3"}, "missing stage evidence"
+    common_owners = schedules["1"]["owners"]
+    assert set(common_owners) == {"1", "2"}, "missing owner completion"
+    for worker, stage in common_owners.items():
+        assert stage["source"] == expected_hash and stage["worker"] == int(worker), (
+            "stale owner marker"
+        )
+        assert type(stage["finished_unix_ns"]) is int and stage["finished_unix_ns"] > 0
+        assert type(stage["success"]) is bool
+        if require_success:
+            assert stage["success"], "failed owner stage"
+    for worker, schedule in schedules.items():
+        assert (
+            schedule["policy"] == "owners-before-denials"
+            and schedule["owners"] == common_owners
+        ), "inconsistent stage schedule"
+        assert math.isfinite(schedule["wait_ms"]) and schedule["wait_ms"] >= 0
+        release = schedule["released_unix_ns"]
+        assert type(release) is int and release >= max(
+            s["finished_unix_ns"] for s in common_owners.values()
+        ), "early stage release"
+        assert type(fixtures[worker]) is int and fixtures[worker] > 0
+        if worker == "3":
+            assert fixtures[worker] >= release, "post fixture competed with owner reads"
+        else:
+            assert fixtures[worker] < common_owners[worker]["finished_unix_ns"]
+    for sample in report["samples"]:
+        worker = str(sample["worker"])
+        started = sample["request_started_unix_ns"]
+        assert type(started) is int and started >= fixtures[worker], (
+            "invalid request clock"
+        )
+        finished = sample["request_finished_unix_ns"]
+        assert type(finished) is int and finished >= started, (
+            "invalid request end clock"
+        )
+        assert sample["elapsed_ms"] * 1_000_000 <= finished - started + 1_000_000, (
+            "inconsistent request duration"
+        )
+        if worker != "3" and sample["principal"] == "authorized":
+            assert started <= finished <= common_owners[worker]["finished_unix_ns"], (
+                "owner read follows completion"
+            )
+        else:
+            assert started >= schedules[worker]["released_unix_ns"], (
+                "request bypassed owner stage barrier"
+            )
+
+
 def merge_workers(routes, weights, reports, expected_hash):
     assert len(reports) == 3, "three isolated workers required"
     shards = {r["shard"] for r in reports}
@@ -73,6 +125,8 @@ def merge_workers(routes, weights, reports, expected_hash):
         worker_count=3,
         workers=[1, 2, 3],
         worker_gomaxprocs={"1": 2, "2": 2, "3": 1},
+        worker_stage_schedules={},
+        worker_fixture_started_unix_ns={},
         samples=[],
         completed=[],
         plans={},
@@ -88,6 +142,10 @@ def merge_workers(routes, weights, reports, expected_hash):
             type(report["gomaxprocs"]) is int
             and report["gomaxprocs"] == out["worker_gomaxprocs"][str(report["worker"])]
         ), "wrong worker CPU policy"
+        out["worker_stage_schedules"][str(report["worker"])] = report["stage_schedule"]
+        out["worker_fixture_started_unix_ns"][str(report["worker"])] = report[
+            "fixture_started_unix_ns"
+        ]
         for sample in report["samples"]:
             assert (
                 sample["worker"] == report["worker"] == sample_worker(sample, workers)
@@ -101,6 +159,7 @@ def merge_workers(routes, weights, reports, expected_hash):
                 out["plans"][key]["findings"].update(plan["findings"])
     # Preserve failed/partial completion verbatim; the executed-union gate will
     # reject it. Merging never manufactures successful native subtests.
+    validate_stage_schedule(out, expected_hash, False)
     return out
 
 
@@ -187,9 +246,9 @@ def validate(routes, weights, allowances, reports, expected_hash):
             type(shard) is int and shard in {1, 2, 3, 4} and shard not in seen_shards
         ), "wrong/duplicate shard"
         seen_shards.add(shard)
-        assert (
-            report["diagnostic"] is False
-        ), "diagnostic report cannot establish acceptance"
+        assert report["diagnostic"] is False, (
+            "diagnostic report cannot establish acceptance"
+        )
         assert (
             report["shard_count"] == 4 and report["core_source_sha256"] == expected_hash
         ), "stale report"
@@ -203,6 +262,7 @@ def validate(routes, weights, allowances, reports, expected_hash):
             "2": 2,
             "3": 1,
         }, "wrong worker CPU policy"
+        validate_stage_schedule(report, expected_hash, True)
         workers = worker_assignments(routes, weights, shard)
         durations = {}
         sequences = {}
@@ -302,9 +362,9 @@ def validate(routes, weights, allowances, reports, expected_hash):
         seen_completed.update(completed)
         for (key, principal, phase), values in durations.items():
             budget = exceptions.get((key, principal, limit_phase(phase)), by_key[key])
-            assert max(values) <= max(
-                5000, budget["latency_ms"] * 4
-            ), "secondary maximum latency"
+            assert max(values) <= max(5000, budget["latency_ms"] * 4), (
+                "secondary maximum latency"
+            )
             if phase == "warm":
                 assert sorted(values)[2] <= budget["latency_ms"], "warm median latency"
         summaries.append(
@@ -327,9 +387,9 @@ def validate(routes, weights, allowances, reports, expected_hash):
             ("post_invalidation", 6),
         ]
     }
-    assert (
-        seen_samples == expected
-    ), "executed shards omit case/principal/cache-state/sample coverage"
+    assert seen_samples == expected, (
+        "executed shards omit case/principal/cache-state/sample coverage"
+    )
     return sorted(summaries, key=lambda s: s["shard"])
 
 

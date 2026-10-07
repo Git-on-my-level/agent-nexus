@@ -47,6 +47,27 @@ class ExecutedCoverageTests(unittest.TestCase):
             )
             for i in range(1, 5)
         ]
+        owners = {
+            str(w): dict(
+                source=self.hash, worker=w, success=True, finished_unix_ns=2_000_000_000
+            )
+            for w in (1, 2)
+        }
+        for report in self.reports:
+            report["worker_stage_schedules"] = {
+                str(w): dict(
+                    policy="owners-before-denials",
+                    wait_ms=10,
+                    owners=copy.deepcopy(owners),
+                    released_unix_ns=2_500_000_000,
+                )
+                for w in (1, 2, 3)
+            }
+            report["worker_fixture_started_unix_ns"] = {
+                "1": 100,
+                "2": 100,
+                "3": 2_600_000_000,
+            }
         for route in self.routes:
             report = self.reports[shards[coverage.case_key(route)] - 1]
             worker = coverage.worker_assignments(
@@ -89,6 +110,20 @@ class ExecutedCoverageTests(unittest.TestCase):
                             ),
                             receipt_invalidation_epoch_after=(
                                 21 if phase == "post_invalidation" else 0
+                            ),
+                            request_started_unix_ns=(
+                                1_000_000_000
+                                if principal == "authorized"
+                                and phase
+                                not in {"post_preparation", "post_invalidation"}
+                                else 3_000_000_000
+                            ),
+                            request_finished_unix_ns=(
+                                1_001_000_000
+                                if principal == "authorized"
+                                and phase
+                                not in {"post_preparation", "post_invalidation"}
+                                else 3_001_000_000
                             ),
                             elapsed_ms=1,
                             queries=1,
@@ -169,6 +204,27 @@ class ExecutedCoverageTests(unittest.TestCase):
         def missing_worker(reports):
             reports[0]["workers"] = [1]
 
+        def early_post_fixture(reports):
+            reports[0]["worker_fixture_started_unix_ns"]["3"] = 100
+
+        def unfinished_owner_request(reports):
+            sample = next(
+                s
+                for s in reports[0]["samples"]
+                if s["principal"] == "authorized" and s["worker"] != 3
+            )
+            sample["request_finished_unix_ns"] = 2_001_000_000
+
+        def early_denied_request(reports):
+            sample = next(
+                s for s in reports[0]["samples"] if s["principal"] == "unauthorized"
+            )
+            sample["request_started_unix_ns"] = 1_000_000_000
+
+        def failed_owner_stage(reports):
+            for schedule in reports[0]["worker_stage_schedules"].values():
+                schedule["owners"]["1"]["success"] = False
+
         def wrong_cpu_policy(reports):
             reports[0]["worker_gomaxprocs"]["1"] = 1
 
@@ -196,6 +252,10 @@ class ExecutedCoverageTests(unittest.TestCase):
             no_receipt_invalidation,
             missing_worker,
             wrong_cpu_policy,
+            early_post_fixture,
+            unfinished_owner_request,
+            early_denied_request,
+            failed_owner_stage,
             wrong_worker,
             reordered_invalidation,
         ):
@@ -233,6 +293,10 @@ class ExecutedCoverageTests(unittest.TestCase):
             fragment = copy.deepcopy(report)
             fragment["worker"] = worker
             fragment["gomaxprocs"] = 1 if worker == 3 else 2
+            fragment["stage_schedule"] = report["worker_stage_schedules"][str(worker)]
+            fragment["fixture_started_unix_ns"] = report[
+                "worker_fixture_started_unix_ns"
+            ][str(worker)]
             fragment["samples"] = [
                 s for s in fragment["samples"] if s["worker"] == worker
             ]
