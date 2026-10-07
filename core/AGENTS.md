@@ -213,7 +213,9 @@ ancestry; cross-receipt references and every existing ownership input invalidate
 it. Payload reads validate the full authorization epoch in the consuming scoped
 statement and retain canonical fallback. Visibility replay retains its position
 across epoch changes and checks the update log before each replay page. Migration
-69 reconciles applied receipt previews while preserving historical migration 67.
+69 installs schema and metadata only, without copying historical receipts or
+indexing populated tables. Accepted resumes page the canonical receipt table
+through its released ordering index; the update log contains only new writes.
 Shared cached projections with inaccessible contributors are unavailable to the reader;
 a reader-filtered projection must never replace canonical derived state.
 

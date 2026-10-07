@@ -14,6 +14,15 @@ import (
 )
 
 func TestReceiptStreamResumeAndUpdateReplay(t *testing.T) {
+	testReceiptStreamResumeAndUpdateReplay(t, false)
+}
+
+func TestReceiptStreamHistoricalResumeWithoutBackfill(t *testing.T) {
+	testReceiptStreamResumeAndUpdateReplay(t, true)
+}
+
+func testReceiptStreamResumeAndUpdateReplay(t *testing.T, historical bool) {
+	t.Helper()
 	ctx := context.Background()
 	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
 	if err != nil {
@@ -62,6 +71,14 @@ func TestReceiptStreamResumeAndUpdateReplay(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if historical {
+		// Model receipts committed before the log was installed. The storage
+		// upgrade test uses the real released schema; here exercise resume
+		// privacy and offline updates with no historical log entries.
+		if _, err = ws.DB().Exec(`DELETE FROM agent_wakeup_stream`); err != nil {
+			t.Fatal(err)
+		}
+	}
 	scope := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "stranger"})
 	accept := func(wakeup primitives.AgentWakeup) bool {
 		return wakeup.WakeupID == first.WakeupID && wakeup.Status == primitives.AgentWakeupStatusRequested
@@ -87,6 +104,14 @@ func TestReceiptStreamResumeAndUpdateReplay(t *testing.T) {
 	}
 	if !resumed.Snapshot || resumed.WakeupID != "wake-first" {
 		t.Fatalf("visible resume cursor %#v", resumed)
+	}
+	changed, err := store.ReceiptStreamCursor(scope, threadID, "receipt:wake-first@stale", func(primitives.AgentWakeup) bool { return false })
+	if err != nil {
+		t.Fatal(err)
+	}
+	changedPage, err := store.ListReceiptStreamPage(scope, threadID, changed)
+	if err != nil || len(changedPage.Wakeups) != 2 || changedPage.Wakeups[0].WakeupID != "wake-first" {
+		t.Fatalf("offline historical update: %+v %v", changedPage.Wakeups, err)
 	}
 	page, err := store.ListReceiptStreamPage(scope, threadID, resumed)
 	if err != nil {
@@ -511,14 +536,17 @@ func TestReceiptPayloadPlanSeeksWakeupID(t *testing.T) {
 			t.Fatal(err)
 		}
 		detail := plan.String()
-		if strings.Contains(detail, "idx_agent_wakeups_thread_trigger_created") {
+		// The inactive canonical fallback may propagate thread denials through
+		// its existing index (alias r). Only the selected payload/metadata lookup
+		// must seek wakeup_id, rather than scan that thread index.
+		if strings.Contains(detail, "SEARCH _row USING INDEX idx_agent_wakeups_thread_trigger_created") || strings.Contains(detail, "SEARCH agent_wakeups USING INDEX idx_agent_wakeups_thread_trigger_created") {
 			t.Fatalf("payload scan used the thread index:\n%s\nSQL=%s", detail, statement.SQL)
 		}
-		if strings.Contains(detail, "sqlite_autoindex_agent_wakeups_1") || strings.Contains(detail, "idx_agent_wakeups_thread_wakeup") {
+		if strings.Contains(detail, "sqlite_autoindex_agent_wakeups_1") {
 			sawSeek = true
 			if metadata {
 				sawMetadataSeek = true
-				if !strings.Contains(detail, "idx_access_exact_source") || !strings.Contains(detail, "idx_access_mentions_source") {
+				if !strings.Contains(detail, "sqlite_autoindex_resource_access_edges_1") || !strings.Contains(detail, "SEARCH x USING INTEGER PRIMARY KEY") || !strings.Contains(detail, "sqlite_autoindex_resource_access_mentions_1") {
 					t.Fatalf("reference metadata did not seek the selected source keys:\n%s", detail)
 				}
 			}

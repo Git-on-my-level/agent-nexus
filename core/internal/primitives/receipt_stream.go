@@ -334,8 +334,11 @@ func (s *Store) loadVisibleReceipts(ctx context.Context, threadID string, ids []
 	}
 	keys, _ := json.Marshal(ids)
 	rows, err := s.db.QueryContext(ctx, `SELECT p.wakeup_id,p.thread_id,p.trigger_event_id,
-  COALESCE((SELECT json_group_array(target_key) FROM resource_access_exact_edges WHERE source_kind='wakeup' AND source_id=p.wakeup_id),'[]'),
-  COALESCE((SELECT json_group_array(json_array(i.kind,i.resource_id)) FROM resource_access_mentions m JOIN resource_access_identities i ON i.identity_id=m.identity_id WHERE m.source_kind='wakeup' AND m.source_id=p.wakeup_id),'[]'),
+  COALESCE((SELECT json_group_array(x.target_key) FROM resource_access_edges e
+   CROSS JOIN resource_access_exact_edges x ON x.edge_id=e.rowid WHERE e.source_kind='wakeup' AND e.source_id=p.wakeup_id),'[]'),
+  COALESCE((SELECT json_group_array(json_array(i.kind,i.resource_id)) FROM resource_access_edges e
+   CROSS JOIN resource_access_mentions m ON m.edge_id=e.rowid
+   JOIN resource_access_identities i ON i.identity_id=m.identity_id WHERE e.source_kind='wakeup' AND e.source_id=p.wakeup_id),'[]'),
   (SELECT version FROM resource_access_epoch WHERE singleton=1)
   FROM json_each(?) wanted JOIN agent_wakeup_snapshot_positions p ON p.wakeup_id=wanted.value`, string(keys))
 	if err != nil {

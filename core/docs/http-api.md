@@ -414,6 +414,10 @@ page an indexed created-at snapshot, then an append-only update log, at most
 timer only at the head and does not hold a database connection between pages.
 Hidden and trashed receipts advance that cursor without a client-visible control.
 A visible receipt whose payload changed while disconnected is delivered from that receipt forward.
+This also applies to receipts predating the update log: migration 69 installs
+schema and records the initial log head without backfilling history. Historical
+resumes seek the existing canonical receipt index and use the same scoped payload
+read as new receipts; startup work does not grow with receipt history.
 Inherited visibility changes replay the snapshot without a wakeup rewrite.
 Replay retains its position across further visibility changes and checks new
 updates before each replay page. Payload reads validate authorization in the

@@ -523,6 +523,10 @@
       "singleton": "internal:reader-snapshot",
       "version": "internal:reader-snapshot"
     },
+    "receipt_stream_state": {
+      "log_start_seq": "internal:reader-cursor",
+      "singleton": "internal:reader-cursor"
+    },
     "receipt_trigger_positions": {
       "id": "internal:reader-cursor",
       "trashed_at": "internal:reader-cursor"
@@ -1454,7 +1458,7 @@
     "../primitives/receipt_stream.go:*Store:advanceReceiptVisibility": "c082294cdfc2520a53499c32f1fc87f9cb4026b6849efd2e94fba93f4f7a32f5",
     "../primitives/receipt_stream.go:*Store:listReceiptSnapshotPage": "39d852280d5074cab60a9791ae10f626e9851237ea718bbd06b6ee20cffa57b5",
     "../primitives/receipt_stream.go:*Store:listReceiptTailPage": "1b7fc78d975ce945a97c4353bd02a737ab1686d461e505719c07ac4fcc0b5098",
-    "../primitives/receipt_stream.go:*Store:loadVisibleReceipts": "8b51a548e6d5d436fc14c1a4316933da80462b25c1a50fde6ca15520daaba8fc",
+    "../primitives/receipt_stream.go:*Store:loadVisibleReceipts": "55bbebed7e2b83f9bb7cf1a2cd9cb56b86628b8992b409784dc08b17e5b857b3",
     "../primitives/receipt_stream.go:*Store:receiptDenial": "3da86b58d83c174f9ebf2d0d0ce6a930c70e2d1e03e2cb7f5575887af3fe30fc",
     "../primitives/receipt_stream.go:*Store:receiptStreamHead": "1aba0745bc7e013e78c4a5ffd401b6b045b95a6d44e6405c3bda6d13180ec340",
     "../primitives/receipt_stream.go:*Store:receiptThreadDenied": "1e8d1a0bb697e38ea451ac80b4c4ce9bacba820b06728a7ced021fc54f935076",
@@ -2261,14 +2265,14 @@
     "../storage/migrations.go:migration25BackfillHandles": "0b1a8866c4541f58041168cea6b043ee880a43a3afe56eca68a658ffe31fa3b6",
     "../storage/migrations.go:migration25HandleExpressions": "8981e5f9b2e01ce392b77c0763fa38a47b68b5ca20d4cadcf0d7795952dc84c8",
     "../storage/migrations.go:migration25UniqueHandle": "6bed0b1e2baf92af71deb2b6a7f9e281bd75894a80f37d4bbbb09e632befe7d3",
-    "../storage/migrations.go:migrations": "bc2c79224ad9150a639165167b15584e0a424cfb74db396ae0f961da2fcb1e43",
+    "../storage/migrations.go:migrations": "0b2b6e14b16da163dcb861b39228d0fabb5793ba2f80ebee704565eb67318af0",
     "../storage/migrations.go:repairLegacyReferenceAccess": "03b66e0fb21f24a185a0127b607c51d9760f17b8abfbe904451d093c732ac5ab",
     "../storage/migrations.go:repairNULReferenceAccess": "7579edda9e055e69a0e88914fcd02f919d26c1f02a5b456a6ac3bf25f422fed9",
     "../storage/migrations.go:sqliteTableExists": "c0fa57bdf9800dd6002c1c4dcfcb6ab9f2a889101a7f21b61f434439a39a3ac4",
     "../storage/migrations.go:sqliteTableHasColumn": "c93760a8303ff8cac0b3040a639f92dfffa22e21851c2561cfa17c81a3c6879c",
     "../storage/overview_indexes.go:indexBoundedOverviewReads": "bdd13b08f0d2475647709f911adc50fbec3c9b04185d9991374f6a494cded96e",
-    "../storage/receipt_stream.go:indexBoundedReceiptStreamReads": "011a330912159f0962fce8cc152059d71a3c2025b258e2a5f6091bff1ef49acf",
-    "../storage/receipt_stream_access.go:reconcileReceiptStreamAccess": "a7af760cf6697c7b791c320999b26bc19e0a4eb942082d8c7b4e6c72dc39997e",
+    "../storage/receipt_stream.go:indexBoundedReceiptStreamReads": "4a6bb9bc30a15286702cf72090fa97ecc82a5c427714b3c067cf96ef35405367",
+    "../storage/receipt_stream_access.go:installReceiptStreamAccess": "89c871e912f38c3d85424a142d3548dba4612af54d9d7d42079eb3b0b09650d8",
     "../storage/scope_migration.go:InstallScopeMigration": "adb762d563288438b59694c7aaa10b836bae717480aa00e423121f4cd7bf5b0a",
     "../storage/scope_migration_connections.go:*Workspace:EnableScopeServingLease": "a740cfafaf4acefa74f873daa130bc25023d7a5f43f324f9aaf629339e75e7d8",
     "../storage/scope_migration_connections.go:*scopeConnection:ExecContext": "abb449935ecbf784ca408d907064b265c95e4bf13a3af561749c70779457c560",
