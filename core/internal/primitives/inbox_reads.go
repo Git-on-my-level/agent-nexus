@@ -36,7 +36,7 @@ func inboxSubjectLifecycleSQL(ctx context.Context, subject, refs, legacyRefs str
 
 // ReadInbox counts and pages the centrally scoped inbox relation.
 // Summary counts in SQLite and decodes only the requested, authorized page.
-func (s *Store) ReadInbox(ctx context.Context, options InboxReadOptions) ([]DerivedInboxItem, int, error) {
+func (s *Store) readInboxLegacy(ctx context.Context, options InboxReadOptions, db inboxQueryer, ids []string) ([]DerivedInboxItem, int, error) {
 	if options.Limit != nil && (*options.Limit < 0 || *options.Limit > 50) {
 		return nil, 0, fmt.Errorf("inbox summary limit must be 0..50")
 	}
@@ -45,6 +45,7 @@ func (s *Store) ReadInbox(ctx context.Context, options InboxReadOptions) ([]Deri
 		where = inboxReadSQL(ctx)
 	}
 	args := []any{}
+	source := inboxCandidateSource(ids, &args)
 	if options.ThreadID != "" {
 		where += ` AND i.thread_id=?`
 		args = append(args, options.ThreadID)
@@ -57,14 +58,14 @@ func (s *Store) ReadInbox(ctx context.Context, options InboxReadOptions) ([]Deri
 		where += ` AND COALESCE(NULLIF(json_extract(i.data_json,'$.kind'),''),i.category)='ask'`
 	}
 	var count int
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM derived_inbox_items i WHERE `+where, args...).Scan(&count); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM `+source+` WHERE `+where, args...).Scan(&count); err != nil {
 		return nil, 0, err
 	}
 	items := []DerivedInboxItem{}
 	if options.Limit != nil && *options.Limit == 0 {
 		return items, count, nil
 	}
-	query := `SELECT i.id,i.thread_id,i.category,i.trigger_at,i.due_at,i.has_due_at,i.source_event_id,i.source_card_id,i.generated_at,i.data_json,i.source_hash,i.lifecycle_ready FROM derived_inbox_items i WHERE ` + where
+	query := `SELECT i.id,i.thread_id,i.category,i.trigger_at,i.due_at,i.has_due_at,i.source_event_id,i.source_card_id,i.generated_at,i.data_json,i.source_hash,i.lifecycle_ready FROM ` + source + ` WHERE ` + where
 	if options.AsksOnly {
 		query += ` ORDER BY CASE lower(trim(COALESCE(NULLIF(trim(json_extract(i.data_json,'$.priority')),''),json_extract(i.data_json,'$.severity'),''))) WHEN 'urgent' THEN 0 WHEN 'p0' THEN 0 WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'p1' THEN 1 WHEN 'normal' THEN 2 WHEN 'medium' THEN 2 WHEN 'p2' THEN 2 WHEN 'low' THEN 3 WHEN 'p3' THEN 3 ELSE 4 END,i.trigger_at ASC,i.id ASC`
 	} else {
@@ -74,7 +75,7 @@ func (s *Store) ReadInbox(ctx context.Context, options InboxReadOptions) ([]Deri
 		query += ` LIMIT ?`
 		args = append(args, *options.Limit)
 	}
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, 0, err
 	}

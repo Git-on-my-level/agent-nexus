@@ -166,13 +166,15 @@ func insertDerivedInboxItem(ctx context.Context, exec eventExec, threadID string
 	return nil
 }
 
-func (s *Store) ListDerivedInboxItems(ctx context.Context, filter DerivedInboxListFilter) ([]DerivedInboxItem, error) {
+func (s *Store) listDerivedInboxItemsLegacy(ctx context.Context, filter DerivedInboxListFilter, db inboxQueryer, ids []string) ([]DerivedInboxItem, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
 
-	projection := `SELECT id, thread_id, category, trigger_at, due_at, has_due_at, source_event_id, source_card_id, generated_at, data_json, source_hash, lifecycle_ready FROM derived_inbox_items i`
-	args := []any{filter.RecipientActorID}
+	args := []any{}
+	source := inboxCandidateSource(ids, &args)
+	projection := `SELECT id, thread_id, category, trigger_at, due_at, has_due_at, source_event_id, source_card_id, generated_at, data_json, source_hash, lifecycle_ready FROM ` + source
+	args = append(args, filter.RecipientActorID)
 	clauses := []string{"(COALESCE(json_extract(data_json,'$.recipient_actor_id'),'')='' OR json_extract(data_json,'$.recipient_actor_id')=?)", currentReportReviewSQL}
 	if threadID := strings.TrimSpace(filter.ThreadID); threadID != "" {
 		clauses = append(clauses, "thread_id = ?")
@@ -218,7 +220,7 @@ func (s *Store) ListDerivedInboxItems(ctx context.Context, filter DerivedInboxLi
 		}
 	}
 
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query derived inbox items: %w", err)
 	}

@@ -104,6 +104,7 @@ func accessCTEsWithSnapshot(scope AccessScope, query string, snapshot *denialSna
 		graph += ", pm_records AS (SELECT rowid,* FROM main.pm_records AS _row WHERE " + denied("pm", "_row.id") + ")"
 	}
 	add("derived_inbox_items", denied("inbox", "_row.id"))
+	add("scope_inbox_live", denied("inbox", "_row.id"))
 	add("workspace_dashboard", denied("document", "_row.document_id"))
 	add("idempotency_replays", cleanJSON("_row.response_json"))
 	for _, source := range resourceaccess.FilterOwnershipSources() {

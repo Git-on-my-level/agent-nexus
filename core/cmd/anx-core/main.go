@@ -97,6 +97,7 @@ func main() {
 		streamPollInterval          = envDuration("ANX_STREAM_POLL_INTERVAL", time.Second)
 		projectionMode              = envString("ANX_PROJECTION_MODE", server.ProjectionModeBackground)
 		projectionPollInterval      = envDuration("ANX_PROJECTION_MAINTENANCE_INTERVAL", 5*time.Second)
+		scopedInboxReader           = envBool("ANX_SCOPED_INBOX_READER", false)
 		projectionBatchSize         = envInt("ANX_PROJECTION_MAINTENANCE_BATCH_SIZE", 50)
 		answerWakeQuietWindow       = envDuration("ANX_ANSWER_WAKE_QUIET_WINDOW", server.DefaultAnswerWakeQuietWindow)
 		flushAnswerWakeWhenEmpty    = envBool("ANX_ANSWER_WAKE_FLUSH_WHEN_NO_OPEN_ASKS", true)
@@ -164,6 +165,7 @@ func main() {
 	flag.StringVar(&projectionMode, "projection-mode", projectionMode, "projection maintenance mode (background|manual)")
 	flag.DurationVar(&projectionPollInterval, "projection-maintenance-interval", projectionPollInterval, "poll interval used by background projection maintenance")
 	flag.IntVar(&projectionBatchSize, "projection-maintenance-batch-size", projectionBatchSize, "max dirty thread projections refreshed per maintenance pass")
+	flag.BoolVar(&scopedInboxReader, "scoped-inbox-reader", scopedInboxReader, "enable the scoped inbox index with legacy authorization and fallback")
 	flag.BoolVar(&enforceLocalQuotas, "enforce-local-quotas", enforceLocalQuotas, "opt in to workspace capacity quotas (technical safety limits remain enabled)")
 	flag.StringVar(&workspaceAccessMode, "workspace-access-mode", workspaceAccessMode, "workspace HTTP API mode: read_write or read_only (hosted quota enforcement)")
 	flag.Parse()
@@ -399,6 +401,7 @@ func main() {
 		blobBackendImpl,
 		effectiveBlobRoot,
 		primitives.WithWorkspaceQuota(workspaceQuota),
+		primitives.WithScopedInboxReader(scopedInboxReader),
 		primitives.WithDatabasePath(workspace.Layout().DatabasePath),
 	)
 	projectionMaintainer := server.NewProjectionMaintainer(server.ProjectionMaintainerConfig{
@@ -594,6 +597,16 @@ func main() {
 	maintenanceCtx, maintenanceCancel := context.WithCancel(context.Background())
 	defer maintenanceCancel()
 	go workspace.RunInboxLifecycleMaintenance(maintenanceCtx, func(err error) { fmt.Fprintf(os.Stderr, "inbox lifecycle maintenance: %v\n", err) })
+	if scopedInboxReader {
+		buildDone, shadowDone := make(chan struct{}), make(chan struct{})
+		go func() {
+			defer close(buildDone)
+			workspace.RunScopeInboxMaintenance(maintenanceCtx, func(err error) { fmt.Fprintln(os.Stderr, "scoped inbox build: retrying bounded batch") })
+		}()
+		go func() { defer close(shadowDone); primitiveStore.RunScopeInboxShadow(maintenanceCtx) }()
+		defer func() { maintenanceCancel(); <-buildDone; <-shadowDone }()
+	}
+
 	if projectionMode == server.ProjectionModeBackground {
 		go projectionMaintainer.Run(maintenanceCtx)
 	}

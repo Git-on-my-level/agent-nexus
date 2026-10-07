@@ -157,7 +157,17 @@ func TestScopeUpgradeUnindexedPrivateArtifactsStayDenied(t *testing.T) {
 			t.Fatalf("backfilled manifest lost: %v %v", manifest, err)
 		}
 		var installed int
-		if err = w.DB().QueryRow(`SELECT count(*) FROM sqlite_schema WHERE name LIKE 'scope_%'`).Scan(&installed); err != nil || installed != 0 {
+		// Migration 71 installs the released inbox bridge, but no other scope schema.
+		if err = w.DB().QueryRow(`SELECT count(*) FROM sqlite_schema WHERE name LIKE 'scope_%' AND name NOT IN (
+			'scope_inbox_live',
+			'scope_inbox_live_order',
+			'scope_inbox_live_scope_order',
+			'scope_inbox_live_positions',
+			'scope_inbox_live_job',
+			'scope_inbox_live_insert',
+			'scope_inbox_live_update',
+			'scope_inbox_live_delete'
+		)`).Scan(&installed); err != nil || installed != 0 {
 			t.Fatalf("unregistered scope schema installed at startup: %d %v", installed, err)
 		}
 		if err = w.Close(); err != nil {
