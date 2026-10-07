@@ -1,17 +1,4 @@
 {
-  "external_key_publications": {
-    "work_evidence_record": [
-      "evidence_json"
-    ],
-    "work_metadata": [
-      "metadata_json.source",
-      "metadata_json.source_refs.*"
-    ],
-    "work_observation": [
-      "body_json.facts",
-      "body_json.evidence.*"
-    ]
-  },
   "tables": {
     "access_requests": {
       "actor_id": "scope:request-event",
@@ -1636,6 +1623,12 @@
     "../scopedrepo/legacy_registration.go:RegisterLegacyBatch": "a307a15be210734b1e5f738adef8a8a3e910de42a67061aaab6ecc06c5c93a97",
     "../scopedrepo/legacy_registration.go:legacyIdentity": "95aa69e0a891a3af125012fa26065c096d7f289a1aae18a29b5ef1ea9f4b5bf2",
     "../scopedrepo/queries_gen.go:query_alias": "415b391e0c3fbdd08fb8dbfb3b142d8405feb373b8fa19484c2a60e68d30c38e",
+    "../scopedrepo/readmodel_adapter.go:*readModelAdapter:Buckets": "367b131df2290f2e76f50a1df78a87bfbf15b8c88fe67111198518c8a76188b0",
+    "../scopedrepo/readmodel_adapter.go:*readModelAdapter:Candidates": "2a89546666163a5773cd28af2e87bc621cc2e6ad9321a60c3711c3ced4d9e1ee",
+    "../scopedrepo/readmodel_adapter.go:*readModelAdapter:Hydrate": "ba42cb97bd9291151d76fd87aaaec1861804f3ff41d82c8a66bc114f55daac14",
+    "../scopedrepo/readmodel_adapter.go:*readModelAdapter:Snapshot": "a05a2cd8ec6f76f25d9c068194d82fa35c3952617829b8a1c6e16887828bc2b6",
+    "../scopedrepo/readmodel_hook.go:*hookExecutor:Exec": "64197c7ce04846582d5db24c53116b253795aa77fe438f98d540c5ebdf6e253c",
+    "../scopedrepo/readmodel_hook.go:ReadModelCanonicalHook:ApplyCanonical": "2016ee812b4c7fbbd46d7298123bac0d35585cd7b28f7c742cf55fd9b8917f47",
     "../scopedrepo/store.go:*Store:CanPublish": "ef65489fd033a85545858748fea65b0390db8e572d4f26f0ad0cc434db8e369b",
     "../scopedrepo/store.go:*Store:Compute": "c48c7e2f440cc002b6f6e3a3aea5c3ec28888f74493c8469922eaf07b8c6732d",
     "../scopedrepo/store.go:*Store:Directory": "92903e81bec46399cf66cf2cd1469f6d045f0ab7d3217596d558cac79d62a5aa",
@@ -2188,5 +2181,10 @@
     "../testsql/counter.go:*countedStmt:ExecContext": "e2488b01750b887b043380007c83f1a465a9570d9fbfa1a50a152836339e2acd",
     "../testsql/counter.go:*countedStmt:Query": "552d3c61ed8492bce2343d48841315f51cfdbd29a3ebe9c4bd3388ab99e2b439",
     "../testsql/counter.go:*countedStmt:QueryContext": "7074fd7cc6d9ce1009e88c7ebd48eadb6152a536660b05b3dacfb62d1a48e42d"
+  },
+  "external_key_publications": {
+    "work_evidence_record": ["evidence_json"],
+    "work_metadata": ["metadata_json.source", "metadata_json.source_refs.*"],
+    "work_observation": ["body_json.facts", "body_json.evidence.*"]
   }
 }

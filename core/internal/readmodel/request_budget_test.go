@@ -1,6 +1,7 @@
-package readmodel
+package readmodel_test
 
 import (
+	"agent-nexus-core/internal/readmodel"
 	"context"
 	"database/sql"
 	"database/sql/driver"
@@ -163,15 +164,15 @@ func TestMeasuredDependencyRequestAndBatchProposalBudgets(t *testing.T) {
 			if err = tx.QueryRow(`SELECT rid FROM scope_resource_rids WHERE scope_id=? AND resource_id=?`, s.Scope, opaque).Scan(&rid); err != nil {
 				t.Fatal(err)
 			}
-			if _, err = tx.Exec(InsertFeed, s.Scope, 1, s.Family, s.Audience, n*256+i, rid, 1); err != nil {
+			if _, err = tx.Exec(readmodel.InsertFeed, s.Scope, 1, s.Family, s.Audience, n*256+i, rid, 1); err != nil {
 				t.Fatal(err)
 			}
-			if _, err = tx.Exec(InsertPayload, s.Scope, 1, s.Family, s.Audience, rid, 1, `{}`); err != nil {
+			if _, err = tx.Exec(readmodel.InsertPayload, s.Scope, 1, s.Family, s.Audience, rid, 1, `{}`); err != nil {
 				t.Fatal(err)
 			}
 		}
 		for _, b := range []string{"two", "three", "four"} {
-			if _, err = tx.Exec(IncrementCounter, s.Scope, 1, s.Family, s.Audience, b, 101); err != nil {
+			if _, err = tx.Exec(readmodel.IncrementCounter, s.Scope, 1, s.Family, s.Audience, b, 101); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -186,14 +187,14 @@ func TestMeasuredDependencyRequestAndBatchProposalBudgets(t *testing.T) {
 	start := time.Now()
 	err = repo.ReadFeed(ctx, request, streams, func(r scopedrepo.FeedReader) error {
 		a := feedAdapter{reader: r}
-		p, err := Read(ctx, a, codec(t), 100, "")
+		p, err := readmodel.Read(ctx, a, codec(t), 100, "")
 		if err != nil {
 			return err
 		}
 		if len(p.Items) != 100 {
 			t.Fatal(len(p.Items))
 		}
-		_, err = Count(ctx, a, []string{"total", "two", "three", "four"})
+		_, err = readmodel.Count(ctx, a, []string{"total", "two", "three", "four"})
 		return err
 	})
 	elapsed := time.Since(start)
@@ -208,23 +209,23 @@ func TestMeasuredDependencyRequestAndBatchProposalBudgets(t *testing.T) {
 
 	// Execute proposed batches against the same fixture. This is SQL-shape
 	// evidence for A, not an authorized repository or an enablement receipt.
-	authorized := make([]AuthorizedStream, len(streams))
+	authorized := make([]readmodel.AuthorizedStream, len(streams))
 	for i, s := range streams {
-		authorized[i] = AuthorizedStream{Stream: s, Generation: 1}
+		authorized[i] = readmodel.AuthorizedStream{Stream: s, Generation: 1}
 	}
-	authorityQ, authorityArgs, err := BatchAuthorityProposal(request.Principal, request.ScopeIDs)
+	authorityQ, authorityArgs, err := readmodel.BatchAuthorityProposal(request.Principal, request.ScopeIDs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	bindingQ, bindingArgs, err := BatchBindingProposal(request.Principal, authorized)
+	bindingQ, bindingArgs, err := readmodel.BatchBindingProposal(request.Principal, authorized)
 	if err != nil {
 		t.Fatal(err)
 	}
-	candidateQ, candidateArgs, err := BatchCandidatesProposal(authorized, 100)
+	candidateQ, candidateArgs, err := readmodel.BatchCandidatesProposal(authorized, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
-	counterQ, counterArgs, err := AggregateBucketsProposal(authorized, []string{"total", "two", "three", "four"})
+	counterQ, counterArgs, err := readmodel.AggregateBucketsProposal(authorized, []string{"total", "two", "three", "four"})
 	if err != nil {
 		t.Fatal(err)
 	}

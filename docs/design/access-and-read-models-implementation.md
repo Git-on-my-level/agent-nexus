@@ -13,6 +13,9 @@ must be safe with its default feature flags and have its own green `ci-ok`.
 
 ## Phases that can ship independently
 
+Phase one shipped in v0.12.18. The active inbox-first assignments and remaining
+proof gates are in [the phase-two implementation plan](scope-phase-two.md).
+
 1. **Foundation and readiness:** add empty scope/read-model tables, typed access
    capabilities, reviewed query templates and capture hooks, with the old reader
    authoritative. Remove automatic legacy blob backfill before listen; unknown

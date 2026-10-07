@@ -1,6 +1,7 @@
-package readmodel
+package readmodel_test
 
 import (
+	"agent-nexus-core/internal/readmodel"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -38,7 +39,7 @@ func (a *txAdapter) Exec(ctx context.Context, q string, args ...any) (int64, err
 	}
 	return result.RowsAffected()
 }
-func (a *txAdapter) Query(ctx context.Context, q string, args ...any) (Rows, error) {
+func (a *txAdapter) Query(ctx context.Context, q string, args ...any) (readmodel.Rows, error) {
 	a.calls++
 	return a.tx.QueryContext(ctx, q, args...)
 }
@@ -48,12 +49,12 @@ type testHook func(context.Context, scopedrepo.MutationTx, scopes.CanonicalMutat
 func (h testHook) ApplyCanonical(ctx context.Context, tx scopedrepo.MutationTx, m scopes.CanonicalMutation) error {
 	return h(ctx, tx, m)
 }
-func testCapture(c scopes.Change, p scopes.Projection) (Entry, json.RawMessage, error) {
+func testCapture(c scopes.Change, p scopes.Projection) (readmodel.Entry, json.RawMessage, error) {
 	data, err := json.Marshal(map[string]string{"status": p.Status})
-	return Entry{Family: c.Family, Audience: c.Audience, Sort: p.Timestamp, Buckets: []string{p.Status}}, data, err
+	return readmodel.Entry{Family: c.Family, Audience: c.Audience, Sort: p.Timestamp, Buckets: []string{p.Status}}, data, err
 }
 func TestWriterCanonicalHookSourceFeedPayloadCounterAtomicity(t *testing.T) {
-	for _, fault := range []string{"", InsertFeed, InsertPayload, IncrementCounter, DeleteFeed, DeletePayload, DecrementCounter, "zero:" + DeletePayload, "zero:" + DecrementCounter} {
+	for _, fault := range []string{"", readmodel.InsertFeed, readmodel.InsertPayload, readmodel.IncrementCounter, readmodel.DeleteFeed, readmodel.DeletePayload, readmodel.DecrementCounter, "zero:" + readmodel.DeletePayload, "zero:" + readmodel.DecrementCounter} {
 		t.Run(fault, func(t *testing.T) {
 			db, _, request, _ := adapterFixture(t, 1, 1)
 			ctx := context.Background()
@@ -61,12 +62,12 @@ func TestWriterCanonicalHookSourceFeedPayloadCounterAtomicity(t *testing.T) {
 			if _, err := db.Exec(`CREATE TABLE test_source(id TEXT PRIMARY KEY,version INTEGER,state TEXT);INSERT INTO test_source VALUES('opaque',1,'open')`); err != nil {
 				t.Fatal(err)
 			}
-			old := &Projection{ScopeID: scope, Generation: 1, RID: 1, Version: 1, Entries: []Entry{{Family: "inbox", Audience: "reader", Sort: 1, Buckets: []string{"open"}}}}
+			old := &readmodel.Projection{ScopeID: scope, Generation: 1, RID: 1, Version: 1, Entries: []readmodel.Entry{{Family: "inbox", Audience: "reader", Sort: 1, Buckets: []string{"open"}}}}
 			tx, err := db.Begin()
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err = ApplyProjection(ctx, &txAdapter{tx: tx}, nil, old, map[Stream]json.RawMessage{{Scope: scope, Family: "inbox", Audience: "reader"}: json.RawMessage(`{"status":"open"}`)}, false); err != nil {
+			if err = readmodel.ApplyProjection(ctx, &txAdapter{tx: tx}, nil, old, map[readmodel.Stream]json.RawMessage{{Scope: scope, Family: "inbox", Audience: "reader"}: json.RawMessage(`{"status":"open"}`)}, false); err != nil {
 				t.Fatal(err)
 			}
 			if err = tx.Commit(); err != nil {
@@ -88,12 +89,12 @@ func TestWriterCanonicalHookSourceFeedPayloadCounterAtomicity(t *testing.T) {
 			m := scopes.CanonicalMutation{Identity: scopes.ResourceIdentity{ScopeID: scope, Kind: "card", ResourceID: "opaque", RID: 1, CanonicalID: "opaque", CanonicalVersion: 2}, PreviousVersion: version, Changes: []scopes.Change{{ScopeID: scope, Kind: "card", ResourceID: "opaque", CanonicalVersion: 2, Family: "inbox", Audience: "reader", Before: &scopes.Projection{Status: state, Timestamp: 1}, After: &scopes.Projection{Status: "answered", Timestamp: 2}}}}
 			calls := 0
 			err = scopedrepo.ApplyCanonicalHooks(ctx, source, m, testHook(func(ctx context.Context, cap scopedrepo.MutationTx, m scopes.CanonicalMutation) error {
-				old, next, payloads, err := CaptureCanonical(m, 1, testCapture)
+				old, next, payloads, err := readmodel.CaptureCanonical(m, 1, testCapture)
 				if err != nil {
 					return err
 				}
 				adapter := &txAdapter{tx: cap, fail: fault}
-				err = ApplyProjection(ctx, adapter, old, next, payloads, false)
+				err = readmodel.ApplyProjection(ctx, adapter, old, next, payloads, false)
 				calls = adapter.calls
 				return err
 			}))
@@ -150,13 +151,13 @@ func TestWriterCanonicalHookSourceFeedPayloadCounterAtomicity(t *testing.T) {
 func TestWriterRejectsCorruptOldProjectionAndOverflow(t *testing.T) {
 	db, _, request, _ := adapterFixture(t, 1, 1)
 	ctx := context.Background()
-	p := &Projection{ScopeID: request.ScopeIDs[0], Generation: 1, RID: 999, Version: 1, Entries: []Entry{{Family: "work", Audience: "reader", Buckets: []string{"total"}}}}
+	p := &readmodel.Projection{ScopeID: request.ScopeIDs[0], Generation: 1, RID: 999, Version: 1, Entries: []readmodel.Entry{{Family: "work", Audience: "reader", Buckets: []string{"total"}}}}
 	tx, err := db.Begin()
 	if err != nil {
 		t.Fatal(err)
 	}
 	a := &txAdapter{tx: tx}
-	if err = ApplyProjection(ctx, a, p, nil, nil, false); !errors.Is(err, ErrProjection) {
+	if err = readmodel.ApplyProjection(ctx, a, p, nil, nil, false); !errors.Is(err, readmodel.ErrProjection) {
 		t.Fatal(err)
 	}
 	tx.Rollback()
@@ -165,11 +166,11 @@ func TestWriterRejectsCorruptOldProjectionAndOverflow(t *testing.T) {
 		t.Fatal(err)
 	}
 	a = &txAdapter{tx: tx}
-	payloads := map[Stream]json.RawMessage{{Scope: p.ScopeID, Family: "work", Audience: "reader"}: json.RawMessage(`{}`)}
-	if _, err = tx.Exec(IncrementCounter, p.ScopeID, 1, "work", "reader", "total", int64(math.MaxInt64)); err != nil {
+	payloads := map[readmodel.Stream]json.RawMessage{{Scope: p.ScopeID, Family: "work", Audience: "reader"}: json.RawMessage(`{}`)}
+	if _, err = tx.Exec(readmodel.IncrementCounter, p.ScopeID, 1, "work", "reader", "total", int64(math.MaxInt64)); err != nil {
 		t.Fatal(err)
 	}
-	if err = ApplyProjection(ctx, a, nil, p, payloads, false); err == nil {
+	if err = readmodel.ApplyProjection(ctx, a, nil, p, payloads, false); err == nil {
 		t.Fatal("overflow accepted")
 	}
 	tx.Rollback()
@@ -179,8 +180,8 @@ func TestWriterRejectsCorruptOldProjectionAndOverflow(t *testing.T) {
 	}
 	defer tx.Rollback()
 	a = &txAdapter{tx: tx}
-	payloads[Stream{Scope: p.ScopeID, Family: "work", Audience: "reader"}] = json.RawMessage(`bad JSON`)
-	if err = ApplyProjection(ctx, a, nil, p, payloads, false); !errors.Is(err, ErrProjection) || a.calls != 0 {
+	payloads[readmodel.Stream{Scope: p.ScopeID, Family: "work", Audience: "reader"}] = json.RawMessage(`bad JSON`)
+	if err = readmodel.ApplyProjection(ctx, a, nil, p, payloads, false); !errors.Is(err, readmodel.ErrProjection) || a.calls != 0 {
 		t.Fatal("late validation", err, a.calls)
 	}
 }
@@ -197,7 +198,7 @@ func TestDurableLifecycleTenThousandFencesRestartAndReceipt(t *testing.T) {
 	if err := repo.InitializeFeedSchema(ctx); err != nil {
 		t.Fatal(err)
 	}
-	_, err := db.Exec(LifecycleSchemaProposal + `CREATE TABLE resource_access_epoch(singleton INTEGER PRIMARY KEY,version INTEGER);INSERT INTO resource_access_epoch VALUES(1,7);
+	_, err := db.Exec(readmodel.LifecycleSchemaProposal + `CREATE TABLE resource_access_epoch(singleton INTEGER PRIMARY KEY,version INTEGER);INSERT INTO resource_access_epoch VALUES(1,7);
  CREATE TABLE test_tree(rid INTEGER PRIMARY KEY,parent INTEGER NOT NULL,hidden INTEGER NOT NULL);
  INSERT INTO scope_domains VALUES('scope','active',1);INSERT INTO test_tree VALUES(1,0,1),(2,0,0);
  WITH RECURSIVE children(n) AS(SELECT 3 UNION ALL SELECT n+1 FROM children WHERE n<10002) INSERT INTO test_tree SELECT n,1,0 FROM children;`)
@@ -208,52 +209,52 @@ func TestDurableLifecycleTenThousandFencesRestartAndReceipt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = BeginLifecycle(ctx, &txAdapter{tx: tx}, "scope", 1); err != nil {
+	if err = readmodel.BeginLifecycle(ctx, &txAdapter{tx: tx}, "scope", 1); err != nil {
 		t.Fatal(err)
 	}
 	if err = tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	run := func(fault string) (StepResult, error) {
+	run := func(fault string) (readmodel.StepResult, error) {
 		tx, err := db.Begin()
 		if err != nil {
-			return StepResult{}, err
+			return readmodel.StepResult{}, err
 		}
 		defer tx.Rollback()
 		a := &txAdapter{tx: tx, fail: fault}
-		loader := func(ctx context.Context, j Job, limit int) ([]RebuildRecord, error) {
+		loader := func(ctx context.Context, j readmodel.Job, limit int) ([]readmodel.RebuildRecord, error) {
 			rows, err := tx.QueryContext(ctx, `SELECT r.rid,r.parent,r.hidden,COALESCE(p.hidden,0) FROM test_tree r LEFT JOIN test_tree p ON p.rid=r.parent WHERE r.rid>? ORDER BY r.rid LIMIT ?`, j.Cursor, limit)
 			if err != nil {
 				return nil, err
 			}
 			defer rows.Close()
-			var records []RebuildRecord
+			var records []readmodel.RebuildRecord
 			for rows.Next() {
 				var rid, parent int64
 				var hidden, parentHidden int
 				if err = rows.Scan(&rid, &parent, &hidden, &parentHidden); err != nil {
 					return nil, err
 				}
-				row := LifecycleRow{RID: rid, ScopeID: j.ScopeID}
+				row := readmodel.LifecycleRow{RID: rid, ScopeID: j.ScopeID}
 				if parent != 0 {
-					row.Ancestors = []Ancestor{{ScopeID: j.ScopeID, RID: parent}}
+					row.Ancestors = []readmodel.Ancestor{{ScopeID: j.ScopeID, RID: parent}}
 				}
-				payloads := map[Stream]json.RawMessage{}
+				payloads := map[readmodel.Stream]json.RawMessage{}
 				if hidden|parentHidden == 0 {
-					row.After = &Projection{ScopeID: j.ScopeID, Generation: j.Generation, RID: rid, Version: 1, Entries: []Entry{{Family: "work", Audience: "reader", Sort: rid, Buckets: []string{"live"}}}}
-					payloads[Stream{Scope: j.ScopeID, Family: "work", Audience: "reader"}] = json.RawMessage(`{}`)
+					row.After = &readmodel.Projection{ScopeID: j.ScopeID, Generation: j.Generation, RID: rid, Version: 1, Entries: []readmodel.Entry{{Family: "work", Audience: "reader", Sort: rid, Buckets: []string{"live"}}}}
+					payloads[readmodel.Stream{Scope: j.ScopeID, Family: "work", Audience: "reader"}] = json.RawMessage(`{}`)
 				}
-				records = append(records, RebuildRecord{Row: row, Payloads: payloads})
+				records = append(records, readmodel.RebuildRecord{Row: row, Payloads: payloads})
 			}
 			return records, rows.Err()
 		}
-		r, err := Step(ctx, NewDurableLifecycle(a, "scope", loader))
+		r, err := readmodel.Step(ctx, readmodel.NewDurableLifecycle(a, "scope", loader))
 		if err != nil {
 			return r, err
 		}
 		return r, tx.Commit()
 	}
-	if _, err = run(CheckpointJob); err == nil {
+	if _, err = run(readmodel.CheckpointJob); err == nil {
 		t.Fatal("missing checkpoint fault")
 	}
 	var cursor int64
@@ -284,19 +285,19 @@ func TestDurableLifecycleTenThousandFencesRestartAndReceipt(t *testing.T) {
 		}
 	}
 	// Empty seek alone is insufficient: a verified current receipt is mandatory.
-	if _, err = run(""); !errors.Is(err, ErrProjection) {
+	if _, err = run(""); !errors.Is(err, readmodel.ErrProjection) {
 		t.Fatal("uncertified activation", err)
 	}
 	if _, err = db.Exec(`INSERT INTO scope_feed_generations VALUES('scope',3,1,1,1,1,6)`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = run(""); !errors.Is(err, ErrProjection) {
+	if _, err = run(""); !errors.Is(err, readmodel.ErrProjection) {
 		t.Fatal("stale epoch activation", err)
 	}
 	if _, err = db.Exec(`UPDATE scope_feed_generations SET legacy_auth_epoch=7`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = run(DeleteJob); err == nil {
+	if _, err = run(readmodel.DeleteJob); err == nil {
 		t.Fatal("missing activation fault")
 	}
 	var state string
@@ -320,13 +321,13 @@ func TestDurableLifecycleTenThousandFencesRestartAndReceipt(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := &txAdapter{tx: tx}
-	if err = BeginLifecycle(ctx, a, "scope", 3); err != nil {
+	if err = readmodel.BeginLifecycle(ctx, a, "scope", 3); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = tx.Exec(`UPDATE scope_domains SET generation=6`); err != nil {
 		t.Fatal(err)
 	}
-	if err = exact(ctx, a, CheckpointJob, 64, "scope", 5, 4, 0, "scope", 4); !errors.Is(err, ErrProjection) {
+	if err = exact(ctx, a, readmodel.CheckpointJob, 64, "scope", 5, 4, 0, "scope", 4); !errors.Is(err, readmodel.ErrProjection) {
 		t.Fatal("stale fence", err)
 	}
 	tx.Rollback()
@@ -334,7 +335,7 @@ func TestDurableLifecycleTenThousandFencesRestartAndReceipt(t *testing.T) {
 func TestIndexedRankNeighborsRefuseExhaustedGap(t *testing.T) {
 	db := openFixture(t, ":memory:")
 	defer db.Close()
-	if _, err := db.Exec(RankSchemaProposal + `INSERT INTO scope_ordering VALUES('scope',1,'board-a','column',10,1),('scope',1,'board-a','column',11,2),('scope',1,'board-a','column',30,3),('scope',1,'board-b','column',12,4)`); err != nil {
+	if _, err := db.Exec(readmodel.RankSchemaProposal + `INSERT INTO scope_ordering VALUES('scope',1,'board-a','column',10,1),('scope',1,'board-a','column',11,2),('scope',1,'board-a','column',30,3),('scope',1,'board-b','column',12,4)`); err != nil {
 		t.Fatal(err)
 	}
 	tx, err := db.Begin()
@@ -344,25 +345,25 @@ func TestIndexedRankNeighborsRefuseExhaustedGap(t *testing.T) {
 	defer tx.Rollback()
 	a := &txAdapter{tx: tx}
 	ctx := context.Background()
-	left, err := RankNeighbor(ctx, a, "scope", 1, "board-a", "column", Key{11, 2}, true)
+	left, err := readmodel.RankNeighbor(ctx, a, "scope", 1, "board-a", "column", readmodel.Key{11, 2}, true)
 	if err != nil || left.Sort != 10 {
 		t.Fatal(left, err)
 	}
-	right, err := RankNeighbor(ctx, a, "scope", 1, "board-a", "column", Key{10, 1}, false)
+	right, err := readmodel.RankNeighbor(ctx, a, "scope", 1, "board-a", "column", readmodel.Key{10, 1}, false)
 	if err != nil || right.Sort != 11 {
 		t.Fatal(right, err)
 	}
-	if _, err = RankBetween(&left.Sort, &right.Sort); !errors.Is(err, ErrRankGap) {
+	if _, err = readmodel.RankBetween(&left.Sort, &right.Sort); !errors.Is(err, readmodel.ErrRankGap) {
 		t.Fatal(err)
 	}
-	right, err = RankNeighbor(ctx, a, "scope", 1, "board-a", "column", Key{11, 2}, false)
+	right, err = readmodel.RankNeighbor(ctx, a, "scope", 1, "board-a", "column", readmodel.Key{11, 2}, false)
 	if err != nil || right == nil || right.Sort != 30 || right.RID != 3 {
 		t.Fatal("foreign board contaminated same-column neighbors", right, err)
 	}
-	if _, err = RankNeighbor(ctx, a, "scope", 1, "board-a", "other", Key{10, 1}, false); err != nil {
+	if _, err = readmodel.RankNeighbor(ctx, a, "scope", 1, "board-a", "other", readmodel.Key{10, 1}, false); err != nil {
 		t.Fatal(err)
 	}
-	for _, q := range []string{RankLeft, RankRight} {
+	for _, q := range []string{readmodel.RankLeft, readmodel.RankRight} {
 		rows, err := tx.Query("EXPLAIN QUERY PLAN "+q, "scope", 1, "board-a", "column", 10, 1)
 		if err != nil {
 			t.Fatal(err)
