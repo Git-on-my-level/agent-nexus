@@ -359,10 +359,19 @@ type DispatchRequest struct {
 // Execute starts are uncertain.
 // Reconcile is read-only.
 type Dependencies struct {
+	// AuthorizeReadBatch checks a bounded read operation against fresh principal
+	// authority and canonical resource visibility. It is never used for writes.
+	// Missing entries deny access; nil retains the per-record authorizer.
+	AuthorizeReadBatch func(context.Context, Principal, string, []string) (map[string]bool, error)
 	// DecisionWork reads one live snapshot; ErrNotFound includes trashed/archived work.
 	// ResolveResolution must apply the requesting principal's resource visibility
 	// to any projected summary: decisions are workspace-readable while their
 	// evidence may not be.
+	// DecisionWorkBatch is read-only projection enrichment for a bounded page.
+	// Missing map entries mean work is no longer live. Authorization remains
+	// separate, using fresh read batches when configured or the normal per-record
+	// permission checks.
+	DecisionWorkBatch func(context.Context, Principal, []string) (map[string]DecisionWork, error)
 	DecisionWork      func(context.Context, Principal, string) (DecisionWork, error)
 	ResolveResolution func(context.Context, Principal, string) (ResolutionRef, error)
 	Authorize         func(context.Context, Principal, string, string) error

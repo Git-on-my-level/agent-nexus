@@ -181,7 +181,7 @@ func TestLegacyBatchInputValidationBeforeDatabaseWork(t *testing.T) {
 		if field == "kind" {
 			values = append(values, strings.Repeat("k", 33), "nul\x00byte", "newline\n", string([]byte{0xff}))
 		}
-		for _, value := range values {
+		for i, value := range values {
 			r := valid
 			if field == "kind" {
 				r.Kind = value
@@ -192,7 +192,7 @@ func TestLegacyBatchInputValidationBeforeDatabaseWork(t *testing.T) {
 				name string
 				sink scopes.ID
 				rows []scopedrepo.LegacyRecord
-			}{fmt.Sprintf("%s-%q", field, value), "lost", []scopedrepo.LegacyRecord{valid, r}})
+			}{fmt.Sprintf("%s-case-%d", field, i), "lost", []scopedrepo.LegacyRecord{valid, r}})
 		}
 	}
 	for _, version := range []int64{0, -1} {

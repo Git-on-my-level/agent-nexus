@@ -657,40 +657,16 @@ func findAgentPrincipalByActorID(ctx context.Context, authStore *auth.Store, act
 	if authStore == nil {
 		return auth.AuthPrincipalSummary{}, false, nil
 	}
-	principals, _, err := authStore.ListPrincipals(ctx, auth.AuthPrincipalListFilter{})
-	if err != nil {
-		return auth.AuthPrincipalSummary{}, false, err
-	}
-	wantedActorID := strings.TrimSpace(actorID)
-	for _, principal := range principals {
-		if strings.TrimSpace(principal.ActorID) != wantedActorID {
-			continue
-		}
-		if principal.Revoked || strings.TrimSpace(principal.PrincipalKind) != "agent" {
-			continue
-		}
-		return principal, true, nil
-	}
-	return auth.AuthPrincipalSummary{}, false, nil
+	targets, err := authStore.NotificationTargets(ctx, []string{strings.TrimSpace(actorID)}, nil)
+	p, found := targets["actor:"+strings.TrimSpace(actorID)]
+	return p, found, err
 }
 
 func findAgentPrincipalByAgentID(ctx context.Context, authStore *auth.Store, agentID string) (auth.AuthPrincipalSummary, bool, error) {
 	if authStore == nil {
 		return auth.AuthPrincipalSummary{}, false, nil
 	}
-	principals, _, err := authStore.ListPrincipals(ctx, auth.AuthPrincipalListFilter{})
-	if err != nil {
-		return auth.AuthPrincipalSummary{}, false, err
-	}
-	wantedAgentID := strings.TrimSpace(agentID)
-	for _, principal := range principals {
-		if strings.TrimSpace(principal.AgentID) != wantedAgentID {
-			continue
-		}
-		if principal.Revoked || strings.TrimSpace(principal.PrincipalKind) != "agent" {
-			continue
-		}
-		return principal, true, nil
-	}
-	return auth.AuthPrincipalSummary{}, false, nil
+	targets, err := authStore.NotificationTargets(ctx, nil, []string{strings.TrimSpace(agentID)})
+	p, found := targets["agent:"+strings.TrimSpace(agentID)]
+	return p, found, err
 }

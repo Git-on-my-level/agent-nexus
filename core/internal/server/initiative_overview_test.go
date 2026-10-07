@@ -99,10 +99,10 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 	if out.Code != 200 || strings.Contains(out.Body.String(), "Initiative 0") || strings.Contains(out.Body.String(), "Initiative 39") {
 		t.Fatal(out.Body.String())
 	}
-	// No plans or ref facts are queried when all work is unreadable. The shared
-	// inbox loader retains its four fixed notification-lifecycle reads. A fresh
-	// read request also captures main's epoch-validated denial snapshot once.
-	if counter.Count() != 11 {
+	// One denial snapshot, bounded open/closed selectors, the designated-board
+	// probe, two dashboard reads and the inbox page. No plans, ref facts or
+	// notification lifecycle queries run when all work is unreadable.
+	if counter.Count() != 7 {
 		t.Fatalf("private query count %d", counter.Count())
 	}
 }

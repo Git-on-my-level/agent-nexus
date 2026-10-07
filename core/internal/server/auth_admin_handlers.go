@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"agent-nexus-core/internal/auth"
@@ -24,12 +25,25 @@ func handleAuthAdminRoutes(w http.ResponseWriter, r *http.Request, opts handlerO
 		if _, ok := requireAuthAdminPrincipal(w, r, opts); !ok {
 			return
 		}
-		items, err := opts.authStore.ListAuthAdmins(r.Context())
+		limit := 50
+		if raw := r.URL.Query().Get("limit"); raw != "" {
+			var err error
+			limit, err = strconv.Atoi(raw)
+			if err != nil {
+				writeError(w, 400, "invalid_request", "limit must be 1..200")
+				return
+			}
+		}
+		items, err := opts.authStore.AuthAdminPage(r.Context(), limit, r.URL.Query().Get("cursor"))
+		if errors.Is(err, auth.ErrInvalidRequest) {
+			writeError(w, 400, "invalid_request", "invalid admin pagination")
+			return
+		}
 		if err != nil {
 			writeError(w, 500, "internal_error", "failed to list auth admins")
 			return
 		}
-		writeJSON(w, 200, map[string]any{"admins": items})
+		writeJSON(w, 200, map[string]any{"admins": items.Admins, "next_cursor": items.NextCursor, "has_more": items.HasMore})
 		return
 	}
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/auth/admins/"), "/")

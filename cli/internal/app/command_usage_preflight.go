@@ -138,6 +138,11 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 	if err := preflightFlagUsage(commandArgs, preflightFlagSpecs()[commandName]); err != nil {
 		return commandName, err
 	}
+	if commandName == "auth admins list" {
+		if _, err := parseAuthAdminList(commandArgs); err != nil {
+			return commandName, err
+		}
+	}
 	if commandName == "docs ingest" {
 		if err := preflightDocsIngestArgs(commandArgs); err != nil {
 			return commandName, err
@@ -508,7 +513,7 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 	specs := map[string]map[string]preflightFlagSpec{
 		"host enroll": {"name": {kind: preflightFlagString}, "exclude": {kind: preflightFlagString}, "token": {kind: preflightFlagString}, "token-stdin": {kind: preflightFlagBool}, "plan": {kind: preflightFlagBool}},
 		"host revoke": {}, "host enrollments list": {}, "host enrollments approve": {}, "host enrollments deny": {},
-		"host tokens list": {}, "host tokens revoke": {}, "auth admins list": {}, "auth admins grant": {}, "auth admins revoke": {},
+		"host tokens list": {}, "host tokens revoke": {}, "auth admins list": {"limit": {kind: preflightFlagString}, "cursor": {kind: preflightFlagString}}, "auth admins grant": {}, "auth admins revoke": {},
 	}
 	addLayer := func(layer map[string]map[string]preflightFlagSpec) {
 		for path, flags := range layer {

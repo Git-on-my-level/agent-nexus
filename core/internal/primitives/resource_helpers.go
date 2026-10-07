@@ -52,6 +52,12 @@ func makePublicTypedRef(ctx context.Context, q queryRower, prefix, id string) st
 	if q == nil {
 		return makeTypedRef(prefix, id)
 	}
+	if cached, ok := ctx.Value(publicRefCacheKey{}).(map[string]string); ok {
+		if ref, found := cached[makeTypedRef(prefix, id)]; found {
+			return ref
+		}
+	}
+
 	resolved, err := resolvePublicResourceRef(ctx, q, prefix, id)
 	if err != nil {
 		return makeTypedRef(prefix, id)

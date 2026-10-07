@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"sort"
@@ -10,6 +12,7 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/actors"
+	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
 )
@@ -285,6 +288,10 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 	}
 
 	payload, err := loadOpenInbox(r, opts, now)
+	if errors.Is(err, primitives.ErrInvalidCursor) {
+		writeError(w, 400, "invalid_request", "invalid open inbox pagination")
+		return
+	}
 	if err != nil {
 		writeError(w, 500, "internal_error", "failed to load inbox projections")
 		return
@@ -293,7 +300,20 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 }
 
 func loadOpenInbox(r *http.Request, opts handlerOptions, now time.Time) (map[string]any, error) {
-	threadIDs, err := opts.primitiveStore.ListInboxThreadIDs(r.Context())
+	var threadIDs []string
+	var err error
+	if sampler, ok := opts.primitiveStore.(interface {
+		InboxThreadIDs(context.Context, int) ([]string, error)
+	}); ok {
+		threadIDs, err = sampler.InboxThreadIDs(r.Context(), 100)
+	} else {
+		limit := 100
+		var threads []map[string]any
+		threads, _, err = opts.primitiveStore.ListThreads(r.Context(), primitives.ThreadListFilter{Limit: &limit})
+		for _, thread := range threads {
+			threadIDs = append(threadIDs, anyString(thread["id"]))
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -301,27 +321,109 @@ func loadOpenInbox(r *http.Request, opts handlerOptions, now time.Time) (map[str
 	if err != nil {
 		return nil, err
 	}
-	items, err := loadOpenInboxItems(r, opts)
+	items, next, more, err := loadInboxPage(r, opts)
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"status": "open", "items": items, "generated_at": now.Format(time.RFC3339Nano), "projection_freshness": aggregateTopicProjectionFreshness(states, threadIDs)}, nil
+	freshness := aggregateTopicProjectionFreshness(states, threadIDs)
+	if summary, ok := opts.primitiveStore.(interface {
+		InboxFreshnessSummary(context.Context) (int, int, error)
+	}); ok {
+		count, rank, err := summary.InboxFreshnessSummary(r.Context())
+		if err != nil {
+			return nil, err
+		}
+		freshness["thread_count"] = count
+		freshness["status"] = []string{"current", "missing", "pending", "error"}[rank]
+		freshness["truncated"] = count > len(threadIDs)
+	}
+	return map[string]any{"status": "open", "items": items, "generated_at": now.Format(time.RFC3339Nano), "projection_freshness": freshness, "next_cursor": next, "has_more": more}, nil
 }
 
 // Overview needs the same permission-filtered asks, but not the inbox's
 // workspace-wide thread freshness scan and public-ref hydration.
 func loadOpenInboxItems(r *http.Request, opts handlerOptions) ([]map[string]any, error) {
-	return loadVisibleInboxItems(r, opts, true)
+	items, _, err := loadOverviewInboxItems(r, opts)
+	return items, err
+}
+func loadOverviewInboxItems(r *http.Request, opts handlerOptions) ([]map[string]any, bool, error) {
+	page := &inboxReadPage{}
+	items, err := loadVisibleInboxItemsFiltered(r, opts, true, primitives.DerivedInboxListFilter{Limit: 100}, page)
+	return items, page.More, err
+}
+
+func loadInboxPage(r *http.Request, opts handlerOptions) ([]map[string]any, string, bool, error) {
+	limit := 50
+	var err error
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		limit, err = strconv.Atoi(raw)
+	}
+	if err != nil || limit < 1 || limit > 100 {
+		return nil, "", false, primitives.ErrInvalidCursor
+	}
+	scope := "anonymous"
+	if p, ok := cachedAuthenticatedPrincipal(r); ok && p != nil {
+		scope = p.AgentID
+	}
+	var before struct {
+		Scope       string
+		Category    int
+		Trigger, ID string
+	}
+	cursor := r.URL.Query().Get("cursor")
+	if len(cursor) > 2048 {
+		return nil, "", false, primitives.ErrInvalidCursor
+	}
+	if cursor != "" {
+		raw, e := base64.RawURLEncoding.DecodeString(cursor)
+		if e != nil || json.Unmarshal(raw, &before) != nil || before.Scope != scope || before.ID == "" {
+			return nil, "", false, primitives.ErrInvalidCursor
+		}
+	}
+	page := &inboxReadPage{}
+	items, err := loadVisibleInboxItemsFiltered(r, opts, true, primitives.DerivedInboxListFilter{Limit: limit, BeforeCategory: before.Category, BeforeTrigger: before.Trigger, BeforeID: before.ID}, page)
+	if err != nil {
+		return nil, "", false, err
+	}
+	next := ""
+	if page.More {
+		before.Scope = scope
+		before.Category = primitives.InboxCategoryRank(page.Last.Category)
+		before.Trigger = page.Last.TriggerAt
+		before.ID = page.Last.ID
+		raw, _ := json.Marshal(before)
+		next = base64.RawURLEncoding.EncodeToString(raw)
+	}
+	return items, next, page.More, nil
 }
 
 func loadVisibleInboxItems(r *http.Request, opts handlerOptions, notifications bool) ([]map[string]any, error) {
+	return loadVisibleInboxItemsFiltered(r, opts, notifications, primitives.DerivedInboxListFilter{}, nil)
+}
+
+type inboxReadPage struct {
+	More bool
+	Last primitives.DerivedInboxItem
+}
+
+func loadVisibleInboxItemsFiltered(r *http.Request, opts handlerOptions, notifications bool, filter primitives.DerivedInboxListFilter, page *inboxReadPage) ([]map[string]any, error) {
 	recipient := ""
 	if principal, ok := cachedAuthenticatedPrincipal(r); ok && principal != nil {
 		recipient = principal.ActorID
 	}
-	projected, err := opts.primitiveStore.ListDerivedInboxItems(r.Context(), primitives.DerivedInboxListFilter{RecipientActorID: recipient})
+	filter.RecipientActorID = recipient
+	projected, err := opts.primitiveStore.ListDerivedInboxItems(r.Context(), filter)
 	if err != nil {
 		return nil, err
+	}
+	if filter.Limit > 0 && len(projected) > filter.Limit {
+		if page != nil {
+			page.More = true
+		}
+		projected = projected[:filter.Limit]
+	}
+	if page != nil && len(projected) > 0 {
+		page.Last = projected[len(projected)-1]
 	}
 	accessRequests := map[string]primitives.AccessRequest{}
 	if store, ok := opts.primitiveStore.(*primitives.Store); notifications && ok {
@@ -336,11 +438,37 @@ func loadVisibleInboxItems(r *http.Request, opts handlerOptions, notifications b
 			return nil, err
 		}
 	}
+	targets := map[string]auth.AuthPrincipalSummary{}
+	var targetErr error
+	if notifications && opts.authStore != nil {
+		actorIDs, agentIDs := []string{}, []string{}
+		for _, item := range projected {
+			payload := payloadFromDerivedInboxItem(item)
+			if canonicalHumanAttentionKind(anyString(payload["kind"])) == "" {
+				continue
+			}
+			if id := strings.TrimSpace(anyString(payload["requester_agent_id"])); id != "" {
+				agentIDs = append(agentIDs, id)
+			} else if id := strings.TrimSpace(anyString(payload["requester_actor_id"])); id != "" {
+				actorIDs = append(actorIDs, id)
+			}
+		}
+		if len(actorIDs)+len(agentIDs) > 0 {
+			targets, targetErr = opts.authStore.NotificationTargets(r.Context(), uniqueServerStrings(actorIDs), uniqueServerStrings(agentIDs))
+		}
+	}
 	payloadItems := make([]map[string]any, 0, len(projected))
 	for _, item := range projected {
 		payload := payloadFromDerivedInboxItem(item)
 		if notifications {
-			enrichHumanAttentionNotificationStatus(r.Context(), opts, payload)
+			if canonicalHumanAttentionKind(anyString(payload["kind"])) != "" {
+				key := "actor:" + strings.TrimSpace(anyString(payload["requester_actor_id"]))
+				if id := strings.TrimSpace(anyString(payload["requester_agent_id"])); id != "" {
+					key = "agent:" + id
+				}
+				p, found := targets[key]
+				applyNotificationTargetStatus(payload, humanAttentionResponseTarget{ActorID: p.ActorID, AgentID: p.AgentID, Handle: p.Username}, found, targetErr)
+			}
 			if request, ok := accessRequests["event:"+item.SourceEventID]; ok {
 				applyAccessRequestInboxMetadata(payload, request)
 			}
@@ -354,7 +482,22 @@ func loadVisibleInboxItems(r *http.Request, opts handlerOptions, notifications b
 		if store, ok := opts.primitiveStore.(interface {
 			HiddenSubjectRefs(context.Context) (map[string]bool, error)
 		}); ok {
-			hidden, err := store.HiddenSubjectRefs(r.Context())
+			var hidden map[string]bool
+			var err error
+			if selected, ok := opts.primitiveStore.(interface {
+				HiddenSubjectRefsFor(context.Context, []string) (map[string]bool, error)
+			}); ok {
+				refs := []string{}
+				for _, item := range payloadItems {
+					if canonicalHumanAttentionKind(anyString(item["kind"])) == "" {
+						related, _ := extractStringSlice(item["related_refs"])
+						refs = append(refs, related...)
+					}
+				}
+				hidden, err = selected.HiddenSubjectRefsFor(r.Context(), uniqueServerStrings(refs))
+			} else {
+				hidden, err = store.HiddenSubjectRefs(r.Context())
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -444,6 +587,12 @@ func enrichHumanAttentionNotificationStatus(ctx context.Context, opts handlerOpt
 	requesterActorID := strings.TrimSpace(anyString(item["requester_actor_id"]))
 	requesterAgentID := strings.TrimSpace(anyString(item["requester_agent_id"]))
 	target, found, err := resolveAgentNotificationTarget(ctx, opts, requesterActorID, requesterAgentID)
+	return applyNotificationTargetStatus(item, target, found, err)
+}
+
+func applyNotificationTargetStatus(item map[string]any, target humanAttentionResponseTarget, found bool, err error) map[string]any {
+	requesterActorID := strings.TrimSpace(anyString(item["requester_actor_id"]))
+	requesterAgentID := strings.TrimSpace(anyString(item["requester_agent_id"]))
 	status := map[string]any{
 		"mode":               "original",
 		"requester_actor_id": requesterActorID,

@@ -202,6 +202,7 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			writeError(w, http.StatusConflict, "conflict", "event already exists")
 			return
 		}
+		log.Printf("append event failed: %v", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to append event")
 		return
 	}

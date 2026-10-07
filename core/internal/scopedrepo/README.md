@@ -24,6 +24,27 @@ adds no inspection/recovery workflow.
 | `scope_replays(principal,replay_key,scope_id,kind,request_hash,resource_id)` | Creator replay; reauthorizes scope and checks request hash   |
 | `scope_projection_values(scope_id,projection_key,value)`                     | Derived value, readable/writable only under its source scope |
 
+## Identity and reference integrity
+
+The `(scope_id, kind, id, canonical_id)` registry binding is permanent. Updates,
+deletes and replacement inserts cannot redirect an opaque identity or its RID
+to another canonical source; canonical version updates remain possible. New
+publication creates a separate identity rather than rebinding an existing one.
+
+Persistent schema triggers enforce the declared scope/resource references even
+when a workspace connection has `PRAGMA foreign_keys=OFF`. Constraints therefore
+apply to every pooled connection and trusted migration transaction, without
+changing the legacy workspace connection configuration. Child insert/update
+checks and parent deletion guards use exact keys or indexed scope prefixes.
+Regression tests use the real workspace initializer and multiple connections,
+in addition to the foreign-key-enabled repository fixture.
+
+Feed binding deletion preserves the declared membership cascade with foreign keys
+disabled. That maintenance operation is proportional to matching bindings,
+including historical generations; bounding retirement/cascade work remains a
+write-enablement gate. Replacing a membership that still has bindings is rejected
+rather than allowing SQLite replacement to retain stale audience authority.
+
 ## Interfaces available to parallel workstreams
 
 - `scopes.ID`, `Role`, `Stream`, `Binding`, `DirectoryPage`, fixed scope/stream/page

@@ -1603,7 +1603,7 @@
       "path": "/auth/admins",
       "operation_id": "listAuthAdmins",
       "summary": "List agent auth-admin grants",
-      "description": "Human or auth-admin principal. Lists active explicitly granted agents only; humans retain their existing administration rights.",
+      "description": "Human or auth-admin principal. Lists active explicitly granted agents only, ordered by username and id in pages of at most 200; humans retain their existing administration rights.",
       "why": "Manage explicit workspace administration authority for agents.",
       "input_mode": "none",
       "streaming": {
@@ -1613,7 +1613,8 @@
       "error_codes": [
         "auth_required",
         "invalid_token",
-        "auth_admin_required"
+        "auth_admin_required",
+        "invalid_request"
       ],
       "concepts": [
         "auth"
@@ -9812,7 +9813,7 @@
       ],
       "stability": "beta",
       "surface": "projection",
-      "agent_notes": "Both text and structured version 1 visual reports are supported. Authored review metadata is returned for every static panel. Reading a pinned report checks deadlines and durably deduplicates author-only inbox reminders per panel and revision. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows after subject, related-ref, card and board authorization. Archived boards and their work are excluded. Private PM events remain private.",
+      "agent_notes": "Both text and structured version 1 visual reports are supported. Authored review metadata is returned for every static panel. Reading a pinned report checks deadlines and durably deduplicates author-only inbox reminders per panel and revision. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Native work, event and decision candidates are bounded to 200 per request scope, with truncated marking additional candidates. Archived boards and their work are excluded. Private PM events remain private.",
       "path_params": [
         "document_id"
       ],
@@ -12347,7 +12348,8 @@
       "output_envelope": "Returns the dashboard report selector projection.",
       "error_codes": [
         "auth_required",
-        "invalid_token"
+        "invalid_token",
+        "invalid_request"
       ],
       "concepts": [
         "home",

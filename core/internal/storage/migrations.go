@@ -1023,6 +1023,7 @@ var migrations = []migration{
 	{Version: 63, AfterApply: indexResourceAccessProfiles},
 	{Version: 64, AfterApply: applyMigration64BoardRole},
 	{Version: 65, AfterApply: applyMigration65EvidenceIndex},
+	{Version: 66, AfterApply: indexBoundedOverviewReads},
 }
 
 func repairNULReferenceAccess(ctx context.Context, tx *sql.Tx) error {

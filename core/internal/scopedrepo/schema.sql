@@ -106,6 +106,66 @@ CREATE TRIGGER IF NOT EXISTS scope_resource_rid_reserved
 BEFORE DELETE ON scope_resource_rids
 BEGIN SELECT RAISE(ABORT,'resource RID remains reserved'); END;
 
+-- The workspace connection pool does not enable foreign_keys. Persist these
+-- guards in the schema so every connection enforces the declared relationships
+-- without changing the behavior of unrelated legacy tables.
+CREATE TRIGGER IF NOT EXISTS scope_membership_parent_insert
+BEFORE INSERT ON scope_memberships
+WHEN NOT EXISTS(SELECT 1 FROM scope_domains WHERE id=NEW.scope_id)
+BEGIN SELECT RAISE(ABORT,'membership scope missing'); END;
+CREATE TRIGGER IF NOT EXISTS scope_membership_parent_update
+BEFORE UPDATE OF scope_id ON scope_memberships
+WHEN NOT EXISTS(SELECT 1 FROM scope_domains WHERE id=NEW.scope_id)
+BEGIN SELECT RAISE(ABORT,'membership scope missing'); END;
+CREATE TRIGGER IF NOT EXISTS scope_resource_parent_insert
+BEFORE INSERT ON scope_resources
+WHEN NOT EXISTS(SELECT 1 FROM scope_domains WHERE id=NEW.scope_id)
+BEGIN SELECT RAISE(ABORT,'resource scope missing'); END;
+CREATE TRIGGER IF NOT EXISTS scope_alias_parent_insert
+BEFORE INSERT ON scope_aliases
+WHEN NOT EXISTS(SELECT 1 FROM scope_resources WHERE scope_id=NEW.scope_id AND kind=NEW.kind AND id=NEW.resource_id)
+BEGIN SELECT RAISE(ABORT,'alias resource missing'); END;
+CREATE TRIGGER IF NOT EXISTS scope_alias_parent_update
+BEFORE UPDATE OF scope_id,kind,resource_id ON scope_aliases
+WHEN NOT EXISTS(SELECT 1 FROM scope_resources WHERE scope_id=NEW.scope_id AND kind=NEW.kind AND id=NEW.resource_id)
+BEGIN SELECT RAISE(ABORT,'alias resource missing'); END;
+CREATE TRIGGER IF NOT EXISTS scope_projection_parent_insert
+BEFORE INSERT ON scope_projection_values
+WHEN NOT EXISTS(SELECT 1 FROM scope_domains WHERE id=NEW.scope_id)
+BEGIN SELECT RAISE(ABORT,'projection scope missing'); END;
+CREATE TRIGGER IF NOT EXISTS scope_projection_parent_update
+BEFORE UPDATE OF scope_id ON scope_projection_values
+WHEN NOT EXISTS(SELECT 1 FROM scope_domains WHERE id=NEW.scope_id)
+BEGIN SELECT RAISE(ABORT,'projection scope missing'); END;
+CREATE TRIGGER IF NOT EXISTS scope_rid_parent_insert
+BEFORE INSERT ON scope_resource_rids
+WHEN NOT EXISTS(SELECT 1 FROM scope_resources WHERE scope_id=NEW.scope_id AND kind=NEW.kind AND id=NEW.resource_id)
+BEGIN SELECT RAISE(ABORT,'RID resource missing'); END;
+CREATE TRIGGER IF NOT EXISTS scope_domain_children_delete
+BEFORE DELETE ON scope_domains
+WHEN EXISTS(SELECT 1 FROM scope_memberships WHERE scope_id=OLD.id)
+ OR EXISTS(SELECT 1 FROM scope_resources WHERE scope_id=OLD.id)
+ OR EXISTS(SELECT 1 FROM scope_projection_values WHERE scope_id=OLD.id)
+BEGIN SELECT RAISE(ABORT,'scope still has children'); END;
+
+-- The opaque handle and RID reserve one canonical source forever. Only version
+-- advances are mutable; moves/reclassification require a separate reviewed path.
+-- BEFORE INSERT covers both uniqueness keys even with recursive_triggers=OFF,
+-- where INSERT OR REPLACE otherwise silently deletes the conflicting parent.
+CREATE TRIGGER IF NOT EXISTS scope_resource_source_immutable
+BEFORE UPDATE OF scope_id,kind,id,canonical_id ON scope_resources
+WHEN NEW.scope_id IS NOT OLD.scope_id OR NEW.kind IS NOT OLD.kind
+ OR NEW.id IS NOT OLD.id OR NEW.canonical_id IS NOT OLD.canonical_id
+BEGIN SELECT RAISE(ABORT,'resource canonical source is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS scope_resource_reserved
+BEFORE DELETE ON scope_resources
+BEGIN SELECT RAISE(ABORT,'resource identity remains reserved'); END;
+CREATE TRIGGER IF NOT EXISTS scope_resource_no_replace
+BEFORE INSERT ON scope_resources
+WHEN EXISTS(SELECT 1 FROM scope_resources WHERE scope_id=NEW.scope_id AND kind=NEW.kind AND id=NEW.id)
+ OR EXISTS(SELECT 1 FROM scope_resources WHERE kind=NEW.kind AND canonical_id=NEW.canonical_id)
+BEGIN SELECT RAISE(ABORT,'resource identity remains reserved'); END;
+
 -- INSERT OR REPLACE otherwise bypasses delete triggers with recursive triggers off.
 CREATE TRIGGER IF NOT EXISTS scope_resource_rid_no_replace
 BEFORE INSERT ON scope_resource_rids
