@@ -816,6 +816,15 @@ Prefer coherent changes over one PR per table; coordinator review precedes relea
    synthetic old schemas, deterministic placement and cutover; remove old graph only after
    route and field matrices pass. Reassess storage and write budgets on full data.
 
+The inbox-only serving cutover is a narrow exception to the general ordering
+above: preserve legacy semantics through complete off-request parity proofs,
+then use scopes as the certified reader's authority without rebuilding the graph.
+Missing/stale proofs retain measured legacy fallback. This does not enable new
+publication or mention semantics. Complete capture/invalidation, closed inbox
+computation, route/field parity and full-request budgets remain mandatory; see
+[the revised inbox plan](scope-phase-two.md). The cold/revoked graph-on-request
+bridge is no longer a candidate for enablement.
+
 SCA-665's bounded PM/history queries, normalized inbox columns and batched
 enrichment remain valuable. Port their filter/order keys into scope-prefixed
 indexes; keep their tests instead of rewriting their active branch. SCA-661/#295

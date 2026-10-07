@@ -155,10 +155,11 @@ func (s *Store) ReadFeed(ctx context.Context, request scopes.RequestSelection, s
 		}
 	}
 	var legacyEpoch int64
-	if err = tx.QueryRowContext(ctx, query_feed_legacy_epoch).Scan(&legacyEpoch); err != nil {
+	var namespace string
+	if err = tx.QueryRowContext(ctx, query_feed_legacy_epoch).Scan(&legacyEpoch, &namespace); err != nil {
 		return err
 	}
-	if legacyEpoch < 0 {
+	if legacyEpoch < 0 || !validWorkspaceNamespace(namespace) {
 		return ErrFeedProjection
 	}
 	r := &feedReader{ctx: ctx, tx: tx, alive: true, ready: true, admitted: make(map[FeedReference]bool), queried: make([]bool, len(streams))}
@@ -200,11 +201,12 @@ func (s *Store) ReadFeed(ctx context.Context, request scopes.RequestSelection, s
 	// Ordered selection is part of the binding because cursor heads use indexes.
 	encoded, err := json.Marshal(struct {
 		Format      int
+		Namespace   string
 		Principal   string
 		LegacyEpoch int64
 		Scopes      []feedAuthority
 		Streams     []feedStreamAuthority
-	}{feedCertificateVersion, request.Principal, legacyEpoch, authorities, bindings})
+	}{feedCertificateVersion, namespace, request.Principal, legacyEpoch, authorities, bindings})
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,23 @@
 package scopes
 
-import "testing"
+import (
+	"errors"
+	"fmt"
+	"testing"
+)
+
+func TestImmutableSentinelCompatibility(t *testing.T) {
+	for err, message := range map[error]string{
+		ErrDenied: "scope unavailable", ErrUpdating: "scope updating",
+		ErrBudget:     "scope request exceeds budget",
+		ErrDerivation: "cross-scope derivation requires publication",
+		ErrClosed:     "scope capability expired",
+	} {
+		if err.Error() != message || !errors.Is(fmt.Errorf("wrapped: %w", err), err) {
+			t.Fatalf("sentinel contract changed: %v", err)
+		}
+	}
+}
 
 func TestStreamBudgets(t *testing.T) {
 	var all []Stream

@@ -228,13 +228,15 @@ func TestPublishSourceOwnerOrAdmin(t *testing.T) {
 func TestShadowSchemaInventory(t *testing.T) {
 	db, _ := fixture(t)
 	expected := map[string]string{
-		"scope_domains":           "generation,id,state",
-		"scope_memberships":       "generation,principal,role,scope_id",
-		"scope_resources":         "canonical_id,id,kind,scope_id,version",
-		"scope_aliases":           "alias,kind,resource_id,retired,scope_id",
-		"scope_replays":           "kind,principal,replay_key,request_hash,resource_id,scope_id",
-		"scope_projection_values": "projection_key,scope_id,value",
-		"scope_resource_rids":     "kind,resource_id,rid,scope_id",
+		// Internal authorization identity only; no canonical record data or grants.
+		"scope_workspace_namespace": "namespace,singleton",
+		"scope_domains":             "generation,id,state",
+		"scope_memberships":         "generation,principal,role,scope_id",
+		"scope_resources":           "canonical_id,id,kind,scope_id,version",
+		"scope_aliases":             "alias,kind,resource_id,retired,scope_id",
+		"scope_replays":             "kind,principal,replay_key,request_hash,resource_id,scope_id",
+		"scope_projection_values":   "projection_key,scope_id,value",
+		"scope_resource_rids":       "kind,resource_id,rid,scope_id",
 	}
 	rows, e := db.Query(`SELECT name FROM sqlite_schema WHERE type='table' AND name GLOB 'scope_*' ORDER BY name`)
 	must(t, e)
