@@ -139,9 +139,16 @@ export function initiativeTileModel(item, options = {}) {
    * width — the whole reason the badges moved off it. Every other health
    * state (Blocked, At risk, On track) is something the age cannot express,
    * so it keeps its pill.
+   *
+   * Only when the badge actually reads late, though. Core computes staleness
+   * its own way and can call an initiative stale while its last movement is
+   * well inside our expectation; dropping the pill there would replace the
+   * one surface saying something is wrong with a green badge saying it is
+   * fine. When the two disagree, the reader gets both.
    */
   const showHealth =
-    health.known && !(health.state === "stale" && Boolean(freshness));
+    health.known &&
+    !(health.state === "stale" && freshness && freshness.state !== "fresh");
 
   return {
     ref,

@@ -38,6 +38,37 @@ const CARD_REF = "card:release-b";
 const NOW = "2026-10-05T12:00:00Z";
 const PR_URL = "https://github.com/Git-on-my-level/agent-nexus/pull/246";
 
+/** Hours relative to the fixed clock, as an instant. */
+function iso(hours) {
+  return new Date(Date.parse(NOW) + hours * 3_600_000).toISOString();
+}
+
+function agentRow(name, state, overrides = {}) {
+  return {
+    id: `agent-${name}`,
+    actor_id: `actor-${name}`,
+    ref: `agent:${name}`,
+    host_id: "host-1",
+    host_slug: "workstation-a",
+    name,
+    handle: `${name}.workstation-a`,
+    display_name: `${name} on workstation-a`,
+    identity_kind: "derived",
+    state,
+    bridge_online: false,
+    current_card_ref: null,
+    current_card_title: null,
+    last_progress_note: null,
+    last_progress_at: null,
+    active_run: null,
+    open_asks_count: 0,
+    waiting_ask: null,
+    last_signal_at: iso(-0.1),
+    revoked_at: null,
+    ...overrides,
+  };
+}
+
 const WIDTHS = [
   { label: "desktop", width: 1440, height: 1200 },
   { label: "390", width: 390, height: 1400 },
@@ -292,6 +323,57 @@ const SNAPSHOT = {
   work: { status: "ok", total: 5, human_count: 1, items: [] },
 };
 
+/**
+ * A roster with one of each kind of quiet: an agent working, one waiting on a
+ * human, one idle, one silent while holding a card, two silent holding nothing,
+ * and two identities nobody has ever run.
+ *
+ * Core seeds every roster row with `state: "stale"` and only overwrites it with
+ * waiting / working / idle (`commandcenter/roster.go`), so the last five arrive
+ * as "stale" — which is exactly the lump this change splits.
+ */
+const ROSTER = [
+  agentRow("codex", "working", {
+    current_card_ref: "card:release-b",
+    current_card_title: "Release B",
+    last_progress_note: "Parry window at 120 ms, testing input buffer",
+    last_progress_at: iso(-0.1),
+    active_run: {
+      run_id: "run-1",
+      adapter: "codex",
+      model: "sol",
+      duration_seconds: 840,
+    },
+    bridge_online: true,
+  }),
+  agentRow("claude", "waiting_on_human", {
+    open_asks_count: 1,
+    waiting_ask: {
+      id: "evt-ask",
+      inbox_item_id: "inbox:ask:thread-1:evt-ask:evt-ask",
+      title: "Confirm the renderer vocabulary",
+      severity: "high",
+      created_at: iso(-3.2),
+      kind: "ask",
+      subject_ref: "card:release-b",
+      subject_title: "Release B",
+      requester_actor_id: "actor-claude",
+      requester_agent_id: "agent-claude",
+    },
+  }),
+  agentRow("reviewer", "idle", { last_signal_at: iso(-2) }),
+  // Silent two days with a card in hand: the one silence worth a warning.
+  agentRow("builder", "stale", {
+    last_signal_at: iso(-50),
+    current_card_ref: "card:dashboards",
+    current_card_title: "Live dashboards",
+  }),
+  agentRow("packager", "stale", { last_signal_at: iso(-60) }),
+  agentRow("cutter", "stale", { last_signal_at: iso(-96) }),
+  agentRow("release-bot", "stale", { last_signal_at: null }),
+  agentRow("migration-bot", "stale", { last_signal_at: null }),
+];
+
 const RESOLVED = {
   items: [
     {
@@ -333,7 +415,10 @@ async function installFixture(page) {
       });
 
     if (path === "/overview" || path === "/workspace/dashboard") {
-      return json(SNAPSHOT);
+      return json({ ...SNAPSHOT, agents: { status: "ok", items: ROSTER } });
+    }
+    if (path === "/agents" && request.method() === "GET") {
+      return json({ agents: ROSTER });
     }
     if (path === "/refs/resolve" && request.method() === "POST") {
       return json(RESOLVED);
@@ -396,6 +481,30 @@ for (const { label, width, height } of WIDTHS) {
       fullPage: true,
     });
     await testInfo.attach(`${LABEL}-overview-${label}`, {
+      path: file,
+      contentType: "image/png",
+    });
+  });
+
+  test(`capture agents @ ${label}`, async ({ page }, testInfo) => {
+    test.skip(!LABEL, "set REVIEW_CAPTURES=before|after to capture");
+    test.setTimeout(120_000);
+    await installFixture(page);
+    await page.setViewportSize({ width, height });
+    await page.goto(`${WORKSPACE}/agents`);
+    await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({
+      timeout: 60_000,
+    });
+    await page.waitForLoadState("networkidle").catch(() => {});
+    await page.evaluate(() => document.fonts?.ready);
+    await mkdir(OUT, { recursive: true });
+    const file = `${OUT}/${LABEL}-agents-${label}.png`;
+    await page.screenshot({
+      path: file,
+      animations: "disabled",
+      fullPage: true,
+    });
+    await testInfo.attach(`${LABEL}-agents-${label}`, {
       path: file,
       contentType: "image/png",
     });

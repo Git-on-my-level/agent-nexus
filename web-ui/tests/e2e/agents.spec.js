@@ -71,16 +71,17 @@ const OMAR = agent("claude", "waiting_on_human", {
 });
 const IDLE = agent("reviewer", "idle", { last_signal_at: ago(120) });
 /*
- * Core reports no state for an agent silent beyond 24h. The roster used to
- * read that as "stale" for every one of them; it now depends on whether work
- * is riding on the silence.
+ * Core seeds every roster row with `state: "stale"` and only overwrites it
+ * with waiting / working / idle (`commandcenter/roster.go`), so every agent
+ * silent beyond 24h arrives as "stale". What it means now depends on whether
+ * work is riding on the silence.
  */
 // Enrolled, never run: roster bookkeeping, folded away.
-const NEVER = agent("release-bot", "", { last_signal_at: null });
+const NEVER = agent("release-bot", "stale", { last_signal_at: null });
 // Silent two days, holding nothing: offline, and not a warning.
-const OFFLINE = agent("packager", "", { last_signal_at: ago(60 * 60) });
+const OFFLINE = agent("packager", "stale", { last_signal_at: ago(60 * 60) });
 // Silent two days while holding a card: the one that is actually alarming.
-const STALE = agent("builder", "", {
+const STALE = agent("builder", "stale", {
   last_signal_at: ago(60 * 50),
   current_card_ref: "card:lock-hub-quest-path",
   current_card_title: "Lock hub quest path",

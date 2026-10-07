@@ -123,12 +123,12 @@ async function installOverview(
       { board: { id: "old", title: "Old backlog", state: "archived" } },
     ],
     work: [...active, ...archived],
-    // Core reports no state for an agent silent beyond 24h. With no work
+    // Core sends "stale" for every agent silent beyond 24h. With no work
     // riding on the silence these read as offline, not as a warning.
     agents: Array.from({ length: 3 }, (_, index) => ({
       id: `agent-${index}`,
       display_name: "claude",
-      state: "",
+      state: "stale",
       last_signal_at: SILENT_SINCE,
     })),
     documents: [dashboard.document],
@@ -183,7 +183,7 @@ async function installOverview(
       truncated: truncatedAgents,
       items: Array.from({ length: 3 }, (_, index) => ({
         id: `agent-${index}`,
-        state: truncatedAgents ? "idle" : "",
+        state: truncatedAgents ? "idle" : "stale",
         last_signal_at: SILENT_SINCE,
       })),
     },

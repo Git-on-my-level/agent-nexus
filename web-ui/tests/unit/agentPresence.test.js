@@ -148,24 +148,38 @@ describe("agent roster model", () => {
 
   it("tells an identity that never checked in from one that is simply off", () => {
     expect(
-      agentRowModel(agent("pm", "", { last_signal_at: null }), {
+      agentRowModel(agent("pm", "stale", { last_signal_at: null }), {
         now: NOW,
       }).headline,
     ).toBe("Never checked in");
     // Silent for two days, but holding nothing: not running is the whole fact.
     expect(
-      agentRowModel(agent("pm", "", { last_signal_at: ago(60 * 50) }), {
+      agentRowModel(agent("pm", "stale", { last_signal_at: ago(60 * 50) }), {
         now: NOW,
       }).headline,
     ).toBe("Not running");
   });
 
+  it("splits the silence whether core names it or leaves it empty", () => {
+    // `commandcenter/roster.go` seeds every row with "stale"; an older or
+    // partial response can leave it empty. Both are the same fact.
+    for (const reported of ["stale", ""]) {
+      expect(
+        agentPresentationState(
+          agent("pm", reported, { last_signal_at: ago(60 * 50) }),
+        ),
+      ).toBe("offline");
+    }
+  });
+
   it("calls a silence stale only when work is riding on it", () => {
-    const silent = { state: "", last_signal_at: ago(60 * 50) };
-    expect(agentPresentationState(agent("pm", "", silent))).toBe("offline");
+    const silent = { state: "stale", last_signal_at: ago(60 * 50) };
+    expect(agentPresentationState(agent("pm", "stale", silent))).toBe(
+      "offline",
+    );
     expect(
       agentPresentationState(
-        agent("pm", "", {
+        agent("pm", "stale", {
           ...silent,
           current_card_ref: "card:tune-combat",
           current_card_title: "Tune core combat loop",
@@ -174,7 +188,7 @@ describe("agent roster model", () => {
     ).toBe("stale");
     expect(
       agentPresentationState(
-        agent("pm", "", {
+        agent("pm", "stale", {
           ...silent,
           active_run: { adapter: "codex", model: null, duration_seconds: 60 },
         }),
@@ -183,7 +197,7 @@ describe("agent roster model", () => {
     // A silence with a card under it says what is at stake.
     expect(
       agentRowModel(
-        agent("pm", "", {
+        agent("pm", "stale", {
           ...silent,
           current_card_ref: "card:tune-combat",
           current_card_title: "Tune core combat loop",
@@ -196,9 +210,9 @@ describe("agent roster model", () => {
   it("counts never-checked-in identities apart from the agents that exist", () => {
     const summary = rosterSummary([
       agent("a", "working"),
-      agent("b", "", { last_signal_at: ago(60 * 50) }),
-      agent("c", "", { last_signal_at: null }),
-      agent("d", "", { last_signal_at: null }),
+      agent("b", "stale", { last_signal_at: ago(60 * 50) }),
+      agent("c", "stale", { last_signal_at: null }),
+      agent("d", "stale", { last_signal_at: null }),
     ]);
     expect(summary).toMatchObject({
       total: 2,
@@ -212,7 +226,7 @@ describe("agent roster model", () => {
   it("folds never-checked-in identities into one collapsed group", () => {
     const groups = groupAgentsByState([
       agent("a", "working"),
-      agent("b", "", { last_signal_at: null }),
+      agent("b", "stale", { last_signal_at: null }),
     ]);
     const folded = groups.find((group) => group.key === "inactive");
     expect(folded?.collapsed).toBe(true);

@@ -382,6 +382,20 @@ describe("tile freshness", () => {
     }
   });
 
+  it("keeps the Stale pill when the badge would contradict it", () => {
+    // Core calls it stale; the last movement is five hours ago, well inside
+    // the three-day expectation. A green badge alone would read as "fine".
+    const tile = initiativeTileModel(
+      row({
+        plan_health: { state: "stale", reason: "No agent has picked it up." },
+        plan_state: planState({ last_movement_at: ago(5 * 3_600_000) }),
+      }),
+      { now: NOW },
+    );
+    expect(tile.freshness.tone).toBe("ok");
+    expect(tile.showHealth).toBe(true);
+  });
+
   it("keeps the Stale pill when there is no instant to badge instead", () => {
     const tile = initiativeTileModel(
       row({
