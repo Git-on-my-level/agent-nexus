@@ -25,14 +25,15 @@ type CanonicalHook interface {
 }
 
 type mutationTx struct {
-	mu        sync.Mutex
-	tx        *resourceaccess.Tx
-	alive     bool
-	ctx       context.Context
-	remaining *int
-	rows      []*sql.Rows
-	cancels   []context.CancelFunc
-	failure   error
+	mu         sync.Mutex
+	tx         *resourceaccess.Tx
+	alive      bool
+	ctx        context.Context
+	remaining  *int
+	rows       []*sql.Rows
+	cancels    []context.CancelFunc
+	failure    error
+	registered bool
 }
 
 // The source context is pinned: hooks cannot drop its authority by supplying a
@@ -76,6 +77,10 @@ func (t *mutationTx) ExecContext(ctx context.Context, q string, args ...any) (sq
 	if err := t.check(ctx); err != nil {
 		return nil, err
 	}
+	if t.registered && !registeredHookWrite(q) {
+		t.failure = scopes.ErrDenied
+		return nil, t.failure
+	}
 	opctx, cancel := t.operationContext(ctx)
 	defer cancel()
 	result, err := t.tx.ExecContext(opctx, q, args...)
@@ -89,6 +94,10 @@ func (t *mutationTx) QueryContext(ctx context.Context, q string, args ...any) (*
 	defer t.mu.Unlock()
 	if err := t.check(ctx); err != nil {
 		return nil, err
+	}
+	if t.registered && q != readModelHookIdentity {
+		t.failure = scopes.ErrDenied
+		return nil, t.failure
 	}
 	opctx, cancel := t.operationContext(ctx)
 	rows, err := t.tx.QueryContext(opctx, q, args...)
@@ -130,6 +139,10 @@ func (t *mutationTx) close() error {
 // derivation isolation, parity and route gates pass. This validates structure,
 // not authority or provenance; canonical capture remains required at call sites.
 func ApplyCanonicalHooks(ctx context.Context, tx *resourceaccess.Tx, mutation scopes.CanonicalMutation, hooks ...CanonicalHook) (err error) {
+	return applyCanonicalHooks(ctx, tx, mutation, false, hooks...)
+}
+
+func applyCanonicalHooks(ctx context.Context, tx *resourceaccess.Tx, mutation scopes.CanonicalMutation, registered bool, hooks ...CanonicalHook) (err error) {
 	if tx == nil {
 		return scopes.ErrDenied
 	}
@@ -149,6 +162,13 @@ func ApplyCanonicalHooks(ctx context.Context, tx *resourceaccess.Tx, mutation sc
 		if h == nil {
 			return scopes.ErrBudget
 		}
+		if registered {
+			// Exact value types only. Embedding, wrappers and pointers cannot add
+			// callbacks or mutate registration after this admission check.
+			if _, approved := h.(ReadModelCanonicalHook); !approved {
+				return scopes.ErrDenied
+			}
+		}
 	}
 	remaining := scopes.MaxComputationOps
 	for _, h := range hooks {
@@ -165,7 +185,7 @@ func ApplyCanonicalHooks(ctx context.Context, tx *resourceaccess.Tx, mutation sc
 				m.Changes[i].After = &v
 			}
 		}
-		cap := &mutationTx{tx: tx, alive: true, ctx: ctx, remaining: &remaining}
+		cap := &mutationTx{tx: tx, alive: true, ctx: ctx, remaining: &remaining, registered: registered}
 		err = func() (hookErr error) {
 			defer func() {
 				if e := cap.close(); hookErr == nil {

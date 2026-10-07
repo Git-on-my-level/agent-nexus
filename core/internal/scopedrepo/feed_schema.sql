@@ -88,3 +88,108 @@ BEGIN SELECT RAISE(ABORT,'membership still has feed bindings'); END;
 CREATE TRIGGER scope_feed_membership_delete
 AFTER DELETE ON scope_memberships
 BEGIN DELETE FROM scope_feed_bindings WHERE principal=OLD.principal AND scope_id=OLD.scope_id; END;
+
+-- Disabled selection boundary. There is deliberately NO production proof writer.
+-- A future trusted comparator must compare the COMPLETE old-policy audience,
+-- lifecycle, payload and counters and prove cross-stream RID disjointness in the
+-- same canonical source snapshot. Request code cannot supply these assertions.
+CREATE TABLE scope_feed_proof_clock (
+ singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+ revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision>0)
+);
+INSERT INTO scope_feed_proof_clock VALUES(1,1);
+CREATE TABLE scope_feed_selection_proofs (
+ authority_binding TEXT PRIMARY KEY CHECK(length(authority_binding)=64),
+ source_revision INTEGER NOT NULL CHECK(typeof(source_revision)='integer' AND source_revision>0),
+ format_version INTEGER NOT NULL,
+ policy_version INTEGER NOT NULL, projector_version INTEGER NOT NULL,
+ audience_compared INTEGER NOT NULL DEFAULT 0,
+ lifecycle_compared INTEGER NOT NULL DEFAULT 0,
+ payload_compared INTEGER NOT NULL DEFAULT 0,
+ counters_compared INTEGER NOT NULL DEFAULT 0,
+ disjoint INTEGER NOT NULL DEFAULT 0
+) WITHOUT ROWID;
+-- This clock protects shadow/canonical-identity changes, including ABA. It is
+-- NOT a substitute for production canonical source capture or publication
+-- authority. Those must join invalidation before any live registration.
+CREATE TRIGGER scope_resources_proof_insert
+AFTER INSERT ON scope_resources
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_resources_proof_update
+AFTER UPDATE ON scope_resources
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_resources_proof_delete
+AFTER DELETE ON scope_resources
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_resource_rids_proof_insert
+AFTER INSERT ON scope_resource_rids
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_resource_rids_proof_update
+AFTER UPDATE ON scope_resource_rids
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_resource_rids_proof_delete
+AFTER DELETE ON scope_resource_rids
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_domains_proof_insert
+AFTER INSERT ON scope_domains
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_domains_proof_update
+AFTER UPDATE ON scope_domains
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_domains_proof_delete
+AFTER DELETE ON scope_domains
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_memberships_proof_insert
+AFTER INSERT ON scope_memberships
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_memberships_proof_update
+AFTER UPDATE ON scope_memberships
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_memberships_proof_delete
+AFTER DELETE ON scope_memberships
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_feed_proof_insert
+AFTER INSERT ON scope_feed
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_feed_proof_update
+AFTER UPDATE ON scope_feed
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_feed_proof_delete
+AFTER DELETE ON scope_feed
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_feed_payloads_proof_insert
+AFTER INSERT ON scope_feed_payloads
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_feed_payloads_proof_update
+AFTER UPDATE ON scope_feed_payloads
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_feed_payloads_proof_delete
+AFTER DELETE ON scope_feed_payloads
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_counters_proof_insert
+AFTER INSERT ON scope_counters
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_counters_proof_update
+AFTER UPDATE ON scope_counters
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_counters_proof_delete
+AFTER DELETE ON scope_counters
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_feed_generations_proof_insert
+AFTER INSERT ON scope_feed_generations
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_feed_generations_proof_update
+AFTER UPDATE ON scope_feed_generations
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_feed_generations_proof_delete
+AFTER DELETE ON scope_feed_generations
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_feed_bindings_proof_insert
+AFTER INSERT ON scope_feed_bindings
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_feed_bindings_proof_update
+AFTER UPDATE ON scope_feed_bindings
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;
+CREATE TRIGGER scope_feed_bindings_proof_delete
+AFTER DELETE ON scope_feed_bindings
+BEGIN UPDATE scope_feed_proof_clock SET revision=revision+1 WHERE singleton=1; END;

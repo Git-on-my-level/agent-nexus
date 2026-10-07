@@ -2,8 +2,6 @@
 // It does not replace legacy authorization until semantic cutover is approved.
 package scopes
 
-import "errors"
-
 const MaxScopes = 64
 const MaxStreamsPerScope = 4
 const MaxStreams = MaxScopes * MaxStreamsPerScope
@@ -26,11 +24,19 @@ func (r Role) CanRead() bool    { return r == Reader || r == Writer || r == Owne
 func (r Role) CanWrite() bool   { return r == Writer || r == Owner || r == Admin }
 func (r Role) CanPublish() bool { return r == Owner || r == Admin }
 
-var ErrDenied = errors.New("scope unavailable") // Missing and unauthorized are indistinguishable.
-var ErrUpdating = errors.New("scope updating")
-var ErrBudget = errors.New("scope request exceeds budget")
-var ErrDerivation = errors.New("cross-scope derivation requires publication")
-var ErrClosed = errors.New("scope capability expired")
+// Immutable sentinels cannot be replaced with an implementation carrying SQL
+// or another capability from outside the reviewed scope dependency.
+type scopeError string
+
+func (e scopeError) Error() string { return string(e) }
+
+const (
+	ErrDenied     scopeError = "scope unavailable" // Missing and unauthorized are indistinguishable.
+	ErrUpdating   scopeError = "scope updating"
+	ErrBudget     scopeError = "scope request exceeds budget"
+	ErrDerivation scopeError = "cross-scope derivation requires publication"
+	ErrClosed     scopeError = "scope capability expired"
+)
 
 // Binding contains only IDs the caller is authorized to enumerate. A directory
 // slot remains present when transitioning; it is not silently filtered out.

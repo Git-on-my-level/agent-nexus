@@ -1,5 +1,22 @@
 -- Additive shadow schema. No production initializer invokes this yet; no released
 -- migration number is allocated. All identities below are opaque external IDs.
+-- Minted once by Initialize. Identity survives reopen/reinitialization and cannot
+-- be replaced, deleted or edited (including INSERT OR REPLACE with triggers off).
+CREATE TABLE IF NOT EXISTS scope_workspace_namespace (
+ singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+ namespace TEXT NOT NULL CHECK(typeof(namespace)='text' AND length(CAST(namespace AS BLOB))=32 AND namespace NOT GLOB '*[^0-9a-f]*')
+);
+CREATE TRIGGER IF NOT EXISTS scope_workspace_namespace_no_update
+BEFORE UPDATE ON scope_workspace_namespace
+BEGIN SELECT RAISE(ABORT,'workspace namespace is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS scope_workspace_namespace_no_delete
+BEFORE DELETE ON scope_workspace_namespace
+BEGIN SELECT RAISE(ABORT,'workspace namespace remains reserved'); END;
+CREATE TRIGGER IF NOT EXISTS scope_workspace_namespace_no_replace
+BEFORE INSERT ON scope_workspace_namespace
+WHEN EXISTS(SELECT 1 FROM scope_workspace_namespace)
+BEGIN SELECT RAISE(ABORT,'workspace namespace remains reserved'); END;
+
 CREATE TABLE IF NOT EXISTS scope_domains (
  id TEXT PRIMARY KEY,
  state TEXT NOT NULL CHECK(state IN ('active','transitioning','inaccessible')),
