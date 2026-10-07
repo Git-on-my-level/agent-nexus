@@ -35,8 +35,16 @@ IDs and content are shared, while the explicit series anchor keeps observations
 inside the requested window. Canonical ownership/reference triggers remain on.
 Content-addressed artifacts share one synthetic text blob to reduce disk work.
 
-The route test constructs one migrated workspace and reuses it across every
-route, principal and sample. The startup test needs a separate schema-58 corpus
+All routes reuse one migrated workspace across principals and samples. The
+unfiltered default stream retains 8,192+ events, 4,096 distinct baseline threads
+and card references, the large-history thread and canonical private-board graph.
+After #311 it starts at HEAD: its first completed chunk must skip old history,
+and its second must deliver fresh public/private controls. The large-history
+case explicitly resumes after event 0000 and checks two ordered bounded pages,
+with a private-reference control inside the second page. Resumed and idle cases
+check fresh delivery separately; timer keepalive flushes never count as reads.
+Both principals exercise every case, and fixture policy is recorded in each
+sample. The startup test uses a separate schema-58 corpus
 to measure a real upgrade. Every fixture consumer validates table/PM
 cardinalities, the private-card distribution, FTS and populated series. The two
 authorization hotfix regressions remain separate: their established common-read
@@ -67,7 +75,7 @@ requires its poll credential. Series responses must contain populated data, and
 selected collection responses must contain known records. Adapter inventory requires an explicit series grant (403 for the unrelated
 principal); public series metadata/query and PM collections retain their
 existing filtered-200 semantics. These are representative
-selectors (including a populated public-thread event stream and a one-row
+selectors (including unfiltered, large-history and resumed event streams, a one-row
 target-board page and a populated one-card ref source), not every possible route filter or a replacement for privacy
 tests. The target-board page requires a positive owner result and an explicitly
 empty unrelated-reader result. It does not certify default unpaginated board/ref
@@ -79,17 +87,39 @@ writes. The preview uses a populated fleet-health panel; saved reports cover liv
 Secret cardinality and document/card revision histories are shallow;
 those fanout dimensions need dedicated scale fixtures when changed.
 
-One warm-up precedes three measured requests. Nearest-rank p95 is the maximum of
-those three measurements. Explicit existing-main baselines with an allowance of
-at least ten seconds use two full measured requests instead, including the
-first/cold request; their maximum is a conservative smoke budget with reduced
-sampling confidence, not a reliable tail-latency estimate. Every sample retains
-all count, plan, status and privacy checks. The default 500 ms budget also has a one-second context
-deadline. SQL statement and returned-row counts provide machine-independent
-bounds, including discarded authorization/projection rows. Series observations
-have a separately documented fixed cap. SSE requests exercise the header flush
-and two data/tick flushes, including an invalidation for agent streams; an error
-event or a missing second poll fails. Network transport latency is not measured.
+One warm-up precedes five measured requests. The median must meet the 500 ms
+ordinary latency reference; nearest-rank p95 and the maximum are reported
+separately. A loose secondary maximum (four times the reference, at least five
+seconds) bounds catastrophic stalls and supplies the request deadline. Existing
+baselines of at least ten seconds include the cold request without an extra
+warm-up. This policy tolerates one scheduling spike without treating a maximum
+of three observations as a stable tail estimate. Statement, returned-row and
+SQLite VM-instruction ceilings are the primary assertions on **every** sample,
+including warm-up. Timing never relaxes counts, work, plans or privacy.
+
+Every read has an ordinary 50,000-VM-instruction ceiling alongside 100 statements
+and 1,024 returned rows. `sqlite3_stmt_status` counters include indexed aggregate
+work, prepared statements, transactions, early close and errors; fullscan, sort
+and autoindex work are also recorded. A result with one row can execute thousands
+of instructions. Native per-statement overflow, unsupported driver layouts and automatic
+schema reprepare without a reliable trace lifetime fail closed. The route
+fixture schema stays fixed during measurement. Cached FTS/internal statement
+counters reset per execution; nested callbacks preserve parent guards and
+capture epochs, so earlier executions cannot inflate a later sample. The test-only adapter validates the pinned modernc connection and
+rows fields and uses its generated SQLite API; it does not alter production
+connections. VM instructions are a work proxy, not bytes processed by Go UDFs,
+so plan checks and the secondary timer remain necessary. See the
+[SQLite counter definitions](https://www.sqlite.org/c3ref/c_stmtstatus_counter.html).
+
+Stream cases have independent IDs, headers and allowances. Event coverage
+includes the existing selected thread, the unfiltered workspace history, a
+4,096-event single thread, resumed history and an idle Last-Event-ID poll.
+Inbox snapshot/resumed/idle polls and agent-change invalidations are exercised.
+The canonical inbox endpoint is `/stream/inbox`; there is no `/inbox/stream`
+alias. Fresh public and inherited-private controls distinguish two actual polls
+from header readiness or replay. Event controls are deleted after measurement
+with canonical triggers active so sample count does not grow the denial graph.
+Network transport latency is not measured.
 
 A wrapper around the canonical SQLite driver captures raw and authorization-
 rewritten statements, including prepared and transactional operations. Every
@@ -99,41 +129,44 @@ patterns can change a plan. Repeated executions still count toward query/row
 budgets; identical SQL text is interned to avoid retaining thousands of copies
 of the authorization compiler output. Targeted filter-value tests remain necessary.
 Tables with at least 1,024 rows are discovered from the fixture. Plans fail on
-large-table SCANs (including full covering-index scans), automatic indexes, or a
-registered custom function in WHERE over a large relation. Alias handling includes
+large-table SCANs (including full covering-index scans), automatic indexes, aggregate/window SEARCH inputs, or a
+registered custom function in WHERE over a large relation. Aggregate/window names come from SQLite’s actual function registry, including MIN/MAX expressions and JSON aggregates. Referenced view definitions are expanded recursively for analysis, so a view cannot hide the aggregate or its input alias. Their SEARCH findings are conservative across nested SQL; bounded optimized cases need exact review rather than a wildcard. Alias handling includes
 quoted and schema-qualified identifiers. Classification is conservative; SQLite
 owns execution and its actual plan, and this lexer is not a general SQL parser.
 
-`performance_plan_allowlist.json` identifies an exact SQL-shape SHA-256 and
+`performance_plan_allowlist.json` identifies an exact SQL-shape SHA-256 (including
+recursively referenced view definitions) and
 specific EXPLAIN findings and the full ordered plan fingerprint (including
 duplicate nodes), with a justification and link to the existing P1 issue.
 The fingerprint preserves all SQL except the two numeric snapshot epochs emitted
 by the authorization compiler: those are data, and change with fixture writes.
-Quoted business literals and comments are preserved. Actual SQL is always used
+Quoted business literals and comments are preserved. Changing a view's bounds
+expires its fingerprint even when submitted SQL and EXPLAIN stay identical;
+unrelated view definitions do not affect it. Actual SQL is always used
 for EXPLAIN; normalization never changes execution. New SQL or findings require
 reviewing a new entry. There are no table-wide or route-wide plan exemptions.
 
 `performance_budget_allowlist.json` records finite baselines for existing hazards
-on main, per method/path/principal, with linked P1 justification. Standard budgets
+on main, per method/path/case/principal, with linked repair justification. Standard budgets
 remain the default for every new route. Baselines retain query/row ceilings,
 success/denial expectations, positive fixtures, private controls and two SSE data
 flushes; exceeding a ceiling still fails. Their purpose is to allow the guardrail
-harness to land while SCA-663/664/665 and the existing SCA-652 repairs proceed,
-not to authorize new O(workspace) work. After merging #302 at `ac77fae8`
-(schema66), the 24 previous broad PM/overview exceptions were replaced by eight narrow
-measured cases; 56 of the other 90 exceptions were retired. Thirty-five
-other reads retain only the dimensions that exceed ordinary limits. The
+harness to land while SCA-663/664/665/673 and the existing SCA-652 repairs proceed,
+not to authorize new O(workspace) work. The merged #302 repairs retired the
+previous broad PM/overview exceptions. Remaining entries are remeasured with
+the expanded stream fixture and SQLite counters, and retain only dimensions
+that exceed ordinary limits. The
 ordinary limits stay at 500 ms, 100 SQL executions and 1,024 returned rows
 (except the existing fixed series-observation cap).
 
-Completed merged-code measurements, including Linux CI runs `37555029376` and `37556967479`, replace the former threefold latency
+Completed merged-code measurements replace the former threefold latency
 allowances and identity-cache refresh extrapolation. Latency headroom is 20%,
 rounded up to 50 ms; overrun counts get 2% headroom with a minimum of eight SQL
-executions or 64 rows. Counts below the ordinary limit use that limit. First
+executions, 64 returned rows or 1,000 VM instructions. Dimensions below the
+ordinary limit use that limit. First
 and returning overview visits remain separately sampled. Legacy PM response
-projection still issues 159 SQL for actions and up to 164 for decisions; indexed
-identity-cache refresh adds two SQL executions and one row in the completed CI
-capture, rather than the old directory-refresh multiplier.
+projection still issues 159 SQL for actions and up to 164 for decisions; identity
+cache refresh is measured directly, rather than extrapolating a multiplier.
 Completed denied PM/overview probes take seconds even after indexed principal
 lookup. These are existing main hazards linked to SCA-663, not permission to
 add repeated lookups. Diagnostic probes provide completed baseline evidence
@@ -155,11 +188,11 @@ Set `ANX_PERFORMANCE_REPORT` to an absolute writable JSON path to collect
 synthetic SQL shapes/findings and route samples for review. CI uploads this report as
 `core-performance-report`, so reviewers can inspect the plans behind the hashes.
 `ANX_PERFORMANCE_DIAGNOSTIC=1`
-uses one diagnostic sample and extends the request deadline to ten minutes to
+uses one diagnostic sample and extends the request deadline to sixty minutes to
 observe baseline counts; it always fails as a diagnostic run, and
-latency/query/row and plan failures still fail. An exact
+latency/query/row/work and plan failures still fail. An exact
 `ANX_PERFORMANCE_DIAGNOSTIC_ROUTE="METHOD /path"` selector can isolate one
-diagnostic route; setting it in acceptance mode fails before fixture setup. CI
+diagnostic route; append ` [case-id]` to select one stream case. Setting it in acceptance mode fails before fixture setup. CI
 never enables either diagnostic option.
 
 ## Startup and migration readiness
@@ -174,8 +207,7 @@ warm-open measurement. This is a database/store readiness proxy; deployment and
 network readiness checks require their own integration coverage.
 
 Main #275's batched source-edge reconciliation removes the measured legacy
-upgrade overrun: the schema-58 through schema-66 upgrade takes 17.23 seconds,
-with a 5.16 ms warm open, in the merged-code local measurement. The former fifteen-minute
+upgrade overrun. The former fifteen-minute
 SCA-664 exception is retired: `performance_startup_allowlist.json` is `null`, so
 CI enforces the ordinary 90-second upgrade and five-second warm-open budgets.
 If a legacy exception is ever needed, it must be finite, linked to a reviewed P1
@@ -202,18 +234,19 @@ exceptions link their P1 issues and cap the current behavior. This is a baseline
 not proof that every reader is bounded. The following independently visible hazards require remedies that preserve
 privacy, legacy data and response contracts:
 
-| Severity | Source                                                                                              | Affected reads                    | Cost before a request/page bound                                                                                                                                                                                                                                       |
-| -------- | --------------------------------------------------------------------------------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P1       | `internal/primitives/inbox_freshness.go:7`, `internal/primitives/inbox_reads.go:39`                 | Inbox freshness and summary       | Aggregate freshness still scans scoped thread candidates, with view/status joins. Summary counts and JSON-kind/lifecycle predicates inspect the corpus; output pagination does not bound candidates. #302 removes full page materialization.                           |
-| P1       | `internal/server/stream_handlers.go:261`, `:491`, `:349`                                            | Inbox, events and receipt streams | Repeated freshness/history and subject work per tick remains. #302's internal 100-record inbox sampling also has a completeness regression, owned by the SCA-665 forward fix; representative two-tick tests do not certify complete feeds.                             |
-| P1       | `internal/primitives/docs_store.go:120`, `:135`                                                     | Document point/history reads      | TRIM/COALESCE event joins inspect events rather than using direct indexed equality.                                                                                                                                                                                    |
-| P1       | `internal/primitives/docs_store.go:1480`                                                            | Document revisions                | Unpaginated revision history has queries per revision, O(R) round trips. The generic fixture has shallow histories.                                                                                                                                                    |
-| P1       | `internal/primitives/docs_knowledge.go:327`, `:335`, `:372`                                         | Document search                   | Matching-corpus ranking and correlated event scans can grow with matches and event history.                                                                                                                                                                            |
-| P1       | `internal/server/pm_runtime.go:310`, `internal/pm/resolution.go:48`, `internal/pm/decisions.go:622` | PM actions and decisions          | Legacy delivery-authority projection resolves work per returned record despite batched snapshots. Measured action/decision requests execute 159/164 SQL. #302's HTTP page selectors and indexed principal lookup retire the prior exhaustion/cache-refresh allowances. |
-| P1       | `internal/pm/store.go:101`                                                                          | Internal PM list consumers        | Internal `listRecords` still accumulates 200-row windows to exhaustion; bounded HTTP pages bypass it. Do not apply this finding to the repaired HTTP page loaders.                                                                                                     |
-| P1       | `internal/auth/hosts.go:738`, `internal/primitives/store.go:1905`                                   | Host enrichment, thread list      | Indexed host selection still hydrates an agent directory; thread lists retain per-thread subject/summary hydration. Selection indexes do not bound those downstream costs.                                                                                             |
-| P1       | `internal/primitives/access_scope.go:56`, `internal/primitives/overview_changes.go:76`              | Fresh transaction/denied reads    | Fresh canonical denial closure and candidate filtering remain costly. Snapshot fallback executes on an epoch miss; cached denied/reference membership still executes on a hit.                                                                                         |
-| P1       | `internal/storage/workspace.go:83`, `internal/storage/migrations.go:1018`                           | Upgrade and startup               | Remaining reconciliation grows with corpus before readiness. #275 batches source edges and #305 removes historical blob reads; ordinary startup budgets now pass without an exception.                                                                                 |
+| Severity | Source                                                                                              | Affected reads                          | Cost before a request/page bound                                                                                                                                                                                                                                       |
+| -------- | --------------------------------------------------------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1       | `internal/primitives/inbox_freshness.go:7`, `internal/primitives/inbox_reads.go:39`                 | Inbox freshness and summary             | Aggregate freshness still scans scoped thread candidates, with view/status joins. Summary counts and JSON-kind/lifecycle predicates inspect the corpus; output pagination does not bound candidates. #302 removes full page materialization.                           |
+| P0       | `internal/server/stream_handlers.go:200`, `:505`; `internal/primitives/store.go:2494`               | Default and large-history event streams | Main materializes, decodes and authorizes the entire selected event history on each poll before applying Last-Event-ID; subject/reference hydration repeats canonical denial work. Separate two-poll allowances link SCA-673.                                          |
+| P1       | `internal/server/stream_handlers.go:261`, `:491`, `:349`                                            | Inbox, events and receipt streams       | Repeated freshness/history and subject work per tick remains. #302's internal 100-record inbox sampling also has a completeness regression, owned by the SCA-665 forward fix; representative two-tick tests do not certify complete feeds.                             |
+| P1       | `internal/primitives/docs_store.go:120`, `:135`                                                     | Document point/history reads            | TRIM/COALESCE event joins inspect events rather than using direct indexed equality.                                                                                                                                                                                    |
+| P1       | `internal/primitives/docs_store.go:1480`                                                            | Document revisions                      | Unpaginated revision history has queries per revision, O(R) round trips. The generic fixture has shallow histories.                                                                                                                                                    |
+| P1       | `internal/primitives/docs_knowledge.go:327`, `:335`, `:372`                                         | Document search                         | Matching-corpus ranking and correlated event scans can grow with matches and event history.                                                                                                                                                                            |
+| P1       | `internal/server/pm_runtime.go:310`, `internal/pm/resolution.go:48`, `internal/pm/decisions.go:622` | PM actions and decisions                | Legacy delivery-authority projection resolves work per returned record despite batched snapshots. Measured action/decision requests execute 159/164 SQL. #302's HTTP page selectors and indexed principal lookup retire the prior exhaustion/cache-refresh allowances. |
+| P1       | `internal/pm/store.go:101`                                                                          | Internal PM list consumers              | Internal `listRecords` still accumulates 200-row windows to exhaustion; bounded HTTP pages bypass it. Do not apply this finding to the repaired HTTP page loaders.                                                                                                     |
+| P1       | `internal/auth/hosts.go:738`, `internal/primitives/store.go:1905`                                   | Host enrichment, thread list            | Indexed host selection still hydrates an agent directory; thread lists retain per-thread subject/summary hydration. Selection indexes do not bound those downstream costs.                                                                                             |
+| P1       | `internal/primitives/access_scope.go:56`, `internal/primitives/overview_changes.go:76`              | Fresh transaction/denied reads          | Fresh canonical denial closure and candidate filtering remain costly. Snapshot fallback executes on an epoch miss; cached denied/reference membership still executes on a hit.                                                                                         |
+| P1       | `internal/storage/workspace.go:83`, `internal/storage/migrations.go:1018`                           | Upgrade and startup                     | Remaining reconciliation grows with corpus before readiness. #275 batches source edges and #305 removes historical blob reads; ordinary startup budgets now pass without an exception.                                                                                 |
 
 #302 also repairs work selection before metadata/projection (`work_store.go:905`),
 page-before-enrichment inbox loading (`derived_store.go:167`), bounded PM/overview

@@ -25,6 +25,9 @@ type Capture struct {
 	enabled       bool
 	seen          map[string]map[string]bool
 	canonicalSQL  map[string]string
+	work          WorkStats
+	workErr       error
+	epoch         uint64
 }
 
 func (c *Capture) Start() {
@@ -35,6 +38,9 @@ func (c *Capture) Start() {
 	c.canonicalSQL = map[string]string{}
 	c.queries = 0
 	c.rows = 0
+	c.work = WorkStats{}
+	c.workErr = nil
+	c.epoch++
 	c.enabled = true
 }
 func (c *Capture) Stop() ([]Statement, int, int) {
@@ -86,10 +92,10 @@ func (c *Capture) record(q string, args []driver.NamedValue) {
 	c.statements = append(c.statements, Statement{q, v})
 
 }
-func (c *Capture) row() {
+func (c *Capture) row(epoch uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.enabled {
+	if c.enabled && epoch != 0 && epoch == c.epoch {
 		c.rows++
 	}
 }
@@ -123,12 +129,24 @@ func (d *captureDriver) Open(name string) (driver.Conn, error) {
 	if e != nil {
 		return nil, e
 	}
-	return &captureConn{Conn: c, capture: d.capture}, nil
+	w, e := installWorkTrace(c, d.capture)
+	if e != nil {
+		_ = c.Close()
+		return nil, e
+	}
+	return &captureConn{Conn: c, capture: d.capture, work: w}, nil
 }
 
 type captureConn struct {
 	driver.Conn
 	capture *Capture
+	work    *workTrace
+}
+
+func (c *captureConn) Close() error {
+	err := c.Conn.Close()
+	workTraces.Delete(c.work.id)
+	return err
 }
 
 // Preserve the canonical driver's pool lifecycle: canceled SQLite connections
@@ -151,36 +169,44 @@ func (c *captureConn) Prepare(q string) (driver.Stmt, error) {
 	if e != nil {
 		return nil, e
 	}
-	return &captureStmt{Stmt: s, q: q, capture: c.capture}, nil
+	return &captureStmt{Stmt: s, q: q, capture: c.capture, work: c.work}, nil
 }
 func (c *captureConn) PrepareContext(ctx context.Context, q string) (driver.Stmt, error) {
 	s, e := c.Conn.(driver.ConnPrepareContext).PrepareContext(ctx, q)
 	if e != nil {
 		return nil, e
 	}
-	return &captureStmt{Stmt: s, q: q, capture: c.capture}, nil
+	return &captureStmt{Stmt: s, q: q, capture: c.capture, work: c.work}, nil
 }
 func (c *captureConn) BeginTx(ctx context.Context, o driver.TxOptions) (driver.Tx, error) {
+	c.work.beginCall(ctx)
+	defer c.work.endCall()
 	return c.Conn.(driver.ConnBeginTx).BeginTx(ctx, o)
 }
 func (c *captureConn) Ping(ctx context.Context) error { return c.Conn.(driver.Pinger).Ping(ctx) }
 func (c *captureConn) ExecContext(ctx context.Context, q string, a []driver.NamedValue) (driver.Result, error) {
+	c.work.beginCall(ctx)
+	defer c.work.endCall()
 	c.capture.record(q, a)
 	return c.Conn.(driver.ExecerContext).ExecContext(ctx, q, a)
 }
 func (c *captureConn) QueryContext(ctx context.Context, q string, a []driver.NamedValue) (driver.Rows, error) {
+	c.work.beginCall(ctx)
+	defer c.work.endCall()
 	c.capture.record(q, a)
+	epoch := c.capture.workEpoch()
 	r, e := c.Conn.(driver.QueryerContext).QueryContext(ctx, q, a)
 	if e != nil {
 		return nil, e
 	}
-	return &captureRows{Rows: r, capture: c.capture}, nil
+	return wrapRows(r, c.capture, c.work, epoch, ctx)
 }
 
 type captureStmt struct {
 	driver.Stmt
 	q       string
 	capture *Capture
+	work    *workTrace
 }
 
 func named(a []driver.Value) []driver.NamedValue {
@@ -191,39 +217,67 @@ func named(a []driver.Value) []driver.NamedValue {
 	return out
 }
 func (s *captureStmt) Exec(a []driver.Value) (driver.Result, error) {
+	s.work.beginCall(context.Background())
+	defer s.work.endCall()
 	s.capture.record(s.q, named(a))
 	return s.Stmt.Exec(a)
 }
 func (s *captureStmt) Query(a []driver.Value) (driver.Rows, error) {
+	s.work.beginCall(context.Background())
+	defer s.work.endCall()
 	s.capture.record(s.q, named(a))
+	epoch := s.capture.workEpoch()
 	r, e := s.Stmt.Query(a)
 	if e != nil {
 		return nil, e
 	}
-	return &captureRows{Rows: r, capture: s.capture}, nil
+	return wrapRows(r, s.capture, s.work, epoch, context.Background())
 }
 func (s *captureStmt) ExecContext(ctx context.Context, a []driver.NamedValue) (driver.Result, error) {
+	s.work.beginCall(ctx)
+	defer s.work.endCall()
 	s.capture.record(s.q, a)
 	return s.Stmt.(driver.StmtExecContext).ExecContext(ctx, a)
 }
 func (s *captureStmt) QueryContext(ctx context.Context, a []driver.NamedValue) (driver.Rows, error) {
+	s.work.beginCall(ctx)
+	defer s.work.endCall()
 	s.capture.record(s.q, a)
+	epoch := s.capture.workEpoch()
 	r, e := s.Stmt.(driver.StmtQueryContext).QueryContext(ctx, a)
 	if e != nil {
 		return nil, e
 	}
-	return &captureRows{Rows: r, capture: s.capture}, nil
+	return wrapRows(r, s.capture, s.work, epoch, ctx)
 }
 
 type captureRows struct {
 	driver.Rows
 	capture *Capture
+	work    *workTrace
+	epoch   uint64
+	ctx     context.Context
+}
+
+func wrapRows(r driver.Rows, c *Capture, w *workTrace, epoch uint64, ctx context.Context) (driver.Rows, error) {
+	if err := w.sampleRows(r); err != nil {
+		_ = r.Close()
+		return nil, err
+	}
+	return &captureRows{Rows: r, capture: c, work: w, epoch: epoch, ctx: ctx}, nil
 }
 
 func (r *captureRows) Next(dest []driver.Value) error {
+	if err := r.work.beginRows(r.Rows, r.ctx, r.epoch); err != nil {
+		return err
+	}
+	defer r.work.endCall()
 	e := r.Rows.Next(dest)
+	if err := r.work.sampleRows(r.Rows); err != nil {
+		return err
+	}
 	if e == nil {
-		r.capture.row()
+		r.capture.row(r.epoch)
 	} else if e != io.EOF {
 		return e
 	}

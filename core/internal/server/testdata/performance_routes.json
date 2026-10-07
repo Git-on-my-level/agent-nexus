@@ -2,211 +2,230 @@
   {
     "method": "GET",
     "path": "/actors",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/adapters",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 403,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/agent-inbox/asks",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
     "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
-    "authorized_as": "agent"
+    "authorized_as": "agent",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/agent-notifications",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
     "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
-    "authorized_as": "agent"
+    "authorized_as": "agent",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/agents",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/agents/me",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/agents/{agent_id}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/artifacts",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
     "reason": "Representative 20-row page; artifact owner enrichment and document-revision joins must still remain bounded before and within the page.",
-    "query": "limit=20"
+    "query": "limit=20",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/artifacts/{artifact_id}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/artifacts/{artifact_id}/content",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/auth/access-requests",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 403,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/auth/access/summary",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 403,
-    "reason": "Human-only summary. The authorized owner exercises the read; unrelated machine credentials must be rejected with human_required."
+    "reason": "Human-only summary. The authorized owner exercises the read; unrelated machine credentials must be rejected with human_required.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/auth/admins",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 403,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/auth/audit",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 403,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/auth/bootstrap/status",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/auth/hosts/enrollment-tokens",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 403,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/auth/hosts/enrollments/pending",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 403,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/auth/hosts/enrollments/{enrollment_id}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 401,
     "reason": "Point enrollment lookup uses its independent enrollment poll token; normal principal access does not grant that token.",
-    "must_contain": "scale-target-enrollment"
+    "must_contain": "scale-target-enrollment",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/auth/invites",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 403,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/auth/principals",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 403,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/boards",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
@@ -214,788 +233,984 @@
     "reason": "One populated target-board page in the unchanged 4K corpus and 256-private-card denial graph. Owner must see the target; unrelated reader must see an empty page. Default unscoped collection/ref hydration overrun is tracked by SCA-665.",
     "query": "q=Private%20scale%20target&limit=1",
     "must_contain": "Private scale target",
-    "unauthorized_must_contain": "\"boards\":[]"
+    "unauthorized_must_contain": "\"boards\":[]",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/boards/{board_id}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/boards/{board_id}/cards",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/boards/{board_id}/cards/{card_id}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/boards/{board_id}/workspace",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/cards",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/cards/{card_id}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/cards/{card_id}/plan",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/cards/{card_id}/revisions",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/cards/{card_id}/revisions/{revision_id}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/cards/{card_id}/timeline",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/docs",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
     "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
     "query": "limit=1",
-    "must_contain": "{document_id}"
+    "must_contain": "{document_id}",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/docs/search",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
     "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
-    "query": "q=Synthetic&limit=1"
+    "query": "q=Synthetic&limit=1",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/docs/{document_id}",
-    "p95_ms": 500,
-    "max_queries": 100,
-    "max_rows": 1024,
-    "authorized_status": 200,
-    "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
-  },
-  {
-    "method": "GET",
-    "path": "/docs/{document_id}/comments",
-    "p95_ms": 500,
-    "max_queries": 100,
-    "max_rows": 1024,
-    "authorized_status": 200,
-    "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
-  },
-  {
-    "method": "GET",
-    "path": "/docs/{document_id}/report",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
     "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
-    "must_contain": "\"status\":\"ok\""
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "path": "/docs/{document_id}/comments",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "path": "/docs/{document_id}/report",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "must_contain": "\"status\":\"ok\"",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/docs/{document_id}/revisions",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/docs/{document_id}/revisions/{revision_id}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/events",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
     "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
     "query": "limit=1&type=message_posted",
-    "must_contain": "{event_id}"
+    "must_contain": "{event_id}",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/events/{event_id}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/health",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/home/unread",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/hosts",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/hosts/{host_id}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/inbox",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/inbox/summary",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/inbox/{inbox_id}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/livez",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/meta/commands",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/meta/commands/{command_id}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/meta/concepts",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/meta/concepts/{concept_name}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/meta/handshake",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/ops/health",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/ops/usage-summary",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/overview",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/overview/changes",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/pm/actions",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/pm/actions/{action_id}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/pm/bindings",
-    "p95_ms": 500,
-    "max_queries": 100,
-    "max_rows": 1024,
-    "authorized_status": 200,
-    "unauthorized_status": 403,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
-  },
-  {
-    "method": "GET",
-    "path": "/pm/context",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 403,
     "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
-    "query": "work_ref={card_ref}&limit=1"
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "path": "/pm/context",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 403,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "query": "work_ref={card_ref}&limit=1",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/pm/conversations",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/pm/conversations/{conversation_id}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/pm/decisions",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/pm/decisions/{decision_id}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/pm/turns/{turn_id}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/readyz",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/ref-edges",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
     "reason": "Populated one-card board source with the full unrelated corpus/private graph. Private source selector must be denied. High-fanout public source (3,840 edges) exceeds 120 seconds for unrelated readers and remains a SCA-665 repair.",
     "query": "source_ref=board:{board_id}",
-    "must_contain": "\"relation\":\"board_card\""
+    "must_contain": "\"relation\":\"board_card\"",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/runs",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/runs/{run_id}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
     "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
-    "must_contain": "scale-target-run"
+    "must_contain": "scale-target-run",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/secrets",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
     "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
-    "must_contain": "scale-secret"
+    "must_contain": "scale-secret",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/series",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/series/{name}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 4608,
     "authorized_status": 200,
     "unauthorized_status": 200,
     "reason": "Series raw reads have a hard 4096-observation cap; metadata and auth fit the remaining 512 rows.",
     "query": "range=24h&step=1h",
-    "must_contain": "4095"
+    "must_contain": "4095",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/series/{name}/query",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 4608,
     "authorized_status": 200,
     "unauthorized_status": 200,
     "reason": "Series raw reads have a hard 4096-observation cap; metadata and auth fit the remaining 512 rows.",
     "query": "range=24h&step=1h&agg=last",
-    "must_contain": "4095"
+    "must_contain": "4095",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/sessions/{session_id}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
     "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
-    "must_contain": "{session_id}"
+    "must_contain": "{session_id}",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/stream/agent-notification-receipts",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
     "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
-    "query": "thread_id={thread_id}"
+    "query": "thread_id={thread_id}",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/stream/agents",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Process-local agent roster invalidation: initial notification and a fresh second revision, both cursor-free, for each authenticated principal.",
+    "scenario": "agents-change",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "path": "/stream/agents",
+    "case": "agents-resumed-header",
+    "scenario": "agents-resumed-header",
+    "reason": "Agent invalidation has no replay cursor: an arbitrary Last-Event-ID must still yield one initial signal and one newly published cursor-free revision for each principal.",
+    "headers": {
+      "Last-Event-ID": "ignored-agent-replay-cursor"
+    },
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/stream/events",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Two ticks for a populated public thread, with the full unrelated corpus and private denial graph. Unscoped full-history materialization is separately tracked by SCA-652.",
+    "reason": "Two actual polls for the existing one-event public thread with fresh second-poll data, the full unrelated corpus and private denial graph; distinct default/history/cursor cases cover SCA-673.",
     "query": "thread_id=scale-thread-1",
-    "must_contain": "scale-event-1"
+    "scenario": "events-thread",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "path": "/stream/events",
+    "case": "events-default",
+    "scenario": "events-default",
+    "reason": "Unfiltered live stream starts at HEAD over 8192 history events and 4096 distinct threads; two completed scanner chunks must skip replay and deliver fresh public/private controls.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "path": "/stream/events",
+    "case": "events-large-thread",
+    "scenario": "events-large-thread",
+    "reason": "Resume after the first of 4096 single-thread history events; require two ordered bounded pages, a private control inside the second page, and no duplicate cursor/data events.",
+    "query": "thread_id={stream_thread_id}",
+    "must_contain": "scale-stream-history-0399",
+    "unauthorized_must_contain": "scale-stream-history-0399",
+    "latency_ms": 500,
+    "max_vm_steps": 50000,
+    "headers": {
+      "Last-Event-ID": "scale-stream-history-0000"
+    }
+  },
+  {
+    "method": "GET",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "path": "/stream/events",
+    "case": "events-resumed",
+    "scenario": "events-resumed",
+    "reason": "Last-Event-ID resumes after event 4094 in a 4096-event public thread; cursor replay is forbidden and a second poll must deliver fresh public/private controls. Existing full-rescan cost is tracked by SCA-673.",
+    "query": "thread_id={stream_thread_id}",
+    "headers": {
+      "Last-Event-ID": "{stream_resume_id}"
+    },
+    "must_contain": "scale-stream-history-4095",
+    "unauthorized_must_contain": "scale-stream-history-4095",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "path": "/stream/events",
+    "case": "events-idle",
+    "scenario": "events-idle",
+    "reason": "Last-Event-ID at the visible history tail requires an idle first query tick, followed by actual fresh public/private second-poll data. Existing idle full-rescan cost is tracked by SCA-673.",
+    "query": "thread_id={stream_thread_id}",
+    "headers": {
+      "Last-Event-ID": "{stream_idle_id}"
+    },
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/stream/inbox",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Canonical /stream/inbox route: two polls with fresh visible and private inbox updates, checking both authenticated principals against the full workspace corpus.",
+    "scenario": "inbox-snapshot",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "path": "/stream/inbox",
+    "case": "inbox-resumed",
+    "scenario": "inbox-resumed",
+    "reason": "Resume from the principal-filtered first-page cursor; reject cursor replay and require fresh visible/private inbox updates on a second actual poll.",
+    "headers": {
+      "Last-Event-ID": "{inbox_resume_id}"
+    },
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "path": "/stream/inbox",
+    "case": "inbox-idle",
+    "scenario": "inbox-idle",
+    "reason": "Resume from the principal-filtered page tail; require an idle first query tick and fresh visible/private inbox data on the second poll.",
+    "headers": {
+      "Last-Event-ID": "{inbox_idle_id}"
+    },
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/threads",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/threads/{thread_id}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/threads/{thread_id}/context",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/threads/{thread_id}/timeline",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/threads/{thread_id}/workspace",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/topics",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/topics/{topic_id}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/topics/{topic_id}/timeline",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/topics/{topic_id}/workspace",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/v1/usage/summary",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/version",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/work",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
     "reason": "One-row page over the full workspace. The private target title is a positive sentinel because the public work projection removes internal IDs.",
     "query": "limit=1",
-    "must_contain": "Private scale target"
+    "must_contain": "Private scale target",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/work/capabilities",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/work/{card_ref}",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/work/{card_ref}/observations",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/work/{card_ref}/participants",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/work/{card_ref}/refresh",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "GET",
     "path": "/workspace/dashboard/reports",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization."
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "POST",
@@ -1003,7 +1218,6 @@
     "body": {
       "refs": ["{card_ref}"]
     },
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
@@ -1017,7 +1231,9 @@
           "resolvable": false
         }
       ]
-    }
+    },
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "POST",
@@ -1054,13 +1270,14 @@
         ]
       }
     },
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
     "reason": "Representative populated fleet-health preview with capped host/agent inventory. The saved-document report case covers live-activity fanout; uncached read-only POST activity rebuilds remain tracked by SCA-665.",
-    "must_contain": "scale-host"
+    "must_contain": "scale-host",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "POST",
@@ -1069,18 +1286,18 @@
       "limit": 1,
       "lease_token": "synthetic-lease"
     },
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 403,
     "reason": "Read-only POST; request payload and context limit bound work.",
-    "authorized_as": "agent"
+    "authorized_as": "agent",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "POST",
     "path": "/secrets/reveal-batch",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
@@ -1089,17 +1306,20 @@
     "reason": "Credential read with an audit write; both authenticated principals may reveal under the existing independent policy. Actual encrypted fixture exercises decryption and audit SQL.",
     "body": {
       "names": ["scale-secret"]
-    }
+    },
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   },
   {
     "method": "POST",
     "path": "/secrets/{secret_id}/reveal",
-    "p95_ms": 500,
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
     "must_contain": "SyntheticScaleSecret",
-    "reason": "Credential read with an audit write; both authenticated principals may reveal under the existing independent policy. Actual encrypted fixture exercises decryption and audit SQL."
+    "reason": "Credential read with an audit write; both authenticated principals may reveal under the existing independent policy. Actual encrypted fixture exercises decryption and audit SQL.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   }
 ]

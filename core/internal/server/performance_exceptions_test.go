@@ -16,10 +16,12 @@ import (
 )
 
 type baselineBudget struct {
+	Case           string `json:"case,omitempty"`
+	MaxVMSteps     uint64 `json:"max_vm_steps"`
 	Method         string `json:"method"`
 	Path           string `json:"path"`
 	Principal      string `json:"principal"`
-	P95MS          int    `json:"p95_ms"`
+	LatencyMS      int    `json:"latency_ms"`
 	MaxQueries     int    `json:"max_queries"`
 	MaxRows        int    `json:"max_rows"`
 	Issue          string `json:"issue"`
@@ -98,25 +100,35 @@ func performanceBaselineBudgets(t *testing.T, routes []routeBudget) map[string]b
 	sourceHash := ""
 	registered := map[string]bool{}
 	for _, b := range routes {
-		registered[b.Method+" "+b.Path] = true
+		registered[performanceCaseKey(b.Method, b.Path, b.Case)] = true
 	}
 	for _, e := range entries {
-		key := e.Method + " " + e.Path + " " + e.Principal
-		if !registered[e.Method+" "+e.Path] || (e.Principal != "authorized" && e.Principal != "unauthorized") || e.P95MS <= 0 || e.P95MS > 1800000 || e.MaxQueries <= 0 || e.MaxQueries > 100000 || e.MaxRows <= 0 || e.MaxRows > 500000 || (e.MaxRows > 250000 && e.CoreSourceHash == "") || !reviewedPerformanceException(e.Issue, e.IssueURL, e.Reason) || out[key].Path != "" {
+		key := performanceCaseKey(e.Method, e.Path, e.Case) + " " + e.Principal
+		if !registered[performanceCaseKey(e.Method, e.Path, e.Case)] || (e.Principal != "authorized" && e.Principal != "unauthorized") || e.LatencyMS <= 0 || e.LatencyMS > 1800000 || e.MaxQueries <= 0 || e.MaxQueries > 100000 || e.MaxRows <= 0 || e.MaxRows > 500000 || !reviewedPerformanceException(e.Issue, e.IssueURL, e.Reason) || out[key].Path != "" {
 			t.Fatalf("invalid, duplicate or stale performance baseline %s", key)
 		}
-		if e.CoreSourceHash != "" {
-			if sourceHash == "" {
-				var err error
-				sourceHash, err = performanceRuntimeSourceHash("../../..")
-				if err != nil {
-					t.Fatal(err)
-				}
-			}
-			if e.CoreSourceHash != sourceHash {
-				t.Fatalf("runtime/dependency/fixture changed: source-pinned existing-main baseline expired for %s; re-review its linked P1", key)
+		if sourceHash == "" {
+			sourceHash, err = performanceRuntimeSourceHash("../../..")
+			if err != nil {
+				t.Fatal(err)
 			}
 		}
+		if err := validatePerformanceSourcePin(e.CoreSourceHash, sourceHash); err != nil {
+			if os.Getenv("ANX_PERFORMANCE_DIAGNOSTIC") == "1" {
+				t.Errorf("diagnostic only: expired baseline %s: %v", key, err)
+			} else {
+				t.Fatalf("runtime/dependency/fixture changed: source-pinned existing-main baseline expired for %s: %v", key, err)
+			}
+		}
+		if e.MaxVMSteps == 0 || e.MaxVMSteps > 1000000000000 {
+			if os.Getenv("ANX_PERFORMANCE_DIAGNOSTIC") == "1" {
+				t.Errorf("diagnostic only: missing work baseline %s", key)
+				e.MaxVMSteps = 50000
+			} else {
+				t.Fatalf("invalid/missing finite VM-work baseline %s", key)
+			}
+		}
+
 		out[key] = e
 	}
 	return out
@@ -196,4 +208,32 @@ func performancePlanExceptions(t *testing.T) map[string]bool {
 func TestPerformanceExceptionInventory(t *testing.T) {
 	performanceBaselineBudgets(t, performanceBudgets(t))
 	performancePlanExceptions(t)
+}
+
+func validatePerformanceSourcePin(pin, actual string) error {
+	decoded, err := hex.DecodeString(pin)
+	if err != nil || len(pin) != 64 || len(decoded) != 32 {
+		return fmt.Errorf("every allowance requires a valid SHA-256 source hash")
+	}
+	if pin != actual {
+		return fmt.Errorf("source hash changed; remeasure and review the linked P1")
+	}
+	return nil
+}
+func TestPerformanceEveryAllowanceRequiresSourcePin(t *testing.T) {
+	raw, err := os.ReadFile("testdata/performance_budget_allowlist.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var entries []baselineBudget
+	if err = json.Unmarshal(raw, &entries); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		for _, bad := range []string{"", strings.Repeat("z", 64), strings.Repeat("a", 63), strings.Repeat("a", 64)} {
+			if err := validatePerformanceSourcePin(bad, e.CoreSourceHash); err == nil {
+				t.Fatalf("%s/%s accepted invalid pin", e.Path, e.Principal)
+			}
+		}
+	}
 }

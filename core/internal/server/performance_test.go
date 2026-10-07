@@ -27,20 +27,24 @@ import (
 )
 
 type routeBudget struct {
-	Method                  string          `json:"method"`
-	Path                    string          `json:"path"`
-	Query                   string          `json:"query,omitempty"`
-	P95MS                   int             `json:"p95_ms"`
-	MaxQueries              int             `json:"max_queries"`
-	MaxRows                 int             `json:"max_rows"`
-	AuthorizedStatus        int             `json:"authorized_status"`
-	UnauthorizedStatus      int             `json:"unauthorized_status"`
-	Body                    json.RawMessage `json:"body,omitempty"`
-	MustContain             string          `json:"must_contain,omitempty"`
-	UnauthorizedMustContain string          `json:"unauthorized_must_contain,omitempty"`
-	UnauthorizedExactBody   json.RawMessage `json:"unauthorized_exact_body,omitempty"`
-	AuthorizedAs            string          `json:"authorized_as,omitempty"`
-	Reason                  string          `json:"reason"`
+	Case                    string            `json:"case,omitempty"`
+	Headers                 map[string]string `json:"headers,omitempty"`
+	Scenario                string            `json:"scenario,omitempty"`
+	MaxVMSteps              uint64            `json:"max_vm_steps"`
+	Method                  string            `json:"method"`
+	Path                    string            `json:"path"`
+	Query                   string            `json:"query,omitempty"`
+	LatencyMS               int               `json:"latency_ms"`
+	MaxQueries              int               `json:"max_queries"`
+	MaxRows                 int               `json:"max_rows"`
+	AuthorizedStatus        int               `json:"authorized_status"`
+	UnauthorizedStatus      int               `json:"unauthorized_status"`
+	Body                    json.RawMessage   `json:"body,omitempty"`
+	MustContain             string            `json:"must_contain,omitempty"`
+	UnauthorizedMustContain string            `json:"unauthorized_must_contain,omitempty"`
+	UnauthorizedExactBody   json.RawMessage   `json:"unauthorized_exact_body,omitempty"`
+	AuthorizedAs            string            `json:"authorized_as,omitempty"`
+	Reason                  string            `json:"reason"`
 }
 
 func performanceBudgets(t *testing.T) []routeBudget {
@@ -54,11 +58,14 @@ func performanceBudgets(t *testing.T) []routeBudget {
 		t.Fatal(err)
 	}
 	covered := map[string]bool{}
+	cases := map[string]bool{}
 	for _, b := range budgets {
 		key := b.Method + " " + b.Path
-		if covered[key] {
-			t.Errorf("duplicate route budget: %s", key)
+		caseKey := performanceCaseKey(b.Method, b.Path, b.Case)
+		if cases[caseKey] {
+			t.Errorf("duplicate route case budget: %s", caseKey)
 		}
+		cases[caseKey] = true
 		covered[key] = true
 		if len(b.UnauthorizedExactBody) > 0 && (b.Method != http.MethodPost || b.Path != "/refs/resolve" || b.UnauthorizedStatus != http.StatusOK || !performanceExactDenialBody(b.UnauthorizedExactBody, []byte(`{"items":[{"ref":"{card_ref}","resolvable":false}]}`))) {
 			t.Errorf("exact echoed-reference denial is restricted to POST /refs/resolve: %s", key)
@@ -67,7 +74,7 @@ func performanceBudgets(t *testing.T) []routeBudget {
 		if b.Method == http.MethodGet && (b.Path == "/series/{name}" || b.Path == "/series/{name}/query") {
 			rowCeiling = series.MaxRawQueryPoints + 512 // fixed API cap plus scoped metadata
 		}
-		if b.P95MS <= 0 || b.P95MS > 500 || b.MaxQueries <= 0 || b.MaxQueries > 100 || b.MaxRows <= 0 || b.MaxRows > rowCeiling || b.AuthorizedStatus != 200 || (b.UnauthorizedStatus != 200 && b.UnauthorizedStatus != 403 && b.UnauthorizedStatus != 404 && !(b.Path == "/auth/hosts/enrollments/{enrollment_id}" && b.UnauthorizedStatus == 401)) || b.Reason == "" || (b.AuthorizedAs != "" && b.AuthorizedAs != "agent") {
+		if b.LatencyMS <= 0 || b.LatencyMS > 500 || b.MaxQueries <= 0 || b.MaxQueries > 100 || b.MaxRows <= 0 || b.MaxRows > rowCeiling || b.MaxVMSteps == 0 || b.MaxVMSteps > 50000 || b.AuthorizedStatus != 200 || (b.UnauthorizedStatus != 200 && b.UnauthorizedStatus != 403 && b.UnauthorizedStatus != 404 && !(b.Path == "/auth/hosts/enrollments/{enrollment_id}" && b.UnauthorizedStatus == 401)) || b.Reason == "" || (b.AuthorizedAs != "" && b.AuthorizedAs != "agent") {
 			t.Errorf("incomplete or excessive route budget: %s", key)
 		}
 	}
@@ -282,10 +289,13 @@ func newPerformanceEnv(t *testing.T) performanceEnv {
 
 type performanceWriter struct {
 	*httptest.ResponseRecorder
-	cancel  context.CancelFunc
-	flushes []time.Time
-	onFlush func()
-	closed  bool
+	cancel      context.CancelFunc
+	flushes     []time.Time
+	onFlush     func()
+	eventStream bool
+	lastBodyLen int
+	polls       int
+	closed      bool
 }
 
 func (w *performanceWriter) Write(b []byte) (int, error) {
@@ -300,11 +310,21 @@ func (w *performanceWriter) Flush() {
 		return
 	}
 	w.ResponseRecorder.Flush()
+	delta := w.Body.String()[w.lastBodyLen:]
+	w.lastBodyLen = w.Body.Len()
+	header := len(w.flushes) == 0
 	w.flushes = append(w.flushes, time.Now())
-	if len(w.flushes) == 2 && w.onFlush != nil {
+	// #311 flushes headers, independent comment-only keepalives, and each
+	// completed scanner result. An empty result writes no bytes before Flush.
+	// Count only the latter; timer activity cannot cancel unfinished reads.
+	if header || (w.eventStream && delta != "" && !strings.Contains(delta, "event: ")) {
+		return
+	}
+	w.polls++
+	if w.polls == 1 && w.onFlush != nil {
 		w.onFlush()
 	}
-	if len(w.flushes) >= 3 {
+	if w.polls >= 2 {
 		w.closed = true
 		w.cancel()
 	}
@@ -324,7 +344,7 @@ func TestPerformanceRoutes(t *testing.T) {
 		}
 		found := false
 		for _, b := range budgets {
-			found = found || selector == b.Method+" "+b.Path
+			found = found || selector == b.Method+" "+b.Path || selector == performanceCaseKey(b.Method, b.Path, b.Case)
 		}
 		if !found {
 			t.Fatal("unknown diagnostic route selector")
@@ -340,8 +360,8 @@ func TestPerformanceRoutes(t *testing.T) {
 		}
 	}
 	allowed := performancePlanExceptions(t)
-	baseline := performanceBaselineBudgets(t, budgets) // expire pins before the costly corpus
-	env := newPerformanceEnv(t)                        // cached once for every route, principal and sample
+	baseline := performanceBaselineBudgets(t, budgets)                     // expire pins before the costly corpus
+	env := preparePerformanceStreamCases(t, newPerformanceEnv(t), budgets) // cached once for every route, principal and sample
 	large, err := perfguard.LargeTables(context.Background(), env.db)
 	if err != nil {
 		t.Fatal(err)
@@ -350,12 +370,25 @@ func TestPerformanceRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	aggregates, err := perfguard.AggregateFunctions(context.Background(), env.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	views, err := perfguard.ViewDefinitions(context.Background(), env.db)
+	if err != nil {
+		t.Fatal(err)
+	}
 	checked := map[string]bool{}
 	reported := map[string]bool{}
+	sourceHash, err := performanceRuntimeSourceHash("../../..")
+	if err != nil {
+		t.Fatal(err)
+	}
 	report := struct {
-		Plans   map[string]map[string]any `json:"plans"`
-		Samples []map[string]any          `json:"samples"`
-	}{Plans: map[string]map[string]any{}}
+		SourceHash string                    `json:"core_source_sha256"`
+		Plans      map[string]map[string]any `json:"plans"`
+		Samples    []map[string]any          `json:"samples"`
+	}{SourceHash: sourceHash, Plans: map[string]map[string]any{}}
 	persistReport := func() {
 		if path := reportPath; path != "" {
 			b, err := json.MarshalIndent(report, "", "  ")
@@ -375,17 +408,22 @@ func TestPerformanceRoutes(t *testing.T) {
 			label = "unauthorized"
 		}
 		for _, b := range budgets {
-			if selector != "" && selector != b.Method+" "+b.Path {
+			if selector != "" && selector != b.Method+" "+b.Path && selector != performanceCaseKey(b.Method, b.Path, b.Case) {
 				continue
 			}
-			t.Run(label+"/"+b.Method+" "+b.Path, func(t *testing.T) {
+			routeEnv, routePrincipal := env, principal
+			fixturePolicy := "shared-4096-distinct-thread-corpus"
+
+			t.Run(label+"/"+performanceCaseKey(b.Method, b.Path, b.Case), func(t *testing.T) {
+				env, principal := routeEnv, routePrincipal
 				defer persistReport()
 				slowBaseline := false
-				if e, ok := baseline[b.Method+" "+b.Path+" "+label]; ok {
-					slowBaseline = e.P95MS >= 10000
-					b.P95MS = e.P95MS
+				if e, ok := baseline[performanceCaseKey(b.Method, b.Path, b.Case)+" "+label]; ok {
+					slowBaseline = e.LatencyMS >= 10000
+					b.LatencyMS = e.LatencyMS
 					b.MaxQueries = e.MaxQueries
 					b.MaxRows = e.MaxRows
+					b.MaxVMSteps = e.MaxVMSteps
 					t.Logf("existing baseline exception %s: %s", e.Issue, e.Reason)
 				}
 				path := env.replace.Replace(b.Path)
@@ -404,19 +442,24 @@ func TestPerformanceRoutes(t *testing.T) {
 					want = b.UnauthorizedStatus
 				}
 				var durations []time.Duration
-				samples := 4 // one warmup and three measured requests
+				samples := 6 // one warmup and five measured requests
 				if slowBaseline {
-					samples = 2 // both measured: include the first/cold request
+					samples = 5 // include first/cold request for slow existing-main baselines
+				}
+				policy := "warmup-plus-five-measured"
+				if slowBaseline {
+					policy = "five-measured-including-cold"
 				}
 				if diagnostic {
 					samples = 1
+					policy = "diagnostic-not-acceptance"
 				}
 				for sample := 0; sample < samples; sample++ {
-					deadlineBudget := time.Duration(b.P95MS) * time.Millisecond * 2
+					deadlineBudget := performanceMaxSample(b.LatencyMS)
 					if diagnostic {
-						deadlineBudget = 10 * time.Minute
+						deadlineBudget = 60 * time.Minute // diagnostic evidence only; never an acceptance allowance
 					}
-					ctx, cancel := context.WithTimeout(context.Background(), deadlineBudget)
+					ctx, cancel := context.WithCancel(context.Background())
 					req := httptest.NewRequest(b.Method, path, bytes.NewBufferString(env.replace.Replace(string(b.Body)))).WithContext(ctx)
 					req.Header.Set("Authorization", "Bearer "+principal.AccessToken)
 					if pi == 0 && b.AuthorizedAs == "agent" {
@@ -426,17 +469,29 @@ func TestPerformanceRoutes(t *testing.T) {
 						req.Header.Set("X-ANX-Enrollment-Token", "synthetic-enrollment-poll")
 					}
 					req.Header.Set("Content-Type", "application/json")
-					w := &performanceWriter{ResponseRecorder: httptest.NewRecorder(), cancel: cancel}
+					for name, value := range b.Headers {
+						req.Header.Set(name, env.replace.Replace(value))
+					}
+					w := &performanceWriter{ResponseRecorder: httptest.NewRecorder(), cancel: cancel, eventStream: b.Path == "/stream/events"}
 					if b.Path == "/stream/agents" {
 						w.onFlush = env.hub.publish
 					}
+					validateStream := configurePerformanceStreamCase(t, env, b, pi, sample, req, w)
+					cancel()
+					ctx, cancel = context.WithTimeout(context.Background(), deadlineBudget)
+					req = req.WithContext(ctx)
+					w.cancel = cancel
 					env.capture.Start()
 					start := time.Now()
 					env.handler.ServeHTTP(w, req)
 					elapsed := time.Since(start)
 					statements, queries, rows := env.capture.Stop()
-					report.Samples = append(report.Samples, map[string]any{"method": b.Method, "path": b.Path, "principal": label, "sample": sample, "elapsed_ms": float64(elapsed) / float64(time.Millisecond), "queries": queries, "rows": rows, "status": w.Code})
+					work := env.capture.Work()
+					if err := env.capture.WorkError(); err != nil {
+						t.Fatalf("SQLite work counters: %v", err)
+					}
 					deadline := ctx.Err() == context.DeadlineExceeded
+					report.Samples = append(report.Samples, map[string]any{"method": b.Method, "path": b.Path, "case": b.Case, "principal": label, "sample": sample, "measured": sample > 0 || diagnostic || slowBaseline, "sampling_policy": policy, "fixture_policy": fixturePolicy, "elapsed_ms": float64(elapsed) / float64(time.Millisecond), "queries": queries, "rows": rows, "vm_steps": work.VMSteps, "fullscan_steps": work.FullScanSteps, "sorts": work.Sorts, "autoindex_rows": work.AutoIndexRows, "status": w.Code, "deadline_exceeded": deadline, "stream_polls": w.polls})
 					cancel()
 					if sample > 0 || diagnostic || slowBaseline {
 						durations = append(durations, elapsed)
@@ -445,7 +500,7 @@ func TestPerformanceRoutes(t *testing.T) {
 						// EXPLAIN does not execute SQL. Retain every typed argument
 						// variant for STAT4-dependent plans while deduplicating repeats;
 						// execution and row counts still include every call.
-						key := perfguard.PlanMemoKey(s)
+						key := fixturePolicy + "\x00" + perfguard.PlanMemoKey(s)
 						if checked[key] {
 							continue
 						}
@@ -457,14 +512,15 @@ func TestPerformanceRoutes(t *testing.T) {
 							t.Errorf("EXPLAIN %s: %v", perfguard.SQLHash(s.SQL), err)
 							continue
 						}
-						findings := perfguard.Findings(s.SQL, plan, large, functions)
-						hash := perfguard.PlanSQLHash(s.SQL)
+						analysisSQL := perfguard.AnalysisSQL(s.SQL, views)
+						findings := perfguard.Findings(analysisSQL, plan, large, functions, aggregates)
+						hash := perfguard.PlanSQLHash(analysisSQL)
 						planHash := perfguard.PlanHash(plan)
 						reportKey := hash + "/" + planHash
 						if len(findings) > 0 {
 							entry := report.Plans[reportKey]
 							if entry == nil {
-								entry = map[string]any{"sql": s.SQL, "sql_sha256": hash, "plan_sha256": planHash, "plan": plan, "method": b.Method, "path": b.Path, "principal": label, "findings": map[string]bool{}}
+								entry = map[string]any{"sql": s.SQL, "analysis_sql": analysisSQL, "sql_sha256": hash, "plan_sha256": planHash, "plan": plan, "method": b.Method, "path": b.Path, "case": b.Case, "principal": label, "findings": map[string]bool{}}
 								report.Plans[reportKey] = entry
 							}
 							for _, f := range findings {
@@ -472,7 +528,6 @@ func TestPerformanceRoutes(t *testing.T) {
 							}
 						}
 						for _, finding := range findings {
-							hash := perfguard.PlanSQLHash(s.SQL)
 							if !allowed[hash+"\n"+planHash+"\n"+finding] && !reported[hash+"\n"+planHash+"\n"+finding] {
 								reported[hash+"\n"+planHash+"\n"+finding] = true
 								t.Errorf("unreviewed query plan: sql_sha256=%s plan_sha256=%s finding=%q", hash, planHash, finding)
@@ -484,6 +539,9 @@ func TestPerformanceRoutes(t *testing.T) {
 					}
 					if w.Code != want {
 						t.Fatalf("fixture returned %d, want %d: %.500s", w.Code, want, w.Body.String())
+					}
+					if validateStream != nil {
+						validateStream()
 					}
 					if pi == 0 && b.MustContain != "" && !strings.Contains(w.Body.String(), env.replace.Replace(b.MustContain)) {
 						t.Errorf("successful response omitted positive fixture %q", b.MustContain)
@@ -497,7 +555,7 @@ func TestPerformanceRoutes(t *testing.T) {
 					if strings.HasPrefix(b.Path, "/stream/") && strings.Contains(w.Body.String(), "event: error") {
 						t.Errorf("stream returned an error event: %.500s", w.Body.String())
 					}
-					if want == 200 && strings.HasPrefix(b.Path, "/stream/") && len(w.flushes) < 3 {
+					if want == 200 && strings.HasPrefix(b.Path, "/stream/") && w.polls != 2 {
 						t.Fatal("stream did not exercise a second poll/invalidation")
 					}
 					if pi == 1 && want == 200 {
@@ -516,16 +574,16 @@ func TestPerformanceRoutes(t *testing.T) {
 					if !(pi == 0 && b.AuthorizedAs == "agent") && strings.Contains(w.Body.String(), "PrivatePerformanceSecret") {
 						t.Error("unrelated private control leaked")
 					}
-					if queries > b.MaxQueries || rows > b.MaxRows {
-						t.Errorf("unbounded read: SQL=%d (budget %d), rows=%d (budget %d)", queries, b.MaxQueries, rows, b.MaxRows)
+					if performanceCountsExceeded(b, queries, rows, work.VMSteps) {
+						t.Errorf("unbounded read: SQL=%d (budget %d), rows=%d (budget %d), VM steps=%d (budget %d)", queries, b.MaxQueries, rows, b.MaxRows, work.VMSteps, b.MaxVMSteps)
 					}
 				}
-				sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
-				p95 := durations[len(durations)-1] // nearest-rank p95 is max for N=2 or N=3
-				t.Logf("p95=%v measured_samples=%d budget=%dms", p95, len(durations), b.P95MS)
-				if p95 > time.Duration(b.P95MS)*time.Millisecond {
-					t.Errorf("p95 %v exceeds %dms", p95, b.P95MS)
+				median, p95, maximum := performanceLatency(durations)
+				t.Logf("median=%v p95=%v max=%v measured_samples=%d median_budget=%dms secondary_max=%v", median, p95, maximum, len(durations), b.LatencyMS, performanceMaxSample(b.LatencyMS))
+				if median > time.Duration(b.LatencyMS)*time.Millisecond || maximum > performanceMaxSample(b.LatencyMS) {
+					t.Errorf("secondary latency bound exceeded: median=%v (budget%dms), max=%v (budget%v)", median, b.LatencyMS, maximum, performanceMaxSample(b.LatencyMS))
 				}
+
 			})
 		}
 	}
@@ -554,4 +612,67 @@ func TestPerformanceStreamSampleRequiresTwoDataFlushes(t *testing.T) {
 	if ctx.Err() != context.Canceled || len(w.flushes) != 3 {
 		t.Fatal("second poll was not measured")
 	}
+}
+
+// Independent keepalives can fire while the scanner is blocked. None is a
+// completed read, and an empty scanner result still counts when it arrives.
+func TestPerformanceEventStreamKeepalivesCannotCompleteSample(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	completed := 0
+	w := &performanceWriter{ResponseRecorder: httptest.NewRecorder(), cancel: cancel, eventStream: true, onFlush: func() { completed++ }}
+	w.Flush()
+	for n := 0; n < 8; n++ {
+		w.WriteString(": keepalive\n\n")
+		w.Flush()
+	}
+	if w.polls != 0 || completed != 0 || ctx.Err() != nil {
+		t.Fatal("timer canceled a pending scanner")
+	}
+	w.Flush() // completed empty result
+	if w.polls != 1 || completed != 1 || ctx.Err() != nil {
+		t.Fatal("empty result was not measured")
+	}
+	for n := 0; n < 8; n++ {
+		w.WriteString(": keepalive\n\n")
+		w.Flush()
+	}
+	w.WriteString("id: visible\nevent: event\ndata: {}\n\n")
+	w.Flush()
+	if w.polls != 2 || ctx.Err() != context.Canceled {
+		t.Fatal("second result did not finish sample")
+	}
+}
+
+func performanceCaseKey(method, path, caseID string) string {
+	key := method + " " + path
+	if caseID != "" {
+		key += " [" + caseID + "]"
+	}
+	return key
+}
+
+func performanceCountsExceeded(b routeBudget, queries, rows int, steps uint64) bool {
+	return queries > b.MaxQueries || rows > b.MaxRows || steps > b.MaxVMSteps
+}
+
+// Wall-clock is secondary to deterministic statement/row/work ceilings.
+func performanceMaxSample(medianMS int) time.Duration {
+	bound := time.Duration(medianMS) * time.Millisecond * 4
+	if bound < 5*time.Second {
+		bound = 5 * time.Second
+	}
+	return bound
+}
+func performanceLatency(durations []time.Duration) (median, p95, maximum time.Duration) {
+	values := append([]time.Duration(nil), durations...)
+	sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
+	n := len(values)
+	if n == 0 {
+		panic("latency requires completed samples")
+	}
+	median = values[(n-1)/2]
+	p95 = values[(95*n+99)/100-1]
+	maximum = values[n-1]
+	return
 }
