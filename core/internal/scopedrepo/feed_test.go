@@ -12,6 +12,7 @@ import (
 
 	"agent-nexus-core/internal/scopedrepo"
 	"agent-nexus-core/internal/scopes"
+	"agent-nexus-core/internal/testsql"
 )
 
 func feedFixture(t *testing.T) (*sql.DB, *scopedrepo.Store, scopes.RequestSelection, []scopes.Stream) {
@@ -151,6 +152,45 @@ func TestFeedMaximumPageAndCounters(t *testing.T) {
 		_, err = r.Snapshot()
 		return err
 	}))
+	// Exercise and count the new path at the same 64/256 maximum.
+	var seq int
+	var name, path string
+	must(t, db.QueryRow(`PRAGMA database_list`).Scan(&seq, &name, &path))
+	counted, counter := testsql.Open(path)
+	defer counted.Close()
+	batchStore := scopedrepo.New(counted)
+	installTestOnlyProof(t, db, s, request, streams)
+	counter.Reset()
+	must(t, batchStore.ReadBatchFeed(context.Background(), request, streams, func(r scopedrepo.BatchFeedReader) error {
+		refs, err := r.Candidates(make([]*scopedrepo.FeedKey, len(streams)), 100)
+		if err != nil {
+			return err
+		}
+		if len(refs) != 101 {
+			t.Fatal(len(refs))
+		}
+		items, err := r.Hydrate(refs[:100])
+		if err != nil {
+			return err
+		}
+		if len(items) != 100 {
+			t.Fatal(len(items))
+		}
+		counts, err := r.Buckets([]string{"one", "two", "three", "four"})
+		if err == nil {
+			for _, v := range counts {
+				if v != 256 {
+					t.Fatal(counts)
+				}
+			}
+		}
+		return err
+	}))
+
+	if counter.Count() != 7 || counter.ReturnedRows() != 527 {
+		t.Fatalf("batch repository subtotal: SQL=%d rows=%d, want 7/527", counter.Count(), counter.ReturnedRows())
+	}
+
 }
 
 func TestFeedUnreadyNeverReturnsAvailableZero(t *testing.T) {
@@ -216,8 +256,12 @@ func TestFeedHydrationRejectsCorruptionAndUnadmittedKeys(t *testing.T) {
 		t.Run(mutation, func(t *testing.T) {
 			db, s, request, streams := feedFixture(t)
 			seedFeed(t, db, "public", "documents", "owner", "row", 1)
-			// Disabling FKs here models persisted corruption, not an authorized writer.
+			// Bypass integrity guards only to model persisted corruption. Ordinary
+			// writers cannot redirect this source, even with foreign keys disabled.
 			must(t, exec(db, `PRAGMA foreign_keys=OFF`))
+			if mutation == `UPDATE scope_resources SET id='changed'` {
+				must(t, exec(db, `DROP TRIGGER scope_resource_source_immutable`))
+			}
 			must(t, exec(db, mutation))
 			err := s.ReadFeed(context.Background(), request, streams, func(r scopedrepo.FeedReader) error {
 				rows, e := r.Candidates(0, nil, 1)

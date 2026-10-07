@@ -42,7 +42,7 @@ func TestOverviewPrioritizesOpenWorkWithinCandidateLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	items := overview["initiatives"].(map[string]any)["items"].([]map[string]any)
-	if len(items) != 1 || items[0]["ref"] != open["ref"] || overview["initiatives"].(map[string]any)["truncated"] != true || len(overview["_visit_work"].([]map[string]any)) != 2000 {
+	if len(items) != 1 || items[0]["ref"] != open["ref"] || overview["initiatives"].(map[string]any)["truncated"] != true || len(overview["_visit_work"].([]map[string]any)) != 101 {
 		t.Fatal("open work missing or candidate limit lost:", overview["initiatives"])
 	}
 }

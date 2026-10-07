@@ -165,34 +165,8 @@ func (s *Store) ListPrincipals(ctx context.Context, filter AuthPrincipalListFilt
 	if err := rows.Close(); err != nil {
 		return nil, "", err
 	}
-	hosts := map[string]Host{}
-	for i := range principals {
-		hostID, err := s.AgentHost(ctx, principals[i].AgentID)
-		if errors.Is(err, ErrHostNotFound) {
-			continue
-		}
-		if err != nil {
-			return nil, "", err
-		}
-		host, ok := hosts[hostID]
-		if !ok {
-			host, err = s.GetHost(ctx, hostID)
-			if err != nil {
-				return nil, "", err
-			}
-			hosts[hostID] = host
-		}
-		principals[i].HostID = hostID
-		for _, excluded := range host.ExcludedNames {
-			if strings.EqualFold(principals[i].Username, excluded+"."+host.Slug) {
-				principals[i].HostExcluded = true
-			}
-		}
-		for _, agent := range host.Agents {
-			if agent.ID == principals[i].AgentID {
-				principals[i].HostBridgeOnline = agent.BridgeOnline
-			}
-		}
+	if err := s.enrichPrincipalHosts(ctx, principals); err != nil {
+		return nil, "", err
 	}
 
 	var nextCursor string

@@ -2,8 +2,10 @@ package primitives
 
 import (
 	"agent-nexus-core/internal/plans"
+	"agent-nexus-core/internal/resourceaccess"
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,16 +20,52 @@ import (
 // HiddenSubjectRefs includes aliases and backing threads so archived subjects
 // cannot leak into projections through a secondary event or inbox ref.
 func (s *Store) HiddenSubjectRefs(ctx context.Context) (map[string]bool, error) {
+	return s.hiddenSubjectRefs(ctx, nil, false)
+}
+func (s *Store) HiddenSubjectRefsFor(ctx context.Context, refs []string) (map[string]bool, error) {
+	return s.hiddenSubjectRefs(ctx, refs, true)
+}
+func (s *Store) hiddenSubjectRefs(ctx context.Context, refs []string, filtered bool) (map[string]bool, error) {
 	out := map[string]bool{}
 	queries := []struct{ kind, query string }{
-		{"board", `SELECT id, COALESCE(handle,''), thread_id FROM boards WHERE COALESCE(archived_at,'')<>'' OR COALESCE(trashed_at,'')<>''`},
-		{"document", `SELECT id, COALESCE(handle,''), COALESCE(thread_id,'') FROM documents WHERE COALESCE(archived_at,'')<>'' OR COALESCE(trashed_at,'')<>''`},
-		{"thread", `SELECT id, '', id FROM threads WHERE COALESCE(archived_at,'')<>'' OR COALESCE(trashed_at,'')<>''`},
-		{"topic", `SELECT id, COALESCE(handle,''), COALESCE(thread_id,'') FROM topics WHERE COALESCE(archived_at,'')<>'' OR COALESCE(trashed_at,'')<>''`},
+		{"board", `SELECT id, COALESCE(handle,''), thread_id FROM boards WHERE (COALESCE(archived_at,'')<>'' OR COALESCE(trashed_at,'')<>'')`},
+		{"document", `SELECT id, COALESCE(handle,''), COALESCE(thread_id,'') FROM documents WHERE (COALESCE(archived_at,'')<>'' OR COALESCE(trashed_at,'')<>'')`},
+		{"thread", `SELECT id, '', id FROM threads WHERE (COALESCE(archived_at,'')<>'' OR COALESCE(trashed_at,'')<>'')`},
+		{"topic", `SELECT id, COALESCE(handle,''), COALESCE(thread_id,'') FROM topics WHERE (COALESCE(archived_at,'')<>'' OR COALESCE(trashed_at,'')<>'')`},
 		{"card", `SELECT c.id, COALESCE(c.handle,''), c.thread_id FROM cards c ` + cardVisibilityJoins + ` WHERE NOT ` + cardLifecycleWhere([]string{"active"})},
 	}
+	selected := map[string][]string{}
+	for _, ref := range refs {
+		kind, id, ok := strings.Cut(ref, ":")
+		if ok {
+			if kind == "doc" {
+				kind = "document"
+			}
+			selected[kind] = append(selected[kind], id)
+		}
+	}
 	for _, q := range queries {
-		rows, err := s.db.QueryContext(ctx, q.query)
+		args := []any{}
+		if filtered {
+			if len(selected[q.kind])+len(selected["thread"]) == 0 {
+				continue
+			}
+			raw, _ := json.Marshal(uniqueSortedStrings(selected[q.kind]))
+			threads, _ := json.Marshal(uniqueSortedStrings(selected["thread"]))
+			prefix := ""
+			if q.kind == "card" {
+				prefix = "c."
+			}
+			predicate := prefix + `id IN (SELECT value FROM json_each(?)) OR (` + prefix + `handle IN (SELECT value FROM json_each(?)) AND ` + prefix + `handle IS NOT NULL AND ` + `trim(` + prefix + `handle)<>'') OR ` + prefix + `thread_id IN (SELECT value FROM json_each(?))`
+			if q.kind == "thread" {
+				predicate = `id IN (SELECT value FROM json_each(?))`
+				args = append(args, string(threads))
+			} else {
+				args = append(args, string(raw), string(raw), string(threads))
+			}
+			q.query += ` AND (` + predicate + `)`
+		}
+		rows, err := s.db.QueryContext(ctx, q.query, args...)
 		if err != nil {
 			return nil, err
 		}
@@ -104,7 +142,25 @@ func (s *Store) DashboardReports(ctx context.Context) (map[string]any, error) {
 	return s.dashboard(ctx, true)
 }
 
+func (s *Store) DashboardReportsPage(ctx context.Context, cursor string) (map[string]any, error) {
+	return s.dashboardPage(ctx, true, cursor)
+}
+
 func (s *Store) dashboard(ctx context.Context, all bool) (map[string]any, error) {
+	return s.dashboardPage(ctx, all, "")
+}
+
+func (s *Store) dashboardPage(ctx context.Context, all bool, cursor string) (map[string]any, error) {
+	var before struct{ Updated, ID string }
+	if len(cursor) > 2048 {
+		return nil, ErrInvalidCursor
+	}
+	if cursor != "" {
+		raw, err := base64.RawURLEncoding.DecodeString(cursor)
+		if err != nil || json.Unmarshal(raw, &before) != nil || before.ID == "" {
+			return nil, ErrInvalidCursor
+		}
+	}
 	var pin sql.NullString
 	err := s.db.QueryRowContext(ctx, `SELECT document_id FROM workspace_dashboard WHERE singleton=1`).Scan(&pin)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -113,13 +169,26 @@ func (s *Store) dashboard(ctx context.Context, all bool) (map[string]any, error)
 	result := map[string]any{"status": "ok", "pinned_ref": nil, "reports": []map[string]any{}, "has_more": false}
 	// One metadata read, with the pin first; only read candidate blobs until the
 	// selected valid report is found. No per-document GetDocument queries.
+	candidates := `SELECT id FROM documents WHERE COALESCE(archived_at,'')='' AND COALESCE(trashed_at,'')='' AND id<>? AND ` + backingThreadLifecycleSQL(ctx, `documents.thread_id`, false)
+	args := []any{pin.String}
+	if before.ID != "" {
+		candidates += ` AND (updated_at<? OR (updated_at=? AND id>?))`
+		args = append(args, before.Updated, before.Updated, before.ID)
+	}
+	candidates += ` ORDER BY updated_at DESC,id ASC LIMIT 101`
+	pinID := pin.String
+	if cursor != "" {
+		pinID = ""
+	}
+	args = append([]any{pinID}, args...)
+	args = append(args, pinID)
 	rows, err := s.db.QueryContext(ctx, `SELECT d.id, COALESCE(NULLIF(d.handle,''),d.id), d.title, d.updated_at,
         COALESCE(a.content_hash,''), COALESCE(d.archived_at,''), COALESCE(d.trashed_at,''), d.head_revision_number
         FROM documents d LEFT JOIN document_revisions dr ON dr.revision_id=d.head_revision_id
         LEFT JOIN artifacts a ON a.id=dr.artifact_id
-        WHERE ((COALESCE(d.archived_at,'')='' AND COALESCE(d.trashed_at,'')='') OR d.id=?)
+        WHERE d.id IN (SELECT id FROM documents WHERE id=? UNION ALL SELECT id FROM (`+candidates+`))
         AND `+backingThreadLifecycleSQL(ctx, `d.thread_id`, false)+`
-        ORDER BY (d.id=?) DESC, d.updated_at DESC, d.id ASC`, pin.String, pin.String)
+        ORDER BY (d.id=?) DESC, d.updated_at DESC, d.id ASC`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -140,6 +209,26 @@ func (s *Store) dashboard(ctx context.Context, all bool) (map[string]any, error)
 	rows.Close()
 	if err != nil {
 		return nil, err
+	}
+	// The extra candidate proves truncation without reading its blob.
+	count := 0
+	bounded := []head{}
+	for _, h := range heads {
+		if h.id != pinID {
+			count++
+			if count > 100 {
+				result["has_more"] = true
+				continue
+			}
+		}
+		bounded = append(bounded, h)
+	}
+	heads = bounded
+	if result["has_more"] == true && len(heads) > 0 {
+		last := heads[len(heads)-1]
+		before.Updated, before.ID = last.updated, last.id
+		raw, _ := json.Marshal(before)
+		result["next_cursor"] = base64.RawURLEncoding.EncodeToString(raw)
 	}
 	reports := []map[string]any{}
 	failures := 0
@@ -165,7 +254,7 @@ func (s *Store) dashboard(ctx context.Context, all bool) (map[string]any, error)
 		}
 		reports = append(reports, map[string]any{"id": h.id, "segment": h.handle, "title": h.title, "updated_at": h.updated, "revision_ref": "document_revision:" + revisionHandle(h.handle, h.revisionNumber), "report": validation.Report, "ref": "document:" + h.handle})
 		if !all {
-			result["has_more"] = i+1 < len(heads)
+			result["has_more"] = result["has_more"] == true || i+1 < len(heads)
 			break
 		}
 	}
@@ -204,7 +293,30 @@ func (s *Store) Overview(ctx context.Context, humanIDs map[string]bool, agentNam
 
 // overviewWork shares the bounded report projection and its joined privacy context.
 func (s *Store) overviewWork(ctx context.Context, visible func(string, string) bool, now time.Time, threshold time.Duration, includeClosed bool) ([]map[string]any, bool, map[string]bool, error) {
-	page, err := s.ListReportWork(ctx, ReportWorkFilter{Limit: 2000, IncludeClosed: includeClosed})
+	// Scoped SQL has already applied canonical card and contributor privacy.
+	// Keep legacy callbacks for direct/unscoped callers; do not query every thread
+	// again for rows already filtered by this request's immutable policy.
+	_, scoped := resourceaccess.PolicyFrom(ctx)
+	if scoped {
+		visible = nil
+	}
+	closed := false
+	page, err := s.ListReportWork(ctx, ReportWorkFilter{Limit: 100, IncludeClosed: true, OverviewClosed: &closed, skipOwnerContext: scoped})
+	if err == nil && includeClosed {
+		closed = true
+		history, e := s.ListReportWork(ctx, ReportWorkFilter{Limit: 100, IncludeClosed: true, OverviewClosed: &closed, skipOwnerContext: scoped})
+		if e != nil {
+			return nil, false, nil, e
+		}
+		page.Work = append(page.Work, history.Work...)
+		page.Truncated = page.Truncated || history.Truncated
+		for k, v := range history.Boards {
+			page.Boards[k] = v
+		}
+		for k, v := range history.PrivateOwners {
+			page.PrivateOwners[k] = v
+		}
+	}
 	if err != nil {
 		return nil, false, nil, err
 	}
@@ -243,6 +355,10 @@ func (s *Store) OverviewVisible(ctx context.Context, humanIDs, agentNames map[st
 	// an accessible designated board has no work in the bounded visit snapshot.
 	var designated bool
 	if err = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM boards WHERE role='initiatives' LIMIT 1)`).Scan(&designated); err != nil {
+		return nil, err
+	}
+	humanIDs, agentNames, err = s.overviewPeople(ctx, work, humanIDs, agentNames)
+	if err != nil {
 		return nil, err
 	}
 	result["_visit_work"] = work

@@ -1,6 +1,7 @@
-package readmodel
+package readmodel_test
 
 import (
+	"agent-nexus-core/internal/readmodel"
 	"agent-nexus-core/internal/scopedrepo"
 	"agent-nexus-core/internal/scopes"
 	"context"
@@ -18,27 +19,27 @@ type feedAdapter struct {
 	directoryCursor string
 }
 
-func (a feedAdapter) Snapshot(ctx context.Context) (Snapshot, error) {
+func (a feedAdapter) Snapshot(ctx context.Context) (readmodel.Snapshot, error) {
 	if err := ctx.Err(); err != nil {
-		return Snapshot{}, err
+		return readmodel.Snapshot{}, err
 	}
 	raw, err := a.reader.Snapshot()
 	if err != nil {
-		return Snapshot{}, err
+		return readmodel.Snapshot{}, err
 	}
-	s := Snapshot{Binding: raw.Binding, Streams: append([]Stream(nil), raw.Streams...), MoreScopes: raw.MoreScopes, DirectoryContinuation: raw.DirectoryContinuation, AsOf: raw.AsOf}
+	s := readmodel.Snapshot{Binding: raw.Binding, Streams: append([]readmodel.Stream(nil), raw.Streams...), MoreScopes: raw.MoreScopes, DirectoryContinuation: raw.DirectoryContinuation, AsOf: raw.AsOf}
 	for _, r := range raw.Scopes {
-		s.Scopes = append(s.Scopes, Scope{r.ID, r.Generation, Availability(r.Availability), r.Ready})
+		s.Scopes = append(s.Scopes, readmodel.Scope{r.ID, r.Generation, readmodel.Availability(r.Availability), r.Ready})
 	}
 	// Explicit selection does not assert directory completeness. Overlay only a
 	// matching authorized directory page; directory cursors are already encrypted.
 	if a.directory.Bindings != nil {
 		if len(a.directory.Bindings) != len(s.Scopes) || a.directory.MoreScopes && a.directoryCursor == "" {
-			return Snapshot{}, ErrProjection
+			return readmodel.Snapshot{}, readmodel.ErrProjection
 		}
 		for i, b := range a.directory.Bindings {
 			if b.ID != s.Scopes[i].ID {
-				return Snapshot{}, ErrProjection
+				return readmodel.Snapshot{}, readmodel.ErrProjection
 			}
 		}
 		s.MoreScopes = a.directory.MoreScopes
@@ -46,7 +47,7 @@ func (a feedAdapter) Snapshot(ctx context.Context) (Snapshot, error) {
 	}
 	return s, nil
 }
-func (a feedAdapter) Candidates(ctx context.Context, stream int, after *Key, limit int) ([]Candidate, error) {
+func (a feedAdapter) Candidates(ctx context.Context, stream int, after *readmodel.Key, limit int) ([]readmodel.Candidate, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -58,13 +59,13 @@ func (a feedAdapter) Candidates(ctx context.Context, stream int, after *Key, lim
 	if err != nil {
 		return nil, err
 	}
-	out := make([]Candidate, len(rows))
+	out := make([]readmodel.Candidate, len(rows))
 	for i, r := range rows {
-		out[i] = Candidate{Key{r.Key.Sort, r.Key.RID}, r.Version}
+		out[i] = readmodel.Candidate{readmodel.Key{r.Key.Sort, r.Key.RID}, r.Version}
 	}
 	return out, nil
 }
-func (a feedAdapter) Hydrate(ctx context.Context, refs []Reference) ([]Item, error) {
+func (a feedAdapter) Hydrate(ctx context.Context, refs []readmodel.Reference) ([]readmodel.Item, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -76,9 +77,9 @@ func (a feedAdapter) Hydrate(ctx context.Context, refs []Reference) ([]Item, err
 	if err != nil {
 		return nil, err
 	}
-	out := make([]Item, len(rows))
+	out := make([]readmodel.Item, len(rows))
 	for i, r := range rows {
-		out[i] = Item{Ref: r.Ref, Data: append(json.RawMessage(nil), r.Data...)}
+		out[i] = readmodel.Item{Ref: r.Ref, Data: append(json.RawMessage(nil), r.Data...)}
 	}
 	return out, nil
 }
@@ -89,13 +90,13 @@ func (a feedAdapter) Buckets(ctx context.Context, buckets []string) (map[string]
 	return a.reader.Buckets(append([]string(nil), buckets...))
 }
 
-func adapterFixture(t *testing.T, count, perScope int) (*sql.DB, *scopedrepo.Store, scopes.RequestSelection, []Stream) {
+func adapterFixture(t *testing.T, count, perScope int) (*sql.DB, *scopedrepo.Store, scopes.RequestSelection, []readmodel.Stream) {
 	t.Helper()
 	db := openFixture(t, ":memory:")
 	return adapterFixtureOnDB(t, db, count, perScope)
 }
 
-func adapterFixtureOnDB(t *testing.T, db *sql.DB, count, perScope int) (*sql.DB, *scopedrepo.Store, scopes.RequestSelection, []Stream) {
+func adapterFixtureOnDB(t *testing.T, db *sql.DB, count, perScope int) (*sql.DB, *scopedrepo.Store, scopes.RequestSelection, []readmodel.Stream) {
 	t.Helper()
 	t.Cleanup(func() { db.Close() })
 	repo := scopedrepo.New(db)
@@ -114,7 +115,7 @@ func adapterFixtureOnDB(t *testing.T, db *sql.DB, count, perScope int) (*sql.DB,
 		t.Fatal(err)
 	}
 	request := scopes.RequestSelection{Principal: "reader"}
-	var streams []Stream
+	var streams []readmodel.Stream
 	tx, err := db.Begin()
 	if err != nil {
 		t.Fatal(err)
@@ -134,7 +135,7 @@ func adapterFixtureOnDB(t *testing.T, db *sql.DB, count, perScope int) (*sql.DB,
 		exec(`INSERT INTO scope_feed_generations VALUES(?,1,1,1,1,1,?)`, id, epoch)
 		for j := 0; j < perScope; j++ {
 			family := fmt.Sprintf("family-%d", j)
-			streams = append(streams, Stream{Scope: id, Family: family, Audience: "reader"})
+			streams = append(streams, readmodel.Stream{Scope: id, Family: family, Audience: "reader"})
 			exec(`INSERT INTO scope_feed_bindings VALUES('reader',?,1,?,'reader',1,1)`, id, family)
 			for n := 0; n < 3; n++ {
 				opaque := fmt.Sprintf("opaque-%d-%d-%d", i, j, n)
@@ -143,10 +144,10 @@ func adapterFixtureOnDB(t *testing.T, db *sql.DB, count, perScope int) (*sql.DB,
 				if err := tx.QueryRow(`SELECT rid FROM scope_resource_rids WHERE scope_id=? AND resource_id=?`, id, opaque).Scan(&rid); err != nil {
 					t.Fatal(err)
 				}
-				exec(InsertFeed, id, 1, family, "reader", n*count*perScope+i*perScope+j, rid, 1)
-				exec(InsertPayload, id, 1, family, "reader", rid, 1, `{"title":"visible"}`)
+				exec(readmodel.InsertFeed, id, 1, family, "reader", n*count*perScope+i*perScope+j, rid, 1)
+				exec(readmodel.InsertPayload, id, 1, family, "reader", rid, 1, `{"title":"visible"}`)
 			}
-			exec(IncrementCounter, id, 1, family, "reader", "total", 3)
+			exec(readmodel.IncrementCounter, id, 1, family, "reader", "total", 3)
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -159,16 +160,16 @@ func TestRepositoryAdapterPagingCoverageAndEpoch(t *testing.T) {
 	ctx := context.Background()
 	c := codec(t)
 	directory := scopes.DirectoryPage{Bindings: []scopes.Binding{{ID: request.ScopeIDs[0], Available: true}, {ID: request.ScopeIDs[1], Available: true}}, MoreScopes: true}
-	read := func(token string) (Page, error) {
-		var p Page
+	read := func(token string) (readmodel.Page, error) {
+		var p readmodel.Page
 		err := repo.ReadFeed(ctx, request, streams, func(r scopedrepo.FeedReader) error {
 			a := feedAdapter{reader: r, directory: directory, directoryCursor: "encrypted-directory-token"}
 			var err error
-			p, err = Read(ctx, a, c, 1, token)
+			p, err = readmodel.Read(ctx, a, c, 1, token)
 			if err != nil {
 				return err
 			}
-			counts, err := Count(ctx, a, []string{"total"})
+			counts, err := readmodel.Count(ctx, a, []string{"total"})
 			if err == nil && len(counts.Coverage.UnavailableScopeIDs) == 0 && counts.Values["total"] != 6 {
 				t.Fatal(counts)
 			}
@@ -211,7 +212,7 @@ func TestRepositoryAdapterPagingCoverageAndEpoch(t *testing.T) {
 	if _, err = db.Exec(`UPDATE scope_feed_generations SET legacy_auth_epoch=8`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = read(first.NextCursor); !errors.Is(err, ErrCursor) {
+	if _, err = read(first.NextCursor); !errors.Is(err, readmodel.ErrCursor) {
 		t.Fatal("stale continuation", err)
 	}
 }
@@ -221,14 +222,14 @@ func TestAdapterRejectsDuplicateLookaheadAcrossStreams(t *testing.T) {
 	if err := db.QueryRow(`SELECT rid FROM scope_feed WHERE family='family-0' ORDER BY sort_key LIMIT 1`).Scan(&rid); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(InsertFeed, request.ScopeIDs[0], 1, "family-1", "reader", 100, rid, 1); err != nil {
+	if _, err := db.Exec(readmodel.InsertFeed, request.ScopeIDs[0], 1, "family-1", "reader", 100, rid, 1); err != nil {
 		t.Fatal(err)
 	}
 	err := repo.ReadFeed(context.Background(), request, streams, func(r scopedrepo.FeedReader) error {
-		_, err := Read(context.Background(), feedAdapter{reader: r}, codec(t), 3, "")
+		_, err := readmodel.Read(context.Background(), feedAdapter{reader: r}, codec(t), 3, "")
 		return err
 	})
-	if !errors.Is(err, ErrProjection) {
+	if !errors.Is(err, readmodel.ErrProjection) {
 		t.Fatal(err)
 	}
 }
@@ -236,17 +237,17 @@ func TestAdapterDirectoryMismatchAndUnavailableCounts(t *testing.T) {
 	db, repo, request, streams := adapterFixture(t, 1, 1)
 	ctx := context.Background()
 	err := repo.ReadFeed(ctx, request, streams, func(r scopedrepo.FeedReader) error {
-		_, err := Read(ctx, feedAdapter{reader: r, directory: scopes.DirectoryPage{Bindings: []scopes.Binding{{ID: "wrong"}}}}, codec(t), 1, "")
+		_, err := readmodel.Read(ctx, feedAdapter{reader: r, directory: scopes.DirectoryPage{Bindings: []scopes.Binding{{ID: "wrong"}}}}, codec(t), 1, "")
 		return err
 	})
-	if !errors.Is(err, ErrProjection) {
+	if !errors.Is(err, readmodel.ErrProjection) {
 		t.Fatal(err)
 	}
 	if _, err = db.Exec(`UPDATE scope_domains SET state='transitioning'`); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.ReadFeed(ctx, request, streams, func(r scopedrepo.FeedReader) error {
-		c, err := Count(ctx, feedAdapter{reader: r}, []string{"total"})
+		c, err := readmodel.Count(ctx, feedAdapter{reader: r}, []string{"total"})
 		if err == nil && (c.Values != nil || len(c.Coverage.UnavailableScopeIDs) != 1) {
 			t.Fatal(c)
 		}
@@ -259,14 +260,14 @@ func TestRepositoryAdapterMaximumFanoutIsNotServingBudget(t *testing.T) {
 	_, repo, request, streams := adapterFixture(t, 64, 4)
 	err := repo.ReadFeed(context.Background(), request, streams, func(r scopedrepo.FeedReader) error {
 		a := feedAdapter{reader: r}
-		p, err := Read(context.Background(), a, codec(t), 100, "")
+		p, err := readmodel.Read(context.Background(), a, codec(t), 100, "")
 		if err != nil {
 			return err
 		}
 		if len(p.Items) != 100 || len(p.Coverage.CoveredScopeIDs) != 64 {
 			t.Fatal(p)
 		}
-		counts, err := Count(context.Background(), a, []string{"total"})
+		counts, err := readmodel.Count(context.Background(), a, []string{"total"})
 		if err == nil && counts.Values["total"] != 768 {
 			t.Fatal(counts)
 		}
@@ -285,5 +286,5 @@ func TestRepositoryAdapterMaximumFanoutIsNotServingBudget(t *testing.T) {
 	t.Logf("dependency request: %d SQL / %d returned rows; serving gate FAIL", statements, rows)
 }
 
-var _ Reader = feedAdapter{}
-var _ CounterReader = feedAdapter{}
+var _ readmodel.Reader = feedAdapter{}
+var _ readmodel.CounterReader = feedAdapter{}

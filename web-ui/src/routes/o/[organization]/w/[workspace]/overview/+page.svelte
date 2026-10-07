@@ -13,6 +13,7 @@
   import {
     WORK_ROW_CAP,
     formatPartialCount,
+    mergeDashboardReports,
     loadOverview,
   } from "$lib/overview.js";
   import SinceYouLastLooked from "$lib/components/SinceYouLastLooked.svelte";
@@ -44,6 +45,7 @@
   let model = $derived(fetched);
   let refreshing = $state(false);
   let loadingMoreReports = $state(false);
+  let reportChoicesLoaded = $state(false);
   let pinning = $state(false);
   let pinError = $state("");
 
@@ -185,7 +187,7 @@
   let requestedReportLoad = $state("");
   $effect(() => {
     const wanted = $page.url.searchParams.get("dashboard") || "";
-    const key = `${request}:${wanted}`;
+    const key = `${request}:${wanted}:${reportChoicesLoaded ? model?.reports?.next_cursor || "end" : "first"}`;
     if (
       wanted &&
       model?.reports?.status === "ok" &&
@@ -208,6 +210,8 @@
       const next = await loadOverview(coreClient);
       if (id === request) {
         fetched = next;
+        reportChoicesLoaded = false;
+        requestedReportLoad = "";
         writeWorkspaceView(cacheKey, next);
       }
     } catch (error) {
@@ -260,9 +264,13 @@
     const id = request;
     loadingMoreReports = true;
     try {
-      const more = await coreClient.getDashboardReports();
+      const more = await coreClient.getDashboardReports({
+        cursor: reportChoicesLoaded ? section.next_cursor : undefined,
+      });
       if (id !== request || !fetched?.reports) return;
-      fetched = { ...fetched, reports: more };
+      fetched = { ...fetched, reports: mergeDashboardReports(section, more) };
+      reportChoicesLoaded = true;
+      writeWorkspaceView(cacheKey, fetched);
     } catch (error) {
       if (id === request)
         pinError =
@@ -415,6 +423,15 @@
           </div>
         {/if}
       </header>
+      {#if model.reports.status === "ok" && model.reports.has_more}
+        <button
+          class="ui-button m-3"
+          disabled={loadingMoreReports}
+          onclick={() => void loadMoreReports()}
+        >
+          {loadingMoreReports ? "Loading reports…" : "More reports"}
+        </button>
+      {/if}
       {#if pinError}<p
           class="px-3 py-2 text-meta text-danger-text"
           role="alert"
@@ -675,6 +692,12 @@
             class="flex items-baseline justify-between gap-2 border-b border-line px-3 py-2"
           >
             <h2 id="overview-agents" class="text-subtitle text-fg">Agents</h2>
+            {#if model.agents.truncated}
+              <span
+                class="text-micro text-fg-muted"
+                title="Showing a limited agent sample.">Partial counts</span
+              >
+            {/if}
             {#if model.agents.status === "ok"}
               <a
                 class="text-meta text-accent-text hover:underline"
@@ -704,7 +727,11 @@
                       class="text-title tabular-nums {countClass(
                         item.key,
                         item.count,
-                      )}">{item.count}</span
+                      )}"
+                      >{formatPartialCount(
+                        item.count,
+                        model.agents.truncated,
+                      )}</span
                     >
                     <span class="text-micro text-fg-muted">{item.label}</span>
                   </a>

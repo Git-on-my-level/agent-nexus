@@ -14,6 +14,7 @@ import (
 	"agent-nexus-core/internal/plans"
 	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/resourceaccess"
 	reports "agent-nexus-visualreport"
 )
 
@@ -84,6 +85,11 @@ func handlePreviewReport(w http.ResponseWriter, r *http.Request, opts handlerOpt
 func materializeReportPanels(r *http.Request, opts handlerOptions, panels []reports.Panel) (string, []map[string]any) {
 	now := time.Now().UTC()
 	reader := reportReader{r: r, opts: opts, now: now, visibility: map[string]bool{}}
+	for _, panel := range panels {
+		if panel.Type == "live-activity" {
+			reader.decisionLimit = max(reader.decisionLimit, min(maxReportCandidates, panel.Query.Limit+1))
+		}
+	}
 	results := []map[string]any{}
 	for _, panel := range panels {
 		if !reports.IsLive(panel.Type) && panel.Source == nil {
@@ -111,11 +117,15 @@ func materializeReportPanels(r *http.Request, opts handlerOptions, panels []repo
 
 // Reads are shared across panels, scoped to this request and principal. Nothing is
 // cached between requests or written back into the report document.
+const maxReportCandidates = 200
+
 type reportReader struct {
+	decisionLimit    int
 	r                *http.Request
 	opts             handlerOptions
 	now              time.Time
 	labels           map[string]string
+	actorLabels      map[string]string
 	visibility       map[string]bool
 	hidden           map[string]bool
 	work             []map[string]any
@@ -193,7 +203,7 @@ func (reader *reportReader) loadWork(filter primitives.ReportWorkFilter) {
 }
 
 func (reader *reportReader) scopedWork(q reports.Query, includeClosed bool) ([]map[string]any, error) {
-	filter := primitives.ReportWorkFilter{Limit: reports.MaxRows, IncludeClosed: includeClosed}
+	filter := primitives.ReportWorkFilter{Limit: maxReportCandidates, IncludeClosed: includeClosed}
 	selected := map[string]bool{}
 	for _, ref := range q.BoardRefs {
 		resolved, err := reader.opts.primitiveStore.ResolveResourceRef(reader.r.Context(), primitives.ResourceRefInput{Type: "board", Ref: ref})
@@ -388,18 +398,20 @@ func (reader *reportReader) loadEvents() {
 		return
 	}
 	reader.eventsRead = true
-	if store, ok := reader.opts.primitiveStore.(interface {
-		HiddenSubjectRefs(context.Context) (map[string]bool, error)
-	}); ok {
-		var err error
-		reader.hidden, err = store.HiddenSubjectRefs(reader.r.Context())
-		if err != nil {
-			reader.eventsErr = err
-			return
+	if _, canonical := reader.opts.primitiveStore.(*primitives.Store); !canonical {
+		if store, ok := reader.opts.primitiveStore.(interface {
+			HiddenSubjectRefs(context.Context) (map[string]bool, error)
+		}); ok {
+			var err error
+			reader.hidden, err = store.HiddenSubjectRefs(reader.r.Context())
+			if err != nil {
+				reader.eventsErr = err
+				return
+			}
 		}
 	}
 	cursor := ""
-	for count := 0; count < reports.MaxRows; {
+	for count := 0; count < maxReportCandidates; {
 		page, err := reader.opts.primitiveStore.ListEventsPage(reader.r.Context(), primitives.EventListFilter{ReportSubjects: true, Types: []string{"human_attention_requested", "human_attention_responded", "card_moved", "card_resolved", "card_closed", "card_updated"}, Limit: 200, Cursor: cursor})
 		if err != nil {
 			reader.eventsErr = err
@@ -412,6 +424,32 @@ func (reader *reportReader) loadEvents() {
 			break
 		}
 	}
+	if store, ok := reader.opts.primitiveStore.(*primitives.Store); ok {
+		refs := []string{}
+		for _, event := range reader.events {
+			refs = append(refs, stringSliceAny(event["refs"])...)
+			if id := eventThreadID(event); id != "" {
+				refs = append(refs, "thread:"+id)
+			}
+			if payload, ok := event["payload"].(map[string]any); ok {
+				if ref := anyString(payload["subject_ref"]); ref != "" {
+					refs = append(refs, ref)
+				}
+			}
+		}
+		var err error
+		reader.hidden, err = store.HiddenSubjectRefsFor(reader.r.Context(), refs)
+		if err != nil {
+			reader.eventsErr = err
+			return
+		}
+		if err := reader.prepareCardRefs(refs); err != nil {
+			reader.eventsErr = err
+			return
+		}
+
+	}
+
 	reader.eventsPartial = cursor != ""
 }
 
@@ -440,9 +478,17 @@ func (reader *reportReader) activeRef(ref string) bool {
 	}
 	switch kind {
 	case "board":
-		row, err = reader.opts.primitiveStore.GetBoard(reader.r.Context(), value)
+		if store, ok := reader.opts.primitiveStore.(*primitives.Store); ok {
+			row, err = store.ReportSubjectSnapshot(reader.r.Context(), kind, value)
+		} else {
+			row, err = reader.opts.primitiveStore.GetBoard(reader.r.Context(), value)
+		}
 	case "topic":
-		row, err = reader.opts.primitiveStore.GetTopic(reader.r.Context(), value)
+		if store, ok := reader.opts.primitiveStore.(*primitives.Store); ok {
+			row, err = store.ReportSubjectSnapshot(reader.r.Context(), kind, value)
+		} else {
+			row, err = reader.opts.primitiveStore.GetTopic(reader.r.Context(), value)
+		}
 	case "card":
 		store, ok := reader.opts.primitiveStore.(WorkStore)
 		if !ok {
@@ -610,11 +656,18 @@ func (reader *reportReader) activity(q reports.Query) (map[string]any, bool, err
 					if label == "" {
 						label = "board"
 					}
-					actorLabel := actor
-					if reader.opts.actorRegistry != nil {
-						if known, err := reader.opts.actorRegistry.Get(reader.r.Context(), actor); err == nil && known.DisplayName != "" {
-							actorLabel = known.DisplayName
+					if reader.actorLabels == nil {
+						reader.actorLabels = map[string]string{}
+					}
+					actorLabel, known := reader.actorLabels[actor]
+					if !known {
+						actorLabel = actor
+						if reader.opts.actorRegistry != nil {
+							if known, err := reader.opts.actorRegistry.Get(reader.r.Context(), actor); err == nil && known.DisplayName != "" {
+								actorLabel = known.DisplayName
+							}
 						}
+						reader.actorLabels[actor] = actorLabel
 					}
 					items[index]["summary"] = fmt.Sprintf("%s updated %s · %d edits", actorLabel, label, items[index]["count"])
 					continue
@@ -665,13 +718,24 @@ func (reader *reportReader) readDecisionActivity() ([]map[string]any, bool, erro
 		return nil, false, pm.ErrForbidden
 	}
 	p := pm.Principal{WorkspaceID: runtime.cfg.PM.WorkspaceID, ActorID: principal.ActorID, Human: principal.PrincipalKind == string(auth.PrincipalKindHuman)}
+	limit := reader.decisionLimit
+	if limit <= 0 {
+		limit = maxReportCandidates
+	}
 	cursor := ""
-	for count := 0; count < reports.MaxRows; {
-		page, err := runtime.Service.DecisionPage(reader.r.Context(), p, 200, cursor)
+	for count := 0; count < limit; {
+		page, err := runtime.Service.DecisionPage(reader.r.Context(), p, limit, cursor)
 		if err != nil {
 			return nil, false, err
 		}
 		count += len(page.Items)
+		refs := []string{}
+		for _, d := range page.Items {
+			refs = append(refs, d.WorkRef)
+		}
+		if err := reader.prepareCardRefs(refs); err != nil {
+			return nil, false, err
+		}
 		for _, decision := range page.Items {
 			if !reader.activeRef(decision.WorkRef) {
 				continue
@@ -706,4 +770,56 @@ func reportHasValue(row map[string]any, value string, keys ...string) bool {
 		}
 	}
 	return false
+}
+
+// Batch card projections while preserving the same active parent checks and
+// source title overlays as activeRef. Other stores retain the point-read path.
+func (reader *reportReader) prepareCardRefs(refs []string) error {
+	store, canonical := reader.opts.primitiveStore.(*primitives.Store)
+	_, scoped := resourceaccess.PolicyFrom(reader.r.Context())
+	if !canonical || !scoped {
+		return nil
+	}
+	pending := []string{}
+	seen := map[string]bool{}
+	for _, ref := range refs {
+		if strings.HasPrefix(ref, "card:") && !seen[ref] {
+			if _, cached := reader.visibility[ref]; !cached {
+				pending = append(pending, ref)
+				seen[ref] = true
+			}
+		}
+	}
+	if reader.visibility == nil {
+		reader.visibility = map[string]bool{}
+	}
+	if reader.labels == nil {
+		reader.labels = map[string]string{}
+	}
+	for len(pending) > 0 {
+		n := min(200, len(pending))
+		batch := pending[:n]
+		pending = pending[n:]
+		snapshots, err := store.ReportWorkSnapshots(reader.r.Context(), batch)
+		if err != nil {
+			return err
+		}
+		for _, ref := range batch {
+			w, ok := snapshots[ref]
+			allowed := ok && reportActive(w)
+			if allowed {
+				for _, parent := range []string{anyString(w["board_ref"]), anyString(w["project_ref"])} {
+					if parent != "" && !reader.activeRef(parent) {
+						allowed = false
+						break
+					}
+				}
+			}
+			reader.visibility[ref] = allowed
+			if allowed {
+				reader.labels[ref] = anyString(w["title"])
+			}
+		}
+	}
+	return nil
 }

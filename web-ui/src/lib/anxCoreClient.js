@@ -327,7 +327,11 @@ const adapterCommandTable = [
     "report.render",
     (documentId) => p(pathParams({ document_id: documentId })),
   ],
-  ["getDashboardReports", "workspace.dashboard.list", () => ({})],
+  [
+    "getDashboardReports",
+    "workspace.dashboard.list",
+    (filters = {}) => ({ options: q(filters) }),
+  ],
   ["getOverview", "overview.get", () => ({})],
   [
     "setWorkspaceDashboard",

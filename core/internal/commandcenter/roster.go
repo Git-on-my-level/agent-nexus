@@ -15,6 +15,18 @@ import (
 type SQLIdentities struct{ DB *sql.DB }
 
 func (s SQLIdentities) ListAgents(ctx context.Context) ([]Identity, error) {
+	return s.listAgents(ctx, 0)
+}
+func (s SQLIdentities) ListAgentsBounded(ctx context.Context, limit int) ([]Identity, error) {
+	return s.listAgents(ctx, limit)
+}
+func (s SQLIdentities) listAgents(ctx context.Context, limit int) ([]Identity, error) {
+	suffix := ""
+	args := []any{}
+	if limit > 0 {
+		suffix = " LIMIT ?"
+		args = append(args, limit)
+	}
 	rows, e := resourceaccess.NewDB(s.DB).QueryContext(ctx, `SELECT a.id,a.username,a.actor_id,a.metadata_json,
 		COALESCE(x.display_name,a.username),COALESCE(a.revoked_at,''),
 		COALESCE(ha.name,''),COALESCE(ha.identity_kind,''),
@@ -27,7 +39,7 @@ func (s SQLIdentities) ListAgents(ctx context.Context) ([]Identity, error) {
 		LEFT JOIN hosts h ON h.id=ha.host_id
 		LEFT JOIN host_exclusions hx ON hx.host_id=ha.host_id AND hx.name=ha.name
 		WHERE COALESCE(json_extract(a.metadata_json,'$.principal_kind'),'agent')='agent'
-		ORDER BY a.username`)
+		ORDER BY a.username`+suffix, args...)
 	if e != nil {
 		return nil, e
 	}
@@ -93,6 +105,7 @@ type ActiveRun struct {
 	DurationSeconds int64   `json:"duration_seconds"`
 }
 type OpenAsk struct {
+	Total            int     `json:"-"`
 	ID               string  `json:"id"`
 	InboxItemID      *string `json:"inbox_item_id"`
 	Title            string  `json:"title"`
@@ -152,9 +165,36 @@ func later(a, b string) string {
 	return a
 }
 func (s *Store) Roster(ctx context.Context, now time.Time) ([]Summary, error) {
-	identities, e := s.Identities.ListAgents(ctx)
+	out, _, err := s.roster(ctx, now, 0)
+	return out, err
+}
+func (s *Store) OverviewRoster(ctx context.Context, now time.Time) ([]Summary, bool, error) {
+	return s.roster(ctx, now, 100)
+}
+func (s *Store) roster(ctx context.Context, now time.Time, limit int) ([]Summary, bool, error) {
+	var identities []Identity
+	var e error
+	if bounded, ok := s.Identities.(interface {
+		ListAgentsBounded(context.Context, int) ([]Identity, error)
+	}); ok && limit > 0 {
+		identities, e = bounded.ListAgentsBounded(ctx, limit+1)
+	} else {
+		identities, e = s.Identities.ListAgents(ctx)
+	}
+	partial := false
+	if limit > 0 && len(identities) > limit {
+		partial = true
+		identities = identities[:limit]
+	}
+	ids, actors := []string{}, []string{}
+	for _, v := range identities {
+		ids = append(ids, v.AgentID)
+		actors = append(actors, v.ActorID)
+	}
+	idJSON, _ := json.Marshal(ids)
+	actorJSON, _ := json.Marshal(actors)
 	if e != nil {
-		return nil, e
+		return nil, false, e
 	}
 	out := make([]Summary, len(identities))
 	index := map[string]int{}
@@ -164,16 +204,22 @@ func (s *Store) Roster(ctx context.Context, now time.Time) ([]Summary, error) {
 		index[v.AgentID] = i
 	}
 	// Each source is scanned once. No per-agent event query is performed.
-	rows, e := resourceaccess.NewDB(s.DB).QueryContext(ctx, `SELECT agent_id,current_card_ref,note,observed_at FROM agent_presence`)
+	presenceQuery := `SELECT agent_id,current_card_ref,note,observed_at FROM agent_presence`
+	presenceArgs := []any{}
+	if limit > 0 {
+		presenceQuery += ` WHERE agent_id IN (SELECT value FROM json_each(?))`
+		presenceArgs = append(presenceArgs, string(idJSON))
+	}
+	rows, e := resourceaccess.NewDB(s.DB).QueryContext(ctx, presenceQuery, presenceArgs...)
 	if e != nil {
-		return nil, e
+		return nil, false, e
 	}
 	for rows.Next() {
 		var id, at string
 		var card, note sql.NullString
 		if e = rows.Scan(&id, &card, &note, &at); e != nil {
 			rows.Close()
-			return nil, e
+			return nil, false, e
 		}
 		if i, ok := index[id]; ok {
 			v := &out[i]
@@ -186,17 +232,26 @@ func (s *Store) Roster(ctx context.Context, now time.Time) ([]Summary, error) {
 	e = rows.Err()
 	rows.Close()
 	if e != nil {
-		return nil, e
+		return nil, false, e
 	}
-	runRows, e := resourceaccess.NewDB(s.DB).QueryContext(ctx, "SELECT "+runColumns+" FROM runs ORDER BY julianday(last_observed_at) DESC")
+	runQuery := "SELECT " + runColumns + " FROM runs"
+	runArgs := []any{}
+	if limit > 0 {
+		runQuery += ` WHERE id IN (
+ SELECT (SELECT id FROM runs r WHERE r.agent_id=j.value ORDER BY anx_timestamp_key(r.last_observed_at) DESC,r.id DESC LIMIT 1) FROM json_each(?) j
+ UNION SELECT (SELECT id FROM runs r WHERE r.agent_id=j.value AND r.state NOT IN ('completed','failed','cancelled') AND r.liveness='alive' AND anx_timestamp_key(r.last_observed_at) BETWEEN anx_timestamp_key(?) AND anx_timestamp_key(?) ORDER BY anx_timestamp_key(r.last_observed_at) DESC,r.id DESC LIMIT 1) FROM json_each(?) j)`
+		runArgs = append(runArgs, string(idJSON), now.Add(-ActiveRunFreshness).Format(time.RFC3339Nano), now.Add(RunObservationFutureSkew).Format(time.RFC3339Nano), string(idJSON))
+	}
+	runQuery += ` ORDER BY anx_timestamp_key(last_observed_at) DESC`
+	runRows, e := resourceaccess.NewDB(s.DB).QueryContext(ctx, runQuery, runArgs...)
 	if e != nil {
-		return nil, e
+		return nil, false, e
 	}
 	for runRows.Next() {
 		r, scanErr := readRun(runRows)
 		if scanErr != nil {
 			runRows.Close()
-			return nil, scanErr
+			return nil, false, scanErr
 		}
 		if i, ok := index[r.AgentID]; ok {
 			v := &out[i]
@@ -221,11 +276,17 @@ func (s *Store) Roster(ctx context.Context, now time.Time) ([]Summary, error) {
 	e = runRows.Err()
 	runRows.Close()
 	if e != nil {
-		return nil, e
+		return nil, false, e
 	}
-	rows, e = resourceaccess.NewDB(s.DB).QueryContext(ctx, `SELECT actor_id,ts FROM (SELECT actor_id,ts,ROW_NUMBER() OVER (PARTITION BY actor_id ORDER BY julianday(ts) DESC,id DESC) AS row_number FROM events) WHERE row_number=1`)
+	eventQuery := `SELECT actor_id,ts FROM (SELECT actor_id,ts,ROW_NUMBER() OVER (PARTITION BY actor_id ORDER BY anx_timestamp_key(ts) DESC,id DESC) AS row_number FROM events) WHERE row_number=1`
+	eventArgs := []any{}
+	if limit > 0 {
+		eventQuery = `SELECT actor_id,ts FROM events WHERE id IN (SELECT (SELECT id FROM events e WHERE e.actor_id=j.value ORDER BY anx_timestamp_key(e.ts) DESC,e.id DESC LIMIT 1) FROM json_each(?) j)`
+		eventArgs = append(eventArgs, string(actorJSON))
+	}
+	rows, e = resourceaccess.NewDB(s.DB).QueryContext(ctx, eventQuery, eventArgs...)
 	if e != nil {
-		return nil, e
+		return nil, false, e
 	}
 	actorIndex := map[string]int{}
 	for i, v := range out {
@@ -235,7 +296,7 @@ func (s *Store) Roster(ctx context.Context, now time.Time) ([]Summary, error) {
 		var id, at string
 		if e = rows.Scan(&id, &at); e != nil {
 			rows.Close()
-			return nil, e
+			return nil, false, e
 		}
 		if i, ok := actorIndex[id]; ok {
 			out[i].LastSignalAt = stringPtr(later(value(out[i].LastSignalAt), at))
@@ -244,11 +305,12 @@ func (s *Store) Roster(ctx context.Context, now time.Time) ([]Summary, error) {
 	e = rows.Err()
 	rows.Close()
 	if e != nil {
-		return nil, e
+		return nil, false, e
 	}
-	asks, e := s.openAsks(ctx)
+	identityJSON, _ := json.Marshal(identities)
+	asks, e := s.openAsksLimit(ctx, limit, string(idJSON), string(identityJSON))
 	if e != nil {
-		return nil, e
+		return nil, false, e
 	}
 	for _, ask := range asks {
 		i, ok := index[value(ask.RequesterAgentID)]
@@ -256,23 +318,36 @@ func (s *Store) Roster(ctx context.Context, now time.Time) ([]Summary, error) {
 			i, ok = actorIndex[ask.RequesterActorID]
 		}
 		if ok {
-			out[i].OpenAsksCount++
+			out[i].OpenAsksCount += ask.Total
 			if out[i].WaitingAsk == nil {
 				copy := ask
 				out[i].WaitingAsk = &copy
 			}
 		}
 	}
-	cardRows, e := resourceaccess.NewDB(s.DB).QueryContext(ctx, `SELECT id,handle,title FROM cards`)
+	cardQuery := `SELECT id,handle,title FROM cards`
+	cardArgs := []any{}
+	if limit > 0 {
+		refs := []string{}
+		for _, v := range out {
+			if v.CurrentCardRef != nil {
+				refs = append(refs, strings.TrimPrefix(*v.CurrentCardRef, "card:"))
+			}
+		}
+		raw, _ := json.Marshal(refs)
+		cardQuery += ` WHERE id IN (SELECT value FROM json_each(?)) OR (handle IN (SELECT value FROM json_each(?)) AND handle IS NOT NULL AND trim(handle)<>'')`
+		cardArgs = append(cardArgs, string(raw), string(raw))
+	}
+	cardRows, e := resourceaccess.NewDB(s.DB).QueryContext(ctx, cardQuery, cardArgs...)
 	if e != nil {
-		return nil, e
+		return nil, false, e
 	}
 	cardTitles := map[string]string{}
 	for cardRows.Next() {
 		var id, handle, title string
 		if e = cardRows.Scan(&id, &handle, &title); e != nil {
 			cardRows.Close()
-			return nil, e
+			return nil, false, e
 		}
 		cardTitles[id] = title
 		cardTitles[handle] = title
@@ -280,7 +355,7 @@ func (s *Store) Roster(ctx context.Context, now time.Time) ([]Summary, error) {
 	e = cardRows.Err()
 	cardRows.Close()
 	if e != nil {
-		return nil, e
+		return nil, false, e
 	}
 	for i := range out {
 		v := &out[i]
@@ -299,7 +374,7 @@ func (s *Store) Roster(ctx context.Context, now time.Time) ([]Summary, error) {
 			v.State = "idle"
 		}
 	}
-	return out, nil
+	return out, partial, nil
 }
 func value(p *string) string {
 	if p == nil {
@@ -319,11 +394,25 @@ func bridgeOnline(expires string, now time.Time) bool {
 	return err == nil && t.After(now) && t.Sub(now) <= BridgeFreshness
 }
 func (s *Store) openAsks(ctx context.Context) ([]OpenAsk, error) {
-	rows, e := resourceaccess.NewDB(s.DB).QueryContext(ctx, `SELECT req.id,req.ts,COALESCE(json_extract(req.payload_json,'$.summary'),''),req.payload_json,
+	return s.openAsksLimit(ctx, 0, "", "")
+}
+func (s *Store) openAsksLimit(ctx context.Context, limit int, ids, identities string) ([]OpenAsk, error) {
+	query := `SELECT req.id,req.ts,COALESCE(json_extract(req.payload_json,'$.summary'),''),req.payload_json,
 		COALESCE((SELECT di.id FROM derived_inbox_items di WHERE di.source_event_id=req.id AND di.category IN ('ask','review','escalate') ORDER BY di.id LIMIT 1),''),
 		COALESCE((SELECT di.data_json FROM derived_inbox_items di WHERE di.source_event_id=req.id AND di.category IN ('ask','review','escalate') ORDER BY di.id LIMIT 1),'')
 		FROM events req WHERE req.type='human_attention_requested' AND req.trashed_at IS NULL AND NOT EXISTS (SELECT 1 FROM events resp WHERE resp.type='human_attention_responded' AND resp.trashed_at IS NULL AND (json_extract(resp.payload_json,'$.payload.request_event_id')=req.id OR json_extract(resp.payload_json,'$.payload.request_event_ref')='event:'||req.id OR json_extract(resp.payload_json,'$.payload.request_event_ref')='event:'||req.handle)) AND NOT EXISTS (SELECT 1 FROM events withdrawn WHERE withdrawn.type='human_attention_withdrawn' AND withdrawn.trashed_at IS NULL AND (json_extract(withdrawn.payload_json,'$.payload.request_event_id')=req.id OR json_extract(withdrawn.payload_json,'$.payload.request_event_ref')='event:'||req.id OR json_extract(withdrawn.payload_json,'$.payload.request_event_ref')='event:'||req.handle))
-		ORDER BY julianday(req.ts),req.id`)
+		 ORDER BY anx_timestamp_key(req.ts),req.id`
+	args := []any{}
+	if limit > 0 {
+		query = `WITH candidates AS (SELECT req.id,req.ts,
+ CASE WHEN json_extract(req.payload_json,'$.payload.requester_agent_id') IN (SELECT value FROM json_each(?)) THEN json_extract(req.payload_json,'$.payload.requester_agent_id') WHEN EXISTS(SELECT 1 FROM agents known WHERE known.id=json_extract(req.payload_json,'$.payload.requester_agent_id')) THEN NULL ELSE (SELECT json_extract(j.value,'$.AgentID') FROM json_each(?) j WHERE json_extract(j.value,'$.ActorID')=json_extract(req.payload_json,'$.payload.requester_actor_id') ORDER BY j.key DESC LIMIT 1) END AS target
+ FROM events req WHERE req.type='human_attention_requested' AND req.trashed_at IS NULL AND NOT EXISTS (SELECT 1 FROM events resp WHERE resp.type='human_attention_responded' AND resp.trashed_at IS NULL AND (json_extract(resp.payload_json,'$.payload.request_event_id')=req.id OR json_extract(resp.payload_json,'$.payload.request_event_ref')='event:'||req.id OR json_extract(resp.payload_json,'$.payload.request_event_ref')='event:'||req.handle)) AND NOT EXISTS (SELECT 1 FROM events withdrawn WHERE withdrawn.type='human_attention_withdrawn' AND withdrawn.trashed_at IS NULL AND (json_extract(withdrawn.payload_json,'$.payload.request_event_id')=req.id OR json_extract(withdrawn.payload_json,'$.payload.request_event_ref')='event:'||req.id OR json_extract(withdrawn.payload_json,'$.payload.request_event_ref')='event:'||req.handle))), ranked AS (SELECT id,count(*) OVER(PARTITION BY target) AS total,row_number() OVER(PARTITION BY target ORDER BY anx_timestamp_key(ts),id) AS n FROM candidates WHERE target IS NOT NULL)
+ SELECT req.id,req.ts,COALESCE(json_extract(req.payload_json,'$.summary'),''),req.payload_json,
+		COALESCE((SELECT di.id FROM derived_inbox_items di WHERE di.source_event_id=req.id AND di.category IN ('ask','review','escalate') ORDER BY di.id LIMIT 1),''),
+		COALESCE((SELECT di.data_json FROM derived_inbox_items di WHERE di.source_event_id=req.id AND di.category IN ('ask','review','escalate') ORDER BY di.id LIMIT 1),''),ranked.total FROM ranked JOIN events req ON req.id=ranked.id WHERE ranked.n=1 ORDER BY anx_timestamp_key(req.ts),req.id`
+		args = append(args, ids, identities)
+	}
+	rows, e := resourceaccess.NewDB(s.DB).QueryContext(ctx, query, args...)
 	if e != nil {
 		return nil, e
 	}
@@ -331,7 +420,12 @@ func (s *Store) openAsks(ctx context.Context) ([]OpenAsk, error) {
 	out := []OpenAsk{}
 	for rows.Next() {
 		var id, at, summary, raw, inboxID, inboxRaw string
-		if e = rows.Scan(&id, &at, &summary, &raw, &inboxID, &inboxRaw); e != nil {
+		total := 1
+		scan := []any{&id, &at, &summary, &raw, &inboxID, &inboxRaw}
+		if limit > 0 {
+			scan = append(scan, &total)
+		}
+		if e = rows.Scan(scan...); e != nil {
 			return nil, e
 		}
 		var wrapped map[string]any
@@ -346,7 +440,7 @@ func (s *Store) openAsks(ctx context.Context) ([]OpenAsk, error) {
 		if inboxRaw != "" {
 			_ = json.Unmarshal([]byte(inboxRaw), &inbox)
 		}
-		ask := OpenAsk{ID: id, InboxItemID: stringPtr(inboxID), CreatedAt: at,
+		ask := OpenAsk{Total: total, ID: id, InboxItemID: stringPtr(inboxID), CreatedAt: at,
 			Kind: str(p["kind"]), SubjectRef: stringPtr(str(p["subject_ref"])),
 			SubjectTitle: str(p["subject_title"]), RequesterActorID: str(p["requester_actor_id"]),
 			RequesterAgentID: stringPtr(str(p["requester_agent_id"]))}

@@ -87,7 +87,11 @@ func (s *Store) OverviewChanges(ctx context.Context, principal string, work []ma
 		return out, nil
 	}
 	var since, raw string
-	err := s.db.QueryRowContext(ctx, `SELECT visited_at,snapshot_json FROM overview_visits WHERE principal_id=?`, principal).Scan(&since, &raw)
+	var anyAnswers bool
+	err := s.db.QueryRowContext(ctx, `SELECT visited_at,snapshot_json,EXISTS(SELECT 1 FROM events
+ WHERE type='human_attention_responded' AND trashed_at IS NULL AND archived_at IS NULL
+ AND julianday(ts)>=julianday(overview_visits.visited_at) AND julianday(ts)<=julianday(?) LIMIT 1)
+ FROM overview_visits WHERE principal_id=?`, now.Format(time.RFC3339Nano), principal).Scan(&since, &raw, &anyAnswers)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out, nil
 	}
@@ -129,7 +133,9 @@ func (s *Store) OverviewChanges(ctx context.Context, principal string, work []ma
 			}
 		}
 	}
-	err = s.overviewAnsweredAsks(ctx, &out, visible, now)
+	if anyAnswers {
+		err = s.overviewAnsweredAsks(ctx, &out, visible, now)
+	}
 	return out, err
 }
 
@@ -217,6 +223,11 @@ func (s *Store) overviewAnsweredAsks(ctx context.Context, out *OverviewChanges, 
 	rows.Close()
 	if err != nil {
 		return err
+	}
+	// Over-budget answers are already excluded. With no complete candidates,
+	// their accumulated subjects cannot contribute any output or eligibility.
+	if len(answers) == 0 {
+		return nil
 	}
 	readable := map[string]bool{}
 	refs = uniqueSortedStrings(refs)

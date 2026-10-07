@@ -1,6 +1,7 @@
-package readmodel
+package readmodel_test
 
 import (
+	"agent-nexus-core/internal/readmodel"
 	"context"
 	"testing"
 	"time"
@@ -55,10 +56,10 @@ func TestProposedDispatcherBudgetIncludesLegacyDenialPreparation(t *testing.T) {
 	}
 	err = repo.ReadFeed(scoped, request, streams, func(r scopedrepo.FeedReader) error {
 		a := feedAdapter{reader: r}
-		if _, err := Read(scoped, a, codec(t), 100, ""); err != nil {
+		if _, err := readmodel.Read(scoped, a, codec(t), 100, ""); err != nil {
 			return err
 		}
-		_, err := Count(scoped, a, []string{"total"})
+		_, err := readmodel.Count(scoped, a, []string{"total"})
 		return err
 	})
 	elapsed := time.Since(start)

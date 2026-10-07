@@ -37,7 +37,7 @@ func TestReadModelNotServing(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				if name == "agent-nexus-core/internal/readmodel" {
+				if name == "agent-nexus-core/internal/readmodel" && !trustedRepositoryAdapter(path) {
 					t.Errorf("read-model bridge not approved for production consumption: %s", path)
 				}
 				if inKernelTree(path) && (name == "database/sql" || name == "agent-nexus-core/internal/storage" || name == "agent-nexus-core/internal/scopedrepo") {
@@ -48,6 +48,33 @@ func TestReadModelNotServing(t *testing.T) {
 		})
 		if err != nil {
 			t.Fatal(err)
+		}
+	}
+}
+
+// These two adapters remain unreachable from serving: scopedrepo's independent
+// TestFoundationNotServing rejects every production import of that package.
+// This admits the reviewed dependency edge, not a handler or constructor.
+func trustedRepositoryAdapter(path string) bool {
+	switch filepath.ToSlash(filepath.Clean(path)) {
+	case "../scopedrepo/readmodel_adapter.go", "../scopedrepo/readmodel_hook.go":
+		return true
+	default:
+		return false
+	}
+}
+
+func TestTrustedAdapterBoundaryIsExact(t *testing.T) {
+	for path, want := range map[string]bool{
+		"../scopedrepo/readmodel_adapter.go":     true,
+		"../scopedrepo/readmodel_hook.go":        true,
+		"../scopedrepo/other.go":                 false,
+		"../server/readmodel_adapter.go":         false,
+		"../scopedrepo/nested/readmodel_hook.go": false,
+		"../../cmd/readmodel_hook.go":            false,
+	} {
+		if got := trustedRepositoryAdapter(filepath.FromSlash(path)); got != want {
+			t.Fatalf("%s: got %v want %v", path, got, want)
 		}
 	}
 }

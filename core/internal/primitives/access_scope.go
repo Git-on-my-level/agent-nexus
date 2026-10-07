@@ -265,8 +265,7 @@ func requireAccessibleValues(ctx context.Context, q queryRower, values any) erro
 	args := []any{string(encoded)}
 	if policy, ok := resourceaccess.PolicyFrom(ctx); !mutation && ok && policy.ReadOnDB != nil {
 		// Read selector checks share the request closure, still validating its
-		// epoch inside this statement. SQLValues always denotes a transactional
-		// mutation: those checks must use that transaction's current graph.
+		// epoch inside this statement. All writes use their current graph.
 		query, args = policy.ReadOnDB(ctx, q, query, args)
 	} else {
 		query = `WITH RECURSIVE ` + accessCTEs(scope, "") + ` ` + query

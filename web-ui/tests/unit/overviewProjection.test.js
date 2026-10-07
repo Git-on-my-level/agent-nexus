@@ -90,3 +90,38 @@ it("preserves the backend plan geometry and visit digest wire fixtures", async (
   expect(result.sinceYouLastLooked).toBe(digest);
   expect(result.work.truncated).toBe(true);
 });
+
+it("preserves partial agent counts and accumulated dashboard choices", async () => {
+  const { loadOverview, mergeDashboardReports } =
+    await import("../../src/lib/overview.js");
+  const { visualReportExample } =
+    await import("../../src/lib/fixtures/visualReportExample.js");
+  const model = await loadOverview({
+    getOverview: async () => ({
+      work: { status: "ok", items: [], human_count: 0 },
+      needs_you: { status: "ok", rows: [] },
+      dashboard: { status: "ok", reports: [] },
+      agents: { status: "ok", truncated: true, items: [{ state: "idle" }] },
+    }),
+  });
+  expect(model.agents).toMatchObject({ working: 0, truncated: true });
+  const first = {
+    status: "ok",
+    pinned_ref: "document:first",
+    reports: [{ id: "first", report: visualReportExample }],
+    next_cursor: "two",
+    has_more: true,
+  };
+  const merged = mergeDashboardReports(first, {
+    status: "ok",
+    pinned_ref: null,
+    reports: [
+      { id: "first", report: visualReportExample },
+      { id: "second", report: visualReportExample },
+    ],
+    has_more: false,
+  });
+  expect(merged.reports.map((r) => r.id)).toEqual(["first", "second"]);
+  expect(merged.pinned_ref).toBe("document:first");
+  expect(merged.has_more).toBe(false);
+});

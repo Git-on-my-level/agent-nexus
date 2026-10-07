@@ -13,6 +13,9 @@ must be safe with its default feature flags and have its own green `ci-ok`.
 
 ## Phases that can ship independently
 
+Phase one shipped in v0.12.18. The active inbox-first assignments and remaining
+proof gates are in [the phase-two implementation plan](scope-phase-two.md).
+
 1. **Foundation and readiness:** add empty scope/read-model tables, typed access
    capabilities, reviewed query templates and capture hooks, with the old reader
    authoritative. Remove automatic legacy blob backfill before listen; unknown
@@ -173,3 +176,11 @@ regression in the disabled readiness foundation: its owner must remeasure the
 merged schema-65 code with zero-blob startup before proposing replacement pins.
 The feed API's maximum 643 statements is explicitly not a passing full-request
 budget; batching and parity must be demonstrated before switching a reader.
+
+Foundation identity hardening makes the opaque-to-canonical registry tuple
+immutable and enforces declared reference constraints through persistent triggers
+on every connection, including the production workspace configuration with
+foreign keys disabled. This does not satisfy the remaining dispatcher isolation,
+source-provenance capture or canonical-hook SQL-allowlisting gates. Membership
+binding cascades also need bounded historical-generation retirement before
+write enablement.

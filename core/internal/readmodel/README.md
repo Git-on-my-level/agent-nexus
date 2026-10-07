@@ -55,7 +55,14 @@ indexed predecessor/successor seek. `RankBetween` refuses exhausted gaps without
 request-time rebalance. Board identity prevents shared column keys from mixing
 neighbors across boards.
 
-## Unapplied integration proposals for A
+## Repository integration and remaining proposals
+
+A integrated the first two patches as `scopedrepo.AdaptReadModel` and
+`scopedrepo.ReadModelCanonicalHook`, with immutable snapshot checks and exact
+delta-SQL admission. The patch files remain the original proposal; use the Go
+implementation for integration. Both adapters are still unreachable from live
+consumers under `TestFoundationNotServing`. The inbox-first ownership and proof
+plan is in `docs/design/scope-phase-two.md`.
 
 - `proposals/trusted-feed-adapter.patch`: transaction-local Reader/CounterReader
   translation, with explicit directory coverage.

@@ -140,7 +140,7 @@ func TestReportPartialAndUnavailablePanels(t *testing.T) {
 		{"id": first["id"], "ref": "card:first", "phase": "ready", "board_ref": "board:b", "plan_state": map[string]any{"shape": "chain", "health": "on_track", "steps": []any{map[string]any{"id": "design", "title": "Design", "status": "done"}}}, "assignee_refs": []string{"actor:one"}},
 		{"id": second["id"], "ref": "card:second", "phase": "ready", "board_ref": "board:b"},
 	}, boards: map[string]map[string]any{"board:b": {"title": "Work"}}}
-	cacheKey, _ := json.Marshal(primitives.ReportWorkFilter{Limit: reports.MaxRows})
+	cacheKey, _ := json.Marshal(primitives.ReportWorkFilter{Limit: maxReportCandidates})
 	reader.workScopes = map[string]reportWorkRead{string(cacheKey): {work: reader.work}}
 	data, partial, err := reader.materialize(reports.Panel{Type: "live-initiatives", Query: reports.Query{Limit: 1, Sort: "title"}})
 	if err != nil || !partial || len(data["items"].([]map[string]any)) != 1 {

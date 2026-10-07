@@ -1,6 +1,7 @@
-package readmodel
+package readmodel_test
 
 import (
+	"agent-nexus-core/internal/readmodel"
 	"agent-nexus-core/internal/resourceaccess"
 	"agent-nexus-core/internal/scopedrepo"
 	"agent-nexus-core/internal/scopes"
@@ -28,7 +29,7 @@ func (e hookExecutor) Exec(ctx context.Context, q string, args ...any) (int64, e
 // Candidate for A: identity comes from the private registry in the SAME source
 // transaction. This check is necessary, but complete canonical before/after
 // provenance and capture coverage must still be supplied by A's actual writers.
-type feedHookProposal struct{ capture Capture }
+type feedHookProposal struct{ capture readmodel.Capture }
 
 func (h feedHookProposal) ApplyCanonical(ctx context.Context, tx scopedrepo.MutationTx, m scopes.CanonicalMutation) error {
 	if err := m.Validate(); err != nil {
@@ -47,7 +48,7 @@ func (h feedHookProposal) ApplyCanonical(ctx context.Context, tx scopedrepo.Muta
 		if err != nil {
 			return err
 		}
-		return ErrProjection
+		return readmodel.ErrProjection
 	}
 	if err = rows.Scan(&state, &generation, &version, &canonical, &rid); err != nil {
 		rows.Close()
@@ -63,15 +64,15 @@ func (h feedHookProposal) ApplyCanonical(ctx context.Context, tx scopedrepo.Muta
 		return closeErr
 	}
 	if extra || state != "active" || generation < 1 || version != i.CanonicalVersion || canonical != i.CanonicalID || rid != i.RID {
-		return ErrProjection
+		return readmodel.ErrProjection
 	}
-	old, next, payloads, err := CaptureCanonical(m, generation, h.capture)
+	old, next, payloads, err := readmodel.CaptureCanonical(m, generation, h.capture)
 	if err != nil {
 		return err
 	}
 	// Never discard semantic affected-row errors: returning them is what makes
 	// ApplyCanonicalHooks roll back the source, including earlier adapters.
-	return ApplyProjection(ctx, hookExecutor{tx: tx}, old, next, payloads, false)
+	return readmodel.ApplyProjection(ctx, hookExecutor{tx: tx}, old, next, payloads, false)
 }
 
 var _ scopedrepo.CanonicalHook = feedHookProposal{}
@@ -119,7 +120,7 @@ func TestTrustedHookIdentityAndFenceRejectWholeSource(t *testing.T) {
 					t.Fatal(err)
 				}
 			} else {
-				if !errors.Is(err, ErrProjection) {
+				if !errors.Is(err, readmodel.ErrProjection) {
 					t.Fatal(err)
 				}
 				if !errors.Is(source.Commit(), sql.ErrTxDone) {

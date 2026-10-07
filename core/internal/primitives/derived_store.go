@@ -15,8 +15,11 @@ import (
 )
 
 type DerivedInboxListFilter struct {
-	RecipientActorID string
-	ThreadID         string
+	RecipientActorID        string
+	ThreadID                string
+	Limit                   int
+	BeforeCategory          int
+	BeforeTrigger, BeforeID string
 }
 
 type DerivedInboxItem struct {
@@ -174,10 +177,19 @@ func (s *Store) ListDerivedInboxItems(ctx context.Context, filter DerivedInboxLi
 		clauses = append(clauses, "thread_id = ?")
 		args = append(args, threadID)
 	}
+	rank := `CASE anx_unicode_trim(category) WHEN 'escalate' THEN 0 WHEN 'ask' THEN 1 WHEN 'review' THEN 2 ELSE 99 END`
+	if filter.BeforeID != "" {
+		clauses = append(clauses, `((`+rank+`)>? OR ((`+rank+`)=? AND (trigger_at<? OR (trigger_at=? AND id>?))))`)
+		args = append(args, filter.BeforeCategory, filter.BeforeCategory, filter.BeforeTrigger, filter.BeforeTrigger, filter.BeforeID)
+	}
 	if len(clauses) > 0 {
 		query += " WHERE " + strings.Join(clauses, " AND ")
 	}
-	query += " ORDER BY trigger_at DESC, id ASC"
+	query += " ORDER BY " + rank + ",trigger_at DESC,id ASC"
+	if filter.Limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, filter.Limit+1)
+	}
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -586,6 +598,7 @@ func boolToInt(value bool) int {
 	return 0
 }
 
+func InboxCategoryRank(category string) int { return derivedInboxCategoryOrder(category) }
 func derivedInboxCategoryOrder(category string) int {
 	switch strings.TrimSpace(category) {
 	case "escalate":
