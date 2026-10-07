@@ -272,9 +272,11 @@ it("keeps what core resolved when a later read fails", async () => {
   coreClientMock.renderReport.mockRejectedValue(new Error("core is down"));
   await vi.advanceTimersByTimeAsync(DUE_AT - Date.now() + 2000);
   await settled();
-  expect(container.querySelector("[data-anx-provenance]").title).toContain(
-    "actor:agent-writer",
-  );
+  expect(
+    container
+      .querySelector("[data-anx-provenance]")
+      .getAttribute("data-tooltip"),
+  ).toContain("actor:agent-writer");
 });
 
 it("clears its timer when the report goes away", async () => {

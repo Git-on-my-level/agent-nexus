@@ -71,6 +71,14 @@ vi.mock("$lib/authSession", () => ({
   initializeAuthSession: vi.fn().mockResolvedValue({ actor_id: "human" }),
   // The Inbox pane asks whether the reader may decide an access request.
   isHumanWorkspacePrincipal: () => true,
+  // The task page reads these to skip re-hydrating a session it already has.
+  isAuthenticated: () => true,
+  authSessionReady: {
+    subscribe: (fn) => {
+      fn(true);
+      return () => {};
+    },
+  },
   authenticatedAgent: {
     subscribe: (fn) => {
       fn({ actor_id: "human" });

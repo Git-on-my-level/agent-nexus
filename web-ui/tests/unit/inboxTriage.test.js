@@ -14,7 +14,10 @@ import {
   UNDO_WINDOW_MS,
   applyResponseOverlay,
   defaultNotifyMode,
+  dismissInboxResponseFailure,
+  dismissInboxResponseToast,
   flushInboxResponse,
+  inboxResponseFailures,
   inboxResponseOverlay,
   inboxResponseToast,
   queueInboxResponse,
@@ -210,6 +213,95 @@ describe("inbox response queue", () => {
       error: expect.stringContaining("core unavailable"),
     });
     expect(get(inboxResponseOverlay)["inbox:a"]).toBeUndefined();
+  });
+
+  it("marks the item itself, so a failure outlives the toast", async () => {
+    client.respondInboxItem.mockRejectedValue(new Error("quota exceeded"));
+    queueInboxResponse({ itemId: "inbox:a", request, message: "A" });
+    await flushInboxResponse();
+    expect(get(inboxResponseFailures)["inbox:a"]).toMatchObject({
+      error: expect.stringContaining("quota exceeded"),
+      outcome: "answered",
+    });
+    // The toast is dismissible; the mark on the item is not, because the item
+    // is still unanswered and that is what the reader has to come back to.
+    dismissInboxResponseToast();
+    expect(get(inboxResponseToast)).toBeNull();
+    expect(get(inboxResponseFailures)["inbox:a"]).toBeDefined();
+  });
+
+  it("keeps a failed item in place instead of filing it as answered", async () => {
+    client.respondInboxItem.mockRejectedValue(new Error("quota exceeded"));
+    queueInboxResponse({ itemId: "inbox:a", request, message: "A" });
+    await flushInboxResponse();
+    const [row] = applyResponseOverlay(
+      [{ id: "inbox:a", status: "open" }],
+      get(inboxResponseOverlay),
+      Date.now(),
+      get(inboxResponseFailures),
+    );
+    expect(row.status).toBe("open");
+    expect(row.response_failed).toBe(true);
+    expect(row.response_error).toContain("quota exceeded");
+  });
+
+  it("a failure outranks an optimistic overlay for the same item", () => {
+    const [row] = applyResponseOverlay(
+      [{ id: "inbox:a", status: "open" }],
+      {
+        "inbox:a": {
+          status: "pending",
+          response_text: "Ship it",
+          outcome: "answered",
+          responded_at: "t",
+        },
+      },
+      Date.now(),
+      { "inbox:a": { error: "quota exceeded" } },
+    );
+    expect(row.status).toBe("open");
+    expect(row.response_error).toBe("quota exceeded");
+  });
+
+  it("clears the mark on a successful retry", async () => {
+    client.respondInboxItem.mockRejectedValueOnce(new Error("quota exceeded"));
+    queueInboxResponse({ itemId: "inbox:a", request, message: "A" });
+    await flushInboxResponse();
+    expect(get(inboxResponseFailures)["inbox:a"]).toBeDefined();
+    client.respondInboxItem.mockResolvedValue({});
+    await retryInboxResponse("inbox:a");
+    expect(get(inboxResponseFailures)["inbox:a"]).toBeUndefined();
+    expect(get(inboxResponseOverlay)["inbox:a"]).toMatchObject({
+      status: "committed",
+    });
+  });
+
+  it("will not let one row's Retry resend another row's response", async () => {
+    client.respondInboxItem.mockRejectedValue(new Error("quota exceeded"));
+    queueInboxResponse({ itemId: "inbox:a", request, message: "A" });
+    await flushInboxResponse();
+    const sends = client.respondInboxItem.mock.calls.length;
+    await retryInboxResponse("inbox:b");
+    expect(client.respondInboxItem).toHaveBeenCalledTimes(sends);
+    expect(get(inboxResponseFailures)["inbox:a"]).toBeDefined();
+  });
+
+  it("drops the mark when the reader chooses to answer again", async () => {
+    client.respondInboxItem.mockRejectedValue(new Error("quota exceeded"));
+    queueInboxResponse({ itemId: "inbox:a", request, message: "A" });
+    await flushInboxResponse();
+    dismissInboxResponseFailure("inbox:a");
+    expect(get(inboxResponseFailures)["inbox:a"]).toBeUndefined();
+    expect(get(inboxResponseToast)).toBeNull();
+  });
+
+  it("clears an earlier failure when the item is answered afresh", async () => {
+    client.respondInboxItem.mockRejectedValue(new Error("quota exceeded"));
+    queueInboxResponse({ itemId: "inbox:a", request, message: "A" });
+    await flushInboxResponse();
+    client.respondInboxItem.mockResolvedValue({});
+    queueInboxResponse({ itemId: "inbox:a", request, message: "A again" });
+    expect(get(inboxResponseFailures)["inbox:a"]).toBeUndefined();
   });
 
   it("retries an ambiguous failure with the same idempotency key", async () => {

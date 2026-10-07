@@ -232,6 +232,25 @@ describe("inbox row badges", () => {
     }
   });
 
+  it("says Not sent on an item whose response failed, above all else", () => {
+    const [row] = buildInboxRows({
+      inboxItems: [
+        {
+          id: "in-1",
+          title: "Need a reply",
+          kind: "ask",
+          // Written onto the item by the response queue when a commit failed.
+          response_error: "500 quota_exceeded",
+        },
+      ],
+    });
+    expect(row.responseError).toBe("500 quota_exceeded");
+    expect(inboxRowBadge(row)).toMatchObject({
+      label: "Not sent",
+      tone: "danger",
+    });
+  });
+
   it("badges blocked, loud severity, and an unreachable source", () => {
     const now = Date.parse("2026-09-01T12:00:00Z");
     const rows = buildInboxRows({

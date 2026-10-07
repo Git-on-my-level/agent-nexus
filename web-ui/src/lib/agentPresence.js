@@ -9,17 +9,51 @@ import { inboxItemMailboxId } from "$lib/inboxUtils.js";
  * agent: who (and where), doing what, since when, and whether a human is the
  * blocker. It is a presence surface: a "waiting on you" row links into the
  * Inbox and never answers the ask itself.
+ *
+ * ## Silence is not an alarm
+ *
+ * Core reports no state at all for an agent with no signal inside
+ * `SignalStaleness` (24h). The roster used to read that absence as **stale**,
+ * which put a warning on every agent that simply was not running — a laptop
+ * that is closed, a persona nobody has used this week — and made a healthy
+ * workspace look like a page of problems.
+ *
+ * Silence only means something when work is riding on it, so the absence is
+ * split three ways and the API is left alone:
+ *
+ * - **offline** (neutral) — no recent signal, and no work depending on one.
+ * - **stale** (warning) — silent past its expectation *while holding* an
+ *   in-progress card or an open run. This is the only alarming one, and the
+ *   only one that was ever worth a colour.
+ * - **inactive** — never checked in at all. An identity that exists and has
+ *   never been used is roster bookkeeping, so these collapse into one counted
+ *   group instead of a screenful of rows.
  */
 
-/** Derived states in roster order (core precedence). */
+/** Derived states in roster order (core precedence, then our split). */
 export const AGENT_STATES = [
   { key: "waiting_on_human", label: "Waiting on you", short: "Waiting" },
   { key: "working", label: "Working", short: "Working" },
   { key: "idle", label: "Idle", short: "Idle" },
   { key: "stale", label: "Stale", short: "Stale" },
+  { key: "offline", label: "Offline", short: "Offline" },
+  {
+    key: "inactive",
+    label: "Inactive identities",
+    short: "Inactive",
+    /** Rendered as a counted, collapsed group rather than a list of rows. */
+    collapsed: true,
+  },
 ];
 
 const STATE_BY_KEY = new Map(AGENT_STATES.map((state) => [state.key, state]));
+
+/** States that mean "nothing is wrong, nothing is happening". */
+const QUIET_STATES = new Set(["offline", "inactive"]);
+
+export function isQuietAgentState(state) {
+  return QUIET_STATES.has(text(state));
+}
 
 /** Adapters core knows by name; anything else is an operator persona. */
 export const KNOWN_ADAPTERS = new Set([
@@ -114,11 +148,39 @@ export function inboxAskPath(ask) {
  * terms. A waiting agent names its oldest open ask (`waiting_ask`). Run time
  * is core's `duration_seconds` at `loadedAt`, counted forward to `now`.
  */
+/**
+ * Does this agent hold something that a silence would hurt?
+ *
+ * An open run, or a card it has claimed through presence. Core's roster
+ * carries `current_card_ref` only while an agent is actually on a card, which
+ * is the signal "in progress" means here — the roster does not carry the
+ * card's phase, and asking for it per row would be an N+1 on a presence page.
+ */
+export function agentHoldsWork(agent) {
+  return Boolean(agent?.active_run || text(agent?.current_card_ref));
+}
+
+/**
+ * The state the roster shows, which is core's when core has one.
+ *
+ * Core's vocabulary is `waiting_on_human | working | idle`, plus an empty
+ * state for an agent silent beyond `SignalStaleness`. That silence is the one
+ * this splits. A literal `stale` is read as silence too, so a server that
+ * starts naming it gets the same three-way split rather than a bare warning
+ * on an agent nothing is waiting for.
+ */
+export function agentPresentationState(agent) {
+  const reported = text(agent?.state);
+  if (reported && reported !== "stale") return reported;
+  if (agentHoldsWork(agent)) return "stale";
+  return text(agent?.last_signal_at) ? "offline" : "inactive";
+}
+
 export function agentRowModel(
   agent,
   { now = Date.now(), loadedAt = now } = {},
 ) {
-  const state = text(agent?.state) || "stale";
+  const state = agentPresentationState(agent);
   const note = text(agent?.last_progress_note);
   const noteAge = formatAge(agent?.last_progress_at, now);
   const cardTitle = text(agent?.current_card_title);
@@ -187,15 +249,41 @@ export function agentRowModel(
     };
   }
 
+  if (state === "stale") {
+    return {
+      ...base,
+      // The alarming case: something is riding on a silence.
+      headline: cardTitle
+        ? `No signal for ${signalAge} on this task`
+        : `No signal for ${signalAge} during a run`,
+      duration: signalAge,
+      durationTitle: "Last signal",
+    };
+  }
+
+  if (state === "inactive") {
+    return {
+      ...base,
+      headline: "Never checked in",
+      duration: "",
+      durationTitle: "",
+    };
+  }
+
+  /*
+   * Offline: not running, and nothing waiting on it. "Not running" is the
+   * whole fact, and it is not a problem — so it reads as a plain statement
+   * rather than as a complaint about a missing signal.
+   */
   return {
     ...base,
-    headline: signalAge ? `No signal for ${signalAge}` : "Never checked in",
+    headline: "Not running",
     duration: signalAge,
     durationTitle: "Last signal",
   };
 }
 
-/** Roster grouped by state, in state order; empty groups are omitted. */
+/** Roster grouped by presentation state, in state order; empty groups omitted. */
 export function groupAgentsByState(agents = []) {
   const active = (Array.isArray(agents) ? agents : []).filter(
     (agent) => agent && !agent.revoked_at,
@@ -203,7 +291,7 @@ export function groupAgentsByState(agents = []) {
   return AGENT_STATES.map((state) => ({
     ...state,
     agents: active
-      .filter((agent) => text(agent.state) === state.key)
+      .filter((agent) => agentPresentationState(agent) === state.key)
       .sort((a, b) => compareWithinState(a, b, state.key)),
   })).filter((group) => group.agents.length > 0);
 }
@@ -236,9 +324,19 @@ export function rosterSummary(agents = []) {
   );
   const counts = Object.fromEntries(AGENT_STATES.map((s) => [s.key, 0]));
   for (const agent of active) {
-    if (agent.state in counts) counts[agent.state] += 1;
+    const state = agentPresentationState(agent);
+    if (state in counts) counts[state] += 1;
   }
-  return { total: active.length, ...counts };
+  /*
+   * An identity that has never checked in is not part of "6 agents" in any
+   * sense a reader means it: it is a row in a table, counted separately so
+   * the headline number describes agents that exist in practice.
+   */
+  return {
+    total: active.length - counts.inactive,
+    inactiveTotal: counts.inactive,
+    ...counts,
+  };
 }
 
 /** How many agents are working right now (the nav badge). */

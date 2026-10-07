@@ -73,10 +73,13 @@ describe("AnxRefPreview", () => {
     expect(text).toContain("Release B");
     expect(text).toContain("p1");
     expect(text).toContain("Next: Computed progress and health");
-    // The age is a badge now: "21h", with "Moved <timestamp>" on hover.
+    // The age is a badge now: "21h", with "Moved <timestamp>" on hover. The
+    // tooltip is ours rather than the browser's `title`, so it is readable
+    // from `data-tooltip` and shows in 60ms instead of a second.
     const age = container.querySelector("time.age-badge");
     expect(age?.textContent?.trim()).toMatch(/^\d+[mhdwy]$|^now$/);
-    expect(age?.getAttribute("title")).toMatch(/^Moved /);
+    expect(age?.getAttribute("title")).toBeNull();
+    expect(age?.getAttribute("data-tooltip")).toMatch(/^Moved /);
   });
 
   it("omits a row the response did not carry", async () => {

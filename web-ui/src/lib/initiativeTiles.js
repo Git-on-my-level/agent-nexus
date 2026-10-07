@@ -20,6 +20,7 @@
  *   a tile and a page header cannot disagree about which is worse.
  */
 
+import { freshnessModel } from "./freshness.js";
 import { markdownExcerpt } from "./markdown.js";
 import { nextStepModel, planHealthModel } from "./planHealth.js";
 
@@ -85,7 +86,7 @@ export function planSegments(planState, geometry = null, limit = 24) {
  * @param {{ now?: number, href?: (ref: string) => string, excerptLimit?: number }} [options]
  */
 export function initiativeTileModel(item, options = {}) {
-  const { href = () => "", excerptLimit = 120 } = options;
+  const { href = () => "", excerptLimit = 120, now = Date.now() } = options;
   const ref = asText(item?.ref);
   const planState = item?.plan_state ?? null;
   const geometry = item?.geometry ?? null;
@@ -120,6 +121,28 @@ export function initiativeTileModel(item, options = {}) {
   const bars = planSegments(planState, geometry);
   const next = nextStepModel(item);
 
+  /*
+   * An initiative is expected to move every three days, so its age is a
+   * freshness badge rather than a bare "2h": green inside the expectation,
+   * amber up to twice it, red beyond.
+   */
+  const freshness = freshnessModel(movedAt, {
+    kind: "initiative",
+    row: item,
+    verb: "moved",
+    now,
+  });
+
+  /*
+   * Stale is what the freshness badge is for. Showing core's "Stale" pill
+   * beside a red `9d` says the same thing twice and costs the title a line of
+   * width — the whole reason the badges moved off it. Every other health
+   * state (Blocked, At risk, On track) is something the age cannot express,
+   * so it keeps its pill.
+   */
+  const showHealth =
+    health.known && !(health.state === "stale" && Boolean(freshness));
+
   return {
     ref,
     title: asText(item?.title) || ref,
@@ -140,6 +163,10 @@ export function initiativeTileModel(item, options = {}) {
     needs,
     /** ISO instant for the age badge; the badge owns the wording. */
     movedAt,
+    /** Freshness against the initiative cadence, or null when unknowable. */
+    freshness,
+    /** False when the freshness badge already says what health would. */
+    showHealth,
   };
 }
 

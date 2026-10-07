@@ -219,6 +219,12 @@ export function classifyInboxRow(row, now = Date.now()) {
  * "Handled" inside Handled are not information.
  */
 export function inboxRowBadge(row, now = Date.now()) {
+  /*
+   * A send that failed outranks everything else a row could say. The item is
+   * still unanswered and still here; without this the row came back from an
+   * optimistic removal looking exactly like one nobody had touched.
+   */
+  if (row.responseError) return { label: "Not sent", tone: "danger" };
   if (row.kind === "task") {
     if (taskIsBlocked(row)) {
       return { label: "Blocked", tone: "warn" };
@@ -596,6 +602,11 @@ export function buildInboxRows({
       // Set only on an agent's request for a grant. The respond panel offers
       // the two decisions core accepts on those, and nothing else.
       access: accessRequestFromInboxItem(item),
+      /*
+       * Why the last send failed, written onto the item by the response queue.
+       * Set means: nothing was recorded, and the reader has to decide again.
+       */
+      responseError: String(item.response_error ?? "").trim(),
       item,
     });
   }

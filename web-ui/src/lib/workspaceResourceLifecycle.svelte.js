@@ -139,19 +139,35 @@ export function createWorkspaceResourceLifecycleController(options) {
     if (!runner || !list.length || bulkBusy) return;
     bulkBusy = true;
     options.setError("");
+    /*
+     * A bulk run is not atomic: it stops at the first failure with everything
+     * before it already applied. Reporting only "Archive failed" and leaving
+     * the list untouched told the reader nothing had happened when some of it
+     * had — so the error names how far it got, and the list is re-read either
+     * way so what is on screen is what the server holds.
+     */
+    let done = 0;
     try {
       for (const id of list) {
         await runner(id);
+        done += 1;
       }
       options.clearSelection();
       confirmModal = emptyConfirmModal();
-      await options.reload();
     } catch (e) {
+      const reason = e instanceof Error ? e.message : String(e);
       options.setError(
-        `${actionLabel(action)} failed: ${e instanceof Error ? e.message : String(e)}`,
+        done === 0
+          ? `${actionLabel(action)} failed: ${reason}`
+          : `${actionLabel(action)} stopped after ${done} of ${list.length}: ${reason}`,
       );
     } finally {
       bulkBusy = false;
+      try {
+        await options.reload();
+      } catch {
+        // The reload's own failure is reported by the list's loader.
+      }
     }
   }
 

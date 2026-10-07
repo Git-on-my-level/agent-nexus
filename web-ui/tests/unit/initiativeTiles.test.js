@@ -334,3 +334,78 @@ describe("inboxWaitingLine", () => {
     expect(inboxWaitingLine(null)).toBeNull();
   });
 });
+
+describe("tile freshness", () => {
+  it("judges a tile's age against the three-day initiative cadence", () => {
+    const fresh = initiativeTileModel(
+      row({ plan_state: planState({ last_movement_at: ago(2 * 3_600_000) }) }),
+      { now: NOW },
+    );
+    expect(fresh.freshness).toMatchObject({ age: "2h", tone: "ok" });
+
+    const late = initiativeTileModel(
+      row({ plan_state: planState({ last_movement_at: ago(5 * 86_400_000) }) }),
+      { now: NOW },
+    );
+    expect(late.freshness).toMatchObject({ age: "5d", tone: "warn" });
+
+    const veryLate = initiativeTileModel(
+      row({ plan_state: planState({ last_movement_at: ago(9 * 86_400_000) }) }),
+      { now: NOW },
+    );
+    expect(veryLate.freshness).toMatchObject({ age: "9d", tone: "danger" });
+  });
+
+  it("drops the Stale pill, because the freshness badge now says it", () => {
+    const tile = initiativeTileModel(
+      row({
+        plan_health: { state: "stale", reason: "No movement for 9 days." },
+        plan_state: planState({ last_movement_at: ago(9 * 86_400_000) }),
+      }),
+      { now: NOW },
+    );
+    expect(tile.health.state).toBe("stale");
+    expect(tile.showHealth).toBe(false);
+    expect(tile.freshness.tone).toBe("danger");
+  });
+
+  it("keeps every other health pill: an age cannot say Blocked", () => {
+    for (const state of ["blocked", "at_risk", "on_track"]) {
+      const tile = initiativeTileModel(
+        row({
+          plan_health: { state, reason: "" },
+          plan_state: planState({ last_movement_at: ago(3_600_000) }),
+        }),
+        { now: NOW },
+      );
+      expect(tile.showHealth).toBe(true);
+    }
+  });
+
+  it("keeps the Stale pill when there is no instant to badge instead", () => {
+    const tile = initiativeTileModel(
+      row({
+        plan_health: { state: "stale", reason: "" },
+        plan_state: planState({ last_movement_at: "" }),
+        updated_at: "",
+      }),
+      { now: NOW },
+    );
+    expect(tile.freshness).toBeNull();
+    expect(tile.showHealth).toBe(true);
+  });
+
+  it("reads a projection-supplied cadence when one arrives", () => {
+    const tile = initiativeTileModel(
+      row({
+        update_expectation_hours: 6,
+        plan_state: planState({ last_movement_at: ago(8 * 3_600_000) }),
+      }),
+      { now: NOW },
+    );
+    expect(tile.freshness).toMatchObject({
+      tone: "warn",
+      expectation: "6h",
+    });
+  });
+});
