@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   liveAgentChanges,
+  liveInboxChanges,
   liveWorkspaceEvents,
 } from "../../src/lib/liveWorkspaceEvents.js";
 
@@ -38,6 +39,76 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 describe("liveWorkspaceEvents", () => {
   beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
   afterEach(() => vi.useRealTimers());
+
+  it("shares inbox progress, resumes the keyset boundary, and clears partial state", async () => {
+    let emit;
+    let fail;
+    const client = {
+      streamInboxItems: vi.fn(
+        (options) =>
+          new Promise((resolve, reject) => {
+            emit = options.onEvent;
+            fail = reject;
+            options.signal.addEventListener("abort", () =>
+              reject(
+                Object.assign(new Error("aborted"), { name: "AbortError" }),
+              ),
+            );
+          }),
+      ),
+      listEvents: vi.fn(),
+    };
+    const page = vi.fn();
+    const badge = vi.fn();
+    const stopPage = liveInboxChanges({
+      client,
+      onChange: page,
+      reconnectMs: 10,
+    });
+    const stopBadge = liveInboxChanges({ client, onChange: badge });
+    await flush();
+    emit({
+      id: "item:one",
+      event: "inbox_item",
+      data: { item: { id: "one" } },
+    });
+    emit({
+      id: "inbox-page:cursor",
+      event: "inbox_page",
+      data: { partial: true, resume_cursor: "cursor" },
+    });
+    await vi.advanceTimersByTimeAsync(300);
+    expect(page.mock.calls[0][0]).toEqual([
+      { type: "inbox_item", item: { id: "one" } },
+      { type: "inbox_page", partial: true, resume_cursor: "cursor" },
+    ]);
+    expect(badge).toHaveBeenCalledTimes(1);
+    expect(client.streamInboxItems).toHaveBeenCalledTimes(1);
+    expect(client.listEvents).not.toHaveBeenCalled();
+    fail(new Error("dropped"));
+    await vi.advanceTimersByTimeAsync(50);
+    expect(client.streamInboxItems.mock.calls[1][0].lastEventId).toBe(
+      "inbox-page:cursor",
+    );
+    emit({
+      id: "inbox-page:",
+      event: "inbox_page",
+      data: { partial: false, resume_cursor: "" },
+    });
+    await vi.advanceTimersByTimeAsync(300);
+    expect(page.mock.calls[1][0]).toEqual([
+      { type: "inbox_page", partial: false, resume_cursor: "" },
+    ]);
+    fail(new Error("dropped"));
+    await vi.advanceTimersByTimeAsync(50);
+    expect(client.streamInboxItems.mock.calls[2][0].lastEventId).toBe(
+      "inbox-page:",
+    );
+    stopPage();
+    expect(client.streamInboxItems.mock.calls[2][0].signal.aborted).toBe(false);
+    stopBadge();
+    expect(client.streamInboxItems.mock.calls[2][0].signal.aborted).toBe(true);
+  });
 
   it("starts after the newest matching event and coalesces a burst", async () => {
     const fake = fakeClient();

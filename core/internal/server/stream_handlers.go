@@ -312,6 +312,15 @@ func handleInboxStream(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	}
 
 	lastEventID := resolveLastEventID(r)
+	filter := primitives.DerivedInboxListFilter{}
+	if strings.HasPrefix(lastEventID, "inbox-page:") {
+		var err error
+		filter, err = decodeInboxStreamCursor(r, lastEventID)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "invalid inbox stream cursor")
+			return
+		}
+	}
 	controller, flusher, ok := prepareSSE(w)
 	if !ok {
 		writeError(w, http.StatusInternalServerError, "stream_unavailable", "streaming is not supported by this server")
@@ -320,13 +329,14 @@ func handleInboxStream(w http.ResponseWriter, r *http.Request, opts handlerOptio
 
 	lastDigestByItem := map[string]string{}
 	firstPoll := true
+	partialSweep := filter.BeforeID != ""
 	ticker := time.NewTicker(opts.streamPollInterval)
 	defer ticker.Stop()
 
 	for {
 		// Reuse the list's permission and subject-visibility filters on every
 		// poll, before constructing payload digests or SSE records.
-		items, err := loadOpenInboxItems(r, opts)
+		items, page, err := loadInboxStreamPage(r, opts, filter)
 		if err != nil {
 			writeSSEErrorEvent(controller, w, flusher, "internal_error", "failed to load inbox projections for stream")
 			return
@@ -355,7 +365,27 @@ func handleInboxStream(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			}
 			sentAny = true
 		}
-		lastDigestByItem = currentDigestByItem
+		// Retain earlier pages so the next sweep can suppress unchanged items.
+		for itemID, digest := range currentDigestByItem {
+			lastDigestByItem[itemID] = digest
+		}
+		if page.More {
+			filter.BeforeCategory = primitives.InboxCategoryRank(page.Last.Category)
+			filter.BeforeTrigger = page.Last.TriggerAt
+			filter.BeforeID = page.Last.ID
+			partialSweep = partialSweep || sentAny
+		} else {
+			filter = primitives.DerivedInboxListFilter{}
+		}
+		if partialSweep {
+			cursor := encodeInboxStreamCursor(r, filter)
+			if err := writeSSEEvent(controller, w, "inbox-page:"+cursor, "inbox_page", map[string]any{"partial": page.More, "resume_cursor": cursor}); err != nil {
+				clearSSEWriteDeadline(controller)
+				return
+			}
+			sentAny = true
+			partialSweep = page.More
+		}
 
 		if !sentAny {
 			if err := writeSSEKeepalive(controller, w); err != nil {

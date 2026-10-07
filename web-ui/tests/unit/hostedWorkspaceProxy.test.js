@@ -190,7 +190,13 @@ describe("hostedWorkspaceProxy (proxyToControlPlaneWorkspace)", () => {
 
   it("forwards a valid /ws/{org}/{ws}/... to the control plane with search string", async () => {
     envState.ANX_CONTROL_BASE_URL = "http://control.example.test";
-    globalThis.fetch = vi.fn(async () => new Response("ok", { status: 200 }));
+    globalThis.fetch = vi.fn(
+      async () =>
+        new Response("ok", {
+          status: 200,
+          headers: { "Server-Timing": "projection;dur=12.000" },
+        }),
+    );
 
     const pathname = "/ws/example-team/personal/api/x";
     const event = createEvent(pathname, { search: "?q=1&x=y" });
@@ -207,6 +213,9 @@ describe("hostedWorkspaceProxy (proxyToControlPlaneWorkspace)", () => {
     );
     expect(response.status).toBe(200);
     expect(response.headers.get("X-ANX-UI-Version")).toBe(CURRENT_VERSION);
+    expect(response.headers.get("Server-Timing")).toMatch(
+      /^projection;dur=12\.000, bff;dur=\d+\.\d{3}$/,
+    );
   });
 
   it("forwards POST with body to upstream", async () => {

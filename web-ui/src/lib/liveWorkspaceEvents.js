@@ -107,6 +107,31 @@ export function liveAgentChanges({
   });
 }
 
+/** Inbox page progress qualifies partial counts and resumes after reconnect. */
+export function liveInboxChanges({
+  client,
+  onChange,
+  debounceMs = 250,
+  reconnectMs = 3000,
+}) {
+  if (
+    !client ||
+    typeof client.streamInboxItems !== "function" ||
+    typeof onChange !== "function"
+  ) {
+    return () => {};
+  }
+  return subscribe({
+    client,
+    key: "inbox",
+    accept: () => true,
+    filter: () => true,
+    onChange,
+    debounceMs,
+    reconnectMs,
+  });
+}
+
 /** One subscriber on a shared hub, with its own filter and debounce. */
 function subscribe({
   client,
@@ -187,7 +212,8 @@ function joinHub(client, key, subscriber, options) {
  */
 function createHub(client, key, { reconnectMs = 3000 } = {}) {
   const agents = key === "agents";
-  const threadId = agents ? "" : key.slice("events:".length);
+  const inbox = key === "inbox";
+  const threadId = agents || inbox ? "" : key.slice("events:".length);
   const subscribers = new Set();
   let started = false;
   let controller = null;
@@ -242,7 +268,7 @@ function createHub(client, key, { reconnectMs = 3000 } = {}) {
 
   async function connect() {
     if (hub.closed) return;
-    if (!agents && !connectedOnce && !lastEventId) await seedCursor();
+    if (!agents && !inbox && !connectedOnce && !lastEventId) await seedCursor();
     if (hub.closed) return;
     controller = new AbortController();
     let delivered = false;
@@ -258,6 +284,26 @@ function createHub(client, key, { reconnectMs = 3000 } = {}) {
               type: "agents_changed",
               revision: message?.data?.revision ?? null,
             });
+          },
+        });
+      } else if (inbox) {
+        await client.streamInboxItems({
+          lastEventId: lastEventId || undefined,
+          signal: controller.signal,
+          onEvent: (message) => {
+            delivered = true;
+            if (message?.event === "inbox_page") {
+              // Progress IDs resume the keyset walk, including an empty
+              // completion cursor. Item IDs cannot resume a paged sweep.
+              if (message?.id) lastEventId = String(message.id);
+              notify({
+                type: "inbox_page",
+                partial: message?.data?.partial === true,
+                resume_cursor: message?.data?.resume_cursor ?? "",
+              });
+            } else if (message?.event === "inbox_item") {
+              notify({ type: "inbox_item", item: message?.data?.item });
+            }
           },
         });
       } else {

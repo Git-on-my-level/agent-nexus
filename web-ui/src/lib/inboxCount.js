@@ -7,7 +7,10 @@ import {
 } from "$lib/actorSession";
 import { buildInboxRows, filterMailbox } from "$lib/inboxMailbox.js";
 import { coreClient } from "$lib/coreClient";
-import { liveWorkspaceEvents } from "$lib/liveWorkspaceEvents.js";
+import {
+  liveWorkspaceEvents,
+  liveInboxChanges,
+} from "$lib/liveWorkspaceEvents.js";
 import {
   applyResponseOverlay,
   inboxResponseOverlay,
@@ -109,12 +112,13 @@ export function startInboxCount(workspace) {
     let inflight = false;
     let again = false;
     let sources = null;
+    let streamPartial = false;
     const publish = () => {
       if (stopped || pageClaims || !sources) return;
       publishInboxCount(
         key,
         countFrom(sources, get(inboxResponseOverlay)),
-        sources.truncated,
+        sources.truncated || streamPartial,
       );
     };
     const run = async () => {
@@ -147,6 +151,16 @@ export function startInboxCount(workspace) {
       client: coreClient,
       onChange: schedule,
     });
+    const unsubscribeInbox = liveInboxChanges({
+      client: coreClient,
+      onChange: (changes) => {
+        for (const change of changes) {
+          if (change.type === "inbox_page") streamPartial = change.partial;
+        }
+        publish();
+        schedule();
+      },
+    });
     // A response answered from the standalone page lowers the count at once.
     const unsubscribeOverlay = inboxResponseOverlay.subscribe(publish);
     controller = {
@@ -157,12 +171,16 @@ export function startInboxCount(workspace) {
         stopped = true;
         clearTimeout(timer);
         unsubscribeLive();
+        unsubscribeInbox();
         unsubscribeOverlay();
       },
     };
     const current = get(inboxNeedsYouCount);
     if (current.workspace !== key) publishInboxCount(key, null);
-    void run();
+    // Let the route mount and claim its count before starting five background
+    // reads. On other pages these badge reads should follow the primary data,
+    // rather than competing for core's SQLite connection on first paint.
+    schedule();
   }
   return () => {
     if (!controller || controller.workspace !== key) return;

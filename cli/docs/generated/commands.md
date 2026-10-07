@@ -1582,7 +1582,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: Server-sent events feed of inbox projection updates.
 - Concepts: `inbox`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Output: SSE `inbox_item` events with JSON payloads.
+- Output: SSE `inbox_item` events and `inbox_page` progress with partial/resume_cursor.
 
 ## `inbox.summary`
 

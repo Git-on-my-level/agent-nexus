@@ -174,12 +174,15 @@ type EventCursor struct {
 }
 
 type Store struct {
-	db       *accessDB
-	blob     blob.Backend
-	blobRoot string
-	dbPath   string
-	quota    WorkspaceQuota
-	quotaMu  sync.Mutex
+	db                *accessDB
+	blob              blob.Backend
+	blobRoot          string
+	dbPath            string
+	quota             WorkspaceQuota
+	quotaMu           sync.Mutex
+	contentUsageMu    sync.Mutex
+	contentUsageBytes int64
+	contentUsageAt    time.Time
 }
 
 type eventExec interface {

@@ -979,8 +979,8 @@ func TestWorkspaceUsageSummaryInitializesBlobLedgerFromCanonicalState(t *testing
 	if summary.Usage.DatabaseBytes <= 0 {
 		t.Fatalf("expected database bytes to be measured, got %d", summary.Usage.DatabaseBytes)
 	}
-	if summary.Usage.StorageBytes != summary.Usage.BlobBytes+summary.Usage.DatabaseBytes {
-		t.Fatalf("expected storage bytes to equal blob+db bytes, got storage=%d blob=%d db=%d", summary.Usage.StorageBytes, summary.Usage.BlobBytes, summary.Usage.DatabaseBytes)
+	if summary.Usage.StorageBytes <= summary.Usage.BlobBytes || summary.Usage.StorageBytes >= summary.Usage.BlobBytes+summary.Usage.DatabaseBytes {
+		t.Fatalf("expected content bytes without physical database overhead, got storage=%d blob=%d db=%d", summary.Usage.StorageBytes, summary.Usage.BlobBytes, summary.Usage.DatabaseBytes)
 	}
 }
 

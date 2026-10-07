@@ -340,12 +340,20 @@ func loadOpenInbox(r *http.Request, opts handlerOptions, now time.Time) (map[str
 	return map[string]any{"status": "open", "items": items, "generated_at": now.Format(time.RFC3339Nano), "projection_freshness": freshness, "next_cursor": next, "has_more": more}, nil
 }
 
-// Overview needs the same permission-filtered asks, but not the inbox's
-// workspace-wide thread freshness scan and public-ref hydration.
-func loadOpenInboxItems(r *http.Request, opts handlerOptions) ([]map[string]any, error) {
-	items, _, err := loadOverviewInboxItems(r, opts)
-	return items, err
+const inboxStreamTickLimit = 200
+
+// One bounded, freshly authorized page per tick. The long-lived stream never
+// retains a read snapshot; SQL validates the new tick's snapshot on every read.
+func loadInboxStreamPage(r *http.Request, opts handlerOptions, filter primitives.DerivedInboxListFilter) ([]map[string]any, inboxReadPage, error) {
+	filter.Limit = inboxStreamTickLimit
+	filter.ActiveNotifications = true
+	tick := r.WithContext(primitives.WithReadTickSnapshot(r.Context()))
+	page := inboxReadPage{}
+	items, err := loadVisibleInboxItemsFiltered(tick, opts, true, filter, &page)
+	return items, page, err
 }
+
+// Overview uses an explicit truncated window of the same authorized state.
 func loadOverviewInboxItems(r *http.Request, opts handlerOptions) ([]map[string]any, bool, error) {
 	page := &inboxReadPage{}
 	items, err := loadVisibleInboxItemsFiltered(r, opts, true, primitives.DerivedInboxListFilter{Limit: 100}, page)
@@ -478,7 +486,13 @@ func loadVisibleInboxItemsFiltered(r *http.Request, opts handlerOptions, notific
 	// Authorization is already applied by the scoped inbox relation. Lifecycle
 	// filtering is only needed for ordinary notifications; requests keep their
 	// own response/withdrawal lifecycle when linked context is archived.
-	if notifications {
+	pendingLifecycle := map[string]bool{}
+	for _, item := range projected {
+		if !item.LifecycleReady {
+			pendingLifecycle[item.ID] = true
+		}
+	}
+	if notifications && (!filter.ActiveNotifications || len(pendingLifecycle) > 0) {
 		if store, ok := opts.primitiveStore.(interface {
 			HiddenSubjectRefs(context.Context) (map[string]bool, error)
 		}); ok {
@@ -489,6 +503,9 @@ func loadVisibleInboxItemsFiltered(r *http.Request, opts handlerOptions, notific
 			}); ok {
 				refs := []string{}
 				for _, item := range payloadItems {
+					if filter.ActiveNotifications && !pendingLifecycle[anyString(item["id"])] {
+						continue
+					}
 					if canonicalHumanAttentionKind(anyString(item["kind"])) == "" {
 						related, _ := extractStringSlice(item["related_refs"])
 						refs = append(refs, related...)
@@ -503,6 +520,10 @@ func loadVisibleInboxItemsFiltered(r *http.Request, opts handlerOptions, notific
 			}
 			visible := payloadItems[:0]
 			for _, item := range payloadItems {
+				if filter.ActiveNotifications && !pendingLifecycle[anyString(item["id"])] {
+					visible = append(visible, item)
+					continue
+				}
 				if canonicalHumanAttentionKind(anyString(item["kind"])) != "" {
 					visible = append(visible, item)
 					continue
