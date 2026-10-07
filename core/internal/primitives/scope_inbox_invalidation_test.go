@@ -127,6 +127,12 @@ func TestScopeInboxInvalidationRegistryComplete(t *testing.T) {
 	for _, s := range sources {
 		byTable[s.Table] = s
 	}
+	for _, s := range ScopeInboxMutationLedger() {
+		got, ok := byTable[s.Table]
+		if !ok || got.Late != s.Optional {
+			t.Fatalf("canonical ledger not reconciled: %+v", s)
+		}
+	}
 	for _, s := range append(append([]resourceaccess.OwnershipSource{}, resourceaccess.OwnershipSources...), resourceaccess.FilterOwnershipSources()...) {
 		got, ok := byTable[s.Table]
 		if !ok {
@@ -290,6 +296,47 @@ func TestScopeInboxInvalidationOutsideInboxAuthorityAndEnrichment(t *testing.T) 
 					return err
 				}
 			})
+		})
+	}
+}
+
+func TestScopeInboxInvalidationCanonicalLedgerEnrichment(t *testing.T) {
+	db, _ := inboxInvalidationFixture(t, true)
+	for _, q := range []string{
+		`INSERT INTO actors(id,display_name,tags_json,created_at,metadata_json) VALUES('ledger-actor','Actor','[]','now','{}')`,
+		`INSERT INTO agents(id,actor_id,username,created_at,updated_at,metadata_json) VALUES('ledger-agent','ledger-actor','ledger.agent','now','now','{}')`,
+		`INSERT INTO hosts(id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at) VALUES('ledger-host','ledger-host','Host','user','host','[]','now')`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// These dependencies do not appear in OwnershipSources: a report pin and
+	// changes to legacy principal/notification identity still revoke all receipts.
+	for _, source := range []struct {
+		name   string
+		writes []string
+	}{
+		{"report-pin", []string{
+			`INSERT OR REPLACE INTO workspace_dashboard VALUES(1,NULL,'now','ledger-actor')`,
+			`UPDATE workspace_dashboard SET updated_at='later' WHERE singleton=1`,
+			`DELETE FROM workspace_dashboard WHERE singleton=1`,
+		}},
+		{"principal-kind", []string{
+			`INSERT INTO passkey_credentials(credential_id,agent_id,user_handle,public_key,attestation_type,created_at) VALUES('ledger-key','ledger-agent',X'01',X'01','none','now')`,
+			`UPDATE passkey_credentials SET agent_id=agent_id WHERE credential_id='ledger-key'`,
+			`DELETE FROM passkey_credentials WHERE credential_id='ledger-key'`,
+		}},
+		{"host-binding", []string{
+			`INSERT INTO host_agents VALUES('ledger-host','agent','ledger-agent','agent')`,
+			`UPDATE host_agents SET identity_kind=identity_kind WHERE host_id='ledger-host'`,
+			`DELETE FROM host_agents WHERE host_id='ledger-host'`,
+		}},
+	} {
+		t.Run(source.name, func(t *testing.T) {
+			for _, q := range source.writes {
+				inboxInvalidationAssertAdvance(t, db, func() error { _, err := db.Exec(q); return err })
+			}
 		})
 	}
 }

@@ -18,15 +18,15 @@ the eventual minimal handler switch.
    in that transaction. `EncodeScopeInbox` stores a <=16 KiB envelope;
    `DecodeScopeInbox` requires the independently joined exact tuple and preserves
    unknown JSON fields. Neither method grants scope/audience provenance.
-2. Use the detached `ScopeInboxMutationLedger` and exact, unapplied
-   `ScopeInboxInvalidationProposal` for bulk `ReplaceDerivedInboxItems`, canonical
-   decision/answer/read state, report reviews, lifecycle and imports. Install the
-   monotonic `ScopeInboxEpochGuardProposal` and all source triggers atomically
-   through A’s reviewed schema/hook boundary before publishing any receipt.
-   These constant-work BEFORE triggers invalidate the global legacy epoch; they
-   abort the source statement if invalidation cannot persist. Invalid clock
-   invariants explicitly roll back the whole transaction; A must keep generic
-   SQL errors sticky and roll back instead of committing earlier writes. A bulk
+2. A's disabled `InstallScopeInboxInvalidation` consumes the detached
+   `ScopeInboxMutationLedger` together with the ownership and directory inventory
+   for bulk `ReplaceDerivedInboxItems`, decision/answer/read state, report reviews,
+   lifecycle and imports. It binds the complete ledger meaning and schema cookie,
+   invalidates source/authority/directory and batch-proof clocks, and explicitly
+   rolls back ignored clock failures. Register it atomically through A's reviewed
+   schema/hook boundary before publishing any receipt. The older unapplied
+   `ScopeInboxInvalidationProposal`/`ScopeInboxEpochGuardProposal` remain isolated
+   ledger test alternatives; do not install both trigger sets. A bulk
    replacement invalidates and enqueues a durable keyset rebuild;
    do not turn the point helper into an unbounded loop or certify a partially
    captured generation. Bind all external PM authority to invalidation as well.
@@ -141,9 +141,15 @@ invalidation protocol; these same-database triggers do not certify them. Epoch
 delete/replacement, database restore and DDL changes remain trusted maintenance
 boundaries, requiring receipt invalidation rather than epoch reuse.
 
-Invalidation adds one primary-key epoch update per changed canonical row; bulk
+The standalone proposal adds one primary-key epoch update per changed canonical row; bulk
 operations retain their legacy write semantics and invalidate globally, without
 materializing inbox payloads or enumerating scopes. This conservative proposal
 also invalidates on profile and operational changes, so fallback churn and full
 latency must be measured after A registers it. No production registration, proof
 writer, canonical completeness verifier or reader switch is added by B.
+
+A's combined disabled installer now consumes this ledger and watches 59 tables
+with 177 triggers, including scope-directory and graph-index dependencies. It
+adds two clock-row updates per watched trigger invocation, with additional
+legacy cascade amplification; see the measured write-cost caveats in
+`docs/design/scope-phase-two.md`. This integration has no live registration.

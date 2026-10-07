@@ -81,6 +81,13 @@ func scopeInboxInvalidationSources() ([]scopeInboxInvalidationSource, string, er
 	for _, s := range resourceaccess.FilterOwnershipSources() {
 		add(s.Table, false, append([]string{s.ID}, s.Columns...)...)
 	}
+	// The canonical producer ledger also covers principal-kind fallback, host
+	// bindings and report pins that are outside the ownership registry. Consume
+	// it directly so adding a producer cannot leave the installer behind.
+	ledger := ScopeInboxMutationLedger()
+	for _, s := range ledger {
+		add(s.Table, s.Optional)
+	}
 	// Dependencies outside the reference-field inventory: complete source rows,
 	// legacy authority indexes, answer/read state and response enrichments.
 	for table, columns := range map[string][]string{
@@ -100,6 +107,9 @@ func scopeInboxInvalidationSources() ([]scopeInboxInvalidationSource, string, er
 		"work_participants":                   {"card_id"},
 		"agent_wakeups":                       {"thread_id", "trigger_event_id"},
 		"agents":                              {"actor_id", "username", "created_at", "revoked_at"},
+		"passkey_credentials":                 {"credential_id", "agent_id"},
+		"host_agents":                         {"host_id", "name", "agent_id", "identity_kind"},
+		"workspace_dashboard":                 {"singleton", "document_id", "updated_at", "updated_by"},
 		"ref_edges":                           {"source_type", "source_id", "target_type", "target_id", "edge_type"},
 		"resource_handle_aliases":             {"resource_type", "resource_id", "alias_handle"},
 		"resource_access_tombstones":          {"kind", "id", "ref", "owner"},
@@ -163,7 +173,8 @@ func scopeInboxInvalidationSources() ([]scopeInboxInvalidationSource, string, er
 		Sources             []scopeInboxInvalidationSource
 		Ownership, Profiles []resourceaccess.OwnershipSource
 		Publications        map[string][]string
-	}{1, result, ownership, resourceaccess.FilterOwnershipSources(), resourceaccess.ExternalKeyPublications})
+		MutationLedger      []ScopeInboxMutationSource
+	}{2, result, ownership, resourceaccess.FilterOwnershipSources(), resourceaccess.ExternalKeyPublications, ledger})
 	if err != nil {
 		return nil, "", err
 	}

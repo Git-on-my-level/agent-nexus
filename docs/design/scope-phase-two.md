@@ -272,8 +272,8 @@ counters have no principal labels and are not HTTP response fields. Their latenc
 covers the dispatcher only; future route wiring must measure legacy fallback and
 the entire request, including authentication and enrichment.
 
-`InstallScopeInboxInvalidation` derives 56 watched tables from executable
-ownership/filter/publication registries plus inbox, authority, enrichment and
+`InstallScopeInboxInvalidation` derives 59 watched tables (177 triggers) from the
+canonical producer ledger and executable ownership/filter/publication registries plus inbox, authority, enrichment and
 scope-directory dependencies. All INSERT/UPDATE/DELETE operations conservatively
 advance source, authority and directory revisions and the selection proof clock,
 and clear directory coverage. Installation validates actual columns and binds a
@@ -282,6 +282,15 @@ explicitly incomplete until reconciliation occurs in its table-creation
 transaction. Dropping/changing a trigger or table invalidates admission. This is
 unregistered maintenance DDL: it must run after all shadow/verifier tables are
 installed and cannot be selected by a startup constructor yet.
+
+The ledger includes report pins, passkey principal-kind fallback and host-agent
+notification bindings outside the ownership inventory. The compiled digest pins
+both table coverage and dependency meaning. The earlier ledger-only epoch trigger
+proposal remains a test alternative, not a second trigger set to install alongside
+the combined source-clock installer. Mounted legacy HTTP fixtures cover current
+access-request/notification enrichment and omitted-directory, counter, ordering,
+duplicate-audience and over-limit refusal cases. They do not switch the route to
+the dispatcher or establish complete enriched-generation proof.
 
 The conservative invalidation cost is **two clock-row updates per watched row
 trigger invocation**, multiplied by existing legacy index cascades. Actual
