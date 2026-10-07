@@ -120,13 +120,13 @@ success/denial expectations, positive fixtures, private controls and two SSE dat
 flushes; exceeding a ceiling still fails. Their purpose is to allow the guardrail
 harness to land while SCA-663/664/665 and the existing SCA-652 repairs proceed,
 not to authorize new O(workspace) work. After merging #302 at `ac77fae8`
-(schema66), all 24 previous PM/overview exceptions and 58 of the other 90
-exceptions were retired. Seven PM/denied reads still need narrow allowances;
-33 other reads retain only the dimensions that exceed ordinary limits. The
+(schema66), the 24 previous broad PM/overview exceptions were replaced by eight narrow
+measured cases; 56 of the other 90 exceptions were retired. Thirty-five
+other reads retain only the dimensions that exceed ordinary limits. The
 ordinary limits stay at 500 ms, 100 SQL executions and 1,024 returned rows
 (except the existing fixed series-observation cap).
 
-Completed merged-code measurements, including Linux CI run `37555029376`, replace the former threefold latency
+Completed merged-code measurements, including Linux CI runs `37555029376` and `37556967479`, replace the former threefold latency
 allowances and identity-cache refresh extrapolation. Latency headroom is 20%,
 rounded up to 50 ms; overrun counts get 2% headroom with a minimum of eight SQL
 executions or 64 rows. Counts below the ordinary limit use that limit. First
