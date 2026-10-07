@@ -1,0 +1,141 @@
+# Reviewed actual kernel symbol uses and selections, counted per declaration.
+1 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.decode select *encoding/base64.Encoding.DecodeString from encoding/base64
+1 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.decode select crypto/cipher.AEAD.Open from crypto/cipher
+1 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.decode select crypto/cipher.AEAD.Overhead from crypto/cipher
+1 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.decode use encoding/base64.RawURLEncoding
+1 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.decode use encoding/json.Unmarshal
+1 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.decodeOrdered select *encoding/base64.Encoding.DecodeString from encoding/base64
+1 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.decodeOrdered select crypto/cipher.AEAD.Open from crypto/cipher
+1 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.decodeOrdered select crypto/cipher.AEAD.Overhead from crypto/cipher
+1 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.decodeOrdered use encoding/base64.RawURLEncoding
+1 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.decodeOrdered use encoding/json.Unmarshal
+1 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.encode select *encoding/base64.Encoding.EncodeToString from encoding/base64
+1 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.encode select crypto/cipher.AEAD.NonceSize from crypto/cipher
+1 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.encode select crypto/cipher.AEAD.Seal from crypto/cipher
+1 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.encode use crypto/rand.Read
+1 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.encode use encoding/base64.RawURLEncoding
+1 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.encode use encoding/json.Marshal
+1 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.encodeOrdered select *encoding/base64.Encoding.EncodeToString from encoding/base64
+1 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.encodeOrdered select crypto/cipher.AEAD.NonceSize from crypto/cipher
+1 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.encodeOrdered select crypto/cipher.AEAD.Seal from crypto/cipher
+1 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.encodeOrdered use crypto/rand.Read
+1 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.encodeOrdered use encoding/base64.RawURLEncoding
+1 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.encodeOrdered use encoding/json.Marshal
+1 readmodel/cursor.go:func NewCursorCodec use crypto/aes.NewCipher
+1 readmodel/cursor.go:func NewCursorCodec use crypto/cipher.NewGCM
+1 readmodel/cursor.go:func binding use crypto/sha256.Sum256
+1 readmodel/cursor.go:func binding use encoding/json.Marshal
+1 readmodel/cursor.go:type CursorCodec use crypto/cipher.AEAD
+1 readmodel/delta.go:func Count select agent-nexus-core/internal/readmodel.CounterReader.Buckets from agent-nexus-core/internal/readmodel
+1 readmodel/delta.go:func Count select agent-nexus-core/internal/readmodel.CounterReader.Snapshot from agent-nexus-core/internal/readmodel
+1 readmodel/delta.go:func Count use context.Context
+1 readmodel/delta.go:func planDelta use sort.Slice
+1 readmodel/delta.go:type CounterKey use agent-nexus-core/internal/scopes.ID
+1 readmodel/delta.go:type Counts use agent-nexus-core/internal/scopes.Coverage
+1 readmodel/delta.go:type Projection use agent-nexus-core/internal/scopes.ID
+1 readmodel/durable.go:func *agent-nexus-core/internal/readmodel.DurableLifecycle.Activate use context.Context
+1 readmodel/durable.go:func *agent-nexus-core/internal/readmodel.DurableLifecycle.Apply use context.Context
+1 readmodel/durable.go:func *agent-nexus-core/internal/readmodel.DurableLifecycle.Checkpoint use context.Context
+1 readmodel/durable.go:func *agent-nexus-core/internal/readmodel.DurableLifecycle.Job select agent-nexus-core/internal/readmodel.QueryTx.Query from agent-nexus-core/internal/readmodel
+1 readmodel/durable.go:func *agent-nexus-core/internal/readmodel.DurableLifecycle.Job select agent-nexus-core/internal/readmodel.Rows.Close from agent-nexus-core/internal/readmodel
+1 readmodel/durable.go:func *agent-nexus-core/internal/readmodel.DurableLifecycle.Job select agent-nexus-core/internal/readmodel.Rows.Scan from agent-nexus-core/internal/readmodel
+1 readmodel/durable.go:func *agent-nexus-core/internal/readmodel.DurableLifecycle.Job use context.Context
+1 readmodel/durable.go:func *agent-nexus-core/internal/readmodel.DurableLifecycle.Job use math.MaxInt64
+1 readmodel/durable.go:func *agent-nexus-core/internal/readmodel.DurableLifecycle.Rows select *agent-nexus-core/internal/readmodel.DurableLifecycle.Job from agent-nexus-core/internal/readmodel
+1 readmodel/durable.go:func *agent-nexus-core/internal/readmodel.DurableLifecycle.Rows use context.Context
+1 readmodel/durable.go:func BeginLifecycle use agent-nexus-core/internal/scopes.ID
+1 readmodel/durable.go:func BeginLifecycle use context.Context
+1 readmodel/durable.go:func BeginLifecycle use math.MaxInt64
+1 readmodel/durable.go:func NewDurableLifecycle use agent-nexus-core/internal/scopes.ID
+1 readmodel/durable.go:type DurableLifecycle use agent-nexus-core/internal/scopes.ID
+1 readmodel/durable.go:type RebuildLoader use context.Context
+1 readmodel/durable.go:type RebuildRecord use encoding/json.RawMessage
+1 readmodel/lifecycle.go:func Step select agent-nexus-core/internal/readmodel.LifecycleTx.Activate from agent-nexus-core/internal/readmodel
+1 readmodel/lifecycle.go:func Step select agent-nexus-core/internal/readmodel.LifecycleTx.Apply from agent-nexus-core/internal/readmodel
+1 readmodel/lifecycle.go:func Step select agent-nexus-core/internal/readmodel.LifecycleTx.Checkpoint from agent-nexus-core/internal/readmodel
+1 readmodel/lifecycle.go:func Step select agent-nexus-core/internal/readmodel.LifecycleTx.Job from agent-nexus-core/internal/readmodel
+1 readmodel/lifecycle.go:func Step select agent-nexus-core/internal/readmodel.LifecycleTx.Rows from agent-nexus-core/internal/readmodel
+1 readmodel/lifecycle.go:func Step use context.Context
+1 readmodel/lifecycle.go:type Ancestor use agent-nexus-core/internal/scopes.ID
+1 readmodel/lifecycle.go:type Job use agent-nexus-core/internal/scopes.ID
+1 readmodel/lifecycle.go:type LifecycleRow use agent-nexus-core/internal/scopes.ID
+1 readmodel/ordered.go:func ReadOrdered select *agent-nexus-core/internal/readmodel.CursorCodec.decodeOrdered from agent-nexus-core/internal/readmodel
+1 readmodel/ordered.go:func ReadOrdered select *agent-nexus-core/internal/readmodel.CursorCodec.encodeOrdered from agent-nexus-core/internal/readmodel
+1 readmodel/ordered.go:func ReadOrdered select agent-nexus-core/internal/readmodel.OrderedReader.HydrateOrdered from agent-nexus-core/internal/readmodel
+1 readmodel/ordered.go:func ReadOrdered select agent-nexus-core/internal/readmodel.OrderedReader.OrderedCandidates from agent-nexus-core/internal/readmodel
+1 readmodel/ordered.go:func ReadOrdered select agent-nexus-core/internal/readmodel.OrderedReader.Snapshot from agent-nexus-core/internal/readmodel
+1 readmodel/ordered.go:func ReadOrdered select agent-nexus-core/internal/readmodel.Page.NextCursor from agent-nexus-core/internal/scopes
+1 readmodel/ordered.go:func ReadOrdered use container/heap.Init
+1 readmodel/ordered.go:func ReadOrdered use container/heap.Pop
+1 readmodel/ordered.go:func ReadOrdered use container/heap.Push
+1 readmodel/ordered.go:func ReadOrdered use context.Context
+1 readmodel/ordered.go:func ReadOrdered use encoding/json.Valid
+1 readmodel/ordered.go:func orderedBefore use bytes.Compare
+1 readmodel/page.go:func Read select *agent-nexus-core/internal/readmodel.CursorCodec.decode from agent-nexus-core/internal/readmodel
+1 readmodel/page.go:func Read select *agent-nexus-core/internal/readmodel.CursorCodec.encode from agent-nexus-core/internal/readmodel
+1 readmodel/page.go:func Read select agent-nexus-core/internal/readmodel.Page.NextCursor from agent-nexus-core/internal/scopes
+1 readmodel/page.go:func Read select agent-nexus-core/internal/readmodel.Reader.Candidates from agent-nexus-core/internal/readmodel
+1 readmodel/page.go:func Read select agent-nexus-core/internal/readmodel.Reader.Hydrate from agent-nexus-core/internal/readmodel
+1 readmodel/page.go:func Read select agent-nexus-core/internal/readmodel.Reader.Snapshot from agent-nexus-core/internal/readmodel
+1 readmodel/page.go:func Read use container/heap.Init
+1 readmodel/page.go:func Read use container/heap.Pop
+1 readmodel/page.go:func Read use container/heap.Push
+1 readmodel/page.go:func Read use context.Context
+1 readmodel/page.go:func Read use encoding/json.Valid
+1 readmodel/page.go:func validateSnapshot select agent-nexus-core/internal/readmodel.Stream.Audience from agent-nexus-core/internal/scopes
+1 readmodel/page.go:func validateSnapshot select agent-nexus-core/internal/readmodel.Stream.Family from agent-nexus-core/internal/scopes
+1 readmodel/page.go:func validateSnapshot select time.Time.IsZero from time
+1 readmodel/page.go:func validateSnapshot use agent-nexus-core/internal/scopes.ID
+1 readmodel/page.go:type Item use encoding/json.RawMessage
+1 readmodel/page.go:type Page use agent-nexus-core/internal/scopes.Page
+1 readmodel/page.go:type Scope use agent-nexus-core/internal/scopes.ID
+1 readmodel/page.go:type Snapshot use time.Time
+1 readmodel/page.go:type Stream use agent-nexus-core/internal/scopes.Stream
+1 readmodel/page.go:value MaxPageSize use agent-nexus-core/internal/scopes.MaxPage
+1 readmodel/page.go:value MaxScopes use agent-nexus-core/internal/scopes.MaxScopes
+1 readmodel/page.go:value MaxStreams use agent-nexus-core/internal/scopes.MaxStreams
+1 readmodel/page.go:value MaxStreamsPerScope use agent-nexus-core/internal/scopes.MaxStreamsPerScope
+1 readmodel/writer.go:func ApplyProjection use context.Context
+1 readmodel/writer.go:func ApplyProjection use encoding/json.RawMessage
+1 readmodel/writer.go:func CaptureCanonical select *agent-nexus-core/internal/scopes.Projection.Deleted from agent-nexus-core/internal/scopes
+1 readmodel/writer.go:func CaptureCanonical select agent-nexus-core/internal/scopes.CanonicalMutation.Changes from agent-nexus-core/internal/scopes
+1 readmodel/writer.go:func CaptureCanonical select agent-nexus-core/internal/scopes.CanonicalMutation.Identity from agent-nexus-core/internal/scopes
+1 readmodel/writer.go:func CaptureCanonical select agent-nexus-core/internal/scopes.CanonicalMutation.PreviousVersion from agent-nexus-core/internal/scopes
+1 readmodel/writer.go:func CaptureCanonical select agent-nexus-core/internal/scopes.CanonicalMutation.Validate from agent-nexus-core/internal/scopes
+1 readmodel/writer.go:func CaptureCanonical select agent-nexus-core/internal/scopes.Change.After from agent-nexus-core/internal/scopes
+1 readmodel/writer.go:func CaptureCanonical select agent-nexus-core/internal/scopes.Change.Audience from agent-nexus-core/internal/scopes
+1 readmodel/writer.go:func CaptureCanonical select agent-nexus-core/internal/scopes.Change.Before from agent-nexus-core/internal/scopes
+1 readmodel/writer.go:func CaptureCanonical select agent-nexus-core/internal/scopes.Change.Family from agent-nexus-core/internal/scopes
+1 readmodel/writer.go:func CaptureCanonical select agent-nexus-core/internal/scopes.ResourceIdentity.CanonicalVersion from agent-nexus-core/internal/scopes
+1 readmodel/writer.go:func CaptureCanonical use agent-nexus-core/internal/scopes.CanonicalMutation
+1 readmodel/writer.go:func CaptureCanonical use agent-nexus-core/internal/scopes.Projection
+1 readmodel/writer.go:func boundedText use strings.ContainsRune
+1 readmodel/writer.go:func boundedText use unicode/utf8.ValidString
+1 readmodel/writer.go:func exact select agent-nexus-core/internal/readmodel.Executor.Exec from agent-nexus-core/internal/readmodel
+1 readmodel/writer.go:func exact use context.Context
+1 readmodel/writer.go:func validateProjectionPayloads use encoding/json.RawMessage
+1 readmodel/writer.go:func validateProjectionPayloads use encoding/json.Valid
+1 readmodel/writer.go:type Capture use agent-nexus-core/internal/scopes.Change
+1 readmodel/writer.go:type Capture use agent-nexus-core/internal/scopes.Projection
+1 readmodel/writer.go:type Capture use encoding/json.RawMessage
+1 readmodel/writer.go:type Executor use context.Context
+1 readmodel/writer.go:type QueryTx use context.Context
+2 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.decode select crypto/cipher.AEAD.NonceSize from crypto/cipher
+2 readmodel/cursor.go:func *agent-nexus-core/internal/readmodel.CursorCodec.decodeOrdered select crypto/cipher.AEAD.NonceSize from crypto/cipher
+2 readmodel/delta.go:type CounterReader use context.Context
+2 readmodel/durable.go:func *agent-nexus-core/internal/readmodel.DurableLifecycle.Job select agent-nexus-core/internal/readmodel.Rows.Err from agent-nexus-core/internal/readmodel
+2 readmodel/durable.go:func *agent-nexus-core/internal/readmodel.DurableLifecycle.Job select agent-nexus-core/internal/readmodel.Rows.Next from agent-nexus-core/internal/readmodel
+2 readmodel/durable.go:func sameDelta use encoding/json.Marshal
+2 readmodel/page.go:func coverage select agent-nexus-core/internal/scopes.Coverage.CoveredScopeIDs from agent-nexus-core/internal/scopes
+2 readmodel/page.go:func coverage select agent-nexus-core/internal/scopes.Coverage.UnavailableScopeIDs from agent-nexus-core/internal/scopes
+2 readmodel/page.go:func coverage use agent-nexus-core/internal/scopes.Coverage
+2 readmodel/page.go:func coverage use agent-nexus-core/internal/scopes.ID
+2 readmodel/page.go:func validateSnapshot select agent-nexus-core/internal/readmodel.Stream.Scope from agent-nexus-core/internal/scopes
+2 readmodel/writer.go:func CaptureCanonical select agent-nexus-core/internal/scopes.ResourceIdentity.RID from agent-nexus-core/internal/scopes
+3 readmodel/ordered.go:func ReadOrdered select agent-nexus-core/internal/readmodel.Page.Items from agent-nexus-core/internal/scopes
+3 readmodel/ordered.go:type OrderedReader use context.Context
+3 readmodel/page.go:func Read select agent-nexus-core/internal/readmodel.Page.Items from agent-nexus-core/internal/scopes
+3 readmodel/page.go:type Reader use context.Context
+3 readmodel/writer.go:func CaptureCanonical select agent-nexus-core/internal/scopes.ResourceIdentity.ScopeID from agent-nexus-core/internal/scopes
+3 readmodel/writer.go:func CaptureCanonical use encoding/json.RawMessage
+5 readmodel/lifecycle.go:type LifecycleTx use context.Context

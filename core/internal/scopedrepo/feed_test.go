@@ -12,6 +12,7 @@ import (
 
 	"agent-nexus-core/internal/scopedrepo"
 	"agent-nexus-core/internal/scopes"
+	"agent-nexus-core/internal/testsql"
 )
 
 func feedFixture(t *testing.T) (*sql.DB, *scopedrepo.Store, scopes.RequestSelection, []scopes.Stream) {
@@ -151,6 +152,45 @@ func TestFeedMaximumPageAndCounters(t *testing.T) {
 		_, err = r.Snapshot()
 		return err
 	}))
+	// Exercise and count the new path at the same 64/256 maximum.
+	var seq int
+	var name, path string
+	must(t, db.QueryRow(`PRAGMA database_list`).Scan(&seq, &name, &path))
+	counted, counter := testsql.Open(path)
+	defer counted.Close()
+	batchStore := scopedrepo.New(counted)
+	installTestOnlyProof(t, db, s, request, streams)
+	counter.Reset()
+	must(t, batchStore.ReadBatchFeed(context.Background(), request, streams, func(r scopedrepo.BatchFeedReader) error {
+		refs, err := r.Candidates(make([]*scopedrepo.FeedKey, len(streams)), 100)
+		if err != nil {
+			return err
+		}
+		if len(refs) != 101 {
+			t.Fatal(len(refs))
+		}
+		items, err := r.Hydrate(refs[:100])
+		if err != nil {
+			return err
+		}
+		if len(items) != 100 {
+			t.Fatal(len(items))
+		}
+		counts, err := r.Buckets([]string{"one", "two", "three", "four"})
+		if err == nil {
+			for _, v := range counts {
+				if v != 256 {
+					t.Fatal(counts)
+				}
+			}
+		}
+		return err
+	}))
+
+	if counter.Count() != 7 || counter.ReturnedRows() != 527 {
+		t.Fatalf("batch repository subtotal: SQL=%d rows=%d, want 7/527", counter.Count(), counter.ReturnedRows())
+	}
+
 }
 
 func TestFeedUnreadyNeverReturnsAvailableZero(t *testing.T) {

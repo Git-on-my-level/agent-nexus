@@ -1,1 +1,2 @@
-SELECT version FROM resource_access_epoch WHERE singleton=1
+SELECT e.version,n.namespace FROM resource_access_epoch e
+JOIN scope_workspace_namespace n ON n.singleton=e.singleton WHERE e.singleton=1
