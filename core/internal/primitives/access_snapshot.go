@@ -169,7 +169,8 @@ func rememberReadDenial(db *sql.DB, scope AccessScope, snapshot *denialSnapshot)
 // WithRequestAccessScope caches the denial closure for a regular read request.
 // Every consuming statement validates the authorization epoch IN its own SQL
 // snapshot and falls back to the canonical graph if any ownership write occurred.
-// Business transactions and visit writes evaluate the canonical graph directly.
+// Business transactions evaluate the canonical graph directly. The visit ledger
+// can reuse the read closure only after checking its epoch in the transaction.
 // An inbox poll may use a fresh request boundary; never share request state
 // across ticks. Shared snapshots are bounded and isolated by DB, scope and epoch.
 func WithRequestAccessScope(ctx context.Context, scope AccessScope) context.Context {

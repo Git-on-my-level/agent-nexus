@@ -58,8 +58,8 @@ func TestOverviewVisitValidationUsesFreshWriteGraph(t *testing.T) {
 		if strings.Contains(statement.SQL, "json_group_array(json_array(kind,id))") {
 			t.Fatal("visit rebuilt the prepared denial")
 		}
-		if strings.Contains(statement.SQL, "anx_resource_json_refs") {
-			fresh = strings.Contains(statement.SQL, "main.threads") && !strings.Contains(statement.SQL, "_anx_fresh_denied") && len(statement.Args) == 1
+		if strings.Contains(statement.SQL, "CROSS JOIN _anx_denied") {
+			fresh = strings.Contains(statement.SQL, "main.threads") && strings.Contains(statement.SQL, "_anx_fresh_denied") && strings.Contains(statement.SQL, "main.resource_access_epoch") && len(statement.Args) == 7
 		}
 	}
 	if !fresh {

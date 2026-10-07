@@ -47,6 +47,10 @@ type visitState struct {
 	Steps  map[string]string `json:"steps"`
 }
 
+// Only the visit ledger may reuse the immutable request closure, with its epoch
+// checked inside the write transaction. Business mutations retain full checks.
+type overviewVisitValidationKey struct{}
+
 func overviewSnapshot(work []map[string]any) map[string]visitState {
 	out := map[string]visitState{}
 	for _, w := range work {
@@ -75,6 +79,7 @@ func (s *Store) RecordOverviewVisit(ctx context.Context, principal string, work 
 		return err
 	}
 	// A slower old request cannot replace a newer visit or its snapshot.
+	ctx = context.WithValue(ctx, overviewVisitValidationKey{}, true)
 	_, err = s.db.ExecContext(ctx, `INSERT INTO overview_visits(principal_id,visited_at,snapshot_json) VALUES(?,?,?)
  ON CONFLICT(principal_id) DO UPDATE SET visited_at=excluded.visited_at,snapshot_json=excluded.snapshot_json
  WHERE excluded.visited_at>overview_visits.visited_at`, principal, now.UTC().Format("2006-01-02T15:04:05.000000000Z"), string(raw))
