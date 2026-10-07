@@ -1,0 +1,289 @@
+package perfguard
+
+import (
+	"context"
+	"database/sql"
+	"database/sql/driver"
+	"io"
+	"sync"
+
+	_ "modernc.org/sqlite"
+)
+
+// Statement is the SQL actually submitted to SQLite, after policy rewriting.
+// Arguments are retained only for EXPLAIN on synthetic data; never log them.
+type Statement struct {
+	SQL  string
+	Args []any
+}
+type Capture struct {
+	mu            sync.Mutex
+	statements    []Statement
+	queries, rows int
+	enabled       bool
+	seen          map[string]map[string]bool
+	canonicalSQL  map[string]string
+	work          WorkStats
+	workErr       error
+	epoch         uint64
+}
+
+func (c *Capture) Start() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.statements = nil
+	c.seen = map[string]map[string]bool{}
+	c.canonicalSQL = map[string]string{}
+	c.queries = 0
+	c.rows = 0
+	c.work = WorkStats{}
+	c.workErr = nil
+	c.epoch++
+	c.enabled = true
+}
+func (c *Capture) Stop() ([]Statement, int, int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.enabled = false
+	return append([]Statement(nil), c.statements...), c.queries, c.rows
+}
+func (c *Capture) record(q string, args []driver.NamedValue) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.enabled {
+		return
+	}
+	c.queries++ // count every execution, including repeated N+1 lookups
+	patterns, seen := c.seen[q]
+	if !seen {
+		patterns = map[string]bool{}
+		c.seen[q] = patterns
+		c.canonicalSQL[q] = q
+	} else {
+		q = c.canonicalSQL[q]
+	}
+	v := make([]any, len(args))
+	for i, a := range args {
+		v[i] = a.Value
+		if a.Name != "" {
+			v[i] = sql.Named(a.Name, a.Value)
+		}
+	}
+	key := ArgsHash(v)
+	if patterns[key] {
+		return
+	}
+	patterns[key] = true
+	for i, a := range args {
+		if b, ok := a.Value.([]byte); ok {
+			var cloned []byte
+			if b != nil {
+				cloned = make([]byte, len(b))
+				copy(cloned, b)
+			}
+			v[i] = cloned
+			if a.Name != "" {
+				v[i] = sql.Named(a.Name, v[i])
+			}
+		}
+	}
+	c.statements = append(c.statements, Statement{q, v})
+
+}
+func (c *Capture) row(epoch uint64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.enabled && epoch != 0 && epoch == c.epoch {
+		c.rows++
+	}
+}
+
+// Open instruments a separate pool, including raw auth reads, transactions and
+// prepared statements. The normal workspace connection remains uninstrumented
+// for fixture construction and EXPLAIN (which must not recursively capture).
+func Open(dsn string) (*sql.DB, *Capture, error) {
+	base, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, nil, err
+	}
+	d := base.Driver() // includes the canonical driver's registered scalar functions
+	_ = base.Close()
+	c := &Capture{}
+	// A connector owns the capture only for this pool's lifetime. Registering a
+	// unique driver would retain every closed cold-request capture globally.
+	wrapper := &captureDriver{base: d, capture: c}
+	return sql.OpenDB(&captureConnector{driver: wrapper, dsn: dsn}), c, nil
+}
+
+type captureConnector struct {
+	driver *captureDriver
+	dsn    string
+}
+
+func (c *captureConnector) Connect(context.Context) (driver.Conn, error) { return c.driver.Open(c.dsn) }
+func (c *captureConnector) Driver() driver.Driver                        { return c.driver }
+
+type captureDriver struct {
+	base    driver.Driver
+	capture *Capture
+}
+
+func (d *captureDriver) Open(name string) (driver.Conn, error) {
+	c, e := d.base.Open(name)
+	if e != nil {
+		return nil, e
+	}
+	w, e := installWorkTrace(c, d.capture)
+	if e != nil {
+		_ = c.Close()
+		return nil, e
+	}
+	return &captureConn{Conn: c, capture: d.capture, work: w}, nil
+}
+
+type captureConn struct {
+	driver.Conn
+	capture *Capture
+	work    *workTrace
+}
+
+func (c *captureConn) Close() error {
+	err := c.Conn.Close()
+	workTraces.Delete(c.work.id)
+	return err
+}
+
+// Preserve the canonical driver's pool lifecycle: canceled SQLite connections
+// must be reset or discarded before another request borrows them.
+func (c *captureConn) ResetSession(ctx context.Context) error {
+	if r, ok := c.Conn.(driver.SessionResetter); ok {
+		return r.ResetSession(ctx)
+	}
+	return nil
+}
+func (c *captureConn) IsValid() bool {
+	if v, ok := c.Conn.(driver.Validator); ok {
+		return v.IsValid()
+	}
+	return true
+}
+
+func (c *captureConn) Prepare(q string) (driver.Stmt, error) {
+	s, e := c.Conn.Prepare(q)
+	if e != nil {
+		return nil, e
+	}
+	return &captureStmt{Stmt: s, q: q, capture: c.capture, work: c.work}, nil
+}
+func (c *captureConn) PrepareContext(ctx context.Context, q string) (driver.Stmt, error) {
+	s, e := c.Conn.(driver.ConnPrepareContext).PrepareContext(ctx, q)
+	if e != nil {
+		return nil, e
+	}
+	return &captureStmt{Stmt: s, q: q, capture: c.capture, work: c.work}, nil
+}
+func (c *captureConn) BeginTx(ctx context.Context, o driver.TxOptions) (driver.Tx, error) {
+	c.work.beginCall(ctx)
+	defer c.work.endCall()
+	return c.Conn.(driver.ConnBeginTx).BeginTx(ctx, o)
+}
+func (c *captureConn) Ping(ctx context.Context) error { return c.Conn.(driver.Pinger).Ping(ctx) }
+func (c *captureConn) ExecContext(ctx context.Context, q string, a []driver.NamedValue) (driver.Result, error) {
+	c.work.beginCall(ctx)
+	defer c.work.endCall()
+	c.capture.record(q, a)
+	return c.Conn.(driver.ExecerContext).ExecContext(ctx, q, a)
+}
+func (c *captureConn) QueryContext(ctx context.Context, q string, a []driver.NamedValue) (driver.Rows, error) {
+	c.work.beginCall(ctx)
+	defer c.work.endCall()
+	c.capture.record(q, a)
+	epoch := c.capture.workEpoch()
+	r, e := c.Conn.(driver.QueryerContext).QueryContext(ctx, q, a)
+	if e != nil {
+		return nil, e
+	}
+	return wrapRows(r, c.capture, c.work, epoch, ctx)
+}
+
+type captureStmt struct {
+	driver.Stmt
+	q       string
+	capture *Capture
+	work    *workTrace
+}
+
+func named(a []driver.Value) []driver.NamedValue {
+	out := make([]driver.NamedValue, len(a))
+	for i, v := range a {
+		out[i] = driver.NamedValue{Ordinal: i + 1, Value: v}
+	}
+	return out
+}
+func (s *captureStmt) Exec(a []driver.Value) (driver.Result, error) {
+	s.work.beginCall(context.Background())
+	defer s.work.endCall()
+	s.capture.record(s.q, named(a))
+	return s.Stmt.Exec(a)
+}
+func (s *captureStmt) Query(a []driver.Value) (driver.Rows, error) {
+	s.work.beginCall(context.Background())
+	defer s.work.endCall()
+	s.capture.record(s.q, named(a))
+	epoch := s.capture.workEpoch()
+	r, e := s.Stmt.Query(a)
+	if e != nil {
+		return nil, e
+	}
+	return wrapRows(r, s.capture, s.work, epoch, context.Background())
+}
+func (s *captureStmt) ExecContext(ctx context.Context, a []driver.NamedValue) (driver.Result, error) {
+	s.work.beginCall(ctx)
+	defer s.work.endCall()
+	s.capture.record(s.q, a)
+	return s.Stmt.(driver.StmtExecContext).ExecContext(ctx, a)
+}
+func (s *captureStmt) QueryContext(ctx context.Context, a []driver.NamedValue) (driver.Rows, error) {
+	s.work.beginCall(ctx)
+	defer s.work.endCall()
+	s.capture.record(s.q, a)
+	epoch := s.capture.workEpoch()
+	r, e := s.Stmt.(driver.StmtQueryContext).QueryContext(ctx, a)
+	if e != nil {
+		return nil, e
+	}
+	return wrapRows(r, s.capture, s.work, epoch, ctx)
+}
+
+type captureRows struct {
+	driver.Rows
+	capture *Capture
+	work    *workTrace
+	epoch   uint64
+	ctx     context.Context
+}
+
+func wrapRows(r driver.Rows, c *Capture, w *workTrace, epoch uint64, ctx context.Context) (driver.Rows, error) {
+	if err := w.sampleRows(r); err != nil {
+		_ = r.Close()
+		return nil, err
+	}
+	return &captureRows{Rows: r, capture: c, work: w, epoch: epoch, ctx: ctx}, nil
+}
+
+func (r *captureRows) Next(dest []driver.Value) error {
+	if err := r.work.beginRows(r.Rows, r.ctx, r.epoch); err != nil {
+		return err
+	}
+	defer r.work.endCall()
+	e := r.Rows.Next(dest)
+	if err := r.work.sampleRows(r.Rows); err != nil {
+		return err
+	}
+	if e == nil {
+		r.capture.row(r.epoch)
+	} else if e != io.EOF {
+		return e
+	}
+	return e
+}

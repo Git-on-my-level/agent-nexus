@@ -2735,44 +2735,54 @@ func applyMigrations(ctx context.Context, db *sql.DB) error {
 			continue
 		}
 
-		tx, err := db.BeginTx(ctx, nil)
-		if err != nil {
-			return fmt.Errorf("begin migration %d: %w", m.Version, err)
-		}
-
-		for _, statement := range m.Statements {
-			if _, err := tx.ExecContext(ctx, statement); err != nil {
-				if rbErr := tx.Rollback(); rbErr != nil {
-					log.Printf("migration rollback failed: %v", rbErr)
-				}
-				return fmt.Errorf("apply migration %d: %w", m.Version, err)
-			}
-		}
-		if m.AfterApply != nil {
-			if err := m.AfterApply(ctx, tx); err != nil {
-				if rbErr := tx.Rollback(); rbErr != nil {
-					log.Printf("migration rollback failed: %v", rbErr)
-				}
-				return fmt.Errorf("apply migration %d after hook: %w", m.Version, err)
-			}
-		}
-
-		if _, err := tx.ExecContext(
-			ctx,
-			`INSERT INTO schema_migrations(version, applied_at) VALUES (?, CURRENT_TIMESTAMP)`,
-			m.Version,
-		); err != nil {
-			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Printf("migration rollback failed: %v", rbErr)
-			}
-			return fmt.Errorf("record migration %d: %w", m.Version, err)
-		}
-
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("commit migration %d: %w", m.Version, err)
+		if err := applyMigration(ctx, db, m); err != nil {
+			return err
 		}
 	}
 
+	return nil
+}
+
+func applyMigration(ctx context.Context, db *sql.DB, m migration) error {
+	finish := reportMigrationProgress(ctx, m.Version)
+	defer finish()
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin migration %d: %w", m.Version, err)
+	}
+
+	for _, statement := range m.Statements {
+		if _, err := tx.ExecContext(ctx, statement); err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("migration rollback failed: %v", rbErr)
+			}
+			return fmt.Errorf("apply migration %d: %w", m.Version, err)
+		}
+	}
+	if m.AfterApply != nil {
+		if err := m.AfterApply(ctx, tx); err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("migration rollback failed: %v", rbErr)
+			}
+			return fmt.Errorf("apply migration %d after hook: %w", m.Version, err)
+		}
+	}
+
+	if _, err := tx.ExecContext(
+		ctx,
+		`INSERT INTO schema_migrations(version, applied_at) VALUES (?, CURRENT_TIMESTAMP)`,
+		m.Version,
+	); err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("migration rollback failed: %v", rbErr)
+		}
+		return fmt.Errorf("record migration %d: %w", m.Version, err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit migration %d: %w", m.Version, err)
+	}
 	return nil
 }
 

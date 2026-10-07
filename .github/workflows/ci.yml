@@ -56,6 +56,8 @@ jobs:
             go_shared:
               - '.github/actions/setup-go/**'
               - '.github/workflows/ci.yml'
+              - 'scripts/check-performance-shards.py'
+              - 'scripts/tests/test_performance_shards.py'
             node_shared:
               - '.github/actions/setup-node-pnpm/**'
               - '.github/workflows/ci.yml'
@@ -63,6 +65,8 @@ jobs:
               - '.github/e2e-timings.json'
               - 'scripts/ci-e2e.mjs'
               - 'scripts/tests/ci-automation.test.mjs'
+              - 'scripts/check-performance-shards.py'
+              - 'scripts/tests/test_performance_shards.py'
               - 'package.json'
               - 'pnpm-workspace.yaml'
               - 'pnpm-lock.yaml'
@@ -108,7 +112,9 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Test CI gate and shard coverage
-        run: node --test scripts/tests/ci-automation.test.mjs
+        run: |
+          node --test scripts/tests/ci-automation.test.mjs
+          python3 -m unittest discover -s scripts/tests -p "test_performance_shards.py"
 
       - name: Check GitHub automation formatting
         run: pnpm -C web-ui exec prettier --check "../.github/**/*.{yml,yaml}"
