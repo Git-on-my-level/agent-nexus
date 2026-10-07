@@ -19,5 +19,9 @@
   "feed_start": "scope",
   "feed_after": "scope",
   "feed_hydrate_suffix": "scope",
-  "feed_buckets_suffix": "scope"
+  "feed_buckets_suffix": "scope",
+  "feed_batch_authority_suffix": "authority",
+  "feed_batch_binding_suffix": "principal",
+  "feed_batch_buckets_suffix": "scope",
+  "feed_batch_proof": "authority"
 }

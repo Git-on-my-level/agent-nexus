@@ -113,3 +113,21 @@ into a live constructor or handler.
 The kernel boundary admits exactly these two repository files. The independent
 repository import guard still forbids **every** live consumer of `scopedrepo`,
 so this dependency edge cannot reach serving through a transitive import.
+
+## Batch selection checkpoint
+
+A's `scopedrepo.ReadBatchFeed` now consumes a persisted full-selection proof before
+exposing a batch capability: exact batched authority/audiences, one global P+1
+candidate query, existing exact RID/version hydration and grouped counters.
+B can target `BatchFeedReader` after adding trusted cursor adaptation; the existing
+per-stream `AdaptReadModel` API is preserved. See `scopedrepo/FEEDS.md` for the
+seven-query repository bound and proof contract. Neither generation flags nor
+caller input can substitute for the proof lookup.
+
+The proof table has no production writer. Its revision clock covers shadow data
+and identity changes, not yet B's actual canonical ask/answer source snapshot.
+B must supply capture/publication-authority proposals; A and D must bind complete
+old-policy audience/lifecycle/payload/counter comparison and global disjointness
+to that snapshot before minting. The unchanged no-serving guard remains the
+production barrier. HTTP selection, exact full-request budgets, dispatcher and
+hook sealing remain prerequisites; the batch subtotal does not satisfy them.
