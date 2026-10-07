@@ -340,12 +340,28 @@ func loadOpenInbox(r *http.Request, opts handlerOptions, now time.Time) (map[str
 	return map[string]any{"status": "open", "items": items, "generated_at": now.Format(time.RFC3339Nano), "projection_freshness": freshness, "next_cursor": next, "has_more": more}, nil
 }
 
-// Overview needs the same permission-filtered asks, but not the inbox's
-// workspace-wide thread freshness scan and public-ref hydration.
+// Streams need the complete authorized state on every poll. Page candidates
+// before enrichment, and advance even when lifecycle filtering hides a page.
 func loadOpenInboxItems(r *http.Request, opts handlerOptions) ([]map[string]any, error) {
-	items, _, err := loadOverviewInboxItems(r, opts)
-	return items, err
+	filter := primitives.DerivedInboxListFilter{Limit: 100}
+	items := []map[string]any{}
+	for {
+		page := &inboxReadPage{}
+		batch, err := loadVisibleInboxItemsFiltered(r, opts, true, filter, page)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, batch...)
+		if !page.More {
+			return items, nil
+		}
+		filter.BeforeCategory = primitives.InboxCategoryRank(page.Last.Category)
+		filter.BeforeTrigger = page.Last.TriggerAt
+		filter.BeforeID = page.Last.ID
+	}
 }
+
+// Overview uses an explicit truncated window of the same authorized state.
 func loadOverviewInboxItems(r *http.Request, opts handlerOptions) ([]map[string]any, bool, error) {
 	page := &inboxReadPage{}
 	items, err := loadVisibleInboxItemsFiltered(r, opts, true, primitives.DerivedInboxListFilter{Limit: 100}, page)

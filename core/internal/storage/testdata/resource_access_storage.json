@@ -1858,7 +1858,7 @@
     "../server/inbox_handlers.go:handleRebuildDerived": "605ef9fc6f13d4615ffa500e9d4684ee4a8c2cb08cf0700b74ea22faaa883669",
     "../server/inbox_handlers.go:loadInboxPage": "1daccc2e626b7e3a5a0879bca6576229d2f22e83fb44e1d4bf6e9b56c358a52c",
     "../server/inbox_handlers.go:loadOpenInbox": "5bb37f9d4609f633aab95a06ecc6db184a4c1ba975d6f0fbf3e9d9df1eefdc08",
-    "../server/inbox_handlers.go:loadOpenInboxItems": "5378ea0cae499ce2e00c6fa9e43aa731894ddeda55fef10d98be29b247ca8d3b",
+    "../server/inbox_handlers.go:loadOpenInboxItems": "5f379b80f9c19c461208de45f3aee719fac650b67d0dcfea77fe2a840aba61ea",
     "../server/inbox_handlers.go:loadOverviewInboxItems": "fb6a687149fe58a9e0729e4f219265429832626d32ded644f982c2cce072a264",
     "../server/inbox_handlers.go:loadVisibleInboxItems": "4465bb9bb7157a184365a017efc83a17bae49f54ef5fed08a33618efd7f51ac6",
     "../server/inbox_handlers.go:loadVisibleInboxItemsFiltered": "194436666cd3ef73b7e9037debb6de3a52ef897f37f0e559c50213cea993c1a1",

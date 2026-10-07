@@ -7,9 +7,105 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
+
+	"agent-nexus-core/internal/testsql"
 )
+
+func TestInboxStreamDeliversAllAuthorizedItemsAcrossPages(t *testing.T) {
+	requireIntegrationTest(t)
+	for _, hiddenPage := range []bool{false, true} {
+		t.Run(fmt.Sprintf("hidden_first_page_%t", hiddenPage), func(t *testing.T) {
+			env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+			ctx := context.Background()
+			owner := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "page-owner", "page-owner-actor", "page-owner", "page-owner-token")
+			reader := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "page-reader", "page-reader-actor", "page-reader", "page-reader-token")
+			store := env.primitiveStore.(*primitives.Store)
+			public := seedStreamPrivacyThread(t, store, owner.ActorID, false)
+			private := seedStreamPrivacyThread(t, store, owner.ActorID, true)
+			items := []primitives.DerivedInboxItem{}
+			want := map[string]string{}
+			for i := 0; i < 104; i++ {
+				id := fmt.Sprintf("public-%03d", i)
+				item := streamPrivacyInboxItem(public, id, "Public ask")
+				item.Category = []string{"escalate", "ask", "review"}[i%3]
+				items = append(items, item)
+				want[id] = "Public ask"
+			}
+			if hiddenPage {
+				hidden := seedStreamPrivacyThread(t, store, owner.ActorID, false)
+				if _, err := store.ArchiveThread(ctx, owner.ActorID, hidden); err != nil {
+					t.Fatal(err)
+				}
+				// The entire first candidate page disappears during lifecycle
+				// filtering. Continuation must use its raw last row, not payloads.
+				for i := 0; i < 100; i++ {
+					item := streamPrivacyInboxItem(public, fmt.Sprintf("hidden-%03d", i), "Archived notification")
+					item.Category = "escalate"
+					item.Data["kind"] = "agent_wake"
+					item.Data["subject_ref"] = "thread:" + hidden
+					item.Data["related_refs"] = []any{"thread:" + hidden}
+					items = append(items, item)
+				}
+			}
+			seedStreamPrivacyInbox(t, store, public, items...)
+			seedStreamPrivacyInbox(t, store, private, streamPrivacyInboxItem(private, "private-ask", "Private page secret"))
+
+			// Measure the same loader on the production store/driver: each
+			// selector may decode only 100 candidates plus its lookahead.
+			counted, counter := testsql.Open("file:" + env.workspace.Layout().DatabasePath)
+			defer counted.Close()
+			measured := primitives.NewTestStore(counted, env.workspace.Layout().ArtifactContentDir)
+			req := httptest.NewRequest("GET", "/stream/inbox", nil).WithContext(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: reader.ActorID}))
+			loaded, err := loadOpenInboxItems(req, handlerOptions{primitiveStore: measured})
+			if err != nil || len(loaded) != len(want) {
+				t.Fatalf("complete stream snapshot: got %d items, err %v; want %d", len(loaded), err, len(want))
+			}
+			pages := 0
+			for _, statement := range counter.Statements() {
+				if strings.Contains(statement.SQL, "SELECT id, thread_id, category, trigger_at") {
+					pages++
+					if statement.Rows > 101 || !strings.Contains(statement.SQL, "LIMIT ?") {
+						t.Fatalf("unbounded inbox selector: %d returned rows", statement.Rows)
+					}
+				}
+			}
+			wantPages := 2
+			if hiddenPage {
+				wantPages = 3
+			}
+			if pages != wantPages {
+				t.Fatalf("inbox selector pages: got %d, want %d", pages, wantPages)
+			}
+
+			resp := openAuthenticatedPrivacyStream(t, env.server.URL+"/stream/inbox", reader.AccessToken, "")
+			events, stop := startSSEReader(resp.Body)
+			defer stop()
+			assertPrivacyInboxEvents(t, events, want)
+			// A change beyond the original 100-row window must also be sent
+			// on subsequent polls, without duplicating the unchanged items.
+			items[101].Data["body"] = "Updated final-page ask"
+			seedStreamPrivacyInbox(t, store, public, items...)
+			assertPrivacyInboxEvents(t, events, map[string]string{items[101].ID: "Updated final-page ask"})
+
+			response := getJSONExpectStatusWithAuth(t, env.server.URL+"/inbox/summary?limit=5", reader.AccessToken, http.StatusOK)
+			defer response.Body.Close()
+			var summary struct {
+				Count int              `json:"open_ask_count"`
+				Asks  []map[string]any `json:"asks"`
+			}
+			if err := json.NewDecoder(response.Body).Decode(&summary); err != nil {
+				t.Fatal(err)
+			}
+			if summary.Count != 104 || len(summary.Asks) != 5 {
+				t.Fatalf("summary lost exhaustive scoped count: %+v", summary)
+			}
+		})
+	}
+}
 
 func TestOpenInboxPagesKeepRankOrderAndPrincipalScope(t *testing.T) {
 	if testing.Short() {
