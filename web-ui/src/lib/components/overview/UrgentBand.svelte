@@ -20,6 +20,13 @@
   let {
     /** `urgentBandModel` output. */
     band = null,
+    /**
+     * Heading. Defaults to "Needs you", which is what the band is when it is
+     * the top of the page. When the morning brief is present the brief owns
+     * this workspace, and the band is reduced to the one thing the brief
+     * cannot see — the other workspaces — so it has to say that instead.
+     */
+    title = "Needs you",
     /** `(path, workspace) => href` — the ask's own workspace, not this one. */
     hrefFor = (path) => path,
     /** True while the cross-workspace fan-out is still in flight. */
@@ -78,7 +85,7 @@
   data-urgent-state={empty ? "empty" : "active"}
 >
   <header class="urgent__head">
-    <h2 id="overview-urgent" class="urgent__title">Needs you</h2>
+    <h2 id="overview-urgent" class="urgent__title">{title}</h2>
     {#if loading}
       <span class="urgent__note" role="status">Checking workspaces…</span>
     {:else if empty}

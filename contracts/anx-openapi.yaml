@@ -11957,8 +11957,10 @@ components:
       type: object
       required: [status, count, items, more, href]
       description: >
-        The needs_you rows, ranked. Score precedence is blocking open work (1000 per visible dependent), then an overdue or
-        within-48h due date, then critical/high priority, then a blocked phase, then age in hours capped at 30 days. Ties break
+        The needs_you rows, ranked. Score precedence is blocking open work (1000 per visible dependent), then an overdue (600)
+        or within-48h (300) due date, then priority (critical/p0 320, high/p1 200, medium/p2 80, low/p3 20), then a blocked
+        phase (150), then age at a third of a point per hour capped at 30 days (240). Age is deliberately sub-critical: it
+        lifts work everyone has walked past without letting a stale question outrank a p0 raised this morning. Ties break
         oldest first, then by id, so the order is stable across reads. `reason` is the computed explanation for the rank, at most
         three clauses. blocks counts only dependents this caller can see, so it is a lower bound and never implies a hidden row.
       properties:
@@ -11998,7 +12000,9 @@ components:
         Grouped digest of what changed since the caller's previous Overview visit, computed over the same bounded visible rows.
         Groups are ordered finished, newly blocked, new asks, new decisions, asks answered, plan steps done, initiatives off
         track, cancelled, updated; empty groups are omitted. first_visit is true when there is no previous visit to compare with,
-        which is not the same as nothing having changed.
+        which is not the same as nothing having changed. newly_blocked counts transitions, not current state: a card already
+        blocked at the previous visit, or one whose previous phase is unknown, is reported under updated, so editing a blocked
+        card is never reported as a new blocker.
       properties:
         since: { type: string, format: date-time, nullable: true }
         first_visit: { type: boolean }
@@ -12024,6 +12028,7 @@ components:
               title: { type: string }
               href: { type: string }
               at: { type: string, format: date-time }
+              step_id: { type: string, description: Plan step this row reports, for a completed-step row. Two steps of one initiative share its ref, so ref plus step_id is the row identity. }
 
     OverviewBriefRisk:
       type: object

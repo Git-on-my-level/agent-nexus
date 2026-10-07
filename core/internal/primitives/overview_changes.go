@@ -24,10 +24,15 @@ type OverviewChange struct {
 	TS     string `json:"ts,omitempty"`
 }
 type OverviewChanges struct {
-	Since       *string           `json:"since"`
-	GeneratedAt string            `json:"generated_at"`
-	Items       []OverviewChange  `json:"items"`
-	Truncated   bool              `json:"truncated"`
+	Since       *string          `json:"since"`
+	GeneratedAt string           `json:"generated_at"`
+	Items       []OverviewChange `json:"items"`
+	Truncated   bool             `json:"truncated"`
+	// Phase per card id as the previous visit saw it, for callers that need to
+	// distinguish a transition from a current state. A card the previous visit
+	// did not record has no entry, which means "unknown", not "no phase".
+	// Never serialized: the digest's contract is its items, and this is a
+	// derivation input.
 	PriorPhases map[string]string `json:"-"`
 }
 
@@ -56,6 +61,10 @@ type overviewVisitValidationKey struct{}
 func overviewSnapshot(work []map[string]any) map[string]visitState {
 	out := map[string]visitState{}
 	for _, w := range work {
+		// Phase is recorded so the next visit can tell a card that moved into
+		// blocked from one that was already blocked and merely edited. A
+		// snapshot written by an older core has no phase, which reads as
+		// "unknown" rather than as a transition.
 		v := visitState{Health: anyStringValue(initiativeHealth(w)["status"]), Phase: anyStringValue(w["phase"]), Steps: map[string]string{}}
 		if state, ok := w["plan_state"].(plans.State); ok {
 			p := w["plan"].(plans.Plan)
@@ -110,9 +119,17 @@ func (s *Store) OverviewChanges(ctx context.Context, principal string, work []ma
 	if err = json.Unmarshal([]byte(raw), &before); err != nil {
 		return out, err
 	}
-	out.PriorPhases = make(map[string]string, len(before))
+	/*
+	 * An empty phase is a snapshot written before phase was recorded. Passing
+	 * it through as "" would read as a real previous phase and make every
+	 * blocked card look newly blocked on the first read after an upgrade, so
+	 * it is omitted and the caller sees "unknown".
+	 */
+	out.PriorPhases = map[string]string{}
 	for id, state := range before {
-		out.PriorPhases[id] = state.Phase
+		if state.Phase != "" {
+			out.PriorPhases[id] = state.Phase
+		}
 	}
 	for _, w := range work {
 		old, known := before[anyStringValue(w["id"])]

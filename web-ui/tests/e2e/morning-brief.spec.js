@@ -248,11 +248,20 @@ const brief = {
         label: "Plan steps done",
         count: 2,
         more: 0,
+        // Two steps of ONE initiative: they share its ref, which is exactly
+        // the shape that used to throw each_key_duplicate on expand.
         items: [
           {
             ref: "card:initiative-1",
             title: "Draft the pilot brief",
             href: "/tasks/initiative-1",
+            step_id: "draft",
+          },
+          {
+            ref: "card:initiative-1",
+            title: "Review the pilot brief",
+            href: "/tasks/initiative-1",
+            step_id: "review",
           },
         ],
       },
@@ -586,4 +595,105 @@ test("a core with no brief renders the page it used to", async ({ page }) => {
     path: ".screenshots/review/morning-brief-before.png",
     fullPage: true,
   });
+});
+
+/*
+Expanding a group whose rows share one ref must not take the page down.
+
+Two completed steps of one initiative carry the initiative's ref, so keyed
+rendering on ref alone threw `each_key_duplicate` the moment "Plan steps
+done" was opened — in the production build as well as in dev. A unit test on
+the key cannot see that; only mounting the list and opening the group can.
+*/
+test("expanding a group whose rows share a ref renders both rows", async ({
+  page,
+}) => {
+  const crashes = [];
+  page.on("pageerror", (error) => crashes.push(String(error)));
+  await page.setViewportSize({ width: 1440, height: 1200 });
+  await installOverview(page);
+  await page.goto(OVERVIEW);
+
+  const group = page.locator(
+    '[data-overview-section="brief"] [data-brief-group="steps"]',
+  );
+  await expect(group.locator("button")).toContainText("Plan steps done");
+  await group.locator("button").click();
+
+  await expect(
+    group.getByRole("link", { name: "Draft the pilot brief", exact: true }),
+  ).toBeVisible();
+  await expect(
+    group.getByRole("link", { name: "Review the pilot brief", exact: true }),
+  ).toBeVisible();
+  expect(crashes, "expanding the group threw").toEqual([]);
+});
+
+/*
+The brief owns this workspace, so the page must not say the same thing twice.
+*/
+test("the brief replaces the lower sections that repeat it", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1200 });
+  await installOverview(page);
+  await page.goto(OVERVIEW);
+
+  // The tile grid repeats the brief's initiatives and risks, so it folds.
+  const initiatives = page.locator('[data-overview-section="initiatives"]');
+  await expect(initiatives).toHaveAttribute(
+    "data-overview-initiatives-folded",
+    "true",
+  );
+  await expect(page.locator("[data-initiative-tile]")).toHaveCount(0);
+  // One click away, not gone.
+  await page.locator("[data-overview-initiatives-toggle]").click();
+  await expect(page.locator("[data-initiative-tile]").first()).toBeVisible();
+
+  /*
+   * The urgent band listed the same asks the brief now ranks. On this
+   * single-workspace fixture it has nothing left that the brief cannot see,
+   * so it does not render at all rather than contradicting the brief with
+   * "nothing is waiting on you" directly under "26 waiting".
+   */
+  await expect(page.locator('[data-overview-section="urgent"]')).toHaveCount(0);
+});
+
+test("without a brief the page keeps its original sections", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1200 });
+  await installOverview(page, { withBrief: false });
+  await page.goto(OVERVIEW);
+  // The band is the top of the page again, and the tiles are open.
+  await expect(page.locator('[data-overview-section="urgent"]')).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Needs you" })).toBeVisible();
+  await expect(
+    page.locator('[data-overview-section="initiatives"]'),
+  ).toHaveAttribute("data-overview-initiatives-folded", "false");
+  await expect(page.locator("[data-initiative-tile]").first()).toBeVisible();
+});
+
+test("a reason is never truncated at phone width", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installOverview(page);
+  await page.goto(OVERVIEW);
+  const reasons = page.locator(
+    '[data-overview-section="brief"] [data-brief-reason]',
+  );
+  // count() does not wait; the brief arrives with the snapshot fetch.
+  await expect(reasons.first()).toBeVisible();
+  const count = await reasons.count();
+  expect(count).toBeGreaterThan(0);
+  for (let i = 0; i < count; i++) {
+    const row = reasons.nth(i);
+    const clipped = await row.evaluate((node) => ({
+      overflowing: node.scrollWidth > node.clientWidth + 1,
+      text: node.textContent.trim(),
+      title: node.getAttribute("title"),
+    }));
+    expect(clipped.overflowing, `"${clipped.text}" is clipped`).toBe(false);
+    // And the full text is on hover/long-press wherever it does clip.
+    expect(clipped.title).toBe(clipped.text);
+  }
 });

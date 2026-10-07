@@ -189,15 +189,36 @@ func briefAge(d time.Duration) string {
 	}
 }
 
-func briefPriorityWeight(priority string) int {
+/*
+briefPriorityName folds the two spellings a priority arrives in into one.
+Work carries p0..p3; inbox severity and PM use words. Matching only the words
+scored every card zero on priority, which is how a p0 sat below a three-day-old
+question. The folded name is also what the reader is shown: "critical priority"
+reads, where "p0 priority" is a code they have to translate.
+*/
+func briefPriorityName(priority string) string {
 	switch strings.ToLower(strings.TrimSpace(priority)) {
-	case "critical", "urgent", "p0":
+	case "p0", "critical", "urgent":
+		return "critical"
+	case "p1", "high":
+		return "high"
+	case "p2", "medium", "normal":
+		return "medium"
+	case "p3", "low":
+		return "low"
+	}
+	return ""
+}
+
+func briefPriorityWeight(priority string) int {
+	switch briefPriorityName(priority) {
+	case "critical":
 		return 320
-	case "high", "p1":
+	case "high":
 		return 200
-	case "medium", "normal", "p2":
+	case "medium":
 		return 80
-	case "low", "p3":
+	case "low":
 		return 20
 	}
 	return 0
@@ -238,15 +259,15 @@ func briefRank(signal briefSignal, now time.Time) (int, string, map[string]any) 
 		}
 	}
 	score += dueRank * briefDuePlace
+	name := briefPriorityName(signal.Priority)
 	if weight := briefPriorityWeight(signal.Priority); weight >= 200 {
 		score += weight * briefPriorityPlace
-		facts["priority"] = strings.ToLower(signal.Priority)
-		parts = append(parts, strings.ToLower(signal.Priority)+" priority")
+		parts = append(parts, name+" priority")
 	} else {
 		score += weight
-		if signal.Priority != "" && signal.Priority != "none" {
-			facts["priority"] = strings.ToLower(signal.Priority)
-		}
+	}
+	if name != "" {
+		facts["priority"] = name
 	}
 	if signal.Phase == "blocked" {
 		score += briefBlockedPlace
@@ -262,6 +283,13 @@ func briefRank(signal briefSignal, now time.Time) (int, string, map[string]any) 
 		if hours > briefAgeCapHours {
 			hours = briefAgeCapHours
 		}
+		/*
+		 * Age is the last place, so it only ever breaks a tie between rows that
+		 * agree on everything above it. Before the places were separated it ran
+		 * at a point an hour to a ceiling of 720 and outweighed every other
+		 * signal combined, which is how a three-week-old "what should we call
+		 * it" outranked a p0 raised this morning.
+		 */
 		score += hours
 		facts["age_hours"] = int(age.Hours())
 		facts["since"] = at.Format(time.RFC3339Nano)
@@ -373,7 +401,22 @@ func briefSinceLastLook(in briefInputs) map[string]any {
 		case "cancelled":
 			add("cancelled", item)
 		case "blocked":
-			add("newly_blocked", item)
+			/*
+			 * "Newly blocked" has to mean the card moved into blocked since the
+			 * last visit. Current phase plus a fresh updated_at does not: it
+			 * also matches a card that was already blocked and had its title
+			 * edited, which reported a new blocker every time anyone touched it.
+			 *
+			 * The previous visit's phase settles it. Where that is unknown — a
+			 * card the last visit never saw, or a snapshot written before phase
+			 * was recorded — the honest answer is that something changed, not
+			 * that something broke, so it goes to Updated.
+			 */
+			if known && prior != "blocked" {
+				add("newly_blocked", item)
+			} else {
+				add("updated", item)
+			}
 		default:
 			add("updated", item)
 		}
@@ -392,6 +435,12 @@ func briefSinceLastLook(in briefInputs) map[string]any {
 		item := map[string]any{"ref": change.Ref, "title": change.Title, "href": briefChangeHref(change)}
 		if change.TS != "" {
 			item["at"] = change.TS
+		}
+		// Two completed steps of one initiative share its ref. Without the step
+		// id the rows are indistinguishable, and a client keying on ref alone
+		// has a duplicate key rather than two rows.
+		if change.StepID != "" {
+			item["step_id"] = change.StepID
 		}
 		switch change.Kind {
 		case "step_completed":
