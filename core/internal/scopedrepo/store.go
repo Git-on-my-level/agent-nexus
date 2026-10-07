@@ -26,8 +26,9 @@ type Store struct{ db *sql.DB }
 // business computations. The boundary test forbids serving imports until cutover.
 func New(db *sql.DB) *Store { return &Store{db: db} }
 
-// Initialize adds only empty shadow tables. The migration owner must register it
-// after the actual merge head; no current workspace calls this automatically.
+// Initialize adds shadow tables and mints the immutable workspace namespace.
+// The migration owner must register it after the actual merge head; no current
+// workspace calls this automatically.
 func (s *Store) Initialize(ctx context.Context) error {
 	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
@@ -35,6 +36,13 @@ func (s *Store) Initialize(ctx context.Context) error {
 	}
 	defer tx.Rollback()
 	if _, e = tx.ExecContext(ctx, schemaSQL); e != nil {
+		return e
+	}
+	namespace, e := opaque()
+	if e != nil {
+		return e
+	}
+	if _, e = tx.ExecContext(ctx, `INSERT INTO scope_workspace_namespace(singleton,namespace) SELECT 1,? WHERE NOT EXISTS(SELECT 1 FROM scope_workspace_namespace)`, namespace); e != nil {
 		return e
 	}
 	return tx.Commit()

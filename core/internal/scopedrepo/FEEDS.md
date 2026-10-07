@@ -109,6 +109,15 @@ revocation does not mutate the already-pinned snapshot.
 
 ## Schema and remaining gates
 
+`Initialize` mints a 128-bit random workspace namespace once, in its schema
+transaction. The singleton is immutable under UPDATE, DELETE and replacement,
+and survives database reopen and repeated initialization. Both feed authority
+bindings hash that namespace; selection and serving receipts and encrypted
+continuations therefore cannot cross separately initialized databases even
+when all local identities/clocks and the codec key match. Existing receipts
+without this namespace binding become unavailable and require fresh proof.
+The namespace is private authorization metadata and never appears on the wire.
+
 `InitializeFeedSchema(ctx)` installs only empty shadow DDL, separately from the
 existing foundation initializer. It intentionally fails when these tables already
 exist; it performs no upgrades, automatic registration, backfill, or certification.

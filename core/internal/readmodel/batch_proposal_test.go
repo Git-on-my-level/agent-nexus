@@ -9,9 +9,9 @@ import (
 	"testing"
 )
 
-func batchCandidates(t *testing.T, db *sql.DB, streams []readmodel.AuthorizedStream, size int) []readmodel.Reference {
+func batchCandidates(t *testing.T, db *sql.DB, streams []AuthorizedStream, size int) []readmodel.Reference {
 	t.Helper()
-	q, args, err := readmodel.BatchCandidatesProposal(streams, size)
+	q, args, err := BatchCandidatesProposal(streams, size)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,9 +56,9 @@ func proposalPlan(t *testing.T, db *sql.DB, q string, args []any) string {
 }
 func TestBatchProposalValuesContinuationAndExactSeekPlans(t *testing.T) {
 	db, _, request, streams := adapterFixture(t, 2, 1)
-	authorized := make([]readmodel.AuthorizedStream, len(streams))
+	authorized := make([]AuthorizedStream, len(streams))
 	for i, s := range streams {
-		authorized[i] = readmodel.AuthorizedStream{Stream: s, Generation: 1}
+		authorized[i] = AuthorizedStream{Stream: s, Generation: 1}
 	}
 	var emitted []int64
 	for page := 0; page < 6; page++ {
@@ -78,7 +78,7 @@ func TestBatchProposalValuesContinuationAndExactSeekPlans(t *testing.T) {
 	if !reflect.DeepEqual(emitted, []int64{0, 1, 2, 3, 4, 5}) || len(batchCandidates(t, db, authorized, 1)) != 0 {
 		t.Fatal(emitted)
 	}
-	q, args, err := readmodel.BatchCandidatesProposal(authorized, 1)
+	q, args, err := BatchCandidatesProposal(authorized, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestBatchProposalValuesContinuationAndExactSeekPlans(t *testing.T) {
 	if strings.Count(plan, "SEARCH scope_feed USING PRIMARY KEY") != 2 || strings.Contains(plan, "SCAN scope_feed") {
 		t.Fatal(plan)
 	}
-	q, args, err = readmodel.BatchAuthorityProposal(request.Principal, request.ScopeIDs)
+	q, args, err = BatchAuthorityProposal(request.Principal, request.ScopeIDs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestBatchProposalValuesContinuationAndExactSeekPlans(t *testing.T) {
 			t.Fatal(plan)
 		}
 	}
-	q, args, err = readmodel.BatchBindingProposal("stranger", authorized)
+	q, args, err = BatchBindingProposal("stranger", authorized)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestBatchProposalValuesContinuationAndExactSeekPlans(t *testing.T) {
 	if n != 2 {
 		t.Fatal(n)
 	}
-	q, args, err = readmodel.AggregateBucketsProposal(authorized, []string{"total", "absent"})
+	q, args, err = AggregateBucketsProposal(authorized, []string{"total", "absent"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestBatchProposalValuesContinuationAndExactSeekPlans(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(values, map[string]int64{"total": 6, "absent": 0}) {
 		t.Fatal(values, err)
 	}
-	if _, _, err = readmodel.AggregateBucketsProposal(authorized, []string{"total", "total"}); !errors.Is(err, readmodel.ErrProjection) {
+	if _, _, err = AggregateBucketsProposal(authorized, []string{"total", "total"}); !errors.Is(err, readmodel.ErrProjection) {
 		t.Fatal(err)
 	}
 }
@@ -155,7 +155,7 @@ func TestGlobalBatchRequiresSeparateDisjointIdentityCertification(t *testing.T) 
 	if _, err := db.Exec(`DELETE FROM scope_feed;INSERT INTO scope_feed VALUES(?,1,'family-0','reader',1,1,1),(?,1,'family-0','reader',2,2,1),(?,1,'family-0','reader',3,3,1),(?,1,'family-1','reader',100,2,1)`, request.ScopeIDs[0], request.ScopeIDs[0], request.ScopeIDs[0], request.ScopeIDs[0]); err != nil {
 		t.Fatal(err)
 	}
-	selected := []readmodel.AuthorizedStream{{Stream: streams[0], Generation: 1}, {Stream: streams[1], Generation: 1}}
+	selected := []AuthorizedStream{{Stream: streams[0], Generation: 1}, {Stream: streams[1], Generation: 1}}
 	var emitted []int64
 	for page := 0; page < 4; page++ {
 		refs := batchCandidates(t, db, selected, 1)

@@ -1,6 +1,7 @@
 package readmodel
 
 import (
+	"fmt"
 	"go/parser"
 	"go/token"
 	"io/fs"
@@ -16,6 +17,9 @@ import (
 // cost/route/storage tests land together; a default-false handler flag alone is
 // not adequate proof that a new call site cannot accidentally select the bridge.
 func TestReadModelNotServing(t *testing.T) {
+	if err := checkKernelDependencyClosure("..", "agent-nexus-core/internal/readmodel"); err != nil {
+		t.Error(err)
+	}
 	for _, root := range []string{"..", "../../cmd"} {
 		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
@@ -49,6 +53,99 @@ func TestReadModelNotServing(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// Walk every allowed application dependency, including files excluded by the
+// current platform/build tags. An allowed package is not a trusted factory.
+// Standard-library operations remain a closed, reviewed leaf allowlist.
+func checkKernelDependencyClosure(internalRoot, rootPackage string) error {
+	visited := map[string]bool{}
+	var visit func(string) error
+	visit = func(name string) error {
+		if visited[name] {
+			return nil
+		}
+		visited[name] = true
+		const prefix = "agent-nexus-core/internal/"
+		if !strings.HasPrefix(name, prefix) {
+			return fmt.Errorf("invalid application dependency: %s", name)
+		}
+		dir := filepath.Join(internalRoot, strings.TrimPrefix(name, prefix))
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			path := filepath.Join(dir, entry.Name())
+			if entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+				continue
+			}
+			file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+			if err != nil {
+				return err
+			}
+			for _, imp := range file.Imports {
+				dependency, err := strconv.Unquote(imp.Path.Value)
+				if err != nil {
+					return err
+				}
+				if !kernelImportAllowed(dependency) {
+					return fmt.Errorf("kernel dependency %s acquires forbidden import %s in %s", name, dependency, path)
+				}
+				if strings.HasPrefix(dependency, prefix) {
+					if err := visit(dependency); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		return nil
+	}
+	return visit(rootPackage)
+}
+
+// This is the reviewer's exact indirect SQL ingress: the kernel imports only
+// scopes, which exports sql.Open; its caller can read a private document title.
+// The previous direct-import guard admitted both production files.
+func TestKernelRejectsSQLFactoryInAllowedScopeDependency(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		"scopes/types.go":   "package scopes\nimport \"context\"\nvar _ context.Context\n",
+		"readmodel/page.go": "package readmodel\nimport \"agent-nexus-core/internal/scopes\"\n",
+	}
+	write := func(path, source string) {
+		t.Helper()
+		path = filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(source), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for path, source := range files {
+		write(path, source)
+	}
+	if err := checkKernelDependencyClosure(root, "agent-nexus-core/internal/readmodel"); err != nil {
+		t.Fatal(err)
+	}
+	write("scopes/zz_review_bypass.go", `package scopes
+import "database/sql"
+var ReviewRawFactory = sql.Open
+`)
+	write("readmodel/review_bypass.go", `package readmodel
+import "agent-nexus-core/internal/scopes"
+func reviewIndirectBypass(path string) (string,error) {
+ db,e:=scopes.ReviewRawFactory("sqlite",path)
+ if e!=nil {return "",e};defer db.Close()
+ var secret string
+ e=db.QueryRow("SELECT title FROM documents LIMIT 1").Scan(&secret)
+ return secret,e
+}
+`)
+	if err := checkKernelDependencyClosure(root, "agent-nexus-core/internal/readmodel"); err == nil || !strings.Contains(err.Error(), "database/sql") || !strings.Contains(err.Error(), "scopes") {
+		t.Fatalf("indirect SQL factory escaped: %v", err)
 	}
 }
 

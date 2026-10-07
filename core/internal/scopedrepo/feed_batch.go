@@ -81,10 +81,11 @@ func (s *Store) readBatchFeedTx(ctx context.Context, tx *sql.Tx, request scopes.
 		return err
 	}
 	var epoch int64
-	if err = tx.QueryRowContext(ctx, query_feed_legacy_epoch).Scan(&epoch); err != nil {
+	var namespace string
+	if err = tx.QueryRowContext(ctx, query_feed_legacy_epoch).Scan(&epoch, &namespace); err != nil {
 		return err
 	}
-	if epoch < 0 {
+	if epoch < 0 || !validWorkspaceNamespace(namespace) {
 		return ErrFeedProjection
 	}
 	bindings, err := batchBindings(ctx, tx, request.Principal, streams, authorities, selected)
@@ -107,14 +108,16 @@ func (s *Store) readBatchFeedTx(ctx context.Context, tx *sql.Tx, request scopes.
 		r.ready = r.ready && ready
 	}
 	// Ordered selection, principal, membership/role, all generations and legacy
-	// authority are bound independently of source-revision proof invalidation.
+	// authority and immutable workspace namespace are bound independently of
+	// source-revision proof invalidation.
 	encoded, err := json.Marshal(struct {
 		Format      int
+		Namespace   string
 		Principal   string
 		LegacyEpoch int64
 		Scopes      []feedAuthority
 		Streams     []feedStreamAuthority
-	}{feedCertificateVersion, request.Principal, epoch, authorities, bindings})
+	}{feedCertificateVersion, namespace, request.Principal, epoch, authorities, bindings})
 	if err != nil {
 		return err
 	}

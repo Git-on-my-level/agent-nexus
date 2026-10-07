@@ -1,8 +1,8 @@
 # Bounded read-model kernel
 
 Stream B remains disabled and unwired. Main's #307 feed dependency and A's
-`4e9f0c12` trusted adapters are integrated. The kernel retains A's exact two-file
-adapter exception; the independent repository guard still rejects every live
+trusted adapters are integrated. The kernel retains exact reviewed adapter
+exceptions; the independent repository guard still rejects every live
 consumer. No HTTP routes, serving constructors or migrations are registered,
 and existing authorization remains authoritative.
 
@@ -12,7 +12,7 @@ items in one batch. Limits remain 64 scopes, four streams per scope, 256 streams
 and 100 items. Resource identities must already be disjoint across the selected
 streams before paging and counting; admission checks cannot prove whole-generation
 disjointness. AES-GCM continuations bind ordered authority, generations, streams
-and directory coverage. Integer allocation keys stay internal.
+and directory coverage, including the immutable database namespace. Integer allocation keys stay internal.
 
 `Count` reads up to four exact sparse buckets. Any unavailable or uncertified
 scope makes the whole selected page/count unavailable. Values are absent rather
@@ -51,30 +51,20 @@ never creates certificates. D still owns durable worker claims/leases, complete
 canonical-family enumeration and cleanup. A owns parent capture and epoch
 invalidation. An unverified generation remains unavailable.
 
-`RankNeighbor` uses the exact `(scope,generation,board,column)` prefix and one
-indexed predecessor/successor seek. `RankBetween` refuses exhausted gaps without
-request-time rebalance. Board identity prevents shared column keys from mixing
-neighbors across boards.
+## Repository integration and remaining work
 
-## Repository integration and remaining proposals
+The integrated `scopedrepo.AdaptReadModel` and
+`scopedrepo.ReadModelCanonicalHook` supply immutable snapshot checks and exact
+delta-SQL admission. Their superseded patch proposals have been removed. Both
+adapters remain unreachable from live consumers under `TestFoundationNotServing`.
+The inbox-first proof plan is in `docs/design/scope-phase-two.md`.
 
-A integrated the first two patches as `scopedrepo.AdaptReadModel` and
-`scopedrepo.ReadModelCanonicalHook`, with immutable snapshot checks and exact
-delta-SQL admission. The patch files remain the original proposal; use the Go
-implementation for integration. Both adapters are still unreachable from live
-consumers under `TestFoundationNotServing`. The inbox-first ownership and proof
-plan is in `docs/design/scope-phase-two.md`.
-
-- `proposals/trusted-feed-adapter.patch`: transaction-local Reader/CounterReader
-  translation, with explicit directory coverage.
-- `proposals/scopedrepo-mutation-hook.patch`: the frozen CanonicalHook adapter,
-  exact private-registry/version/fence checks, and direct error propagation.
-  This replaces the earlier raw-transaction hook sketch.
 - `proposals/CAPTURE.md`: source/capture, schema, worker and certification wiring
   obligations. No shared constructors or migration files are edited by B.
-- `batch_proposal.go`: bounded authority/binding VALUES batches, exact-prefix
+- `batch_proposal_helpers_test.go`: bounded authority/binding VALUES batches, exact-prefix
   candidate seeks with a bounded global merge, and grouped sparse counters.
-  These return SQL only; no repository executes them in production. The global
+  These diagnostic builders are compiled only in tests. The runtime uses
+  the integrated scopedrepo queries. The global
   P+1 candidate proposal is not equivalent to per-stream duplicate admission:
   separately certified disjoint identities are mandatory before adoption.
 
@@ -88,7 +78,6 @@ plan is in `docs/design/scope-phase-two.md`.
 | Projection mutation  | <=24 exact statements; feed resource uniqueness and audience/version payload primary keys                         |
 | Lifecycle initiation | Two exact statements plus canonical parent write; domain/job primary keys                                         |
 | Lifecycle slice      | <=64 candidates and <=8 indexed same-scope ancestors; staging feed keys and fenced job checkpoint                 |
-| Rank neighbors       | Two O(log N) seeks; `(scope,generation,board,column,rank,rid)` primary key                                        |
 | Batch SQL proposal   | <=6 statements/526 returned rows before directory and legacy preparation; bounded S(P+1) internal candidate merge |
 
 Instrumented SQLite tests measure the published maximum request at **643 SQL and
@@ -103,7 +92,7 @@ directory coverage, duplicate lookahead, 64,000 wrong-audience rows, actual SQL
 plans, source/feed/payload/counter rollback through CanonicalHook, exact-zero
 faults, private RID mismatches, transitioning-source refusal, 10,002 durable
 metadata rows in <=64 chunks, restart, checkpoint/activation faults, missing/stale
-receipts and board-local rank gaps. Batch tests check values, keysets, ordering,
+receipts. Board/column ranking is deferred to a separate change. Batch tests check values, keysets, ordering,
 indexed seeks and the adversarial distant-duplicate prerequisite.
 
 Production HTTP/worker acceptance remains gated on A's complete canonical source

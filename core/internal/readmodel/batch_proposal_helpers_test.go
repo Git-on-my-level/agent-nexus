@@ -1,27 +1,27 @@
-package readmodel
+package readmodel_test
 
 import (
+	"agent-nexus-core/internal/readmodel"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"agent-nexus-core/internal/scopes"
 )
 
-// These builders are proposals for A's reviewed repository manifest. They only
-// return bounded SQL/arguments; no production repository executes them. A must
-// authorize the entire selection, validate every row, preserve sticky errors and
-// bind continuation/admission in its existing transaction before adoption.
+// Diagnostic-only SQL shapes retained for the pre-integration request-cost and
+// overlap counterexamples. The runtime uses scopedrepo's reviewed builders.
 
 func BatchAuthorityProposal(principal string, ids []scopes.ID) (string, []any, error) {
-	if !boundedText(principal, 512) || len(ids) < 1 || len(ids) > MaxScopes {
-		return "", nil, ErrBudget
+	if !proposalText(principal, 512) || len(ids) < 1 || len(ids) > readmodel.MaxScopes {
+		return "", nil, readmodel.ErrBudget
 	}
 	values := make([]string, len(ids))
 	args := make([]any, 0, 2*len(ids)+1)
 	seen := map[scopes.ID]bool{}
 	for i, id := range ids {
-		if !boundedText(string(id), 512) || seen[id] {
-			return "", nil, ErrProjection
+		if !proposalText(string(id), 512) || seen[id] {
+			return "", nil, readmodel.ErrProjection
 		}
 		seen[id] = true
 		values[i] = "(?,?)"
@@ -46,8 +46,8 @@ type AuthorizedStream struct {
 func validateAuthorizedStreams(streams []AuthorizedStream) error {
 	s := make([]Stream, len(streams))
 	for i, stream := range streams {
-		if !boundedText(string(stream.Stream.Scope), 512) || !boundedText(stream.Stream.Family, 128) || !boundedText(stream.Stream.Audience, 512) || stream.Generation < 1 || stream.After != nil && stream.After.RID < 1 {
-			return ErrProjection
+		if !proposalText(string(stream.Stream.Scope), 512) || !proposalText(stream.Stream.Family, 128) || !proposalText(stream.Stream.Audience, 512) || stream.Generation < 1 || stream.After != nil && stream.After.RID < 1 {
+			return readmodel.ErrProjection
 		}
 		s[i] = stream.Stream
 	}
@@ -55,8 +55,8 @@ func validateAuthorizedStreams(streams []AuthorizedStream) error {
 }
 
 func BatchBindingProposal(principal string, streams []AuthorizedStream) (string, []any, error) {
-	if !boundedText(principal, 512) || len(streams) < 1 {
-		return "", nil, ErrBudget
+	if !proposalText(principal, 512) || len(streams) < 1 {
+		return "", nil, readmodel.ErrBudget
 	}
 	if err := validateAuthorizedStreams(streams); err != nil {
 		return "", nil, err
@@ -84,8 +84,8 @@ func BatchBindingProposal(principal string, streams []AuthorizedStream) (string,
 // have disjoint resource identities for this generation. It cannot establish
 // that proof itself; retain Read's existing guard until A supplies certification.
 func BatchCandidatesProposal(streams []AuthorizedStream, size int) (string, []any, error) {
-	if size < 1 || size > MaxPageSize || len(streams) < 1 {
-		return "", nil, ErrBudget
+	if size < 1 || size > readmodel.MaxPageSize || len(streams) < 1 {
+		return "", nil, readmodel.ErrBudget
 	}
 	if err := validateAuthorizedStreams(streams); err != nil {
 		return "", nil, err
@@ -93,10 +93,10 @@ func BatchCandidatesProposal(streams []AuthorizedStream, size int) (string, []an
 	parts := make([]string, len(streams))
 	args := make([]any, 0, 7*len(streams)+1)
 	for i, s := range streams {
-		query := SeekFeedStart
+		query := readmodel.SeekFeedStart
 		args = append(args, s.Stream.Scope, s.Generation, s.Stream.Family, s.Stream.Audience)
 		if s.After != nil {
-			query = SeekFeedAfter
+			query = readmodel.SeekFeedAfter
 			args = append(args, s.After.Sort, s.After.RID)
 		}
 		args = append(args, size+1)
@@ -109,16 +109,16 @@ func BatchCandidatesProposal(streams []AuthorizedStream, size int) (string, []an
 // AggregateBucketsProposal groups the existing sparse exact-probe relation so
 // counters return <=4 rows. Integer SUM overflow fails, never casts to REAL.
 func AggregateBucketsProposal(streams []AuthorizedStream, buckets []string) (string, []any, error) {
-	if len(streams) < 1 || len(buckets) < 1 || len(buckets) > MaxBuckets {
-		return "", nil, ErrBudget
+	if len(streams) < 1 || len(buckets) < 1 || len(buckets) > readmodel.MaxBuckets {
+		return "", nil, readmodel.ErrBudget
 	}
 	if err := validateAuthorizedStreams(streams); err != nil {
 		return "", nil, err
 	}
 	seen := map[string]bool{}
 	for _, b := range buckets {
-		if !boundedText(b, 128) || seen[b] {
-			return "", nil, ErrProjection
+		if !proposalText(b, 128) || seen[b] {
+			return "", nil, readmodel.ErrProjection
 		}
 		seen[b] = true
 	}
@@ -135,4 +135,11 @@ func AggregateBucketsProposal(streams []AuthorizedStream, buckets []string) (str
  LEFT JOIN scope_counters c ON c.scope_id=r.scope_id AND c.generation=r.generation
  AND c.family=r.family AND c.audience_key=r.audience_key AND c.bucket=r.bucket
  GROUP BY r.bucket`, args, nil
+}
+
+type Stream = readmodel.Stream
+type Key = readmodel.Key
+
+func proposalText(s string, max int) bool {
+	return s != "" && len(s) <= max && utf8.ValidString(s) && !strings.ContainsRune(s, 0)
 }

@@ -50,10 +50,10 @@ the eventual minimal handler switch.
    the shadow/identity revision alone misses canonical ask/answer and external
    PM changes. Supply actual same-transaction old/new sources and publication
    authority to A's comparator; no production proof writer exists yet.
-   Hydrate once using `OrderedHydrationProposal`, including the private canonical
-   key/version join. Validate every ordinal, tuple, payload, nullable join and
+   Hydrate once through the integrated `ReadOrderedBatchFeed` capability,
+   including its private canonical key/version join. Validate every ordinal, tuple, payload, nullable join and
    byte bound, then call `DecodeScopeInbox`. Keep capability expiry and all
-   errors sticky. The SQL builder is an unapplied template, not a capability.
+   errors sticky. The superseded unapplied hydration builder has been removed.
 5. `ReadOrdered` uses one encrypted global comparator key with separate AAD,
    authenticated selection/epoch/generation/stream/directory binding, and a
    <=2 KiB token independent of fanout. Disjoint resource identities and uniform

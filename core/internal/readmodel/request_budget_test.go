@@ -209,23 +209,23 @@ func TestMeasuredDependencyRequestAndBatchProposalBudgets(t *testing.T) {
 
 	// Execute proposed batches against the same fixture. This is SQL-shape
 	// evidence for A, not an authorized repository or an enablement receipt.
-	authorized := make([]readmodel.AuthorizedStream, len(streams))
+	authorized := make([]AuthorizedStream, len(streams))
 	for i, s := range streams {
-		authorized[i] = readmodel.AuthorizedStream{Stream: s, Generation: 1}
+		authorized[i] = AuthorizedStream{Stream: s, Generation: 1}
 	}
-	authorityQ, authorityArgs, err := readmodel.BatchAuthorityProposal(request.Principal, request.ScopeIDs)
+	authorityQ, authorityArgs, err := BatchAuthorityProposal(request.Principal, request.ScopeIDs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	bindingQ, bindingArgs, err := readmodel.BatchBindingProposal(request.Principal, authorized)
+	bindingQ, bindingArgs, err := BatchBindingProposal(request.Principal, authorized)
 	if err != nil {
 		t.Fatal(err)
 	}
-	candidateQ, candidateArgs, err := readmodel.BatchCandidatesProposal(authorized, 100)
+	candidateQ, candidateArgs, err := BatchCandidatesProposal(authorized, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
-	counterQ, counterArgs, err := readmodel.AggregateBucketsProposal(authorized, []string{"total", "two", "three", "four"})
+	counterQ, counterArgs, err := AggregateBucketsProposal(authorized, []string{"total", "two", "three", "four"})
 	if err != nil {
 		t.Fatal(err)
 	}

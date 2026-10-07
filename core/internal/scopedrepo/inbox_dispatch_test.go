@@ -90,6 +90,99 @@ func TestInboxDispatcherSyntheticCompleteSnapshotReadsAndCounts(t *testing.T) {
 	}
 }
 
+func TestInboxDispatcherRejectsCrossDatabaseContinuationWithSharedCodecKey(t *testing.T) {
+	// Both fixtures have identical principals, scopes, RID allocation, generations,
+	// clocks, source rows and codec keys. Only the immutable namespace differs.
+	_, _, first := dispatchFixture(t, true)
+	_, _, second := dispatchFixture(t, true)
+	page, err := first.Read(context.Background(), "owner", 1, "")
+	must(t, err)
+	if page.Page.NextCursor == "" {
+		t.Fatal("missing continuation")
+	}
+	out, err := second.Read(context.Background(), "owner", 1, page.Page.NextCursor)
+	if err == nil && out.Fallback == "" {
+		t.Fatal("foreign database cursor admitted", out)
+	}
+	if len(out.Page.Items) != 0 || out.Counts != nil {
+		t.Fatal("foreign cursor disclosed data", out)
+	}
+}
+
+func TestInboxDispatcherRejectsCopiedCrossDatabaseReceipts(t *testing.T) {
+	for _, receipts := range []string{"selection", "serving", "both"} {
+		t.Run(receipts, func(t *testing.T) {
+			source, _, _ := dispatchFixture(t, true)
+			target, _, dispatcher := dispatchFixture(t, true)
+			var seq int
+			var name, path string
+			must(t, source.QueryRow(`PRAGMA database_list`).Scan(&seq, &name, &path))
+			must(t, exec(target, `ATTACH DATABASE ? AS source`, path))
+			if receipts != "serving" {
+				must(t, exec(target, `DELETE FROM scope_feed_selection_proofs; INSERT INTO scope_feed_selection_proofs SELECT * FROM source.scope_feed_selection_proofs`))
+			}
+			if receipts != "selection" {
+				must(t, exec(target, `DELETE FROM scope_inbox_serving_receipts; INSERT INTO scope_inbox_serving_receipts SELECT * FROM source.scope_inbox_serving_receipts`))
+			}
+			out, err := dispatcher.Read(context.Background(), "owner", 1, "")
+			must(t, err)
+			if out.Fallback != scopedrepo.InboxProofUnavailable || len(out.Page.Items) != 0 || out.Counts != nil {
+				t.Fatal("foreign receipt served", out)
+			}
+		})
+	}
+}
+
+func TestWorkspaceNamespaceIsPersistentAndImmutable(t *testing.T) {
+	db, store, dispatcher := dispatchFixture(t, true)
+	ctx := context.Background()
+	var before, after string
+	must(t, db.QueryRow(`SELECT namespace FROM scope_workspace_namespace WHERE singleton=1`).Scan(&before))
+	must(t, store.Initialize(ctx))
+	must(t, db.QueryRow(`SELECT namespace FROM scope_workspace_namespace WHERE singleton=1`).Scan(&after))
+	if before != after || len(before) != 32 {
+		t.Fatal(before, after)
+	}
+	for _, mutation := range []string{
+		`UPDATE scope_workspace_namespace SET namespace=printf('%032d',0)`,
+		`DELETE FROM scope_workspace_namespace`,
+		`INSERT OR REPLACE INTO scope_workspace_namespace VALUES(1,printf('%032d',0))`,
+		`INSERT OR IGNORE INTO scope_workspace_namespace VALUES(1,printf('%032d',0))`,
+	} {
+		if _, err := db.Exec(mutation); err == nil {
+			t.Fatal("namespace mutation admitted", mutation)
+		}
+	}
+	// Existing local receipts remain usable after failed mutations/reinitialization.
+	out, err := dispatcher.Read(ctx, "owner", 1, "")
+	must(t, err)
+	if out.Fallback != "" || len(out.Page.Items) != 1 {
+		t.Fatal(out)
+	}
+	// Close and reopen the database: identity is persisted, not a process nonce.
+	var seq int
+	var name, path string
+	must(t, db.QueryRow(`PRAGMA database_list`).Scan(&seq, &name, &path))
+	must(t, db.Close())
+	reopenedDB, err := sql.Open("sqlite", path)
+	must(t, err)
+	defer reopenedDB.Close()
+	reopenedDB.SetMaxOpenConns(1)
+	must(t, scopedrepo.New(reopenedDB).Initialize(ctx))
+	must(t, reopenedDB.QueryRow(`SELECT namespace FROM scope_workspace_namespace WHERE singleton=1`).Scan(&after))
+	if after != before {
+		t.Fatal("namespace changed after reopen", before, after)
+	}
+	codec, err := readmodel.NewCursorCodec(make([]byte, 32))
+	must(t, err)
+	reopened := scopedrepo.NewInboxDispatcher(scopedrepo.New(reopenedDB), codec)
+	next, err := reopened.Read(ctx, "owner", 1, out.Page.NextCursor)
+	must(t, err)
+	if next.Fallback != "" || len(next.Page.Items) != 1 || next.Page.Items[0].Ref == out.Page.Items[0].Ref {
+		t.Fatal(next)
+	}
+}
+
 func TestInboxDispatcherMissingProofDoesNotReadCandidates(t *testing.T) {
 	db, _, dispatcher := dispatchFixture(t, false)
 	must(t, exec(db, `DROP TABLE scope_inbox_order`))

@@ -3,7 +3,6 @@ package readmodel
 import (
 	"context"
 	"errors"
-	"math"
 	"testing"
 )
 
@@ -66,26 +65,5 @@ func TestCountsRejectMissingAndNegativeBuckets(t *testing.T) {
 	f.counts = map[string]int64{"open": 0}
 	if got, e := Count(context.Background(), f, []string{"open"}); e != nil || got.Values["open"] != 0 {
 		t.Fatalf("%+v %v", got, e)
-	}
-}
-
-func TestRankFullRangeAndGapRefusal(t *testing.T) {
-	for _, pair := range [][2]int64{{math.MinInt64, math.MaxInt64}, {-10, 10}, {math.MinInt64, math.MinInt64 + 2}, {math.MaxInt64 - 2, math.MaxInt64}} {
-		got, e := RankBetween(&pair[0], &pair[1])
-		if e != nil || got <= pair[0] || got >= pair[1] {
-			t.Fatalf("%v -> %d %v", pair, got, e)
-		}
-	}
-	for _, pair := range [][2]int64{{1, 2}, {1, 1}, {2, 1}} {
-		if _, e := RankBetween(&pair[0], &pair[1]); !errors.Is(e, ErrRankGap) {
-			t.Fatal(pair, e)
-		}
-	}
-	max, min := int64(math.MaxInt64), int64(math.MinInt64)
-	if _, e := RankBetween(&max, nil); !errors.Is(e, ErrRankGap) {
-		t.Fatal(e)
-	}
-	if _, e := RankBetween(nil, &min); !errors.Is(e, ErrRankGap) {
-		t.Fatal(e)
 	}
 }
