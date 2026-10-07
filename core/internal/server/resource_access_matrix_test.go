@@ -249,6 +249,11 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 					}
 					req.Header.Set("Authorization", "Bearer "+principal.AccessToken)
 					req.Header.Set("Content-Type", "application/json")
+					if p.Path == "/stream/events" {
+						// Resume the seeded fixture: a fresh connection starts at
+						// head, while this matrix must exercise visible replay too.
+						req.Header.Set("Last-Event-ID", anyString(event["id"]))
+					}
 					if p.Path == "/artifacts/attachments" {
 						var multipartBody bytes.Buffer
 						mw := multipart.NewWriter(&multipartBody)
