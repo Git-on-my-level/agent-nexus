@@ -30,11 +30,21 @@ type workerLifecycleBridge struct {
 	fault    string
 	examined int
 	expire   bool
+	delay    time.Duration
 }
 
 func (b *workerLifecycleBridge) Step(ctx context.Context, tx *sql.Tx, limit int, token int64) (bool, error) {
 	if limit != readmodel.MaxLifecycleChunk || token < 1 {
 		return false, readmodel.ErrBudget
+	}
+	if b.delay > 0 {
+		timer := time.NewTimer(b.delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return false, ctx.Err()
+		case <-timer.C:
+		}
 	}
 	loader := func(ctx context.Context, j readmodel.Job, limit int) ([]readmodel.RebuildRecord, error) {
 		rows, err := tx.QueryContext(ctx, `SELECT c.rid,c.parent,c.hidden,COALESCE(p.hidden,0) FROM worker_tree c LEFT JOIN worker_tree p ON p.rid=c.parent WHERE c.rid>? ORDER BY c.rid LIMIT ?`, j.Cursor, limit)
@@ -133,6 +143,16 @@ INSERT INTO scope_resources VALUES('scope','card','opaque-root','canonical-root'
 			t.Fatal("partial staged writes survived", count, err)
 		}
 	}
+	lifecycleSnapshot := func() (cursor int64, staged int) {
+		t.Helper()
+		if err := db.QueryRow(`SELECT cursor FROM scope_feed_jobs`).Scan(&cursor); err != nil {
+			t.Fatal(err)
+		}
+		if err := db.QueryRow(`SELECT (SELECT count(*) FROM scope_feed)+(SELECT count(*) FROM scope_feed_payloads)+(SELECT count(*) FROM scope_counters)`).Scan(&staged); err != nil {
+			t.Fatal(err)
+		}
+		return cursor, staged
+	}
 	b.fault = readmodel.CheckpointJob
 	if _, err = runner.LifecycleStep(ctx, token); err == nil {
 		t.Fatal("checkpoint fault ignored")
@@ -159,9 +179,36 @@ INSERT INTO scope_resources VALUES('scope','card','opaque-root','canonical-root'
 		t.Fatal(err)
 	}
 	examined := 0
+	deadlinePauses := 0
+	sawDeadline := false
 	for examined < 10002 {
+		// One slice is held past the production 50ms deadline so a yield is
+		// observed every run. Later slices still pause on their own if -race
+		// makes the same deadline fire, and only resume when nothing committed.
+		if examined == 0 && deadlinePauses == 0 {
+			b.delay = 80 * time.Millisecond
+		} else {
+			b.delay = 0
+		}
+		cursorBefore, stagedBefore := lifecycleSnapshot()
 		done, err := runner.LifecycleStep(ctx, token)
-		if err != nil || done || b.examined < 1 || b.examined > 64 {
+		if err != nil {
+			cursorAfter, stagedAfter := lifecycleSnapshot()
+			// LifecycleStep's production deadline is 50ms. Under -race a chunk
+			// can exceed it and roll back. That yield is resumable; a commit
+			// during the error, or any other error, is a semantic failure.
+			if errors.Is(err, context.DeadlineExceeded) && !done && cursorAfter == cursorBefore && stagedAfter == stagedBefore {
+				deadlinePauses++
+				sawDeadline = true
+				if deadlinePauses == 32 {
+					t.Fatal("deadline pause did not resume", cursorAfter)
+				}
+				continue
+			}
+			t.Fatal("bounded slice", done, b.examined, err)
+		}
+		deadlinePauses = 0
+		if done || b.examined < 1 || b.examined > 64 {
 			t.Fatal("bounded slice", done, b.examined, err)
 		}
 		examined += b.examined
@@ -179,6 +226,9 @@ INSERT INTO scope_resources VALUES('scope','card','opaque-root','canonical-root'
 			}
 			runner.DB = db
 		}
+	}
+	if !sawDeadline {
+		t.Fatal("worker did not yield at the slice deadline")
 	}
 	checkCursor(10002)
 	if _, err = runner.LifecycleStep(ctx, token); err == nil {
