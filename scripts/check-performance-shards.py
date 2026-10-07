@@ -102,6 +102,8 @@ def validate(routes, weights, allowances, reports, expected_hash):
                 assert sample["stream_polls"] == 2, "missing stream poll"
             if phase == "post_invalidation":
                 assert sample["invalidation_epoch_after"] > sample["invalidation_epoch_before"] > 0, "missing invalidation"
+                if route["path"] == "/stream/agent-notification-receipts":
+                    assert sample["receipt_invalidation_epoch_after"] > sample["receipt_invalidation_epoch_before"] > 0, "missing receipt invalidation"
             else:
                 assert sample["invalidation_epoch_before"] == sample["invalidation_epoch_after"] == 0, "unexpected invalidation"
             budget = exceptions.get((key, principal, phase), route)

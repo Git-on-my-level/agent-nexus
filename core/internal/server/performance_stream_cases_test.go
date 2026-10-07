@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/sha1"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -73,6 +74,9 @@ func configurePerformanceStreamCase(t *testing.T, env performanceEnv, b routeBud
 	if b.Scenario == "" {
 		return func() {}
 	}
+	if principal == 1 && b.UnauthorizedStatus == http.StatusNotFound {
+		return func() {} // Denied private-thread streams must return before any payload.
+	}
 	firstEnd := -1
 	public := fmt.Sprintf("FreshStreamPublic-%s-%d-%d", b.Scenario, principal, sample)
 	private := fmt.Sprintf("FreshStreamPrivate-%s-%d-%d", b.Scenario, principal, sample)
@@ -81,6 +85,55 @@ func configurePerformanceStreamCase(t *testing.T, env performanceEnv, b routeBud
 	cleanup := func() {}
 	var firstMust, firstMustNot string
 	switch b.Scenario {
+	case "receipts-private-thread", "receipts-public-thread":
+		req.Header.Del("Last-Event-ID") // Snapshot controls require the default history path.
+		public = time.Date(2030, 1, 1, 0, principal, sample, 0, time.UTC).Format(time.RFC3339)
+		private = time.Date(2031, 1, 1, 0, principal, sample, 0, time.UTC).Format(time.RFC3339)
+		thread := req.URL.Query().Get("thread_id")
+		id := fmt.Sprintf("scale-receipt-control-%s-%d", b.Scenario, principal)
+		firstMust = id + "-initial"
+		checkPrivate = b.Scenario == "receipts-public-thread"
+		removeReceipts := func() {
+			if _, err := env.db.Exec(`DELETE FROM agent_wakeups WHERE wakeup_id IN (?,?,?,?)`, id+"-initial", id+"-initial-private", id+"-public", id+"-private"); err != nil {
+				t.Errorf("remove temporary receipt controls: %v", err)
+			}
+		}
+		if sample == 0 {
+			t.Cleanup(removeReceipts)
+		}
+		appendReceipt := func(suffix, text string, refs []string) {
+			at := time.Now().UTC().Format(time.RFC3339Nano)
+			seedReceiptStreamWakeup(t, env.store, primitives.AgentWakeup{WakeupID: id + suffix, ThreadID: thread, TargetHandle: env.principals[0].Username, TargetActorID: env.principals[0].ActorID, Status: primitives.AgentWakeupStatusRequested, TriggerText: text, Refs: refs, CreatedAt: at, UpdatedAt: at})
+		}
+		if sample == 0 {
+			appendReceipt("-initial", "Initial visible receipt", nil)
+			if checkPrivate {
+				appendReceipt("-initial-private", "InitialStreamReceiptPrivate", []string{env.replace.Replace("{card_ref}")})
+			}
+		}
+		w.onFlush = func() {
+			firstEnd = w.Body.Len()
+			var before, after int64
+			if err := env.db.QueryRow(`SELECT version FROM receipt_access_epoch WHERE singleton=1`).Scan(&before); err != nil {
+				t.Fatal(err)
+			}
+			// Delivery-only writes append replay positions without changing receipt
+			// ancestry. Keep authority and cardinality stable across warm requests.
+			for suffix, marker := range map[string]string{"-initial": public, "-initial-private": private} {
+				if suffix == "-initial-private" && !checkPrivate {
+					continue
+				}
+				if _, err := env.db.Exec(`UPDATE agent_wakeups SET read_at=? WHERE wakeup_id=?`, marker, id+suffix); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := env.db.QueryRow(`SELECT version FROM receipt_access_epoch WHERE singleton=1`).Scan(&after); err != nil {
+				t.Fatal(err)
+			}
+			if before != after {
+				t.Fatal("delivery-only receipt controls invalidated the warm authority cache")
+			}
+		}
 	case "events-thread", "events-default", "events-large-thread", "events-resumed", "events-idle":
 		thread := req.URL.Query().Get("thread_id")
 		if thread == "" {
@@ -190,6 +243,17 @@ func configurePerformanceStreamCase(t *testing.T, env performanceEnv, b routeBud
 			t.Fatal("stream scenario did not complete two polls/invalidation deliveries")
 		}
 		first, second := w.Body.String()[:firstEnd], w.Body.String()[firstEnd:]
+		if strings.HasPrefix(b.Scenario, "receipts-") {
+			if err := performanceValidateReceiptFrames(w.Body.String()); err != nil {
+				t.Error(err)
+			}
+			if checkPrivate && principal == 0 && !strings.Contains(first, "InitialStreamReceiptPrivate") {
+				t.Error("owner omitted initial private receipt")
+			}
+			if principal != 0 && (strings.Contains(w.Body.String(), "InitialStreamReceiptPrivate") || strings.Contains(w.Body.String(), "-initial-private") || strings.Contains(w.Body.String(), "-private@")) {
+				t.Error("stranger received a private receipt identity or payload")
+			}
+		}
 		if strings.HasPrefix(b.Scenario, "events-") {
 			if err := performanceValidateEventFrames(w.Body.String()); err != nil {
 				t.Error(err)
@@ -241,6 +305,45 @@ func configurePerformanceStreamCase(t *testing.T, env performanceEnv, b routeBud
 
 // A resume marker may repeat only the last visible data ID, never the hidden
 // scanner cursor. Keepalives carry no IDs or payload; resume payload is empty.
+func performanceValidateReceiptFrames(body string) error {
+	seen := map[string]bool{}
+	for _, frame := range strings.Split(body, "\n\n") {
+		if strings.TrimSpace(frame) == "" || frame == ": keepalive" {
+			continue
+		}
+		id, kind, data := "", "", ""
+		for _, line := range strings.Split(frame, "\n") {
+			switch {
+			case strings.HasPrefix(line, "id: "):
+				id = strings.TrimPrefix(line, "id: ")
+			case strings.HasPrefix(line, "event: "):
+				kind = strings.TrimPrefix(line, "event: ")
+			case strings.HasPrefix(line, "data: "):
+				data = strings.TrimPrefix(line, "data: ")
+			default:
+				return fmt.Errorf("malformed receipt frame")
+			}
+		}
+		var payload struct {
+			Receipt map[string]any `json:"receipt"`
+		}
+		if kind != "notification_receipt" || json.Unmarshal([]byte(data), &payload) != nil || payload.Receipt == nil {
+			return fmt.Errorf("invalid receipt payload")
+		}
+		encoded, _ := json.Marshal(payload.Receipt)
+		sum := sha1.Sum(encoded)
+		want := fmt.Sprintf("receipt:%s@%x", anyString(payload.Receipt["wakeup_id"]), sum[:8])
+		if id != want || seen[id] {
+			return fmt.Errorf("incorrect or duplicate receipt ID/digest")
+		}
+		seen[id] = true
+	}
+	if len(seen) < 2 {
+		return fmt.Errorf("receipt stream needs distinct initial and fresh payloads")
+	}
+	return nil
+}
+
 func performanceValidateEventFrames(body string) error {
 	lastVisible := ""
 	seen := map[string]bool{}
@@ -469,21 +572,23 @@ func TestStreamScaleControlsPrivacy(t *testing.T) {
 	env := performanceEnv{store: store, db: db, handler: handler, principals: []lockoutPrincipalSeed{owner, stranger}, hub: opts.agentChanges, replace: strings.NewReplacer("{card_ref}", cardRef)}
 	performanceAppendStreamControls(t, env, performanceStreamThread, "small-history", "Small stream history", "", perfguard.Timestamp)
 	for pi, principal := range env.principals {
-		for _, scenario := range []string{"events-default", "events-idle", "inbox-snapshot", "inbox-resumed", "inbox-idle", "agents-change", "agents-resumed-header"} {
+		for _, scenario := range []string{"events-default", "events-idle", "inbox-snapshot", "inbox-resumed", "inbox-idle", "agents-change", "agents-resumed-header", "receipts-public-thread"} {
 			t.Run(fmt.Sprintf("%d/%s", pi, scenario), func(t *testing.T) {
 				path := "/stream/events?thread_id=" + performanceStreamThread
 				if strings.HasPrefix(scenario, "inbox-") {
 					path = "/stream/inbox"
 				} else if strings.HasPrefix(scenario, "agents-") {
 					path = "/stream/agents"
+				} else if strings.HasPrefix(scenario, "receipts-") {
+					path = "/stream/agent-notification-receipts?thread_id=" + performanceStreamThread
 				}
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
 				req := httptest.NewRequest(http.MethodGet, path, nil).WithContext(ctx)
 				req.Header.Set("Authorization", "Bearer "+principal.AccessToken)
 				req.Header.Set("Last-Event-ID", "arbitrary-reconnect-header")
-				w := &performanceWriter{ResponseRecorder: httptest.NewRecorder(), cancel: cancel, eventStream: strings.HasPrefix(scenario, "events-")}
-				validate := configurePerformanceStreamCase(t, env, routeBudget{Scenario: scenario}, pi, 0, req, w)
+				w := &performanceWriter{ResponseRecorder: httptest.NewRecorder(), cancel: cancel, eventStream: strings.HasPrefix(scenario, "events-"), receiptStream: strings.HasPrefix(scenario, "receipts-")}
+				validate := configurePerformanceStreamCase(t, env, routeBudget{Scenario: scenario, UnauthorizedStatus: http.StatusOK}, pi, 0, req, w)
 				handler.ServeHTTP(w, req)
 				if w.Code != http.StatusOK {
 					t.Fatalf("stream status=%d body=%.500s", w.Code, w.Body.String())

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,8 +9,74 @@ import (
 	"testing"
 	"time"
 
+	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/testutil/perfguard"
 )
+
+func TestPerformanceReceiptCacheInvalidation(t *testing.T) {
+	requirePerformanceTest(t)
+	env := newPerformanceEnv(t)
+	var seq int
+	var name, path string
+	if err := env.db.QueryRow(`PRAGMA database_list`).Scan(&seq, &name, &path); err != nil {
+		t.Fatal(err)
+	}
+	open := func() (*primitives.Store, *perfguard.Capture, func()) {
+		pool, capture, err := perfguard.Open("file:" + path + "?_pragma=busy_timeout(20000)&_pragma=journal_mode(WAL)")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return primitives.NewStore(pool, nil, ""), capture, func() { pool.Close() }
+	}
+	s, c, closePool := open()
+	defer closePool()
+	read := func(s *primitives.Store, c *perfguard.Capture) []perfguard.Statement {
+		ctx := primitives.WithAccessScope(context.Background(), primitives.AccessScope{ActorID: env.principals[0].ActorID, PMActorID: env.agent.ActorID})
+		c.Start()
+		cursor, err := s.ReceiptStreamCursor(ctx, env.replace.Replace("{thread_id}"), "receipt:scale-target-wakeup@control", func(primitives.AgentWakeup) bool { return true })
+		statements, _, _ := c.Stop()
+		if err != nil || cursor.AcceptedWakeupID != "scale-target-wakeup" || c.WorkError() != nil {
+			t.Fatalf("receipt cache control: cursor%+v err%v work%v", cursor, err, c.WorkError())
+		}
+		return statements
+	}
+	closure := func(statements []perfguard.Statement, stale bool, epoch int64) bool {
+		for _, statement := range statements {
+			if !strings.Contains(statement.SQL, "main.receipt_access_epoch") || !strings.Contains(statement.SQL, "json_group_array") {
+				continue
+			}
+			if !stale && !strings.Contains(statement.SQL, "_anx_snapshot_epoch") {
+				return true
+			}
+			if stale && strings.Contains(statement.SQL, "_anx_snapshot_epoch") && len(statement.Args) == 5 && statement.Args[0] == epoch && statement.Args[1] == epoch && statement.Args[3] == epoch {
+				return true
+			}
+		}
+		return false
+	}
+	if !closure(read(s, c), false, 0) {
+		t.Fatal("first receipt read inherited a warm closure")
+	}
+	if closure(read(s, c), false, 0) {
+		t.Fatal("warm receipt read rebuilt its closure")
+	}
+	var before, after int64
+	if err := env.db.QueryRow(`SELECT version FROM receipt_access_epoch WHERE singleton=1`).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	invalidatePerformanceCache(t, env)
+	if err := env.db.QueryRow(`SELECT version FROM receipt_access_epoch WHERE singleton=1`).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if after <= before || !closure(read(s, c), true, before) {
+		t.Fatal("receipt invalidation did not validate its stale cache against the advanced epoch")
+	}
+	s2, c2, close2 := open()
+	defer close2()
+	if !closure(read(s2, c2), false, 0) {
+		t.Fatal("fresh receipt pool inherited the prior pool's closure")
+	}
+}
 
 // Exercise the actual cache boundary, rather than trusting a report's label.
 func TestPerformanceColdStateIsolation(t *testing.T) {

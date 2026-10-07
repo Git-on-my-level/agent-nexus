@@ -308,6 +308,10 @@
     "milliseconds": 10109
   },
   {
+    "key": "GET /stream/agent-notification-receipts [public-thread]",
+    "milliseconds": 53969
+  },
+  {
     "key": "GET /stream/agents",
     "milliseconds": 6
   },

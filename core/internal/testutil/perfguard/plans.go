@@ -38,12 +38,15 @@ func PlanSQLHash(q string) string {
 		return SQLHash(q)
 	}
 	mask := unquotedSQL(q)
-	re := regexp.MustCompile(`COALESCE\(\(SELECT version FROM main\.resource_access_epoch WHERE singleton=1\),-1\)(?:<>|=)([0-9]+)\b`)
+	re := regexp.MustCompile(`COALESCE\(\(SELECT version FROM main\.(?:resource_access_epoch|receipt_access_epoch) WHERE singleton=1\),-1\)(?:<>|=)([0-9]+)\b`)
 	matches := re.FindAllSubmatchIndex(mask, -1)
 	// The compiler emits exactly a cold <> gate and a cached = gate with the
 	// same epoch. Extra occurrences (including business predicates) stay exact.
 	if len(matches) != 2 || !strings.HasSuffix(string(mask[matches[0][0]:matches[0][2]]), "<>") || !strings.HasSuffix(string(mask[matches[1][0]:matches[1][2]]), "=") || q[matches[0][2]:matches[0][3]] != q[matches[1][2]:matches[1][3]] {
 		return SQLHash(q)
+	}
+	if strings.TrimSuffix(string(mask[matches[0][0]:matches[0][2]]), "<>") != strings.TrimSuffix(string(mask[matches[1][0]:matches[1][2]]), "=") {
+		return SQLHash(q) // Mixed epoch tables are not one compiler snapshot.
 	}
 	var b strings.Builder
 	start := 0

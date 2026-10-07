@@ -14,6 +14,7 @@ class ExecutedCoverageTests(unittest.TestCase):
         self.routes = [dict(method="GET", path=f"/case/{i}", authorized_status=200,
             unauthorized_status=200, latency_ms=500, max_queries=100, max_rows=1024,
             max_vm_steps=50000) for i in range(109)]
+        self.routes[0]["path"] = "/stream/agent-notification-receipts"
         self.weights = [dict(key=coverage.case_key(r), milliseconds=i+1) for i,r in enumerate(self.routes)]
         shards = coverage.assignments(self.routes,self.weights)
         self.reports = [dict(shard=i,diagnostic=False,shard_count=4,core_source_sha256=self.hash,samples=[],completed=[]) for i in range(1,5)]
@@ -28,8 +29,10 @@ class ExecutedCoverageTests(unittest.TestCase):
                         fixture_policy="fresh-pool-and-handler-per-case-principal/shared-4096-distinct-thread-corpus",
                         invalidation_epoch_before=10 if phase=="post_invalidation" else 0,
                         invalidation_epoch_after=11 if phase=="post_invalidation" else 0,
+                        receipt_invalidation_epoch_before=20 if phase=="post_invalidation" else 0,
+                        receipt_invalidation_epoch_after=21 if phase=="post_invalidation" else 0,
                         elapsed_ms=1,queries=1,rows=1,vm_steps=1,fullscan_steps=0,
-                        sorts=0,autoindex_rows=0,status=200,deadline_exceeded=False,stream_polls=0))
+                        sorts=0,autoindex_rows=0,status=200,deadline_exceeded=False,stream_polls=2 if route["path"].startswith("/stream/") else 0))
 
     def validate(self,reports=None,allowances=()):
         return coverage.validate(self.routes,self.weights,allowances,
@@ -51,7 +54,9 @@ class ExecutedCoverageTests(unittest.TestCase):
         def failed_case(reports): reports[0]["completed"].pop()
         def no_invalidation(reports):
             next(s for s in reports[0]["samples"] if s["cache_phase"]=="post_invalidation")["invalidation_epoch_after"]=10
-        for mutation in (omit_sample,duplicate,omit_principal,wrong_phase,unknown_case,duplicate_shard,stale_hash,diagnostic,declared_only,failed_case,no_invalidation):
+        def no_receipt_invalidation(reports):
+            next(s for r in reports for s in r["samples"] if s["path"]=="/stream/agent-notification-receipts" and s["cache_phase"]=="post_invalidation")["receipt_invalidation_epoch_after"]=20
+        for mutation in (omit_sample,duplicate,omit_principal,wrong_phase,unknown_case,duplicate_shard,stale_hash,diagnostic,declared_only,failed_case,no_invalidation,no_receipt_invalidation):
             with self.subTest(mutation=mutation.__name__):
                 reports = copy.deepcopy(self.reports); mutation(reports)
                 with self.assertRaises((AssertionError,IndexError)): self.validate(reports)

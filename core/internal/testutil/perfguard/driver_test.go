@@ -115,6 +115,14 @@ func TestPlanFingerprintOnlyNormalizesSnapshotData(t *testing.T) {
 	if PlanSQLHash(a) != PlanSQLHash(b) {
 		t.Fatal("epoch data changed query fingerprint")
 	}
+	ra, rb := strings.ReplaceAll(a, "resource_access_epoch", "receipt_access_epoch"), strings.ReplaceAll(b, "resource_access_epoch", "receipt_access_epoch")
+	if PlanSQLHash(ra) != PlanSQLHash(rb) || PlanSQLHash(ra) == PlanSQLHash(a) {
+		t.Fatal("receipt snapshot data must normalize without erasing its epoch table")
+	}
+	mixed := strings.Replace(a, "resource_access_epoch", "receipt_access_epoch", 1)
+	if PlanSQLHash(mixed) != SQLHash(mixed) || PlanSQLHash(ra+" AND COALESCE((SELECT version FROM main.receipt_access_epoch WHERE singleton=1),-1)=999") != SQLHash(ra+" AND COALESCE((SELECT version FROM main.receipt_access_epoch WHERE singleton=1),-1)=999") {
+		t.Fatal("mixed or additional receipt gates normalized")
+	}
 	for _, changed := range []string{strings.Replace(a, "business", "other", 1), a + " AND id=?", a + " -- epoch 456", a + " /* epoch 456 */"} {
 		if PlanSQLHash(a) == PlanSQLHash(changed) {
 			t.Fatal("structural or literal change escaped fingerprint")

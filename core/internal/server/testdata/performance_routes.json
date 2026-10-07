@@ -870,7 +870,24 @@
     "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
     "query": "thread_id={thread_id}",
     "latency_ms": 500,
-    "max_vm_steps": 50000
+    "max_vm_steps": 50000,
+    "scenario": "receipts-private-thread",
+    "must_contain": "scale-target-wakeup"
+  },
+  {
+    "method": "GET",
+    "path": "/stream/agent-notification-receipts",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "query": "thread_id={stream_thread_id}",
+    "latency_ms": 500,
+    "max_vm_steps": 50000,
+    "scenario": "receipts-public-thread",
+    "must_contain": "Initial visible receipt",
+    "case": "public-thread"
   },
   {
     "method": "GET",

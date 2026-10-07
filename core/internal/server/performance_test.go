@@ -309,13 +309,14 @@ func newPerformanceEnv(t *testing.T) performanceEnv {
 
 type performanceWriter struct {
 	*httptest.ResponseRecorder
-	cancel      context.CancelFunc
-	flushes     []time.Time
-	onFlush     func()
-	eventStream bool
-	lastBodyLen int
-	polls       int
-	closed      bool
+	cancel        context.CancelFunc
+	flushes       []time.Time
+	onFlush       func()
+	eventStream   bool
+	receiptStream bool
+	lastBodyLen   int
+	polls         int
+	closed        bool
 }
 
 func (w *performanceWriter) Write(b []byte) (int, error) {
@@ -337,7 +338,7 @@ func (w *performanceWriter) Flush() {
 	// #311 flushes headers, independent comment-only keepalives, and each
 	// completed scanner result. An empty result writes no bytes before Flush.
 	// Count only the latter; timer activity cannot cancel unfinished reads.
-	if header || (w.eventStream && delta != "" && !strings.Contains(delta, "event: ")) {
+	if header || (w.eventStream && delta != "" && !strings.Contains(delta, "event: ")) || (w.receiptStream && !strings.Contains(delta, "event: notification_receipt\n")) {
 		return
 	}
 	w.polls++
@@ -513,14 +514,28 @@ func TestPerformanceRoutes(t *testing.T) {
 					for name, value := range b.Headers {
 						req.Header.Set(name, env.replace.Replace(value))
 					}
-					w := &performanceWriter{ResponseRecorder: httptest.NewRecorder(), cancel: cancel, eventStream: b.Path == "/stream/events"}
+					w := &performanceWriter{ResponseRecorder: httptest.NewRecorder(), cancel: cancel, eventStream: b.Path == "/stream/events", receiptStream: b.Path == "/stream/agent-notification-receipts"}
 					if b.Path == "/stream/agents" {
 						w.onFlush = env.hub.publish
 					}
 					validateStream := configurePerformanceStreamCase(t, env, b, pi, sample, req, w)
 					beforeEpoch, afterEpoch := int64(0), int64(0)
+					beforeReceiptEpoch, afterReceiptEpoch := int64(0), int64(0)
 					if phase == "post_invalidation" {
+						if w.receiptStream {
+							if err := env.db.QueryRow(`SELECT version FROM receipt_access_epoch WHERE singleton=1`).Scan(&beforeReceiptEpoch); err != nil {
+								t.Fatal(err)
+							}
+						}
 						beforeEpoch, afterEpoch = invalidatePerformanceCache(t, env)
+						if w.receiptStream {
+							if err := env.db.QueryRow(`SELECT version FROM receipt_access_epoch WHERE singleton=1`).Scan(&afterReceiptEpoch); err != nil {
+								t.Fatal(err)
+							}
+							if afterReceiptEpoch <= beforeReceiptEpoch {
+								t.Fatal("receipt cache invalidation did not advance its authority epoch")
+							}
+						}
 					}
 					cancel()
 					ctx, cancel = context.WithTimeout(context.Background(), deadlineBudget)
@@ -531,6 +546,13 @@ func TestPerformanceRoutes(t *testing.T) {
 					env.handler.ServeHTTP(w, req)
 					elapsed := time.Since(start)
 					statements, queries, rows := env.capture.Stop()
+					if w.receiptStream && phase == "warm" && w.Code == http.StatusOK {
+						for _, statement := range statements {
+							if strings.Contains(statement.SQL, "main.receipt_access_epoch") && strings.Contains(statement.SQL, "json_group_array") && !strings.HasPrefix(strings.TrimSpace(statement.SQL), "WITH RECURSIVE _anx_fresh_denied(") {
+								t.Error("warm receipt request rebuilt its authority closure")
+							}
+						}
+					}
 					work := env.capture.Work()
 					if err := env.capture.WorkError(); err != nil {
 						t.Fatalf("SQLite work counters: %v", err)
@@ -538,6 +560,8 @@ func TestPerformanceRoutes(t *testing.T) {
 					deadline := ctx.Err() == context.DeadlineExceeded
 					report.Samples = append(report.Samples, map[string]any{"method": b.Method, "path": b.Path, "case": b.Case, "principal": label, "sample": sample, "measured": true, "cache_phase": phase, "invalidation_epoch_before": beforeEpoch, "invalidation_epoch_after": afterEpoch, "sampling_policy": policy, "fixture_policy": fixturePolicy, "elapsed_ms": float64(elapsed) / float64(time.Millisecond), "queries": queries, "rows": rows, "vm_steps": work.VMSteps, "fullscan_steps": work.FullScanSteps, "sorts": work.Sorts, "autoindex_rows": work.AutoIndexRows, "status": w.Code, "deadline_exceeded": deadline, "stream_polls": w.polls})
 					cancel()
+					lastSample := report.Samples[len(report.Samples)-1]
+					lastSample["receipt_invalidation_epoch_before"], lastSample["receipt_invalidation_epoch_after"] = beforeReceiptEpoch, afterReceiptEpoch
 					durations[phase] = append(durations[phase], elapsed)
 					for _, s := range statements {
 						// EXPLAIN does not execute SQL. Retain every typed argument
@@ -691,6 +715,33 @@ func TestPerformanceEventStreamKeepalivesCannotCompleteSample(t *testing.T) {
 	w.Flush()
 	if w.polls != 2 || ctx.Err() != context.Canceled {
 		t.Fatal("second result did not finish sample")
+	}
+}
+
+func TestPerformanceReceiptKeepalivesCannotCompleteSample(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w := &performanceWriter{ResponseRecorder: httptest.NewRecorder(), cancel: cancel, receiptStream: true}
+	w.Flush()
+	for n := 0; n < 8; n++ {
+		w.WriteString(": keepalive\n\n")
+		w.Flush()
+		w.Flush()
+	}
+	if w.polls != 0 || ctx.Err() != nil {
+		t.Fatal("receipt timer/empty flush counted an unfinished read")
+	}
+	w.WriteString("id: initial\nevent: notification_receipt\ndata: {}\n\n")
+	w.Flush()
+	if w.polls != 1 || ctx.Err() != nil {
+		t.Fatal("first receipt payload not measured")
+	}
+	w.WriteString(": keepalive\n\n")
+	w.Flush()
+	w.WriteString("id: fresh\nevent: notification_receipt\ndata: {}\n\n")
+	w.Flush()
+	if w.polls != 2 || ctx.Err() != context.Canceled {
+		t.Fatal("fresh receipt payload did not finish sample")
 	}
 }
 
