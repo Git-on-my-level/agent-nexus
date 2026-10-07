@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -190,15 +191,23 @@ func TestEventsStreamHiddenOnlyHistoryMatchesIdleOverHTTP(t *testing.T) {
 
 type eventTickBudgetStore struct {
 	PrimitiveStore
-	calls chan int
-	gate  <-chan struct{}
+	calls        chan int
+	gate         <-chan struct{}
+	hiddenPages  int
+	visiblePages int
+	pages        int
 }
 
 func (s *eventTickBudgetStore) EventStreamCursor(context.Context, string) (primitives.EventCursor, error) {
 	return primitives.EventCursor{}, nil
 }
 func (s *eventTickBudgetStore) ListEventStreamPage(ctx context.Context, _ primitives.EventListFilter, cursor primitives.EventCursor) (primitives.EventStreamPage, error) {
-	s.calls <- 1
+	select {
+	case s.calls <- 1:
+	case <-ctx.Done():
+		return primitives.EventStreamPage{}, ctx.Err()
+	}
+	s.pages++
 	if s.gate != nil {
 		select {
 		case <-s.gate:
@@ -206,35 +215,63 @@ func (s *eventTickBudgetStore) ListEventStreamPage(ctx context.Context, _ primit
 			return primitives.EventStreamPage{}, ctx.Err()
 		}
 	}
+	if s.pages > s.hiddenPages && (s.hiddenPages > 0 || s.visiblePages > 0) {
+		visible := s.pages - s.hiddenPages
+		id := "public-probe"
+		if visible > 1 {
+			id = fmt.Sprintf("public-probe-%d", visible)
+		}
+		return primitives.EventStreamPage{Events: []map[string]any{{"id": id}}, Cursor: cursor, HasMore: visible < s.visiblePages}, nil
+	}
 	return primitives.EventStreamPage{Cursor: cursor, HasMore: true}, nil
 }
-func TestEventsStreamHiddenCandidateBudgetIsBoundedPerTick(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	s := &eventTickBudgetStore{calls: make(chan int, 20)}
-	w := httptest.NewRecorder()
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		handleEventsStream(w, httptest.NewRequest("GET", "/stream/events", nil).WithContext(ctx), handlerOptions{primitiveStore: s, contract: &schema.Contract{}, streamPollInterval: time.Hour})
-	}()
-	defer func() { cancel(); <-done }()
-	for i := 0; i < primitives.EventStreamTickCandidateBudget/primitives.EventStreamPageSize; i++ {
-		select {
-		case <-s.calls:
-		case <-time.After(5 * time.Second):
-			t.Fatal("hidden budget was not scanned within a tick")
-		}
-	}
-	select {
-	case <-s.calls:
-		t.Fatal("tick exceeded candidate budget")
-	case <-time.After(50 * time.Millisecond):
-	}
-	cancel()
-	<-done
-	if w.Body.String() != ": keepalive\n\n" {
-		t.Fatalf("hidden controls: %q", w.Body.String())
+
+// A one-hour poll interval makes any timer wait during hidden catch-up fail.
+func TestEventsStreamChunksContinueWithoutPollWait(t *testing.T) {
+	for _, fixture := range []struct{ hidden, visible int }{{50, 1}, {0, 3}, {10, 3}} {
+		t.Run(fmt.Sprintf("hidden-%d-visible-%d", fixture.hidden, fixture.visible), func(t *testing.T) {
+			s := &eventTickBudgetStore{calls: make(chan int, 60), hiddenPages: fixture.hidden, visiblePages: fixture.visible}
+			done := make(chan struct{})
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer close(done)
+				handleEventsStream(w, r, handlerOptions{primitiveStore: s, contract: &schema.Contract{}, streamPollInterval: time.Hour})
+			}))
+			defer srv.Close()
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			req, err := http.NewRequestWithContext(ctx, "GET", srv.URL+"/stream/events", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			reader := bufio.NewReader(resp.Body)
+			if frame := round4SSEFrame(t, reader); frame != ": keepalive\n\n" {
+				t.Fatalf("initial frame: %q", frame)
+			}
+			for i := 1; i <= fixture.visible; i++ {
+				id := "public-probe"
+				if i > 1 {
+					id = fmt.Sprintf("public-probe-%d", i)
+				}
+				if frame := round4SSEFrame(t, reader); !strings.Contains(frame, "id: "+id+"\n") || !strings.Contains(frame, "event: event\n") {
+					t.Fatalf("catch-up emitted a control or lost/duplicated the probe: %q", frame)
+				}
+			}
+			cancel()
+			resp.Body.Close()
+			select {
+			case <-done:
+			case <-time.After(2 * time.Second):
+				t.Fatal("cancelled handler did not join scanner")
+			}
+			if got := len(s.calls); got != fixture.hidden+fixture.visible {
+				t.Fatalf("read %d pages, want %d", got, fixture.hidden+fixture.visible)
+			}
+		})
 	}
 }
 
@@ -281,5 +318,99 @@ func TestEventsStreamKeepalivesContinueDuringHiddenScanAndCancelWorker(t *testin
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("cancelled handler did not join scanner")
+	}
+}
+
+// Measure actual page work so CI load and the accepted authorization cost do
+// not masquerade as timer delays. The allowance excludes initialization before
+// headers; authorized resume validation warms the identical principal cache.
+type timedEventPageStore struct {
+	PrimitiveStore
+	readNanos atomic.Int64
+}
+
+func (s *timedEventPageStore) ListEventStreamPage(ctx context.Context, filter primitives.EventListFilter, cursor primitives.EventCursor) (primitives.EventStreamPage, error) {
+	start := time.Now()
+	page, err := s.PrimitiveStore.ListEventStreamPage(ctx, filter, cursor)
+	s.readNanos.Add(int64(time.Since(start)))
+	return page, err
+}
+
+func TestEventsStreamPublicProbeLatencyDoesNotWaitForHiddenPollTicks(t *testing.T) {
+	const schedulingTolerance = 100 * time.Millisecond
+	idleLatency := map[time.Duration]time.Duration{}
+	for _, hidden := range []int{0, 10000} {
+		t.Run(fmt.Sprint(hidden), func(t *testing.T) {
+			env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+			db := env.workspace.DB()
+			reader := seedHumanPrincipalForLockoutTest(t, context.Background(), db, "latency-reader", "latency-reader-actor", "latency-reader", "latency-reader-token")
+			for _, query := range []string{
+				`INSERT INTO threads(id,updated_at,updated_by,body_json) VALUES('private','now','owner','{"pm_actor_id":"owner"}')`,
+				`INSERT INTO events(id,type,ts,actor_id,refs_json,payload_json) VALUES('000000','message_posted','2026-01-01T00:00:00Z','owner','[]','{}')`,
+				`INSERT INTO events(id,type,ts,actor_id,refs_json,payload_json) VALUES('public-probe','message_posted','2026-01-01T00:00:01Z','owner','[]','{}')`,
+			} {
+				if _, err := db.Exec(query); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if hidden > 0 {
+				if _, err := db.Exec(`WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<?)
+				INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) SELECT printf('%06d',i),'message_posted','2026-01-01T00:00:00Z','owner','private','[]','{}' FROM n`, hidden); err != nil {
+					t.Fatal(err)
+				}
+			}
+			store := &timedEventPageStore{PrimitiveStore: env.primitiveStore}
+			env.primitiveStore = store
+			// The 100ms run primes the identical principal/epoch cache. The
+			// default-interval run also reports warm request-to-delivery time;
+			// canonical cold capture remains a separate accepted cost.
+			for _, pollInterval := range []time.Duration{100 * time.Millisecond, time.Second} {
+				t.Run(pollInterval.String(), func(t *testing.T) {
+					store.readNanos.Store(0)
+					srv := eventPrivacyHTTPServer(t, env, pollInterval)
+					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+					defer cancel()
+					req, err := http.NewRequestWithContext(ctx, "GET", srv.URL+"/stream/events", nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+					req.Header.Set("Authorization", "Bearer "+reader.AccessToken)
+					req.Header.Set("Last-Event-ID", "000000")
+					requestStart := time.Now()
+					resp, err := http.DefaultClient.Do(req)
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer resp.Body.Close()
+					if resp.StatusCode != 200 {
+						t.Fatalf("status=%d", resp.StatusCode)
+					}
+					start := time.Now()
+					wire := bufio.NewReader(resp.Body)
+					for {
+						frame := round4SSEFrame(t, wire)
+						if frame == ": keepalive\n\n" {
+							continue
+						}
+						if !strings.Contains(frame, "id: public-probe\n") || !strings.Contains(frame, "event: event\n") {
+							t.Fatalf("unexpected frame before public probe: %q", frame)
+						}
+						break
+					}
+					latency := time.Since(start)
+					pageWork := time.Duration(store.readNanos.Load())
+					t.Logf("hidden=%d poll=%s request_to_delivery=%s after_headers=%s page_work=%s", hidden, pollInterval, time.Since(requestStart), latency, pageWork)
+					if hidden == 0 {
+						idleLatency[pollInterval] = latency
+						return
+					}
+					// Pending history may cost more SQL, but must not add five
+					// poll intervals. Allow framing and scheduler variance.
+					if latency > idleLatency[pollInterval]+pageWork+schedulingTolerance {
+						t.Fatalf("hidden backlog added timer delay: idle=%s hidden=%s work=%s tolerance=%s", idleLatency[pollInterval], latency, pageWork, schedulingTolerance)
+					}
+				})
+			}
+		})
 	}
 }

@@ -9,7 +9,7 @@ import (
 )
 
 const EventStreamPageSize = 200
-const EventStreamTickCandidateBudget = 2000
+const EventStreamChunkCandidateBudget = 2000
 
 // EventStreamPage carries server-local traversal state. Cursor can refer to a
 // hidden row and MUST NOT be serialized to a client (including SSE IDs).

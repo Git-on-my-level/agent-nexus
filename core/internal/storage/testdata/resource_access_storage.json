@@ -2023,7 +2023,7 @@
     "../server/stream/stream.go:Wrap": "2272bb83cf2ca8ab5bd8af2e16647a33aa4adb6038c1581aa6d18edee6439822",
     "../server/stream_handlers.go:eventActorIDsForKind": "728326f05609e5aa9b1c038ad58c700a2095dfbac9c7ed67b4d539ecf1940a86",
     "../server/stream_handlers.go:handleAgentNotificationReceiptsStream": "a8cb94c709fa1a12f7e523f4b492ca075f74f3064d0e171a40c087b1158d5d8e",
-    "../server/stream_handlers.go:handleEventsStream": "30516904b3c2d298aea68decb47ccf13a882b7aa98e07368c27912df351e8398",
+    "../server/stream_handlers.go:handleEventsStream": "73baf8dc75843e4147e1cd317568aa1d990329d866a7a4167e9dae4845962669",
     "../server/stream_handlers.go:handleInboxStream": "e8dbf7414c9ff01684b1c008fd6a137272d071aef68106d4aed325c38ec691e1",
     "../server/stream_handlers.go:handleListEvents": "bc86466808b5f652ae07736e56abcd6c2dad8e19b14c687b03a751eac81eab79",
     "../server/stream_handlers.go:parseBackingScope": "4394df739ced72916f52a9e948a58af345a9f4e3386e0a744e16a066dca09c87",

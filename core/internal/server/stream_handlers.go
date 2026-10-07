@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -198,7 +199,7 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 
 	// Only the handler writes SSE frames. A single owned scanner keeps slow
 	// authorization/page reads from postponing the independent keepalive timer.
-	// Requests never overlap and each scans at most one tick's candidate budget.
+	// Requests never overlap and each chunk has a fixed candidate budget.
 	scanCtx, cancelScan := context.WithCancel(r.Context())
 	requests := make(chan struct{}, 1)
 	type scanResult struct {
@@ -216,7 +217,7 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 			case <-requests:
 			}
 			var result scanResult
-			for candidates := 0; candidates < primitives.EventStreamTickCandidateBudget; candidates += primitives.EventStreamPageSize {
+			for candidates := 0; candidates < primitives.EventStreamChunkCandidateBudget; candidates += primitives.EventStreamPageSize {
 				result.page, result.err = opts.primitiveStore.ListEventStreamPage(scanCtx, primitives.EventListFilter{
 					ThreadID: threadID, ThreadIDs: threadIDs, Types: eventTypes,
 				}, cursor)
@@ -292,6 +293,14 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 				}
 			}
 			flushSSE(controller, flusher)
+			if result.page.HasMore {
+				// Remaining positions must not add a poll interval to visible
+				// delivery; wait on the timer only after reaching the head. Yield before scheduling the next bounded
+				// chunk; the handler still services keepalives independently.
+				runtime.Gosched()
+				requests <- struct{}{}
+				scanning = true
+			}
 		}
 	}
 }
