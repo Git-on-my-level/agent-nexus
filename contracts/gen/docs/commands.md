@@ -1762,7 +1762,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `home`, `documents`, `cards`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Output: Returns the workspace Overview projection.
-- Agent notes: Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it.
+- Agent notes: Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it. brief holds the ranked morning answers (decisions, since_last_look, at_risk, machine, initiatives) computed from the same authorized rows, with no extra query.
 
 ## `plan.set`
 

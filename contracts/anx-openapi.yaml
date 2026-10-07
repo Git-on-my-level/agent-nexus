@@ -4865,7 +4865,7 @@ paths:
       tags: [home]
       x-anx-surface: projection
       x-anx-command-id: overview.get
-      x-anx-agent-notes: Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it.
+      x-anx-agent-notes: Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it. brief holds the ranked morning answers (decisions, since_last_look, at_risk, machine, initiatives) computed from the same authorized rows, with no extra query.
       x-anx-cli-path: overview
       x-anx-why: Read the same active-work Overview projection used by the web UI.
       x-anx-input-mode: none
@@ -11890,6 +11890,7 @@ components:
       properties:
         generated_at: { type: string, format: date-time }
         since_you_last_looked: { $ref: '#/components/schemas/OverviewChanges' }
+        brief: { $ref: '#/components/schemas/OverviewBrief' }
         work:
           type: object
           required: [status, total, human_count, items]
@@ -11929,6 +11930,197 @@ components:
             status: { type: string, enum: [ok, unavailable] }
             message: { type: string }
             items: { type: array, items: { type: object, additionalProperties: true } }
+    OverviewBrief:
+      type: object
+      required: [status, generated_at, decisions, since_last_look, at_risk, machine, initiatives]
+      additionalProperties: true
+      description: >
+        Morning brief: five ranked, computed answers for the top of Overview — what needs a decision, what changed since the
+        caller's previous visit, what is off track and why, whether agents are working, and where each initiative actually is.
+        Derived entirely from the rows this request already loaded and already filtered (the bounded visit work snapshot, the
+        assembled needs_you rows, since_you_last_looked and the agent roster), so it issues no additional query and adds no
+        O(workspace) pass. Nothing is hand-maintained. Counts describe only what the caller is authorized to see: where access
+        is denied the number is smaller, and no field reveals that something was withheld. Sections carry at most section_limit
+        rows plus a `more` remainder.
+      properties:
+        status: { type: string, enum: [ok] }
+        generated_at: { type: string, format: date-time }
+        section_limit: { type: integer, description: Rows a section shows before the more remainder. }
+        throughput_hours: { type: integer, description: Window for machine.finished_24h. }
+        decisions: { $ref: '#/components/schemas/OverviewBriefDecisions' }
+        since_last_look: { $ref: '#/components/schemas/OverviewBriefChanges' }
+        at_risk: { $ref: '#/components/schemas/OverviewBriefRisk' }
+        machine: { $ref: '#/components/schemas/OverviewBriefMachine' }
+        initiatives: { $ref: '#/components/schemas/OverviewBriefInitiatives' }
+
+    OverviewBriefDecisions:
+      type: object
+      required: [status, count, items, more, href]
+      description: >
+        The needs_you rows, ranked. Score precedence is blocking open work (1000 per visible dependent), then an overdue or
+        within-48h due date, then critical/high priority, then a blocked phase, then age in hours capped at 30 days. Ties break
+        oldest first, then by id, so the order is stable across reads. `reason` is the computed explanation for the rank, at most
+        three clauses. blocks counts only dependents this caller can see, so it is a lower bound and never implies a hidden row.
+      properties:
+        status: { type: string, enum: [ok, unavailable] }
+        message: { type: string }
+        count: { type: integer, description: Ranked candidates, not just the rows returned. }
+        more: { type: integer }
+        truncated: { type: boolean }
+        href: { type: string }
+        items: { type: array, items: { $ref: '#/components/schemas/OverviewBriefDecision' } }
+
+    OverviewBriefDecision:
+      type: object
+      required: [id, title, href, reason, signals]
+      properties:
+        id: { type: string, description: Matching needs_you row id. }
+        title: { type: string }
+        source: { type: string }
+        href: { type: string }
+        reason: { type: string, description: Computed rank explanation, e.g. "blocks 2 cards · 3d without a change". }
+        signals:
+          type: object
+          additionalProperties: true
+          properties:
+            kind: { type: string, enum: [task, ask, decision] }
+            blocks: { type: integer, description: Visible open rows declaring depends_on this one; a lower bound. }
+            priority: { type: string }
+            phase: { type: string }
+            due_at: { type: string, format: date-time }
+            age_hours: { type: integer }
+            since: { type: string, format: date-time }
+
+    OverviewBriefChanges:
+      type: object
+      required: [since, groups, total]
+      description: >
+        Grouped digest of what changed since the caller's previous Overview visit, computed over the same bounded visible rows.
+        Groups are ordered finished, newly blocked, new asks, new decisions, asks answered, plan steps done, initiatives off
+        track, cancelled, updated; empty groups are omitted. first_visit is true when there is no previous visit to compare with,
+        which is not the same as nothing having changed.
+      properties:
+        since: { type: string, format: date-time, nullable: true }
+        first_visit: { type: boolean }
+        total: { type: integer }
+        truncated: { type: boolean }
+        groups: { type: array, items: { $ref: '#/components/schemas/OverviewBriefChangeGroup' } }
+
+    OverviewBriefChangeGroup:
+      type: object
+      required: [key, label, count, items, more]
+      properties:
+        key: { type: string, enum: [completed, newly_blocked, new_asks, decisions, answered, steps, initiatives, cancelled, updated] }
+        label: { type: string }
+        count: { type: integer }
+        more: { type: integer }
+        items:
+          type: array
+          items:
+            type: object
+            required: [ref, title, href]
+            properties:
+              ref: { type: string }
+              title: { type: string }
+              href: { type: string }
+              at: { type: string, format: date-time }
+
+    OverviewBriefRisk:
+      type: object
+      required: [status, count, items, more]
+      description: >
+        Initiatives and work that are off track, worst first (blocked, at_risk, stale) then longest-standing. Every row carries
+        the computed reason for its state — plan health's reason, or recorded blockers for a card in the blocked column. A row
+        with no computed reason is omitted rather than guessed at.
+      properties:
+        status: { type: string, enum: [ok] }
+        count: { type: integer }
+        more: { type: integer }
+        truncated: { type: boolean }
+        items:
+          type: array
+          items:
+            type: object
+            required: [ref, title, href, state, reason]
+            properties:
+              ref: { type: string }
+              title: { type: string }
+              href: { type: string }
+              state: { type: string, enum: [blocked, at_risk, stale] }
+              reason: { type: string }
+              since: { type: string, format: date-time }
+              progress:
+                type: object
+                properties:
+                  done: { type: integer }
+                  total: { type: integer }
+
+    OverviewBriefMachine:
+      type: object
+      required: [status, finished_24h, agents_finished_24h, href]
+      description: >
+        Is the machine running. working and waiting reuse the roster's derived states; stuck is the three-way silence split —
+        an agent with no recent signal counts as stuck only while it holds an open run or a card, never merely for being
+        offline or never enrolled. finished_24h counts visible cards that reached done or cancelled inside throughput_hours and
+        agents_finished_24h the distinct owners among them, so throughput survives a roster read failure; working, waiting and
+        stuck are then null and roster_status is unavailable.
+      properties:
+        status: { type: string, enum: [ok] }
+        roster_status: { type: string, enum: [ok, unavailable] }
+        message: { type: string }
+        working: { type: integer, nullable: true }
+        waiting: { type: integer, nullable: true }
+        stuck: { type: integer, nullable: true }
+        finished_24h: { type: integer }
+        agents_finished_24h: { type: integer }
+        truncated: { type: boolean }
+        roster_truncated: { type: boolean }
+        href: { type: string }
+        stuck_items:
+          type: array
+          items:
+            type: object
+            required: [ref, title, href, reason]
+            properties:
+              ref: { type: string }
+              title: { type: string }
+              href: { type: string }
+              reason: { type: string }
+              last_signal_at: { type: string, format: date-time }
+
+    OverviewBriefInitiatives:
+      type: object
+      required: [status, count, items, more, by_state, href]
+      description: >
+        Every initiative's honest state, worst first in the shared health order (blocked, at_risk, stale, on_track, done,
+        no_plan). by_state counts all of them by state, so an initiative with no plan is visible as a gap rather than reported
+        as on track.
+      properties:
+        status: { type: string, enum: [ok] }
+        count: { type: integer }
+        more: { type: integer }
+        truncated: { type: boolean }
+        href: { type: string }
+        by_state: { type: object, additionalProperties: { type: integer } }
+        items:
+          type: array
+          items:
+            type: object
+            required: [ref, title, href, state, reason]
+            properties:
+              ref: { type: string }
+              title: { type: string }
+              href: { type: string }
+              state: { type: string, enum: [no_plan, stale, blocked, at_risk, on_track, done] }
+              reason: { type: string }
+              phase: { type: string }
+              next_step: { type: string }
+              progress:
+                type: object
+                properties:
+                  done: { type: integer }
+                  total: { type: integer }
+
     OverviewDashboard:
       type: object
       required: [status]

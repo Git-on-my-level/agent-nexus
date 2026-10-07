@@ -177,11 +177,30 @@ func TestGenericAliasesAndIndexedLookupIgnoreUnrelatedEvidence(t *testing.T) {
 	}
 }
 
+// The legacy health field reports every state it has a name for. It used to
+// flatten no_plan, at_risk and done into "on_track", which is how seven
+// unplanned initiatives came to render green. Only "stale" is still renamed,
+// to the "stalled" spelling older clients know, and only a state this core
+// does not recognise falls back to "on_track".
 func TestLegacyHealthAndDigestVocabulary(t *testing.T) {
+	for state, want := range map[string]string{
+		"no_plan":  "no_plan",
+		"stale":    "stalled",
+		"stalled":  "stalled",
+		"blocked":  "blocked",
+		"at_risk":  "at_risk",
+		"on_track": "on_track",
+		"done":     "done",
+		"":         "on_track",
+		"invented": "on_track",
+	} {
+		if legacy := plans.LegacyHealth(state); legacy != want {
+			t.Fatalf("LegacyHealth(%q)=%q want %q", state, legacy, want)
+		}
+	}
 	for _, state := range []string{"no_plan", "stale", "blocked", "at_risk", "on_track", "done"} {
-		legacy := plans.LegacyHealth(state)
-		if legacy != "on_track" && legacy != "stalled" && legacy != "blocked" {
-			t.Fatalf("old client cannot read %s", legacy)
+		if legacy := plans.LegacyHealth(state); legacy == "on_track" && state != "on_track" {
+			t.Fatalf("%s must not be reported as on_track", state)
 		}
 	}
 	d := primitives.OverviewChanges{Items: []primitives.OverviewChange{}}

@@ -24,6 +24,8 @@
     urgentBandModel,
   } from "$lib/overviewUrgent.js";
   import UrgentBand from "$lib/components/overview/UrgentBand.svelte";
+  import MorningBrief from "$lib/components/overview/MorningBrief.svelte";
+  import { morningBriefModel } from "$lib/morningBrief.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { workspacePath } from "$lib/workspacePaths";
   import LiveInitiatives from "$lib/components/reports/LiveInitiatives.svelte";
@@ -138,6 +140,14 @@
         })
       : [],
   );
+  /*
+   * The morning brief. Core computes every value in it from rows the same
+   * /overview request already loaded, so this costs one projection of an
+   * object the page already has in hand.
+   */
+  let brief = $derived(
+    morningBriefModel(model?.brief, { hrefFor: workspaceHref }),
+  );
   let urgentBand = $derived(
     urgentBandModel({
       asks: [
@@ -243,6 +253,7 @@
         agents: section,
         reports: section,
         initiatives: section,
+        brief: undefined,
       };
     } finally {
       if (id === request) refreshing = false;
@@ -329,6 +340,13 @@
       <Skeleton rows={6} />
     </div>
   {:else}
+    <!--
+      The morning brief: the five questions a reader opens this page to answer,
+      computed, above everything else. It is first because it is the only part
+      of the page that answers "what should I look at" rather than "here is
+      everything". `MorningBrief.svelte` has the reasoning for each section.
+    -->
+    <MorningBrief {brief} />
     <!--
       One urgent band, not a second Inbox. It is the top of the page because it
       is the only part of the page that might need doing in the next minute:
