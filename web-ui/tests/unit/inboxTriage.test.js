@@ -2,8 +2,21 @@
 import { get } from "svelte/store";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const client = vi.hoisted(() => ({ respondInboxItem: vi.fn() }));
-vi.mock("$lib/coreClient", () => ({ coreClient: client }));
+const client = vi.hoisted(() => ({
+  respondInboxItem: vi.fn(),
+  capturedScopes: [],
+}));
+vi.mock("$lib/coreClient", () => ({
+  coreClient: client,
+  captureInboxResponseSender: () => {
+    client.capturedScopes.push([
+      get(currentOrganizationSlug),
+      get(currentWorkspaceSlug),
+      get(authenticatedAgent)?.actor_id,
+    ]);
+    return client.respondInboxItem.bind(client);
+  },
+}));
 
 import {
   eventPhraseParts,
@@ -57,8 +70,89 @@ describe("answer snapshots", () => {
   beforeEach(() => {
     resetInboxResponseQueue();
     client.respondInboxItem.mockReset();
+    client.capturedScopes.length = 0;
   });
   afterEach(() => resetInboxResponseQueue());
+
+  it.each(["workspace", "organization", "reader"])(
+    "sends a submitted custom reply once in its captured scope across a %s switch",
+    async (change) => {
+      vi.useFakeTimers();
+      try {
+        currentOrganizationSlug.set("org-a");
+        currentWorkspaceSlug.set("workspace-a");
+        authenticatedAgent.set({ agent_id: "human-a", actor_id: "actor-a" });
+        client.respondInboxItem.mockResolvedValue({});
+        queueInboxResponse({
+          itemId: "inbox:private",
+          item: { id: "inbox:private", title: "Private decision" },
+          request: {
+            response_text: "Use the smaller rollout first",
+            outcome: "answered",
+          },
+          restore: { draft: "Use the smaller rollout first" },
+          message: "Sent",
+        });
+        await vi.advanceTimersByTimeAsync(1_000);
+        if (change === "workspace") currentWorkspaceSlug.set("workspace-b");
+        if (change === "organization") currentOrganizationSlug.set("org-b");
+        authenticatedAgent.set({ agent_id: "human-b", actor_id: "actor-b" });
+        await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS);
+        expect(client.respondInboxItem).toHaveBeenCalledTimes(
+          change === "reader" ? 0 : 1,
+        );
+        expect(get(inboxResponseOverlay)).toEqual({});
+        expect(get(inboxResponseToast)).toBeNull();
+        currentOrganizationSlug.set("org-a");
+        currentWorkspaceSlug.set("workspace-a");
+        authenticatedAgent.set({ agent_id: "human-a", actor_id: "actor-a" });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(client.capturedScopes).toEqual([
+          ["org-a", "workspace-a", "actor-a"],
+        ]);
+        expect(client.respondInboxItem).toHaveBeenCalledWith(
+          "inbox:private",
+          expect.objectContaining({
+            response_text: "Use the smaller rollout first",
+          }),
+        );
+        await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS);
+        expect(client.respondInboxItem).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("restores an unsent reply's failure and idempotent retry only to its original reader", async () => {
+    currentOrganizationSlug.set("org-a");
+    currentWorkspaceSlug.set("workspace-a");
+    authenticatedAgent.set({ agent_id: "human-a", actor_id: "actor-a" });
+    let reject;
+    client.respondInboxItem.mockReturnValue(
+      new Promise((_, fail) => (reject = fail)),
+    );
+    queueInboxResponse({
+      itemId: "inbox:private",
+      request: { response_text: "Custom reply", outcome: "answered" },
+      message: "Sent",
+    });
+    const sent = flushInboxResponse();
+    const originalRequest = client.respondInboxItem.mock.calls[0][1];
+    currentWorkspaceSlug.set("workspace-b");
+    authenticatedAgent.set({ agent_id: "human-b", actor_id: "actor-b" });
+    reject(new Error("core unavailable"));
+    await sent;
+    expect(get(inboxResponseFailures)).toEqual({});
+    currentWorkspaceSlug.set("workspace-a");
+    authenticatedAgent.set({ agent_id: "human-a", actor_id: "actor-a" });
+    expect(get(inboxResponseFailures)["inbox:private"].error).toBe(
+      "core unavailable",
+    );
+    client.respondInboxItem.mockResolvedValue({});
+    await retryInboxResponse("inbox:private");
+    expect(client.respondInboxItem.mock.calls[1][1]).toEqual(originalRequest);
+  });
 
   it.each(["workspace", "reader", "organization", "logout"])(
     "does not replay a private snapshot after changing %s",

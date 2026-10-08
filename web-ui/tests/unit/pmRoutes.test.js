@@ -66,7 +66,10 @@ const client = vi.hoisted(() =>
 );
 const navigation = vi.hoisted(() => ({ goto: vi.fn(), guards: [] }));
 vi.mock("$app/stores", () => ({ page: { subscribe: state.subscribe } }));
-vi.mock("$lib/coreClient", () => ({ coreClient: client }));
+vi.mock("$lib/coreClient", () => ({
+  coreClient: client,
+  captureInboxResponseSender: () => client.respondInboxItem.bind(client),
+}));
 vi.mock("$lib/authSession", () => ({
   initializeAuthSession: vi.fn().mockResolvedValue({ actor_id: "human" }),
   // The Inbox pane asks whether the reader may decide an access request.
