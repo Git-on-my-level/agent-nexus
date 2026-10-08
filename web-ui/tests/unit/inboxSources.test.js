@@ -6,6 +6,31 @@ import {
 } from "../../src/lib/inboxSources.js";
 
 describe("Inbox sources", () => {
+  it("filters archived work from progressive PM snapshots as well as the final lists", async () => {
+    const progress = [];
+    const client = {
+      listPmDecisions: async () => ({
+        items: [{ id: "decision", work_ref: "card:archived" }],
+      }),
+      listPmActions: async () => ({
+        items: [{ id: "action", work_ref: "card:archived" }],
+      }),
+      listWork: async () => ({ work: [], archived_refs: ["card:archived"] }),
+      listInboxItems: async () => ({ items: [] }),
+      getHomeUnread: async () => ({ groups: [] }),
+    };
+    const results = await loadInboxSources({
+      client,
+      onProgress: (snapshot) => progress.push(snapshot),
+    });
+    for (const snapshot of [...progress, results]) {
+      if (snapshot[2].status !== "fulfilled") continue;
+      for (const index of [0, 1]) {
+        if (snapshot[index].status === "fulfilled")
+          expect(snapshot[index].value.items).toEqual([]);
+      }
+    }
+  });
   it("removes an older open snapshot using the completed row's original id", () => {
     const completed = {
       id: "completed:response",

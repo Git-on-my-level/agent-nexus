@@ -54,7 +54,23 @@ export async function loadInboxSources({
 } = {}) {
   const skipped = Promise.resolve(null);
   const progress = Array.from({ length: 6 }, () => ({ status: "pending" }));
-  const publish = () => onProgress?.(progress.map((result) => ({ ...result })));
+  const visibleSources = (sources) => {
+    const hidden = new Set(sources[2]?.value?.archived_refs || []);
+    return sources.map((result, index) => {
+      if (index > 1 || result.status !== "fulfilled" || !result.value?.items)
+        return { ...result };
+      return {
+        ...result,
+        value: {
+          ...result.value,
+          items: result.value.items.filter(
+            (item) => !hidden.has(item.work_ref),
+          ),
+        },
+      };
+    });
+  };
+  const publish = () => onProgress?.(visibleSources(progress));
   const pages = async (index, fetchPage, key) => {
     try {
       const value = await listAllPages(fetchPage, key, 8, (page) => {
@@ -97,15 +113,7 @@ export async function loadInboxSources({
     ),
     withHistory ? client.getHomeUnread() : skipped,
   ]);
-  const hidden = new Set(results[2]?.value?.archived_refs || []);
-  for (const index of [0, 1]) {
-    if (results[index].status === "fulfilled" && results[index].value?.items) {
-      results[index].value.items = results[index].value.items.filter(
-        (item) => !hidden.has(item.work_ref),
-      );
-    }
-  }
-  return results;
+  return visibleSources(results);
 }
 
 /** Completed rows have their own ids; match their original inbox_item_id too. */
