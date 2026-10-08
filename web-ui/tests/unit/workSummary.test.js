@@ -302,6 +302,75 @@ describe("the legacy fallback", () => {
     expect(model.sourceStatusShown).toBe(false);
   });
 
+  it("keeps a label core chose deliberately, even for a state it cannot name", () => {
+    /*
+     * The forward-compatibility invariant: a state this client has never seen
+     * renders core's own wording. Only core's *mechanical* label — the state
+     * token with its underscores replaced — loses to the source's word, since
+     * it carries nothing the token did not.
+     */
+    const labelled = workSummaryModel(
+      {
+        ref: "card:x",
+        work_summary: {
+          status: { state: "waiting_on_source", label: "Waiting on source" },
+          source: { authority: "jira", native_status: "In UAT" },
+        },
+      },
+      { now: NOW },
+    );
+    expect(labelled.status.label).toBe("Waiting on source");
+    expect(labelled.sourceStatusShown).toBe(true);
+
+    // And the same for an explicit Unknown core wrote on purpose.
+    expect(
+      workSummaryModel(
+        {
+          ref: "card:x",
+          work_summary: {
+            status: { state: "unknown", label: "Not yet classified" },
+            source: { authority: "jira", native_status: "In UAT" },
+          },
+        },
+        { now: NOW },
+      ).status.label,
+    ).toBe("Not yet classified");
+  });
+
+  it("never borrows the tracker's word for the phase the board filed it under", () => {
+    // `set_status` is the stored Nexus phase. Lending it the source's
+    // workflow word read "Blocked · marked in uat", which is not what the
+    // board says — and then the separate badge said "In UAT" as well.
+    const model = workSummaryModel(
+      {
+        ref: "card:x",
+        work_summary: {
+          status: { state: "blocked", label: "Blocked" },
+          set_status: { state: "vendor_hold" },
+          source: { authority: "jira", native_status: "In UAT" },
+        },
+      },
+      { now: NOW },
+    );
+    expect(model.setStatus.label).toBe("vendor hold");
+    expect(model.sourceStatusShown).toBe(true);
+  });
+
+  it("does not badge the source's word twice over a case difference", () => {
+    expect(
+      workSummaryModel(
+        {
+          ref: "card:x",
+          work_summary: {
+            status: { state: "blocked", label: "Blocked" },
+            source: { authority: "jira", native_status: "blocked" },
+          },
+        },
+        { now: NOW },
+      ).sourceStatusShown,
+    ).toBe(false);
+  });
+
   it("keeps the source's own status word beside the computed one", () => {
     const model = workSummaryModel(
       {

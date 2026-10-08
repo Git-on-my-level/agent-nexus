@@ -90,17 +90,20 @@ describe("no card read is left opted out", () => {
    * a reviewer can check that by looking at the file.
    */
   const NO_STATE_SHOWN = new Map([
-    ["src/lib/inboxSources.js", "names the source behind an inbox row"],
     [
-      "src/routes/o/[organization]/w/[workspace]/integrations/+page.svelte",
+      "listWork src/lib/inboxSources.js",
+      "names the source behind an inbox row",
+    ],
+    [
+      "listWork src/routes/o/[organization]/w/[workspace]/integrations/+page.svelte",
       "counts and lists tasks per connection; shows read freshness, not state",
     ],
     [
-      "src/routes/o/[organization]/w/[workspace]/pm/+page.svelte",
+      "listWork src/routes/o/[organization]/w/[workspace]/pm/+page.svelte",
       "picks a task by title for a PM conversation",
     ],
     [
-      "src/routes/o/[organization]/w/[workspace]/tasks/[workId]/+page.svelte",
+      "listWork src/routes/o/[organization]/w/[workspace]/tasks/[workId]/+page.svelte",
       "the mirrors list: other tasks on the same source item, by title and read state",
     ],
   ]);
@@ -127,11 +130,17 @@ describe("no card read is left opted out", () => {
         }
         const args = body.slice(match.index, end + 1);
         const name = file.slice(root.length - 3);
+        /*
+         * Keyed on the method as well as the file. Keyed on the file alone,
+         * excusing the task page's mirrors `listWork` also excused its two
+         * `getWork` calls — including the card read the whole page is built
+         * on, which could then quietly drop the parameter and stay green.
+         */
         if (
           !/summary:\s*1|SUMMARY_READ/.test(args) &&
-          !NO_STATE_SHOWN.has(name)
+          !NO_STATE_SHOWN.has(`${method} ${name}`)
         ) {
-          offenders.push(`${name}: ${args.replace(/\s+/g, " ")}`);
+          offenders.push(`${method} ${name}: ${args.replace(/\s+/g, " ")}`);
         }
       }
     }
@@ -140,8 +149,9 @@ describe("no card read is left opted out", () => {
 
   it("every read excused from the opt-in is still a real file", () => {
     const present = new Set(sources.map((f) => f.slice(root.length - 3)));
-    for (const name of NO_STATE_SHOWN.keys()) {
-      expect(present.has(name), `${name} is excused but missing`).toBe(true);
+    for (const key of NO_STATE_SHOWN.keys()) {
+      const name = key.slice(key.indexOf(" ") + 1);
+      expect(present.has(name), `${key} is excused but missing`).toBe(true);
     }
   });
 });

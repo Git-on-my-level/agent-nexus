@@ -103,12 +103,22 @@ describe("the vocabulary lives in one place", () => {
    * literal in a file, wherever the file is.
    */
   /*
-   * The distinctive words only. `review` and `cancelled` are also an ask kind
-   * and a run state, and matching them turned two unrelated vocabularies into
-   * false positives.
+   * The computed health states plus the stored phases, minus the three words
+   * that belong to other vocabularies too: `review` is also an ask kind,
+   * `cancelled` and `done` are also run states and plan-step statuses, and
+   * matching them made unrelated tables into false positives.
    */
-  const STATES = "in_progress|blocked|at_risk|no_plan|on_track|backlog";
-  const pattern = new RegExp(`\\b(${STATES})\\s*:\\s*["'\`]`, "g");
+  const STATES =
+    "in_progress|blocked|at_risk|no_plan|on_track|backlog|stale|ready";
+  /*
+   * Quoted or bare keys. Not a `new Map([[...]])` of pairs, and not a key
+   * computed at runtime — this catches the shape a second vocabulary
+   * actually takes, not every shape one could be written in. The rules in
+   * the next block are the DOM-side net; between them a presenter has to be
+   * deliberately disguised to get through, which is a different problem from
+   * one written without noticing.
+   */
+  const pattern = new RegExp(`["']?\\b(${STATES})\\b["']?\\s*:\\s*["'\`]`, "g");
 
   const ALLOWED = new Map([
     ["src/lib/workSummary.js", "is the vocabulary: labels, tones and order"],

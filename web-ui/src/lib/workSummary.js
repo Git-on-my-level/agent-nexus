@@ -159,18 +159,26 @@ function stateLabel(state) {
  * @param {object|null|undefined} raw the `status` or `set_status` part
  * @param {string} [sourceStatus] the source's own word for this state
  *
- * A state Nexus has no name for gets the source's word instead, even over
- * core's label: `summaryLabel` falls back to the state token with its
- * underscores replaced, so "vendor waiting" carries nothing the token did
- * not. "Custom waiting state" is what the tracker's own users read.
+ * A state Nexus has no name for reads better in the tracker's own words than
+ * as its raw token: "Custom waiting state", not "vendor waiting".
+ *
+ * But only over a *mechanical* label. Core labels a state it does not know by
+ * replacing the underscores (`summaryLabel`), which carries nothing the token
+ * did not — that is the one this replaces. A label core chose deliberately is
+ * core's answer and stands, which is what keeps a state this client has never
+ * seen rendering core's wording rather than the client's guess at it.
  */
 function statusPart(raw, sourceStatus = "") {
   const state = asText(raw?.state);
-  // "Unknown" counts as unnamed: it is the one label that carries less than
-  // the source's own word does.
+  // "Unknown" counts as unnamed: it is the one label of ours that carries
+  // less than the source's own word does.
   const named = state !== "unknown" && Boolean(FALLBACK_LABELS[state]);
+  const given = asText(raw?.label);
+  const mechanical = !given || given === state.replaceAll("_", " ");
   const label =
-    (!named && asText(sourceStatus)) || asText(raw?.label) || stateLabel(state);
+    (!named && mechanical && asText(sourceStatus)) ||
+    given ||
+    stateLabel(state);
   if (!state && !label) return null;
   return {
     state,
@@ -190,6 +198,18 @@ function statusPart(raw, sourceStatus = "") {
  *   one without the other — so it marks the count rather than hiding in a
  *   tooltip the Overview showed and the Tasks row did not.
  */
+/**
+ * Is the source's word worth a badge of its own?
+ *
+ * Not when the status label already *is* that word — which is what happens
+ * for a state Nexus cannot name — and not when it differs only in case.
+ */
+function sourceWordAdds(sourceStatus, status) {
+  const word = asText(sourceStatus);
+  if (!word) return false;
+  return word.toLocaleLowerCase() !== asText(status?.label).toLocaleLowerCase();
+}
+
 function progressPart(raw, unresolved = false) {
   const total = Number(raw?.total);
   if (!Number.isFinite(total) || total <= 0) return null;
@@ -535,7 +555,10 @@ function baseModel(row) {
 function fromComputed(raw, row, { now }) {
   const sourceStatus = asText(raw.source?.native_status);
   const status = statusPart(raw.status, sourceStatus);
-  const setStatus = statusPart(raw.set_status, sourceStatus);
+  // No source word for `set_status`: that is the phase the card is filed
+  // under in Nexus, and borrowing the tracker's workflow word for it read
+  // "Blocked · marked in uat", which is not what the board says.
+  const setStatus = statusPart(raw.set_status);
   const age = Number(raw.age);
   return finish(
     {
@@ -581,9 +604,7 @@ function fromComputed(raw, row, { now }) {
        * had no Nexus name the label above already *is* the source's word, and
        * a badge beside it would say the same thing twice.
        */
-      sourceStatusShown: Boolean(
-        sourceStatus && sourceStatus !== status?.label,
-      ),
+      sourceStatusShown: sourceWordAdds(sourceStatus, status),
       attention: attentionPart(raw.attention),
       attentionTruncated: raw.attention_truncated === true,
       resolutionTruncated: raw.resolution_truncated === true,
@@ -648,7 +669,7 @@ function fromLegacy(row, { now }) {
       // the computed health would be this client's own claim.
       setStatus:
         health.known && phase && phase !== health.state
-          ? statusPart({ state: phase }, sourceStatus)
+          ? statusPart({ state: phase })
           : null,
       phaseHint: phase || asText(status?.state),
       progress: progressPart(
@@ -669,9 +690,7 @@ function fromLegacy(row, { now }) {
         asText(row?.plan_state?.last_movement_at) || asText(row?.updated_at),
       source: row?.source && typeof row.source === "object" ? row.source : null,
       sourceStatus,
-      sourceStatusShown: Boolean(
-        sourceStatus && sourceStatus !== status?.label,
-      ),
+      sourceStatusShown: sourceWordAdds(sourceStatus, status),
       resolutionTruncated: row?.plan_resolution_truncated === true,
     },
     row,

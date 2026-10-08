@@ -1010,7 +1010,7 @@
             {/each}
           </ul>
         </section>
-        {#if plan && work.summary}
+        {#if plan && cardProse}
           <section data-initiative-body>
             <div class="flex flex-wrap items-baseline justify-between gap-2">
               <h2 class="ui-label">Card body</h2>
@@ -1028,7 +1028,7 @@
               />
             </div>
             <MarkdownRenderer
-              source={work.summary}
+              source={cardProse}
               class="mt-2 text-meta text-fg [overflow-wrap:anywhere]"
               resolved={planRefs}
               organizationSlug={$page.params.organization}

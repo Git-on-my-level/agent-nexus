@@ -24,6 +24,7 @@
   import { coreClient } from "$lib/coreClient";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
   import WorkSummary from "$lib/components/WorkSummary.svelte";
+  import { resolveRefsInBatches } from "$lib/refResolve.js";
   import { workSummaryModel } from "$lib/workSummary.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import TaskParticipation from "$lib/components/participation/TaskParticipation.svelte";
@@ -121,6 +122,45 @@
     Boolean(agent?.name && host?.excluded_names?.includes(agent.name)),
   );
 
+  /**
+   * The computed summary for the cards this agent touched.
+   *
+   * `/agents/{id}` builds `recent_cards` straight from the card store and
+   * computes no summary, and it has no `summary=1` to opt into. So the list
+   * would read the stored column while the Tasks table read the computed
+   * status — the disagreement this whole change exists to end, left standing
+   * on one surface.
+   *
+   * `refs.resolve` carries a computed summary per card preview without an
+   * opt-in, and it is one bounded batch for the handful of rows on screen.
+   * A failed resolve is not an error here: the rows fall back to the stored
+   * column, which is what they showed before.
+   */
+  let recentCardSummaries = $state(new Map());
+  async function loadRecentCardSummaries(key, cards) {
+    const refs = (Array.isArray(cards) ? cards : [])
+      .map((card) => String(card?.ref || `card:${card?.handle ?? ""}`).trim())
+      .filter((ref) => ref && ref !== "card:");
+    if (!refs.length) {
+      recentCardSummaries = new Map();
+      return;
+    }
+    const resolved = await resolveRefsInBatches(refs, (batch) =>
+      coreClient.resolveRefs(batch),
+    );
+    if (key !== agentKey) return;
+    recentCardSummaries = new Map(
+      [...resolved]
+        .filter(([, hit]) => hit?.summary)
+        .map(([ref, hit]) => [ref, hit.summary]),
+    );
+  }
+
+  function recentCardSummary(card) {
+    const ref = String(card?.ref || `card:${card?.handle ?? ""}`).trim();
+    return recentCardSummaries.get(ref) ?? workSummaryModel(card, { now });
+  }
+
   async function load(key = agentKey, { quiet = false } = {}) {
     if (!quiet) {
       loading = true;
@@ -131,6 +171,7 @@
       const response = await coreClient.getAgent(key);
       if (key !== agentKey) return;
       detail = response ?? null;
+      void loadRecentCardSummaries(key, response?.recent_cards);
       const actorId = response?.agent?.actor_id;
       const hostId = response?.agent?.host_id;
       const [events, principals, hostResponse] = await Promise.allSettled([
@@ -666,7 +707,7 @@
                        blocked plan. -->
                   <span class="shrink-0 text-micro text-fg-muted">
                     <WorkSummary
-                      summary={workSummaryModel(card, { now })}
+                      summary={recentCardSummary(card)}
                       density="row"
                       title={card.title}
                       {now}

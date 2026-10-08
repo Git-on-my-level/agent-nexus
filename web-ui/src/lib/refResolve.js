@@ -151,6 +151,9 @@ export function indexResolvedRefs(response, requested = []) {
        * for a doc or a topic, which have no card state.
        */
       summary: hasWorkSummary(row) ? workSummaryModel(row) : null,
+      // Cheap per preview despite being the whole model: a resolved ref
+      // carries no plan state, geometry or step digest, so the parts that
+      // cost anything never run.
       owner: asText(row?.owner),
       url: asText(row?.url),
       progress: normalizeProgress(row?.progress),
@@ -266,7 +269,14 @@ export function refChipModel(ref, resolved, context = {}) {
       : (KIND_LABELS[kind] ?? ""),
     title: title || raw,
     status,
-    statusLabel: status ? status.replaceAll("_", " ") : "",
+    /*
+     * The computed label too, not just the state. `on_track` reads "on
+     * track" in a preview and "In progress" in every badge beside it, which
+     * is one vocabulary too many for the same fact.
+     */
+    statusLabel:
+      asText(computed?.status?.label) ||
+      (status ? status.replaceAll("_", " ") : ""),
     statusTone,
     owner: asText(hit?.ownerDisplay) || asText(hit?.owner),
     priority: asText(hit?.priority),
