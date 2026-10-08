@@ -187,3 +187,11 @@ describe("Inbox sources", () => {
     );
   });
 });
+
+it("keeps a feed's partial marker even when it has no usable next cursor", async () => {
+  const result = await listAllPages(
+    async () => ({ items: [{ id: "first" }], has_more: true }),
+    "items",
+  );
+  expect(result).toMatchObject({ items: [{ id: "first" }], has_more: true });
+});

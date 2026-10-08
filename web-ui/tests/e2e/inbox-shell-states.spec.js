@@ -1131,6 +1131,8 @@ for (const viewport of AUDIT_VIEWPORTS) {
 
     test("inbox notices, deep links and partial loads", async ({ page }) => {
       const api = await installWorkspaceApi(page, { truncated: true });
+      // Missing single-item reads return 404, never a different decision.
+      api.fail.decision = { status: 404, message: "Decision not found" };
       // A capped mailbox cannot claim a pinned row is definitely absent.
       await gotoInbox(page, "?item=decision:not-loaded");
       await expect(

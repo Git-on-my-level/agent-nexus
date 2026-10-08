@@ -29,7 +29,7 @@ export async function listAllPages(fetchPage, key, maxPages = 8, onPage) {
   }
   return {
     [key]: collected,
-    has_more: more && Boolean(cursor),
+    has_more: more,
     archived_refs: [...archived],
   };
 }
