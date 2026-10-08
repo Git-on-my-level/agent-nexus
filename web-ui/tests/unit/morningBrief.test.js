@@ -221,23 +221,25 @@ describe("morningBriefModel", () => {
     // The state counts are the point: five initiatives with no plan is a
     // sentence, where five green chips were a lie. Labels and tones come from
     // `workSummary.js`, so a chip and the cards it counts agree.
-    expect(model.sections.initiatives.chips).toEqual([
-      { state: "blocked", count: 1, rank: 0, label: "Blocked", tone: "danger" },
-      {
-        state: "on_track",
-        count: 1,
-        rank: 3,
-        label: "In progress",
-        tone: "ok",
-      },
-      {
-        state: "no_plan",
-        count: 5,
-        rank: 11,
-        label: "No plan",
-        tone: "neutral",
-      },
+    /*
+     * Worst first, by state rather than by magic number: the ranks are
+     * positions in a list `workSummary.js` owns and may grow, and pinning the
+     * integers made adding a state look like a regression here.
+     */
+    expect(
+      model.sections.initiatives.chips.map(({ state, count, label, tone }) => ({
+        state,
+        count,
+        label,
+        tone,
+      })),
+    ).toEqual([
+      { state: "blocked", count: 1, label: "Blocked", tone: "danger" },
+      { state: "on_track", count: 1, label: "In progress", tone: "ok" },
+      { state: "no_plan", count: 5, label: "No plan", tone: "neutral" },
     ]);
+    const ranks = model.sections.initiatives.chips.map((chip) => chip.rank);
+    expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
   });
 
   it("keeps a risk row's computed reason and its progress", () => {

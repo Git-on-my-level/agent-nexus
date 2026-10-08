@@ -123,6 +123,18 @@ describe("cardGroup", () => {
     // And finished still wins over everything.
     expect(cardGroup(summary("done", ["no_plan"]))).toBe("done");
   });
+
+  it("does not fold a card whose state nobody could name", () => {
+    // "We do not know what state this is in, and it has no plan" is a worse
+    // case than either half, not a reason to collapse it out of the grid.
+    expect(cardGroup(summary("unknown", ["no_plan"]))).toBe("attention");
+  });
+
+  it("reads the specification's spelling of the two risk states", () => {
+    for (const state of ["overdue", "stalled"]) {
+      expect(cardGroup(summary(state, ["no_plan"])), state).toBe("attention");
+    }
+  });
 });
 
 describe("workSummaryCards", () => {

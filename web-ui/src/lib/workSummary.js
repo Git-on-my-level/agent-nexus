@@ -70,7 +70,9 @@ const SHAPE_LABELS = Object.freeze({
 const STATUS_PRESENTATION = Object.freeze({
   blocked: { tone: "danger", glyph: "■" },
   at_risk: { tone: "warn", glyph: "▲" },
+  overdue: { tone: "warn", glyph: "▲" },
   stale: { tone: "warn", glyph: "◷" },
+  stalled: { tone: "warn", glyph: "◷" },
   on_track: { tone: "ok", glyph: "●" },
   in_progress: { tone: "ok", glyph: "●" },
   done: { tone: "ok", glyph: "✓" },
@@ -89,7 +91,9 @@ const NEUTRAL = Object.freeze({ tone: "neutral", glyph: "·" });
 export const ATTENTION_ORDER = Object.freeze([
   "blocked",
   "at_risk",
+  "overdue",
   "stale",
+  "stalled",
   "on_track",
   "in_progress",
   "review",
@@ -139,7 +143,20 @@ const CLOSED_STATES = new Set(["done", "cancelled"]);
  * out of a collapsed fold — one definition, so the band and the fold cannot
  * disagree about which cards a reader must not miss.
  */
-export const ATTENTION_STATES = Object.freeze(["blocked", "at_risk", "stale"]);
+export const ATTENTION_STATES = Object.freeze([
+  "blocked",
+  "at_risk",
+  "stale",
+  /*
+   * The same two risks under the words the specification uses for them.
+   * Core's tokens are `at_risk` (its reason is "overdue or due within 24
+   * hours") and `stale`; reading both spellings costs nothing and is the
+   * difference between an overdue card leading the dashboard and collapsing
+   * out of it.
+   */
+  "overdue",
+  "stalled",
+]);
 
 /** Is this card asking for someone's attention? */
 export function needsAttention(summary) {
@@ -163,10 +180,19 @@ const HINT_LABELS = Object.freeze({
   no_plan: "No plan",
 });
 
-/** The hints a row carries, in core's order, named. */
+/**
+ * The hints a row carries, in core's order, named.
+ *
+ * A hint is a token, but an open vocabulary with labels is the obvious thing
+ * for core to grow into, so an entry that arrives as `{key, label}` is read
+ * too. Anything else is dropped rather than stringified: `String({})` is
+ * `"[object Object]"`, which would have rendered as a note *and* made the
+ * Overview's planless fold match nothing.
+ */
 function hintParts(raw) {
   const seen = new Set();
   return (Array.isArray(raw) ? raw : [])
+    .map((entry) => (typeof entry === "string" ? entry : entry?.key))
     .map(asText)
     .filter((key) => key && !seen.has(key) && seen.add(key))
     .map((key) => ({
@@ -187,7 +213,9 @@ export function hasHint(summary, key) {
 const FALLBACK_LABELS = Object.freeze({
   blocked: "Blocked",
   at_risk: "At risk",
+  overdue: "Overdue",
   stale: "Stale",
+  stalled: "Stale",
   on_track: "In progress",
   in_progress: "In progress",
   review: "In review",
@@ -740,7 +768,12 @@ function fromLegacy(row, { now }) {
       hasPlan: Array.isArray(row?.plan_state?.steps)
         ? row.plan_state.steps.length > 0
         : Boolean(row?.plan_state),
-      // Same rule for a core with no computed summary at all.
+      /*
+       * Same rule for a core with no computed summary at all — and only that
+       * rule. `hasPlan` is false for every list row from such a core, since
+       * list rows carry no plan state at all, so deriving the hint from it
+       * would put "No plan" on every row in the table.
+       */
       hints: hintParts(status?.state === "no_plan" ? ["no_plan"] : null),
       // `nextStepModel` calls the remainder `extra`; the contract calls it
       // `more`, and one renderer can only read one name.
@@ -777,7 +810,20 @@ export function workSummaryModel(row, options = {}) {
   const { now = Date.now(), summary = null } = options;
   const override =
     summary && typeof summary === "object" && summary.status ? summary : null;
-  const raw = override ?? rawWorkSummary(row);
+  const carried = rawWorkSummary(row);
+  /*
+   * An override is a fresher computation of the same card, not a different
+   * card. One that says nothing about hints is not saying the card has none,
+   * so the row's survive — the plan read the task header prefers does not
+   * compute them, and dropping them there would silence a note on the one
+   * surface with room for it.
+   */
+  const raw = override
+    ? {
+        ...(carried?.hints && !override.hints ? { hints: carried.hints } : {}),
+        ...override,
+      }
+    : carried;
   if (raw?.status) return fromComputed(raw, row, { now });
   return fromLegacy(row, { now });
 }

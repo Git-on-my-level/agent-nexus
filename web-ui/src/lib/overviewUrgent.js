@@ -27,17 +27,9 @@
  * how many workspaces it could not read rather than pretending it saw them.
  */
 
-import { ATTENTION_STATES, needsAttention } from "./workSummary.js";
+import { needsAttention } from "./workSummary.js";
 
 const asText = (value) => String(value ?? "").trim();
-
-/** Initiative health states that belong in the urgent band. */
-/**
- * Re-exported, not redefined: the band and the Overview's "No plan" fold ask
- * the same question — is this card in trouble — and a second copy of the
- * answer is how they would come to disagree.
- */
-export { ATTENTION_STATES as CRITICAL_STATES };
 
 /** One workspace's open asks, read at most this deep. */
 export const OPEN_ASKS_LIMIT = 20;

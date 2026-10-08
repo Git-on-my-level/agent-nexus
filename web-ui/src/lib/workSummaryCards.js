@@ -53,6 +53,9 @@ export function cardGroup(summary) {
    * blocked one — it is arguably a reason it is blocked.
    */
   if (needsAttention(summary)) return CARD_GROUPS.ATTENTION;
+  // Nor one whose state core could not name: "we do not know, and it has no
+  // plan" is a worse case than either half, not a reason to collapse it.
+  if (key === "unknown") return CARD_GROUPS.ATTENTION;
   if (hasHint(summary, "no_plan") || !key) return CARD_GROUPS.NO_PLAN;
   return CARD_GROUPS.ATTENTION;
 }

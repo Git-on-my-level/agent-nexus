@@ -476,7 +476,7 @@ test("a planless card reads as its phase, with the missing plan as a note", asyn
   await expect(row.locator("[data-summary-hints]")).toHaveCount(0);
   await expect(row).not.toContainText("No plan");
 
-  // On the task header: the note is back, beside the computed reason.
+  // On the task header: the note is back, on its own line under the status.
   await page.goto(`${TASKS}/${encodeURIComponent(planlessCard.ref)}`);
   const header = page.locator('[data-work-summary="header"]');
   await expect(header).toBeVisible({ timeout: 60_000 });

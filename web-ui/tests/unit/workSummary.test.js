@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ATTENTION_STATES,
   isComputedClosed,
+  needsAttention,
   planSegments,
   statusChip,
+  statusRank,
   statusStateOf,
   stepListsModel,
   summaryFromStatus,
@@ -243,6 +246,57 @@ describe("hints", () => {
       state: "in_progress",
       label: "In progress",
     });
+  });
+
+  it("reads a hint that arrives with its own label", () => {
+    /*
+     * An open vocabulary *with labels* is the obvious thing for core to grow
+     * into. Stringifying such an entry rendered "[object Object]" as a note
+     * and made the Overview's planless fold match nothing.
+     */
+    expect(withHints([{ key: "no_plan", label: "No plan yet" }]).hints).toEqual(
+      [{ key: "no_plan", label: "No plan" }],
+    );
+  });
+
+  it("drops an entry it cannot read a key out of", () => {
+    for (const bad of [[{}], [0], [false], [[]], [null]]) {
+      expect(withHints(bad).hints, JSON.stringify(bad)).toEqual([]);
+    }
+  });
+
+  it("survives the plan read's fresher summary saying nothing about hints", () => {
+    // The task header prefers the plan read's summary, which computes no
+    // hints. An override that is silent about them is not saying there are
+    // none — it would otherwise drop the note on the one surface with room.
+    const row = {
+      ref: "card:x",
+      work_summary: { status: { state: "in_progress" }, hints: ["no_plan"] },
+    };
+    const model = workSummaryModel(row, {
+      now: NOW,
+      summary: { status: { state: "blocked", label: "Blocked" } },
+    });
+    expect(model.status.state).toBe("blocked");
+    expect(model.hints.map((hint) => hint.key)).toEqual(["no_plan"]);
+  });
+
+  it("lets an override that does name hints replace them", () => {
+    expect(
+      workSummaryModel(
+        {
+          ref: "card:x",
+          work_summary: {
+            status: { state: "in_progress" },
+            hints: ["no_plan"],
+          },
+        },
+        {
+          now: NOW,
+          summary: { status: { state: "on_track" }, hints: [] },
+        },
+      ).hints,
+    ).toEqual([]);
   });
 
   it("reads a core that still reports no plan as the status", () => {
@@ -569,6 +623,53 @@ describe("the legacy fallback", () => {
       model({ plan_state: null, updated_at: ago(3 * 3_600_000) })
         .lastMovementAt,
     ).toBe(ago(3 * 3_600_000));
+  });
+});
+
+describe("the risk states, in either spelling", () => {
+  /*
+   * Core's tokens are `at_risk` (whose reason is "overdue or due within 24
+   * hours") and `stale`; the specification calls the same two risks
+   * "overdue" and "stalled". Reading both costs nothing, and is the
+   * difference between an overdue card leading the dashboard and sorting
+   * below Done.
+   */
+  it("tones and names both spellings the same", () => {
+    for (const [token, alias] of [
+      ["at_risk", "overdue"],
+      ["stale", "stalled"],
+    ]) {
+      const of = (state) =>
+        workSummaryModel(
+          { ref: "card:x", work_summary: { status: { state } } },
+          { now: NOW },
+        ).status;
+      expect(of(alias).tone, alias).toBe(of(token).tone);
+      expect(of(alias).rank, alias).toBeLessThan(statusRank("on_track"));
+      expect(of(alias).label, alias).not.toBe(alias);
+    }
+  });
+
+  it("counts both as needing attention", () => {
+    for (const state of ATTENTION_STATES) {
+      expect(
+        needsAttention(
+          workSummaryModel(
+            { ref: "card:x", work_summary: { status: { state } } },
+            { now: NOW },
+          ),
+        ),
+        state,
+      ).toBe(true);
+    }
+    expect(
+      needsAttention(
+        workSummaryModel(
+          { ref: "card:x", work_summary: { status: { state: "in_progress" } } },
+          { now: NOW },
+        ),
+      ),
+    ).toBe(false);
   });
 });
 
