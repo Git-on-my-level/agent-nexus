@@ -92,7 +92,7 @@ function nonCardState(file, source) {
   );
   for (const match of imports) {
     if (
-      /(?:coreClient|anxCoreClient|AnxClient|contracts[/\\]gen[/\\]ts|agent-nexus-contracts-ts-client|\b\w*(?:Work|Cards?)(?:\b|[A-Z])|(?:^|[^a-zA-Z])(?:work|cards?)(?:$|[^a-z]|[A-Z]))/.test(
+      /(?:coreClient|anxCoreClient|AnxClient|contracts[/\\]gen[/\\]ts|agent-nexus-contracts-ts-client|\b(?:get|list|create|patch|update|delete|archive|restore|purge|fetch|read|request|subscribe)\w*(?:Work|Cards?)(?:\b|[A-Z])|(?:^|[^a-zA-Z])(?:work|cards?)(?:$|[^a-z]|[A-Z]))/.test(
         match[0],
       )
     ) {
@@ -161,6 +161,15 @@ describe("explicit non-card state exemptions", () => {
     expect(() => nonCardState("a.js", marker + "\n" + code)).toThrow(
       "cannot exempt",
     );
+  });
+  it("does not mistake generic visual cards for card APIs", () => {
+    expect(
+      nonCardState(
+        "a.js",
+        marker +
+          '\nimport SkeletonCard from "$lib/components/state/SkeletonCard.svelte";',
+      ),
+    ).toBe(true);
   });
   it("does not mistake workspace lifecycle helpers for work APIs", () => {
     expect(
