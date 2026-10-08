@@ -209,6 +209,10 @@ func TestRefPreviewRealWireFixtureAndBoardPrivacy(t *testing.T) {
 	}
 	health["since"] = "2026-10-04T12:00:00Z"
 	summary := item["summary"].(map[string]any)
+	if _, err = time.Parse(time.RFC3339Nano, summary["created_at"].(string)); err != nil {
+		t.Fatal(err)
+	}
+	summary["created_at"] = "2026-10-04T12:00:00Z"
 	summary["last_movement_at"] = "2026-10-04T12:00:00Z"
 	summary["age"] = float64(0)
 	summary["status"].(map[string]any)["since"] = "2026-10-04T12:00:00Z"
