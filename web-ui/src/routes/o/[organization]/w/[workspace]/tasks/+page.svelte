@@ -27,8 +27,13 @@
     workFreshness,
     workKey,
   } from "$lib/pm/presentation.js";
-  import { pmFeaturesVisible, pmKnownAbsent } from "$lib/pm/onboardingState.js";
-  import { pmPresence } from "$lib/pm/presence.js";
+  import {
+    PM_STATES,
+    isPmNotOnboardedRefusal,
+    pmFeaturesVisible,
+    pmKnownAbsent,
+  } from "$lib/pm/onboardingState.js";
+  import { pmPresence, publishPmPresence } from "$lib/pm/presence.js";
   import {
     actorDirectoryIncomplete,
     actorRegistry,
@@ -153,10 +158,9 @@
   // With no PM agent onboarded, moving source-owned work still files a
   // request for the reader to approve; only the PM wording and the PM
   // affordances go away.
+  let workspaceSlug = $derived($page.data?.workspace?.slug ?? "");
   let pmState = $derived(
-    $pmPresence.workspace === ($page.data?.workspace?.slug ?? "")
-      ? $pmPresence
-      : null,
+    $pmPresence.workspace === workspaceSlug ? $pmPresence : null,
   );
   // Gates the PM affordances and wording only, never a read.
   let pmVisible = $derived(pmFeaturesVisible(pmState));
@@ -483,14 +487,7 @@
        * instead of filing a proposal that would wait forever.
        */
       if (pmAbsent) {
-        setMoveNotice(
-          {
-            text: `Changing work owned by ${source} is a request a PM carries out, and this workspace has none. Set one up to request the move.`,
-            href: workspaceHref("/pm/setup"),
-            hrefLabel: "Set up your PM",
-          },
-          { pointer },
-        );
+        noticeNoPm(source, { pointer });
         return;
       }
       if (
@@ -633,10 +630,32 @@
         );
         return;
       }
+      /*
+       * The move was attempted because presence had not answered yet, and
+       * core has now settled it: there is no PM. Record that so the whole
+       * shell stops waiting and offers setup, and say it the same way the
+       * pre-check does rather than passing core's sentence through.
+       */
+      if (isPmNotOnboardedRefusal(err)) {
+        publishPmPresence(workspaceSlug, PM_STATES.NOT_ONBOARDED);
+        noticeNoPm(sourceLabel(work.source), { pointer });
+        return;
+      }
       setMoveNotice(null);
       moveError = readableMoveError(err);
       moveSessionExpired = isSessionExpired(err);
     }
+  }
+  /** The one explanation for a source-owned move with no PM to carry it. */
+  function noticeNoPm(source, { pointer = false } = {}) {
+    setMoveNotice(
+      {
+        text: `Changing work owned by ${source} is a request a PM carries out, and this workspace has none. Set one up to request the move.`,
+        href: workspaceHref("/pm/setup"),
+        hrefLabel: "Set up your PM",
+      },
+      { pointer },
+    );
   }
   // Core's validation names the field; the reader needs the fix.
   function readableMoveError(err) {

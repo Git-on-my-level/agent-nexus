@@ -19,9 +19,9 @@ export const PM_STATES = Object.freeze({
   /** A PM agent is onboarded but is not running right now. */
   OFFLINE: "offline",
   /**
-   * Core did not say. An older core has no PM state at all, and a read can
-   * fail; neither is evidence that no PM exists, so PM surfaces stay as they
-   * were. Core's own `pm_not_onboarded` gate is what actually enforces this.
+   * Core did not say — the state before the first read returns, and after
+   * one fails. It is not evidence either way, so no PM surface is shown and
+   * no setup is offered; see `pmFeaturesVisible` and `pmKnownAbsent`.
    */
   UNKNOWN: "unknown",
 });

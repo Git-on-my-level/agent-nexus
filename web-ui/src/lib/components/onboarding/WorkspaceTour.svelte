@@ -11,7 +11,7 @@
     replayTourSignal,
   } from "$lib/tourState";
   import { stripWorkspacePath, workspacePath } from "$lib/workspacePaths";
-  import { pmSetupOffered } from "$lib/pm/onboardingState.js";
+  import { pmSetupOffered, pmStateKnown } from "$lib/pm/onboardingState.js";
   import { pmPresence } from "$lib/pm/presence.js";
 
   let {
@@ -39,13 +39,17 @@
       : "/access?from=tour#hosts",
   );
 
-  // No PM agent onboarded yet: the PM slot is an invitation, so its step
-  // explains what setting one up means rather than how to use one.
-  let pmNeedsSetup = $derived(
-    pmSetupOffered(
-      $pmPresence.workspace === workspaceSlug ? $pmPresence : null,
-    ),
+  /*
+   * The PM step describes whatever the slot it points at actually is. Three
+   * cases, because "no PM yet" and "we have not read the state" are not the
+   * same claim: offer setup only when core says there is none, and when it
+   * has said nothing, describe the PM without promising either.
+   */
+  let pmTourState = $derived(
+    $pmPresence.workspace === workspaceSlug ? $pmPresence : null,
   );
+  let pmNeedsSetup = $derived(pmSetupOffered(pmTourState));
+  let pmTourKnown = $derived(pmStateKnown(pmTourState));
 
   let firstName = $derived(deriveFirstName(userLabel));
 
@@ -77,9 +81,10 @@
             placement: "center",
             eyebrow: "60-second tour",
             title: welcomeTitle,
-            body: pmNeedsSetup
-              ? "Overview is the workspace home. Inbox is where agents wait on you, Agents shows what each one is doing, and Tasks and Docs hold the work."
-              : "Overview is the workspace home. Inbox is where agents wait on you, Agents shows what each one is doing, and Tasks and Docs hold the work. PM is the conversation surface for decisions that need follow-through.",
+            body:
+              pmNeedsSetup || !pmTourKnown
+                ? "Overview is the workspace home. Inbox is where agents wait on you, Agents shows what each one is doing, and Tasks and Docs hold the work."
+                : "Overview is the workspace home. Inbox is where agents wait on you, Agents shows what each one is doing, and Tasks and Docs hold the work. PM is the conversation surface for decisions that need follow-through.",
             primaryLabel: "Take the tour →",
             skipLabel: "Maybe later",
           },
@@ -116,10 +121,16 @@
           {
             selector: '[data-tour="pm"]',
             eyebrow: "6 of 7 · PM",
-            title: pmNeedsSetup ? "A PM is optional" : "PM is the conversation",
-            body: pmNeedsSetup
-              ? "A PM agent answers questions about this workspace and proposes changes you approve. It runs on your own computer, through the agent you already use. Set one up whenever you want it."
-              : "Ask what needs a decision, then follow the receipt. The PM runs on your computer with your chosen agent harness.",
+            title: !pmTourKnown
+              ? "A PM answers about this workspace"
+              : pmNeedsSetup
+                ? "A PM is optional"
+                : "PM is the conversation",
+            body: !pmTourKnown
+              ? "A PM agent answers questions about this workspace and proposes changes you approve. It runs on your own computer, through the agent you already use."
+              : pmNeedsSetup
+                ? "A PM agent answers questions about this workspace and proposes changes you approve. It runs on your own computer, through the agent you already use. Set one up whenever you want it."
+                : "Ask what needs a decision, then follow the receipt. The PM runs on your computer with your chosen agent harness.",
           },
           {
             selector: '[data-tour="access"]',

@@ -1114,9 +1114,16 @@
             flash the wrong label on the way in.
           -->
           {#if !pmSlotKnown}
-            <div class="shell-ask-pm shell-ask-pm--pending" aria-hidden="true">
-              <!-- Holds the row's space so the sidebar does not jump. -->
-            </div>
+            <!--
+              Holds the row's space so the sidebar does not jump, and keeps
+              the tour's spotlight target so its PM step still has something
+              to point at.
+            -->
+            <div
+              class="shell-ask-pm shell-ask-pm--pending"
+              data-tour="pm"
+              aria-hidden="true"
+            ></div>
           {:else}
             <a
               class="shell-ask-pm {pmNeedsSetup ? 'shell-ask-pm--setup' : ''}"
@@ -1615,7 +1622,11 @@
       {/each}
       <!-- Same rule as the sidebar slot: hold the tab, say nothing yet. -->
       {#if !pmSlotKnown}
-        <span class="shell-bottom-nav-item" aria-hidden="true"></span>
+        <span class="shell-bottom-nav-item" aria-hidden="true">
+          <!-- The glyph wrapper sets the tab's height; match it exactly. -->
+          <span class="shell-bottom-nav-accent-glyph"></span>
+          <span>&nbsp;</span>
+        </span>
       {:else}
         <a
           class="shell-bottom-nav-item {pmNeedsSetup

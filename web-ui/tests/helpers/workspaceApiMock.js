@@ -262,7 +262,8 @@ export async function installWorkspaceApi(page, overrides = {}) {
       });
     }
     if (path === "/pm/presence") {
-      // An older core has no such route; the UI must leave PM alone then.
+      // An older core has no such route; the state then stays unknown and no
+      // PM surface is shown.
       if (api.pm === null) return reply({ error: { code: "not_found" } }, 404);
       return respond("pmPresence", () => ({
         ...api.pm,

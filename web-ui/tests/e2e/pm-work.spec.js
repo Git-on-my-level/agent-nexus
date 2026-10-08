@@ -902,6 +902,63 @@ test("a source-owned move is not offered with no PM, and writes nothing", async 
   expect(writes).toEqual([]);
 });
 
+/*
+ * The move is attempted while presence is unknown, because refusing it on an
+ * unproven state would block a workspace that has a PM. Core settles it — and
+ * that answer has to land in the UI, not just in a toast: the shell stops
+ * waiting and offers setup, and the reader gets the UI's own explanation
+ * rather than core's raw sentence.
+ */
+test("a move attempted before the PM state loads self-corrects", async ({
+  page,
+}) => {
+  await setup(page);
+  // Presence never answers: the request is left pending on purpose.
+  await page.route("**/pm/presence", () => {});
+  await page.route("**/pm/decisions", async (route) => {
+    if (route.request().method() !== "POST") {
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ items: [], has_more: false }),
+      });
+    }
+    await route.fulfill({
+      status: 409,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: {
+          code: "pm_not_onboarded",
+          message: "PM is not onboarded.",
+        },
+      }),
+    });
+  });
+
+  // `card:release` is GitHub-owned in this fixture.
+  await page.goto(`${root}/tasks/card%3Arelease`);
+  await expect(
+    page.getByRole("heading", { name: "Release the sample workspace" }),
+  ).toBeVisible();
+
+  // The rows are offered, because nothing yet says there is no PM. `M` opens
+  // the move sub-list; its leaves are the requests themselves.
+  await page.keyboard.press("m");
+  const palette = page.getByRole("dialog", { name: "Command palette" });
+  const request = palette
+    .getByRole("option", { name: /Request move to .* at / })
+    .first();
+  await expect(request).toBeVisible();
+  await request.click();
+
+  // Core's answer, in the UI's words, with the way forward.
+  await expect(page.getByText(/this workspace has none/i)).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Set up your PM" }).first(),
+  ).toBeVisible();
+  // And recorded, so the shell stops waiting and commits to setup.
+  await expect(page.locator('[data-pm-nav="setup"]').first()).toBeVisible();
+});
+
 test("a connected PM keeps Ask PM and says nothing about setup", async ({
   page,
 }) => {

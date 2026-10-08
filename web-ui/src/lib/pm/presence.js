@@ -48,8 +48,8 @@ export const SHELL_REFRESH_MIN_MS = 60_000;
  * Read PM state from core's `GET /pm/presence` (SCA-700).
  *
  * A core without that route cannot be asked, and an unreadable state is not
- * "no PM" (see `onboardingState.js`), so it answers `unknown` and leaves PM
- * surfaces alone.
+ * evidence either way, so it answers `unknown` — which shows no PM surface
+ * and offers no setup (see `onboardingState.js`).
  *
  * @param {{ client?: object }} [options]
  */
@@ -78,10 +78,10 @@ let inflight = null;
  * Refresh PM state for `workspace`.
  *
  * Resolves `{ presence, read }`, where `read` is false when the request
- * failed. A failed read never changes the state — `unknown` keeps PM surfaces
- * as they are, and a stale `connected` is corrected by the next successful
- * read — so callers that retry have to be told, rather than inferring it from
- * a state that is also what an older core legitimately reports.
+ * failed. A failed read never overwrites a state already known, and a stale
+ * `connected` is corrected by the next successful read. Callers that retry
+ * have to be told the read failed rather than inferring it from `unknown`,
+ * which is also the state before the first read returns.
  *
  * Concurrent callers share one request, `force` included: a second request
  * cannot answer sooner than the one already outstanding, and the shared

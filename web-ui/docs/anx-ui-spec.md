@@ -488,9 +488,12 @@ read as "install a PM", which would throw away the reader's draft.
   `anx pm status` and `anx pm uninstall` commands), reached from the "Manage"
   link beside the PM status.
 - **An unknown state shows nothing.** Before the first read returns, after a
-  read fails, and against a core with no `/pm/presence` at all, neither Ask PM
-  nor the setup entry is rendered: the slot holds its space and commits to a
-  label only once core answers. Showing a guess made the row flash in and out
+  read fails, and against a core with no `/pm/presence` at all, no PM
+  affordance is rendered anywhere the reader did not ask for one — the shell
+  slot, the palette, the Inbox and Tasks entry points, the ⌘J shortcut: the
+  slot holds its space and commits to a label only once core answers.
+  `/pm/setup` stays reachable by typing the URL, and says it is still checking
+  rather than claiming either answer. Showing a guess made the row flash in and out
   on every load, and a read that never succeeded left a button that could not
   work. Answering an existing proposal is never gated this way (see above), so
   nothing already asked of the reader becomes unreachable. A core old enough

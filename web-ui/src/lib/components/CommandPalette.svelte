@@ -39,11 +39,13 @@
   } from "$lib/commandPaletteModel.js";
   import { workspacePath } from "$lib/workspacePaths";
   import {
+    PM_STATES,
+    isPmNotOnboardedRefusal,
     pmFeaturesVisible,
     pmKnownAbsent,
     pmSetupOffered,
   } from "$lib/pm/onboardingState.js";
-  import { pmPresence } from "$lib/pm/presence.js";
+  import { pmPresence, publishPmPresence } from "$lib/pm/presence.js";
   import WorkSummary from "$lib/components/WorkSummary.svelte";
   import { workSummaryModel } from "$lib/workSummary.js";
 
@@ -198,9 +200,22 @@
   async function moveContextTask(phase) {
     const work = contextWork;
     close();
-    const result = await applyTaskPhaseMove(coreClient, work, phase, {
-      pmOnboarded: !pmAbsent,
-    });
+    let result;
+    try {
+      result = await applyTaskPhaseMove(coreClient, work, phase, {
+        pmOnboarded: !pmAbsent,
+      });
+    } catch (err) {
+      /*
+       * The move was attempted because presence had not answered yet, and
+       * core has now settled it. Record that so the shell stops waiting and
+       * offers setup, and say it the way the absent case does instead of
+       * passing core's sentence through as a raw failure.
+       */
+      if (!isPmNotOnboardedRefusal(err)) throw err;
+      publishPmPresence(workspaceSlug, PM_STATES.NOT_ONBOARDED);
+      result = { kind: "needs_pm", work };
+    }
     if (result.kind === "moved") {
       contextWork = { ...work, phase };
       return {
@@ -220,8 +235,9 @@
       };
     }
     if (result.kind === "needs_pm") {
-      // The rows above are absent without a PM; this covers a state that
-      // changed between opening the palette and running the row.
+      // The rows above are absent once a PM is known to be missing; this
+      // covers running the row before presence answered, and a state that
+      // changed while the palette was open.
       return {
         text: `Changing work owned by ${sourceLabel(work.source)} is a request a PM carries out, and this workspace has none.`,
         href: href("/pm/setup"),
