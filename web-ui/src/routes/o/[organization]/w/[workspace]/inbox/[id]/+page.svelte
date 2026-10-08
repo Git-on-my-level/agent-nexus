@@ -498,6 +498,7 @@
           : requesterName();
     queueInboxResponse({
       itemId: item.id,
+      item,
       request,
       message: acknowledge
         ? "Acknowledged"

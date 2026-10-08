@@ -33,6 +33,27 @@ export function getBrowserCoreClientOptions() {
   };
 }
 
+/** Freeze routing and write identity while a submitted Inbox reply waits for Undo. */
+export function getInboxResponseClientOptions() {
+  const options = getBrowserCoreClientOptions();
+  const actorId = options.actorIdProvider();
+  const lockActorId = options.lockActorIdProvider();
+  const headers = options.requestContextHeadersProvider();
+  return {
+    actorIdProvider: () => actorId,
+    lockActorIdProvider: () => lockActorId,
+    requestContextHeadersProvider: () => ({ ...headers }),
+  };
+}
+
+export function captureInboxResponseSender() {
+  const client = createAnxCoreClient({
+    ...getInboxResponseClientOptions(),
+    fetchFn: globalThis.fetch.bind(globalThis),
+  });
+  return client.respondInboxItem.bind(client);
+}
+
 function resolveBrowserClient() {
   if (!browser) {
     throw new Error(

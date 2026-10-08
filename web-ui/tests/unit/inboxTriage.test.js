@@ -2,8 +2,21 @@
 import { get } from "svelte/store";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const client = vi.hoisted(() => ({ respondInboxItem: vi.fn() }));
-vi.mock("$lib/coreClient", () => ({ coreClient: client }));
+const client = vi.hoisted(() => ({
+  respondInboxItem: vi.fn(),
+  capturedScopes: [],
+}));
+vi.mock("$lib/coreClient", () => ({
+  coreClient: client,
+  captureInboxResponseSender: () => {
+    client.capturedScopes.push([
+      get(currentOrganizationSlug),
+      get(currentWorkspaceSlug),
+      get(authenticatedAgent)?.actor_id,
+    ]);
+    return client.respondInboxItem.bind(client);
+  },
+}));
 
 import {
   eventPhraseParts,
@@ -33,6 +46,12 @@ import {
   contextThreads,
   pickProgressNote,
 } from "../../src/lib/inboxContext.js";
+import { buildInboxRows, filterMailbox } from "../../src/lib/inboxMailbox.js";
+import { authenticatedAgent } from "../../src/lib/authSession.js";
+import {
+  currentOrganizationSlug,
+  currentWorkspaceSlug,
+} from "../../src/lib/workspaceContext.js";
 
 function key(k, extra = {}) {
   return {
@@ -46,6 +65,198 @@ function key(k, extra = {}) {
     ...extra,
   };
 }
+
+describe("answer snapshots", () => {
+  beforeEach(() => {
+    resetInboxResponseQueue();
+    client.respondInboxItem.mockReset();
+    client.capturedScopes.length = 0;
+  });
+  afterEach(() => resetInboxResponseQueue());
+
+  it.each(["workspace", "organization", "reader"])(
+    "sends a submitted custom reply once in its captured scope across a %s switch",
+    async (change) => {
+      vi.useFakeTimers();
+      try {
+        currentOrganizationSlug.set("org-a");
+        currentWorkspaceSlug.set("workspace-a");
+        authenticatedAgent.set({ agent_id: "human-a", actor_id: "actor-a" });
+        client.respondInboxItem.mockResolvedValue({});
+        queueInboxResponse({
+          itemId: "inbox:private",
+          item: { id: "inbox:private", title: "Private decision" },
+          request: {
+            response_text: "Use the smaller rollout first",
+            outcome: "answered",
+          },
+          restore: { draft: "Use the smaller rollout first" },
+          message: "Sent",
+        });
+        await vi.advanceTimersByTimeAsync(1_000);
+        if (change === "workspace") currentWorkspaceSlug.set("workspace-b");
+        if (change === "organization") currentOrganizationSlug.set("org-b");
+        authenticatedAgent.set({ agent_id: "human-b", actor_id: "actor-b" });
+        await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS);
+        expect(client.respondInboxItem).toHaveBeenCalledTimes(
+          change === "reader" ? 0 : 1,
+        );
+        expect(get(inboxResponseOverlay)).toEqual({});
+        expect(get(inboxResponseToast)).toBeNull();
+        currentOrganizationSlug.set("org-a");
+        currentWorkspaceSlug.set("workspace-a");
+        authenticatedAgent.set({ agent_id: "human-a", actor_id: "actor-a" });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(client.capturedScopes).toEqual([
+          ["org-a", "workspace-a", "actor-a"],
+        ]);
+        expect(client.respondInboxItem).toHaveBeenCalledWith(
+          "inbox:private",
+          expect.objectContaining({
+            response_text: "Use the smaller rollout first",
+          }),
+        );
+        await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS);
+        expect(client.respondInboxItem).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("restores an unsent reply's failure and idempotent retry only to its original reader", async () => {
+    currentOrganizationSlug.set("org-a");
+    currentWorkspaceSlug.set("workspace-a");
+    authenticatedAgent.set({ agent_id: "human-a", actor_id: "actor-a" });
+    let reject;
+    client.respondInboxItem.mockReturnValue(
+      new Promise((_, fail) => (reject = fail)),
+    );
+    queueInboxResponse({
+      itemId: "inbox:private",
+      request: { response_text: "Custom reply", outcome: "answered" },
+      message: "Sent",
+    });
+    const sent = flushInboxResponse();
+    const originalRequest = client.respondInboxItem.mock.calls[0][1];
+    currentWorkspaceSlug.set("workspace-b");
+    authenticatedAgent.set({ agent_id: "human-b", actor_id: "actor-b" });
+    reject(new Error("core unavailable"));
+    await sent;
+    expect(get(inboxResponseFailures)).toEqual({});
+    currentWorkspaceSlug.set("workspace-a");
+    authenticatedAgent.set({ agent_id: "human-a", actor_id: "actor-a" });
+    expect(get(inboxResponseFailures)["inbox:private"].error).toBe(
+      "core unavailable",
+    );
+    client.respondInboxItem.mockResolvedValue({});
+    await retryInboxResponse("inbox:private");
+    expect(client.respondInboxItem.mock.calls[1][1]).toEqual(originalRequest);
+  });
+
+  it.each(["workspace", "reader", "organization", "logout"])(
+    "does not replay a private snapshot after changing %s",
+    async (change) => {
+      currentOrganizationSlug.set("org-a");
+      currentWorkspaceSlug.set("workspace-a");
+      authenticatedAgent.set({ agent_id: "human-a", actor_id: "actor-a" });
+      client.respondInboxItem.mockResolvedValue({});
+      const item = {
+        id: "inbox:private",
+        kind: "ask",
+        title: "Private decision",
+        body: "Private content",
+        subject_ref: "card:private",
+      };
+      queueInboxResponse({
+        itemId: item.id,
+        item,
+        request: { response_text: "Proceed", outcome: "answered" },
+        message: "Sent",
+      });
+      await flushInboxResponse();
+      const oldOverlay = get(inboxResponseOverlay);
+      expect(applyResponseOverlay([], oldOverlay)).toHaveLength(1);
+      if (change === "workspace") currentWorkspaceSlug.set("workspace-b");
+      if (change === "organization") currentOrganizationSlug.set("org-b");
+      if (change === "reader")
+        authenticatedAgent.set({ agent_id: "human-b", actor_id: "actor-b" });
+      if (change === "logout") {
+        authenticatedAgent.set(null);
+        authenticatedAgent.set({ agent_id: "human-a", actor_id: "actor-a" });
+      }
+      expect(applyResponseOverlay([], oldOverlay)).toEqual([]);
+      expect(get(inboxResponseOverlay)).toEqual({});
+    },
+  );
+
+  it("ignores a response that completes after the reader changes", async () => {
+    let resolve;
+    client.respondInboxItem.mockReturnValue(
+      new Promise((finish) => {
+        resolve = finish;
+      }),
+    );
+    authenticatedAgent.set({ agent_id: "human-a", actor_id: "actor-a" });
+    queueInboxResponse({
+      itemId: "inbox:private",
+      item: { id: "inbox:private", title: "Private" },
+      request: { response_text: "Proceed", outcome: "answered" },
+      message: "Sent",
+    });
+    const sent = flushInboxResponse();
+    authenticatedAgent.set({ agent_id: "human-b", actor_id: "actor-b" });
+    resolve({});
+    await sent;
+    expect(get(inboxResponseOverlay)).toEqual({});
+  });
+
+  it.each(["Proceed", "Use the smaller rollout first"])(
+    "retains the answered subject when open/history reads straddle %s",
+    async (text) => {
+      client.respondInboxItem.mockResolvedValue({});
+      const item = {
+        id: "inbox:ask",
+        kind: "ask",
+        subject_ref: "card:rollout",
+        related_refs: ["card:rollout"],
+        title: "Proceed?",
+      };
+      queueInboxResponse({
+        itemId: item.id,
+        item,
+        request: {
+          response_text: text,
+          outcome: "answered",
+          notify_mode: "none",
+        },
+        message: "Sent",
+      });
+      await flushInboxResponse();
+      const items = applyResponseOverlay([], get(inboxResponseOverlay));
+      const rows = buildInboxRows({
+        work: [
+          {
+            ref: "card:rollout",
+            phase: "blocked",
+            updated_at: "2026-01-01T00:00:00Z",
+          },
+        ],
+        inboxItems: items,
+      });
+      expect(filterMailbox(rows, "needs-you")).toEqual([]);
+      expect(items[0].response_text).toBe(text);
+      const completed = {
+        ...items[0],
+        id: "completed:response",
+        inbox_item_id: item.id,
+      };
+      expect(
+        applyResponseOverlay([completed], get(inboxResponseOverlay)),
+      ).toEqual([completed]);
+    },
+  );
+});
 
 describe("update digests", () => {
   const names = {
