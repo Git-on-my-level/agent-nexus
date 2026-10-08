@@ -644,7 +644,8 @@ export function buildInboxRows({
        * Core marks an open ask stale when its task has not changed for the
        * deployment's `ANX_ASK_STALE_AFTER`. A stale ask folds into the same
        * group as a stale blocked task: still there, still answerable, out of
-       * the way of what moved this week.
+       * the way of what moved this week. Core does not put `is_stale` on an
+       * inbox row yet, so this is inert against today's server — see SCA-708.
        */
       stale: inboxItemNeedsResponse(item) && askIsStale(item),
       category: String(item.kind ?? item.category ?? "").trim(),

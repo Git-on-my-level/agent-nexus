@@ -130,6 +130,9 @@ describe("delivery state mapping", () => {
       ["endpoint_blocked", "The endpoint address is not allowed"],
       ["transport_failed", "The endpoint could not be reached"],
       ["dead_letter: invalid_endpoint", "The endpoint URL is not usable"],
+      // The two that arrive with a status code rather than a local failure.
+      ["http_failure", "The endpoint rejected the answer"],
+      ["redirect_blocked", "The endpoint redirected, which is not followed"],
     ]) {
       expect(deliveryReasonText(token)).toBe(expected);
     }

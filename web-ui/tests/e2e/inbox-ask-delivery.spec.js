@@ -557,7 +557,12 @@ test("the Handled list costs the page, not its rows", async ({ page }) => {
    * state. Listing three answered items must read exactly the one the pane
    * selected — never one per row.
    */
-  await expect.poll(() => state.asksRead.size).toBe(1);
+  // Hard assertions, not a poll: `expect.poll` passes on the first sample that
+  // matches, and a per-row regression's three requests pass through one on
+  // their way to three. The rendered panel is the settle point — the selected
+  // ask's read has resolved, so any per-row read has already been issued.
+  await expect(page.locator("[data-inbox-delivery]")).toBeVisible();
+  expect(state.asksRead.size).toBe(1);
   expect(state.eventsRead.size).toBe(1);
 
   await page.getByTestId(`inbox-row-${DELIVERED.id}`).click();
@@ -568,7 +573,6 @@ test("the Handled list costs the page, not its rows", async ({ page }) => {
   await expect(page.locator("[data-inbox-delivery-none]")).toBeVisible();
 
   // Two more selections, two more asks — and only the ones selected.
-  await expect.poll(() => state.asksRead.size).toBe(3);
   expect([...state.asksRead].sort()).toEqual([
     "event:ask-del",
     "event:ask-grant",

@@ -902,8 +902,8 @@
         />
         {#if askDelivery?.isStale && !isCompleted}
           <p class="text-micro text-fg-muted" data-inbox-ask-stale>
-            The task behind this ask has not changed since it was asked. It is
-            still answerable.
+            The task behind this ask has not changed in a while. It is still
+            answerable.
           </p>
         {/if}
         {#if supersedesLink}

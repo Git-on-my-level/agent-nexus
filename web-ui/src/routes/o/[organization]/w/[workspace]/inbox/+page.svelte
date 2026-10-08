@@ -469,13 +469,21 @@
    * Titles the side panel has already read. A document is never in `work`, so
    * without this its evidence row shows a bare id; the panel reads the title
    * anyway, and handing it back costs no request.
+   *
+   * A title is a read, so it belongs to the reader and workspace it was read
+   * for and is dropped with them. Keeping it would label a document for a
+   * reader who cannot open it — the same scope the ask cache keeps.
    */
   let docTitles = $state({});
   $effect(() => {
-    // A document opened as one item's evidence is not the next item's.
+    // A document opened as one item's evidence is not the next item's, and a
+    // title read as one reader is not another reader's to see.
     void selectedId;
+    void $page.params.workspace;
+    void $selectedActorId;
     untrack(() => {
       docPanelRef = "";
+      docTitles = {};
     });
   });
 
@@ -1830,12 +1838,13 @@
                 />
                 {#if askDelivery?.isStale && needsResponse}
                   <!-- From the ask read, which is the only thing that knows:
-                       core computes staleness per ask, and does not put it on
-                       the row. So this says what it measured, not where the
-                       row ended up. -->
+                       core measures the subject card's last change against the
+                       deployment's staleness window, and does not put the
+                       result on the row. So this says what was measured, not
+                       where the row ended up. -->
                   <p class="text-micro text-fg-muted" data-inbox-ask-stale>
-                    The task behind this ask has not changed since it was asked.
-                    It is still answerable.
+                    The task behind this ask has not changed in a while. It is
+                    still answerable.
                   </p>
                 {/if}
                 {#if supersedesLink}

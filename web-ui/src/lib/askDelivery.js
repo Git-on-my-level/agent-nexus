@@ -65,7 +65,14 @@ export function supportsNeedsContext(item) {
   return allowed.map(asText).includes(NEEDS_CONTEXT_OUTCOME);
 }
 
-/** An open ask core has marked stale, so the Inbox can fold it with the rest. */
+/**
+ * An open ask core has marked stale, so the Inbox can fold it with the rest.
+ *
+ * Core computes this per ask, from the subject card's last change against the
+ * deployment's `ANX_ASK_STALE_AFTER`, and today only `GET /asks/{ask_id}`
+ * carries it — an inbox row does not. This reads the contract field wherever it
+ * appears, so the fold starts working the day a core projects it.
+ */
 export function askIsStale(item) {
   return item?.is_stale === true;
 }
@@ -95,9 +102,10 @@ const DELIVERY_STATE_PRESENTATION = Object.freeze(
 /*
  * Core records why a delivery stopped as a fixed token, which is the right
  * thing to store and the wrong thing to show an operator: `dead_letter:
- * retry_limit` and `endpoint_blocked` are engineer words. These are the tokens
- * `askWebhooks` writes; a token this list has never seen falls through to
- * core's own text rather than being hidden.
+ * retry_limit` and `endpoint_blocked` are engineer words. Every token
+ * `sendAskWebhook` returns is here, including the two that come with a status
+ * code rather than a local failure. A token this list has never seen falls
+ * through to core's own text rather than being hidden.
  */
 const DELIVERY_REASONS = Object.freeze(
   Object.assign(Object.create(null), {
@@ -110,6 +118,8 @@ const DELIVERY_REASONS = Object.freeze(
     secret_unavailable: "The signing secret could not be read",
     invalid_endpoint: "The endpoint URL is not usable",
     transport_failed: "The endpoint could not be reached",
+    http_failure: "The endpoint rejected the answer",
+    redirect_blocked: "The endpoint redirected, which is not followed",
   }),
 );
 
