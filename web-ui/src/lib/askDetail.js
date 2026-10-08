@@ -17,6 +17,16 @@ import { askRefForInboxItem } from "$lib/askDelivery.js";
  * `related_refs`, which already merge the event's native refs.
  */
 
+/*
+ * Delivery state moves on its own — a webhook retries, a bridge acknowledges —
+ * so a cached read is only good for as long as it is plausibly current. The
+ * Inbox pane drops the whole cache on every live refresh; this bound is what
+ * keeps the standalone item page, which has no such signal, from showing one
+ * read for the life of the tab.
+ */
+const CACHE_TTL_MS = 30_000;
+
+/** @type {Map<string, { at: number, promise: Promise<object> }>} */
 const cache = new Map();
 
 function eventIdFromRef(ref) {
@@ -35,7 +45,7 @@ export function loadAskDetail(item, { client = coreClient } = {}) {
     return Promise.resolve({ askRef: "", outcome: null, event: null });
   }
   const cached = cache.get(askRef);
-  if (cached) return cached;
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.promise;
   const promise = (async () => {
     const [outcome, event] = await Promise.all([
       Promise.resolve()
@@ -49,15 +59,18 @@ export function loadAskDetail(item, { client = coreClient } = {}) {
     ]);
     return { askRef, outcome, event };
   })();
-  cache.set(askRef, promise);
+  const entry = { at: Date.now(), promise };
+  cache.set(askRef, entry);
   // A read that returned nothing is retried on the next selection rather than
-  // pinned: both calls can fail for reasons that pass (a dropped connection).
-  promise.then(
-    (value) => {
-      if (!value.outcome && !value.event) cache.delete(askRef);
-    },
-    () => cache.delete(askRef),
-  );
+  // waiting out the window: both calls can fail for reasons that pass (a
+  // dropped connection). Only this entry is dropped — a newer one may have
+  // replaced it while this read was in flight.
+  const forget = () => {
+    if (cache.get(askRef) === entry) cache.delete(askRef);
+  };
+  promise.then((value) => {
+    if (!value.outcome && !value.event) forget();
+  }, forget);
   return promise;
 }
 

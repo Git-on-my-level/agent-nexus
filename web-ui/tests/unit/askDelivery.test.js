@@ -424,3 +424,41 @@ describe("the resolved subject is not repeated as evidence", () => {
     expect(model.refs.map((entry) => entry.ref)).toEqual(["document:rulings"]);
   });
 });
+
+describe("a link destination cannot carry the rest of the line", () => {
+  const evidence = {
+    refs: [],
+    links: [
+      {
+        label: "Change",
+        // A parenthesis in the URL would end the markdown link early and hand
+        // whoever wrote it the remaining text as markdown.
+        url: "https://example.org/repo/pull/7)[spoof](https://evil.example/x",
+        host: "example.org",
+        kind: "Pull request",
+      },
+    ],
+  };
+
+  it("percent-encodes parentheses, angle brackets and spaces", () => {
+    const out = linkifyAskEvidence("Ship PR #7 today.", evidence, {});
+    // The whole URL stays inside one destination: brackets are legal there,
+    // the parentheses are encoded, so nothing escapes into the body.
+    expect(out).toBe(
+      "Ship [PR #7](https://example.org/repo/pull/7%29[spoof]%28https://evil.example/x) today.",
+    );
+    expect(out).not.toContain("[spoof](");
+  });
+
+  it("escapes brackets in a linked name so the link cannot end early", () => {
+    const refs = {
+      refs: [{ ref: "document:a]b", prefix: "document", id: "a]b" }],
+      links: [],
+    };
+    expect(
+      linkifyAskEvidence('See doc "a]b" now.', refs, {
+        hrefFor: () => "/docs/x",
+      }),
+    ).toBe("See doc [a\\]b](/docs/x) now.");
+  });
+});

@@ -343,6 +343,33 @@ function replaceOutsideProtectedSpans(source, replace) {
   return out + replace(source.slice(index));
 }
 
+/*
+ * A markdown link destination may not carry an unescaped parenthesis, angle
+ * bracket or space: `[x](https://h/a)b)` parses as a link to `https://h/a`
+ * followed by the literal `b)`, which hands whoever wrote the URL the rest of
+ * the line as markdown. Percent-encode those so the destination is exactly the
+ * URL and nothing after it is reinterpreted.
+ */
+const LINK_DESTINATION_UNSAFE = /[()<>\s"'`\\]/g;
+
+function linkDestination(href) {
+  // Not `encodeURIComponent`: it leaves `(` and `)` as they are, which are
+  // exactly the two characters that matter here.
+  return String(href ?? "").replace(
+    LINK_DESTINATION_UNSAFE,
+    (character) =>
+      `%${character.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`,
+  );
+}
+
+/*
+ * Link text is the author's own prose, so it can already be markdown — but a
+ * bracket in it would end the link early and leave the destination on screen.
+ */
+function linkText(label) {
+  return String(label ?? "").replace(/[[\]]/g, "\\$&");
+}
+
 /**
  * Names in the body that an evidence entry already identifies become links.
  *
@@ -393,13 +420,13 @@ export function linkifyAskEvidence(
         const prefix = REF_PREFIX_WORDS[word.toLowerCase()];
         const href = hrefByName.get(`${prefix}:${name.trim().toLowerCase()}`);
         if (!href) return whole;
-        const label = quote === "`" ? `\`${name}\`` : name;
-        return `${word}${gap}[${label}](${href})`;
+        const label = quote === "`" ? `\`${name}\`` : linkText(name);
+        return `${word}${gap}[${label}](${linkDestination(href)})`;
       }
       if (whole.startsWith("`")) return whole;
       const number = whole.match(/(\d+)/)?.[1] ?? "";
       const url = pullUrlByNumber.get(number);
-      return url ? `[${whole}](${url})` : whole;
+      return url ? `[${whole}](${linkDestination(url)})` : whole;
     }),
   );
 }

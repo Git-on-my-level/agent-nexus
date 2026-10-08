@@ -521,6 +521,11 @@ test("evidence reads as a sheet at phone width", async ({ page }) => {
   const box = await panel.boundingBox();
   expect(box.width).toBeGreaterThan(300);
   expect(box.x).toBeLessThan(40);
+  // Focus moved into the sheet, so Escape reaches it and lands back on the
+  // button that opened it rather than on <body>.
   await page.keyboard.press("Escape");
   await expect(panel).toHaveCount(0);
+  await expect(
+    page.locator("[data-inbox-evidence-doc='document:rulings']"),
+  ).toBeFocused();
 });

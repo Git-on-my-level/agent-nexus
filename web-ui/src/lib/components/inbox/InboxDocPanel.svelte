@@ -41,6 +41,26 @@
       : `${SHEET} lg:static lg:z-auto lg:border-t-0 lg:border-l`,
   );
 
+  /*
+   * The panel is a reading column at lg and a sheet over the page below it, so
+   * it is not a modal and does not trap Tab — but it does appear on a click, so
+   * focus moves into it and goes back to whatever opened it when it closes.
+   * Without that, dismissing the sheet on a phone stranded focus on `<body>`.
+   */
+  let shell = $state(null);
+  let opener = null;
+  $effect(() => {
+    const node = shell;
+    if (!node) return;
+    opener = globalThis.document?.activeElement ?? null;
+    node.focus?.({ preventScroll: true });
+    return () => {
+      const target = opener;
+      opener = null;
+      if (target?.isConnected) target.focus?.({ preventScroll: true });
+    };
+  });
+
   let loading = $state(false);
   let error = $state("");
   let doc = $state(null);
@@ -98,6 +118,8 @@
   <aside
     class="flex min-w-0 flex-col {shellClass}"
     aria-label={`Evidence document: ${title}`}
+    tabindex="-1"
+    bind:this={shell}
     data-inbox-doc-panel={ref}
     use:dismissOnEscape={{
       enabled: true,
