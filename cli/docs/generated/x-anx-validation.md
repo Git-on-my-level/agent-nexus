@@ -4,9 +4,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `221`
+- Command operations: `222`
 - Baseline-allowed required-field gaps: `120`
-- Missing recommended examples: `201`
+- Missing recommended examples: `202`
 
 ## Baseline gap counts
 
@@ -276,6 +276,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - `pm.actions.reconcile` `POST /pm/actions/{action_id}/reconcile`
 - `pm.bindings.create` `POST /pm/bindings`
 - `pm.bindings.list` `GET /pm/bindings`
+- `pm.connect` `POST /pm/connect`
 - `pm.context` `GET /pm/context`
 - `pm.conversations.create` `POST /pm/conversations`
 - `pm.conversations.get` `GET /pm/conversations/{conversation_id}`

@@ -159,7 +159,7 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 	}
 	seedStreamPrivacyInbox(t, store, publicThread, streamPrivacyInboxItem(publicThread, "public-control-ask", "Visible inbox control"))
 	selected := seedMachinePrincipalForLockoutTest(t, ctx, db, "matrix-selected", "matrix-selected-actor", "matrix.selected", "matrix-selected-token")
-	runtime, err := NewPMRuntime(db, store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: selected.ActorID}})
+	runtime, err := newOnboardedPMRuntime(t, db, store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: selected.ActorID}})
 	if err != nil {
 		t.Fatal(err)
 	}

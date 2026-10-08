@@ -30,7 +30,7 @@ func TestRound10RefreshBookkeepingPreservesDecisionFence(t *testing.T) {
 				t.Fatal(err)
 			}
 			executions := 0
-			svc, err := pm.NewService(st, pm.Config{WorkspaceID: "ws_main"}, pm.Dependencies{
+			svc, err := newOnboardedPMService(t, env.workspace.DB(), st, pm.Config{WorkspaceID: "ws_main"}, pm.Dependencies{
 				Authorize: func(context.Context, pm.Principal, string, string) error { return nil },
 				DecisionWork: func(ctx context.Context, _ pm.Principal, ref string) (pm.DecisionWork, error) {
 					w, err := store.GetWork(ctx, ref)

@@ -250,7 +250,7 @@ func newPerformanceEnv(t *testing.T) performanceEnv {
 	t.Cleanup(func() { observed.Close() })
 	ps := primitives.NewStore(observed, blob.NewFilesystemBackend(env.workspace.Layout().ArtifactContentDir), env.workspace.Layout().ArtifactContentDir)
 	as := auth.NewStore(observed)
-	runtime, err := NewPMRuntime(observed, ps, as, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: agent.ActorID}})
+	runtime, err := newOnboardedPMRuntime(t, observed, ps, as, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: agent.ActorID}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +299,7 @@ func newPerformanceEnv(t *testing.T) performanceEnv {
 		}
 		ps := primitives.NewStore(pool, blob.NewFilesystemBackend(env.workspace.Layout().ArtifactContentDir), env.workspace.Layout().ArtifactContentDir)
 		as := auth.NewStore(pool)
-		runtime, err := NewPMRuntime(pool, ps, as, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: agent.ActorID}})
+		runtime, err := newOnboardedPMRuntime(t, pool, ps, as, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: agent.ActorID}})
 		if err != nil {
 			pool.Close()
 			t.Fatal(err)

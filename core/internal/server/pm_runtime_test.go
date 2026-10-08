@@ -30,7 +30,7 @@ func TestPMRuntimeNativeDecisionAuthorizationAndReadback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := NewPMRuntime(env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	handler, err := newOnboardedPMRuntime(t, env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestPMRuntimeNativeDecisionAuthorizationAndReadback(t *testing.T) {
 		t.Fatalf("action not persisted: %v %v", updated, err)
 	}
 	// Restart service against same workspace storage: decision and receipt survive.
-	restored, err := NewPMRuntime(env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	restored, err := newOnboardedPMRuntime(t, env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,18 +105,14 @@ func TestPMRuntimeDoesNotTrustBodyIdentityOrConfigureProvider(t *testing.T) {
 			assertErrorCode(t, resp, tc.code)
 		})
 	}
-	resp := postJSONExpectStatusWithAuth(t, srv.URL+"/pm/conversations", map[string]any{"request_key": "conversation", "title": "Context"}, seed.AccessToken, 201)
+	resp := postJSONExpectStatusWithAuth(t, srv.URL+"/pm/conversations", map[string]any{"request_key": "conversation", "title": "Context"}, seed.AccessToken, http.StatusConflict)
 	defer resp.Body.Close()
-	var c map[string]any
-	if err = json.NewDecoder(resp.Body).Decode(&c); err != nil {
-		t.Fatal(err)
-	}
-	postJSONExpectStatusWithAuth(t, srv.URL+"/pm/conversations/"+asString(c["id"])+"/messages", map[string]any{"request_key": "turn", "text": "What changed?"}, seed.AccessToken, 503)
+	assertErrorCode(t, resp, "pm_not_onboarded")
 }
 
 func TestPMRuntimeBridgeFailsClosedWithoutRuntimeEnvelope(t *testing.T) {
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
-	_, err := NewPMRuntime(env.workspace.DB(), env.primitiveStore.(*primitives.Store), env.authStore, PMRuntimeConfig{
+	_, err := newOnboardedPMRuntime(t, env.workspace.DB(), env.primitiveStore.(*primitives.Store), env.authStore, PMRuntimeConfig{
 		PM:            pm.Config{WorkspaceID: "ws_main", AgentActorID: "pm-agent", AgentHandle: "pm"},
 		BridgeEnabled: true,
 	})
@@ -141,7 +137,7 @@ func TestPMRuntimeSourceWriteStaysUnavailable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := NewPMRuntime(env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	handler, err := newOnboardedPMRuntime(t, env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +174,7 @@ func TestPMRuntimeReplyUsesConversationAuthorization(t *testing.T) {
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	seed := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "reply-fixture", "reply-fixture-actor", "reply-fixture", "reply-fixture-token")
-	handler, err := NewPMRuntime(env.workspace.DB(), env.primitiveStore.(*primitives.Store), env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: seed.ActorID}})
+	handler, err := newOnboardedPMRuntime(t, env.workspace.DB(), env.primitiveStore.(*primitives.Store), env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: seed.ActorID}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +229,7 @@ func TestPMRuntimeSourceReconcileDoesNotVerifyUnsentWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := NewPMRuntime(env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}, Observation: runtime})
+	handler, err := newOnboardedPMRuntime(t, env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}, Observation: runtime})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +282,7 @@ func TestPMPhaseCanonicalMutationAndSourceRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewPMRuntime(env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: machine.ActorID}})
+	rt, err := newOnboardedPMRuntime(t, env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: machine.ActorID}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -386,7 +382,7 @@ func TestPMRuntimeRespondRequiresConfiguredUnrevokedActor(t *testing.T) {
 	ctx := context.Background()
 	selected := seedMachinePrincipalForLockoutTest(t, ctx, env.workspace.DB(), "selected-pm", "selected-pm-actor", "selected-pm", "selected-token")
 	other := seedMachinePrincipalForLockoutTest(t, ctx, env.workspace.DB(), "other-pm", "other-pm-actor", "other-pm", "other-token")
-	rt, err := NewPMRuntime(env.workspace.DB(), env.primitiveStore.(*primitives.Store), env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: selected.ActorID}})
+	rt, err := newOnboardedPMRuntime(t, env.workspace.DB(), env.primitiveStore.(*primitives.Store), env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: selected.ActorID}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -409,7 +405,7 @@ func TestPMRuntimeRespondRequiresConfiguredUnrevokedActor(t *testing.T) {
 func TestPMMaintenanceTickExpiresWithoutRunnerReadOrSender(t *testing.T) {
 	env := newPMStoreTestEnv(t)
 	ctx := context.Background()
-	rt, err := NewPMRuntime(env.workspace.DB(), env.primitiveStore.(*primitives.Store), env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	rt, err := newOnboardedPMRuntime(t, env.workspace.DB(), env.primitiveStore.(*primitives.Store), env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -450,7 +446,7 @@ func TestPMRuntimeAgentOnlyProposesForRequestingHuman(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewPMRuntime(env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: machine.ActorID}})
+	rt, err := newOnboardedPMRuntime(t, env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: machine.ActorID}})
 	if err != nil {
 		t.Fatal(err)
 	}

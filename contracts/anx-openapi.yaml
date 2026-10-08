@@ -332,6 +332,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMConversationListResponse`.
       x-anx-error-codes:
+      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -375,6 +376,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMConversation`.
       x-anx-error-codes:
+      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -418,6 +420,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMConversationDetailResponse`.
       x-anx-error-codes:
+      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -467,6 +470,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMTurn`.
       x-anx-error-codes:
+      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -506,6 +510,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PMErrorResponse'
+  /pm/connect:
+    post:
+      operationId: pmConnect
+      summary: Connect a local workspace PM runner
+      tags: [pm]
+      x-anx-surface: canonical
+      x-anx-command-id: pm.connect
+      x-anx-cli-path: pm connect
+      x-anx-why: Register the selected PM's local connection without queueing a turn.
+      x-anx-agent-notes: Send safe runner and host labels only. This bootstrap operation remains available before onboarding.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `PMPresence`.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, conflict, invalid_request, unavailable]
+      x-anx-concepts: [agents]
+      x-anx-stability: beta
+      description: Only the explicitly selected PM or a verified host-derived agent named pm when none is selected may connect. Labels are short display metadata, never commands or credentials.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMConnectRequest'
+      responses:
+        '200':
+          description: Workspace PM connection state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMPresence'
   /pm/presence:
     get:
       operationId: pmPresence
@@ -521,7 +555,7 @@ paths:
       x-anx-error-codes: [auth_required, invalid_token, forbidden, unavailable]
       x-anx-concepts: [agents]
       x-anx-stability: beta
-      x-anx-agent-notes: Only accepted claims and lease heartbeats from the configured PM count. No turn text or runner identity is returned.
+      x-anx-agent-notes: Same computed PM state included in agents me. Accepted local connections, claims and lease heartbeats count; connected expires after 90 seconds. Labels never contain runner commands.
       responses:
         '200':
           description: Workspace PM connection state; connected expires after 90 seconds.
@@ -544,6 +578,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMContextResponse`.
       x-anx-error-codes:
+      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -607,6 +642,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMDecisionListResponse`.
       x-anx-error-codes:
+      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -651,6 +687,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMDecision`.
       x-anx-error-codes:
+      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -708,6 +745,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMTurn`.
       x-anx-error-codes:
+      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -750,6 +788,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMDecision`.
       x-anx-error-codes:
+      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -794,6 +833,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMDecision`.
       x-anx-error-codes:
+      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -850,6 +890,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMAction`.
       x-anx-error-codes:
+      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -912,6 +953,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMActionListResponse`.
       x-anx-error-codes:
+      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -956,6 +998,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMAction`.
       x-anx-error-codes:
+      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -1000,6 +1043,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMAction`.
       x-anx-error-codes:
+      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -1055,6 +1099,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMAction`.
       x-anx-error-codes:
+      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -1110,6 +1155,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMBindingListResponse`.
       x-anx-error-codes:
+      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -1152,6 +1198,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMBinding`.
       x-anx-error-codes:
+      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -1248,6 +1295,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMTurn`.
       x-anx-error-codes:
+      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -1299,6 +1347,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMTurn`.
       x-anx-error-codes:
+      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -1409,6 +1458,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMContextResponse`.
       x-anx-error-codes:
+      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -1461,6 +1511,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMDecision`.
       x-anx-error-codes:
+      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -1520,6 +1571,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMTurn`.
       x-anx-error-codes:
+      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -7477,7 +7529,7 @@ paths:
       x-anx-why: Resolve any workspace bearer to its principal and durable actor identity, including host-derived agent details when present.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ agent: PrincipalSelf }` for a human, derived/adopted agent, or standalone agent. The agent key is retained for existing clients."
+      x-anx-output-envelope: "Returns `{ agent: PrincipalSelf, pm: PMState }` for a human, derived/adopted agent, or standalone agent. The agent key is retained for existing clients."
       x-anx-error-codes: [auth_required, invalid_token]
       x-anx-concepts: [auth, agents]
       x-anx-stability: beta
@@ -8786,7 +8838,8 @@ components:
       additionalProperties: false
       properties:
         agent: {$ref: '#/components/schemas/PrincipalSelf'}
-      required: [agent]
+        pm: {$ref: '#/components/schemas/PMState'}
+      required: [agent, pm]
     PrincipalSelf:
       type: object
       additionalProperties: false
@@ -9520,10 +9573,31 @@ components:
       type: object
       additionalProperties: true
       properties: &id006 {}
+    PMState:
+      type: object
+      additionalProperties: false
+      required: [state, last_seen, runner, host]
+      properties:
+        state: {type: string, enum: [not_onboarded, connected, offline]}
+        last_seen: {type: string, format: date-time, nullable: true}
+        runner: {type: string, nullable: true, maxLength: 80}
+        host: {type: string, nullable: true, maxLength: 80}
+      description: Registered workspace PM with at least one accepted local connection is onboarded. Connected expires after 90 seconds; offline remains onboarded. An unconnected registered PM is not_onboarded.
+    PMConnectRequest:
+      type: object
+      additionalProperties: false
+      required: [runner, host]
+      properties:
+        runner: {type: string, minLength: 1, maxLength: 80}
+        host: {type: string, minLength: 1, maxLength: 80}
     PMPresence:
       type: object
-      required: [configured, connected]
+      required: [configured, connected, state, last_seen, runner, host]
       properties:
+        state: {type: string, enum: [not_onboarded, connected, offline]}
+        last_seen: {type: string, format: date-time, nullable: true}
+        runner: {type: string, nullable: true, maxLength: 80}
+        host: {type: string, nullable: true, maxLength: 80}
         configured:
           type: boolean
         connected:
@@ -9533,7 +9607,7 @@ components:
           format: date-time
         signal:
           type: string
-          enum: [claim, heartbeat]
+          enum: [connect, claim, heartbeat]
     PMContextResponse:
       type: object
       additionalProperties: true

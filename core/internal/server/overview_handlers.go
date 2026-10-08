@@ -237,7 +237,7 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 					}
 				}
 			}
-			if e != nil {
+			if e != nil && !errors.Is(e, pm.ErrNotOnboarded) {
 				needs["status"] = "unavailable"
 				needs["message"] = "Decisions could not be loaded."
 			} else {

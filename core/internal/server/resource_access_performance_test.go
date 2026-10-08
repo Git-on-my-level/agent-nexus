@@ -195,7 +195,7 @@ func TestResourceAccessCommonReadPerformance(t *testing.T) {
 	t.Cleanup(func() { counted.Close() })
 	measuredStore := primitives.NewTestStore(counted, env.workspace.Layout().ArtifactContentDir)
 	measuredAuth := auth.NewStore(counted)
-	runtime, err := NewPMRuntime(counted, measuredStore, measuredAuth, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	runtime, err := newOnboardedPMRuntime(t, counted, measuredStore, measuredAuth, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -344,7 +344,7 @@ func TestResourceAccessCommonReadPerformance(t *testing.T) {
 			defer counted.Close()
 			measuredStore = primitives.NewTestStore(counted, env.workspace.Layout().ArtifactContentDir)
 			measuredAuth = auth.NewStore(counted)
-			runtime, err = NewPMRuntime(counted, measuredStore, measuredAuth, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+			runtime, err = newOnboardedPMRuntime(t, counted, measuredStore, measuredAuth, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 227,
+  "route_count": 228,
   "routes": [
     {
       "method": "GET",
@@ -755,6 +755,11 @@
     {
       "method": "POST",
       "path": "/pm/bindings",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/pm/connect",
       "access_class": "workspace_business_surface"
     },
     {

@@ -11,6 +11,9 @@ import (
 func TestPresenceAcceptedClaimsScopeAndExpiry(t *testing.T) {
 	s, st, human, _ := fixture(t)
 	ctx := context.Background()
+	if _, err := st.db.Exec(`DELETE FROM pm_presence`); err != nil {
+		t.Fatal(err)
+	}
 	absent, err := s.Presence(ctx, human)
 	if err != nil || absent.Connected || !absent.Configured {
 		t.Fatalf("initial: %+v %v", absent, err)

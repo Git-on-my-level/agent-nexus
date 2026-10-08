@@ -756,7 +756,7 @@ export const commandRegistry: CommandSpec[] = [
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ agent: PrincipalSelf }` for a human, derived/adopted agent, or standalone agent. The agent key is retained for existing clients.",
+    "output_envelope": "Returns `{ agent: PrincipalSelf, pm: PMState }` for a human, derived/adopted agent, or standalone agent. The agent key is retained for existing clients.",
     "error_codes": [
       "auth_required",
       "invalid_token"
@@ -8256,6 +8256,7 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMAction`.",
     "error_codes": [
+      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -8282,6 +8283,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.reconcile",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.get",
@@ -8320,6 +8322,7 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMAction`.",
     "error_codes": [
+      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -8346,6 +8349,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.reconcile",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.get",
@@ -8385,6 +8389,7 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMActionListResponse`.",
     "error_codes": [
+      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -8408,6 +8413,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.reconcile",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.get",
@@ -8447,6 +8453,7 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMAction`.",
     "error_codes": [
+      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -8473,6 +8480,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.list",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.get",
@@ -8511,6 +8519,7 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMBinding`.",
     "error_codes": [
+      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -8590,6 +8599,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.list",
       "pm.actions.reconcile",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.get",
@@ -8628,6 +8638,7 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMBindingListResponse`.",
     "error_codes": [
+      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -8651,6 +8662,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.list",
       "pm.actions.reconcile",
       "pm.bindings.create",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.get",
@@ -8675,6 +8687,77 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "pmBindingsList"
   },
   {
+    "command_id": "pm.connect",
+    "cli_path": "pm connect",
+    "group": "pm",
+    "method": "POST",
+    "path": "/pm/connect",
+    "operation_id": "pmConnect",
+    "summary": "Connect a local workspace PM runner",
+    "description": "Only the explicitly selected PM or a verified host-derived agent named pm when none is selected may connect. Labels are short display metadata, never commands or credentials.",
+    "why": "Register the selected PM's local connection without queueing a turn.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `PMPresence`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "forbidden",
+      "conflict",
+      "invalid_request",
+      "unavailable"
+    ],
+    "concepts": [
+      "agents"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Send safe runner and host labels only. This bootstrap operation remains available before onboarding.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "host",
+          "type": "string"
+        },
+        {
+          "name": "runner",
+          "type": "string"
+        }
+      ]
+    },
+    "adjacent_commands": [
+      "pm.actions.acknowledge",
+      "pm.actions.get",
+      "pm.actions.list",
+      "pm.actions.reconcile",
+      "pm.bindings.create",
+      "pm.bindings.list",
+      "pm.context",
+      "pm.conversations.create",
+      "pm.conversations.get",
+      "pm.conversations.list",
+      "pm.conversations.messages.create",
+      "pm.decisions.answer",
+      "pm.decisions.create",
+      "pm.decisions.dispatch",
+      "pm.decisions.get",
+      "pm.decisions.list",
+      "pm.presence",
+      "pm.turns.claim",
+      "pm.turns.complete",
+      "pm.turns.context",
+      "pm.turns.decisions.create",
+      "pm.turns.fail",
+      "pm.turns.get",
+      "pm.turns.heartbeat",
+      "pm.turns.release"
+    ],
+    "go_method": "PmConnect",
+    "ts_method": "pmConnect"
+  },
+  {
     "command_id": "pm.context",
     "cli_path": "pm context",
     "group": "pm",
@@ -8689,6 +8772,7 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMContextResponse`.",
     "error_codes": [
+      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -8713,6 +8797,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.reconcile",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.conversations.create",
       "pm.conversations.get",
       "pm.conversations.list",
@@ -8750,6 +8835,7 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMConversation`.",
     "error_codes": [
+      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -8796,6 +8882,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.reconcile",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.get",
       "pm.conversations.list",
@@ -8833,6 +8920,7 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMConversationDetailResponse`.",
     "error_codes": [
+      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -8860,6 +8948,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.reconcile",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.list",
@@ -8898,6 +8987,7 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMConversationListResponse`.",
     "error_codes": [
+      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -8922,6 +9012,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.reconcile",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.get",
@@ -8959,6 +9050,7 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMTurn`.",
     "error_codes": [
+      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -8998,6 +9090,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.reconcile",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.get",
@@ -9036,6 +9129,7 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMDecision`.",
     "error_codes": [
+      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -9079,6 +9173,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.reconcile",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.get",
@@ -9117,6 +9212,7 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMDecision`.",
     "error_codes": [
+      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -9184,6 +9280,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.reconcile",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.get",
@@ -9222,6 +9319,7 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMAction`.",
     "error_codes": [
+      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -9249,6 +9347,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.reconcile",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.get",
@@ -9286,6 +9385,7 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMDecision`.",
     "error_codes": [
+      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -9313,6 +9413,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.reconcile",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.get",
@@ -9351,6 +9452,7 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMDecisionListResponse`.",
     "error_codes": [
+      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -9375,6 +9477,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.reconcile",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.get",
@@ -9422,7 +9525,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Only accepted claims and lease heartbeats from the configured PM count. No turn text or runner identity is returned.",
+    "agent_notes": "Same computed PM state included in agents me. Accepted local connections, claims and lease heartbeats count; connected expires after 90 seconds. Labels never contain runner commands.",
     "adjacent_commands": [
       "pm.actions.acknowledge",
       "pm.actions.get",
@@ -9430,6 +9533,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.reconcile",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.get",
@@ -9500,6 +9604,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.reconcile",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.get",
@@ -9538,6 +9643,7 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMTurn`.",
     "error_codes": [
+      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -9585,6 +9691,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.reconcile",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.get",
@@ -9623,6 +9730,7 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMContextResponse`.",
     "error_codes": [
+      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -9678,6 +9786,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.reconcile",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.get",
@@ -9716,6 +9825,7 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMDecision`.",
     "error_codes": [
+      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -9792,6 +9902,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.reconcile",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.get",
@@ -9829,6 +9940,7 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMTurn`.",
     "error_codes": [
+      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -9870,6 +9982,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.reconcile",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.get",
@@ -9908,6 +10021,7 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMTurn`.",
     "error_codes": [
+      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -9935,6 +10049,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.reconcile",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.get",
@@ -10028,6 +10143,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.reconcile",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.get",
@@ -10066,6 +10182,7 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMTurn`.",
     "error_codes": [
+      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -10107,6 +10224,7 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.reconcile",
       "pm.bindings.create",
       "pm.bindings.list",
+      "pm.connect",
       "pm.context",
       "pm.conversations.create",
       "pm.conversations.get",
@@ -13552,6 +13670,10 @@ export class AnxClient {
 
   pmBindingsList(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("pm.bindings.list", {}, options);
+  }
+
+  pmConnect(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("pm.connect", {}, options);
   }
 
   pmContext(options: RequestOptions = {}): Promise<InvokeResult> {

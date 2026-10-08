@@ -25,7 +25,7 @@ func TestRound12DecisionWorkProjectionAndMissingWork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewPMRuntime(env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	rt, err := newOnboardedPMRuntime(t, env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}

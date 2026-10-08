@@ -914,6 +914,10 @@ work_tracking:
     - Queued refresh is not a successful read.
 
 conversational_pm:
+  onboarding_state: [not_onboarded, connected, offline]
+  onboarding_fields: [state, last_seen, runner, host]
+  onboarding_error_code: pm_not_onboarded
+  connection_ttl_seconds: 90
   storage: workspace_sqlite
   work_identity: card
   conversation_scope: [workspace_id, actor_id]

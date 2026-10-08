@@ -734,6 +734,9 @@ func (reader *reportReader) readDecisionActivity() ([]map[string]any, bool, erro
 	cursor := ""
 	for count := 0; count < limit; {
 		page, err := runtime.Service.DecisionPage(reader.r.Context(), p, limit, cursor)
+		if errors.Is(err, pm.ErrNotOnboarded) {
+			return items, false, nil
+		}
 		if err != nil {
 			return nil, false, err
 		}

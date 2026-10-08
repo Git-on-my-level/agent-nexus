@@ -32,7 +32,7 @@ func TestRound19NativeContentAndMetadataFence(t *testing.T) {
 					if work["decision_revision"] != "1.1" {
 						t.Fatalf("composition: %+v", work)
 					}
-					rt, err := NewPMRuntime(env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+					rt, err := newOnboardedPMRuntime(t, env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
 					if err != nil {
 						t.Fatal(err)
 					}

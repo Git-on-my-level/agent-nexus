@@ -1023,7 +1023,7 @@ func fileExists(path string) (bool, error) {
 func configuredPMActor(stderr io.Writer) string {
 	actor := envString("ANX_PM_AGENT_ACTOR_ID", "")
 	if actor == "" {
-		fmt.Fprintln(stderr, "WARNING: ANX_PM_AGENT_ACTOR_ID is empty; PM turn creation and response operations are unavailable")
+		fmt.Fprintln(stderr, "WARNING: ANX_PM_AGENT_ACTOR_ID is empty; select a local PM with anx pm install on your computer")
 	}
 	return actor
 }

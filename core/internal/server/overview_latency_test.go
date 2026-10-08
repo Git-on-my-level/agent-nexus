@@ -52,7 +52,7 @@ func testOverviewWorkspaceLatency(t *testing.T, cards, principals int) {
 	t.Cleanup(func() { db.Close() })
 	measured := primitives.NewTestStore(db, env.workspace.Layout().ArtifactContentDir)
 	authStore := auth.NewStore(db)
-	runtime, err := NewPMRuntime(db, measured, authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	runtime, err := newOnboardedPMRuntime(t, db, measured, authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}

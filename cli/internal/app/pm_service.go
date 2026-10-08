@@ -47,7 +47,7 @@ func init() {
 	for _, verb := range []string{"install", "status", "uninstall"} {
 		topic := localHelperTopic{Path: "pm " + verb, Summary: map[string]string{"install": "Install or update the PM service on this computer.", "status": "Read the local PM service and last accepted claim.", "uninstall": "Stop and remove the local PM service."}[verb], JSONShape: "installed, running, workspace, agent, service, logs, last_claim_at", Composition: "Per-user launchd on macOS or systemd --user on Linux. Uses the selected workspace and profile; stores no credentials in the service definition.", Examples: []string{"anx pm " + verb}}
 		if verb == "install" {
-			topic.Flags = []localHelperFlag{{Name: "--runner <argv>", Description: "Runner command; saved locally for subsequent installs. Use {prompt_file} for a private prompt file, or omit a placeholder to use agentctl's file transport."}}
+			topic.Flags = []localHelperFlag{{Name: "--wait", Description: "Wait for an accepted connection after install."}, {Name: "--wait-timeout <duration>", Description: "Bound the connection wait (default 90s, maximum 5m)."}, {Name: "--runner <argv>", Description: "Runner command; saved locally for subsequent installs. Use {prompt_file} for a private prompt file, or omit a placeholder to use agentctl's file transport."}}
 		}
 		localHelperTopics = append(localHelperTopics, topic)
 	}
@@ -56,14 +56,30 @@ func init() {
 func (a *App) runPMService(ctx context.Context, verb string, args []string, cfg config.Resolved) (*commandResult, error) {
 	fs := newSilentFlagSet("pm " + verb)
 	var runner trackedString
+	var wait bool
+	var waitTimeout = 90 * time.Second
 	if verb == "install" {
 		fs.Var(&runner, "runner", "Runner command")
+		fs.BoolVar(&wait, "wait", false, "Wait for the first accepted PM connection")
+		fs.DurationVar(&waitTimeout, "wait-timeout", 90*time.Second, "Connection wait budget")
 	}
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) != 0 {
 		return nil, errnorm.Usage("invalid_args", "unexpected arguments for pm "+verb)
+	}
+	if verb == "install" && cfg.Sources["pm_install_mode"] == "interactive" {
+		selected, command, err := a.pmInstallWizard(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+		cfg = selected
+		runner.value = command
+		wait = true
+	}
+	if waitTimeout < time.Second || waitTimeout > 5*time.Minute {
+		return nil, errnorm.Usage("invalid_flags", "--wait-timeout must be between 1s and 5m")
 	}
 	if pmServiceOS != "darwin" && pmServiceOS != "linux" {
 		return nil, errnorm.New(errnorm.KindLocal, "unsupported_platform", "PM services support macOS and Linux")
@@ -229,6 +245,12 @@ func (a *App) runPMService(ctx context.Context, verb string, args []string, cfg 
 		if b, e := os.ReadFile(filepath.Join(state, "last-claim")); e == nil {
 			status.LastClaimAt = strings.TrimSpace(string(b))
 		}
+	}
+	if verb == "install" && wait {
+		if err := a.waitPMConnection(ctx, cfg, waitTimeout, state, time.Now()); err != nil {
+			return nil, err
+		}
+		return &commandResult{Data: status, Text: "PM connected\nWorkspace: " + cfg.BaseURL + "\nLogs: " + state}, nil
 	}
 	return &commandResult{Data: status, Text: fmt.Sprintf("PM %s: installed=%t running=%t\nWorkspace: %s\nProfile: %s\nLast accepted claim: %s\nLogs: %s", verb, status.Installed, status.Running, status.Workspace, status.Agent, firstNonEmpty(status.LastClaimAt, "none"), state)}, nil
 }

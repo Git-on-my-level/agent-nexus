@@ -568,10 +568,17 @@ transport authentication.
 The PM runs on **your own computer**, including when your workspace core is remote.
 Keep the computer awake and online while asking PM questions. Enroll its host key
 and select the workspace with `anx config use <alias>` (or `--workspace <alias>`).
-The workspace must designate the same PM actor as the local `--as pm` profile.
+The default `pm` host profile is registered and selected automatically when its
+local runner first connects. An explicitly selected workspace PM remains authoritative.
 
-Install once with a runner of your choice. These are optional examples; runner
-commands and provider credentials remain your responsibility:
+Run `anx pm install` with no flags in a terminal for the onboarding wizard. Pick
+a workspace and Hermes, Claude Code, or a custom command. The wizard tests the
+runner once, installs the service, then waits for a fresh local claim and server
+heartbeat before printing **PM connected**. Runner credentials must already work
+on this computer. EOF or an invalid choice cancels before installation.
+
+Flags select the non-interactive path. Add `--wait --wait-timeout 90s` to wait for
+connection; `--json` remains non-interactive. These are optional runner examples:
 
 ```sh
 # Claude Code reads the private prompt file through stdin.
@@ -579,7 +586,7 @@ anx pm install --runner "sh -c 'exec claude -p < \"\$1\"' sh {prompt_file}"
 # Hermes supports a query file; no question text appears in its argv.
 anx pm install --runner 'hermes chat --query-file {prompt_file} -Q'
 anx pm status
-anx pm install                  # idempotent repair using saved runner config
+anx pm install --json           # idempotent repair using saved runner config
 anx pm uninstall               # stop and remove this workspace/profile service
 ```
 
@@ -602,11 +609,22 @@ Prompt files are mode 0600 and removed after execution. `{prompt_file}` substitu
 only the path; legacy `{prompt}` also means a path. Without a placeholder, agentctl
 receives `--prompt-file`. Do not use command substitution to put prompt text in argv.
 `status --json` reports installed/running, workspace, profile, logs and last claim.
-Uninstall removes only the selected service and its state; workspace credentials stay.
+Uninstall removes only the selected service and its local state; workspace credentials
+and the durable workspace onboarding fact stay. A stopped or uninstalled PM becomes
+offline after 90 seconds; it does not hide existing PM history or disrupt another
+computer. Revoking host credentials prevents reconnecting; selecting a different
+workspace PM requires that actor to connect before its features become available.
 
-Ask PM and PM-routed Inbox decisions show **No PM connected** when the configured
-PM has not made an accepted claim or lease heartbeat in 90 seconds. A connected
-runner can still fail a turn; presence is a connection signal, not a model health guarantee.
+PM features require onboarding: a registered PM has connected through `anx pm serve`
+at least once. Before that, PM-only requests return HTTP 409 `pm_not_onboarded`
+and do not queue questions. Ordinary workspace features remain available.
+The existing `GET /agents/me` bootstrap includes `pm` with `state`
+(`not_onboarded`, `connected`, or `offline`), nullable `last_seen`, `runner`, and
+`host`. `GET /pm/presence` exposes the same state plus legacy presence fields.
+A connection older than 90 seconds is offline; onboarding is retained across
+restarts. Offline PM features remain available and queued questions wait for
+the runner to return. A connected runner can still fail a turn; presence is
+a connection signal, not a model health guarantee.
 
 ### PM runner (`anx pm serve`)
 

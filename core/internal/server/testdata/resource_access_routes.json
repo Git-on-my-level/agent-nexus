@@ -1194,5 +1194,11 @@
     "method": "GET",
     "path": "/workspace/dashboard/reports",
     "policy": "collection"
+  },
+  {
+    "method": "POST",
+    "path": "/pm/connect",
+    "policy": "independent",
+    "reason": "Authenticated selected PM or verified host-derived reserved pm agent connects with bounded display labels only; no resource data."
   }
 ]

@@ -26,6 +26,7 @@ type workCommandSpec struct {
 }
 
 var workCommands = map[string]workCommandSpec{
+	"pm connect":                 {path: "/pm/connect", method: "POST", body: true, summary: "Register a local PM connection with bounded runner and host labels."},
 	"pm presence":                {path: "/pm/presence", method: "GET", summary: "Read recent PM connection state."},
 	"report render":              {path: "/docs/{id}/report", method: "GET", idFlag: "document-id", summary: "Materialize a visual report’s live panels from current, authorized workspace data."},
 	"sessions register":          {path: "/sessions", method: "POST", body: true, summary: "Register or refresh a private provider session with a monotonic sequence; never creates an agent credential or assigns work."},

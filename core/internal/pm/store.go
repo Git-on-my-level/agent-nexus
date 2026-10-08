@@ -29,7 +29,8 @@ func NewStore(db *sql.DB) (*Store, error) {
 		return nil, err
 	}
 	defer tx.Rollback()
-	_, err = tx.Exec(`CREATE TABLE IF NOT EXISTS pm_presence (workspace_id TEXT NOT NULL, actor_id TEXT NOT NULL, last_seen_at TEXT NOT NULL, signal TEXT NOT NULL, PRIMARY KEY(workspace_id,actor_id));
+	_, err = tx.Exec(`CREATE TABLE IF NOT EXISTS pm_registration (workspace_id TEXT PRIMARY KEY, actor_id TEXT NOT NULL, runner TEXT NOT NULL, host TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS pm_presence (workspace_id TEXT NOT NULL, actor_id TEXT NOT NULL, last_seen_at TEXT NOT NULL, signal TEXT NOT NULL, PRIMARY KEY(workspace_id,actor_id));
  CREATE TABLE IF NOT EXISTS pm_records (
  kind TEXT NOT NULL, id TEXT NOT NULL, workspace_id TEXT NOT NULL, actor_id TEXT NOT NULL,
  parent_id TEXT NOT NULL DEFAULT '', revision INTEGER NOT NULL, body BLOB NOT NULL,
@@ -47,6 +48,33 @@ func NewStore(db *sql.DB) (*Store, error) {
 	}
 	if err := resourceaccess.InstallPMAccess(context.Background(), tx, false); err != nil {
 		return nil, err
+	}
+	// Upgrade the old presence projection once at startup. First connection is
+	// durable; only last_seen expires when computing connected versus offline.
+	columns, e := tx.Query(`PRAGMA table_info(pm_presence)`)
+	if e != nil {
+		return nil, e
+	}
+	hasFirstSeen := false
+	for columns.Next() {
+		var cid, notNull, pk int
+		var name, typ string
+		var defaultValue any
+		if e = columns.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); e != nil {
+			columns.Close()
+			return nil, e
+		}
+		hasFirstSeen = hasFirstSeen || name == "first_seen_at"
+	}
+	e = columns.Err()
+	columns.Close()
+	if e != nil {
+		return nil, e
+	}
+	if !hasFirstSeen {
+		if _, e = tx.Exec(`ALTER TABLE pm_presence ADD COLUMN first_seen_at TEXT NOT NULL DEFAULT ''; UPDATE pm_presence SET first_seen_at=last_seen_at`); e != nil {
+			return nil, e
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err

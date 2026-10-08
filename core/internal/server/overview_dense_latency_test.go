@@ -204,7 +204,7 @@ func TestOverviewDenseAccessWorkspaceLatency(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 	store := primitives.NewTestStore(db, env.workspace.Layout().ArtifactContentDir)
 	authStore := auth.NewStore(db)
-	runtime, err := NewPMRuntime(db, store, authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	runtime, err := newOnboardedPMRuntime(t, db, store, authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}

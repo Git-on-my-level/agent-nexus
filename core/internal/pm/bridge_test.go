@@ -30,6 +30,9 @@ func TestRealNexusWakeArtifactSessionAndReplyRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err = svc.notePresence(ctx, Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, "connect"); err != nil {
+		t.Fatal(err)
+	}
 	p := Principal{WorkspaceID: "ws", ActorID: "human", Human: true}
 	c, err := svc.CreateConversation(ctx, p, CreateConversation{RequestKey: "conversation", Title: "Review work"})
 	if err != nil {

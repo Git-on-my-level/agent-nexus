@@ -267,7 +267,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `pm`
 
-- Commands: `25`
+- Commands: `26`
 - Command IDs:
   - `pm.actions.acknowledge` (`pm actions acknowledge`)
   - `pm.actions.get` (`pm actions get`)
@@ -275,6 +275,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `pm.actions.reconcile` (`pm actions reconcile`)
   - `pm.bindings.create` (`pm bindings create`)
   - `pm.bindings.list` (`pm bindings list`)
+  - `pm.connect` (`pm connect`)
   - `pm.context` (`pm context`)
   - `pm.conversations.create` (`pm conversations create`)
   - `pm.conversations.get` (`pm conversations get`)

@@ -26,7 +26,7 @@ func TestPMReadBatchKeepsFreshAuthorityAndEpochPrivacy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := NewPMRuntime(db, store, auth.NewStore(db), PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	runtime, err := newOnboardedPMRuntime(t, db, store, auth.NewStore(db), PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}

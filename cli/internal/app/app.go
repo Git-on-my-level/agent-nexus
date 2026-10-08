@@ -175,7 +175,11 @@ func (a *App) Run(args []string) int {
 			return a.renderError(resolveMachineCommandIdentity(configErrorCommand), jsonMode, wrapped)
 		}
 	}
-	if !workspaceIndependentCommand(remaining) || cmdPeek == "config" && subPeek == "workspaces" && overrides.Workspace != nil {
+	wizard := len(args) == 2 && args[0] == "pm" && args[1] == "install" && !resolved.JSON && a.StdinIsTTY != nil && a.StdinIsTTY()
+	if wizard {
+		resolved.Sources["pm_install_mode"] = "interactive"
+	}
+	if !wizard && (!workspaceIndependentCommand(remaining) || cmdPeek == "config" && subPeek == "workspaces" && overrides.Workspace != nil) {
 		resolved, err = a.resolveWorkspace(resolved, overrides.Workspace)
 		if err != nil {
 			return a.renderError(resolveMachineCommandIdentity(preflightCommandName), resolved.JSON, err)

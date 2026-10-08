@@ -20,7 +20,7 @@ func TestPerformancePMPresence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stmt, err := tx.Prepare(`INSERT INTO pm_presence(workspace_id,actor_id,last_seen_at,signal) VALUES('ws_main',?,'2020-01-01T00:00:00Z','heartbeat')`)
+	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO pm_presence(workspace_id,actor_id,last_seen_at,signal) VALUES('ws_main',?,'2020-01-01T00:00:00Z','heartbeat')`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestPerformancePMPresence(t *testing.T) {
 				}
 				found := false
 				for _, line := range plan {
-					if strings.Contains(line, "SEARCH pm_presence USING INDEX sqlite_autoindex_pm_presence_1") {
+					if strings.Contains(line, "SEARCH p USING INDEX sqlite_autoindex_pm_presence_1") {
 						found = true
 					}
 					if strings.Contains(line, "SCAN pm_presence") {
