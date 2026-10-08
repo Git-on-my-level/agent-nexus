@@ -54,6 +54,15 @@ export function captureInboxResponseSender() {
   return client.respondInboxItem.bind(client);
 }
 
+/** Bind all Inbox pages to one scope and abort outstanding reads at its deadline. */
+export function createInboxSourceClient(signal) {
+  const fetchFn = globalThis.fetch.bind(globalThis);
+  return createAnxCoreClient({
+    ...getInboxResponseClientOptions(),
+    fetchFn: (url, init) => fetchFn(url, { ...init, signal }),
+  });
+}
+
 function resolveBrowserClient() {
   if (!browser) {
     throw new Error(

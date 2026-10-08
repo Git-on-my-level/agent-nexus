@@ -60,6 +60,7 @@ const REFRESH_DELAY_MS = 1_500;
 const emptySources = () =>
   Array.from({ length: 6 }, () => ({
     status: "fulfilled",
+    complete: true,
     value: { items: [], work: [] },
   }));
 
@@ -228,4 +229,20 @@ describe("what the badge counts", () => {
     expect(get(inboxNeedsYouCount).count).toBe(7);
     release();
   });
+});
+
+it("keeps unknown receipts in Needs you when a later action page never resolves", async () => {
+  await installSources({ work: [] });
+  client.listPmDecisions.mockResolvedValue({
+    items: [{ id: "unknown", status: "answered", action_id: "missing" }],
+  });
+  client.listPmActions.mockImplementation(({ cursor }) =>
+    cursor
+      ? new Promise(() => {})
+      : Promise.resolve({ items: [], next_cursor: "slow" }),
+  );
+  const stop = startInboxCount("local");
+  await vi.advanceTimersByTimeAsync(REFRESH_DELAY_MS + 5000);
+  expect(get(inboxNeedsYouCount)).toMatchObject({ count: 1, truncated: true });
+  stop();
 });

@@ -1,4 +1,4 @@
-import { coreClient } from "$lib/coreClient";
+import { createInboxSourceClient } from "$lib/coreClient";
 
 /**
  * The attention surface must not hide an obligation on page two. Follow
@@ -29,34 +29,34 @@ export async function listAllPages(fetchPage, key, maxPages = 8, onPage) {
   }
   return {
     [key]: collected,
-    has_more: more && Boolean(cursor),
+    has_more: more,
     archived_refs: [...archived],
   };
 }
 
 /**
- * Everything the Inbox classifies, fetched in parallel. Each source settles
- * on its own so one failing list does not blank the others.
- *
- * @param {{ withHistory?: boolean, client?: object, onProgress?: function }} [options]
- *   `withHistory: false` skips unread updates. Completed asks remain loaded so
- *   a blocked card does not return to Needs you after its ask is answered.
- *   `client` defaults to the browser core client;
- *   a server load passes its own.
- * @returns {Promise<PromiseSettledResult<any>[]>} decisions, actions, work,
- *   open items, completed items, unread updates (unread updates resolve to
- *   null when skipped)
+ * Publish after each feed's first page, or 800 ms, whichever comes first.
+ * Continue bounded pagination with incremental snapshots, but stop waiting
+ * after five seconds. A partial history never admits work-derived rows.
+ * `complete` means pagination finished without a cap/cycle/partial marker.
  */
 export async function loadInboxSources({
   withHistory = true,
-  client = coreClient,
+  client,
   onProgress,
+  firstPaintMs = 800,
+  deadlineMs = 5_000,
+  signal,
 } = {}) {
-  const skipped = Promise.resolve(null);
-  const progress = Array.from({ length: 6 }, () => ({ status: "pending" }));
-  const visibleSources = (sources) => {
-    const hidden = new Set(sources[2]?.value?.archived_refs || []);
-    return sources.map((result, index) => {
+  const controller = new AbortController();
+  client ||= createInboxSourceClient(controller.signal);
+  const results = Array.from({ length: 6 }, () => ({ status: "pending" }));
+  const firstPages = new Set();
+  let published = false;
+  let stopped = false;
+  const snapshot = () => {
+    const hidden = new Set(results[2]?.value?.archived_refs || []);
+    return results.map((result, index) => {
       if (index > 1 || result.status !== "fulfilled" || !result.value?.items)
         return { ...result };
       return {
@@ -70,50 +70,144 @@ export async function loadInboxSources({
       };
     });
   };
-  const publish = () => onProgress?.(visibleSources(progress));
-  const pages = async (index, fetchPage, key) => {
-    try {
-      const value = await listAllPages(fetchPage, key, 8, (page) => {
-        if (index === 3) {
-          progress[index] = { status: "fulfilled", value: page };
-          publish();
-        }
-      });
-      progress[index] = { status: "fulfilled", value };
-      publish();
-      return value;
-    } catch (reason) {
-      progress[index] = { status: "rejected", reason };
-      publish();
-      throw reason;
-    }
+  const publish = () => {
+    if (stopped || signal?.aborted) return;
+    published = true;
+    onProgress?.(snapshot());
   };
-  // On the page, give actionable asks the first database turn. Secondary
-  // history/work queries must not keep an already-loaded ask behind a spinner.
-  const open = pages(
-    3,
-    (cursor) => client.listInboxItems({ status: "open", limit: 50, cursor }),
-    "items",
+  const update = (index, result) => {
+    if (stopped) return;
+    results[index] = result;
+    firstPages.add(index);
+    if (published || firstPages.size === results.length) publish();
+  };
+  // Wrapping each outstanding page also terminates pagination when a client
+  // transport does not support cancellation. Late responses are ignored.
+  const bounded = (fetchPage) => {
+    if (controller.signal.aborted)
+      return Promise.reject(controller.signal.reason);
+    return new Promise((resolve, reject) => {
+      const settle = (callback, value) => {
+        controller.signal.removeEventListener("abort", abort);
+        callback(value);
+      };
+      const abort = () => settle(reject, controller.signal.reason);
+      controller.signal.addEventListener("abort", abort, { once: true });
+      Promise.resolve()
+        .then(() => {
+          if (controller.signal.aborted) throw controller.signal.reason;
+          return fetchPage();
+        })
+        .then(
+          (value) => settle(resolve, value),
+          (reason) => settle(reject, reason),
+        );
+    });
+  };
+  const pages = (index, fetchPage, key) =>
+    listAllPages(
+      (cursor) => bounded(() => fetchPage(cursor)),
+      key,
+      8,
+      (value) =>
+        update(index, {
+          status: "fulfilled",
+          value,
+          complete: !value.has_more,
+        }),
+    );
+  const cancel = () => controller.abort(new Error("Inbox loading canceled"));
+  signal?.addEventListener("abort", cancel, { once: true });
+  if (signal?.aborted) cancel();
+  const firstPaintTimer = setTimeout(() => {
+    if (!published) publish();
+  }, firstPaintMs);
+  const deadlineTimer = setTimeout(
+    () => controller.abort(new Error("Inbox loading timed out")),
+    deadlineMs,
   );
-  if (onProgress) await open.catch(() => {});
-  const results = await Promise.allSettled([
-    pages(
-      0,
-      (cursor) => client.listPmDecisions({ limit: 50, cursor }),
-      "items",
-    ),
-    pages(1, (cursor) => client.listPmActions({ limit: 50, cursor }), "items"),
-    pages(2, (cursor) => client.listWork({ limit: 50, cursor }), "work"),
-    open,
-    pages(
-      4,
-      (cursor) =>
-        client.listInboxItems({ status: "completed", limit: 50, cursor }),
-      "items",
-    ),
-    withHistory ? client.getHomeUnread() : skipped,
-  ]);
-  return visibleSources(results);
+  const feeds = [
+    () =>
+      pages(
+        0,
+        (cursor) => client.listPmDecisions({ limit: 50, cursor }),
+        "items",
+      ),
+    () =>
+      pages(
+        1,
+        (cursor) => client.listPmActions({ limit: 50, cursor }),
+        "items",
+      ),
+    () =>
+      pages(
+        2,
+        (cursor) => client.listWork({ limit: 50, cursor, summary: 1 }),
+        "work",
+      ),
+    () =>
+      pages(
+        3,
+        (cursor) =>
+          client.listInboxItems({ status: "open", limit: 50, cursor }),
+        "items",
+      ),
+    () =>
+      pages(
+        4,
+        (cursor) =>
+          client.listInboxItems({ status: "completed", limit: 50, cursor }),
+        "items",
+      ),
+    () => bounded(() => (withHistory ? client.getHomeUnread() : null)),
+  ];
+  try {
+    await Promise.all(
+      feeds.map(async (fetchFeed, index) => {
+        try {
+          const value = await fetchFeed();
+          update(index, {
+            status: "fulfilled",
+            value,
+            complete: !value?.has_more,
+          });
+        } catch (reason) {
+          const previous = results[index];
+          update(
+            index,
+            previous.status === "fulfilled"
+              ? { ...previous, complete: false, reason }
+              : { status: "rejected", reason },
+          );
+        }
+      }),
+    );
+    return snapshot();
+  } finally {
+    stopped = true;
+    clearTimeout(firstPaintTimer);
+    clearTimeout(deadlineTimer);
+    signal?.removeEventListener("abort", cancel);
+  }
+}
+
+/** Work classification needs complete ask history, including later pages. */
+export function hasCompleteInboxHistory(results) {
+  return [3, 4].every(
+    (index) =>
+      results[index]?.status === "fulfilled" &&
+      results[index].complete === true,
+  );
+}
+
+/** A partial read adds knowledge; only a complete read may remove records. */
+export function mergeInboxSnapshot(previous, incoming, complete, key = "id") {
+  if (complete) return incoming;
+  return [
+    ...new Map(
+      [...previous, ...incoming].map((item) => [item[key], item]),
+    ).values(),
+  ];
 }
 
 /** Completed rows have their own ids; match their original inbox_item_id too. */

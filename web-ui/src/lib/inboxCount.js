@@ -15,7 +15,11 @@ import {
   applyResponseOverlay,
   inboxResponseOverlay,
 } from "$lib/inboxResponseQueue.js";
-import { loadInboxSources, mergeInboxItems } from "$lib/inboxSources.js";
+import {
+  loadInboxSources,
+  mergeInboxItems,
+  hasCompleteInboxHistory,
+} from "$lib/inboxSources.js";
 
 /**
  * The sidebar's Inbox count: how many rows sit in Needs you.
@@ -71,13 +75,17 @@ async function fetchSources() {
    * the count rather than shrinking it, which is the worse direction to be
    * wrong in.
    */
-  if (results.slice(0, 5).some((result) => result.status === "rejected")) {
+  if (
+    results.slice(0, 5).some((result) => result.status !== "fulfilled") ||
+    !hasCompleteInboxHistory(results)
+  ) {
     return null;
   }
   const value = (index, key) => results[index].value?.[key] || [];
   return {
     decisions: value(0, "items"),
     actions: value(1, "items"),
+    receiptsUnavailable: !results[1].complete,
     work: value(2, "work"),
     /*
      * Open *and* completed, exactly as the Inbox page merges them.
@@ -94,7 +102,9 @@ async function fetchSources() {
     truncated: results.some(
       (result) =>
         result.status === "fulfilled" &&
-        (result.value?.has_more === true || Boolean(result.value?.next_cursor)),
+        (result.complete === false ||
+          result.value?.has_more === true ||
+          Boolean(result.value?.next_cursor)),
     ),
   };
 }
@@ -103,6 +113,7 @@ function countFrom(sources, overlay) {
   const rows = buildInboxRows({
     decisions: sources.decisions,
     actions: sources.actions,
+    receiptsUnavailable: sources.receiptsUnavailable,
     work: sources.work,
     inboxItems: applyResponseOverlay(sources.inboxItems, overlay),
     currentActorId: get(selectedActorId) || "",

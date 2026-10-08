@@ -3,7 +3,7 @@
   import { onMount, tick, untrack } from "svelte";
   import { page } from "$app/stores";
   import { beforeNavigate, goto } from "$app/navigation";
-  import { coreClient } from "$lib/coreClient";
+  import { coreClient, createInboxSourceClient } from "$lib/coreClient";
   import {
     actorDisplayLabel,
     actorRegistry,
@@ -72,7 +72,13 @@
     stashInboxRestore,
     undoInboxResponse,
   } from "$lib/inboxResponseQueue.js";
-  import { loadInboxSources, mergeInboxItems } from "$lib/inboxSources.js";
+  import {
+    loadInboxSources,
+    mergeInboxItems,
+    mergeInboxSnapshot,
+    hasCompleteInboxHistory,
+  } from "$lib/inboxSources.js";
+  import { createInboxOrder } from "$lib/inboxOrder.js";
   import { MAX_KEYED_PROPOSALS } from "$lib/inboxProposalChoice.js";
   import {
     inboxShortcutAction,
@@ -82,6 +88,7 @@
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
+  import SkeletonInboxRow from "$lib/components/state/SkeletonInboxRow.svelte";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
   import DecisionPanel from "$lib/components/pm/DecisionPanel.svelte";
   import KeyboardShortcutsDialog from "$lib/components/KeyboardShortcutsDialog.svelte";
@@ -112,7 +119,12 @@
   let decidesAccess = $derived(isHumanWorkspacePrincipal($authenticatedAgent));
   let helpOpen = $state(false);
   let requestId = 0;
+  let loadController;
   let selectionRequest = 0;
+  let selectedController;
+  const archivedWorkRefs = new Set();
+  let decisionResolvedFor = $state("");
+  let staleExpanded = $state(false);
   let ready = $state(false);
   let truncated = $state(false);
   let streamPartial = $state(false);
@@ -184,7 +196,26 @@
   let scoped = $derived(
     workRef ? rows.filter((row) => rowMatchesWorkRef(row, workRef)) : rows,
   );
-  let visible = $derived(filterMailbox(scoped, mailbox));
+  let mailboxRows = $derived(filterMailbox(scoped, mailbox));
+  const orderInboxRows = createInboxOrder();
+  let presentation = $derived(
+    ready
+      ? orderInboxRows(`${mailbox}:${workRef}`, mailboxRows, staleExpanded)
+      : { currentRows: [], staleRows: [], lateRows: [], added: 0 },
+  );
+  let staleRows = $derived(presentation.staleRows);
+  let currentRows = $derived(presentation.currentRows);
+  let lateRows = $derived(presentation.lateRows);
+  let visible = $derived([
+    ...currentRows,
+    ...(staleExpanded ? staleRows : []),
+    ...lateRows,
+  ]);
+  // A direct link remains visible even when its task normally lives folded.
+  $effect(() => {
+    if (explicitId && staleRows.some((row) => row.id === explicitId))
+      staleExpanded = true;
+  });
   let handled = $derived(filterMailbox(scoped, "handled"));
   let counts = $derived({
     "needs-you": filterMailbox(scoped, "needs-you").length,
@@ -284,7 +315,13 @@
     const itemId = selectedId;
     if (!ready || !itemId?.startsWith("decision:")) return;
     const id = itemId.slice("decision:".length);
-    if (id) void untrack(() => loadSelected(id));
+    if (id) {
+      void untrack(() => loadSelected(id));
+      return () => {
+        selectionRequest++;
+        selectedController?.abort();
+      };
+    }
   });
 
   // Context strip: what the selected item blocks and the latest note.
@@ -367,19 +404,29 @@
 
   async function loadSelected(id) {
     const ticket = ++selectionRequest;
+    selectedController?.abort();
+    const controller = new AbortController();
+    selectedController = controller;
+    const client = createInboxSourceClient(controller.signal);
+    const timer = setTimeout(
+      () => controller.abort(new Error("Requested item loading timed out")),
+      5_000,
+    );
     try {
       let item = decisions.find((entry) => entry.id === id);
       if (!item) {
-        item = await coreClient.getPmDecision(id);
-        if (ticket !== selectionRequest) return;
+        item = await client.getPmDecision(id);
+        if (ticket !== selectionRequest || archivedWorkRefs.has(item.work_ref))
+          return;
         decisions = [...decisions.filter((entry) => entry.id !== id), item];
       }
       if (
         item?.action_id &&
         !actions.some((entry) => entry.id === item.action_id)
       ) {
-        const receipt = await coreClient.getPmAction(item.action_id);
-        if (ticket !== selectionRequest) return;
+        const receipt = await client.getPmAction(item.action_id);
+        if (ticket !== selectionRequest || archivedWorkRefs.has(item.work_ref))
+          return;
         actions = [
           ...actions.filter((entry) => entry.id !== receipt.id),
           receipt,
@@ -387,6 +434,9 @@
       }
     } catch (err) {
       if (ticket === selectionRequest) actionError = errorMessage(err);
+    } finally {
+      clearTimeout(timer);
+      if (ticket === selectionRequest) decisionResolvedFor = `decision:${id}`;
     }
   }
 
@@ -416,6 +466,8 @@
   let loadErrorText = $state("");
   async function load({ quiet = false } = {}) {
     const ticket = ++requestId;
+    loadController?.abort();
+    loadController = new AbortController();
     if (!quiet) {
       loading = true;
       error = "";
@@ -427,37 +479,41 @@
       // Refreshing it here adds a serial identity round trip on navigation
       // and every live reload. Each source request still authenticates in core;
       // session maintenance and recovery belong to the shell and proxy.
-      const applySources = (results, complete = false) => {
+      const applySources = (results) => {
         if (ticket !== requestId) return;
-        let nextError = "";
+        const failure = results.find((result) => result.reason);
+        let nextError = failure ? errorMessage(failure.reason) : "";
         // A refused session will refuse the retry too; offer sign-in instead.
         sessionExpired = results.some(
-          (result) =>
-            result.status === "rejected" && isSessionExpired(result.reason),
+          (result) => Boolean(result.reason) && isSessionExpired(result.reason),
         );
-        if (
-          results[0].status === "fulfilled" &&
-          (complete ||
-            (results[1].status !== "pending" &&
-              results[2].status !== "pending"))
-        ) {
-          decisions = results[0].value.items || [];
+        if (results[0].status === "fulfilled") {
+          decisions = mergeInboxSnapshot(
+            decisions,
+            results[0].value.items || [],
+            results[0].complete,
+          );
         } else if (results[0].status === "rejected")
           nextError = errorMessage(results[0].reason);
         // Lists follow cursors up to a bound. Counts drawn from a capped list
         // are lower bounds, and the reader must be told so rather than shown a total.
-        truncated =
-          !complete ||
-          results.some(
-            (result) =>
-              result.status === "rejected" ||
-              (result.status === "fulfilled" &&
-                (result.value?.has_more === true ||
-                  Boolean(result.value?.next_cursor))),
-          );
+        truncated = results.some(
+          (result) =>
+            result.status !== "fulfilled" ||
+            result.complete === false ||
+            (result.status === "fulfilled" &&
+              (result.value?.has_more === true ||
+                Boolean(result.value?.next_cursor))),
+        );
         if (results[1].status === "fulfilled") {
-          actions = results[1].value.items || [];
-          receiptsUnavailable = false;
+          actions = mergeInboxSnapshot(
+            actions,
+            results[1].value.items || [],
+            results[1].complete,
+          );
+          receiptsUnavailable = !results[1].complete;
+        } else if (results[1].status === "pending") {
+          receiptsUnavailable = true;
         } else if (sessionExpired) {
           // The receipts are not in doubt, the session is; keep the last
           // classification and let the banner say what to do.
@@ -468,29 +524,39 @@
           receiptsUnavailable = true;
           nextError = nextError || errorMessage(results[1].reason);
         }
-        // A work row can duplicate an ask. Publish it only with successful
-        // open and completed reads, so missing history cannot resurrect a card.
-        if (
-          results[2].status === "fulfilled" &&
-          results[3].status === "fulfilled" &&
-          results[4].status === "fulfilled"
-        ) {
-          work = results[2].value.work || [];
-        } else if (
-          results[3].status === "rejected" ||
-          results[4].status === "rejected"
-        ) {
-          // Older work is unsafe too: its linked answer may be newer than
-          // the history we have, and the local response overlay expires.
-          // Keep the explicit asks and partial/error notice, not stale cards.
-          work = [];
-        } else if (results[2].status === "rejected") {
+        // Keep validated work during refreshes. New work needs both histories
+        // to finish: an answer to a blocked card may be on a later page.
+        const historyComplete = hasCompleteInboxHistory(results);
+        if (results[2].status === "fulfilled" && historyComplete) {
+          work = mergeInboxSnapshot(
+            work,
+            results[2].value.work || [],
+            results[2].complete,
+            "ref",
+          );
+        } else if (results[2].status === "rejected")
           nextError = nextError || errorMessage(results[2].reason);
-        }
+        // Replace the histories together. Dropping a known answer while an
+        // older open snapshot remains would resurrect the answered ask.
         if (results[3].status === "fulfilled")
-          openInboxItems = results[3].value.items || [];
+          openInboxItems = mergeInboxSnapshot(
+            openInboxItems,
+            results[3].value.items || [],
+            historyComplete,
+          );
         if (results[4].status === "fulfilled")
-          completedInboxItems = results[4].value.items || [];
+          completedInboxItems = mergeInboxSnapshot(
+            completedInboxItems,
+            results[4].value.items || [],
+            historyComplete,
+          );
+        const hiddenRefs = new Set([
+          ...archivedWorkRefs,
+          ...(results[2].value?.archived_refs || []),
+        ]);
+        work = work.filter((item) => !hiddenRefs.has(item.ref));
+        decisions = decisions.filter((item) => !hiddenRefs.has(item.work_ref));
+        actions = actions.filter((item) => !hiddenRefs.has(item.work_ref));
         inboxItems = mergeInboxItems(openInboxItems, completedInboxItems);
         if (results[3].status === "rejected") {
           nextError = nextError || errorMessage(results[3].reason);
@@ -498,28 +564,27 @@
           nextError = nextError || errorMessage(results[4].reason);
         }
         if (results[5].status === "fulfilled") {
-          updates = results[5].value.groups || [];
+          updates = mergeInboxSnapshot(
+            updates,
+            results[5].value.groups || [],
+            results[5].complete,
+            "group_ref",
+          );
         }
         if (nextError) {
           error = nextError;
           loadErrorText = nextError;
-        } else if (
-          complete &&
-          quiet &&
-          loadErrorText &&
-          error === loadErrorText
-        ) {
+        } else if (quiet && loadErrorText && error === loadErrorText) {
           // The failure a live reload recovered from is no longer true.
           error = "";
           loadErrorText = "";
         }
-        if (complete || inboxItems.length) {
-          loading = false;
-          ready = true;
-        }
+        ready = true;
       };
-      const results = await loadInboxSources({ onProgress: applySources });
-      applySources(results, true);
+      await loadInboxSources({
+        onProgress: applySources,
+        signal: loadController.signal,
+      });
     } catch (err) {
       if (ticket === requestId && !quiet) error = errorMessage(err);
     } finally {
@@ -790,10 +855,15 @@
   }
 
   /** The row to land on once `id` leaves the list: the next, else the previous. */
-  function neighbourId(id) {
+  function neighbourId(id, excludedRef = "") {
     const index = visible.findIndex((row) => row.id === id);
     if (index < 0) return "";
-    return visible[index + 1]?.id || visible[index - 1]?.id || "";
+    const survives = (row) => !excludedRef || row.ref !== excludedRef;
+    return (
+      visible.slice(index + 1).find(survives)?.id ||
+      visible.slice(0, index).reverse().find(survives)?.id ||
+      ""
+    );
   }
 
   async function select(id, { scroll = false } = {}) {
@@ -966,6 +1036,44 @@
     event.preventDefault();
   }
 
+  async function archiveStaleTask(row) {
+    if (busy || !row.stale || !isNexusOwned(row.item)) return;
+    const { prefix, id } = splitTypedRef(row.ref);
+    if (prefix !== "card" || !id) return;
+    busy = true;
+    actionError = "";
+    try {
+      await coreClient.archiveCard(id, {
+        ...(Number.isInteger(row.item.version)
+          ? { if_version: row.item.version }
+          : {}),
+      });
+      // Invalidate feed reads and prevent pending single-item reads from
+      // restoring this task's decisions, without cancelling unrelated reads.
+      requestId++;
+      loadController?.abort();
+      archivedWorkRefs.add(row.ref);
+      // Navigate while the old row still exists. Related decisions also leave
+      // after archive, so select only a row that will survive the removal.
+      if (selectedId === row.id || selected?.ref === row.ref) {
+        selectionRequest++;
+        heldItem = "";
+        await select(neighbourId(selectedId, row.ref));
+      }
+      work = work.filter((item) => workKey(item) !== row.ref);
+      decisions = decisions.filter((item) => item.work_ref !== row.ref);
+      actions = actions.filter((item) => item.work_ref !== row.ref);
+      // Flush selection effects before setting the outcome they normally clear.
+      await tick();
+      notice = "Task archived. You can restore it from Archive.";
+      scheduleLiveRefresh();
+    } catch (err) {
+      error = errorMessage(err);
+    } finally {
+      busy = false;
+    }
+  }
+
   function inboxKindLabel(row) {
     const kind = String(row?.category ?? "").toLowerCase();
     return (INBOX_CATEGORY_LABELS[kind] ?? kind ?? "").toUpperCase();
@@ -1053,10 +1161,21 @@
       },
     });
     const stopCommitted = onInboxResponseCommitted((itemId) => {
-      // The server confirmed this answer. Do not keep its old open snapshot
-      // if both refresh feeds fail beyond the temporary response overlay.
+      // Keep the server-confirmed answer beyond the temporary overlay, until
+      // complete histories replace it. Retained work must stay suppressed too.
+      const answered = applyResponseOverlay(
+        inboxItems.filter((item) => item.id === itemId),
+        { [itemId]: $inboxResponseOverlay[itemId] },
+        Date.now(),
+      );
+      completedInboxItems = mergeInboxSnapshot(
+        completedInboxItems,
+        answered,
+        false,
+      );
       // Invalidate reads begun before the commit so they cannot restore it.
       requestId++;
+      loadController?.abort();
       openInboxItems = openInboxItems.filter((item) => item.id !== itemId);
       inboxItems = mergeInboxItems(openInboxItems, completedInboxItems);
       scheduleLiveRefresh();
@@ -1071,7 +1190,9 @@
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       requestId++;
+      loadController?.abort();
       selectionRequest++;
+      selectedController?.abort();
       clearInterval(timer);
       clearTimeout(liveTimer);
       stopLive();
@@ -1155,6 +1276,11 @@
         >
       </span>
     {/if}
+    {#if presentation.added}
+      <span class="ml-2 text-micro text-fg-subtle" data-inbox-more-loaded>
+        {presentation.added} more loaded
+      </span>
+    {/if}
     {#if truncated || streamPartial}
       <span class="ml-2 text-micro text-fg-subtle"
         >Not everything is loaded; the counts are lower bounds.</span
@@ -1184,10 +1310,17 @@
       {notice}
     </p>
   {/if}
-  {#if loading && !rows.length}
-    <p class="py-10 text-center text-meta text-fg-muted" role="status">
-      Loading inbox…
-    </p>
+  {#if loading && !ready}
+    <div
+      class="rounded-md border border-line p-4"
+      data-inbox-loading
+      aria-busy="true"
+    >
+      <p class="mb-3 text-meta text-fg-muted" role="status">
+        {explicitId ? "Loading requested item…" : "Loading inbox…"}
+      </p>
+      <SkeletonInboxRow count={5} />
+    </div>
   {:else}
     {@const showDetail = Boolean(selectedId)}
     <div
@@ -1203,61 +1336,73 @@
           : ''}"
         aria-label="Inbox list"
       >
-        <ul class="divide-y divide-line-subtle">
-          {#each visible as row (row.id)}
-            {@const badge = inboxRowBadge(row, now)}
-            {@const wait = row.mailbox === "needs-you" ? waitFor(row) : null}
-            <li>
-              <a
-                class="flex h-[52px] min-w-0 flex-col justify-center gap-0.5 border-l-2 px-4 {selectedId ===
-                row.id
-                  ? 'border-accent bg-bg-soft'
-                  : 'border-transparent hover:bg-panel-hover'}"
-                href={href({ item: row.id })}
-                data-inbox-row={row.id}
-                data-testid={row.kind === "inbox" && row.item?.id
-                  ? `inbox-row-${row.item.id}`
-                  : `inbox-row-${row.id}`}
-                aria-current={selectedId === row.id ? "page" : undefined}
-              >
-                <div class="flex min-w-0 items-center gap-2">
-                  <span
-                    class="min-w-0 flex-1 truncate text-meta font-medium text-fg"
-                    >{row.title}</span
-                  >
-                  {#if badge}
-                    <SignalBadge tone={badge.tone} class="shrink-0"
-                      >{badge.label}</SignalBadge
-                    >
-                  {/if}
-                </div>
-                <div
-                  class="flex min-w-0 items-center gap-2 text-micro text-fg-muted"
+        {#snippet inboxRow(row)}
+          {@const badge = inboxRowBadge(row, now)}
+          {@const wait = row.mailbox === "needs-you" ? waitFor(row) : null}
+          <li class="flex items-center">
+            <a
+              class="flex h-[52px] min-w-0 flex-1 flex-col justify-center gap-0.5 border-l-2 px-4 {selectedId ===
+              row.id
+                ? 'border-accent bg-bg-soft'
+                : 'border-transparent hover:bg-panel-hover'}"
+              href={href({ item: row.id })}
+              data-inbox-row={row.id}
+              data-testid={row.kind === "inbox" && row.item?.id
+                ? `inbox-row-${row.item.id}`
+                : `inbox-row-${row.id}`}
+              aria-current={selectedId === row.id ? "page" : undefined}
+            >
+              <div class="flex min-w-0 items-center gap-2">
+                <span
+                  class="min-w-0 flex-1 truncate text-meta font-medium text-fg"
+                  >{row.title}</span
                 >
-                  <span class="min-w-0 flex-1 truncate"
-                    >{#if row.kind === "inbox" && row.requesterLabel}<span
-                        class="text-fg">{row.requesterLabel}</span
-                      >{#if row.source}{" "}· {row.source}{/if}{:else}{row.source ||
-                        row.kind}{/if}</span
+                {#if badge}
+                  <SignalBadge tone={badge.tone} class="shrink-0"
+                    >{badge.label}</SignalBadge
                   >
-                  {#if wait?.text}
-                    <span
-                      class="shrink-0 tabular-nums {wait.long
-                        ? 'text-warn-text'
-                        : ''}"
-                      title={row.waitingSince
-                        ? `Waiting since ${formatAbsoluteDateTime(row.waitingSince)}`
-                        : undefined}
-                      data-inbox-wait>{wait.text}</span
-                    >
-                  {:else if row.time}
-                    <time class="shrink-0 tabular-nums" datetime={row.time}
-                      >{formatTimestamp(row.time)}</time
-                    >
-                  {/if}
-                </div>
-              </a>
-            </li>
+                {/if}
+              </div>
+              <div
+                class="flex min-w-0 items-center gap-2 text-micro text-fg-muted"
+              >
+                <span class="min-w-0 flex-1 truncate"
+                  >{#if row.kind === "inbox" && row.requesterLabel}<span
+                      class="text-fg">{row.requesterLabel}</span
+                    >{#if row.source}{" "}· {row.source}{/if}{:else}{row.source ||
+                      row.kind}{/if}</span
+                >
+                {#if wait?.text}
+                  <span
+                    class="shrink-0 tabular-nums {wait.long
+                      ? 'text-warn-text'
+                      : ''}"
+                    title={row.waitingSince
+                      ? `Waiting since ${formatAbsoluteDateTime(row.waitingSince)}`
+                      : undefined}
+                    data-inbox-wait>{wait.text}</span
+                  >
+                {:else if row.time}
+                  <time class="shrink-0 tabular-nums" datetime={row.time}
+                    >{formatTimestamp(row.time)}</time
+                  >
+                {/if}
+              </div>
+            </a>
+            {#if row.stale && isNexusOwned(row.item) && splitTypedRef(row.ref).prefix === "card"}
+              <button
+                class="ui-btn-secondary mr-3 shrink-0"
+                type="button"
+                disabled={busy}
+                aria-label={`Archive ${row.title}`}
+                onclick={() => archiveStaleTask(row)}>Archive</button
+              >
+            {/if}
+          </li>
+        {/snippet}
+        <ul class="divide-y divide-line-subtle">
+          {#each currentRows as row (row.id)}
+            {@render inboxRow(row)}
           {:else}
             <!--
               An empty inbox is good news, and good news is one line. It used to
@@ -1267,43 +1412,79 @@
               taller than it needs to be (the grid drops its minimum height
               when there is nothing to list).
             -->
-            <li class="px-5 py-8">
-              <div
-                class="mx-auto flex max-w-sm flex-col items-center gap-1 text-center"
-                data-inbox-empty={mailbox}
-              >
-                {#if mailbox === "needs-you"}
-                  <p class="text-meta font-medium text-fg">You're clear.</p>
-                  {#if counts.watching}
-                    <a
-                      class="text-micro text-accent-text hover:underline"
-                      href={href({ mailbox: "watching", item: "" })}
-                      data-inbox-empty-watching
-                      >{counts.watching}
-                      {counts.watching === 1 ? "thing" : "things"} being watched</a
-                    >
+            {#if !staleRows.length && !lateRows.length}
+              <li class="px-5 py-8">
+                <div
+                  class="mx-auto flex max-w-sm flex-col items-center gap-1 text-center"
+                  data-inbox-empty={mailbox}
+                >
+                  {#if mailbox === "needs-you"}
+                    <p class="text-meta font-medium text-fg">
+                      {truncated || streamPartial
+                        ? "No items loaded yet."
+                        : "You're clear."}
+                    </p>
+                    {#if counts.watching}
+                      <a
+                        class="text-micro text-accent-text hover:underline"
+                        href={href({ mailbox: "watching", item: "" })}
+                        data-inbox-empty-watching
+                        >{counts.watching}
+                        {counts.watching === 1 ? "thing" : "things"} being watched</a
+                      >
+                    {/if}
+                  {:else if mailbox === "watching"}
+                    <p class="text-meta font-medium text-fg">
+                      Nothing is waiting on a source or a delivery.
+                    </p>
+                  {:else}
+                    <p class="text-meta font-medium text-fg">
+                      Nothing handled yet.
+                    </p>
+                    <p class="text-micro text-fg-muted">
+                      Answered decisions and dismissed items land here.
+                    </p>
                   {/if}
-                {:else if mailbox === "watching"}
-                  <p class="text-meta font-medium text-fg">
-                    Nothing is waiting on a source or a delivery.
-                  </p>
-                {:else}
-                  <p class="text-meta font-medium text-fg">
-                    Nothing handled yet.
-                  </p>
-                  <p class="text-micro text-fg-muted">
-                    Answered decisions and dismissed items land here.
-                  </p>
-                {/if}
-                {#if lastHandledAt && mailbox === "needs-you"}
-                  <p class="text-micro text-fg-subtle" data-inbox-empty-handled>
-                    Last handled {formatTimestamp(lastHandledAt)}
-                  </p>
-                {/if}
-              </div>
-            </li>
+                  {#if lastHandledAt && mailbox === "needs-you"}
+                    <p
+                      class="text-micro text-fg-subtle"
+                      data-inbox-empty-handled
+                    >
+                      Last handled {formatTimestamp(lastHandledAt)}
+                    </p>
+                  {/if}
+                </div>
+              </li>
+            {/if}
           {/each}
         </ul>
+        {#if staleRows.length}
+          <div class="border-t border-line-subtle" data-inbox-stale>
+            <button
+              type="button"
+              class="w-full px-4 py-3 text-left text-meta text-fg-muted hover:bg-panel-hover"
+              aria-expanded={staleExpanded}
+              aria-controls="inbox-stale-tasks"
+              onclick={() => (staleExpanded = !staleExpanded)}
+            >
+              Stale ({staleRows.length})
+            </button>
+            {#if staleExpanded}
+              <ul id="inbox-stale-tasks" class="divide-y divide-line-subtle">
+                {#each staleRows as row (row.id)}
+                  {@render inboxRow(row)}
+                {/each}
+              </ul>
+            {/if}
+          </div>
+        {/if}
+        {#if lateRows.length}
+          <ul class="divide-y divide-line-subtle border-t border-line-subtle">
+            {#each lateRows as row (row.id)}
+              {@render inboxRow(row)}
+            {/each}
+          </ul>
+        {/if}
       </section>
       {#if showDetail}
         <section
@@ -1380,7 +1561,8 @@
               <div class="space-y-4 p-4 sm:p-5">
                 {#if wait?.text}
                   <p class="text-micro text-fg-muted">
-                    Blocked for <span
+                    {taskItem.work_summary ? "Task age" : "Blocked for"}
+                    <span
                       class="font-medium {wait.long
                         ? 'text-warn-text'
                         : 'text-fg'}">{wait.text}</span
@@ -1729,7 +1911,14 @@
               </div>
             {:else if explicitId}
               <p class="p-6 text-meta text-fg-muted">
-                This item is not in the loaded mailbox.
+                {#if loading || (explicitId.startsWith("decision:") && decisionResolvedFor !== explicitId)}
+                  <span role="status">Loading requested item…</span>
+                {:else if truncated || actionError}
+                  This item could not be loaded. Retry or open the task
+                  directly.
+                {:else}
+                  This item is not in the loaded mailbox.
+                {/if}
               </p>
             {/if}
           </div>

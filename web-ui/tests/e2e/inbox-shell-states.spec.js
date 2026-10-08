@@ -620,6 +620,11 @@ for (const viewport of AUDIT_VIEWPORTS) {
     });
 
     test("inbox loading, populated, empty and failed", async ({ page }) => {
+      // The loading skeleton lasts at most 800ms. Freeze browser time so a
+      // slow host does not miss it while navigation/assets finish in CI.
+      const started = new Date();
+      await page.clock.install({ time: started });
+      await page.clock.pauseAt(started);
       const api = await installWorkspaceApi(page);
       api.hold.inboxOpen = deferred();
       api.hold.decisions = deferred();
@@ -627,7 +632,12 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(
         page.locator('p[role="status"]', { hasText: "Loading inbox" }),
       ).toBeVisible(FIRST_PAINT);
-      await expectCleanLayout(page, "inbox loading");
+      const loadingAudit = expectCleanLayout(page, "inbox loading");
+      // The audit settles animations and waits for a frame. Advance those
+      // timers while remaining below the 800ms publication deadline.
+      await page.clock.runFor(650);
+      await loadingAudit;
+      await page.clock.resume();
 
       api.hold.decisions.resolve();
       api.hold.inboxOpen.resolve();
@@ -1131,12 +1141,16 @@ for (const viewport of AUDIT_VIEWPORTS) {
 
     test("inbox notices, deep links and partial loads", async ({ page }) => {
       const api = await installWorkspaceApi(page, { truncated: true });
-      // A pinned row that is not in the loaded mailbox.
+      // Missing single-item reads return 404, never a different decision.
+      api.fail.decision = { status: 404, message: "Decision not found" };
+      // A capped mailbox cannot claim a pinned row is definitely absent.
       await gotoInbox(page, "?item=decision:not-loaded");
       await expect(
-        page.getByText("This item is not in the loaded mailbox."),
+        page.getByText(
+          "This item could not be loaded. Retry or open the task directly.",
+        ),
       ).toBeVisible();
-      await expectCleanLayout(page, "pinned row missing", bothEnds);
+      await expectCleanLayout(page, "pinned row not fully loaded", bothEnds);
 
       // has_more: counts become lower bounds and say so.
       await expect(

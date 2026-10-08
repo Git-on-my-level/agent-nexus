@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildInboxRows,
+  isStaleBlockedTask,
   filterMailbox,
   formatWait,
   inboxItemIsReminder,
@@ -8,6 +9,7 @@ import {
   inboxItemSubject,
   inboxRowBadge,
   rowMatchesWorkRef,
+  rowWaitMs,
   shortIdLabel,
 } from "../../src/lib/inboxMailbox.js";
 
@@ -511,7 +513,7 @@ describe("Needs you triage order", () => {
   const minutesAgo = (now, minutes) =>
     new Date(now - minutes * 60_000).toISOString();
 
-  it("puts whoever has waited longest first, then the louder severity", () => {
+  it("puts priority before age among asks and decisions", () => {
     const now = Date.parse("2026-09-27T12:00:30Z");
     const rows = buildInboxRows({
       inboxItems: [
@@ -539,9 +541,9 @@ describe("Needs you triage order", () => {
       now,
     });
     expect(filterMailbox(rows, "needs-you").map((row) => row.item.id)).toEqual([
-      "old-ask",
       "fresh-critical",
       "same-minute-high",
+      "old-ask",
     ]);
   });
 
@@ -752,4 +754,181 @@ describe("report review reminders", () => {
     expect(subject.kind).toBe("document");
     expect(subject.ref).toBe("document:dashboard");
   });
+});
+
+describe("blocked task ranking and computed facts", () => {
+  const now = Date.parse("2026-10-08T12:00:00Z");
+  const days = (n) => new Date(now - n * 86400_000).toISOString();
+  const task = (extra = {}) => ({
+    ref: "card:old",
+    phase: "blocked",
+    title: "Old task",
+    updated_at: days(0),
+    work_summary: {
+      status: { state: "blocked", label: "Blocked", reason: "Blocked step" },
+      age: 127 * 86400,
+      created_at: days(127),
+      last_movement_at: days(127),
+    },
+    ...extra,
+  });
+  it("puts asks and decisions ahead of even a p0 blocked task", () => {
+    const rows = filterMailbox(
+      buildInboxRows({
+        now,
+        work: [task({ priority: "p0" })],
+        decisions: [
+          {
+            id: "d",
+            status: "awaiting_answer",
+            priority: "p1",
+            created_at: days(1),
+          },
+        ],
+        inboxItems: [
+          {
+            id: "a",
+            kind: "ask",
+            severity: "high",
+            source_event_time: days(2),
+          },
+        ],
+      }),
+      "needs-you",
+    );
+    expect(rows.map((row) => row.kind)).toEqual(["inbox", "decision", "task"]);
+    expect(rows[2].stale).toBe(true);
+    expect(rowWaitMs(rows[2], now)).toBe(127 * 86400_000);
+  });
+  it("uses movement and owner facts rather than the last poll or creation age", () => {
+    expect(isStaleBlockedTask(task(), now)).toBe(true);
+    for (const summary of [
+      { owner: "actor:owner" },
+      { last_movement_at: days(1) },
+      { last_movement_at: days(30) },
+    ])
+      expect(
+        isStaleBlockedTask(
+          task({ work_summary: { ...task().work_summary, ...summary } }),
+          now,
+        ),
+      ).toBe(false);
+    expect(isStaleBlockedTask(task({ owner: "actor:owner" }), now)).toBe(false);
+    expect(isStaleBlockedTask(task({ work_summary: undefined }), now)).toBe(
+      false,
+    );
+    expect(
+      isStaleBlockedTask(
+        task({
+          work_summary: {
+            ...task().work_summary,
+            last_movement_at: undefined,
+            age: 31 * 86400,
+          },
+        }),
+        now,
+      ),
+    ).toBe(true);
+  });
+  it("preserves computed health when stored phase disagrees", () => {
+    const row = buildInboxRows({
+      now,
+      work: [task({ phase: "in_progress" })],
+    })[0];
+    expect(row.mailbox).toBe("needs-you");
+    expect(row.status).toBe("blocked");
+    expect(inboxRowBadge(row)).toMatchObject({ label: "Blocked" });
+  });
+  it("keeps stale tasks after owned and recently moved blockers", () => {
+    const rows = filterMailbox(
+      buildInboxRows({
+        now,
+        work: [
+          task({ priority: "p0" }),
+          task({ ref: "card:owned", priority: "p3", owner: "actor:owner" }),
+          task({
+            ref: "card:moved",
+            priority: "p2",
+            work_summary: { ...task().work_summary, last_movement_at: days(1) },
+          }),
+        ],
+      }),
+      "needs-you",
+    );
+    expect(rows.map((row) => row.ref)).toEqual([
+      "card:moved",
+      "card:owned",
+      "card:old",
+    ]);
+  });
+});
+
+it("ranks decisions by the linked work priority when the proposal has none", () => {
+  const rows = filterMailbox(
+    buildInboxRows({
+      decisions: [
+        {
+          id: "low",
+          work_ref: "card:low",
+          status: "awaiting_answer",
+          created_at: "2026-01-01T00:00:00Z",
+        },
+        {
+          id: "high",
+          work_ref: "card:high",
+          status: "awaiting_answer",
+          created_at: "2026-10-01T00:00:00Z",
+        },
+      ],
+      work: [
+        { ref: "card:low", phase: "in_progress", priority: "p3" },
+        { ref: "card:high", phase: "in_progress", priority: "p0" },
+      ],
+    }),
+    "needs-you",
+  );
+  expect(rows.map((row) => row.id)).toEqual(["decision:high", "decision:low"]);
+});
+
+it("does not revive a stored blocker when core says its plan is done or moving", () => {
+  for (const state of ["done", "on_track", "stale"]) {
+    const item = {
+      ref: `card:${state}`,
+      phase: "blocked",
+      source: { authority: "nexus" },
+      work_summary: {
+        status: { state, label: state, reason: "Computed plan health" },
+        age: 127 * 86400,
+      },
+      ...(state === "done" ? { next_actor: "human:operator" } : {}),
+    };
+    const rows = buildInboxRows({ work: [item] });
+    expect(filterMailbox(rows, "needs-you")).toEqual([]);
+    expect(isStaleBlockedTask(item)).toBe(false);
+    if (state === "stale") expect(rows[0].mailbox).toBe("watching");
+  }
+});
+
+it("uses a matching verified receipt even when later receipt pages are incomplete", () => {
+  const rows = buildInboxRows({
+    decisions: [
+      { id: "known", status: "answered" },
+      { id: "unknown", status: "answered" },
+    ],
+    actions: [
+      {
+        id: "action",
+        decision_id: "known",
+        status: "verified",
+        receipt: { independently_verified: true },
+      },
+    ],
+    receiptsUnavailable: true,
+  });
+  expect(rows.find((row) => row.id === "decision:known").mailbox).toBe(
+    "handled",
+  );
+  expect(rows.find((row) => row.id === "decision:unknown").status).toBe(
+    "receipt_unavailable",
+  );
 });

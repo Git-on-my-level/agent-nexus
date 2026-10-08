@@ -90,6 +90,7 @@ vi.mock("$app/stores", () => ({
 
 vi.mock("$lib/coreClient", () => ({
   coreClient: coreClientMock,
+  createInboxSourceClient: () => coreClientMock,
 }));
 vi.mock("$lib/authSession", () => ({
   initializeAuthSession: vi.fn(async () => ({})),

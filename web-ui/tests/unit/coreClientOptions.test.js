@@ -91,3 +91,43 @@ describe("getBrowserCoreClientOptions", () => {
     }
   });
 });
+
+it("aborts every outstanding Inbox feed request through the browser transport", async () => {
+  const controller = new AbortController();
+  const seen = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((_url, init) => {
+      seen.push(init.signal);
+      return new Promise((_resolve, reject) => {
+        init.signal.addEventListener(
+          "abort",
+          () => reject(new DOMException("Aborted", "AbortError")),
+          { once: true },
+        );
+      });
+    }),
+  );
+  try {
+    const { createInboxSourceClient } =
+      await import("../../src/lib/coreClient.js");
+    const client = createInboxSourceClient(controller.signal);
+    const reads = Promise.allSettled([
+      client.listPmDecisions({ limit: 50 }),
+      client.listPmActions({ limit: 50 }),
+      client.listWork({ limit: 50, summary: 1 }),
+      client.listInboxItems({ status: "open" }),
+      client.listInboxItems({ status: "completed" }),
+      client.getHomeUnread(),
+    ]);
+    await vi.waitFor(() => expect(seen).toHaveLength(6));
+    expect(seen.every((signal) => signal === controller.signal)).toBe(true);
+    controller.abort();
+    expect((await reads).every((result) => result.status === "rejected")).toBe(
+      true,
+    );
+  } finally {
+    controller.abort();
+    vi.unstubAllGlobals();
+  }
+});
