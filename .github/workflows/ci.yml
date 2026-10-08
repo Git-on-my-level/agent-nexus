@@ -96,6 +96,9 @@ jobs:
               - 'core/internal/auth/**'
               - 'core/internal/server/**'
               - 'scripts/e2e-smoke'
+              - 'scripts/owned_process.py'
+              - 'scripts/tests/test_owned_process.py'
+              - 'scripts/tests/test_e2e_smoke_lifecycle.sh'
             platform_constraints:
               - 'scripts/check-platform-constraints.sh'
 
@@ -406,6 +409,11 @@ jobs:
 
       - name: Setup Node And pnpm
         uses: ./.github/actions/setup-node-pnpm
+
+      - name: Run owned-process lifecycle regressions
+        run: |
+          python3 -B -m unittest scripts/tests/test_owned_process.py
+          bash scripts/tests/test_e2e_smoke_lifecycle.sh
 
       - name: Run end-to-end smoke
         env:
