@@ -131,8 +131,40 @@ function isApiCall(route) {
   );
 }
 
+/** One recent task, as `/agents/{id}` returns them. */
+const recentCard = (index) => ({
+  id: `card-uuid-${index}`,
+  ref: `card:recent-${index}`,
+  handle: `recent-${index}`,
+  title: `Recent task ${index}`,
+  column_key: "in_progress",
+  updated_at: ago(30 + index),
+});
+
+/**
+ * The worst case a row has to survive: a computed status that disagrees with
+ * the board, progress, and an ask. `/agents/{id}` computes none of this, so
+ * the page resolves the refs it is showing and reads the summary off those.
+ */
+const LOUD_SUMMARY = {
+  status: { state: "blocked", label: "Blocked", reason: "A step is blocked." },
+  set_status: { state: "in_progress", label: "In progress" },
+  progress: { done: 2, total: 5, unit: "steps" },
+  attention: { count: 1, oldest_age: 7200 },
+};
+
 async function installAgentsApi(page, overrides = {}) {
-  const api = { roster: ROSTER, fail: {}, detailCalls: [], ...overrides };
+  const api = {
+    roster: ROSTER,
+    fail: {},
+    detailCalls: [],
+    resolveCalls: [],
+    /** Null keeps the single-card default below. */
+    recentCards: null,
+    /** Summary handed back for every resolved card ref. */
+    cardSummary: LOUD_SUMMARY,
+    ...overrides,
+  };
   const mock = (pattern, handler) =>
     page.route(pattern, (route) =>
       isApiCall(route) ? handler(route) : route.fallback(),
@@ -168,7 +200,8 @@ async function installAgentsApi(page, overrides = {}) {
     return json(route, 200, {
       agent: found,
       recent_cards:
-        found === LEO
+        api.recentCards ??
+        (found === LEO
           ? [
               {
                 id: "card-uuid",
@@ -179,7 +212,7 @@ async function installAgentsApi(page, overrides = {}) {
                 updated_at: ago(30),
               },
             ]
-          : [],
+          : []),
       recent_runs: found === LEO ? [RUN] : [],
       open_asks: found === OMAR ? [WAITING_ASK] : [],
       recent_notes:
@@ -192,6 +225,19 @@ async function installAgentsApi(page, overrides = {}) {
               },
             ]
           : [],
+    });
+  });
+  await mock(/\/refs\/resolve$/, (route) => {
+    const refs = route.request().postDataJSON()?.refs ?? [];
+    api.resolveCalls.push(refs);
+    return json(route, 200, {
+      items: refs.map((ref) => ({
+        ref,
+        resolvable: true,
+        kind: "card",
+        title: ref,
+        summary: api.cardSummary,
+      })),
     });
   });
   await mock(/\/inbox(\?.*)?$/, (route) =>
@@ -369,6 +415,63 @@ test("waiting agent page links its ask into the Inbox", async ({ page }) => {
     "href",
     `${BASE}/inbox?mailbox=needs-you&item=${encodeURIComponent(INBOX_ITEM.id)}`,
   );
+});
+
+test("a loud status never squeezes the task link off a phone", async ({
+  page,
+}) => {
+  /*
+   * As one flex row the status sat beside the title and refused to shrink,
+   * so at 390px "Blocked · marked in progress" with a progress count and an
+   * ask left the link zero pixels wide — present in the DOM, invisible, and
+   * impossible to click. The summary takes its own line until there is room.
+   */
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installAgentsApi(page);
+  await page.goto(`${BASE}/agents/codex.workstation-a`);
+
+  // Scoped to the list: the same task is linked from the runs and activity
+  // sections too, and those are not the row that collapsed.
+  const row = page.locator("[data-agent-tasks] li").first();
+  const link = row.getByRole("link", { name: "Tune core combat loop" });
+  await expect(link).toBeVisible();
+  const box = await link.boundingBox();
+  expect(box.width).toBeGreaterThan(80);
+
+  // The status is on its own line, under the title rather than beside it.
+  const summary = row.locator("[data-work-summary]").first();
+  expect((await summary.boundingBox()).y).toBeGreaterThan(box.y);
+
+  // And the link does what a link does.
+  await link.click();
+  await expect(page).toHaveURL(/\/tasks\/card%3Atune-core-combat-loop$/);
+});
+
+test("the recent task list and its summary reads are bounded", async ({
+  page,
+}) => {
+  /*
+   * `/agents/{id}` returns every card the agent is assigned, with no limit of
+   * its own. Rendering all of them was a page nobody scrolls; resolving all
+   * of them made the summary work grow with how much the agent had ever been
+   * given. Both are the window now, and the window is one batch.
+   */
+  const api = await installAgentsApi(page, {
+    recentCards: Array.from({ length: 25 }, (_, index) => recentCard(index)),
+  });
+  await page.goto(`${BASE}/agents/codex.workstation-a`);
+
+  const rows = page.locator("[data-agent-tasks] li");
+  await expect(rows).toHaveCount(20);
+  await expect(page.locator("[data-agent-tasks-capped]")).toContainText(
+    "20 most recently updated of 25",
+  );
+  // Newest first, as core ordered them, and cut from the end.
+  await expect(rows.first()).toContainText("Recent task 0");
+  await expect(page.getByText("Recent task 20")).toHaveCount(0);
+
+  await expect.poll(() => api.resolveCalls.length, { timeout: 10_000 }).toBe(1);
+  expect(api.resolveCalls[0]).toHaveLength(20);
 });
 
 for (const viewport of AUDIT_VIEWPORTS) {
