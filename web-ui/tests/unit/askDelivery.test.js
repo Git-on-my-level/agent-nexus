@@ -3,7 +3,6 @@ import {
   INBOX_RESPONSE_OUTCOMES,
   askDeliveryModel,
   askEvidenceModel,
-  askIsStale,
   askRefForInboxItem,
   deliveryReasonText,
   deliveryRowModel,
@@ -15,7 +14,6 @@ import {
   taskOutcomeModel,
 } from "../../src/lib/askDelivery.js";
 import { buildInboxRows, inboxRowBadge } from "../../src/lib/inboxMailbox.js";
-import { createInboxOrder } from "../../src/lib/inboxOrder.js";
 
 const NOW = Date.parse("2026-10-09T12:00:00.000Z");
 
@@ -149,29 +147,57 @@ describe("task outcome", () => {
         { card_ref: "card:anx-7", phase: "ready", next_actor: "codex" },
         { status: "needs_context" },
       ).label,
-    ).toBe("Returned for context · next: codex");
+    ).toBe("Returned for context · Ready · next: codex");
   });
 
-  it("reads unblocked, closed and source-owned from core's record", () => {
+  it("states the phase core recorded and the actor it routed to", () => {
     expect(
       taskOutcomeModel(
         { card_ref: "card:anx-7", phase: "ready", next_actor: "actor:dev" },
         { nextActorLabel: "Dana" },
       ),
-    ).toMatchObject({ label: "Unblocked · next: Dana", closed: false });
+    ).toMatchObject({ label: "Ready · next: Dana", closed: false });
     expect(
       taskOutcomeModel({ card_ref: "card:anx-7", phase: "done" }),
     ).toMatchObject({ label: "Closed", closed: true });
-    expect(
-      taskOutcomeModel({
-        card_ref: "card:anx-7",
-        phase: "in_progress",
-        next_actor: "jira-bot",
-        reason: "source_owned",
-      }).label,
-    ).toBe("Phase unchanged (source owns it) · next: jira-bot");
     expect(taskOutcomeModel(null)).toBeNull();
     expect(taskOutcomeModel({})).toBeNull();
+  });
+
+  it("never says unblocked about a task the answer left blocked", () => {
+    /*
+     * Core removes only the ask's own blocker and keeps the task blocked when
+     * others remain (`TestAskAnswerPreservesOtherBlockersAndRollsBack`), so an
+     * answer legitimately returns `phase: "blocked"`.
+     */
+    const model = taskOutcomeModel(
+      { card_ref: "card:anx-7", phase: "blocked", next_actor: "actor:dev" },
+      { nextActorLabel: "Dana" },
+    );
+    expect(model.label).toBe("Blocked · next: Dana");
+    expect(model.label).not.toContain("Unblocked");
+    expect(model.closed).toBe(false);
+  });
+
+  it("says the source owns the phase instead of claiming core moved it", () => {
+    const model = taskOutcomeModel({
+      card_ref: "card:anx-7",
+      phase: "in_progress",
+      next_actor: "jira-bot",
+      reason: "source_owned",
+    });
+    expect(model.label).toBe("In progress · source-owned · next: jira-bot");
+    expect(model.label).not.toContain("Unblocked");
+  });
+
+  it("keeps a phase it has never seen rather than blanking it", () => {
+    expect(
+      taskOutcomeModel({ card_ref: "card:anx-7", phase: "triage" }).label,
+    ).toBe("triage");
+    expect(
+      taskOutcomeModel({ card_ref: "card:anx-7", phase: "constructor" })
+        .phaseLabel,
+    ).toBe("constructor");
   });
 });
 
@@ -194,9 +220,41 @@ describe("ask delivery model", () => {
       nextActorLabel: "Dana",
     });
     expect(model.notDelivered).toBe(
-      "Not delivered: no subscriber; task unblocked for Dana.",
+      "Not delivered: no subscriber; the task is ready for Dana.",
     );
     expect(model.subscriptions).toEqual([]);
+  });
+
+  it("does not claim unblocking in the no-subscriber line either", () => {
+    const blocked = askDeliveryModel(
+      {
+        ...answered,
+        task_outcome: {
+          card_ref: "card:anx-7",
+          phase: "blocked",
+          next_actor: "actor:dev",
+        },
+      },
+      { nextActorLabel: "Dana" },
+    );
+    expect(blocked.notDelivered).toBe(
+      "Not delivered: no subscriber; the task is blocked for Dana.",
+    );
+    const sourceOwned = askDeliveryModel({
+      ...answered,
+      task_outcome: {
+        card_ref: "card:anx-7",
+        phase: "in_progress",
+        next_actor: "jira-bot",
+        reason: "source_owned",
+      },
+    });
+    expect(sourceOwned.notDelivered).toBe(
+      "Not delivered: no subscriber; the task is in progress for jira-bot.",
+    );
+    for (const model of [blocked, sourceOwned]) {
+      expect(model.notDelivered).not.toContain("unblocked");
+    }
   });
 
   it("says the task was closed when no subscriber was waiting", () => {
@@ -415,7 +473,7 @@ describe("linking names the ask already backed with evidence", () => {
   });
 });
 
-describe("stale asks and context requests in the Inbox list", () => {
+describe("a handled context request in the Inbox list", () => {
   const openAsk = (overrides = {}) => ({
     id: "inbox-1",
     kind: "ask",
@@ -427,53 +485,27 @@ describe("stale asks and context requests in the Inbox list", () => {
     ...overrides,
   });
 
-  /*
-   * `is_stale` is contract-shaped but core computes it per ask and does not put
-   * it on an inbox row today, so these assert the fold for a core that does —
-   * forward compatibility, not current server behaviour. See the issue.
-   */
-  it("marks an ask core called stale, and only while it is open", () => {
-    expect(askIsStale({ is_stale: true })).toBe(true);
-    expect(askIsStale({})).toBe(false);
-    const rows = buildInboxRows({
-      inboxItems: [
-        openAsk({ is_stale: true }),
-        openAsk({ id: "inbox-2", is_stale: false }),
-        openAsk({
-          id: "inbox-3",
-          is_stale: true,
-          status: "completed",
-          responded_at: "2026-10-08T00:00:00.000Z",
-          outcome: "answered",
-        }),
-      ],
-      now: NOW,
-    });
-    const byId = new Map(rows.map((row) => [row.item.id, row]));
-    expect(byId.get("inbox-1").stale).toBe(true);
-    expect(byId.get("inbox-2").stale).toBe(false);
-    // An answered ask is Handled; folding it under Stale would hide history.
-    expect(byId.get("inbox-3").stale).toBe(false);
-  });
-
-  it("folds a stale ask into the Stale group with the stale tasks", () => {
-    const rows = buildInboxRows({
-      inboxItems: [openAsk({ is_stale: true }), openAsk({ id: "inbox-2" })],
-      now: NOW,
-    });
-    const order = createInboxOrder();
-    const grouped = order("needs-you:", rows, false);
-    expect(grouped.currentRows.map((row) => row.item.id)).toEqual(["inbox-2"]);
-    expect(grouped.staleRows.map((row) => row.item.id)).toEqual(["inbox-1"]);
-  });
-
-  it("badges a handled ask that was sent back for context", () => {
+  it("badges an ask that was sent back for context", () => {
     expect(
       inboxRowBadge({ kind: "inbox", item: { outcome: "needs_context" } }, NOW),
     ).toEqual({ label: "Sent back for context", tone: "neutral" });
     expect(
       inboxRowBadge({ kind: "inbox", item: { outcome: "answered" } }, NOW),
     ).toBeNull();
+  });
+
+  it("does not fold an ask out of the list on its own say-so", () => {
+    /*
+     * Staleness is a per-ask fact the list does not have (core returns
+     * `is_stale` only from `GET /asks/{ask_id}`), so an ask row is never folded
+     * into the Stale group. The detail panel is where staleness is shown. The
+     * fold returns with core projecting `is_stale` onto the row.
+     */
+    const rows = buildInboxRows({
+      inboxItems: [openAsk({ is_stale: true }), openAsk({ id: "inbox-2" })],
+      now: NOW,
+    });
+    expect(rows.every((row) => !row.stale)).toBe(true);
   });
 });
 

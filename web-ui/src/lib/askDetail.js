@@ -1,12 +1,6 @@
-import { get } from "svelte/store";
 import { coreClient } from "$lib/coreClient";
 import { askRefForInboxItem } from "$lib/askDelivery.js";
-import { authenticatedAgent } from "$lib/authSession.js";
-import { selectedActorId } from "$lib/actorSession.js";
-import {
-  currentOrganizationSlug,
-  currentWorkspaceSlug,
-} from "$lib/workspaceContext.js";
+import { readerScopeKey } from "$lib/readerScope.js";
 
 /**
  * The ask behind one inbox item: its durable outcome and its own event.
@@ -41,24 +35,14 @@ const cache = new Map();
 
 let scopeIdentity = "";
 
-/**
- * The reader and workspace a cached read belongs to. Read at call time rather
- * than subscribed: a store subscription here would run during module load in
- * every context that imports this file, and the only thing it would buy is
- * dropping the cache a moment earlier than the next read does.
+/*
+ * Read at call time rather than subscribed: a store subscription here would run
+ * during module load in every context that imports this file, and the only
+ * thing it would buy is dropping the cache a moment earlier than the next read
+ * does.
  */
-function currentScope() {
-  const agent = get(authenticatedAgent);
-  return JSON.stringify([
-    get(currentOrganizationSlug),
-    get(currentWorkspaceSlug),
-    agent?.agent_id || "",
-    agent?.actor_id || get(selectedActorId) || "",
-  ]);
-}
-
 function cacheForCurrentScope() {
-  const identity = currentScope();
+  const identity = readerScopeKey();
   if (identity !== scopeIdentity) {
     scopeIdentity = identity;
     cache.clear();

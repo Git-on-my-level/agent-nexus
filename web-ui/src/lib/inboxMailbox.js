@@ -1,5 +1,5 @@
 import { accessRequestFromInboxItem } from "$lib/accessGrant.js";
-import { NEEDS_CONTEXT_OUTCOME, askIsStale } from "./askDelivery.js";
+import { NEEDS_CONTEXT_OUTCOME } from "./askDelivery.js";
 import { isHumanNextActor } from "./humanActors.js";
 import { updateDigest } from "./inboxDigest.js";
 import {
@@ -640,14 +640,6 @@ export function buildInboxRows({
       waitingSince:
         item.source_event_time || item.trigger_at || item.created_at || "",
       status: item.status || (item.responded_at ? "completed" : "open"),
-      /*
-       * Core marks an open ask stale when its task has not changed for the
-       * deployment's `ANX_ASK_STALE_AFTER`. A stale ask folds into the same
-       * group as a stale blocked task: still there, still answerable, out of
-       * the way of what moved this week. Core does not put `is_stale` on an
-       * inbox row yet, so this is inert against today's server — see SCA-708.
-       */
-      stale: inboxItemNeedsResponse(item) && askIsStale(item),
       category: String(item.kind ?? item.category ?? "").trim(),
       severity: item.severity || "",
       requester: { name: requesterName, id: requesterId },

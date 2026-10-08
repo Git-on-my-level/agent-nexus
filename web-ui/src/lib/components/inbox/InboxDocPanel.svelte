@@ -16,6 +16,7 @@
   import { dismissOnEscape } from "$lib/actions/dismissOnEscape.js";
   import { coreClient } from "$lib/coreClient";
   import { splitTypedRef } from "$lib/inboxUtils.js";
+  import { readerScope } from "$lib/readerScope.js";
 
   let {
     /** `document:<id>` to read, or "" for a closed panel. */
@@ -23,7 +24,11 @@
     /** `(ref) => href` for the full document page. */
     hrefFor = () => "",
     onClose = null,
-    /** `(ref, title)` once the title is read, so the evidence row can use it. */
+    /**
+     * `(ref, title)` once the title is read, so the evidence row can use it.
+     * Called only for a read that is still the current one, for the reader who
+     * made it — a title is a read, and belongs to that reader alone.
+     */
     onTitle = null,
     organizationSlug = "",
     workspaceSlug = "",
@@ -67,7 +72,15 @@
   let error = $state("");
   let doc = $state(null);
   let revision = $state(null);
-  let loadedRef = $state("");
+  /*
+   * What is on screen and what is on its way, as plain variables: this is the
+   * effect's own bookkeeping, and making it reactive would feed back into the
+   * effect that writes it. Both are keyed by reader *and* ref, because the
+   * answer to "do we already have this document?" is different for a different
+   * reader — core authorizes every read.
+   */
+  let loadedKey = null;
+  let inFlightKey = null;
   let sequence = 0;
 
   const TEXTUAL = new Set(["", "text", "markdown", "text/markdown"]);
@@ -79,38 +92,51 @@
 
   $effect(() => {
     const target = ref;
-    if (!target) {
-      loadedRef = "";
-      doc = null;
-      revision = null;
-      error = "";
-      loading = false;
-      return;
-    }
-    if (target === loadedRef) return;
+    const scope = $readerScope;
+    const key = `${scope}|${target}`;
+    // Already on screen, or already on its way, for this reader: nothing to do,
+    // and nothing in flight to cancel.
+    if (key === loadedKey || key === inFlightKey) return;
+    /*
+     * Everything else invalidates what is in flight — the panel closed, the
+     * reader opened another document, or the acting reader changed. A result
+     * that lands after any of those must not be shown, must not be remembered
+     * as loaded, and must not be handed back as a title: a read authorized for
+     * one reader is not the next reader's to see, and a `loadedKey` left set
+     * for it would serve that content again with no fresh read.
+     */
+    sequence += 1;
+    const ticket = sequence;
+    loadedKey = null;
+    inFlightKey = null;
+    doc = null;
+    revision = null;
+    error = "";
+    loading = false;
+    if (!target) return;
     const id = splitTypedRef(target).id;
     if (!id) {
       error = "This evidence reference names no document.";
       return;
     }
-    const ticket = ++sequence;
+    inFlightKey = key;
     loading = true;
-    error = "";
-    doc = null;
-    revision = null;
+    const current = () => ticket === sequence && scope === $readerScope;
     void coreClient.getDocument(id).then(
       (result) => {
-        if (ticket !== sequence) return;
+        if (!current()) return;
+        inFlightKey = null;
         doc = result?.document ?? null;
         revision = result?.revision ?? null;
-        loadedRef = target;
+        loadedKey = key;
         loading = false;
         if (!doc) error = "This document could not be read.";
         const read = String(doc?.title ?? "").trim();
         if (read) onTitle?.(target, read);
       },
       () => {
-        if (ticket !== sequence) return;
+        if (!current()) return;
+        inFlightKey = null;
         loading = false;
         error = "This document could not be read.";
       },

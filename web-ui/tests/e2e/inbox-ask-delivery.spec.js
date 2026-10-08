@@ -89,7 +89,6 @@ const STALE_ASK = {
   request_event_ref: "event:ask-stale",
   source_event_id: "ask-stale",
   response_proposals: ["Proceed."],
-  is_stale: true,
   source_event_time: new Date(Date.now() - 400 * 3_600_000).toISOString(),
 };
 
@@ -508,7 +507,7 @@ test("Handled names the task outcome and every delivery state", async ({
   const delivery = page.locator("[data-inbox-delivery]");
   await expect(delivery).toBeVisible();
   await expect(delivery.locator("[data-inbox-task-outcome]")).toHaveText(
-    "Unblocked · next: codex-worker",
+    "Ready · next: codex-worker",
   );
   const awaitRow = delivery.locator("[data-inbox-delivery-row='sub_await']");
   await expect(awaitRow).toContainText("Live await");
@@ -523,7 +522,7 @@ test("Handled names the task outcome and every delivery state", async ({
 
   await page.getByTestId(`inbox-row-${NO_SUBSCRIBER.id}`).click();
   await expect(page.locator("[data-inbox-delivery-none]")).toHaveText(
-    "Not delivered: no subscriber; task unblocked for codex-worker.",
+    "Not delivered: no subscriber; the task is ready for codex-worker.",
   );
 });
 
@@ -596,24 +595,28 @@ test("a deep link into an ask loads its evidence", async ({ page }) => {
   ).toContainText("Rollout change");
 });
 
-/*
- * `is_stale` is contract-shaped but core computes it per ask and does not put it
- * on an inbox row today, so this asserts the fold for a core that does —
- * forward compatibility, not current server behaviour. See the issue.
- */
-test("a stale ask folds into the Stale group", async ({ page }) => {
-  await setupInbox(page, { open: [EVIDENCE_ASK, STALE_ASK] });
+test("a stale ask says so on the ask, and is not folded out of the list", async ({
+  page,
+}) => {
+  // Staleness is a per-ask fact: core returns `is_stale` from `GET /asks/{id}`
+  // and does not put it on an inbox row, so the ask that has it says so and the
+  // list leaves every open ask where it is.
+  await setupInbox(page, { open: [STALE_ASK, EVIDENCE_ASK] });
   await page.goto("/o/local/w/local/inbox");
 
-  await expect(page.getByTestId(`inbox-row-${EVIDENCE_ASK.id}`)).toBeVisible();
-  const stale = page.locator("[data-inbox-stale]");
-  await expect(stale.getByRole("button", { name: "Stale (1)" })).toBeVisible();
-  await expect(page.getByTestId(`inbox-row-${STALE_ASK.id}`)).toHaveCount(0);
+  const row = page.getByTestId(`inbox-row-${STALE_ASK.id}`);
+  await expect(row).toBeVisible();
+  await expect(page.locator("[data-inbox-stale]")).toHaveCount(0);
 
-  await stale.getByRole("button", { name: "Stale (1)" }).click();
-  await expect(page.getByTestId(`inbox-row-${STALE_ASK.id}`)).toBeVisible();
-  // A stale ask is not an archivable stale task; it offers no Archive button.
-  await expect(stale.getByRole("button", { name: /^Archive / })).toHaveCount(0);
+  await row.click();
+  await expect(page.locator("[data-inbox-ask-stale]")).toContainText(
+    "has not changed in a while",
+  );
+
+  // An ask whose task has changed says nothing about staleness.
+  await page.getByTestId(`inbox-row-${EVIDENCE_ASK.id}`).click();
+  await expect(page.locator("[data-inbox-evidence]")).toBeVisible();
+  await expect(page.locator("[data-inbox-ask-stale]")).toHaveCount(0);
 });
 
 test("evidence reads as a sheet at phone width", async ({ page }) => {

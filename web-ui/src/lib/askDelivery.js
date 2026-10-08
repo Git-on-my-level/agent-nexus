@@ -17,6 +17,7 @@
 import taxonomy from "./generated/taxonomy.json";
 import { formatAge } from "./ageBadge.js";
 import { inboxSubjectNoun, splitTypedRef } from "./inboxUtils.js";
+import { CLOSED_PHASES, PHASE_LABELS } from "./pm/presentation.js";
 
 const asText = (value) => String(value ?? "").trim();
 
@@ -63,18 +64,6 @@ export function supportsNeedsContext(item) {
   const allowed = item?.allowed_response_outcomes;
   if (!Array.isArray(allowed) || allowed.length === 0) return true;
   return allowed.map(asText).includes(NEEDS_CONTEXT_OUTCOME);
-}
-
-/**
- * An open ask core has marked stale, so the Inbox can fold it with the rest.
- *
- * Core computes this per ask, from the subject card's last change against the
- * deployment's `ANX_ASK_STALE_AFTER`, and today only `GET /asks/{ask_id}`
- * carries it — an inbox row does not. This reads the contract field wherever it
- * appears, so the fold starts working the day a core projects it.
- */
-export function askIsStale(item) {
-  return item?.is_stale === true;
 }
 
 /*
@@ -176,20 +165,32 @@ export function deliveryRowModel(delivery, { now = Date.now() } = {}) {
   };
 }
 
-const CLOSED_PHASES = new Set(["done", "cancelled"]);
+/**
+ * The operator's word for a stored phase, from the one module that owns those
+ * names, so a Handled line and the Tasks table call the same phase the same
+ * thing. No phase is "Unknown" here — an absent one says nothing — and a phase
+ * this client has never seen keeps core's own word. `Object.hasOwn`, because a
+ * phase of `constructor` otherwise answers with a function.
+ */
+export function phaseLabel(phase) {
+  const key = asText(phase);
+  if (!key) return "";
+  return Object.hasOwn(PHASE_LABELS, key) ? PHASE_LABELS[key] : key;
+}
 
 /**
- * What the answer did to the task, in one line.
+ * What the answer recorded against the task, in one line.
  *
- * Core records the decision on the card in the same transaction as the answer,
- * so this is a read of that record rather than an inference: `phase` is where
- * the card ended up, `next_actor` is who owns it now, and `reason`
- * `source_owned` means an external source owns the phase and core left it
- * alone.
+ * Core writes the decision on the card in the same transaction as the answer,
+ * so this is a read of that record: `phase` is the phase the card holds after
+ * it, `next_actor` is who owns it now, and `reason` `source_owned` means an
+ * external source owns the phase and core left it alone.
  *
- * A context request clears the blocker too, so the phase moves — but calling
- * that "Unblocked" next to a header that says the ask was not answered reads
- * as though it had been. `status` is what tells the two apart.
+ * It states the recorded phase and the recorded decision, and never a
+ * transition. "Unblocked" was wrong in two ways that matter: core keeps a task
+ * blocked when other blockers remain, so an answer can leave `phase: "blocked"`
+ * — and a card that was never blocked was never unblocked either. The phase is
+ * the fact; whether it moved is not something the outcome records.
  */
 export function taskOutcomeModel(
   taskOutcome,
@@ -203,18 +204,28 @@ export function taskOutcomeModel(
   if (!ref && !phase && !nextActor) return null;
   const who = asText(nextActorLabel) || nextActor;
   const closed = CLOSED_PHASES.has(phase);
-  const next = who ? ` · next: ${who}` : "";
-  let label = "";
+  const parts = [];
+  // A context request is not an answer, and the line says so first: core does
+  // clear the ask's own blocker either way.
+  if (asText(status) === NEEDS_CONTEXT_OUTCOME)
+    parts.push("Returned for context");
   if (closed) {
-    label = "Closed";
-  } else if (asText(status) === NEEDS_CONTEXT_OUTCOME) {
-    label = `Returned for context${next}`;
-  } else if (reason === "source_owned") {
-    label = `Phase unchanged (source owns it)${next}`;
+    parts.push("Closed");
   } else {
-    label = `Unblocked${next}`;
+    if (phaseLabel(phase)) parts.push(phaseLabel(phase));
+    if (reason === "source_owned") parts.push("source-owned");
   }
-  return { ref, phase, nextActor, nextActorLabel: who, reason, closed, label };
+  if (who) parts.push(`next: ${who}`);
+  return {
+    ref,
+    phase,
+    phaseLabel: phaseLabel(phase),
+    nextActor,
+    nextActorLabel: who,
+    reason,
+    closed,
+    label: parts.join(" · "),
+  };
 }
 
 /**
@@ -249,18 +260,33 @@ export function askDeliveryModel(
   const owner = task?.nextActorLabel || "";
   let notDelivered = null;
   if (answered && subscriptions.length === 0) {
+    // Nothing was sent, and the decision is on the task either way. The
+    // sentence names the phase core recorded, never a move it did not: a task
+    // the answer left blocked, or whose phase its source owns, was not
+    // unblocked for anybody.
+    const phase = task?.phaseLabel ? task.phaseLabel.toLowerCase() : "";
     if (!task) {
       notDelivered = "Not delivered: no subscriber was registered.";
     } else if (task.closed) {
       notDelivered = "Not delivered: no subscriber; the task was closed.";
+    } else if (phase && owner) {
+      notDelivered = `Not delivered: no subscriber; the task is ${phase} for ${owner}.`;
+    } else if (phase) {
+      notDelivered = `Not delivered: no subscriber; the task is ${phase}.`;
     } else if (owner) {
-      notDelivered = `Not delivered: no subscriber; task unblocked for ${owner}.`;
+      notDelivered = `Not delivered: no subscriber; the task is with ${owner}.`;
     } else {
-      notDelivered = "Not delivered: no subscriber; the task was unblocked.";
+      notDelivered = "Not delivered: no subscriber was registered.";
     }
   }
   return {
     status,
+    /*
+     * Core computes staleness per ask, from the subject card's last change
+     * against the deployment's `ANX_ASK_STALE_AFTER`, and only `GET
+     * /asks/{ask_id}` carries it — an inbox row does not, so this is a fact the
+     * detail knows and the list cannot.
+     */
     isStale: outcome.is_stale === true,
     needsContext: status === NEEDS_CONTEXT_OUTCOME,
     task,
