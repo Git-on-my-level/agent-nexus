@@ -179,7 +179,11 @@ func TestInboxReadsMaterializedProjectionWithFreshness(t *testing.T) {
 		"key_artifacts":   []any{},
 		"provenance":      map[string]any{"sources": []any{"inferred"}},
 	})
-	created := createHumanAttentionEvent(t, h.baseURL, threadID, "ask", "Need materialized answer", "thread:"+threadID, nil, nil)
+	// Use an explicit board so this projection-read test does not also exercise
+	// lazy default-board provisioning, whose backing thread starts unmaterialized.
+	board := workPostJSON(t, h.baseURL+"/boards", `{"actor_id":"actor-1","board":{"title":"Materialized ask subjects"}}`, http.StatusCreated)["board"].(map[string]any)
+	work := workPostJSON(t, h.baseURL+"/work", fmt.Sprintf(`{"actor_id":"actor-1","board_ref":%q,"title":"Need materialized answer","phase":"ready"}`, board["ref"]), http.StatusCreated)["work"].(map[string]any)
+	created := createHumanAttentionEvent(t, h.baseURL, threadID, "ask", "Need materialized answer", asString(work["ref"]), []string{"thread:" + threadID}, nil)
 	requestEventID := asString(created["id"])
 
 	standard := getInboxPayload(t, h.baseURL+"/inbox")
