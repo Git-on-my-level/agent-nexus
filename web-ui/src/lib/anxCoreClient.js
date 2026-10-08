@@ -448,7 +448,13 @@ const adapterCommandTable = [
   ["issueAuthToken", "auth.token", (payload) => ({ options: b(payload) })],
   ["getCurrentAgent", "agents.me.get"],
   ["listAgents", "agents.list"],
-  ["getAgent", "agents.get", (agentId) => p(pathParams({ agent_id: agentId }))],
+  [
+    "getAgent",
+    "agents.get",
+    // `filters` carries `summary=1`: without it the route scans every card
+    // the agent is assigned and computes no summary.
+    (agentId, filters) => pq(pathParams({ agent_id: agentId }), filters),
+  ],
   ["listRuns", "runs.list", (filters) => ({ options: q(filters) })],
   ["getRun", "runs.get", (runId) => p(pathParams({ run_id: runId }))],
   ["listHosts", "hosts.list"],

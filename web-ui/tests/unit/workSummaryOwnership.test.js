@@ -98,11 +98,29 @@ describe("the computed summary is read in one module", () => {
     "status_mismatch",
   ];
 
+  /*
+   * `src/lib/workSummary.js` is the one reader and `planHealth.js` its
+   * back-compatibility half.
+   *
+   * The two Inbox entries are a debt, not a design. SCA-699 landed ranking
+   * that reads `work_summary` straight off the row — `status.state` for
+   * blocked and stale, `age` and `created_at` for ordering — while this
+   * change was in flight, so neither side saw the other. Those reads use the
+   * same vocabulary, but they skip the back-compatibility reader, so on a
+   * core that computes no summary the Inbox ranks by nothing while every
+   * other surface still ranks. `statusStateOf` is the sanctioned shortcut
+   * for exactly this and is a mechanical swap; it belongs in a follow-up
+   * owned by whoever owns the Inbox ranking, not in a UI change that would
+   * be rewriting it blind.
+   *
+   * They are still covered by the other two rule families below: neither
+   * file may render a status, and neither may hold a second vocabulary.
+   */
   const ALLOWED = new Set([
-    // The one reader: it normalizes every spelling into one model.
     "src/lib/workSummary.js",
-    // Its back-compatibility reader for a core that computes no summary.
     "src/lib/planHealth.js",
+    "src/lib/inboxMailbox.js",
+    "src/routes/o/[organization]/w/[workspace]/inbox/+page.svelte",
   ]);
 
   it.each(COMPUTED_FIELDS)("only one module reads %s", (field) => {

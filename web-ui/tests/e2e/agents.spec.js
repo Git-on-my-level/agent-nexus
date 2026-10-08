@@ -192,9 +192,11 @@ async function installAgentsApi(page, overrides = {}) {
         })
       : json(route, 200, { agents: api.roster }),
   );
-  await mock(/\/agents\/[^/?]+$/, (route) => {
-    const key = decodeURIComponent(route.request().url().split("/agents/")[1]);
-    api.detailCalls.push(key);
+  await mock(/\/agents\/[^/?]+(\?.*)?$/, (route) => {
+    const url = new URL(route.request().url());
+    const key = decodeURIComponent(url.pathname.split("/agents/")[1]);
+    api.detailCalls.push(`${key}?summary=${url.searchParams.get("summary")}`);
+    const optedIn = url.searchParams.get("summary") === "1";
     const found = api.roster.find(
       (entry) => entry.handle === key || entry.id === key,
     );
@@ -205,7 +207,13 @@ async function installAgentsApi(page, overrides = {}) {
     }
     return json(route, 200, {
       agent: found,
-      recent_cards:
+      /*
+       * `summary=1` is what makes core compute these; without it the route
+       * answers with the legacy card rows and no summary at all, which is
+       * what the page used to work around with its own resolve.
+       */
+      cards_truncated: api.cardsTruncated || undefined,
+      recent_cards: (
         api.recentCards ??
         (found === LEO
           ? [
@@ -218,7 +226,10 @@ async function installAgentsApi(page, overrides = {}) {
                 updated_at: ago(30),
               },
             ]
-          : []),
+          : [])
+      ).map((card) =>
+        optedIn ? { ...card, work_summary: api.cardSummary } : card,
+      ),
       recent_runs: found === LEO ? [RUN] : [],
       open_asks: found === OMAR ? [WAITING_ASK] : [],
       recent_notes:
@@ -513,8 +524,14 @@ test("the recent task list and its summary reads are bounded", async ({
     "Recent task 5",
   );
 
-  await expect.poll(() => api.resolveCalls.length, { timeout: 10_000 }).toBe(1);
-  expect(api.resolveCalls[0]).toHaveLength(20);
+  /*
+   * And no second request to make up for the route: `summary=1` carries the
+   * computed summary on the rows themselves, from a window core bounds. The
+   * page used to resolve every ref it had been handed, which is how an agent
+   * with four hundred cards cost three batches.
+   */
+  expect(api.detailCalls).toEqual(["codex.workstation-a?summary=1"]);
+  expect(api.resolveCalls).toEqual([]);
 });
 
 for (const viewport of AUDIT_VIEWPORTS) {

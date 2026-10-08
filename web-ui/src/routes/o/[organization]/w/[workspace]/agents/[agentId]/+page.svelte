@@ -24,7 +24,6 @@
   import { coreClient } from "$lib/coreClient";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
   import WorkSummary from "$lib/components/WorkSummary.svelte";
-  import { resolveRefsInBatches } from "$lib/refResolve.js";
   import { workSummaryModel } from "$lib/workSummary.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import TaskParticipation from "$lib/components/participation/TaskParticipation.svelte";
@@ -154,60 +153,29 @@
   }
   let recentCards = $derived(recentWindow(detail?.recent_cards));
   /**
-   * How many core sent — which is every card this agent is assigned, since
-   * the route has no limit of its own. If it ever grows one, this becomes
-   * "of what we were given" and the sentence below understates; the response
-   * carries no total to read instead.
+   * How many core sent, and whether that was itself a cut.
+   *
+   * `summary=1` bounds the candidate window, so a prolific agent's count is
+   * core's cap rather than its true total — `cards_truncated` says so, and
+   * the line below reads "50+" rather than claiming 50 is all of them.
    */
   let recentCardTotal = $derived(detail?.recent_cards?.length ?? 0);
+  let recentCardsTruncated = $derived(detail?.cards_truncated === true);
 
   function cardRef(card) {
     return String(card?.ref || `card:${card?.handle ?? ""}`).trim();
   }
 
   /**
-   * The computed summary for the cards this agent touched.
+   * The computed summary for one recent task.
    *
-   * `/agents/{id}` builds `recent_cards` straight from the card store and
-   * computes no summary, and it has no `summary=1` to opt into. So the list
-   * would read the stored column while the Tasks table read the computed
-   * status — the disagreement this whole change exists to end, left standing
-   * on one surface.
-   *
-   * `refs.resolve` carries a computed summary per card preview without an
-   * opt-in. It resolves the shown window and nothing else: resolving the
-   * whole of `recent_cards` made the summary work grow with how much the
-   * agent has ever been assigned, which is the opposite of bounded.
-   *
-   * A failed resolve is not an error here: the rows fall back to the stored
-   * column, which is what they showed before.
+   * It rides on the row: `summary=1` is what makes `/agents/{id}` compute it,
+   * and the page used to resolve the refs itself because the route had no
+   * opt-in. It does now, and core bounds its own candidate window there too,
+   * so the extra request is gone.
    */
-  let recentCardSummaries = $state(new Map());
-  async function loadRecentCardSummaries(key, cards) {
-    // The same window the list renders, so the resolve answers the rows on
-    // screen and nothing else.
-    const refs = recentWindow(cards)
-      .map(cardRef)
-      .filter((ref) => ref && ref !== "card:");
-    if (!refs.length) {
-      recentCardSummaries = new Map();
-      return;
-    }
-    const resolved = await resolveRefsInBatches(refs, (batch) =>
-      coreClient.resolveRefs(batch),
-    );
-    if (key !== agentKey) return;
-    recentCardSummaries = new Map(
-      [...resolved]
-        .filter(([, hit]) => hit?.summary)
-        .map(([ref, hit]) => [ref, hit.summary]),
-    );
-  }
-
   function recentCardSummary(card) {
-    return (
-      recentCardSummaries.get(cardRef(card)) ?? workSummaryModel(card, { now })
-    );
+    return workSummaryModel(card, { now });
   }
 
   async function load(key = agentKey, { quiet = false } = {}) {
@@ -217,10 +185,12 @@
       notFound = false;
     }
     try {
-      const response = await coreClient.getAgent(key);
+      // `summary=1`: the computed summary on every recent card, from a
+      // candidate window core bounds, instead of a scan over everything the
+      // agent has ever been assigned.
+      const response = await coreClient.getAgent(key, { summary: 1 });
       if (key !== agentKey) return;
       detail = response ?? null;
-      void loadRecentCardSummaries(key, response?.recent_cards);
       const actorId = response?.agent?.actor_id;
       const hostId = response?.agent?.host_id;
       const [events, principals, hostResponse] = await Promise.allSettled([
@@ -782,11 +752,13 @@
                 </li>
               {/each}
             </ul>
-            {#if recentCardTotal > recentCards.length}
+            {#if recentCardTotal > recentCards.length || recentCardsTruncated}
               <!-- Say what was left out rather than implying this is all of
                    it: core returns every card the agent is assigned. -->
               <p class="mt-1 text-micro text-fg-subtle" data-agent-tasks-capped>
-                Showing the {recentCards.length} most recently updated of {recentCardTotal}.
+                Showing the {recentCards.length} most recently updated of {recentCardTotal}{recentCardsTruncated
+                  ? "+"
+                  : ""}.
               </p>
             {/if}
           {:else}
