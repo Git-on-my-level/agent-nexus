@@ -82,7 +82,9 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 			if err != nil || len(data["items"].([]map[string]any)) != i+1 {
 				t.Fatalf("initiatives=%+v error=%v", data, err)
 			}
-			if got := counter.Count(); got != 8 {
+			// Default reports retain the legacy projection: computed attention
+			// summaries add no query unless the report opts in.
+			if got := counter.Count(); got != 7 {
 				t.Fatalf("initiatives: %d queries for %d cards and boards", got, i+1)
 			}
 			counter.Reset()
@@ -116,7 +118,7 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 	// This new request captures one authorization snapshot, unlike the reused
 	// render request above. Projection queries remain six at either workspace size.
 	data, _, err := reader.materialize(reports.Panel{Type: "live-initiatives", Query: reports.Query{Limit: 40}})
-	if err != nil || len(data["items"].([]map[string]any)) != 38 || counter.Count() != 9 {
+	if err != nil || len(data["items"].([]map[string]any)) != 38 || counter.Count() != 8 {
 		t.Fatalf("private initiatives must be omitted without more queries: data=%+v queries=%d error=%v", data, counter.Count(), err)
 	}
 	for _, item := range data["items"].([]map[string]any) {
