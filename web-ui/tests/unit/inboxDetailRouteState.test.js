@@ -63,12 +63,21 @@ vi.mock("$app/stores", () => ({
 
 vi.mock("$lib/coreClient", () => ({
   coreClient: coreClientMock,
+  // The response queue captures the sender when it enqueues, so the commit
+  // survives the navigation that follows.
+  captureInboxResponseSender: () =>
+    coreClientMock.respondInboxItem.bind(coreClientMock),
 }));
 
 vi.mock("$lib/searchHelpers", () => ({
   searchActors: searchActorsMock,
 }));
 
+import { PROPOSAL_FLASH_MS } from "../../src/lib/inboxProposalChoice.js";
+import {
+  flushInboxResponse,
+  resetInboxResponseQueue,
+} from "../../src/lib/inboxResponseQueue.js";
 import InboxDetailPage from "../../src/routes/o/[organization]/w/[workspace]/inbox/[id]/+page.svelte";
 
 function inboxItem(id, title, overrides = {}) {
@@ -100,6 +109,7 @@ function setInboxRoute(id, workspace = "local") {
 
 afterEach(() => {
   cleanup();
+  resetInboxResponseQueue();
   vi.useRealTimers();
   vi.clearAllMocks();
   localStorage.clear();
@@ -248,5 +258,93 @@ describe("inbox detail route state", () => {
       );
     });
     expect(getByRole("alert").textContent).not.toContain("{inbox_id}");
+  });
+
+  /*
+   * A suggested response sends after a short flash, and the reader can open
+   * another item inside it. `loadItem` nulls `item` and clears the composer
+   * the moment the route changes, so a send that read this page's state at
+   * that point answered nothing at all: the response was dropped in silence,
+   * with its toast already on screen.
+   */
+  it("still sends the response it was given when the reader switches items inside the flash", async () => {
+    let resolveSecond;
+    coreClientMock.getInboxItem.mockImplementation((id) => {
+      if (id === "inbox-first") {
+        return Promise.resolve({
+          item: inboxItem("inbox-first", "First item", {
+            response_proposals: ["Ship it", "Hold for review"],
+          }),
+        });
+      }
+      // Still loading while the flash ends: `item` is null, which is exactly
+      // the moment the dropped send happened.
+      return new Promise((resolve) => {
+        resolveSecond = resolve;
+      });
+    });
+    coreClientMock.respondInboxItem.mockResolvedValue({
+      event: { id: "evt-1" },
+    });
+
+    const { getByRole, findByRole } = render(InboxDetailPage);
+    await findByRole("heading", { name: "First item" });
+
+    await fireEvent.click(getByRole("button", { name: /Ship it/ }));
+    setInboxRoute("inbox-second");
+    await waitFor(() => {
+      expect(coreClientMock.getInboxItem).toHaveBeenCalledWith("inbox-second");
+    });
+    await new Promise((resolve) =>
+      setTimeout(resolve, PROPOSAL_FLASH_MS + 100),
+    );
+
+    await flushInboxResponse();
+    expect(coreClientMock.respondInboxItem).toHaveBeenCalledTimes(1);
+    const [itemId, request] = coreClientMock.respondInboxItem.mock.calls[0];
+    expect(itemId).toBe("inbox-first");
+    expect(request).toMatchObject({
+      response_text: "Ship it",
+      outcome: "answered",
+    });
+    resolveSecond({ item: inboxItem("inbox-second", "Second item") });
+  });
+
+  it("leaves the item the reader moved to alone when the earlier answer lands", async () => {
+    coreClientMock.getInboxItem.mockImplementation((id) =>
+      Promise.resolve({
+        item: inboxItem(
+          id,
+          id === "inbox-first" ? "First item" : "Second item",
+          { response_proposals: ["Ship it"] },
+        ),
+      }),
+    );
+    coreClientMock.respondInboxItem.mockResolvedValue({
+      event: { id: "evt-1" },
+    });
+
+    const { getByRole, getByLabelText, findByRole } = render(InboxDetailPage);
+    await findByRole("heading", { name: "First item" });
+    await fireEvent.click(getByRole("button", { name: /Ship it/ }));
+    setInboxRoute("inbox-second");
+    await findByRole("heading", { name: "Second item" });
+    await fireEvent.input(getByLabelText("Your response"), {
+      target: { value: "typing on the second item" },
+    });
+    await new Promise((resolve) =>
+      setTimeout(resolve, PROPOSAL_FLASH_MS + 100),
+    );
+
+    await flushInboxResponse();
+    expect(coreClientMock.respondInboxItem.mock.calls[0][0]).toBe(
+      "inbox-first",
+    );
+    // The first item's answer must not clear the composer the reader is
+    // typing in, nor navigate them away from it.
+    expect(getByLabelText("Your response").value).toBe(
+      "typing on the second item",
+    );
+    expect(getByRole("heading", { name: "Second item" })).toBeTruthy();
   });
 });

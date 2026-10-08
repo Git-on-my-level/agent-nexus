@@ -454,24 +454,57 @@
   );
 
   /**
+   * The item a response belongs to, and the composer state that goes with it,
+   * as they are right now.
+   *
+   * A suggested response sends after a short flash, and the reader can switch
+   * to another item inside it. `loadItem` nulls `item` and resets the composer
+   * before the next one arrives, so a send that read this page's state at that
+   * moment answered nothing at all. The answer carries its own context
+   * instead; see `sendContext` on the respond panel.
+   */
+  function responseContext() {
+    return {
+      itemId: String(item?.id ?? ""),
+      item,
+      href: $page.url.pathname,
+      draft: responseDraft,
+      proposals: proposalStrings,
+      attachmentRefs: responseAttachmentRefs,
+      artifactsByRef: responseComposerArtifactsByRef,
+      notifyMode,
+      notifyTargetSelected,
+      notifyTargetActorID,
+      notifyTargetAgentID,
+      who:
+        notifyMode === "target"
+          ? notifyTargetLabel()
+          : notifyMode === "none"
+            ? ""
+            : requesterName(),
+    };
+  }
+
+  /**
    * Queues the response behind the undo toast and returns to the Inbox. The
    * committed request is this page's `inbox.respond` call, unchanged.
    */
   function submitResponseWithText(
     responseText,
-    { acknowledge = false, outcome = "answered" } = {},
+    { acknowledge = false, outcome = "answered", context = null } = {},
   ) {
-    if (!item) return;
+    const sending = context ?? responseContext();
+    if (!sending.itemId) return;
     const text = String(responseText ?? "").trim();
     if (!text) {
       submitError = "Response text is required.";
       return;
     }
-    const targetActorID = String(notifyTargetActorID ?? "").trim();
-    const targetAgentID = String(notifyTargetAgentID ?? "").trim();
+    const targetActorID = String(sending.notifyTargetActorID ?? "").trim();
+    const targetAgentID = String(sending.notifyTargetAgentID ?? "").trim();
     if (
       !acknowledge &&
-      notifyMode === "target" &&
+      sending.notifyMode === "target" &&
       !targetActorID &&
       !targetAgentID
     ) {
@@ -485,46 +518,47 @@
       : {
           response_text: text,
           outcome,
-          related_refs: responseAttachmentRefs,
-          notify_mode: notifyMode,
+          related_refs: sending.attachmentRefs,
+          notify_mode: sending.notifyMode,
           notify_target_actor_id:
-            notifyMode === "target" && targetActorID
+            sending.notifyMode === "target" && targetActorID
               ? targetActorID
               : undefined,
           notify_target_agent_id:
-            notifyMode === "target" && targetAgentID
+            sending.notifyMode === "target" && targetAgentID
               ? targetAgentID
               : undefined,
         };
-    const proposal = proposalStrings.includes(text) ? text : "";
-    const who =
-      notifyMode === "target"
-        ? notifyTargetLabel()
-        : notifyMode === "none"
-          ? ""
-          : requesterName();
+    const proposal = sending.proposals.includes(text) ? text : "";
     queueInboxResponse({
-      itemId: item.id,
-      item,
+      itemId: sending.itemId,
+      // The item that was answered, which is not necessarily the one on
+      // screen: the overlay files it under Handled, so it has to be the one
+      // the reader chose on.
+      item: sending.item,
       request,
       message: acknowledge
         ? "Acknowledged"
-        : who
-          ? `Sent to ${who}`
+        : sending.who
+          ? `Sent to ${sending.who}`
           : "Response recorded",
       restore: {
         origin: "item",
-        href: $page.url.pathname,
-        draft: acknowledge || proposal ? responseDraft : text,
+        href: sending.href,
+        draft: acknowledge || proposal ? sending.draft : text,
         chosen: proposal,
-        notifyMode,
-        notifyTargetSelected,
-        notifyTargetActorID,
-        notifyTargetAgentID,
-        attachmentRefs: responseAttachmentRefs,
-        artifactsByRef: responseComposerArtifactsByRef,
+        notifyMode: sending.notifyMode,
+        notifyTargetSelected: sending.notifyTargetSelected,
+        notifyTargetActorID: sending.notifyTargetActorID,
+        notifyTargetAgentID: sending.notifyTargetAgentID,
+        attachmentRefs: sending.attachmentRefs,
+        artifactsByRef: sending.artifactsByRef,
       },
     });
+    // Clearing the composer and leaving belong to the item that was answered.
+    // When the reader has already moved on, this page is showing something
+    // else and must be left exactly as they left it.
+    if (sending.itemId !== String(item?.id ?? "")) return;
     if (browser) localStorage.removeItem(draftStorageKey());
     responseDraft = "";
     chosen = "";
@@ -904,7 +938,9 @@
           placeholder="Write the response the agent should rely on."
           tall
           sendLabel="Send response"
-          onSend={(text, outcome) => submitResponseWithText(text, { outcome })}
+          sendContext={responseContext}
+          onSend={(text, outcome, context) =>
+            submitResponseWithText(text, { outcome, context })}
           onAcknowledge={accessRequest
             ? null
             : () =>

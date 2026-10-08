@@ -817,7 +817,16 @@
   function respondInbox(
     row,
     text,
-    { acknowledge = false, proposal = "", outcome = "answered" } = {},
+    {
+      acknowledge = false,
+      proposal = "",
+      outcome = "answered",
+      // The composer as it was when the reader chose. A suggestion sends
+      // after a short flash, and by then they may have moved to another row
+      // whose draft is not the one Undo has to hand back.
+      draft = reply,
+      from = mailbox,
+    } = {},
   ) {
     const item = row?.item;
     const body = String(text ?? "").trim();
@@ -827,7 +836,6 @@
       ? { response_text: body, outcome: "acknowledged", notify_mode: "none" }
       : { response_text: body, outcome, notify_mode: defaultNotifyMode(item) };
     const next = neighbourId(row.id);
-    const draft = reply;
     queueInboxResponse({
       itemId: item.id,
       item,
@@ -840,11 +848,14 @@
       restore: {
         origin: "pane",
         rowId: row.id,
-        mailbox,
+        mailbox: from,
         reply: acknowledge || proposal ? draft : body,
         chosen: proposal,
       },
     });
+    // Answering the row on screen moves on from it; answering one the reader
+    // has already left alone leaves their place where it is.
+    if (row.id !== selected?.id) return;
     reply = "";
     chosen = "";
     void select(next, { scroll: true });
@@ -1533,19 +1544,27 @@
                     bind:draft={reply}
                     {chosen}
                     {busy}
-                    onSend={(text, outcome, itemId) => {
+                    sendContext={() => ({
+                      id: selected.id,
+                      draft: reply,
+                      mailbox,
+                    })}
+                    onSend={(text, outcome, context) => {
                       /*
                        * The row the answer was chosen on, not whatever is on
                        * screen when it lands: a suggestion sends after a
                        * short flash, and the reader can move on inside it.
                        */
                       const row =
-                        rows.find((entry) => entry.id === itemId) || selected;
+                        rows.find((entry) => entry.id === context?.id) ||
+                        selected;
                       respondInbox(row, text, {
                         outcome,
                         proposal: row.responseProposals?.includes(text)
                           ? text
                           : "",
+                        draft: context?.draft ?? reply,
+                        from: context?.mailbox ?? mailbox,
                       });
                     }}
                     onAcknowledge={selected.access

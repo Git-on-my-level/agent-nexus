@@ -1,5 +1,5 @@
 <script>
-  import { onDestroy, tick } from "svelte";
+  import { onDestroy, tick, untrack } from "svelte";
 
   import {
     ACCESS_APPROVE_OUTCOME,
@@ -50,6 +50,17 @@
      * for their identity.
      */
     itemKey = "",
+    /**
+     * Everything the caller needs to answer the item the reader chose on,
+     * captured the moment they choose and handed back to `onSend`.
+     *
+     * A suggestion sends after a short flash, and the reader can move on
+     * inside it — by then the surface has loaded the next item and cleared
+     * its composer, so reading any of that at send time answers the wrong
+     * question or, as happened on the standalone page, nothing at all.
+     * Defaults to `itemKey`.
+     */
+    sendContext = null,
     draft = $bindable(""),
     chosen = "",
     busy = false,
@@ -75,8 +86,13 @@
   let proposalListEl = $state(null);
   /** The suggestion mid-flash. Also the guard against a double send. */
   let flashing = $state(-1);
-  /** The answer the flash is for, held until it goes out. */
-  let pending = null;
+  /**
+   * The answer the flash is for, held until it goes out — and, while it is
+   * set, the reason every other way of answering is held too: one ask takes
+   * one response, and a second enqueue commits the first early, past its own
+   * undo window, for core to reject as a duplicate.
+   */
+  let pending = $state(null);
   let flashTimer = null;
 
   /*
@@ -91,15 +107,34 @@
       (proposal) => String(proposal ?? "").trim() === restored,
     );
   });
+  /*
+   * What the highlight was last decided for. Plain variables: this is the
+   * effect's own bookkeeping, and making it reactive would feed back into the
+   * effect that writes it.
+   */
+  let decidedFor = null;
+  let decidedIndex = null;
   $effect(() => {
-    // Identity and the restored choice only: `proposals` is rebuilt on every
-    // live tick, and depending on the array itself would clear the highlight
-    // under a reader who is still deciding.
-    void itemKey;
+    const key = itemKey;
     const index = restoredIndex;
-    // The item changing mid-flash must not swallow the answer: send it for
-    // the item it was chosen on rather than dropping it silently.
-    flush();
+    /*
+     * Only a real change resets the reader's highlight. An effect re-runs for
+     * reasons that have nothing to do with the question on screen — a live
+     * refresh rebuilding the rows above us, a parent re-render — and each one
+     * used to clear a selection the reader was still looking at.
+     */
+    if (key === decidedFor && index === decidedIndex) return;
+    decidedFor = key;
+    decidedIndex = index;
+    /*
+     * The item changing mid-flash must not swallow the answer: send it for
+     * the item it was chosen on rather than dropping it silently.
+     *
+     * Untracked, because `flush` reads `pending` — and an effect that depends
+     * on `pending` re-runs the moment a choice sets it, which sends on the
+     * click and the flash never happens.
+     */
+    untrack(flush);
     armed = index;
   });
   onDestroy(flush);
@@ -122,7 +157,7 @@
     // Nothing stays selected once it is sent: a stray extra press of the same
     // key then re-selects rather than sending the same answer twice.
     armed = -1;
-    send(sending.proposal, "answered", sending.key);
+    send(sending.proposal, "answered", sending.context);
   }
 
   /** Flash the chosen option once, then send it. */
@@ -131,7 +166,7 @@
     if (!proposal || busy || pending) return;
     armed = index;
     flashing = index;
-    pending = { proposal, key: itemKey };
+    pending = { proposal, context: capture() };
     // Reduced motion keeps the confirmation, drops the animation and the wait.
     if (prefersReducedMotion()) {
       flush();
@@ -204,10 +239,25 @@
    * @param {string} [key] which item this answers, for a send that lands
    *   after the panel has moved on. Defaults to the one on screen.
    */
-  function send(text, outcome = "answered", key = itemKey) {
+  function send(text, outcome = "answered", context = capture()) {
     const body = String(text ?? "").trim();
-    if (!body || busy) return;
-    onSend?.(body, outcome, key);
+    if (!body || busy || pending) return;
+    onSend?.(body, outcome, context);
+  }
+
+  /** What the caller will need to answer this item, as it is right now. */
+  function capture() {
+    return sendContext ? sendContext() : itemKey;
+  }
+
+  /**
+   * Acknowledge goes out through the caller rather than `send`, so it needs
+   * the same guard: disabled is how a browser stops the click, and this is
+   * what stops everything else.
+   */
+  function acknowledge() {
+    if (busy || pending) return;
+    onAcknowledge?.();
   }
 
   async function startConfirm() {
@@ -253,7 +303,7 @@
             <button
               class="ui-btn-primary"
               type="button"
-              disabled={busy}
+              disabled={busy || Boolean(pending)}
               onclick={() =>
                 decide(
                   confirmingRequestId,
@@ -274,13 +324,13 @@
           <button
             class="ui-btn-secondary"
             type="button"
-            disabled={busy}
+            disabled={busy || Boolean(pending)}
             onclick={startConfirm}>Approve…</button
           >
           <button
             class="ui-btn-secondary"
             type="button"
-            disabled={busy}
+            disabled={busy || Boolean(pending)}
             onclick={() =>
               decide(
                 access?.requestId,
@@ -295,17 +345,19 @@
       </p>
     </div>
   {:else if isReview}
+    <!-- Held while a suggestion is on its way out: one ask takes one
+         response, and the second would commit the first early. -->
     <div class="flex flex-wrap gap-2">
       <button
         class="ui-btn-secondary"
         type="button"
-        disabled={busy}
+        disabled={busy || Boolean(pending)}
         onclick={() => send("Approved.", "approved")}>Approve</button
       >
       <button
         class="ui-btn-secondary"
         type="button"
-        disabled={busy}
+        disabled={busy || Boolean(pending)}
         onclick={() => send("Rejected.", "rejected")}>Reject</button
       >
     </div>
@@ -387,7 +439,7 @@
         <button
           class="ui-btn-primary"
           type="submit"
-          disabled={busy || !draft.trim() || flashing >= 0}
+          disabled={busy || !draft.trim() || Boolean(pending)}
           title={`${sendLabel} (${formatShortcut("Enter")})`}
           >{sendLabel}</button
         >
@@ -395,11 +447,11 @@
           <button
             class="ui-btn-secondary"
             type="button"
-            disabled={busy || flashing >= 0}
+            disabled={busy || Boolean(pending)}
             data-inbox-shortcut="done"
             aria-keyshortcuts="E"
             title="Acknowledge (E)"
-            onclick={() => onAcknowledge()}>Acknowledge</button
+            onclick={acknowledge}>Acknowledge</button
           >
         {/if}
         {@render after?.()}
