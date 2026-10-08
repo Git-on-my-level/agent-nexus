@@ -125,6 +125,8 @@
   let askDetailLoading = $state(false);
   /** The evidence document open in the side sheet, or "". */
   let docPanelRef = $state("");
+  /** Titles the side sheet has already read, so an evidence row is not an id. */
+  let docTitles = $state({});
   /* An answered item that was sent back for context rather than answered. */
   let sentBack = $derived(
     String(item?.outcome ?? "") === NEEDS_CONTEXT_OUTCOME,
@@ -325,6 +327,7 @@
     askDetail = null;
     askDetailLoading = false;
     docPanelRef = "";
+    docTitles = {};
   }
 
   function handleNotifyTargetInput(event) {
@@ -528,7 +531,10 @@
     if (!ref.startsWith("event:")) return null;
     return {
       ref,
-      href: `${workspaceHref("/events")}?q=${encodeURIComponent(ref)}`,
+      // The event search matches a bare id, not an `event:<id>` ref.
+      href: `${workspaceHref("/events")}?q=${encodeURIComponent(
+        ref.slice("event:".length),
+      )}`,
     };
   });
 
@@ -896,8 +902,8 @@
         />
         {#if askDelivery?.isStale && !isCompleted}
           <p class="text-micro text-fg-muted" data-inbox-ask-stale>
-            The task behind this ask has not changed in a while, so the Inbox
-            folds it under Stale. It is still answerable.
+            The task behind this ask has not changed since it was asked. It is
+            still answerable.
           </p>
         {/if}
         {#if supersedesLink}
@@ -925,7 +931,9 @@
           evidence={askEvidence}
           hrefFor={refHref}
           labelFor={(ref) =>
-            ref === subject?.ref ? String(subject?.title ?? "") : ""}
+            (ref === subject?.ref ? String(subject?.title ?? "") : "") ||
+            docTitles[ref] ||
+            ""}
           onOpenDoc={(ref) => (docPanelRef = docPanelRef === ref ? "" : ref)}
           openDocRef={docPanelRef}
         />
@@ -1334,6 +1342,7 @@
     ref={docPanelRef}
     hrefFor={refHref}
     onClose={() => (docPanelRef = "")}
+    onTitle={(ref, docTitle) => (docTitles = { ...docTitles, [ref]: docTitle })}
     {organizationSlug}
     {workspaceSlug}
     variant="sheet"

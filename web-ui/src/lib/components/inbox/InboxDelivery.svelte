@@ -42,6 +42,9 @@
     {#if task}
       <div class="space-y-1">
         <p class="ui-label">Task</p>
+        <!-- A context request clears the blocker too, so `task.label` reads
+             "Returned for context" rather than "Unblocked": the ask was not
+             answered, and the header above already says so. -->
         {#if taskSummary}
           <!-- The same renderer the Tasks table and the board use, so Handled
                cannot describe the task differently from the task list. -->

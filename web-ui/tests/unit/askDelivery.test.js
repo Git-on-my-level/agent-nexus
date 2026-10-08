@@ -5,6 +5,7 @@ import {
   askEvidenceModel,
   askIsStale,
   askRefForInboxItem,
+  deliveryReasonText,
   deliveryRowModel,
   isInboxResponseOutcome,
   linkifyAskEvidence,
@@ -72,7 +73,7 @@ describe("delivery state mapping", () => {
           label: "release bot",
           state: "failed",
           attempts: 5,
-          reason: "502 from endpoint",
+          reason: "dead_letter: retry_limit",
           last_at: "2026-10-09T10:00:00.000Z",
         },
         { now: NOW },
@@ -84,7 +85,7 @@ describe("delivery state mapping", () => {
       tone: "danger",
       failed: true,
       attempts: 5,
-      reason: "502 from endpoint",
+      reason: "Gave up after the attempt limit",
       ageLabel: "2h",
     });
     expect(
@@ -113,9 +114,41 @@ describe("delivery state mapping", () => {
     expect(row.kindLabel).toBe("carrier-pigeon");
     expect(subscriptionKindLabel("")).toBe("Subscription");
   });
+
+  it("does not answer a prototype key with a function", () => {
+    // `state: "constructor"` used to resolve to Object and render a blank badge.
+    expect(deliveryRowModel({ state: "constructor" }).stateLabel).toBe(
+      "constructor",
+    );
+    expect(subscriptionKindLabel("constructor")).toBe("constructor");
+    expect(deliveryReasonText("toString")).toBe("toString");
+  });
+
+  it("turns each of core's reason tokens into a sentence", () => {
+    for (const [token, expected] of [
+      ["recipient_inactive", "The subscribing agent is no longer active"],
+      ["endpoint_blocked", "The endpoint address is not allowed"],
+      ["transport_failed", "The endpoint could not be reached"],
+      ["dead_letter: invalid_endpoint", "The endpoint URL is not usable"],
+    ]) {
+      expect(deliveryReasonText(token)).toBe(expected);
+    }
+    // A token this list has never seen is shown, not hidden.
+    expect(deliveryReasonText("something_new")).toBe("something_new");
+    expect(deliveryReasonText("")).toBe("");
+  });
 });
 
 describe("task outcome", () => {
+  it("names a context request rather than calling the task answered", () => {
+    expect(
+      taskOutcomeModel(
+        { card_ref: "card:anx-7", phase: "ready", next_actor: "codex" },
+        { status: "needs_context" },
+      ).label,
+    ).toBe("Returned for context · next: codex");
+  });
+
   it("reads unblocked, closed and source-owned from core's record", () => {
     expect(
       taskOutcomeModel(
@@ -160,7 +193,6 @@ describe("ask delivery model", () => {
     expect(model.notDelivered).toBe(
       "Not delivered: no subscriber; task unblocked for Dana.",
     );
-    expect(model.anyFailed).toBe(false);
     expect(model.subscriptions).toEqual([]);
   });
 
@@ -171,6 +203,22 @@ describe("ask delivery model", () => {
     });
     expect(model.notDelivered).toBe(
       "Not delivered: no subscriber; the task was closed.",
+    );
+  });
+
+  it("says nothing about a task when core recorded no task outcome", () => {
+    // An access-grant decision, a legacy non-card ask and every answer older
+    // than ask delivery all arrive without one. "The task was unblocked" there
+    // asserts a task that does not exist.
+    const model = askDeliveryModel({
+      ask_id: "event:ask-1",
+      status: "answered",
+      is_stale: false,
+      delivery: [],
+    });
+    expect(model.task).toBeNull();
+    expect(model.notDelivered).toBe(
+      "Not delivered: no subscriber was registered.",
     );
   });
 
@@ -196,8 +244,10 @@ describe("ask delivery model", () => {
       "Live await",
       "Host bridge",
     ]);
-    expect(model.anyDelivered).toBe(true);
-    expect(model.anyFailed).toBe(true);
+    expect(model.subscriptions[1]).toMatchObject({
+      failed: true,
+      tone: "danger",
+    });
   });
 
   it("leaves an open ask without a delivery verdict", () => {
@@ -216,6 +266,13 @@ describe("ask delivery model", () => {
     expect(
       askDeliveryModel({ status: "needs_context", delivery: [] }).needsContext,
     ).toBe(true);
+  });
+
+  it("renders an evidence noun for a prototype-shaped ref prefix", () => {
+    expect(
+      askEvidenceModel({ item: { related_refs: ["constructor:x"] } }).refs[0]
+        .noun,
+    ).toBe("constructor");
   });
 
   it("returns nothing for a read that produced nothing", () => {
@@ -367,6 +424,11 @@ describe("stale asks and context requests in the Inbox list", () => {
     ...overrides,
   });
 
+  /*
+   * `is_stale` is contract-shaped but core computes it per ask and does not put
+   * it on an inbox row today, so these assert the fold for a core that does —
+   * forward compatibility, not current server behaviour. See the issue.
+   */
   it("marks an ask core called stale, and only while it is open", () => {
     expect(askIsStale({ is_stale: true })).toBe(true);
     expect(askIsStale({})).toBe(false);

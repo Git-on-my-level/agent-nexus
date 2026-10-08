@@ -70,23 +70,69 @@ export function askIsStale(item) {
   return item?.is_stale === true;
 }
 
-const SUBSCRIPTION_KIND_LABELS = Object.freeze({
-  await: "Live await",
-  bridge: "Host bridge",
-  webhook: "Webhook",
-});
+/*
+ * Lookup tables with no prototype: these are keyed by strings core sends, and
+ * an ordinary object would answer `constructor` with a function, which then
+ * renders as `function Object() { [native code] }` instead of core's own word.
+ */
+const SUBSCRIPTION_KIND_LABELS = Object.freeze(
+  Object.assign(Object.create(null), {
+    await: "Live await",
+    bridge: "Host bridge",
+    webhook: "Webhook",
+  }),
+);
 
-const DELIVERY_STATE_PRESENTATION = Object.freeze({
-  delivered: { label: "Delivered", tone: "ok" },
-  pending: { label: "Pending", tone: "neutral" },
-  failed: { label: "Failed", tone: "danger" },
-  none: { label: "Not delivered", tone: "neutral" },
-});
+const DELIVERY_STATE_PRESENTATION = Object.freeze(
+  Object.assign(Object.create(null), {
+    delivered: { label: "Delivered", tone: "ok" },
+    pending: { label: "Pending", tone: "neutral" },
+    failed: { label: "Failed", tone: "danger" },
+    none: { label: "Not delivered", tone: "neutral" },
+  }),
+);
+
+/*
+ * Core records why a delivery stopped as a fixed token, which is the right
+ * thing to store and the wrong thing to show an operator: `dead_letter:
+ * retry_limit` and `endpoint_blocked` are engineer words. These are the tokens
+ * `askWebhooks` writes; a token this list has never seen falls through to
+ * core's own text rather than being hidden.
+ */
+const DELIVERY_REASONS = Object.freeze(
+  Object.assign(Object.create(null), {
+    retry_limit: "Gave up after the attempt limit",
+    recipient_inactive: "The subscribing agent is no longer active",
+    response_not_accessible:
+      "The answer is no longer readable by the subscriber",
+    payload_too_large: "The answer is too large to send",
+    endpoint_blocked: "The endpoint address is not allowed",
+    secret_unavailable: "The signing secret could not be read",
+    invalid_endpoint: "The endpoint URL is not usable",
+    transport_failed: "The endpoint could not be reached",
+  }),
+);
 
 /** Operator words for a subscription kind; an unknown kind keeps core's word. */
 export function subscriptionKindLabel(kind) {
   const key = asText(kind);
   return SUBSCRIPTION_KIND_LABELS[key] ?? (key || "Subscription");
+}
+
+/**
+ * Core's delivery reason as a sentence.
+ *
+ * A dead-lettered delivery arrives as `dead_letter: <token>`; the prefix says
+ * it will not be retried, which the state already says, so the token is what
+ * carries the information.
+ */
+export function deliveryReasonText(reason) {
+  const raw = asText(reason);
+  if (!raw) return "";
+  const token = raw.startsWith("dead_letter:")
+    ? raw.slice("dead_letter:".length).trim()
+    : raw;
+  return DELIVERY_REASONS[token] ?? raw;
 }
 
 /**
@@ -108,7 +154,6 @@ export function deliveryRowModel(delivery, { now = Date.now() } = {}) {
   const attempts = Number(delivery?.attempts);
   return {
     id: asText(delivery?.id),
-    kind: asText(delivery?.kind),
     kindLabel: subscriptionKindLabel(delivery?.kind),
     label: asText(delivery?.label),
     state,
@@ -116,9 +161,8 @@ export function deliveryRowModel(delivery, { now = Date.now() } = {}) {
     tone: presentation.tone,
     failed: state === "failed",
     attempts: Number.isFinite(attempts) && attempts > 0 ? attempts : 0,
-    lastAt,
     ageLabel: lastAt ? formatAge(lastAt, now) : "",
-    reason: asText(delivery?.reason),
+    reason: deliveryReasonText(delivery?.reason),
   };
 }
 
@@ -132,8 +176,15 @@ const CLOSED_PHASES = new Set(["done", "cancelled"]);
  * the card ended up, `next_actor` is who owns it now, and `reason`
  * `source_owned` means an external source owns the phase and core left it
  * alone.
+ *
+ * A context request clears the blocker too, so the phase moves — but calling
+ * that "Unblocked" next to a header that says the ask was not answered reads
+ * as though it had been. `status` is what tells the two apart.
  */
-export function taskOutcomeModel(taskOutcome, { nextActorLabel = "" } = {}) {
+export function taskOutcomeModel(
+  taskOutcome,
+  { nextActorLabel = "", status = "" } = {},
+) {
   if (!taskOutcome || typeof taskOutcome !== "object") return null;
   const ref = asText(taskOutcome.card_ref);
   const phase = asText(taskOutcome.phase);
@@ -142,15 +193,16 @@ export function taskOutcomeModel(taskOutcome, { nextActorLabel = "" } = {}) {
   if (!ref && !phase && !nextActor) return null;
   const who = asText(nextActorLabel) || nextActor;
   const closed = CLOSED_PHASES.has(phase);
+  const next = who ? ` · next: ${who}` : "";
   let label = "";
   if (closed) {
     label = "Closed";
+  } else if (asText(status) === NEEDS_CONTEXT_OUTCOME) {
+    label = `Returned for context${next}`;
   } else if (reason === "source_owned") {
-    label = who
-      ? `Phase unchanged (source owns it) · next: ${who}`
-      : "Phase unchanged (source owns it)";
+    label = `Phase unchanged (source owns it)${next}`;
   } else {
-    label = who ? `Unblocked · next: ${who}` : "Unblocked";
+    label = `Unblocked${next}`;
   }
   return { ref, phase, nextActor, nextActorLabel: who, reason, closed, label };
 }
@@ -162,6 +214,11 @@ export function taskOutcomeModel(taskOutcome, { nextActorLabel = "" } = {}) {
  * nobody subscribed, so nothing was sent, and the task moved anyway. That is
  * how an unattended agent is meant to work, not a failure, and it says so in
  * words instead of wearing a warning.
+ *
+ * Where there is no task outcome at all the sentence says nothing about a task.
+ * Core returns none for an access-grant decision, for a legacy non-card ask,
+ * and for every answer recorded before #336 — and "the task was unblocked"
+ * about a task that does not exist is a confident wrong answer.
  */
 export function askDeliveryModel(
   outcome,
@@ -169,7 +226,10 @@ export function askDeliveryModel(
 ) {
   if (!outcome || typeof outcome !== "object") return null;
   const status = asText(outcome.status) || "open";
-  const task = taskOutcomeModel(outcome.task_outcome, { nextActorLabel });
+  const task = taskOutcomeModel(outcome.task_outcome, {
+    nextActorLabel,
+    status,
+  });
   const subscriptions = (
     Array.isArray(outcome.delivery) ? outcome.delivery : []
   )
@@ -179,22 +239,23 @@ export function askDeliveryModel(
   const owner = task?.nextActorLabel || "";
   let notDelivered = null;
   if (answered && subscriptions.length === 0) {
-    notDelivered = task?.closed
-      ? "Not delivered: no subscriber; the task was closed."
-      : owner
-        ? `Not delivered: no subscriber; task unblocked for ${owner}.`
-        : "Not delivered: no subscriber; the task was unblocked.";
+    if (!task) {
+      notDelivered = "Not delivered: no subscriber was registered.";
+    } else if (task.closed) {
+      notDelivered = "Not delivered: no subscriber; the task was closed.";
+    } else if (owner) {
+      notDelivered = `Not delivered: no subscriber; task unblocked for ${owner}.`;
+    } else {
+      notDelivered = "Not delivered: no subscriber; the task was unblocked.";
+    }
   }
   return {
-    askRef: asText(outcome.ask_id),
     status,
     isStale: outcome.is_stale === true,
     needsContext: status === NEEDS_CONTEXT_OUTCOME,
     task,
     subscriptions,
     notDelivered,
-    anyDelivered: subscriptions.some((entry) => entry.state === "delivered"),
-    anyFailed: subscriptions.some((entry) => entry.failed),
   };
 }
 
@@ -320,15 +381,21 @@ const PROTECTED_SPANS =
  * stays code.
  */
 const BODY_TOKENS =
-  /\b(doc|document|card|task|topic)(\s+)(["'`])([^"'`\n]+)\3|`[^`\n]*`|\bPR\s*#?\d+\b/gi;
+  /\b(doc|document|card|topic)([ \t]+)(["`])([^"`\n]+)\3|`[^`\n]*`|\bPR[ \t]*#?\d+\b/gi;
 
-const REF_PREFIX_WORDS = Object.freeze({
-  doc: "document",
-  document: "document",
-  card: "card",
-  task: "card",
-  topic: "topic",
-});
+/*
+ * The same words and quoting the CLI's authoring lint recognises
+ * (`cli/internal/app/ask_authoring.go`), so "a named resource" means one thing
+ * on both sides. Prototype-free for the same reason as the tables above.
+ */
+const REF_PREFIX_WORDS = Object.freeze(
+  Object.assign(Object.create(null), {
+    doc: "document",
+    document: "document",
+    card: "card",
+    topic: "topic",
+  }),
+);
 
 function replaceOutsideProtectedSpans(source, replace) {
   let out = "";

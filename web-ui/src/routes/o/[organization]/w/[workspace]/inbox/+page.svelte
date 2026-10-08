@@ -377,23 +377,33 @@
   let askDetail = $state(null);
   let askDetailFor = $state("");
   let askDetailLoading = $state(false);
+  /*
+   * Tracked, not untracked: a `?item=` deep link selects a row before the first
+   * page of rows has arrived, so the first run has no row to read. The ask ref
+   * is what has to be a dependency — `selectedId` does not change when the row
+   * behind it finally loads, and an effect that only watched it never issued
+   * the read at all. This is the Overview's own link into an ask.
+   */
+  let selectedAskRef = $derived(
+    selected?.kind === "inbox" ? askRefForInboxItem(selected.item) : "",
+  );
   $effect(() => {
+    const askRef = selectedAskRef;
     const id = selectedId;
     void contextEpoch;
-    const row = untrack(() => selected);
-    const askRef = row?.kind === "inbox" ? askRefForInboxItem(row.item) : "";
     if (!askRef) {
       askDetail = null;
       askDetailFor = "";
       askDetailLoading = false;
       return;
     }
+    const item = untrack(() => selected?.item);
     if (askDetailFor !== id) {
       askDetail = null;
       askDetailFor = id;
     }
     askDetailLoading = true;
-    void loadAskDetail(row.item).then(
+    void loadAskDetail(item).then(
       (value) => {
         if (askDetailFor !== id) return;
         askDetail = value;
@@ -438,11 +448,14 @@
     const earlier = rows.find(
       (row) => row.kind === "inbox" && askRefForInboxItem(row.item) === ref,
     );
+    // The event search matches a bare id; `event:<id>` is a ref, not an id, and
+    // matched nothing.
+    const eventId = ref.slice("event:".length);
     return {
       ref,
       href: earlier
         ? href({ item: earlier.id })
-        : `${workspaceHref("/events")}?q=${encodeURIComponent(ref)}`,
+        : `${workspaceHref("/events")}?q=${encodeURIComponent(eventId)}`,
       label: earlier?.title || ref,
     };
   });
@@ -452,6 +465,12 @@
   );
   /** The evidence document open in the side panel, or "". */
   let docPanelRef = $state("");
+  /*
+   * Titles the side panel has already read. A document is never in `work`, so
+   * without this its evidence row shows a bare id; the panel reads the title
+   * anyway, and handing it back costs no request.
+   */
+  let docTitles = $state({});
   $effect(() => {
     // A document opened as one item's evidence is not the next item's.
     void selectedId;
@@ -1282,6 +1301,11 @@
       },
     });
     const stopCommitted = onInboxResponseCommitted((itemId) => {
+      // The Handled row this becomes is the same ask, so its cached pre-answer
+      // outcome has to go even when the live stream is down.
+      invalidateAskDetail(
+        inboxItems.find((item) => item.id === itemId) ?? null,
+      );
       // Keep the server-confirmed answer beyond the temporary overlay, until
       // complete histories replace it. Retained work must stay suppressed too.
       const answered = applyResponseOverlay(
@@ -1805,9 +1829,13 @@
                   presenceActorId={selected.requester?.id || ""}
                 />
                 {#if askDelivery?.isStale && needsResponse}
+                  <!-- From the ask read, which is the only thing that knows:
+                       core computes staleness per ask, and does not put it on
+                       the row. So this says what it measured, not where the
+                       row ended up. -->
                   <p class="text-micro text-fg-muted" data-inbox-ask-stale>
-                    The task behind this ask has not changed in a while, so it
-                    is folded under Stale. It is still answerable.
+                    The task behind this ask has not changed since it was asked.
+                    It is still answerable.
                   </p>
                 {/if}
                 {#if supersedesLink}
@@ -1833,7 +1861,9 @@
                   evidence={askEvidence}
                   hrefFor={refHref}
                   labelFor={(ref) =>
-                    work.find((item) => workKey(item) === ref)?.title || ""}
+                    work.find((item) => workKey(item) === ref)?.title ||
+                    docTitles[ref] ||
+                    ""}
                   onOpenDoc={(ref) =>
                     (docPanelRef = docPanelRef === ref ? "" : ref)}
                   openDocRef={docPanelRef}
@@ -2143,6 +2173,8 @@
           ref={docPanelRef}
           hrefFor={refHref}
           onClose={() => (docPanelRef = "")}
+          onTitle={(ref, docTitle) =>
+            (docTitles = { ...docTitles, [ref]: docTitle })}
           organizationSlug={$page.params.organization}
           workspaceSlug={$page.params.workspace}
         />

@@ -1,5 +1,12 @@
+import { get } from "svelte/store";
 import { coreClient } from "$lib/coreClient";
 import { askRefForInboxItem } from "$lib/askDelivery.js";
+import { authenticatedAgent } from "$lib/authSession.js";
+import { selectedActorId } from "$lib/actorSession.js";
+import {
+  currentOrganizationSlug,
+  currentWorkspaceSlug,
+} from "$lib/workspaceContext.js";
 
 /**
  * The ask behind one inbox item: its durable outcome and its own event.
@@ -15,19 +22,49 @@ import { askRefForInboxItem } from "$lib/askDelivery.js";
  * `payload.supersedes` are not projected onto the inbox row. A refused or
  * missing read is not an error here: the panel falls back to the row's own
  * `related_refs`, which already merge the event's native refs.
+ *
+ * ## What a cached read belongs to
+ *
+ * Core applies the caller's resource access on every statement of these reads,
+ * so a cached result belongs to the reader and workspace it was read for and to
+ * nobody else. The cache is keyed by that identity and dropped when it changes,
+ * the same scope `inboxResponseQueue` keeps for a response in flight. Within
+ * one identity a read is only good for as long as it is plausibly current:
+ * delivery state moves on its own (a webhook retries, a bridge acknowledges),
+ * and answering an ask replaces its outcome outright.
  */
 
-/*
- * Delivery state moves on its own — a webhook retries, a bridge acknowledges —
- * so a cached read is only good for as long as it is plausibly current. The
- * Inbox pane drops the whole cache on every live refresh; this bound is what
- * keeps the standalone item page, which has no such signal, from showing one
- * read for the life of the tab.
- */
 const CACHE_TTL_MS = 30_000;
 
 /** @type {Map<string, { at: number, promise: Promise<object> }>} */
 const cache = new Map();
+
+let scopeIdentity = "";
+
+/**
+ * The reader and workspace a cached read belongs to. Read at call time rather
+ * than subscribed: a store subscription here would run during module load in
+ * every context that imports this file, and the only thing it would buy is
+ * dropping the cache a moment earlier than the next read does.
+ */
+function currentScope() {
+  const agent = get(authenticatedAgent);
+  return JSON.stringify([
+    get(currentOrganizationSlug),
+    get(currentWorkspaceSlug),
+    agent?.agent_id || "",
+    agent?.actor_id || get(selectedActorId) || "",
+  ]);
+}
+
+function cacheForCurrentScope() {
+  const identity = currentScope();
+  if (identity !== scopeIdentity) {
+    scopeIdentity = identity;
+    cache.clear();
+  }
+  return cache;
+}
 
 function eventIdFromRef(ref) {
   const raw = String(ref ?? "").trim();
@@ -44,7 +81,8 @@ export function loadAskDetail(item, { client = coreClient } = {}) {
   if (!askRef) {
     return Promise.resolve({ askRef: "", outcome: null, event: null });
   }
-  const cached = cache.get(askRef);
+  const scoped = cacheForCurrentScope();
+  const cached = scoped.get(askRef);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.promise;
   const promise = (async () => {
     const [outcome, event] = await Promise.all([
@@ -60,11 +98,11 @@ export function loadAskDetail(item, { client = coreClient } = {}) {
     return { askRef, outcome, event };
   })();
   const entry = { at: Date.now(), promise };
-  cache.set(askRef, entry);
+  scoped.set(askRef, entry);
   // A read that returned nothing is retried on the next selection rather than
   // waiting out the window: both calls can fail for reasons that pass (a
   // dropped connection). Only this entry is dropped — a newer one may have
-  // replaced it while this read was in flight.
+  // replaced it, or the scope may have changed, while this read was in flight.
   const forget = () => {
     if (cache.get(askRef) === entry) cache.delete(askRef);
   };
@@ -74,7 +112,24 @@ export function loadAskDetail(item, { client = coreClient } = {}) {
   return promise;
 }
 
-/** Drops cached ask reads so the next selection sees new delivery state. */
-export function invalidateAskDetail() {
+/**
+ * Drops cached ask reads so the next selection sees new delivery state.
+ *
+ * With an inbox item, drops only that ask — what an answer invalidates is the
+ * ask it answered. The open row and the Handled row it becomes are the same
+ * ask, so without this the Handled row could show the pre-answer outcome.
+ */
+export function invalidateAskDetail(item = null) {
+  if (!item) {
+    cache.clear();
+    return;
+  }
+  const askRef = askRefForInboxItem(item);
+  if (askRef) cache.delete(askRef);
+}
+
+/** Test hook: forget every cached read and the identity it was read for. */
+export function resetAskDetailCache() {
   cache.clear();
+  scopeIdentity = "";
 }

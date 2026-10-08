@@ -23,6 +23,8 @@
     /** `(ref) => href` for the full document page. */
     hrefFor = () => "",
     onClose = null,
+    /** `(ref, title)` once the title is read, so the evidence row can use it. */
+    onTitle = null,
     organizationSlug = "",
     workspaceSlug = "",
     /**
@@ -104,6 +106,8 @@
         loadedRef = target;
         loading = false;
         if (!doc) error = "This document could not be read.";
+        const read = String(doc?.title ?? "").trim();
+        if (read) onTitle?.(target, read);
       },
       () => {
         if (ticket !== sequence) return;

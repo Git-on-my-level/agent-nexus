@@ -158,6 +158,23 @@ const NO_SUBSCRIBER = {
   responding_actor_id: ACTOR_ID,
 };
 
+const NO_TASK = {
+  id: "completed:resp-grant",
+  status: "completed",
+  inbox_item_id: "inbox-grant",
+  kind: "review",
+  title: "Grant auth-admin to worker",
+  thread_id: "thread-grant",
+  subject_ref: "thread:thread-grant",
+  related_refs: ["thread:thread-grant"],
+  request_event_ref: "event:ask-grant",
+  response_event_ref: "event:resp-grant",
+  response_text: "Approved auth-admin.",
+  outcome: "approved",
+  responded_at: new Date(Date.now() - 900_000).toISOString(),
+  responding_actor_id: ACTOR_ID,
+};
+
 const ASK_OUTCOMES = {
   "event:ask-evidence": {
     ask_id: "event:ask-evidence",
@@ -217,10 +234,19 @@ const ASK_OUTCOMES = {
         label: "release notifier",
         state: "failed",
         attempts: 5,
-        reason: "502 from endpoint",
+        // The token core actually writes, not a plausible-looking sentence.
+        reason: "dead_letter: retry_limit",
         last_at: new Date(Date.now() - 2_000_000).toISOString(),
       },
     ],
+  },
+  // An access-grant decision has no card, so core records no task outcome.
+  "event:ask-grant": {
+    ask_id: "event:ask-grant",
+    status: "answered",
+    subject_ref: "thread:thread-grant",
+    is_stale: false,
+    delivery: [],
   },
   "event:ask-none": {
     ask_id: "event:ask-none",
@@ -263,7 +289,12 @@ const ASK_EVENTS = {
 };
 
 async function setupInbox(page, { open = [], completed = [] } = {}) {
-  const state = { respondBodies: [], openItems: [...open] };
+  const state = {
+    respondBodies: [],
+    openItems: [...open],
+    asksRead: new Set(),
+    eventsRead: new Set(),
+  };
 
   await page.addInitScript((actorId) => {
     window.localStorage.setItem("anx_ui_actor_id:local", actorId);
@@ -305,12 +336,14 @@ async function setupInbox(page, { open = [], completed = [] } = {}) {
   }
 
   await page.route(isEventUrl, (route, request) => {
+    state.eventsRead.add(singleSegment(request.url(), "/events/"));
     const id = singleSegment(request.url(), "/events/");
     const event = ASK_EVENTS[id];
     return event ? json(route, { event }) : json(route, { error: "nope" }, 404);
   });
 
   await page.route(isAskUrl, (route, request) => {
+    state.asksRead.add(singleSegment(request.url(), "/asks/"));
     const ref = singleSegment(request.url(), "/asks/");
     const outcome = ASK_OUTCOMES[ref];
     return outcome ? json(route, outcome) : json(route, { error: "nope" }, 404);
@@ -483,7 +516,7 @@ test("Handled names the task outcome and every delivery state", async ({
   const hookRow = delivery.locator("[data-inbox-delivery-row='sub_hook']");
   await expect(hookRow).toContainText("Webhook");
   await expect(hookRow).toContainText("Failed");
-  await expect(hookRow).toContainText("502 from endpoint");
+  await expect(hookRow).toContainText("Gave up after the attempt limit");
   await expect(hookRow).toContainText("5 attempts");
   // A failed delivery offers no retry: only the subscriber may record one.
   await expect(delivery.getByRole("button", { name: /retry/i })).toHaveCount(0);
@@ -494,6 +527,76 @@ test("Handled names the task outcome and every delivery state", async ({
   );
 });
 
+test("an answer with no task outcome does not claim a task moved", async ({
+  page,
+}) => {
+  await setupInbox(page, { completed: [NO_TASK] });
+  await page.goto("/o/local/w/local/inbox?mailbox=handled");
+
+  await page.getByTestId(`inbox-row-${NO_TASK.id}`).click();
+  await expect(page.locator("[data-inbox-delivery-none]")).toHaveText(
+    "Not delivered: no subscriber was registered.",
+  );
+  // There is no card behind an access-grant decision, so there is no Task row
+  // and nothing says a task was unblocked.
+  await expect(page.locator("[data-inbox-task-outcome]")).toHaveCount(0);
+});
+
+test("the Handled list costs the page, not its rows", async ({ page }) => {
+  const state = await setupInbox(page, {
+    completed: [DELIVERED, NO_SUBSCRIBER, NO_TASK],
+  });
+  await page.goto("/o/local/w/local/inbox?mailbox=handled");
+  await expect(page.getByTestId(`inbox-row-${DELIVERED.id}`)).toBeVisible();
+  await expect(page.getByTestId(`inbox-row-${NO_TASK.id}`)).toBeVisible();
+
+  // Listing three answered items reads one ask: the one the pane selected.
+  /*
+   * Which asks were read is the property that matters, not how many times: a
+   * live refresh legitimately re-reads the selected ask for fresh delivery
+   * state. Listing three answered items must read exactly the one the pane
+   * selected — never one per row.
+   */
+  await expect.poll(() => state.asksRead.size).toBe(1);
+  expect(state.eventsRead.size).toBe(1);
+
+  await page.getByTestId(`inbox-row-${DELIVERED.id}`).click();
+  await expect(
+    page.locator("[data-inbox-delivery-row='sub_await']"),
+  ).toBeVisible();
+  await page.getByTestId(`inbox-row-${NO_SUBSCRIBER.id}`).click();
+  await expect(page.locator("[data-inbox-delivery-none]")).toBeVisible();
+
+  // Two more selections, two more asks — and only the ones selected.
+  await expect.poll(() => state.asksRead.size).toBe(3);
+  expect([...state.asksRead].sort()).toEqual([
+    "event:ask-del",
+    "event:ask-grant",
+    "event:ask-none",
+  ]);
+});
+
+test("a deep link into an ask loads its evidence", async ({ page }) => {
+  // The Overview links readers straight at `?item=`, which selects a row before
+  // the first page of rows has arrived.
+  await setupInbox(page, { open: [EVIDENCE_ASK] });
+  await page.goto(
+    `/o/local/w/local/inbox?item=${encodeURIComponent(`inbox:${EVIDENCE_ASK.id}`)}`,
+  );
+
+  await expect(page.locator("[data-inbox-evidence]")).toBeVisible();
+  await expect(
+    page.locator(
+      "[data-inbox-evidence-link='https://example.org/repo/pull/123']",
+    ),
+  ).toContainText("Rollout change");
+});
+
+/*
+ * `is_stale` is contract-shaped but core computes it per ask and does not put it
+ * on an inbox row today, so this asserts the fold for a core that does —
+ * forward compatibility, not current server behaviour. See the issue.
+ */
 test("a stale ask folds into the Stale group", async ({ page }) => {
   await setupInbox(page, { open: [EVIDENCE_ASK, STALE_ASK] });
   await page.goto("/o/local/w/local/inbox");
