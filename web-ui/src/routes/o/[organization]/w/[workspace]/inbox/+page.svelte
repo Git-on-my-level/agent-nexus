@@ -1009,7 +1009,15 @@
         scheduleLiveRefresh();
       },
     });
-    const stopCommitted = onInboxResponseCommitted(() => scheduleLiveRefresh());
+    const stopCommitted = onInboxResponseCommitted((itemId) => {
+      // The server confirmed this answer. Do not keep its old open snapshot
+      // if both refresh feeds fail beyond the temporary response overlay.
+      // Invalidate reads begun before the commit so they cannot restore it.
+      requestId++;
+      openInboxItems = openInboxItems.filter((item) => item.id !== itemId);
+      inboxItems = mergeInboxItems(openInboxItems, completedInboxItems);
+      scheduleLiveRefresh();
+    });
     const timer = setInterval(() => {
       now = Date.now();
       refreshIfInFlight();

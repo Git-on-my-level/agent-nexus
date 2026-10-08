@@ -49,7 +49,10 @@ const SELF = {
  * The bounded Inbox feeds and selected-item context, each answering after
  * `LATENCY_MS`. Returns the recorded request log.
  */
-async function installScaleCore(page, { latency = LATENCY_MS } = {}) {
+async function installScaleCore(
+  page,
+  { latency = LATENCY_MS, failOpenAfterAnswer = false } = {},
+) {
   const digest = await getExpectedCommandRegistryDigest();
   /** @type {{ path: string, at: number }[]} */
   const calls = [];
@@ -132,6 +135,19 @@ async function installScaleCore(page, { latency = LATENCY_MS } = {}) {
           }),
         });
     }
+    if (
+      path === "/inbox" &&
+      url.searchParams.get("status") !== "completed" &&
+      state.responded &&
+      failOpenAfterAnswer
+    )
+      return route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: { message: "History temporarily unavailable" },
+        }),
+      });
     const body = (() => {
       if (path === "/meta/handshake" || path === "/version") {
         return {
@@ -270,12 +286,20 @@ test("Inbox asks are interactive before the bounded scale history finishes", asy
   expect(calls.filter((call) => call.path === "/pm/decisions")).toHaveLength(1);
 });
 
-for (const answer of ["proposal", "custom"]) {
-  test(`an answered ask and linked card stay out after a ${answer} answer and unavailable history`, async ({
+for (const [answer, failOpenAfterAnswer] of [
+  ["proposal", false],
+  ["custom", false],
+  ["proposal", true],
+  ["custom", true],
+]) {
+  test(`an answered ask and linked card stay out after a ${answer} answer and unavailable ${failOpenAfterAnswer ? "Inbox feeds" : "history"}`, async ({
     page,
   }) => {
     test.setTimeout(60_000);
-    const calls = await installScaleCore(page, { latency: 0 });
+    const calls = await installScaleCore(page, {
+      latency: 0,
+      failOpenAfterAnswer,
+    });
     await page.clock.install();
     await page.goto(`${ROOT}/inbox`);
     await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible();
@@ -308,6 +332,7 @@ for (const answer of ["proposal", "custom"]) {
     // A prolonged history outage must not resurrect the card after the
     // bounded local answer overlay expires.
     await page.clock.fastForward(61_000);
+    await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toHaveCount(0);
     await expect(
       page.locator('[data-inbox-row="task:card:scale-0"]'),
     ).toHaveCount(0);
