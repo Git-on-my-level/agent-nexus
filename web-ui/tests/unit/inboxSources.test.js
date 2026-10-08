@@ -6,7 +6,7 @@ import {
 } from "../../src/lib/inboxSources.js";
 
 describe("Inbox sources", () => {
-  it("filters archived work from progressive PM snapshots as well as the final lists", async () => {
+  it("filters archived work from the settled PM snapshot", async () => {
     const progress = [];
     const client = {
       listPmDecisions: async () => ({
@@ -45,16 +45,27 @@ describe("Inbox sources", () => {
     ).toEqual([{ id: "inbox:other" }, completed]);
   });
 
-  it("publishes actionable asks before work history finishes and preserves the page bound", async () => {
+  it("publishes once after work and every other feed settle, in parallel", async () => {
     let finishWork;
     const work = new Promise((resolve) => {
       finishWork = resolve;
     });
     const progress = [];
+    const started = [];
     const client = {
-      listPmDecisions: async () => ({ items: [] }),
-      listPmActions: async () => ({ items: [] }),
-      listWork: () => work,
+      listPmDecisions: async () => {
+        started.push("decisions");
+        return { items: [] };
+      },
+      listPmActions: async () => {
+        started.push("actions");
+        return { items: [] };
+      },
+      listWork: (options) => {
+        started.push("work");
+        expect(options).toMatchObject({ limit: 50, summary: 1 });
+        return work;
+      },
       listInboxItems: async ({ status }) => ({
         items: status === "open" ? [{ id: "inbox:ask" }] : [],
       }),
@@ -65,10 +76,15 @@ describe("Inbox sources", () => {
       onProgress: (snapshot) => progress.push(snapshot),
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(progress[0][3].value.items).toEqual([{ id: "inbox:ask" }]);
-    expect(progress[0][2].status).toBe("pending");
+    expect(progress).toEqual([]);
+    expect(started).toEqual(["decisions", "actions", "work"]);
     finishWork({ work: [] });
     expect((await pending)[2].status).toBe("fulfilled");
+    expect(progress).toHaveLength(1);
+    expect(progress[0].every((result) => result.status === "fulfilled")).toBe(
+      true,
+    );
+    expect(progress[0][3].value.items).toEqual([{ id: "inbox:ask" }]);
   });
   it("keeps partial results when a feed repeats its cursor", async () => {
     const calls = [];

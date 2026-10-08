@@ -35,85 +35,49 @@ export async function listAllPages(fetchPage, key, maxPages = 8, onPage) {
 }
 
 /**
- * Everything the Inbox classifies, fetched in parallel. Each source settles
- * on its own so one failing list does not blank the others.
- *
- * @param {{ withHistory?: boolean, client?: object, onProgress?: function }} [options]
- *   `withHistory: false` skips unread updates. Completed asks remain loaded so
- *   a blocked card does not return to Needs you after its ask is answered.
- *   `client` defaults to the browser core client;
- *   a server load passes its own.
- * @returns {Promise<PromiseSettledResult<any>[]>} decisions, actions, work,
- *   open items, completed items, unread updates (unread updates resolve to
- *   null when skipped)
+ * Fetch every bounded feed in parallel and publish one settled snapshot.
+ * Work and completed asks affect ranking and deduplication, so painting open
+ * asks before those feeds finish would insert older rows above the selection.
+ * A failed feed still allows the others to render with a partial-result notice.
  */
 export async function loadInboxSources({
   withHistory = true,
   client = coreClient,
   onProgress,
 } = {}) {
-  const skipped = Promise.resolve(null);
-  const progress = Array.from({ length: 6 }, () => ({ status: "pending" }));
-  const visibleSources = (sources) => {
-    const hidden = new Set(sources[2]?.value?.archived_refs || []);
-    return sources.map((result, index) => {
-      if (index > 1 || result.status !== "fulfilled" || !result.value?.items)
-        return { ...result };
-      return {
-        ...result,
-        value: {
-          ...result.value,
-          items: result.value.items.filter(
-            (item) => !hidden.has(item.work_ref),
-          ),
-        },
-      };
-    });
-  };
-  const publish = () => onProgress?.(visibleSources(progress));
-  const pages = async (index, fetchPage, key) => {
-    try {
-      const value = await listAllPages(fetchPage, key, 8, (page) => {
-        if (index === 3) {
-          progress[index] = { status: "fulfilled", value: page };
-          publish();
-        }
-      });
-      progress[index] = { status: "fulfilled", value };
-      publish();
-      return value;
-    } catch (reason) {
-      progress[index] = { status: "rejected", reason };
-      publish();
-      throw reason;
-    }
-  };
-  // On the page, give actionable asks the first database turn. Secondary
-  // history/work queries must not keep an already-loaded ask behind a spinner.
-  const open = pages(
-    3,
-    (cursor) => client.listInboxItems({ status: "open", limit: 50, cursor }),
-    "items",
-  );
-  if (onProgress) await open.catch(() => {});
+  const pages = (fetchPage, key) => listAllPages(fetchPage, key, 8);
   const results = await Promise.allSettled([
+    pages((cursor) => client.listPmDecisions({ limit: 50, cursor }), "items"),
+    pages((cursor) => client.listPmActions({ limit: 50, cursor }), "items"),
     pages(
-      0,
-      (cursor) => client.listPmDecisions({ limit: 50, cursor }),
+      (cursor) => client.listWork({ limit: 50, cursor, summary: 1 }),
+      "work",
+    ),
+    pages(
+      (cursor) => client.listInboxItems({ status: "open", limit: 50, cursor }),
       "items",
     ),
-    pages(1, (cursor) => client.listPmActions({ limit: 50, cursor }), "items"),
-    pages(2, (cursor) => client.listWork({ limit: 50, cursor }), "work"),
-    open,
     pages(
-      4,
       (cursor) =>
         client.listInboxItems({ status: "completed", limit: 50, cursor }),
       "items",
     ),
-    withHistory ? client.getHomeUnread() : skipped,
+    withHistory ? client.getHomeUnread() : Promise.resolve(null),
   ]);
-  return visibleSources(results);
+  const hidden = new Set(results[2]?.value?.archived_refs || []);
+  const visible = results.map((result, index) => {
+    if (index > 1 || result.status !== "fulfilled" || !result.value?.items)
+      return result;
+    return {
+      ...result,
+      value: {
+        ...result.value,
+        items: result.value.items.filter((item) => !hidden.has(item.work_ref)),
+      },
+    };
+  });
+  onProgress?.(visible);
+  return visible;
 }
 
 /** Completed rows have their own ids; match their original inbox_item_id too. */

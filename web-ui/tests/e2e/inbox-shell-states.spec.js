@@ -1131,12 +1131,14 @@ for (const viewport of AUDIT_VIEWPORTS) {
 
     test("inbox notices, deep links and partial loads", async ({ page }) => {
       const api = await installWorkspaceApi(page, { truncated: true });
-      // A pinned row that is not in the loaded mailbox.
+      // A capped mailbox cannot claim a pinned row is definitely absent.
       await gotoInbox(page, "?item=decision:not-loaded");
       await expect(
-        page.getByText("This item is not in the loaded mailbox."),
+        page.getByText(
+          "This item could not be loaded. Retry or open the task directly.",
+        ),
       ).toBeVisible();
-      await expectCleanLayout(page, "pinned row missing", bothEnds);
+      await expectCleanLayout(page, "pinned row not fully loaded", bothEnds);
 
       // has_more: counts become lower bounds and say so.
       await expect(
