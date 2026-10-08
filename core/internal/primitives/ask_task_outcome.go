@@ -94,8 +94,10 @@ func (s *Store) applyAskTaskOutcomeTx(ctx context.Context, tx *accessTx, actor, 
 			break
 		}
 	}
-	if outcome == "needs_context" && card.Assignee.String != "" {
-		next = card.Assignee.String
+	if outcome == "needs_context" {
+		// Clarification belongs to the author/owner even when ordinary answers
+		// route through a configured board role.
+		next = firstNonEmpty(card.Assignee.String, anyStringValue(ask["requester_label"]), anyStringValue(ask["requester_actor_id"]))
 	}
 	phase := card.ColumnKey
 	reason := ""

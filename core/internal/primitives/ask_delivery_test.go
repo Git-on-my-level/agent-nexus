@@ -355,3 +355,29 @@ func TestAskLegacyNonCardExpiryPersistsBeforeDelivery(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAskNeedsContextRoutesToRequesterWithCustomPolicy(t *testing.T) {
+	for _, outcome := range []string{"answered", "needs_context"} {
+		t.Run(outcome, func(t *testing.T) {
+			s, ws, card, ask := askDeliveryFixture(t)
+			s.askNextActorOrder = []string{"board_role"}
+			if _, err := ws.DB().Exec(`UPDATE cards SET assignee=NULL WHERE id=?`, card["id"]); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := ws.DB().Exec(`UPDATE boards SET role='review' WHERE id=(SELECT board_id FROM cards WHERE id=?)`, card["id"]); err != nil {
+				t.Fatal(err)
+			}
+			result, err := answerDeliveryFixture(s, ask, outcome)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := "review"
+			if outcome == "needs_context" {
+				want = "requester"
+			}
+			if got := asMapValue(result["task_outcome"])["next_actor"]; got != want {
+				t.Fatalf("next actor %v want %s", got, want)
+			}
+		})
+	}
+}
