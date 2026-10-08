@@ -196,9 +196,11 @@ def fast_tests(changed):
         run("pnpm", "-C", "web-ui", "run", "test:unit",
             extra_env={"ANX_TEST_FAST": "1", "CI": "1"})
     if any(p in {"scripts/owned_process.py", "scripts/e2e-smoke",
-                 "scripts/tests/test_owned_process.py"} or p.startswith("scripts/git-hooks/")
+                 "scripts/tests/test_owned_process.py",
+                 "scripts/tests/test_e2e_smoke_lifecycle.sh"} or p.startswith("scripts/git-hooks/")
            for p in changed):
         run("python3", "-B", "-m", "unittest", "scripts/tests/test_owned_process.py")
+        run("bash", "scripts/tests/test_e2e_smoke_lifecycle.sh")
     if any(p.startswith(("contracts/", "scripts/contract-", "core/cmd/contract-gen/",
                          "core/cmd/route-inventory/")) for p in changed):
         contract_drift()

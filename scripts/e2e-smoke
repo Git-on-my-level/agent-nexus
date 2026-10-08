@@ -48,32 +48,22 @@ start_supervised() {
 stop_supervised() {
   local pid="$1"
   local receipt="$2"
-  local attempt
-  if [[ -n "${pid:-}" ]] && kill -0 "$pid" >/dev/null 2>&1; then
-    kill -TERM "$pid" >/dev/null 2>&1 || true
-  fi
-  for attempt in $(seq 1 200); do
-    if [[ -z "${pid:-}" ]] || ! kill -0 "$pid" >/dev/null 2>&1; then
-      break
-    fi
-    sleep 0.1
-  done
+  # Receipt proof is the only signal path. A bare pid may have been reused.
   if [[ -f "$receipt" ]]; then
     python3 "$OWNED_PROCESS_PY" stop \
       --receipt "$receipt" \
       --shutdown-deadline "$SMOKE_SHUTDOWN_DEADLINE" || true
   fi
-  if [[ -n "${pid:-}" ]] && kill -0 "$pid" >/dev/null 2>&1; then
-    kill -KILL "$pid" >/dev/null 2>&1 || true
+  if [[ -n "${pid:-}" ]] && ! kill -0 "$pid" >/dev/null 2>&1; then
     wait "$pid" >/dev/null 2>&1 || true
   fi
 }
 
 cleanup() {
   local code=$?
-  trap - EXIT INT TERM
+  trap - EXIT
   # Stop the UI first so it drops core connections, then the core tree.
-  # Each supervisor reaps its own session, including go/node/esbuild grandchildren.
+  # Each supervisor reaps processes that still carry its exact token.
   # SIGKILL of this script is not catchable: a supervisor that is still alive
   # notices the parent pid change and reaps. SIGKILL of the supervisor itself,
   # or a grandchild that leaves the group and clears OWNED_PROCESS_TOKEN, can
@@ -89,7 +79,58 @@ cleanup() {
     echo "smoke artifacts: $TMP_DIR"
   fi
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+if [[ "${SMOKE_LIFECYCLE_SELFTEST:-}" == "interrupt" ]]; then
+  start_supervised "$CORE_RECEIPT" "smoke-selftest" "$CORE_LOG" "$ROOT_DIR" \
+    python3 -c 'import time; time.sleep(60)'
+  CORE_SUP_PID=$SUPERVISED_PID
+  printf '%s\n' "$CORE_SUP_PID" > "$TMP_DIR/supervisor.pid"
+  for _ in $(seq 1 50); do
+    if [[ -f "$CORE_RECEIPT" ]] && grep -q '"state": "running"' "$CORE_RECEIPT"; then
+      break
+    fi
+    sleep 0.05
+  done
+  printf 'ready\n' > "$TMP_DIR/ready"
+  while true; do
+    read -r -t 1 _ || true
+  done
+fi
+
+if [[ "${SMOKE_LIFECYCLE_SELFTEST:-}" == "foreign" ]]; then
+  python3 -c 'import time; time.sleep(60)' &
+  foreign=$!
+  printf '%s\n' "$foreign" > "$TMP_DIR/foreign.pid"
+  python3 - "$CORE_RECEIPT" "$foreign" <<'PY'
+import json, sys
+path, pid = sys.argv[1], int(sys.argv[2])
+payload = {
+    "schema_version": 1,
+    "label": "foreign",
+    "token": "ab" * 16,
+    "state": "running",
+    "supervisor_pid": pid,
+    "supervisor_start": "not-this-process",
+    "leader_pid": pid,
+    "leader_pgid": pid,
+    "leader_start": "not-this-process",
+    "limits": {"shutdown_deadline_seconds": 1},
+}
+open(path, "w").write(json.dumps(payload))
+PY
+  stop_supervised "$foreign" "$CORE_RECEIPT"
+  if kill -0 "$foreign" >/dev/null 2>&1; then
+    printf 'foreign-alive\n' > "$TMP_DIR/foreign-state"
+  else
+    printf 'foreign-dead\n' > "$TMP_DIR/foreign-state"
+  fi
+  kill -TERM "$foreign" >/dev/null 2>&1 || true
+  wait "$foreign" >/dev/null 2>&1 || true
+  exit 0
+fi
 
 require_cmd() {
   local cmd="$1"
