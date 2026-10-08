@@ -3,7 +3,7 @@
   import { onMount, tick, untrack } from "svelte";
   import { page } from "$app/stores";
   import { beforeNavigate, goto } from "$app/navigation";
-  import { coreClient } from "$lib/coreClient";
+  import { coreClient, createInboxSourceClient } from "$lib/coreClient";
   import {
     actorDisplayLabel,
     actorRegistry,
@@ -72,7 +72,12 @@
     stashInboxRestore,
     undoInboxResponse,
   } from "$lib/inboxResponseQueue.js";
-  import { loadInboxSources, mergeInboxItems } from "$lib/inboxSources.js";
+  import {
+    loadInboxSources,
+    mergeInboxItems,
+    hasCompleteInboxHistory,
+  } from "$lib/inboxSources.js";
+  import { createInboxOrder } from "$lib/inboxOrder.js";
   import { MAX_KEYED_PROPOSALS } from "$lib/inboxProposalChoice.js";
   import {
     inboxShortcutAction,
@@ -113,7 +118,9 @@
   let decidesAccess = $derived(isHumanWorkspacePrincipal($authenticatedAgent));
   let helpOpen = $state(false);
   let requestId = 0;
+  let loadController;
   let selectionRequest = 0;
+  let selectedController;
   const archivedWorkRefs = new Set();
   let decisionResolvedFor = $state("");
   let staleExpanded = $state(false);
@@ -189,9 +196,20 @@
     workRef ? rows.filter((row) => rowMatchesWorkRef(row, workRef)) : rows,
   );
   let mailboxRows = $derived(filterMailbox(scoped, mailbox));
-  let staleRows = $derived(mailboxRows.filter((row) => row.stale));
-  let currentRows = $derived(mailboxRows.filter((row) => !row.stale));
-  let visible = $derived([...currentRows, ...(staleExpanded ? staleRows : [])]);
+  const orderInboxRows = createInboxOrder();
+  let presentation = $derived(
+    ready
+      ? orderInboxRows(`${mailbox}:${workRef}`, mailboxRows, staleExpanded)
+      : { currentRows: [], staleRows: [], lateRows: [], added: 0 },
+  );
+  let staleRows = $derived(presentation.staleRows);
+  let currentRows = $derived(presentation.currentRows);
+  let lateRows = $derived(presentation.lateRows);
+  let visible = $derived([
+    ...currentRows,
+    ...(staleExpanded ? staleRows : []),
+    ...lateRows,
+  ]);
   // A direct link remains visible even when its task normally lives folded.
   $effect(() => {
     if (explicitId && staleRows.some((row) => row.id === explicitId))
@@ -296,7 +314,13 @@
     const itemId = selectedId;
     if (!ready || !itemId?.startsWith("decision:")) return;
     const id = itemId.slice("decision:".length);
-    if (id) void untrack(() => loadSelected(id));
+    if (id) {
+      void untrack(() => loadSelected(id));
+      return () => {
+        selectionRequest++;
+        selectedController?.abort();
+      };
+    }
   });
 
   // Context strip: what the selected item blocks and the latest note.
@@ -379,10 +403,18 @@
 
   async function loadSelected(id) {
     const ticket = ++selectionRequest;
+    selectedController?.abort();
+    const controller = new AbortController();
+    selectedController = controller;
+    const client = createInboxSourceClient(controller.signal);
+    const timer = setTimeout(
+      () => controller.abort(new Error("Requested item loading timed out")),
+      5_000,
+    );
     try {
       let item = decisions.find((entry) => entry.id === id);
       if (!item) {
-        item = await coreClient.getPmDecision(id);
+        item = await client.getPmDecision(id);
         if (ticket !== selectionRequest || archivedWorkRefs.has(item.work_ref))
           return;
         decisions = [...decisions.filter((entry) => entry.id !== id), item];
@@ -391,7 +423,7 @@
         item?.action_id &&
         !actions.some((entry) => entry.id === item.action_id)
       ) {
-        const receipt = await coreClient.getPmAction(item.action_id);
+        const receipt = await client.getPmAction(item.action_id);
         if (ticket !== selectionRequest || archivedWorkRefs.has(item.work_ref))
           return;
         actions = [
@@ -402,6 +434,7 @@
     } catch (err) {
       if (ticket === selectionRequest) actionError = errorMessage(err);
     } finally {
+      clearTimeout(timer);
       if (ticket === selectionRequest) decisionResolvedFor = `decision:${id}`;
     }
   }
@@ -432,6 +465,8 @@
   let loadErrorText = $state("");
   async function load({ quiet = false } = {}) {
     const ticket = ++requestId;
+    loadController?.abort();
+    loadController = new AbortController();
     if (!quiet) {
       loading = true;
       error = "";
@@ -445,11 +480,11 @@
       // session maintenance and recovery belong to the shell and proxy.
       const applySources = (results) => {
         if (ticket !== requestId) return;
-        let nextError = "";
+        const failure = results.find((result) => result.reason);
+        let nextError = failure ? errorMessage(failure.reason) : "";
         // A refused session will refuse the retry too; offer sign-in instead.
         sessionExpired = results.some(
-          (result) =>
-            result.status === "rejected" && isSessionExpired(result.reason),
+          (result) => Boolean(result.reason) && isSessionExpired(result.reason),
         );
         if (results[0].status === "fulfilled") {
           decisions = results[0].value.items || [];
@@ -459,14 +494,17 @@
         // are lower bounds, and the reader must be told so rather than shown a total.
         truncated = results.some(
           (result) =>
-            result.status === "rejected" ||
+            result.status !== "fulfilled" ||
+            result.complete === false ||
             (result.status === "fulfilled" &&
               (result.value?.has_more === true ||
                 Boolean(result.value?.next_cursor))),
         );
         if (results[1].status === "fulfilled") {
           actions = results[1].value.items || [];
-          receiptsUnavailable = false;
+          receiptsUnavailable = !results[1].complete;
+        } else if (results[1].status === "pending") {
+          receiptsUnavailable = true;
         } else if (sessionExpired) {
           // The receipts are not in doubt, the session is; keep the last
           // classification and let the banner say what to do.
@@ -477,24 +515,18 @@
           receiptsUnavailable = true;
           nextError = nextError || errorMessage(results[1].reason);
         }
-        // A work row can duplicate an ask. Publish it only with successful
-        // open and completed reads, so missing history cannot resurrect a card.
+        // Later completed pages may contain the answer to any blocked card.
+        // Until both histories are complete, work rows are unsafe, including
+        // a previous refresh's rows after the local response overlay expires.
         if (
           results[2].status === "fulfilled" &&
-          results[3].status === "fulfilled" &&
-          results[4].status === "fulfilled"
+          hasCompleteInboxHistory(results)
         ) {
           work = results[2].value.work || [];
-        } else if (
-          results[3].status === "rejected" ||
-          results[4].status === "rejected"
-        ) {
-          // Older work is unsafe too: its linked answer may be newer than
-          // the history we have, and the local response overlay expires.
-          // Keep the explicit asks and partial/error notice, not stale cards.
+        } else {
           work = [];
-        } else if (results[2].status === "rejected") {
-          nextError = nextError || errorMessage(results[2].reason);
+          if (results[2].status === "rejected")
+            nextError = nextError || errorMessage(results[2].reason);
         }
         if (results[3].status === "fulfilled")
           openInboxItems = results[3].value.items || [];
@@ -517,11 +549,12 @@
           error = "";
           loadErrorText = "";
         }
-        loading = false;
         ready = true;
       };
-      const results = await loadInboxSources();
-      applySources(results);
+      await loadInboxSources({
+        onProgress: applySources,
+        signal: loadController.signal,
+      });
     } catch (err) {
       if (ticket === requestId && !quiet) error = errorMessage(err);
     } finally {
@@ -988,6 +1021,7 @@
       // Invalidate feed reads and prevent pending single-item reads from
       // restoring this task's decisions, without cancelling unrelated reads.
       requestId++;
+      loadController?.abort();
       archivedWorkRefs.add(row.ref);
       // Navigate while the old row still exists. Related decisions also leave
       // after archive, so select only a row that will survive the removal.
@@ -1101,6 +1135,7 @@
       // if both refresh feeds fail beyond the temporary response overlay.
       // Invalidate reads begun before the commit so they cannot restore it.
       requestId++;
+      loadController?.abort();
       openInboxItems = openInboxItems.filter((item) => item.id !== itemId);
       inboxItems = mergeInboxItems(openInboxItems, completedInboxItems);
       scheduleLiveRefresh();
@@ -1115,7 +1150,9 @@
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       requestId++;
+      loadController?.abort();
       selectionRequest++;
+      selectedController?.abort();
       clearInterval(timer);
       clearTimeout(liveTimer);
       stopLive();
@@ -1197,6 +1234,11 @@
           href={href({ work_ref: "", item: "" })}
           aria-label="Show the whole inbox">×</a
         >
+      </span>
+    {/if}
+    {#if presentation.added}
+      <span class="ml-2 text-micro text-fg-subtle" data-inbox-more-loaded>
+        {presentation.added} more loaded
       </span>
     {/if}
     {#if truncated || streamPartial}
@@ -1330,14 +1372,18 @@
               taller than it needs to be (the grid drops its minimum height
               when there is nothing to list).
             -->
-            {#if !staleRows.length}
+            {#if !staleRows.length && !lateRows.length}
               <li class="px-5 py-8">
                 <div
                   class="mx-auto flex max-w-sm flex-col items-center gap-1 text-center"
                   data-inbox-empty={mailbox}
                 >
                   {#if mailbox === "needs-you"}
-                    <p class="text-meta font-medium text-fg">You're clear.</p>
+                    <p class="text-meta font-medium text-fg">
+                      {truncated || streamPartial
+                        ? "No items loaded yet."
+                        : "You're clear."}
+                    </p>
                     {#if counts.watching}
                       <a
                         class="text-micro text-accent-text hover:underline"
@@ -1391,6 +1437,13 @@
               </ul>
             {/if}
           </div>
+        {/if}
+        {#if lateRows.length}
+          <ul class="divide-y divide-line-subtle border-t border-line-subtle">
+            {#each lateRows as row (row.id)}
+              {@render inboxRow(row)}
+            {/each}
+          </ul>
         {/if}
       </section>
       {#if showDetail}

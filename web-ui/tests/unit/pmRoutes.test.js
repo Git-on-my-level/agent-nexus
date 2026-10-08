@@ -70,6 +70,7 @@ const capturedScopes = vi.hoisted(() => []);
 vi.mock("$app/stores", () => ({ page: { subscribe: state.subscribe } }));
 vi.mock("$lib/coreClient", () => ({
   coreClient: client,
+  createInboxSourceClient: () => client,
   // The sender is bound to one workspace; record which, so a test can tell
   // where an answer was actually sent.
   captureInboxResponseSender: () => {

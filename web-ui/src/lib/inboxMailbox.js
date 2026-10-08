@@ -76,14 +76,13 @@ export function decisionRowStatus(
   if (own !== "answered") return own;
   // Receipts could not be loaded: the delivery state is unknown to us, and
   // an unknown delivery belongs in front of the reader, not under Watching.
-  if (receiptsUnavailable) return "receipt_unavailable";
   const action = actions.find(
     (item) =>
       item &&
       ((decision.action_id && item.id === decision.action_id) ||
         item.decision_id === decision.id),
   );
-  if (!action) return own;
+  if (!action) return receiptsUnavailable ? "receipt_unavailable" : own;
   const status = String(action.status ?? "");
   if (status === "verified" && action.receipt?.independently_verified !== true)
     return "source_reported";

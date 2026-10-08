@@ -58,6 +58,10 @@ async function installScaleCore(
     decisions = [],
     gates = {},
     failWork = false,
+    expireWorkAfterFirst = false,
+    completedRecords = [],
+    openRecords = [ASK],
+    actionPages,
   } = {},
 ) {
   const digest = await getExpectedCommandRegistryDigest();
@@ -197,8 +201,10 @@ async function installScaleCore(
         return {
           items:
             url.searchParams.get("status") === "completed" || state.responded
-              ? []
-              : [ASK],
+              ? state.responded
+                ? []
+                : completedRecords
+              : openRecords,
           status: url.searchParams.get("status") || "open",
         };
       if (path === "/home/unread")
@@ -229,7 +235,13 @@ async function installScaleCore(
       if (path === "/refs/resolve") return { refs: {} };
       if (path === "/pm/decisions")
         return { items: decisions, has_more: false };
-      if (path === "/pm/actions") return { items: [], has_more: false };
+      if (path === "/pm/actions")
+        return (
+          actionPages?.[url.searchParams.get("cursor") || ""] || {
+            items: [],
+            has_more: false,
+          }
+        );
       if (path === "/artifacts") return { artifacts: [] };
       if (path === "/docs") return { documents: [] };
       if (path === "/topics") return { topics: [] };
@@ -240,9 +252,26 @@ async function installScaleCore(
       return null;
     })();
 
-    calls.push({ path, at: Date.now() - started, wallAt: Date.now() });
-    if (gates[path]) await gates[path].promise;
+    const cursor = url.searchParams.get("cursor") || "";
+    const status = url.searchParams.get("status") || "";
+    calls.push({
+      path,
+      cursor,
+      status,
+      at: Date.now() - started,
+      wallAt: Date.now(),
+    });
+    const gate = gates[`${path}:${status}:${cursor}`] || gates[path];
+    if (gate) await gate.promise;
     await new Promise((resolve) => setTimeout(resolve, latency));
+    if (path === "/work" && cursor && expireWorkAfterFirst)
+      return route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: { code: "invalid_token", message: "Session ended" },
+        }),
+      });
     if (path === "/work" && failWork)
       return route.fulfill({
         status: 503,
@@ -268,7 +297,7 @@ async function installScaleCore(
 
 // Measure from the first source request, excluding cold Vite compilation and
 // shell authentication. The fixed network delay measures the client waterfall.
-test("Inbox paints one complete bounded snapshot without a scale-history reshuffle", async ({
+test("Inbox paints first pages without waiting for eight scale-work pages", async ({
   page,
 }, testInfo) => {
   test.setTimeout(120_000);
@@ -304,10 +333,9 @@ test("Inbox paints one complete bounded snapshot without a scale-history reshuff
     contentType: "application/json",
   });
   if (!process.env.ANX_INBOX_PERF_BASELINE) {
-    // Eight sequential 400ms work pages remain bounded. The skeleton stays
-    // visible until classification is complete; parallel feeds add no waterfall.
-    expect(interactiveMs).toBeLessThan(6000);
-    expect(earlyWorkPages).toBe(8);
+    // The first ranked paint waits for first pages only, with an 800ms cap.
+    expect(interactiveMs).toBeLessThan(1500);
+    expect(earlyWorkPages).toBeLessThanOrEqual(3);
   }
   await expect
     .poll(() => calls.filter((call) => call.path === "/work").length)
@@ -415,11 +443,11 @@ const slowDecision = {
   updated_at: stamp(1),
 };
 
-test("slow work and decisions keep skeleton slots until the first ranked rows and selection are stable", async ({
+test("late work and decisions append below the shown ask and preserve selection and j/k", async ({
   page,
 }) => {
   const gates = { "/work": deferred(), "/pm/decisions": deferred() };
-  const calls = await installScaleCore(page, {
+  await installScaleCore(page, {
     latency: 0,
     gates,
     decisions: [slowDecision],
@@ -430,35 +458,137 @@ test("slow work and decisions keep skeleton slots until the first ranked rows an
     ],
   });
   await page.goto(`${ROOT}/inbox`);
-  await expect(page.locator("[data-inbox-loading]")).toBeVisible();
-  await expect
-    .poll(() => calls.some((call) => call.path === "/pm/decisions"))
-    .toBe(true);
-  await expect(page.locator("[data-inbox-row]")).toHaveCount(0);
+  const ask = page.getByTestId(`inbox-row-${ASK.id}`);
+  await expect(ask).toBeVisible();
+  await ask.click();
+  const before = await ask.boundingBox();
   gates["/work"].resolve();
-  await expect(page.locator("[data-inbox-row]")).toHaveCount(0);
+  await expect(page.getByTestId("inbox-row-task:card:recent")).toBeVisible();
   gates["/pm/decisions"].resolve();
   const rows = page.locator("[data-inbox-row]");
   await expect(rows).toHaveCount(3);
-  await expect(rows.first()).toHaveAttribute(
-    "data-inbox-row",
-    "decision:priority-decision",
+  expect(
+    await rows.evaluateAll((list) => list.map((row) => row.dataset.inboxRow)),
+  ).toEqual([ASK.id, "task:card:recent", "decision:priority-decision"]);
+  await expect(ask).toHaveAttribute("aria-current", "page");
+  expect((await ask.boundingBox()).y).toBe(before.y);
+  await expect(page.locator("[data-inbox-more-loaded]")).toHaveText(
+    "3 more loaded",
   );
-  const firstPaint = await rows.evaluateAll((list) =>
-    list.map((row) => row.dataset.inboxRow),
-  );
-  await page.getByTestId(`inbox-row-${ASK.id}`).click();
-  await expect(page.getByRole("button", { name: /^1 Proceed/ })).toBeEnabled();
-  await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toHaveAttribute(
+  await page.locator("body").click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press("j");
+  await expect(page.getByTestId("inbox-row-task:card:recent")).toHaveAttribute(
     "aria-current",
     "page",
   );
-  expect(
-    await rows.evaluateAll((list) => list.map((row) => row.dataset.inboxRow)),
-  ).toEqual(firstPaint);
+  await page.keyboard.press("k");
+  await expect(ask).toHaveAttribute("aria-current", "page");
   await expect(
     page.getByRole("button", { name: "Stale (1)", exact: true }),
   ).toHaveAttribute("aria-expanded", "false");
+});
+
+test("a never-resolving unread feed cannot hold asks or revive an answered task", async ({
+  page,
+}) => {
+  test.setTimeout(30_000);
+  const answered = blockedTask("answered", { movedDays: 1 });
+  answered.updated_at = stamp(6);
+  const calls = await installScaleCore(page, {
+    latency: 0,
+    gates: { "/home/unread": { promise: new Promise(() => {}) } },
+    workRecords: [answered],
+    completedRecords: [
+      {
+        id: "completed:answered",
+        status: "completed",
+        kind: "ask",
+        subject_ref: answered.ref,
+        responded_at: stamp(1),
+      },
+    ],
+  });
+  await page.goto(`${ROOT}/inbox`);
+  await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible();
+  await expect(page.getByRole("button", { name: /^1 Proceed/ })).toBeEnabled();
+  const enabled = await page.evaluate(() => window.__inboxInteractive);
+  const sourceStart = calls.find((call) => call.path === "/inbox").wallAt;
+  expect(enabled.wallAt - sourceStart).toBeLessThan(1500);
+  await expect(page.getByTestId("inbox-row-task:card:answered")).toHaveCount(0);
+  await expect(
+    page.getByText("Inbox loading timed out", { exact: false }),
+  ).toHaveCount(0);
+  // Let the five-second overall deadline finish; the safe snapshot stays.
+  await expect(page.locator("[data-inbox-loading]")).toHaveCount(0);
+  await page.waitForTimeout(5200);
+  await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible();
+  await expect(page.getByTestId("inbox-row-task:card:answered")).toHaveCount(0);
+  await expect(
+    page.getByText("Not everything is loaded; the counts are lower bounds."),
+  ).toBeVisible();
+});
+
+test("stalled completed history keeps work suppressed even after the final deadline", async ({
+  page,
+}) => {
+  const gate = { promise: new Promise(() => {}) };
+  await installScaleCore(page, {
+    latency: 0,
+    gates: { "/inbox:completed:": gate },
+    workRecords: [blockedTask("possibly-answered", { movedDays: 1 })],
+  });
+  await page.goto(`${ROOT}/inbox?item=task:card:possibly-answered`);
+  await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible();
+  await expect(
+    page.getByText("Loading requested item…", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByTestId("inbox-row-task:card:possibly-answered"),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText(
+      "This item could not be loaded. Retry or open the task directly.",
+    ),
+  ).toBeVisible({ timeout: 10_000 });
+  await expect(
+    page.getByTestId("inbox-row-task:card:possibly-answered"),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("This item is not in the loaded mailbox."),
+  ).toHaveCount(0);
+});
+
+test("a slow second work page appends below the first page and an expanded stale selection", async ({
+  page,
+}) => {
+  const gate = deferred();
+  const workRecords = [
+    blockedTask("stale"),
+    ...Array.from({ length: 49 }, (_, i) => ({
+      ...CARD,
+      ref: `card:filler-${i}`,
+    })),
+    { ...blockedTask("late-priority", { movedDays: 1 }), priority: "p0" },
+  ];
+  await installScaleCore(page, {
+    latency: 0,
+    gates: { "/work::50": gate },
+    workRecords,
+  });
+  await page.goto(`${ROOT}/inbox?item=task:card:stale`);
+  const selected = page.getByTestId("inbox-row-task:card:stale");
+  await expect(selected).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("button", { name: /^1 Proceed/ })).toHaveCount(0);
+  const before = await selected.boundingBox();
+  gate.resolve();
+  const late = page.getByTestId("inbox-row-task:card:late-priority");
+  await expect(late).toBeVisible();
+  expect((await selected.boundingBox()).y).toBe(before.y);
+  expect((await late.boundingBox()).y).toBeGreaterThan(before.y);
+  await expect(selected).toHaveAttribute("aria-current", "page");
+  await expect(page.locator("[data-inbox-more-loaded]")).toHaveText(
+    "1 more loaded",
+  );
 });
 
 test("a blocked-task deep link loads before resolving and reveals its collapsed stale group", async ({
@@ -613,3 +743,90 @@ for (const onlyStale of [false, true]) {
     }
   });
 }
+
+test("an arrived verified receipt stays handled while the next action page stalls", async ({
+  page,
+}) => {
+  await installScaleCore(page, {
+    latency: 0,
+    decisions: [
+      {
+        ...slowDecision,
+        id: "known-receipt",
+        status: "answered",
+        action_id: "verified-action",
+      },
+    ],
+    actionPages: {
+      "": {
+        items: [
+          {
+            id: "verified-action",
+            decision_id: "known-receipt",
+            status: "verified",
+            receipt: { independently_verified: true },
+          },
+        ],
+        next_cursor: "slow",
+      },
+    },
+    gates: { "/pm/actions::slow": { promise: new Promise(() => {}) } },
+    workRecords: [],
+  });
+  await page.goto(`${ROOT}/inbox`);
+  await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible();
+  await expect(
+    page.getByTestId("inbox-row-decision:known-receipt"),
+  ).toHaveCount(0);
+  await page.getByRole("link", { name: /^Handled/ }).click();
+  await expect(
+    page.getByTestId("inbox-row-decision:known-receipt"),
+  ).toBeVisible();
+  await page.getByRole("link", { name: /^Needs you/ }).click();
+  await expect(
+    page.getByText("Inbox loading timed out", { exact: false }).first(),
+  ).toBeVisible({ timeout: 10_000 });
+  await expect(
+    page.getByTestId("inbox-row-decision:known-receipt"),
+  ).toHaveCount(0);
+});
+
+test("a never-resolving requested decision leaves loading with an incomplete-result message", async ({
+  page,
+}) => {
+  await installScaleCore(page, {
+    latency: 0,
+    workRecords: [],
+    gates: { "/pm/decisions/missing": { promise: new Promise(() => {}) } },
+  });
+  await page.goto(`${ROOT}/inbox?item=decision:missing`);
+  await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible();
+  await expect(
+    page.getByText("Loading requested item…", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("This item is not in the loaded mailbox."),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText(
+      "This item could not be loaded. Retry or open the task directly.",
+    ),
+  ).toBeVisible({ timeout: 10_000 });
+  await expect(
+    page.getByText("Loading requested item…", { exact: true }),
+  ).toHaveCount(0);
+});
+
+test("an expired session on a later work page retains rows and offers sign-in recovery", async ({
+  page,
+}) => {
+  await installScaleCore(page, { latency: 0, expireWorkAfterFirst: true });
+  await page.goto(`${ROOT}/inbox`);
+  await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Sign in again", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Not everything is loaded; the counts are lower bounds."),
+  ).toBeVisible();
+});

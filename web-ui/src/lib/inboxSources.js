@@ -1,4 +1,4 @@
-import { coreClient } from "$lib/coreClient";
+import { createInboxSourceClient } from "$lib/coreClient";
 
 /**
  * The attention surface must not hide an obligation on page two. Follow
@@ -35,49 +35,169 @@ export async function listAllPages(fetchPage, key, maxPages = 8, onPage) {
 }
 
 /**
- * Fetch every bounded feed in parallel and publish one settled snapshot.
- * Work and completed asks affect ranking and deduplication, so painting open
- * asks before those feeds finish would insert older rows above the selection.
- * A failed feed still allows the others to render with a partial-result notice.
+ * Publish after each feed's first page, or 800 ms, whichever comes first.
+ * Continue bounded pagination with incremental snapshots, but stop waiting
+ * after five seconds. A partial history never admits work-derived rows.
+ * `complete` means pagination finished without a cap/cycle/partial marker.
  */
 export async function loadInboxSources({
   withHistory = true,
-  client = coreClient,
+  client,
   onProgress,
+  firstPaintMs = 800,
+  deadlineMs = 5_000,
+  signal,
 } = {}) {
-  const pages = (fetchPage, key) => listAllPages(fetchPage, key, 8);
-  const results = await Promise.allSettled([
-    pages((cursor) => client.listPmDecisions({ limit: 50, cursor }), "items"),
-    pages((cursor) => client.listPmActions({ limit: 50, cursor }), "items"),
-    pages(
-      (cursor) => client.listWork({ limit: 50, cursor, summary: 1 }),
-      "work",
-    ),
-    pages(
-      (cursor) => client.listInboxItems({ status: "open", limit: 50, cursor }),
-      "items",
-    ),
-    pages(
-      (cursor) =>
-        client.listInboxItems({ status: "completed", limit: 50, cursor }),
-      "items",
-    ),
-    withHistory ? client.getHomeUnread() : Promise.resolve(null),
-  ]);
-  const hidden = new Set(results[2]?.value?.archived_refs || []);
-  const visible = results.map((result, index) => {
-    if (index > 1 || result.status !== "fulfilled" || !result.value?.items)
-      return result;
-    return {
-      ...result,
-      value: {
-        ...result.value,
-        items: result.value.items.filter((item) => !hidden.has(item.work_ref)),
-      },
-    };
-  });
-  onProgress?.(visible);
-  return visible;
+  const controller = new AbortController();
+  client ||= createInboxSourceClient(controller.signal);
+  const results = Array.from({ length: 6 }, () => ({ status: "pending" }));
+  const firstPages = new Set();
+  let published = false;
+  let stopped = false;
+  const snapshot = () => {
+    const hidden = new Set(results[2]?.value?.archived_refs || []);
+    return results.map((result, index) => {
+      if (index > 1 || result.status !== "fulfilled" || !result.value?.items)
+        return { ...result };
+      return {
+        ...result,
+        value: {
+          ...result.value,
+          items: result.value.items.filter(
+            (item) => !hidden.has(item.work_ref),
+          ),
+        },
+      };
+    });
+  };
+  const publish = () => {
+    if (stopped || signal?.aborted) return;
+    published = true;
+    onProgress?.(snapshot());
+  };
+  const update = (index, result) => {
+    if (stopped) return;
+    results[index] = result;
+    firstPages.add(index);
+    if (published || firstPages.size === results.length) publish();
+  };
+  // Wrapping each outstanding page also terminates pagination when a client
+  // transport does not support cancellation. Late responses are ignored.
+  const bounded = (fetchPage) => {
+    if (controller.signal.aborted)
+      return Promise.reject(controller.signal.reason);
+    return new Promise((resolve, reject) => {
+      const settle = (callback, value) => {
+        controller.signal.removeEventListener("abort", abort);
+        callback(value);
+      };
+      const abort = () => settle(reject, controller.signal.reason);
+      controller.signal.addEventListener("abort", abort, { once: true });
+      Promise.resolve()
+        .then(() => {
+          if (controller.signal.aborted) throw controller.signal.reason;
+          return fetchPage();
+        })
+        .then(
+          (value) => settle(resolve, value),
+          (reason) => settle(reject, reason),
+        );
+    });
+  };
+  const pages = (index, fetchPage, key) =>
+    listAllPages(
+      (cursor) => bounded(() => fetchPage(cursor)),
+      key,
+      8,
+      (value) =>
+        update(index, {
+          status: "fulfilled",
+          value,
+          complete: !value.has_more,
+        }),
+    );
+  const cancel = () => controller.abort(new Error("Inbox loading canceled"));
+  signal?.addEventListener("abort", cancel, { once: true });
+  if (signal?.aborted) cancel();
+  const firstPaintTimer = setTimeout(() => {
+    if (!published) publish();
+  }, firstPaintMs);
+  const deadlineTimer = setTimeout(
+    () => controller.abort(new Error("Inbox loading timed out")),
+    deadlineMs,
+  );
+  const feeds = [
+    () =>
+      pages(
+        0,
+        (cursor) => client.listPmDecisions({ limit: 50, cursor }),
+        "items",
+      ),
+    () =>
+      pages(
+        1,
+        (cursor) => client.listPmActions({ limit: 50, cursor }),
+        "items",
+      ),
+    () =>
+      pages(
+        2,
+        (cursor) => client.listWork({ limit: 50, cursor, summary: 1 }),
+        "work",
+      ),
+    () =>
+      pages(
+        3,
+        (cursor) =>
+          client.listInboxItems({ status: "open", limit: 50, cursor }),
+        "items",
+      ),
+    () =>
+      pages(
+        4,
+        (cursor) =>
+          client.listInboxItems({ status: "completed", limit: 50, cursor }),
+        "items",
+      ),
+    () => bounded(() => (withHistory ? client.getHomeUnread() : null)),
+  ];
+  try {
+    await Promise.all(
+      feeds.map(async (fetchFeed, index) => {
+        try {
+          const value = await fetchFeed();
+          update(index, {
+            status: "fulfilled",
+            value,
+            complete: !value?.has_more,
+          });
+        } catch (reason) {
+          const previous = results[index];
+          update(
+            index,
+            previous.status === "fulfilled"
+              ? { ...previous, complete: false, reason }
+              : { status: "rejected", reason },
+          );
+        }
+      }),
+    );
+    return snapshot();
+  } finally {
+    stopped = true;
+    clearTimeout(firstPaintTimer);
+    clearTimeout(deadlineTimer);
+    signal?.removeEventListener("abort", cancel);
+  }
+}
+
+/** Work classification needs complete ask history, including later pages. */
+export function hasCompleteInboxHistory(results) {
+  return [3, 4].every(
+    (index) =>
+      results[index]?.status === "fulfilled" &&
+      results[index].complete === true,
+  );
 }
 
 /** Completed rows have their own ids; match their original inbox_item_id too. */

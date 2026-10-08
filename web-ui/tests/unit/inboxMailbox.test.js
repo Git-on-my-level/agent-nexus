@@ -908,3 +908,27 @@ it("does not revive a stored blocker when core says its plan is done or moving",
     if (state === "stale") expect(rows[0].mailbox).toBe("watching");
   }
 });
+
+it("uses a matching verified receipt even when later receipt pages are incomplete", () => {
+  const rows = buildInboxRows({
+    decisions: [
+      { id: "known", status: "answered" },
+      { id: "unknown", status: "answered" },
+    ],
+    actions: [
+      {
+        id: "action",
+        decision_id: "known",
+        status: "verified",
+        receipt: { independently_verified: true },
+      },
+    ],
+    receiptsUnavailable: true,
+  });
+  expect(rows.find((row) => row.id === "decision:known").mailbox).toBe(
+    "handled",
+  );
+  expect(rows.find((row) => row.id === "decision:unknown").status).toBe(
+    "receipt_unavailable",
+  );
+});
