@@ -203,6 +203,123 @@ describe("the computed summary", () => {
   });
 });
 
+describe("hints", () => {
+  /*
+   * `no_plan` is not a status. It was one, and a planless card then read
+   * "No plan" in the Tasks table's Status column — for most of the rows in
+   * it. Core computes the state from the phase now and reports the missing
+   * plan as a hint, which a surface shows where a plan is expected.
+   */
+  const withHints = (hints, status = { state: "in_progress" }) =>
+    workSummaryModel(
+      { ref: "card:x", work_summary: { status, hints } },
+      { now: NOW },
+    );
+
+  it("names the hints core sent, in the order it sent them", () => {
+    expect(withHints(["no_plan"]).hints).toEqual([
+      { key: "no_plan", label: "No plan" },
+    ]);
+  });
+
+  it("renders a hint this client has never seen", () => {
+    // Open vocabulary, the same rule the status labels follow.
+    expect(withHints(["awaiting_scope"]).hints).toEqual([
+      { key: "awaiting_scope", label: "awaiting scope" },
+    ]);
+  });
+
+  it("drops blanks and repeats rather than rendering them", () => {
+    expect(
+      withHints(["no_plan", " ", "no_plan", ""]).hints.map((h) => h.key),
+    ).toEqual(["no_plan"]);
+    expect(withHints(undefined).hints).toEqual([]);
+    expect(withHints("no_plan").hints).toEqual([]);
+  });
+
+  it("does not take the status's place", () => {
+    const model = withHints(["no_plan"]);
+    expect(model.status).toMatchObject({
+      state: "in_progress",
+      label: "In progress",
+    });
+  });
+
+  it("reads a core that still reports no plan as the status", () => {
+    // Between the two contracts the same fact arrives in the old place.
+    for (const row of [
+      { ref: "card:x", work_summary: { status: { state: "no_plan" } } },
+      { ref: "card:x", plan_health: { state: "no_plan" } },
+    ]) {
+      expect(
+        workSummaryModel(row, { now: NOW }).hints.map((hint) => hint.key),
+        JSON.stringify(row),
+      ).toEqual(["no_plan"]);
+    }
+  });
+
+  it("prefers the hints core sent over anything derived from the status", () => {
+    expect(withHints([], { state: "no_plan" }).hints).toEqual([]);
+  });
+});
+
+describe("a planless card under the hint contract", () => {
+  /*
+   * The shape SCA-703 produces: the state comes from the phase, risk
+   * overrides it, and the stored phase agrees so core sends no `set_status`.
+   * Nothing downstream may assume that part is there.
+   */
+  const planless = (overrides = {}) =>
+    workSummaryModel(
+      {
+        ref: "card:plain",
+        phase: "in_progress",
+        work_summary: {
+          status: { state: "in_progress", label: "In progress" },
+          hints: ["no_plan"],
+          ...overrides,
+        },
+      },
+      { now: NOW },
+    );
+
+  it("reads as its phase, with the missing plan as a note", () => {
+    const model = planless();
+    expect(model.status.label).toBe("In progress");
+    expect(model.hints.map((hint) => hint.label)).toEqual(["No plan"]);
+  });
+
+  it("carries no stored phase, because none disagrees", () => {
+    expect(planless().setStatus).toBeNull();
+  });
+
+  it("is judged against the cadence its phase implies, not an initiative's", () => {
+    const model = planless({ last_movement_at: ago(2 * 86_400_000) });
+    expect(model.hasPlan).toBe(false);
+    expect(model.freshnessKind).toBe("in_progress");
+    // Two days against the daily expectation a card in progress carries —
+    // late, not yet three times late. An initiative's three-day cadence
+    // would have called the same age fine.
+    expect(model.freshness).toMatchObject({ age: "2d", tone: "warn" });
+  });
+
+  it("still folds into the planless block of a card grid", () => {
+    expect(planless().hints.map((hint) => hint.key)).toEqual(["no_plan"]);
+  });
+
+  it("keeps a real risk override as the status, with the hint beside it", () => {
+    const blocked = planless({
+      status: {
+        state: "blocked",
+        label: "Blocked",
+        reason: "Waiting on legal.",
+      },
+    });
+    expect(blocked.status.state).toBe("blocked");
+    expect(blocked.hints.map((hint) => hint.label)).toEqual(["No plan"]);
+  });
+});
+
 describe("what a planless task reads as", () => {
   /*
    * Pinned deliberately, because it is the common case and it reads oddly.

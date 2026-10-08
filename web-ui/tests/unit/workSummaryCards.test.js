@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { workSummaryModel } from "../../src/lib/workSummary.js";
 import {
   cardGroup,
   groupedWorkSummaryCards,
@@ -72,14 +73,37 @@ describe("workSummaryCard", () => {
 });
 
 describe("cardGroup", () => {
-  it("sends finished and planless cards to their own blocks", () => {
-    expect(cardGroup("done")).toBe("done");
-    expect(cardGroup("cancelled")).toBe("done");
-    expect(cardGroup("no_plan")).toBe("no_plan");
-    expect(cardGroup("")).toBe("no_plan");
+  const summary = (state, hints) =>
+    workSummaryModel(
+      { ref: "card:x", work_summary: { status: { state }, hints } },
+      { now: NOW },
+    );
+
+  it("sends finished cards to their own block", () => {
+    expect(cardGroup(summary("done"))).toBe("done");
+    expect(cardGroup(summary("cancelled"))).toBe("done");
     for (const state of ["blocked", "at_risk", "stale", "on_track"]) {
-      expect(cardGroup(state)).toBe("attention");
+      expect(cardGroup(summary(state))).toBe("attention");
     }
+  });
+
+  it("finds a planless card by its hint, not by its status", () => {
+    /*
+     * Core computes a planless card's state from its phase — "In progress",
+     * not "No plan" — and says it has no plan separately. Reading the status
+     * would fold nothing away and drop every planless initiative into the
+     * attention grid.
+     */
+    expect(cardGroup(summary("in_progress", ["no_plan"]))).toBe("no_plan");
+    expect(cardGroup(summary("in_progress"))).toBe("attention");
+    // Nothing known at all still folds; a state we simply cannot name does
+    // not — an unrecognised word is not a reason to hide a card.
+    expect(cardGroup(null)).toBe("no_plan");
+    expect(cardGroup(summary("awaiting_vendor"))).toBe("attention");
+  });
+
+  it("still folds a core that reports no plan as the status", () => {
+    expect(cardGroup(summary("no_plan"))).toBe("no_plan");
   });
 });
 

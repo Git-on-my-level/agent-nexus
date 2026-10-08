@@ -131,6 +131,40 @@ export function statusChip(state, count) {
 const CLOSED_STATES = new Set(["done", "cancelled"]);
 
 /**
+ * What a hint is called.
+ *
+ * Hints are not statuses. `no_plan` used to be one, and a planless card then
+ * read "No plan" in the Tasks table's Status column — for most of the tasks
+ * in it, since most tasks have no plan. Core computes the state from the
+ * phase now and says "this has no plan" separately, as a note a surface can
+ * show where a plan is expected and skip where it is noise.
+ *
+ * The vocabulary is open: a hint this client has never seen reads as its own
+ * token with the underscores taken out, which is the same forward-compatible
+ * rule the status labels follow.
+ */
+const HINT_LABELS = Object.freeze({
+  no_plan: "No plan",
+});
+
+/** The hints a row carries, in core's order, named. */
+function hintParts(raw) {
+  const seen = new Set();
+  return (Array.isArray(raw) ? raw : [])
+    .map(asText)
+    .filter((key) => key && !seen.has(key) && seen.add(key))
+    .map((key) => ({
+      key,
+      label: HINT_LABELS[key] || key.replaceAll("_", " "),
+    }));
+}
+
+/** Does this row carry a given hint? */
+export function hasHint(summary, key) {
+  return (summary?.hints ?? []).some((hint) => hint.key === key);
+}
+
+/**
  * The label a state reads as when core sent none — the legacy path, and
  * `summaryFromStatus` callers that have a state and a reason only.
  */
@@ -533,6 +567,7 @@ function baseModel(row) {
   return {
     phaseHint: "",
     hasPlan: false,
+    hints: [],
     sourceStatus: "",
     sourceStatusShown: false,
     lifecycleState: asText(row?.state ?? row?.lifecycle_state),
@@ -605,6 +640,16 @@ function fromComputed(raw, row, { now }) {
        * a badge beside it would say the same thing twice.
        */
       sourceStatusShown: sourceWordAdds(sourceStatus, status),
+      /*
+       * A core between the two contracts still reports "no plan" where the
+       * status goes, so it is read back as the hint it has become. One rule
+       * for "does this card have a plan", whichever wire shape answered.
+       */
+      hints: hintParts(
+        Array.isArray(raw.hints) || status?.state !== "no_plan"
+          ? raw.hints
+          : ["no_plan"],
+      ),
       attention: attentionPart(raw.attention),
       attentionTruncated: raw.attention_truncated === true,
       resolutionTruncated: raw.resolution_truncated === true,
@@ -679,6 +724,8 @@ function fromLegacy(row, { now }) {
       hasPlan: Array.isArray(row?.plan_state?.steps)
         ? row.plan_state.steps.length > 0
         : Boolean(row?.plan_state),
+      // Same rule for a core with no computed summary at all.
+      hints: hintParts(status?.state === "no_plan" ? ["no_plan"] : null),
       // `nextStepModel` calls the remainder `extra`; the contract calls it
       // `more`, and one renderer can only read one name.
       next: nextPart(legacyNext(row)),

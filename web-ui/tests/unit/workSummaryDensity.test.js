@@ -122,6 +122,52 @@ describe("density decides how much fits", () => {
   });
 });
 
+describe("hints are a note, never the status", () => {
+  const hinted = (density) =>
+    at(density, {
+      work_summary: {
+        status: { state: "in_progress", label: "In progress" },
+        hints: ["no_plan"],
+      },
+    });
+
+  it.each(["card", "header"])("%s shows the hint under the status", (d) => {
+    const el = hinted(d);
+    expect(el.querySelector("[data-summary-hint='no_plan']").textContent).toBe(
+      "No plan",
+    );
+    // And the status still says what state the card is in.
+    expect(el.querySelector("[data-health]").dataset.health).toBe(
+      "in_progress",
+    );
+  });
+
+  it("a row shows no hint at all", () => {
+    /*
+     * The whole reason `no_plan` stopped being a status: most tasks have no
+     * plan, so a list of fifty would have said "No plan" fifty times in the
+     * column headed Status.
+     */
+    const el = hinted("row");
+    expect(el.querySelector("[data-summary-hints]")).toBeNull();
+    expect(el.textContent).not.toContain("No plan");
+    expect(el.querySelector("[data-health]").textContent).toContain(
+      "In progress",
+    );
+  });
+
+  it("renders every surface without a stored phase", () => {
+    // Core sends `set_status` only when the phase genuinely disagrees, and
+    // for a planless card under the new rule it never does.
+    for (const d of ["row", "card", "header"]) {
+      const el = hinted(d);
+      expect(el.querySelector("[data-work-summary]"), d).not.toBeNull();
+      expect(el.querySelector("[data-summary-set-status]"), d).toBeNull();
+      expect(el.textContent, d).not.toContain("marked");
+    }
+  });
+});
+
 describe("parts core omitted are not invented", () => {
   it("shows only the status when that is all core sent", () => {
     const el = at("card", {

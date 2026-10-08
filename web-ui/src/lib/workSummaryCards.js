@@ -13,7 +13,7 @@
  */
 
 import { markdownExcerpt } from "./markdown.js";
-import { workProse, workSummaryModel } from "./workSummary.js";
+import { hasHint, workProse, workSummaryModel } from "./workSummary.js";
 
 const asText = (value) => String(value ?? "").trim();
 
@@ -29,10 +29,19 @@ export const CARD_GROUPS = Object.freeze({
   NO_PLAN: "no_plan",
 });
 
-export function cardGroup(state) {
-  const key = asText(state);
+/**
+ * @param {object|null} summary a `workSummaryModel` result
+ *
+ * Planless cards are found by the `no_plan` *hint*, not by a status. Core
+ * computes a planless card's state from its phase now — "In progress", not
+ * "No plan" — so reading the status would have folded nothing away and
+ * dropped every planless initiative into the attention grid, which is the
+ * noise this fold exists to keep out.
+ */
+export function cardGroup(summary) {
+  const key = asText(summary?.status?.state);
   if (key === "done" || key === "cancelled") return CARD_GROUPS.DONE;
-  if (key === "no_plan" || !key) return CARD_GROUPS.NO_PLAN;
+  if (hasHint(summary, "no_plan") || !key) return CARD_GROUPS.NO_PLAN;
   return CARD_GROUPS.ATTENTION;
 }
 
@@ -67,7 +76,7 @@ export function workSummaryCard(item, options = {}) {
     needs,
     summary,
     rank: summary.status?.rank ?? Number.MAX_SAFE_INTEGER,
-    group: cardGroup(summary.status?.state),
+    group: cardGroup(summary),
   };
 }
 

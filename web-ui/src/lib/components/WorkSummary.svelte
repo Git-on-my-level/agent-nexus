@@ -18,10 +18,10 @@
    *   column of its own or no room for one, so where the age goes is its
    *   call — and no source status word, for the same reason: a fourth badge
    *   here turned every Tasks row two lines tall.
-   * - `card` — the Overview card: a status line with its age, a progress bar,
-   *   the step lists or the next step, and a meta line.
+   * - `card` — the Overview card: a status line with its age, any hints, a
+   *   progress bar, the step lists or the next step, and a meta line.
    * - `header` — a page header, which has room for words: the status with its
-   *   computed reason, progress with its unit, due, age and asks.
+   *   computed reason, any hints, progress with its unit, due, age and asks.
    *
    * There is no branching on whether the card is an initiative, which board
    * it is on, or who is looking. A part is shown when core sent it and the
@@ -52,6 +52,13 @@
 
   let status = $derived(summary?.status ?? null);
   let setStatus = $derived(summary?.setStatus ?? null);
+  /*
+   * Notes that are not the card's state: "No plan", and whatever core adds
+   * next. They are deliberately absent from `row` density — a list of fifty
+   * tasks, most of which have no plan, would say so fifty times, which is
+   * what moving `no_plan` out of the status was for.
+   */
+  let hints = $derived(density === "row" ? [] : (summary?.hints ?? []));
   let progress = $derived(summary?.progress ?? null);
   let attention = $derived(summary?.attention ?? null);
   /*
@@ -170,6 +177,16 @@
 
     {#if density === "header" && status.reason}
       <span class="summary__reason" data-summary-reason>{status.reason}</span>
+    {/if}
+
+    {#if hints.length}
+      <!-- Quiet, and under the status rather than beside it: a note about
+           the card, not a second opinion on what state it is in. -->
+      <span class="summary__hints" data-summary-hints>
+        {#each hints as hint (hint.key)}
+          <span data-summary-hint={hint.key}>{hint.label}</span>
+        {/each}
+      </span>
     {/if}
 
     {#if progress}
@@ -371,6 +388,19 @@
   }
   .summary__reason {
     flex-basis: 100%;
+    font-size: 11px;
+  }
+  /*
+   * A secondary note: the same muted scale as the reason, one step quieter
+   * than anything that states the card's status.
+   */
+  .summary__hints {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 8px;
+    flex-basis: 100%;
+    min-width: 0;
+    color: var(--fg-subtle, var(--fg-muted));
     font-size: 11px;
   }
   .summary__viz {

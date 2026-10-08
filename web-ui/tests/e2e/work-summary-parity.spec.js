@@ -74,6 +74,34 @@ const sideCard = {
 };
 
 /**
+ * A planless card as core computes it once `no_plan` stops being a status:
+ * the state comes from the phase, the missing plan is a hint, and the stored
+ * phase agrees so there is no `set_status` at all.
+ */
+const planlessCard = {
+  ref: "card:plainwork",
+  handle: "plainwork",
+  title: "Plain work",
+  summary: "A task nobody wrote a plan for.",
+  summary_text: "A task nobody wrote a plan for.",
+  phase: "in_progress",
+  column_key: "in_progress",
+  board_ref: "board:initiatives",
+  updated_at: MOVED_AT,
+  source: { authority: "nexus" },
+  freshness: { status: "unknown" },
+  work_summary: {
+    status: {
+      state: "in_progress",
+      label: "In progress",
+      reason: "The card is being worked.",
+    },
+    hints: ["no_plan"],
+    last_movement_at: MOVED_AT,
+  },
+};
+
+/**
  * A card from a core that computes no summary at all, carrying only the
  * legacy fields — plus a source status Nexus has no phase for. Every surface
  * has to keep saying something about it.
@@ -144,7 +172,7 @@ async function install(page) {
   await installWorkspaceApi(page, {
     actors: [{ id: "operator", display_name: "Alex", tags: ["human"] }],
     principals: [{ actor_id: "operator", principal_kind: "human" }],
-    work: [card, sideCard, legacyCard],
+    work: [card, sideCard, legacyCard, planlessCard],
   });
   await page.route("**/*", async (route) => {
     // Decoded: a card ref carries a colon, so the path arrives percent-encoded.
@@ -155,11 +183,17 @@ async function install(page) {
     if (path === "/work")
       return route.fulfill({
         json: {
-          work: [card, sideCard, legacyCard].map((row) => asCore(row, optedIn)),
+          work: [card, sideCard, legacyCard, planlessCard].map((row) =>
+            asCore(row, optedIn),
+          ),
         },
       });
     if (path === `/work/${CARD_REF}`)
       return route.fulfill({ json: { work: asCore(card, optedIn) } });
+    if (path === `/work/${planlessCard.ref}`)
+      return route.fulfill({ json: { work: asCore(planlessCard, optedIn) } });
+    if (path.startsWith(`/work/${planlessCard.ref}/`))
+      return route.fulfill({ json: { observations: [], participants: [] } });
     if (path === `/work/${legacyCard.ref}`)
       return route.fulfill({ json: { work: legacyCard } });
     if (path.startsWith(`/work/${legacyCard.ref}/`))
@@ -187,10 +221,11 @@ async function install(page) {
           },
           initiatives: {
             status: "ok",
-            count: 1,
-            items: [
-              { ...asCore(card, optedIn), href: `/tasks/${card.handle}` },
-            ],
+            count: 2,
+            items: [card, planlessCard].map((row) => ({
+              ...asCore(row, optedIn),
+              href: `/tasks/${row.handle}`,
+            })),
           },
           needs_you: { status: "ok", count: 0, rows: [], href: "/inbox" },
           dashboard: { status: "ok", has_more: false, reports: [] },
@@ -397,6 +432,60 @@ test("the surfaces ask core to compute the summary", async ({ page }) => {
   expect(asked.filter((entry) => !entry.endsWith("?summary=1"))).toEqual([]);
 });
 
+test("a planless card reads as its phase, with the missing plan as a note", async ({
+  page,
+}) => {
+  /*
+   * `no_plan` is not a status. It was one, and the Tasks table's Status
+   * column then read "No plan" for most of the rows in it. Core computes the
+   * state from the phase now and reports the missing plan separately, so the
+   * note belongs where a plan is expected — a card, a page header — and
+   * nowhere in a list.
+   */
+  test.setTimeout(120_000);
+  await install(page);
+  await page.setViewportSize({ width: 1440, height: 1100 });
+
+  // On the Overview card: the state, and the note under it.
+  await page.goto(OVERVIEW);
+  /*
+   * In the "No plan" fold, found by the hint rather than by a status. That
+   * fold is the reason the grouping had to move: core no longer calls a
+   * planless card `no_plan`, so reading the status would have folded nothing
+   * and dropped every planless initiative into the attention grid.
+   */
+  const fold = page.locator("[data-initiative-group='no-plan']");
+  await expect(fold).toBeVisible({ timeout: 60_000 });
+  await fold.locator("summary").click();
+  const tile = page.locator(`[data-initiative-tile="${planlessCard.ref}"]`);
+  await expect(tile).toBeVisible();
+  const card = await readSummary(tile);
+  expect(card.state).toBe("in_progress");
+  expect(card.status).toContain("In progress");
+  // The stored phase agrees, so core sends none and the card claims none.
+  expect(card.setStatus).toBe("");
+  await expect(tile.locator("[data-summary-hint='no_plan']")).toHaveText(
+    "No plan",
+  );
+
+  // In the Tasks table: the same state, and no note.
+  await page.goto(`${TASKS}?view=table`);
+  const row = page.locator(`[data-work-ref="${planlessCard.ref}"]`);
+  await expect(row).toBeVisible({ timeout: 60_000 });
+  expect(await readSummary(row)).toEqual(card);
+  await expect(row.locator("[data-summary-hints]")).toHaveCount(0);
+  await expect(row).not.toContainText("No plan");
+
+  // On the task header: the note is back, beside the computed reason.
+  await page.goto(`${TASKS}/${encodeURIComponent(planlessCard.ref)}`);
+  const header = page.locator('[data-work-summary="header"]');
+  await expect(header).toBeVisible({ timeout: 60_000 });
+  await expect(header.locator("[data-summary-hint='no_plan']")).toHaveText(
+    "No plan",
+  );
+  await expect(header.locator("[data-summary-set-status]")).toHaveCount(0);
+});
+
 test("the Initiatives filter reuses the board role Overview selects by", async ({
   page,
 }) => {
@@ -405,7 +494,7 @@ test("the Initiatives filter reuses the board role Overview selects by", async (
   await page.setViewportSize({ width: 1440, height: 1100 });
 
   await page.goto(`${TASKS}?view=table`);
-  await expect(page.locator("[data-work-ref]")).toHaveCount(3, {
+  await expect(page.locator("[data-work-ref]")).toHaveCount(4, {
     timeout: 60_000,
   });
 
@@ -414,7 +503,7 @@ test("the Initiatives filter reuses the board role Overview selects by", async (
   await expect(page.locator("[data-task-initiatives-filter]")).toContainText(
     "initiatives board",
   );
-  await expect(page.locator("[data-work-ref]")).toHaveCount(1);
+  await expect(page.locator("[data-work-ref]")).toHaveCount(2);
   await expect(page.locator(`[data-work-ref="${CARD_REF}"]`)).toBeVisible();
   const filtered = await readSummary(
     page.locator(`[data-work-ref="${CARD_REF}"]`),
