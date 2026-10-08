@@ -241,6 +241,9 @@ func TestCardAndStepMessagesResetPlanRecency(t *testing.T) {
 			if _, err = ws.DB().Exec(`UPDATE card_plans SET updated_at=?`, old); err != nil {
 				t.Fatal(err)
 			}
+			if _, err = ws.DB().Exec(`UPDATE work_metadata SET updated_at=?`, old); err != nil {
+				t.Fatal(err)
+			}
 			card, err := s.GetBoardCard(ctx, "", parent["id"].(string))
 			if err != nil {
 				t.Fatal(err)

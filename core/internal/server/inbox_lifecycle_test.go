@@ -58,6 +58,7 @@ func TestInboxStreamIndexedLifecycleMatchesPayloadRules(t *testing.T) {
 	}
 	seedStreamPrivacyInbox(t, s, thread, items...)
 	req := httptest.NewRequest("GET", "/stream/inbox", nil)
+	attachResourceAccessScope(req, handlerOptions{primitiveStore: s})
 	check := func(name string) {
 		t.Helper()
 		legacy, err := loadVisibleInboxItems(req, handlerOptions{primitiveStore: s}, true)

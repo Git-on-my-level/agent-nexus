@@ -3,11 +3,22 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 )
 
 // This index stores traversal hints only. Bounded candidates must always be
 // joined back through the scoped canonical inbox relation before publication.
 func installWorkSummaryAttention(ctx context.Context, tx *sql.Tx) error {
+	if exists, err := sqliteTableExists(ctx, tx, "ref_edges"); err != nil {
+		return err
+	} else if exists {
+		if _, err = tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_ref_edges_board_card_page ON ref_edges(source_type,source_id,edge_type,target_type,target_id)`); err != nil {
+			return err
+		}
+	}
+	if err := repairPrimaryCardPhases(ctx, tx); err != nil {
+		return err
+	}
 	// Sparse legacy migration fixtures need not contain canonical events.
 	events, err := sqliteTableExists(ctx, tx, "events")
 	if err != nil {
@@ -84,4 +95,64 @@ func maintainWorkSummaryAttention(ctx context.Context, tx *sql.Tx) (bool, error)
 	done = len(ids) == 0
 	_, err = tx.ExecContext(ctx, `UPDATE work_summary_asks_job SET cursor=?,done=? WHERE singleton=1`, cursor, done)
 	return done, err
+}
+
+// Board moves historically updated membership metadata without the primary
+// card column. Restore the canonical typed phase once, in bounded migration
+// pages, then keep it atomic with membership writes. This changes neither
+// activity timestamps nor events and never materializes metadata on a read.
+func repairPrimaryCardPhases(ctx context.Context, tx *sql.Tx) error {
+	for _, table := range []string{"cards", "ref_edges"} {
+		exists, err := sqliteTableExists(ctx, tx, table)
+		if err != nil || !exists {
+			return err
+		}
+	}
+	for _, column := range []string{"board_id", "column_key"} {
+		exists, err := sqliteTableHasColumn(ctx, tx, "cards", column)
+		if err != nil || !exists {
+			return err
+		}
+	}
+	const phase = `json_extract(NEW.metadata_json,'$.column_key')`
+	const allowed = ` IN ('backlog','in_progress','review','blocked','done','cancelled')`
+	for _, operation := range []string{"INSERT", "UPDATE"} {
+		_, err := tx.ExecContext(ctx, `CREATE TRIGGER IF NOT EXISTS work_summary_primary_phase_`+operation+` AFTER `+operation+` ON ref_edges
+ WHEN NEW.source_type='board' AND NEW.target_type='card' AND NEW.edge_type='board_card' AND `+phase+allowed+`
+ BEGIN UPDATE cards SET column_key=`+phase+` WHERE id=NEW.target_id AND board_id=NEW.source_id AND column_key<>`+phase+`; END`)
+		if err != nil {
+			return err
+		}
+	}
+	cursor := ""
+	for {
+		rows, err := tx.QueryContext(ctx, `SELECT id FROM cards WHERE id>? ORDER BY id LIMIT 64`, cursor)
+		if err != nil {
+			return err
+		}
+		ids := []string{}
+		for rows.Next() {
+			var id string
+			if err = rows.Scan(&id); err != nil {
+				rows.Close()
+				return err
+			}
+			ids = append(ids, id)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return err
+		}
+		if len(ids) == 0 {
+			return nil
+		}
+		// The unique membership index supplies one primary edge per card.
+		const primaryPhase = `(SELECT json_extract(re.metadata_json,'$.column_key') FROM ref_edges re WHERE re.source_type='board' AND re.source_id=cards.board_id AND re.target_type='card' AND re.target_id=cards.id AND re.edge_type='board_card')`
+		raw, _ := json.Marshal(ids)
+		if _, err = tx.ExecContext(ctx, `UPDATE cards SET column_key=`+primaryPhase+` WHERE id IN (SELECT value FROM json_each(?)) AND `+primaryPhase+allowed+` AND column_key<>`+primaryPhase, string(raw)); err != nil {
+			return err
+		}
+		cursor = ids[len(ids)-1]
+	}
 }

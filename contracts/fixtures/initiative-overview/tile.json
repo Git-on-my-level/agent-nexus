@@ -16,12 +16,8 @@
       "done": 1,
       "total": 2
     },
-    "critical_path": [
-      "build"
-    ],
-    "next_steps": [
-      "build"
-    ],
+    "critical_path": ["build"],
+    "next_steps": ["build"],
     "shape": "chain",
     "health": "on_track",
     "last_movement_at": "2026-10-04T12:00:00Z",
@@ -49,9 +45,7 @@
         "id": "build",
         "status": "not_started",
         "layer": 1,
-        "after": [
-          "design"
-        ]
+        "after": ["design"]
       }
     ],
     "total_nodes": 2,
@@ -97,5 +91,53 @@
       ],
       "more": 0
     }
+  },
+  "summary_text": "",
+  "work_summary": {
+    "status": {
+      "state": "on_track",
+      "label": "In progress",
+      "reason": "Open steps are progressing.",
+      "since": "2026-10-04T12:00:00Z"
+    },
+    "set_status": {
+      "state": "backlog",
+      "label": "Backlog"
+    },
+    "progress": {
+      "done": 1,
+      "total": 2,
+      "unit": "steps"
+    },
+    "next": {
+      "id": "build",
+      "title": "Build",
+      "ref": "",
+      "more": 0
+    },
+    "age": 0,
+    "steps": {
+      "window_hours": 168,
+      "completed": {
+        "items": [],
+        "more": 0
+      },
+      "current": {
+        "items": [],
+        "more": 0
+      },
+      "next": {
+        "items": [
+          {
+            "id": "build",
+            "title": "Build",
+            "status": "not_started"
+          }
+        ],
+        "more": 0
+      }
+    },
+    "attention_truncated": true,
+    "last_movement_at": "2026-10-04T12:00:00Z"
   }
 }

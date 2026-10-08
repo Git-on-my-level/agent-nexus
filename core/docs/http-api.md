@@ -299,6 +299,13 @@ The transaction proof is bound only by internal policy code and expires on
 rollback; unavailable proof denies. Arbitrary text/ref projections retain their
 existing SQL policy, and writes retain canonical transaction checks.
 
+Native phase uses the primary board membership across every surface. Migration
+72 repairs the legacy card phase from that membership in 64-ID pages and installs
+atomic membership triggers. This one-time upgrade visits existing cards; normal
+reads use the typed card column. It preserves activity timestamps and emits no
+events. Secondary-board placement remains local to that board and does not change
+the shared summary. Native movement includes meaningful card/metadata updates.
+
 ## Executive Overview and workspace dashboard
 
 `GET /overview` is the shared projection behind the web UI and `anx overview

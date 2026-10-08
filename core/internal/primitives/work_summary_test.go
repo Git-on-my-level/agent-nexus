@@ -57,6 +57,58 @@ func TestWorkSummaryDigestDoesNotCountUnreadableSteps(t *testing.T) {
 	}
 }
 
+func TestWorkSummaryUsesPrimaryPhaseAcrossBoardMemberships(t *testing.T) {
+	ctx := context.Background()
+	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	primary, err := s.CreateBoard(ctx, "owner", map[string]any{"title": "Primary"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondary, err := s.CreateBoard(ctx, "owner", map[string]any{"title": "Secondary", "role": "initiatives"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := s.CreateWork(ctx, "owner", workString(primary["id"]), map[string]any{"title": "Shared phase"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := workString(w["id"])
+	if _, err = ws.DB().Exec(`INSERT INTO ref_edges(id,source_type,source_id,target_type,target_id,edge_type,created_at,metadata_json) VALUES('secondary-placement','board',?,'card',?,'board_card','now','{"column_key":"review","rank":"1"}')`, secondary["id"], id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.MoveBoardCard(ctx, "owner", workString(primary["id"]), id, MoveBoardCardInput{ColumnKey: "blocked"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, board := range []map[string]any{primary, secondary} {
+		cards, err := s.ListCards(ctx, CardListFilter{BoardID: workString(board["id"]), Limit: 51})
+		if err != nil || len(cards) != 1 {
+			t.Fatalf("cards=%v err=%v", cards, err)
+		}
+		wantColumn := "blocked"
+		if board["id"] == secondary["id"] {
+			wantColumn = "review"
+		}
+		if cards[0]["column_key"] != wantColumn {
+			t.Fatal("membership placement lost", cards[0])
+		}
+		if err = s.EnrichCardPlans(ctx, cards, nil, time.Now(), 0); err != nil {
+			t.Fatal(err)
+		}
+		if got := cards[0]["work_summary"].(*WorkSummary); got.Status.State != "blocked" || got.SetStatus != nil {
+			t.Fatal(got)
+		}
+	}
+	refs, err := s.ResolveRefs(ctx, []string{workString(w["ref"])}, nil, time.Now(), 0)
+	if err != nil || len(refs) != 1 || refs[0].Phase != "blocked" || refs[0].Summary.Status.State != "blocked" {
+		t.Fatalf("refs=%+v err=%v", refs, err)
+	}
+}
+
 func TestWorkSummaryAttentionAudienceBoundsAndPrivacy(t *testing.T) {
 	ctx := context.Background()
 	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())

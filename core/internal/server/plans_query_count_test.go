@@ -82,7 +82,7 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 			if err != nil || len(data["items"].([]map[string]any)) != i+1 {
 				t.Fatalf("initiatives=%+v error=%v", data, err)
 			}
-			if got := counter.Count(); got != 9 {
+			if got := counter.Count(); got != 8 {
 				t.Fatalf("initiatives: %d queries for %d cards and boards", got, i+1)
 			}
 			counter.Reset()
@@ -93,7 +93,7 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 			handleResolveRefs(out, resolveReq, handlerOptions{primitiveStore: store})
 			// Scoped candidates authorize the read without an additional
 			// whole-body ownership query, independent of workspace size.
-			if out.Code != 200 || counter.Count() != 12 {
+			if out.Code != 200 || counter.Count() != 11 {
 				t.Fatalf("mixed ref queries=%d status=%d body=%s", counter.Count(), out.Code, out.Body.String())
 			}
 		}
@@ -116,7 +116,7 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 	// This new request captures one authorization snapshot, unlike the reused
 	// render request above. Projection queries remain six at either workspace size.
 	data, _, err := reader.materialize(reports.Panel{Type: "live-initiatives", Query: reports.Query{Limit: 40}})
-	if err != nil || len(data["items"].([]map[string]any)) != 38 || counter.Count() != 10 {
+	if err != nil || len(data["items"].([]map[string]any)) != 38 || counter.Count() != 9 {
 		t.Fatalf("private initiatives must be omitted without more queries: data=%+v queries=%d error=%v", data, counter.Count(), err)
 	}
 	for _, item := range data["items"].([]map[string]any) {

@@ -406,6 +406,8 @@ func (s *Store) ResolveRefs(ctx context.Context, refs []string, visible func(str
 			continue
 		}
 		input := movement[row.ID]
+		input.Phase = row.Phase
+		movement[row.ID] = input
 		at := input.Activity
 		if row.MovementAt.After(at) {
 			at = row.MovementAt

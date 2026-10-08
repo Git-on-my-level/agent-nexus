@@ -72,6 +72,10 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 			t.Fatal(err)
 		}
 		health["since"] = "2026-10-04T12:00:00Z"
+		summary := item["work_summary"].(map[string]any)
+		summary["age"] = float64(0)
+		summary["last_movement_at"] = "2026-10-04T12:00:00Z"
+		summary["status"].(map[string]any)["since"] = "2026-10-04T12:00:00Z"
 		item["ref"] = "card:initiative"
 		item["title"] = "Initiative"
 		item["updated_at"] = "2026-10-04T12:00:00Z"
@@ -189,7 +193,7 @@ func TestOverviewDigestDistinctDecisionRefsQueryBudget(t *testing.T) {
 				t.Fatalf("items=%d truncated=%v", len(d.Items), d.Truncated)
 			}
 			// Each full 200-row page needs an empty-page check for previews and plan facts.
-			wantQueries := int64(5 + 2*(i/200))
+			wantQueries := int64(7 + 2*(i/200) + 2*((i+49)/50-1))
 			// Main captures the immutable denial snapshot on the first read only;
 			// later writes use its statement-level epoch fallback without recapture.
 			if i == 1 {

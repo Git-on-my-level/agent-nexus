@@ -38,8 +38,10 @@ func (s *Store) enrichSummaryAttention(ctx context.Context, inputs map[string]ca
 		selectedCards = append(selectedCards, selected{ID: id, Refs: refs})
 	}
 	var ready bool
-	if err := s.db.QueryRowContext(ctx, `SELECT done FROM work_summary_asks_job WHERE singleton=1`).Scan(&ready); err != nil {
-		return err
+	if !scopeApplied {
+		if err := s.db.QueryRowContext(ctx, `SELECT done FROM work_summary_asks_job WHERE singleton=1`).Scan(&ready); err != nil {
+			return err
+		}
 	}
 	for start := 0; start < len(selectedCards); start += summaryBatchSize {
 		end := start + summaryBatchSize

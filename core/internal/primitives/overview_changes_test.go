@@ -96,8 +96,8 @@ func TestOverviewDigestNetTransitionsVisibilityAndBounds(t *testing.T) {
 	queries := counter.Count()
 	// Closed IDs are bounded before hydration; the answer probe shares the
 	// visit read. This fixture uses ten reads; growing its corpus adds none.
-	if queries != 12 {
-		t.Fatalf("queries=%d want 12", queries)
+	if queries != 11 {
+		t.Fatalf("queries=%d want 11", queries)
 	}
 	got := map[string]int{}
 	for _, item := range d.Items {
