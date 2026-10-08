@@ -422,6 +422,10 @@
       }
     } catch (err) {
       if (ticket === requestId) {
+        // The PM was uninstalled while this thread was open: core refuses
+        // every call from here on, so leave for setup rather than re-raising
+        // the same alert on each poll.
+        if (await redirectIfPmGone(err)) return;
         error = errorMessage(err);
         // An expired session will not fix itself; stop polling and offer
         // sign-in instead of re-raising the same alert every few seconds.

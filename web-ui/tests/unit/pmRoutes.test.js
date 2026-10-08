@@ -309,6 +309,42 @@ describe("PM operator interactions", () => {
     );
     expect(client.requestWorkRefresh).toHaveBeenCalledWith("card:one");
   });
+  /*
+   * Core refuses every PM route where no PM is onboarded (409
+   * `pm_not_onboarded`). A task is not a PM surface, so that answer means the
+   * Decisions section is empty — not "Decisions unavailable" on a page the
+   * reader opened to read a task.
+   */
+  it("shows no decisions error on a task when no PM is onboarded", async () => {
+    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    client.getWork.mockResolvedValue({
+      work: work("card:one", "Ungated work"),
+    });
+    client.listWorkObservations.mockResolvedValue({ observations: [] });
+    const refusal = Object.assign(new Error("PM is not onboarded."), {
+      status: 409,
+      body: { error: { code: "pm_not_onboarded" } },
+    });
+    client.listPmDecisions.mockRejectedValue(refusal);
+    client.listPmActions.mockRejectedValue(refusal);
+    render(WorkDetail);
+    await screen.findByText("Ungated work");
+    await waitFor(() =>
+      expect(screen.queryByText("Decisions unavailable")).toBeNull(),
+    );
+  });
+
+  it("still reports a real failure to read a task's decisions", async () => {
+    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    client.getWork.mockResolvedValue({
+      work: work("card:one", "Broken read"),
+    });
+    client.listWorkObservations.mockResolvedValue({ observations: [] });
+    client.listPmDecisions.mockRejectedValue(new Error("core unreachable"));
+    render(WorkDetail);
+    await screen.findByText("Decisions unavailable");
+  });
+
   it("scopes task detail decisions to this work, newest first, with an inbox answer link", async () => {
     state.route("/tasks/card%3Aone", { workId: "card:one" });
     client.getWork.mockResolvedValue({
