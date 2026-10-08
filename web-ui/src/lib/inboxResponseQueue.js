@@ -1,6 +1,12 @@
-import { writable } from "svelte/store";
+import { get, writable } from "svelte/store";
 import { coreClient } from "$lib/coreClient";
 import { errorMessage } from "$lib/pm/presentation.js";
+import { authenticatedAgent } from "$lib/authSession.js";
+import { selectedActorId } from "$lib/actorSession.js";
+import {
+  currentOrganizationSlug,
+  currentWorkspaceSlug,
+} from "$lib/workspaceContext.js";
 
 /**
  * Inbox responses wait a few seconds before they are committed, so a
@@ -79,6 +85,9 @@ let pending = null;
 const failedByItem = new Map();
 let toastTimer = null;
 const committedListeners = new Set();
+let scopeGeneration = 0;
+let scopeIdentity = "";
+const responseScope = () => `${scopeIdentity}:${scopeGeneration}`;
 
 /** Drop the mark and the resend payload for one item. */
 function forgetFailure(itemId) {
@@ -125,12 +134,18 @@ function showToast(toast) {
  * Queue one response. A response already waiting is committed at once: only
  * the latest action is ever undoable, as in a mail client.
  *
- * @param {{ itemId: string, request: object, message: string, restore?: any }} entry
+ * @param {{ itemId: string, item?: object, request: object, message: string, restore?: any }} entry
  *   `request` is the exact `respondInboxItem` body; `message` is the toast
  *   copy ("Sent to Omar Reed"); `restore` is handed back on undo.
  * @returns {number} queue id
  */
-export function queueInboxResponse({ itemId, request, message, restore }) {
+export function queueInboxResponse({
+  itemId,
+  item,
+  request,
+  message,
+  restore,
+}) {
   const id = String(itemId ?? "").trim();
   if (!id) throw new Error("queueInboxResponse requires itemId");
   if (
@@ -146,6 +161,8 @@ export function queueInboxResponse({ itemId, request, message, restore }) {
   const entry = {
     id: ++sequence,
     itemId: id,
+    item: item ? { ...item } : null,
+    scope: responseScope(),
     request: { ...request, idempotency_key: crypto.randomUUID() },
     message: String(message ?? "Response sent"),
     restore: restore ?? null,
@@ -155,6 +172,8 @@ export function queueInboxResponse({ itemId, request, message, restore }) {
   entry.timer = setTimeout(() => void commit(entry), UNDO_WINDOW_MS);
   pending = entry;
   setOverlay(id, {
+    item: entry.item,
+    scope: entry.scope,
     status: "pending",
     response_text: String(entry.request?.response_text ?? ""),
     outcome: String(entry.request?.outcome ?? ""),
@@ -220,6 +239,8 @@ export function retryInboxResponse(itemId = "") {
   if (pending) void commit(pending);
   pending = entry;
   setOverlay(entry.itemId, {
+    item: entry.item,
+    scope: entry.scope,
     status: "pending",
     response_text: String(entry.request?.response_text ?? ""),
     outcome: String(entry.request?.outcome ?? ""),
@@ -264,8 +285,11 @@ async function commit(entry) {
       entry.itemId,
       entry.request,
     );
+    if (entry.scope !== responseScope()) return;
     forgetFailure(entry.itemId);
     setOverlay(entry.itemId, {
+      item: entry.item,
+      scope: entry.scope,
       status: "committed",
       response_text: String(entry.request?.response_text ?? ""),
       outcome: String(entry.request?.outcome ?? ""),
@@ -293,6 +317,7 @@ async function commit(entry) {
       }
     }
   } catch (err) {
+    if (entry.scope !== responseScope()) return;
     /*
      * Not answered. The overlay goes — an unanswered item must not sit under
      * Handled — and the failure takes its place, so the row comes back
@@ -308,6 +333,8 @@ async function commit(entry) {
     failedByItem.set(entry.itemId, {
       id: entry.id,
       itemId: entry.itemId,
+      item: entry.item,
+      scope: entry.scope,
       request: entry.request,
       message: entry.message,
       restore: entry.restore,
@@ -339,7 +366,22 @@ export function applyResponseOverlay(
   if (!Object.keys(entries).length && !Object.keys(failedById).length) {
     return list;
   }
-  return list.map((item) => {
+  // Open and completed reads can straddle the commit. Keep the answered
+  // subject through that gap, even after core removes the original open row.
+  const known = new Set(
+    list.flatMap((item) => [item?.id, item?.inbox_item_id]),
+  );
+  const retained = Object.entries(entries)
+    .filter(
+      ([id, entry]) =>
+        !known.has(id) &&
+        entry.item &&
+        entry.scope === responseScope() &&
+        !failedById[id] &&
+        (!entry.until || entry.until > now),
+    )
+    .map(([, entry]) => entry.item);
+  return [...list, ...retained].map((item) => {
     const id = String(item?.id ?? "");
     const failure = failedById[id];
     const entry = entries[id];
@@ -402,4 +444,35 @@ export function resetInboxResponseQueue() {
   inboxResponseToast.set(null);
   inboxResponseOverlay.set({});
   inboxResponseFailures.set({});
+}
+
+// Invalidate snapshots with their workspace/reader. A generation rejects late
+// results even across logout and login as the same person. Page listeners are
+// still owned by their mounted component and remain subscribed.
+function invalidateResponseScope() {
+  const agent = get(authenticatedAgent);
+  const identity = JSON.stringify([
+    get(currentOrganizationSlug),
+    get(currentWorkspaceSlug),
+    agent?.agent_id || "",
+    agent?.actor_id || get(selectedActorId) || "",
+  ]);
+  if (identity === scopeIdentity) return;
+  scopeIdentity = identity;
+  scopeGeneration += 1;
+  if (pending) clearTimeout(pending.timer);
+  pending = null;
+  failedByItem.clear();
+  restoreSlots.clear();
+  showToast(null);
+  inboxResponseOverlay.set({});
+  inboxResponseFailures.set({});
+}
+for (const store of [
+  authenticatedAgent,
+  selectedActorId,
+  currentOrganizationSlug,
+  currentWorkspaceSlug,
+]) {
+  store.subscribe(invalidateResponseScope);
 }

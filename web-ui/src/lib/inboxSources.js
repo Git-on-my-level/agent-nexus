@@ -4,7 +4,7 @@ import { coreClient } from "$lib/coreClient";
  * The attention surface must not hide an obligation on page two. Follow
  * cursors up to a bound; past it, say so instead of claiming completeness.
  */
-export async function listAllPages(fetchPage, key, maxPages = 8) {
+export async function listAllPages(fetchPage, key, maxPages = 8, onPage) {
   const collected = [];
   const archived = new Set();
   const requestedCursors = new Set();
@@ -20,6 +20,11 @@ export async function listAllPages(fetchPage, key, maxPages = 8) {
     for (const ref of result?.archived_refs || []) archived.add(ref);
     cursor = result?.next_cursor || "";
     more = Boolean(cursor) || result?.has_more === true;
+    onPage?.({
+      [key]: [...collected],
+      has_more: more,
+      archived_refs: [...archived],
+    });
     if (!cursor) break;
   }
   return {
@@ -33,7 +38,7 @@ export async function listAllPages(fetchPage, key, maxPages = 8) {
  * Everything the Inbox classifies, fetched in parallel. Each source settles
  * on its own so one failing list does not blank the others.
  *
- * @param {{ withHistory?: boolean, client?: object }} [options]
+ * @param {{ withHistory?: boolean, client?: object, onProgress?: function }} [options]
  *   `withHistory: false` skips unread updates. Completed asks remain loaded so
  *   a blocked card does not return to Needs you after its ask is answered.
  *   `client` defaults to the browser core client;
@@ -45,23 +50,47 @@ export async function listAllPages(fetchPage, key, maxPages = 8) {
 export async function loadInboxSources({
   withHistory = true,
   client = coreClient,
+  onProgress,
 } = {}) {
   const skipped = Promise.resolve(null);
+  const progress = Array.from({ length: 6 }, () => ({ status: "pending" }));
+  const publish = () => onProgress?.(progress.map((result) => ({ ...result })));
+  const pages = async (index, fetchPage, key) => {
+    try {
+      const value = await listAllPages(fetchPage, key, 8, (page) => {
+        if (index === 3) {
+          progress[index] = { status: "fulfilled", value: page };
+          publish();
+        }
+      });
+      progress[index] = { status: "fulfilled", value };
+      publish();
+      return value;
+    } catch (reason) {
+      progress[index] = { status: "rejected", reason };
+      publish();
+      throw reason;
+    }
+  };
+  // On the page, give actionable asks the first database turn. Secondary
+  // history/work queries must not keep an already-loaded ask behind a spinner.
+  const open = pages(
+    3,
+    (cursor) => client.listInboxItems({ status: "open", limit: 50, cursor }),
+    "items",
+  );
+  if (onProgress) await open.catch(() => {});
   const results = await Promise.allSettled([
-    listAllPages(
+    pages(
+      0,
       (cursor) => client.listPmDecisions({ limit: 50, cursor }),
       "items",
     ),
-    listAllPages(
-      (cursor) => client.listPmActions({ limit: 50, cursor }),
-      "items",
-    ),
-    listAllPages((cursor) => client.listWork({ limit: 50, cursor }), "work"),
-    listAllPages(
-      (cursor) => client.listInboxItems({ status: "open", limit: 50, cursor }),
-      "items",
-    ),
-    listAllPages(
+    pages(1, (cursor) => client.listPmActions({ limit: 50, cursor }), "items"),
+    pages(2, (cursor) => client.listWork({ limit: 50, cursor }), "work"),
+    open,
+    pages(
+      4,
       (cursor) =>
         client.listInboxItems({ status: "completed", limit: 50, cursor }),
       "items",
@@ -79,11 +108,17 @@ export async function loadInboxSources({
   return results;
 }
 
-/** Open and completed inbox items merged by id (completed wins). */
+/** Completed rows have their own ids; match their original inbox_item_id too. */
 export function mergeInboxItems(openItems = [], completedItems = []) {
+  const answered = new Set(
+    completedItems.map((item) => item?.inbox_item_id).filter(Boolean),
+  );
   return [
     ...new Map(
-      [...openItems, ...completedItems]
+      [
+        ...openItems.filter((item) => !answered.has(item?.id)),
+        ...completedItems,
+      ]
         .filter((item) => item?.id)
         .map((item) => [item.id, item]),
     ).values(),

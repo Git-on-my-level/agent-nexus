@@ -93,6 +93,8 @@
   let actions = $state([]);
   let work = $state([]);
   let inboxItems = $state([]);
+  let openInboxItems = $state([]);
+  let completedInboxItems = $state([]);
   let updates = $state([]);
   let loading = $state(true);
   let busy = $state(false);
@@ -398,66 +400,91 @@
       // Refreshing it here adds a serial identity round trip on navigation
       // and every live reload. Each source request still authenticates in core;
       // session maintenance and recovery belong to the shell and proxy.
-      const results = await loadInboxSources();
-      if (ticket !== requestId) return;
-      let nextError = "";
-      // A refused session will refuse the retry too; offer sign-in instead.
-      sessionExpired = results.some(
-        (result) =>
-          result.status === "rejected" && isSessionExpired(result.reason),
-      );
-      if (results[0].status === "fulfilled") {
-        decisions = results[0].value.items || [];
-      } else nextError = errorMessage(results[0].reason);
-      // Lists follow cursors up to a bound. Counts drawn from a capped list
-      // are lower bounds, and the reader must be told so rather than shown a total.
-      truncated = results.some(
-        (result) =>
-          result.status === "fulfilled" &&
-          (result.value?.has_more === true ||
-            Boolean(result.value?.next_cursor)),
-      );
-      if (results[1].status === "fulfilled") {
-        actions = results[1].value.items || [];
-        receiptsUnavailable = false;
-      } else if (sessionExpired) {
-        // The receipts are not in doubt, the session is; keep the last
-        // classification and let the banner say what to do.
-        nextError = nextError || errorMessage(results[1].reason);
-      } else {
-        // Without receipts, an answered decision cannot be classified; say
-        // so rather than quietly filing everything under Watching.
-        receiptsUnavailable = true;
-        nextError = nextError || errorMessage(results[1].reason);
-      }
-      if (results[2].status === "fulfilled") {
-        work = results[2].value.work || [];
-      } else {
-        nextError = nextError || errorMessage(results[2].reason);
-      }
-      const openItems =
-        results[3].status === "fulfilled" ? results[3].value.items || [] : [];
-      const completedItems =
-        results[4].status === "fulfilled" ? results[4].value.items || [] : [];
-      if (!quiet || results[3].status === "fulfilled") {
-        inboxItems = mergeInboxItems(openItems, completedItems);
-      }
-      if (results[3].status === "rejected") {
-        nextError = nextError || errorMessage(results[3].reason);
-      } else if (results[4].status === "rejected") {
-        nextError = nextError || errorMessage(results[4].reason);
-      }
-      if (results[5].status === "fulfilled") {
-        updates = results[5].value.groups || [];
-      }
-      if (nextError) {
-        error = nextError;
-        loadErrorText = nextError;
-      } else if (quiet && loadErrorText && error === loadErrorText) {
-        // The failure a live reload recovered from is no longer true.
-        error = "";
-        loadErrorText = "";
-      }
+      const applySources = (results, complete = false) => {
+        if (ticket !== requestId) return;
+        let nextError = "";
+        // A refused session will refuse the retry too; offer sign-in instead.
+        sessionExpired = results.some(
+          (result) =>
+            result.status === "rejected" && isSessionExpired(result.reason),
+        );
+        if (
+          results[0].status === "fulfilled" &&
+          (complete ||
+            (results[1].status !== "pending" &&
+              results[2].status !== "pending"))
+        ) {
+          decisions = results[0].value.items || [];
+        } else if (results[0].status === "rejected")
+          nextError = errorMessage(results[0].reason);
+        // Lists follow cursors up to a bound. Counts drawn from a capped list
+        // are lower bounds, and the reader must be told so rather than shown a total.
+        truncated =
+          !complete ||
+          results.some(
+            (result) =>
+              result.status === "rejected" ||
+              (result.status === "fulfilled" &&
+                (result.value?.has_more === true ||
+                  Boolean(result.value?.next_cursor))),
+          );
+        if (results[1].status === "fulfilled") {
+          actions = results[1].value.items || [];
+          receiptsUnavailable = false;
+        } else if (sessionExpired) {
+          // The receipts are not in doubt, the session is; keep the last
+          // classification and let the banner say what to do.
+          nextError = nextError || errorMessage(results[1].reason);
+        } else if (results[1].status === "rejected") {
+          // Without receipts, an answered decision cannot be classified; say
+          // so rather than quietly filing everything under Watching.
+          receiptsUnavailable = true;
+          nextError = nextError || errorMessage(results[1].reason);
+        }
+        // A work row can duplicate an ask. Publish it only with successful
+        // open and completed reads, so missing history cannot resurrect a card.
+        if (
+          results[2].status === "fulfilled" &&
+          results[3].status === "fulfilled" &&
+          results[4].status === "fulfilled"
+        ) {
+          work = results[2].value.work || [];
+        } else if (results[2].status === "rejected") {
+          nextError = nextError || errorMessage(results[2].reason);
+        }
+        if (results[3].status === "fulfilled")
+          openInboxItems = results[3].value.items || [];
+        if (results[4].status === "fulfilled")
+          completedInboxItems = results[4].value.items || [];
+        inboxItems = mergeInboxItems(openInboxItems, completedInboxItems);
+        if (results[3].status === "rejected") {
+          nextError = nextError || errorMessage(results[3].reason);
+        } else if (results[4].status === "rejected") {
+          nextError = nextError || errorMessage(results[4].reason);
+        }
+        if (results[5].status === "fulfilled") {
+          updates = results[5].value.groups || [];
+        }
+        if (nextError) {
+          error = nextError;
+          loadErrorText = nextError;
+        } else if (
+          complete &&
+          quiet &&
+          loadErrorText &&
+          error === loadErrorText
+        ) {
+          // The failure a live reload recovered from is no longer true.
+          error = "";
+          loadErrorText = "";
+        }
+        if (complete || inboxItems.length) {
+          loading = false;
+          ready = true;
+        }
+      };
+      const results = await loadInboxSources({ onProgress: applySources });
+      applySources(results, true);
     } catch (err) {
       if (ticket === requestId && !quiet) error = errorMessage(err);
     } finally {
@@ -769,6 +796,7 @@
     const draft = reply;
     queueInboxResponse({
       itemId: item.id,
+      item,
       request,
       message: acknowledge
         ? "Acknowledged"

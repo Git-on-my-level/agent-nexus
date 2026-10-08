@@ -1,7 +1,50 @@
 import { describe, expect, it } from "vitest";
-import { listAllPages, loadInboxSources } from "../../src/lib/inboxSources.js";
+import {
+  listAllPages,
+  loadInboxSources,
+  mergeInboxItems,
+} from "../../src/lib/inboxSources.js";
 
 describe("Inbox sources", () => {
+  it("removes an older open snapshot using the completed row's original id", () => {
+    const completed = {
+      id: "completed:response",
+      inbox_item_id: "inbox:ask",
+      status: "completed",
+    };
+    expect(
+      mergeInboxItems(
+        [{ id: "inbox:ask" }, { id: "inbox:other" }],
+        [completed],
+      ),
+    ).toEqual([{ id: "inbox:other" }, completed]);
+  });
+
+  it("publishes actionable asks before work history finishes and preserves the page bound", async () => {
+    let finishWork;
+    const work = new Promise((resolve) => {
+      finishWork = resolve;
+    });
+    const progress = [];
+    const client = {
+      listPmDecisions: async () => ({ items: [] }),
+      listPmActions: async () => ({ items: [] }),
+      listWork: () => work,
+      listInboxItems: async ({ status }) => ({
+        items: status === "open" ? [{ id: "inbox:ask" }] : [],
+      }),
+      getHomeUnread: async () => ({ groups: [] }),
+    };
+    const pending = loadInboxSources({
+      client,
+      onProgress: (snapshot) => progress.push(snapshot),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(progress[0][3].value.items).toEqual([{ id: "inbox:ask" }]);
+    expect(progress[0][2].status).toBe("pending");
+    finishWork({ work: [] });
+    expect((await pending)[2].status).toBe("fulfilled");
+  });
   it("keeps partial results when a feed repeats its cursor", async () => {
     const calls = [];
     const result = await listAllPages(async (cursor) => {
