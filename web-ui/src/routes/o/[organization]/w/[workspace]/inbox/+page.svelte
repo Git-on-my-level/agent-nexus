@@ -449,6 +449,14 @@
           results[4].status === "fulfilled"
         ) {
           work = results[2].value.work || [];
+        } else if (
+          results[3].status === "rejected" ||
+          results[4].status === "rejected"
+        ) {
+          // Older work is unsafe too: its linked answer may be newer than
+          // the history we have, and the local response overlay expires.
+          // Keep the explicit asks and partial/error notice, not stale cards.
+          work = [];
         } else if (results[2].status === "rejected") {
           nextError = nextError || errorMessage(results[2].reason);
         }

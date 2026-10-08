@@ -276,6 +276,7 @@ for (const answer of ["proposal", "custom"]) {
   }) => {
     test.setTimeout(60_000);
     const calls = await installScaleCore(page, { latency: 0 });
+    await page.clock.install();
     await page.goto(`${ROOT}/inbox`);
     await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible();
     if (answer === "proposal")
@@ -303,5 +304,12 @@ for (const answer of ["proposal", "custom"]) {
     ).toBeVisible();
     await page.getByRole("link", { name: /^Handled/ }).click();
     await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible();
+    await page.getByRole("link", { name: /^Needs you/ }).click();
+    // A prolonged history outage must not resurrect the card after the
+    // bounded local answer overlay expires.
+    await page.clock.fastForward(61_000);
+    await expect(
+      page.locator('[data-inbox-row="task:card:scale-0"]'),
+    ).toHaveCount(0);
   });
 }
