@@ -175,6 +175,18 @@
     return refs;
   });
 
+  /*
+   * The raw refs worth still showing as chips: the Evidence panel already
+   * renders the ones the ask offered as evidence, with their nouns and a way to
+   * read a document without leaving the page, so repeating them here listed the
+   * same document twice. `inboxRefs` itself is unchanged — an attachment is
+   * filed against every ref the item carries, evidence or not.
+   */
+  let chipRefs = $derived.by(() => {
+    const shown = new Set((askEvidence?.refs ?? []).map((entry) => entry.ref));
+    return inboxRefs.filter((ref) => !shown.has(ref));
+  });
+
   let notifyTargetPopupOpen = $derived(
     notifyTargetMenuOpen && notifyTargetResults.length > 0,
   );
@@ -937,11 +949,11 @@
           onOpenDoc={(ref) => (docPanelRef = docPanelRef === ref ? "" : ref)}
           openDocRef={docPanelRef}
         />
-        {#if inboxRefs.length > 0}
+        {#if chipRefs.length > 0}
           <div
             class="flex flex-wrap items-center gap-2 text-micro max-md:gap-x-2 max-md:gap-y-1"
           >
-            {#each inboxRefs.slice(0, 4) as refValue}
+            {#each chipRefs.slice(0, 4) as refValue}
               <RefLink
                 {refValue}
                 threadId={item.thread_id}
@@ -949,8 +961,8 @@
                 artifactRoutesById={inboxComposerArtifactRoutes}
               />
             {/each}
-            {#if inboxRefs.length > 4}
-              <span class="text-fg-muted">+{inboxRefs.length - 4} more</span>
+            {#if chipRefs.length > 4}
+              <span class="text-fg-muted">+{chipRefs.length - 4} more</span>
             {/if}
           </div>
         {/if}
