@@ -237,8 +237,15 @@ func TestHumanAttentionRequestIndexesInboxBeforeCreateReturns(t *testing.T) {
 	if err := json.NewDecoder(inboxResp.Body).Decode(&inboxPayload); err != nil {
 		t.Fatalf("decode inbox payload: %v", err)
 	}
-	if got := asString(inboxPayload.ProjectionFreshness["status"]); got != "current" {
-		t.Fatalf("expected current inbox freshness immediately after create, got %#v", inboxPayload.ProjectionFreshness)
+	foundCurrent := false
+	for _, raw := range inboxPayload.ProjectionFreshness["threads"].([]any) {
+		row := raw.(map[string]any)
+		if row["thread_id"] == threadID && row["status"] == "current" {
+			foundCurrent = true
+		}
+	}
+	if !foundCurrent {
+		t.Fatalf("ask thread not current immediately after create: %#v", inboxPayload.ProjectionFreshness)
 	}
 	if _, ok := findInboxItem(inboxPayload.Items, func(item map[string]any) bool {
 		return asString(item["source_event_id"]) == requestEventID

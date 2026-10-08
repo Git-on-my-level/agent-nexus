@@ -90,6 +90,9 @@ func (s *Store) ListHumanAttentionInboxAsksPage(ctx context.Context, requesterAc
 			}
 			answerPayload := asMapValue(answerEvent["payload"])
 			item["status"] = "answered"
+			if answerPayload["outcome"] == "needs_context" {
+				item["status"] = "needs_context"
+			}
 			item["answer"] = map[string]any{
 				"text": answerPayload["response_text"], "outcome": answerPayload["outcome"],
 				"responder": answerPayload["responding_actor_id"], "at": answerTS.String,

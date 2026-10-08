@@ -82,6 +82,10 @@ func TestThreadEventHandoffScenario(t *testing.T) {
 	threadID := mustStringPath(t, topic.Payload, "result.topic.thread_id")
 	topicID := mustStringPath(t, topic.Payload, "result.topic.id")
 
+	subject := h.runCLIExpectOK(t, "coordinator", map[string]any{"title": "Decision subject", "phase": "ready"}, "work", "create", "--from-file", "-")
+	subjectRef := mustStringPath(t, subject.Payload, "result.work.ref")
+	requesterID := h.actorID(t, "coordinator")
+
 	h.runCLIExpectOK(t, "coordinator", map[string]any{
 		"event": map[string]any{
 			"type":      "human_attention_requested",
@@ -91,8 +95,8 @@ func TestThreadEventHandoffScenario(t *testing.T) {
 			"payload": map[string]any{
 				"kind":               "ask",
 				"title":              "Need worker acknowledgement for integration run " + runID,
-				"subject_ref":        "thread:" + threadID,
-				"requester_actor_id": "actor-1",
+				"subject_ref":        subjectRef,
+				"requester_actor_id": requesterID,
 				"response_proposals": []any{"Acknowledge the request."},
 				"run_id":             runID,
 				"source":             "integration_test",
@@ -173,6 +177,10 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 	documentID := mustStringPath(t, doc.Payload, "result.document.id")
 	initialRevisionID := mustStringPath(t, doc.Payload, "result.revision.revision_id")
 
+	subject := h.runCLIExpectOK(t, "coordinator", map[string]any{"title": "Decision subject", "phase": "ready"}, "work", "create", "--from-file", "-")
+	subjectRef := mustStringPath(t, subject.Payload, "result.work.ref")
+	requesterID := h.actorID(t, "coordinator")
+
 	decision := h.runCLIExpectOK(t, "coordinator", map[string]any{
 		"event": map[string]any{
 			"type":      "human_attention_requested",
@@ -182,8 +190,8 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 			"payload": map[string]any{
 				"kind":                "review",
 				"title":               "Coordinator requested draft + review for run " + runID,
-				"subject_ref":         "document:" + documentID,
-				"requester_actor_id":  "actor-1",
+				"subject_ref":         subjectRef,
+				"requester_actor_id":  requesterID,
 				"response_proposals":  []any{"Accept the draft and review task."},
 				"run_id":              runID,
 				"document_id":         documentID,
@@ -366,6 +374,10 @@ func TestProvenanceWalkScenario(t *testing.T) {
 	topicHandle := mustStringPath(t, topic.Payload, "result.topic.handle")
 	threadRef := "thread:" + topicHandle
 
+	subject := h.runCLIExpectOK(t, "investigator", map[string]any{"title": "Decision subject", "phase": "ready"}, "work", "create", "--from-file", "-")
+	subjectRef := mustStringPath(t, subject.Payload, "result.work.ref")
+	requesterID := h.actorID(t, "investigator")
+
 	event := h.runCLIExpectOK(t, "investigator", map[string]any{
 		"event": map[string]any{
 			"type":      "human_attention_requested",
@@ -375,8 +387,8 @@ func TestProvenanceWalkScenario(t *testing.T) {
 			"payload": map[string]any{
 				"kind":               "ask",
 				"title":              "Trace thread provenance for run " + runID,
-				"subject_ref":        artifactRef,
-				"requester_actor_id": "actor-1",
+				"subject_ref":        subjectRef,
+				"requester_actor_id": requesterID,
 				"response_proposals": []any{"Trace the provenance graph."},
 				"run_id":             runID,
 			},

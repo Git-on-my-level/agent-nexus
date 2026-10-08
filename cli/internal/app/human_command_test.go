@@ -132,7 +132,7 @@ func TestHumanCommandFromFileCreatesEvent(t *testing.T) {
 	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	path := filepath.Join(t.TempDir(), "req.md")
-	content := "---\ntitle: Confirm launch\ncoverage_hint: thin\nsubject_ref: topic:launch\nthread_id: thr1\nrecommended_response: Ship May 15\nproposals:\n  - Wait for legal\n---\n\nMore detail in markdown.\n"
+	content := "---\ntitle: Confirm launch\ncoverage_hint: thin\nsubject_ref: card:launch\nthread_id: thr1\nrecommended_response: Ship May 15\nproposals:\n  - Wait for legal\n---\n\nMore detail in markdown.\n"
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -312,6 +312,13 @@ func TestHumanCommandResolvesThreadFromThreadBackedSubjects(t *testing.T) {
 				"--recommend", "Use May 15.",
 			})
 
+			if !strings.HasPrefix(tc.subjectRef, "card:") {
+				assertEnvelopeError(t, raw)
+				if captured != nil {
+					t.Fatal("published non-card ask")
+				}
+				return
+			}
 			// No --thread-id was passed: the CLI must have grounded it itself.
 			if captured == nil {
 				payload := assertEnvelopeError(t, raw)

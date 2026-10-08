@@ -4,9 +4,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `214`
+- Command operations: `220`
 - Baseline-allowed required-field gaps: `120`
-- Missing recommended examples: `194`
+- Missing recommended examples: `200`
 
 ## Baseline gap counts
 
@@ -149,10 +149,12 @@ Generated from `contracts/anx-openapi.yaml`.
 - `adapters.token` `POST /adapters/{name}/token`
 - `agent.inbox.answers.read` `POST /agent-inbox/answers/read`
 - `agent.inbox.asks.list` `GET /agent-inbox/asks`
+- `agent.inbox.subscribe` `POST /agent-inbox/subscriptions`
 - `agent.notification-receipts.stream` `GET /stream/agent-notification-receipts`
 - `agent.notifications.dismiss` `POST /agent-notifications/dismiss`
 - `agent.notifications.list` `GET /agent-notifications`
 - `agent.notifications.read` `POST /agent-notifications/read`
+- `agent.wakeups.stream` `GET /stream/agent-wakeups`
 - `agents.get` `GET /agents/{agent_id}`
 - `agents.list` `GET /agents`
 - `agents.me.get` `GET /agents/me`
@@ -168,6 +170,10 @@ Generated from `contracts/anx-openapi.yaml`.
 - `artifacts.restore` `POST /artifacts/{artifact_id}/restore`
 - `artifacts.trash` `POST /artifacts/{artifact_id}/trash`
 - `artifacts.unarchive` `POST /artifacts/{artifact_id}/unarchive`
+- `asks.delivery` `POST /asks/{ask_id}/delivery`
+- `asks.get` `GET /asks/{ask_id}`
+- `asks.stream` `GET /stream/asks/{ask_id}`
+- `asks.subscribe` `POST /asks/{ask_id}/subscriptions`
 - `auth.access-requests.approve` `POST /auth/access-requests/{request_id}/approve`
 - `auth.access-requests.deny` `POST /auth/access-requests/{request_id}/deny`
 - `auth.access-requests.list` `GET /auth/access-requests`

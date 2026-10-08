@@ -10,19 +10,21 @@ import (
 )
 
 type humanAttentionFileFrontmatter struct {
-	Title               string   `yaml:"title"`
-	SubjectRef          string   `yaml:"subject_ref"`
-	ThreadID            string   `yaml:"thread_id"`
-	Refs                []string `yaml:"refs"`
-	RequestID           string   `yaml:"request_id"`
-	RequesterActorID    string   `yaml:"requester_actor_id"`
-	RequesterAgentID    string   `yaml:"requester_agent_id"`
-	RequesterLabel      string   `yaml:"requester_label"`
-	RecommendedResponse string   `yaml:"recommended_response"`
-	Proposals           []string `yaml:"proposals"`
-	CoverageHint        string   `yaml:"coverage_hint"`
-	Severity            string   `yaml:"severity"`
-	Kind                string   `yaml:"kind"`
+	Evidence            []askEvidenceLink `yaml:"evidence"`
+	Supersedes          string            `yaml:"supersedes"`
+	Title               string            `yaml:"title"`
+	SubjectRef          string            `yaml:"subject_ref"`
+	ThreadID            string            `yaml:"thread_id"`
+	Refs                []string          `yaml:"refs"`
+	RequestID           string            `yaml:"request_id"`
+	RequesterActorID    string            `yaml:"requester_actor_id"`
+	RequesterAgentID    string            `yaml:"requester_agent_id"`
+	RequesterLabel      string            `yaml:"requester_label"`
+	RecommendedResponse string            `yaml:"recommended_response"`
+	Proposals           []string          `yaml:"proposals"`
+	CoverageHint        string            `yaml:"coverage_hint"`
+	Severity            string            `yaml:"severity"`
+	Kind                string            `yaml:"kind"`
 }
 
 func splitHumanAttentionMarkdown(content string) (yamlSource string, body string, err error) {

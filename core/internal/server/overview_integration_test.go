@@ -85,14 +85,18 @@ func TestOverviewArchivePinAndInitiativeProjection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var subject map[string]any
 	for i := 0; i < 25; i++ {
 		board := active
 		if i >= 7 {
 			board = archived
 		}
-		_, err = store.CreateWork(ctx, "executive", anyString(board["id"]), map[string]any{"title": fmt.Sprintf("Initiative %d", i), "summary": "Ship a useful outcome\n- [x] Design\n- [ ] Build\n```markdown\n- [x] Example\nNeeds ghost: example\n```\nNeeds Alex: choose a launch date\nNeeds Alice: approve\n- [ ]", "priority": "p1"})
-		if err != nil {
-			t.Fatal(err)
+		work, createErr := store.CreateWork(ctx, "executive", anyString(board["id"]), map[string]any{"title": fmt.Sprintf("Initiative %d", i), "summary": "Ship a useful outcome\n- [x] Design\n- [ ] Build\n```markdown\n- [x] Example\nNeeds ghost: example\n```\nNeeds Alex: choose a launch date\nNeeds Alice: approve\n- [ ]", "priority": "p1"})
+		if createErr != nil {
+			t.Fatal(createErr)
+		}
+		if i == 0 {
+			subject = work
 		}
 	}
 	if _, err = store.ArchiveBoard(ctx, "executive", anyString(archived["id"])); err != nil {
@@ -163,7 +167,7 @@ func TestOverviewArchivePinAndInitiativeProjection(t *testing.T) {
 	}
 	for i := 0; i < 2; i++ {
 		thread := anyString(active["thread_id"])
-		event := map[string]any{"actor_id": "executive", "event": map[string]any{"type": "human_attention_requested", "thread_id": thread, "refs": []string{"thread:" + thread, anyString(active["ref"])}, "summary": fmt.Sprintf("Ask %d", i), "payload": map[string]any{"kind": "ask", "subject_ref": active["ref"], "requester_actor_id": "executive", "response_proposals": []string{"Approve"}, "title": fmt.Sprintf("Ask %d", i), "request_id": fmt.Sprintf("ask-%d", i)}, "provenance": map[string]any{"sources": []string{"inferred"}}}}
+		event := map[string]any{"actor_id": "executive", "event": map[string]any{"type": "human_attention_requested", "thread_id": thread, "refs": []string{"thread:" + thread, anyString(active["ref"])}, "summary": fmt.Sprintf("Ask %d", i), "payload": map[string]any{"kind": "ask", "subject_ref": subject["ref"], "requester_actor_id": "executive", "response_proposals": []string{"Approve"}, "title": fmt.Sprintf("Ask %d", i), "request_id": fmt.Sprintf("ask-%d", i)}, "provenance": map[string]any{"sources": []string{"inferred"}}}}
 		raw, _ := json.Marshal(event)
 		postJSONExpectStatus(t, h.baseURL+"/events", string(raw), 201).Body.Close()
 	}

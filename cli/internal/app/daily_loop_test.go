@@ -85,6 +85,9 @@ func TestAwaitOutcomesTimeoutAndReconnect(t *testing.T) {
 		{"acknowledged", "Noted", "acknowledged", 0, 1, false},
 		{"rejected", "Approved.", "rejected", 9, 1, false},
 		{"timeout", "", "", 8, 1, false},
+		{"needs_context", "More evidence", "needs_context", 10, 1, false},
+		{"withdrawn", "Closed", "withdrawn", 11, 1, false},
+		{"expired", "Expired", "expired", 12, 1, false},
 		{"reconnect", "After reconnect", "answered", 0, 2, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -92,11 +95,13 @@ func TestAwaitOutcomesTimeoutAndReconnect(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				switch {
+				case r.URL.Path == "/asks/ask-1/subscriptions" || r.URL.Path == "/asks/ask-1/delivery":
+					fmt.Fprint(w, `{"id":"sub-1"}`)
 				case r.URL.Path == "/events/ask-1":
 					fmt.Fprint(w, `{"event":{"id":"ask-1","type":"human_attention_requested","thread_id":"thread-1"}}`)
 				case r.URL.Path == "/events":
 					fmt.Fprint(w, `{"events":[]}`)
-				case r.URL.Path == "/stream/events":
+				case r.URL.Path == "/stream/asks/ask-1":
 					n := opened.Add(1)
 					w.Header().Set("Content-Type", "text/event-stream")
 					if tc.name == "timeout" {
@@ -107,8 +112,12 @@ func TestAwaitOutcomesTimeoutAndReconnect(t *testing.T) {
 						fmt.Fprint(w, "id: first\nevent: event\ndata: {\"event\":{\"type\":\"other\"}}\n\n")
 						return
 					}
-					payload := fmt.Sprintf(`{"event":{"id":"response-1","type":"human_attention_responded","payload":{"request_event_ref":"event:ask-1","response_text":%q,"outcome":%q,"responding_actor_id":"human-1","subject_ref":"card:task"}}}`, tc.answer, tc.outcome)
-					fmt.Fprintf(w, "id: response-1\nevent: event\ndata: %s\n\n", payload)
+					status := "answered"
+					if tc.wantExit >= 10 {
+						status = tc.outcome
+					}
+					payload := fmt.Sprintf(`{"status":%q,"response":{"response_event_id":"response-1","response_text":%q,"outcome":%q,"responding_actor_id":"human-1"}}`, status, tc.answer, tc.outcome)
+					fmt.Fprintf(w, "event: outcome\ndata: %s\n\n", payload)
 				default:
 					http.NotFound(w, r)
 				}

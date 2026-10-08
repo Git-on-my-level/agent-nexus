@@ -128,6 +128,12 @@ func ExitCode(err error) int {
 		return 8
 	case "rejected":
 		return 9
+	case "needs_context":
+		return 10
+	case "withdrawn":
+		return 11
+	case "expired":
+		return 12
 	}
 	if typed.Kind == KindUsage {
 		return 2

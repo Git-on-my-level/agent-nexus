@@ -4846,6 +4846,7 @@ paths:
     post:
       operationId: createEvent
       summary: Create event
+      description: Generic attention asks are stored against an open subject card. For compatibility, legacy typed non-card subjects (including thread, document and topic) create a ready card atomically with the ask; the original subject and references remain evidence. Existing card subjects resolve canonically and must be effectively open, including source-owned work.
       tags: [events]
       x-anx-surface: canonical
       x-anx-command-id: events.create
@@ -5657,6 +5658,161 @@ paths:
         '409':
           $ref: '#/components/responses/ErrorResponse'
 
+  /asks/{ask_id}/subscriptions:
+    post:
+      operationId: subscribeAsk
+      summary: Subscribe to one ask
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: asks.subscribe
+      x-anx-cli-path: asks subscribe
+      x-anx-why: Subscribe to one ask.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-agent-notes: Requester-only subscription; webhook secrets are returned once and encrypted at rest. Labels must not contain secrets.
+      x-anx-concepts: [inbox, write]
+      x-anx-stability: beta
+      x-anx-output-envelope: Returns subscription or receipt.
+      x-anx-error-codes: [not_found, auth_required, invalid_request]
+      parameters:
+        - {name: ask_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AskSubscriptionInput'}
+      responses:
+        '201':
+          description: Subscription registered; secret appears only in this response.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AskSubscription'}
+  /agent-inbox/subscriptions:
+    post:
+      operationId: subscribeAgentAsks
+      summary: Subscribe to future asks by the authenticated agent
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: agent.inbox.subscribe
+      x-anx-cli-path: agent inbox subscribe
+      x-anx-why: Subscribe to future asks by the authenticated agent.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-agent-notes: Requester-only subscription; webhook secrets are returned once and encrypted at rest. Labels must not contain secrets.
+      x-anx-concepts: [inbox, write]
+      x-anx-stability: beta
+      x-anx-output-envelope: Returns subscription or receipt.
+      x-anx-error-codes: [not_found, auth_required, invalid_request]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AskSubscriptionInput'}
+      responses:
+        '201':
+          description: Subscription registered; secret appears only in this response.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AskSubscription'}
+  /asks/{ask_id}/delivery:
+    post:
+      operationId: recordAskDelivery
+      summary: Record a local delivery receipt
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: asks.delivery
+      x-anx-cli-path: asks delivery
+      x-anx-why: Record a local delivery receipt.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-agent-notes: Requester-only subscription; webhook secrets are returned once and encrypted at rest. Labels must not contain secrets.
+      x-anx-concepts: [inbox, write]
+      x-anx-stability: beta
+      x-anx-output-envelope: Returns subscription or receipt.
+      x-anx-error-codes: [not_found, auth_required, invalid_request]
+      parameters:
+        - {name: ask_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AskDeliveryReceipt'}
+      responses:
+        '200':
+          description: Receipt recorded.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/JsonObject'}
+  /asks/{ask_id}:
+    get:
+      operationId: getAskOutcome
+      summary: Read one durable ask outcome
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: asks.get
+      x-anx-cli-path: asks get
+      x-anx-why: Read one ask and its task outcome without recomputing Inbox projections.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-agent-notes: Current resource access applies on every read.
+      x-anx-concepts: [inbox]
+      x-anx-stability: beta
+      x-anx-output-envelope: Returns AskOutcome.
+      x-anx-error-codes: [not_found, auth_required]
+      parameters:
+        - {name: ask_id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Current authorized ask state; legacy asks remain readable.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AskOutcome'}
+  /stream/asks/{ask_id}:
+    get:
+      operationId: streamAskOutcome
+      summary: Await one durable ask outcome
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: asks.stream
+      x-anx-cli-path: asks stream
+      x-anx-why: Await one ask with indexed point reads and no projection recomputation.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: sse}
+      x-anx-agent-notes: Current resource access applies on every poll.
+      x-anx-concepts: [inbox]
+      x-anx-stability: beta
+      x-anx-output-envelope: SSE outcome contains AskOutcome; stream ends on terminal state.
+      x-anx-error-codes: [not_found, auth_required]
+      parameters:
+        - {name: ask_id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: SSE outcome and keepalive messages.
+          content:
+            text/event-stream:
+              schema: {type: string}
+  /stream/agent-wakeups:
+    get:
+      operationId: streamAgentAnswerWakes
+      summary: Stream durable agent wakes
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: agent.wakeups.stream
+      x-anx-cli-path: agent wakeups stream
+      x-anx-why: Consume bounded positions from the existing wake update log for the authenticated agent.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: sse}
+      x-anx-agent-notes: Current resource access applies on every poll.
+      x-anx-concepts: [inbox]
+      x-anx-stability: beta
+      x-anx-output-envelope: SSE notification_receipt contains the authorized wake.
+      x-anx-error-codes: [not_found, auth_required]
+      responses:
+        '200':
+          description: SSE outcome and keepalive messages.
+          content:
+            text/event-stream:
+              schema: {type: string}
   /inbox:
     get:
       operationId: listInboxItems
@@ -10809,6 +10965,10 @@ components:
         requester_agent_id: { type: string }
         requester_label: { type: string }
         severity: { type: string }
+        allowed_response_outcomes:
+          type: array
+          description: When present, clients must restrict response actions to these outcomes. Structured access requests expose only approved and rejected; clarification is not supported for grant decisions.
+          items: {$ref: '#/components/schemas/HumanAttentionResponseOutcome'}
         access_request_id: {type: string}
         requested_grant: {type: string}
         requester_principal_id: {type: string}
@@ -11412,12 +11572,108 @@ components:
         event: { $ref: '#/components/schemas/EventCreateInput' }
       required: [event]
 
+    AskEvidence:
+      type: object
+      required: [label, url]
+      properties:
+        label: {type: string, minLength: 1}
+        url: {type: string, format: uri}
+      description: External ask evidence in event.payload.evidence. Native evidence stays in payload.related_refs. Ask bodies use Decision, Context (2–5 sentences), What each option does and Evidence sections. Link named PRs and commit-pinned code lines; summarise code. event.payload.supersedes links a previous ask. event.payload.authoring_override_reason records a CLI lint override.
+    AskWebhookPayload:
+      type: object
+      additionalProperties: false
+      required: [ask_id, card_ref, status, outcome, response_event_id, response_text]
+      description: Signed webhook POST body after recipient authorization. X-ANX-Signature is sha256= plus HMAC-SHA256 of X-ANX-Timestamp + '.' + exact body bytes using the returned secret text as key. Receivers enforce the 300-second replay window and deduplicate the stable Idempotency-Key. No response bodies are logged.
+      properties:
+        ask_id: {type: string}
+        card_ref: {type: string}
+        status: {type: string, enum: [answered, needs_context, withdrawn, expired]}
+        outcome: {type: string, nullable: true}
+        response_event_id: {type: string}
+        response_text: {type: string, nullable: true}
+    AskSubscription:
+      type: object
+      required: [id, kind, label]
+      properties:
+        id: {type: string}
+        kind: {type: string, enum: [await, bridge, webhook]}
+        label: {type: string}
+        secret: {type: string, description: Webhook HMAC key returned once on creation; never returned by ask reads.}
+        state: {type: string, enum: [none]}
+        attempts: {type: integer, minimum: 0}
+    AskSubscriptionInput:
+      type: object
+      additionalProperties: false
+      required: [kind, label]
+      properties:
+        kind: {type: string, enum: [await, bridge, webhook]}
+        label: {type: string, minLength: 1, maxLength: 120}
+        url: {type: string, maxLength: 2048, description: HTTPS webhook URL. No credentials, fragments, redirects or non-public resolved addresses.}
+    AskDeliveryReceipt:
+      type: object
+      required: [subscription_id, state, attempts]
+      properties:
+        subscription_id: {type: string}
+        state: {type: string, enum: [pending, delivered, failed]}
+        attempts: {type: integer, minimum: 0, maximum: 20}
+        reason: {type: string, maxLength: 200}
+    AskTaskOutcome:
+      type: object
+      nullable: true
+      properties:
+        card_ref: {type: string}
+        phase: {type: string}
+        next_actor: {type: string}
+        reason: {type: string, description: source_owned means source phase was preserved.}
+    AskOutcome:
+      type: object
+      required: [ask_id, status, subject_ref, is_stale, delivery]
+      properties:
+        ask_id: {type: string}
+        status: {type: string, enum: [open, answered, needs_context, withdrawn, expired]}
+        subject_ref: {type: string}
+        is_stale: {type: boolean}
+        response: {type: object, additionalProperties: true, nullable: true}
+        task_outcome:
+          type: object
+          properties:
+            card_ref: {type: string}
+            phase: {type: string}
+            next_actor: {type: string}
+            reason: {type: string}
+        delivery:
+          type: array
+          maxItems: 32
+          items: {$ref: '#/components/schemas/AskDelivery'}
+    AskDelivery:
+      type: object
+      required: [kind, label, state, attempts]
+      properties:
+        id: {type: string}
+        kind: {type: string, enum: [await, bridge, webhook]}
+        label: {type: string, maxLength: 120}
+        state: {type: string, enum: [pending, delivered, failed, none]}
+        log:
+          type: array
+          maxItems: 5
+          items:
+            type: object
+            properties:
+              attempt: {type: integer}
+              at: {type: string}
+              status_code: {type: integer}
+              latency_ms: {type: integer}
+        status_code: {type: integer, description: Last HTTP status, zero before a response.}
+        latency_ms: {type: integer, minimum: 0}
+        attempts: {type: integer, minimum: 0}
+        last_at: {type: string, nullable: true}
+        reason: {type: string, maxLength: 200}
     RespondInboxItemRequest:
       type: object
       description: >
         Records a human response to a human attention inbox item. The response target must be
         resolvable unless `notify_mode` is `none` or a replacement target is supplied.
-        Server-linked access requests accept only approved or rejected; other outcomes
+        Server-linked access requests accept only approved or rejected; needs_context and other outcomes
         return 400 without mutation. Approval atomically grants the persisted requested
         grant to its persisted principal. Event-supplied correlation never grants authority.
       properties:
@@ -11441,11 +11697,11 @@ components:
 
     HumanAttentionResponseOutcome:
       type: string
-      enum: [answered, approved, rejected, acknowledged]
+      enum: [answered, approved, rejected, acknowledged, needs_context, resolved]
       description: >
         answered means a chosen proposal or free reply; approved and rejected mean the
         explicit review Approve and Reject actions; acknowledged means the operator
-        closed the item without answering it. The response text remains the audit note.
+        closed the item without answering it. needs_context returns the task to its owner without counting as answered; re-ask with supersedes. resolved explicitly closes a native task. The response text remains the audit note.
 
     HumanAttentionRespondedPayload:
       type: object
@@ -12571,6 +12827,7 @@ components:
       type: object
       properties:
         event: { $ref: '#/components/schemas/Event' }
+        task_outcome: {$ref: '#/components/schemas/AskTaskOutcome'}
         notify:
           type: object
           additionalProperties: true

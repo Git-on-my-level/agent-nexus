@@ -19,6 +19,8 @@ type ScopeInboxMutationSource struct {
 // ledger, not a visibility certificate or a list of ready generations.
 func ScopeInboxMutationLedger() []ScopeInboxMutationSource {
 	return []ScopeInboxMutationSource{
+		{"ask_subscriptions", "answer subscription profile visibility", false},
+		{"ask_deliveries", "answer delivery diagnostics visibility", false},
 		{"events", "ask/answer/decision and canonical event lifecycle", false},
 		{"human_attention_request_resolutions", "answer/withdraw/reopen state", false},
 		{"human_attention_answer_reads", "requester answer read state", false},

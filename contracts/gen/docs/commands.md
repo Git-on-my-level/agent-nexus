@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `214`
+- Commands: `220`
 
 ## `actors.create`
 
@@ -123,6 +123,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Output: Returns `{ items, page_info }` with keyset pagination.
 - Agent notes: Results are scoped to the authenticated requester and keyset-paginated; do not infer open state from a partial event timeline.
 
+## `agent.inbox.subscribe`
+
+- CLI path: `agent inbox subscribe`
+- HTTP: `POST /agent-inbox/subscriptions`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Subscribe to future asks by the authenticated agent.
+- Concepts: `inbox`, `write`
+- Error codes: `not_found`, `auth_required`, `invalid_request`
+- Output: Returns subscription or receipt.
+- Agent notes: Requester-only subscription; webhook secrets are returned once and encrypted at rest. Labels must not contain secrets.
+
 ## `agent.notification-receipts.stream`
 
 - CLI path: ``
@@ -170,6 +183,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `agents`, `notifications`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Output: Returns `{ event, notification }`.
+
+## `agent.wakeups.stream`
+
+- CLI path: `agent wakeups stream`
+- HTTP: `GET /stream/agent-wakeups`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Consume bounded positions from the existing wake update log for the authenticated agent.
+- Concepts: `inbox`
+- Error codes: `not_found`, `auth_required`
+- Output: SSE notification_receipt contains the authorized wake.
+- Agent notes: Current resource access applies on every poll.
 
 ## `agents.get`
 
@@ -355,6 +381,58 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `artifacts`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ artifact }`.
+
+## `asks.delivery`
+
+- CLI path: `asks delivery`
+- HTTP: `POST /asks/{ask_id}/delivery`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Record a local delivery receipt.
+- Concepts: `inbox`, `write`
+- Error codes: `not_found`, `auth_required`, `invalid_request`
+- Output: Returns subscription or receipt.
+- Agent notes: Requester-only subscription; webhook secrets are returned once and encrypted at rest. Labels must not contain secrets.
+
+## `asks.get`
+
+- CLI path: `asks get`
+- HTTP: `GET /asks/{ask_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Read one ask and its task outcome without recomputing Inbox projections.
+- Concepts: `inbox`
+- Error codes: `not_found`, `auth_required`
+- Output: Returns AskOutcome.
+- Agent notes: Current resource access applies on every read.
+
+## `asks.stream`
+
+- CLI path: `asks stream`
+- HTTP: `GET /stream/asks/{ask_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Await one ask with indexed point reads and no projection recomputation.
+- Concepts: `inbox`
+- Error codes: `not_found`, `auth_required`
+- Output: SSE outcome contains AskOutcome; stream ends on terminal state.
+- Agent notes: Current resource access applies on every poll.
+
+## `asks.subscribe`
+
+- CLI path: `asks subscribe`
+- HTTP: `POST /asks/{ask_id}/subscriptions`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Subscribe to one ask.
+- Concepts: `inbox`, `write`
+- Error codes: `not_found`, `auth_required`, `invalid_request`
+- Output: Returns subscription or receipt.
+- Agent notes: Requester-only subscription; webhook secrets are returned once and encrypted at rest. Labels must not contain secrets.
 
 ## `auth.access-requests.approve`
 

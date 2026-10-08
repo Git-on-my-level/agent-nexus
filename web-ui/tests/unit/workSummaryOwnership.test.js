@@ -38,8 +38,8 @@ const relative = (file) => file;
  * between — a whole status renderer — went unchecked. Every comment in this
  * repo opens its own line, and an anchored match can only strip less.
  */
-const read = (file) => {
-  const raw = readFileSync(join(root, "..", file), "utf8")
+const uncomment = (file, source) => {
+  const raw = source
     .replaceAll(/^[ \t]*\/\*[\s\S]*?\*\//gm, " ")
     .replaceAll(/^[ \t]*<!--[\s\S]*?-->/gm, " ");
   /*
@@ -56,6 +56,136 @@ const read = (file) => {
     raw.slice(scriptEnd)
   );
 };
+
+const rawSource = (file) => readFileSync(join(root, "..", file), "utf8");
+const read = (file) => uncomment(file, rawSource(file));
+
+/**
+ * Unrelated lifecycle states may share the card vocabulary. The exemption is
+ * local to a file, must explain the other lifecycle, and cannot cover a module
+ * importing card/work APIs. Computed-summary reads are never exempted.
+ * Keep this generic: extensions declare their own reason, not their paths here.
+ */
+function nonCardState(file, source) {
+  const header = source.match(
+    /^\s*(?:\/\/([^\n]*)|\/\*([\s\S]*?)\*\/|<!--([\s\S]*?)-->)/,
+  );
+  const comment = header
+    ?.slice(1)
+    .find((part) => part !== undefined)
+    ?.trim();
+  if (!comment?.startsWith("worksummary-guard:")) return false;
+  if (!/^worksummary-guard: not-a-card-state: [a-zA-Z].+/.test(comment)) {
+    throw new Error(`${file}: worksummary-guard requires a reason`);
+  }
+  // Preserve quoted literals before removing inline comments; a string holding
+  // a comment opener must never hide an import before another string's closer.
+  const code = uncomment(file, source).replaceAll(
+    /(["'`])(?:\\[\s\S]|(?!\1)[^\\])*?\1|\/\*[\s\S]*?\*\//g,
+    (token) => (token.startsWith("/*") ? " " : token),
+  );
+  // Match imported names before aliases, module paths, namespace imports,
+  // re-exports, dynamic imports and require(). Conservative by design: a module
+  // using a general core client can read cards, even if it currently does not.
+  const imports = code.matchAll(
+    /\b(?:import|export)\s+(?:[^;]*?\s+from\s*)?["'`]([^"'`]+)["'`]|\b(?:import|require)\s*\(\s*["'`]([^"'`]+)["'`]/g,
+  );
+  for (const match of imports) {
+    if (
+      /(?:coreClient|anxCoreClient|AnxClient|contracts[/\\]gen[/\\]ts|agent-nexus-contracts-ts-client|\b(?:get|list|create|patch|update|delete|archive|restore|purge|fetch|read|request|subscribe|add|move|remove|search|resolve)\w*(?:Work|Cards?)(?:\b|[A-Z])|(?:^|[^a-zA-Z])(?:work|cards?)(?:$|[^a-z]|[A-Z]))/.test(
+        match[0],
+      )
+    ) {
+      throw new Error(
+        `${file}: worksummary-guard cannot exempt a work/card API importer`,
+      );
+    }
+  }
+  return true;
+}
+
+describe("explicit non-card state exemptions", () => {
+  const marker =
+    "// worksummary-guard: not-a-card-state: Tracks a deployment lifecycle.";
+  it("requires a reason in a file-header comment", () => {
+    expect(nonCardState("a.js", marker)).toBe(true);
+    expect(
+      nonCardState(
+        "a.svelte",
+        "<!-- worksummary-guard: not-a-card-state: Tracks a session lifecycle. -->",
+      ),
+    ).toBe(true);
+    expect(() =>
+      nonCardState("a.js", "// worksummary-guard: not-a-card-state"),
+    ).toThrow("requires a reason");
+    expect(() =>
+      nonCardState("a.js", "// worksummary-guard: not-a-card-state: "),
+    ).toThrow("requires a reason");
+    expect(nonCardState("a.js", 'const marker = "' + marker + '";')).toBe(
+      false,
+    );
+  });
+  it("requires the marker in each file, not just a sibling or parent", () => {
+    const files = [
+      ["src/routes/example/+layout.svelte", marker],
+      ["src/routes/example/+page.svelte", "<span>{deployment.phase}</span>"],
+      [
+        "src/lib/example.js",
+        'const labels = { ready: "Ready", stale: "Stale" };',
+      ],
+    ];
+    expect(
+      files
+        .filter(([file, source]) => nonCardState(file, source))
+        .map(([file]) => file),
+    ).toEqual(["src/routes/example/+layout.svelte"]);
+  });
+  it.each([
+    'import { coreClient as api } from "$lib/coreClient";',
+    'import { createAnxCoreClient } from "$lib/anxCoreClient.js";',
+    'import * as api from "$lib/workApi.js";',
+    'import cardApi from "./cards/client.js";',
+    'import { getCard as fetchItem } from "./api.js";',
+    'import { listWork as rows } from "./api.js";',
+    'import { addBoardCard as add } from "./api.js";',
+    'import { moveBoardCard as move } from "./api.js";',
+    'import { removeBoardCard as remove } from "./api.js";',
+    'export { getWork as fetchItem } from "./api.js";',
+    'const api = await import("$lib/coreClient.js");',
+    'const api = await import("$lib/coreClient.js", {});',
+    'const api = require("./cardApi.js");',
+    'import { AnxClient as api } from "../../../contracts/gen/ts/dist/client.js";',
+    'import * as api from "../../../contracts/gen/ts/dist/client.js";',
+    'import * as api from "agent-nexus-contracts-ts-client";',
+    "const api = await import(`$lib/coreClient.js`);",
+    'import/* client */ { coreClient } from "$lib/coreClient";',
+    'const opener = "/*";\nimport { coreClient } from "$lib/coreClient";\nconst closer = "*/";',
+  ])("cannot silence a card API importer: %s", (code) => {
+    expect(() => nonCardState("a.js", marker + "\n" + code)).toThrow(
+      "cannot exempt",
+    );
+  });
+  it("does not mistake generic visual cards for card APIs", () => {
+    expect(
+      nonCardState(
+        "a.js",
+        marker +
+          '\nimport SkeletonCard from "$lib/components/state/SkeletonCard.svelte";',
+      ),
+    ).toBe(true);
+  });
+  it("does not mistake workspace lifecycle helpers for work APIs", () => {
+    expect(
+      nonCardState(
+        "a.js",
+        marker + '\nimport { workspacePath } from "./workspacePaths.js";',
+      ),
+    ).toBe(true);
+  });
+  it("rejects unsafe exemptions even in an already allowlisted source", () => {
+    for (const file of sources) nonCardState(file, rawSource(file));
+  });
+});
 
 /**
  * Every source file under `src`, as repo-relative paths.
@@ -183,7 +313,7 @@ describe("the vocabulary lives in one place", () => {
     const offenders = [];
     for (const file of sources) {
       const name = relative(file);
-      if (ALLOWED.has(name)) continue;
+      if (ALLOWED.has(name) || nonCardState(file, rawSource(file))) continue;
       const keys = new Set(
         [...read(file).matchAll(pattern)].map((match) => match[1]),
       );
@@ -309,7 +439,7 @@ describe("card status is rendered in one component", () => {
     .flatMap((file) => {
       const body = read(file);
       const name = relative(file);
-      if (ALLOWED.has(name)) return [];
+      if (ALLOWED.has(name) || nonCardState(file, rawSource(file))) return [];
       return RENDERS_STATUS.filter(({ re }) => re.test(body)).map(
         ({ what }) => `${name} renders ${what}`,
       );

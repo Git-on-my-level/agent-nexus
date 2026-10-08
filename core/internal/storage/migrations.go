@@ -1030,6 +1030,10 @@ var migrations = []migration{
 	{Version: 71, AfterApply: installScopeInboxLive},
 	{Version: 72, AfterApply: installWorkSummaryAttention},
 	{Version: 73, AfterApply: indexAgentSummaryCards},
+	{Version: 74, AfterApply: installAskSubjects},
+	{Version: 75, AfterApply: installAskSubscriptions},
+	{Version: 76, AfterApply: installAskEffectiveClosure},
+	{Version: 77, Statements: []string{`CREATE TABLE IF NOT EXISTS ask_subject_boards(actor_id TEXT PRIMARY KEY, board_id TEXT NOT NULL)`}},
 }
 
 func repairNULReferenceAccess(ctx context.Context, tx *sql.Tx) error {

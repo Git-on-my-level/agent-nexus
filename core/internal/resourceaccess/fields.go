@@ -38,6 +38,8 @@ var OwnershipSources = []OwnershipSource{
 // FilterSources are ancillary rows with no navigable canonical resource kind.
 // Their complete rows are filtered by the same predicate before query limits.
 var FilterSources = map[string][]string{
+	"ask_subscriptions":      {"label", "endpoint"},
+	"ask_deliveries":         {"reason"},
 	"actors":                 {"display_name", "tags_json"},
 	"agents":                 {"metadata_json"},
 	"hosts":                  {"display_name", "hostname", "os_user", "discovered_adapters_json"},

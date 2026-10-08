@@ -246,6 +246,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `host revoke` (local-helper): Revoke a host by ID or slug. Agents cannot revoke their own host.
 - `meta skill` (local-helper): Render the bundled participant or PM skill.
 - `install skill` (local-helper): Install the bundled opinionated ANX agent skill to a specific file path.
+- `bridge run` (local-helper): Run registered answer commands for the selected agent on this host.
 - `bridge install` (local-helper): Install the host bridge runtime.
 - `bridge doctor` (local-helper): Check one enrolled-host bridge and its configured runtimes.
 - `bridge start` (local-helper): Start the one bridge process for an enrolled host.
@@ -422,6 +423,15 @@ Executive workspace
 - For a human-facing dashboard, start with `anx report templates` and `anx report init --template <name> [--topic <topic-ref>] [--card <card-ref>]`; The default `anx report init` contains live asks, initiatives and activity. Prefer live-cards for filtered work and live-timeline for adapter-fed events. File missing sync work instead of a manual status panel. Hand-write only unavoidable narrative, always with author, authored_at and review_by; never paste live numbers into it. Run `anx report preview <file>` and inspect its panel summary and PNG before sharing. Publish with `anx report publish <file> --topic <topic-ref> [--title <title>] [--doc <doc-ref>]`; it validates the report, writes a text document, and verifies the saved revision. `--doc` is an exact ref; use `--replace` only when intentionally replacing a non-report document.
 - Ask only for a decision that belongs to the human (direction, money, risk or an irreversible choice). Recommend one answer, give at most 2–3 alternatives, and batch related decisions into one ask. Do not also block the card or set its `next_actor` to the human for that same question; that duplicates the Inbox item. Keep `next_actor` on the agent and advance after the answer with its response event as evidence, for example `anx work done <card> --evidence event:<response_event_id>`.
 - Write for a busy executive: lead with the outcome and what needs them, then add detail. Example: 12 PRs + 4 Multica issues for one project → 1 card with a linked plan, not 16 cards.
+
+
+Asking for decisions
+
+- Every ask, review and escalation belongs to a card. Without a current card, the CLI creates one on ANX_ASK_DEFAULT_BOARD or the workspace default. Documents and topics belong in evidence refs.
+- Use anx ask --from-file with Decision (one line), Context (2–5 sentences), What each option does, and Evidence sections. Include every named document/card/topic as a typed ref and every named PR/file as a labelled URL. Summarise code and link a PR or commit-pinned file with line anchors instead of pasting source. See anx ask --help for the full template.
+- Pointer-only asks and obvious missing evidence fail before publishing. Incomplete context produces warnings; --force --reason records a deliberate lint override. External evidence is structured as {label,url}; native evidence remains in related_refs.
+- Answers atomically record a decision on the card and route next action to its owner/requester/board role. Only a matching sole ask blocker moves blocked to ready; resolved explicitly completes native work. needs_context returns the note to the owner and exits await with 10; re-ask with --supersedes event:<old-ask>.
+- Closed subjects withdraw their asks through bounded durable maintenance. Await exits 11 for withdrawal and 12 for expiry. Optional --on-answer or ANX_RESUME_CMD registers a host-local command for anx bridge run; answer JSON goes to stdin, never shell interpolation. Webhook subscriptions return a once-only signing secret. The task remains authoritative even if delivery fails.
 
 
 Initiative plans
@@ -787,6 +797,7 @@ One bridge per enrolled host for derived-agent wake routing.
 ```text
 Bridge: one process per enrolled host
 
+anx --as <agent> bridge run [--max-attempts 5] [--command-timeout 30m]
 anx host enroll
 anx bridge install
 anx bridge start --config ./bridge.toml
@@ -3133,7 +3144,7 @@ Inputs:
   - body `notify_target_actor_id` (string)
   - body `notify_target_agent_id` (string)
   - body `related_refs` (list<any>)
-  Enum values: notify_mode: none, original, replacement; outcome: acknowledged, answered, approved, rejected
+  Enum values: notify_mode: none, original, replacement; outcome: acknowledged, answered, approved, needs_context, rejected, resolved
 
 CLI flags (`inbox respond`):
   --inbox-item-id <id>    Inbox item id or list alias (see `debug inbox list`).
@@ -8848,6 +8859,14 @@ Options:
 Examples:
   anx install skill --path ./SKILL.md
   anx install skill ./anx-participant/SKILL.md
+```
+
+## `bridge run`
+
+Run registered answer commands for the selected agent on this host.
+
+```text
+anx bridge run [--max-attempts 5] [--command-timeout 30m]: consume host-signed answer wakes and execute locally registered commands. See docs/ask-delivery.md.
 ```
 
 ## `bridge install`

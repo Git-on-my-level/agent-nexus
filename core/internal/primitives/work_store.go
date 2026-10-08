@@ -3,6 +3,7 @@ package primitives
 import (
 	"agent-nexus-core/internal/handles"
 	"agent-nexus-core/internal/schema"
+	"agent-nexus-core/internal/workprojection"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -624,12 +625,8 @@ type ReportWorkPage struct {
 	PrivateOwners map[string]string
 }
 
-// JSON null is a present override in projectWork, distinct from a missing key.
 func projectedWorkStringSQL(key, canonical string) string {
-	value := func(body, path string) string {
-		return `CASE WHEN json_type(` + body + `,'` + path + `')='text' THEN anx_unicode_trim(json_extract(` + body + `,'` + path + `')) ELSE '' END`
-	}
-	return `CASE WHEN anx_unicode_trim(COALESCE(m.authority,'nexus'))='nexus' THEN ` + canonical + ` WHEN json_type(o.body_json,'$.facts.` + key + `') IS NOT NULL THEN ` + value("o.body_json", "$.facts."+key) + ` WHEN json_type(m.metadata_json,'$.` + key + `') IS NOT NULL THEN ` + value("m.metadata_json", "$."+key) + ` ELSE ` + canonical + ` END`
+	return workprojection.StringSQL(key, canonical)
 }
 
 func reportWorkQuery(ctx context.Context, filter ReportWorkFilter) (string, []any) {

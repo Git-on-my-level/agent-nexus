@@ -51,7 +51,7 @@ enums:
     description: >
       A proposal or free reply is answered; explicit review Approve and Reject actions
       are approved and rejected; closing without an answer is acknowledged.
-    values: [answered, approved, rejected, acknowledged]
+    values: [answered, approved, rejected, acknowledged, needs_context, resolved]
 
   board_column_key:
     enum_policy: strict
