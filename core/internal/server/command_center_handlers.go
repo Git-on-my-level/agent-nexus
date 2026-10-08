@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -298,7 +299,35 @@ func handleAgents(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 			writeError(w, 500, "internal_error", "failed to get agent")
 			return
 		}
-		if opts.primitiveStore != nil {
+		truncated := false
+		if r.URL.Query().Get("summary") == "1" {
+			store, ok := opts.primitiveStore.(interface {
+				AgentSummaryCards(context.Context, string, []string) ([]map[string]any, bool, error)
+			})
+			if !ok {
+				writeError(w, 503, "unavailable", "agent summaries are unavailable")
+				return
+			}
+			refs := []string{}
+			if d.Agent.CurrentCardRef != nil {
+				refs = append(refs, *d.Agent.CurrentCardRef)
+			}
+			for _, run := range d.RecentRuns {
+				if run.CardRef != nil {
+					refs = append(refs, *run.CardRef)
+				}
+			}
+			cards, partial, err := store.AgentSummaryCards(r.Context(), d.Agent.Ref, refs)
+			if err != nil {
+				workStoreError(w, r, err)
+				return
+			}
+			if !enrichPlans(w, r, opts, cards) {
+				return
+			}
+			d.RecentCards = publicCardsView(cards)
+			truncated = partial
+		} else if opts.primitiveStore != nil {
 			cards, cardErr := opts.primitiveStore.ListCards(r.Context(), primitives.CardListFilter{})
 			if cardErr != nil {
 				writeError(w, 500, "internal_error", "failed to load agent cards")
@@ -320,7 +349,11 @@ func handleAgents(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 				}
 			}
 		}
-		writeJSON(w, 200, map[string]any{"agent": d.Agent, "recent_cards": d.RecentCards, "recent_runs": d.RecentRuns, "open_asks": d.OpenAsks, "recent_notes": d.RecentNotes})
+		payload := map[string]any{"agent": d.Agent, "recent_cards": d.RecentCards, "recent_runs": d.RecentRuns, "open_asks": d.OpenAsks, "recent_notes": d.RecentNotes}
+		if truncated {
+			payload["cards_truncated"] = true
+		}
+		writeJSON(w, 200, payload)
 		return
 	}
 	writeError(w, 404, "not_found", "endpoint not found")

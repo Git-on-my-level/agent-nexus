@@ -196,6 +196,7 @@ func (a *App) Run(args []string) int {
 	if actorErr != nil {
 		return a.renderError(resolveMachineCommandIdentity(preflightCommandName), resolved.JSON, actorErr)
 	}
+	a.emitPMToolActivity(normalizedArgs, resolved)
 	commandName, result, runErr := a.runCommand(context.Background(), normalizedArgs, resolved)
 	identity := resolveMachineCommandIdentity(commandName)
 	if runErr != nil {

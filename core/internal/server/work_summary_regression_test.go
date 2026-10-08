@@ -244,8 +244,8 @@ func TestDefaultWorkAndOverviewRetainLegacyPlanlessHealth(t *testing.T) {
 		check(legacy)
 		computed := workGetJSON(t, h.baseURL+path+"?summary=1", 200)
 		for _, row := range collectSummaryCards(computed) {
-			if row["work_summary"].(map[string]any)["status"].(map[string]any)["state"] != "at_risk" {
-				t.Fatal("opt-in health lost due facts", path, row)
+			if row["work_summary"].(map[string]any)["status"].(map[string]any)["state"] != "in_progress" {
+				t.Fatal("near due date replaced planless workflow", path, row)
 			}
 		}
 	}

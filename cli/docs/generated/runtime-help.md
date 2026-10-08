@@ -3915,6 +3915,7 @@ Inputs:
   - body `request_key` (string)
   - body `title` (string)
   Optional:
+  - body `context_refs` (list<string>)
   - body `work_ref` (string)
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
@@ -4329,6 +4330,7 @@ Inputs:
   - path `turn_id`
   - body `lease_token` (string)
   Optional:
+  - body `context_ref` (string)
   - body `cursor` (string)
   - body `limit` (integer)
   - body `query` (string)
@@ -4446,6 +4448,11 @@ Inputs:
   Required:
   - path `turn_id`
   - body `lease_token` (string)
+  Optional:
+  - body `activity` (list<any>)
+  - body `activity_append` (list<any>)
+  - body `partial_response` (string)
+  - body `partial_sequence` (integer)
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 

@@ -1029,8 +1029,9 @@ var migrations = []migration{
 	{Version: 70, AfterApply: indexInboxLifecycle},
 	{Version: 71, AfterApply: installScopeInboxLive},
 	{Version: 72, AfterApply: installWorkSummaryAttention},
-	{Version: 73, AfterApply: installAskSubjects},
-	{Version: 74, AfterApply: installAskSubscriptions},
+	{Version: 73, AfterApply: indexAgentSummaryCards},
+	{Version: 74, AfterApply: installAskSubjects},
+	{Version: 75, AfterApply: installAskSubscriptions},
 }
 
 func repairNULReferenceAccess(ctx context.Context, tx *sql.Tx) error {

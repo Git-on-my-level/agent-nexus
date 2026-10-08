@@ -76,14 +76,13 @@ export function decisionRowStatus(
   if (own !== "answered") return own;
   // Receipts could not be loaded: the delivery state is unknown to us, and
   // an unknown delivery belongs in front of the reader, not under Watching.
-  if (receiptsUnavailable) return "receipt_unavailable";
   const action = actions.find(
     (item) =>
       item &&
       ((decision.action_id && item.id === decision.action_id) ||
         item.decision_id === decision.id),
   );
-  if (!action) return own;
+  if (!action) return receiptsUnavailable ? "receipt_unavailable" : own;
   const status = String(action.status ?? "");
   if (status === "verified" && action.receipt?.independently_verified !== true)
     return "source_reported";
@@ -144,6 +143,8 @@ export function inboxItemNeedsResponse(item) {
 }
 
 function taskIsBlocked(row) {
+  const computed = row?.item?.work_summary?.status?.state;
+  if (computed) return computed === "blocked";
   return row?.phase === "blocked" || row?.item?.phase === "blocked";
 }
 
@@ -188,7 +189,11 @@ export function classifyInboxRow(row, now = Date.now()) {
       return "needs-you";
     }
     const freshness = workFreshness(row.item || row, now);
-    if (freshness.key === "stale" || freshness.key === "error") {
+    if (
+      row.item?.work_summary?.status?.state === "stale" ||
+      freshness.key === "stale" ||
+      freshness.key === "error"
+    ) {
       return "watching";
     }
     return null;
@@ -226,9 +231,14 @@ export function inboxRowBadge(row, now = Date.now()) {
    */
   if (row.responseError) return { label: "Not sent", tone: "danger" };
   if (row.kind === "task") {
-    if (taskIsBlocked(row)) {
-      return { label: "Blocked", tone: "warn" };
+    const status = row.item?.work_summary?.status;
+    if (
+      status?.label &&
+      ["blocked", "stale", "at_risk"].includes(status.state)
+    ) {
+      return { label: status.label, tone: "warn" };
     }
+    if (taskIsBlocked(row)) return { label: "Blocked", tone: "warn" };
     const freshness = workFreshness(row.item || row, now);
     // The label names the cause (reader not ready, rate limited, unreachable),
     // the same way the task page does.
@@ -271,7 +281,7 @@ export function inboxRowBadge(row, now = Date.now()) {
 }
 
 const SEVERITY_RANK = { critical: 3, high: 2, medium: 1, normal: 1, low: 0 };
-const KIND_RANK = { escalate: 3, ask: 2, review: 1 };
+const PRIORITY_RANK = { p0: 3, p1: 2, p2: 1, p3: 0 };
 
 /**
  * A short, readable stand-in for an identifier that resolved to no name:
@@ -312,8 +322,10 @@ export function formatWait(ms) {
   return restHours ? `${days}d ${restHours}h` : `${days}d`;
 }
 
-/** Milliseconds a row has been waiting on the reader, or NaN. */
+/** Computed task age or elapsed ask wait, in milliseconds; NaN if unknown. */
 export function rowWaitMs(row, now = Date.now()) {
+  const age = row?.kind === "task" ? row.item?.work_summary?.age : undefined;
+  if (Number.isFinite(age) && age >= 0) return age * 1000;
   const since = Date.parse(row?.waitingSince ?? "");
   return Number.isFinite(since) ? Math.max(0, now - since) : Number.NaN;
 }
@@ -373,7 +385,16 @@ export function inboxItemSubject(
 }
 
 function severityRank(row) {
-  return SEVERITY_RANK[String(row?.severity ?? "").toLowerCase()] ?? 0;
+  const priority = String(
+    row?.priority || row?.item?.priority || "",
+  ).toLowerCase();
+  return (
+    PRIORITY_RANK[priority] ??
+    SEVERITY_RANK[
+      String(row?.severity ?? row?.item?.severity ?? "").toLowerCase()
+    ] ??
+    0
+  );
 }
 
 function waitStartMinute(row) {
@@ -381,26 +402,31 @@ function waitStartMinute(row) {
   return Number.isFinite(since) ? Math.floor(since / 60_000) : Number.NaN;
 }
 
-/**
- * Needs you order: whoever has been blocked longest first, then the louder
- * severity. Start times compare at minute resolution (on the clock, so the
- * order does not flip as time passes) and two asks raised in the same minute
- * fall back to severity rather than to milliseconds.
- */
+/** Explicit asks and decisions precede blocked tasks; priority precedes age. */
 export function compareNeedsYou(a, b) {
+  const task = Number(a.kind === "task") - Number(b.kind === "task");
+  if (task) return task;
+  const stale = Number(Boolean(a.stale)) - Number(Boolean(b.stale));
+  if (stale) return stale;
+  const priority = severityRank(b) - severityRank(a);
+  if (priority) return priority;
   const startA = waitStartMinute(a);
   const startB = waitStartMinute(b);
   const hasA = Number.isFinite(startA);
   const hasB = Number.isFinite(startB);
   if (hasA !== hasB) return hasA ? -1 : 1;
   if (hasA && startA !== startB) return startA - startB;
-  const severity = severityRank(b) - severityRank(a);
-  if (severity) return severity;
-  const kind =
-    (KIND_RANK[String(b?.category ?? "")] ?? 0) -
-    (KIND_RANK[String(a?.category ?? "")] ?? 0);
-  if (kind) return kind;
   return String(a?.title ?? "").localeCompare(String(b?.title ?? ""));
+}
+
+/** No owner and no meaningful movement in over 30 days, using core's facts. */
+export function isStaleBlockedTask(item, now = Date.now()) {
+  const summary = item?.work_summary;
+  if (!summary || !taskIsBlocked({ item })) return false;
+  if (String(summary.owner || item.owner || "").trim()) return false;
+  const moved = Date.parse(summary.last_movement_at || "");
+  const inactive = Number.isFinite(moved) ? (now - moved) / 1000 : summary.age;
+  return Number.isFinite(inactive) && inactive > 30 * 24 * 60 * 60;
 }
 
 /**
@@ -507,6 +533,7 @@ export function buildInboxRows({
         currentActorId,
       }),
       phase: item.status,
+      priority: item.priority || workByRef.get(item.work_ref)?.priority || "",
       item,
     });
   }
@@ -517,7 +544,7 @@ export function buildInboxRows({
       item.id ? `card:${item.id}` : "",
       item.handle ? `card:${item.handle}` : "",
     ];
-    if (item.phase === "blocked") {
+    if (taskIsBlocked({ item })) {
       const hasOpenAsk = taskRefs.some(
         (ref) => ref && openAskedCardRefs.has(ref),
       );
@@ -532,15 +559,18 @@ export function buildInboxRows({
       if (hasOpenAsk || unchangedSinceAnswer) continue;
     }
     // A native task has no source worth naming; who owns it is the signal.
-    const ownerId = String(item.owner ?? "").replace(/^actor:/, "");
+    const ownerId = String(
+      item.work_summary?.owner || item.owner || "",
+    ).replace(/^actor:/, "");
     const owner =
       ownerId && ownerId === currentActorId ? "you" : nameFor(ownerId);
     rows.push({
       id: `task:${workKey(item)}`,
       kind: "task",
       humanNext:
-        !["done", "cancelled"].includes(item.phase) &&
-        isHumanNextActor(item, humanIds),
+        !["done", "cancelled"].includes(
+          item.work_summary?.status?.state || item.phase,
+        ) && isHumanNextActor(item, humanIds),
       title: item.title || "Untitled task",
       source:
         String(item.source?.authority ?? "").toLowerCase() === "nexus"
@@ -550,11 +580,10 @@ export function buildInboxRows({
           : sourceLabel(item.source),
       ref: item.ref || workKey(item),
       time: item.freshness?.last_observed_at || item.updated_at,
-      // Core does not record when a task entered Blocked; its last change
-      // is the closest honest bound.
-      waitingSince: item.updated_at || "",
-      status: item.phase,
-      phase: item.phase,
+      waitingSince: item.work_summary?.created_at || item.updated_at || "",
+      stale: isStaleBlockedTask(item, now),
+      status: item.work_summary?.status?.state || item.phase,
+      phase: item.work_summary?.status?.state || item.phase,
       item,
     });
   }

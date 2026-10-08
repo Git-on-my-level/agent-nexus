@@ -1,12 +1,37 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   listAllPages,
   loadInboxSources,
   mergeInboxItems,
+  mergeInboxSnapshot,
+  hasCompleteInboxHistory,
 } from "../../src/lib/inboxSources.js";
 
 describe("Inbox sources", () => {
-  it("filters archived work from progressive PM snapshots as well as the final lists", async () => {
+  it("retains missing records across partial reads but replaces a complete snapshot", () => {
+    const previous = [{ id: "selected" }, { id: "updated", title: "Old" }];
+    const incoming = [{ id: "updated", title: "New" }, { id: "late" }];
+    expect(mergeInboxSnapshot(previous, incoming, false)).toEqual([
+      previous[0],
+      ...incoming,
+    ]);
+    expect(mergeInboxSnapshot(previous, [], false)).toEqual(previous);
+    expect(mergeInboxSnapshot(previous, incoming, true)).toEqual(incoming);
+    expect(mergeInboxSnapshot([{ ref: "task" }], [], false, "ref")).toEqual([
+      { ref: "task" },
+    ]);
+  });
+
+  it("retains a known answer when a partial history omits it", () => {
+    const answer = { id: "answer", inbox_item_id: "ask", status: "completed" };
+    const completed = mergeInboxSnapshot([answer], [{ id: "other" }], false);
+    expect(mergeInboxItems([{ id: "ask" }], completed)).toEqual([
+      answer,
+      { id: "other" },
+    ]);
+  });
+
+  it("filters archived work from the settled PM snapshot", async () => {
     const progress = [];
     const client = {
       listPmDecisions: async () => ({
@@ -45,30 +70,144 @@ describe("Inbox sources", () => {
     ).toEqual([{ id: "inbox:other" }, completed]);
   });
 
-  it("publishes actionable asks before work history finishes and preserves the page bound", async () => {
-    let finishWork;
-    const work = new Promise((resolve) => {
-      finishWork = resolve;
-    });
-    const progress = [];
-    const client = {
+  afterEach(() => vi.useRealTimers());
+
+  function clientWith(overrides = {}) {
+    return {
       listPmDecisions: async () => ({ items: [] }),
       listPmActions: async () => ({ items: [] }),
-      listWork: () => work,
+      listWork: async () => ({ work: [{ ref: "card:answered" }] }),
       listInboxItems: async ({ status }) => ({
-        items: status === "open" ? [{ id: "inbox:ask" }] : [],
+        items:
+          status === "completed"
+            ? [
+                {
+                  id: "answer",
+                  inbox_item_id: "ask",
+                  subject_ref: "card:answered",
+                },
+              ]
+            : [{ id: "ask" }],
       }),
       getHomeUnread: async () => ({ groups: [] }),
+      ...overrides,
     };
+  }
+
+  it("publishes at 800ms when unread never resolves and terminates at the final deadline", async () => {
+    vi.useFakeTimers();
+    const progress = [];
     const pending = loadInboxSources({
-      client,
+      client: clientWith({ getHomeUnread: () => new Promise(() => {}) }),
       onProgress: (snapshot) => progress.push(snapshot),
     });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(progress[0][3].value.items).toEqual([{ id: "inbox:ask" }]);
-    expect(progress[0][2].status).toBe("pending");
-    finishWork({ work: [] });
-    expect((await pending)[2].status).toBe("fulfilled");
+    await vi.advanceTimersByTimeAsync(799);
+    expect(progress).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(progress).toHaveLength(1);
+    expect(progress[0][5].status).toBe("pending");
+    expect(hasCompleteInboxHistory(progress[0])).toBe(true);
+    expect(
+      mergeInboxItems(
+        progress[0][3].value.items,
+        progress[0][4].value.items,
+      ).some((item) => item.id === "ask"),
+    ).toBe(false);
+    await vi.advanceTimersByTimeAsync(4200);
+    expect((await pending)[5].status).toBe("rejected");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("paints first pages without waiting for slow later work pages", async () => {
+    vi.useFakeTimers();
+    let finishPage;
+    const slowPage = new Promise((resolve) => {
+      finishPage = resolve;
+    });
+    const progress = [];
+    const pending = loadInboxSources({
+      client: clientWith({
+        listWork: ({ cursor, summary, limit }) => {
+          expect({ summary, limit }).toEqual({ summary: 1, limit: 50 });
+          return cursor
+            ? slowPage
+            : Promise.resolve({
+                work: [{ ref: "card:first" }],
+                next_cursor: "next",
+              });
+        },
+      }),
+      onProgress: (snapshot) => progress.push(snapshot),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(progress.length).toBeGreaterThan(0);
+    expect(progress[0][2]).toMatchObject({
+      complete: false,
+      value: { work: [{ ref: "card:first" }], has_more: true },
+    });
+    finishPage({ work: [{ ref: "card:later" }] });
+    const result = await pending;
+    expect(result[2].value.work).toEqual([
+      { ref: "card:first" },
+      { ref: "card:later" },
+    ]);
+    expect(result[2].complete).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("never classifies work from missing, stalled, capped or partial answer history", async () => {
+    vi.useFakeTimers();
+    for (const completed of [
+      () => new Promise(() => {}),
+      async () => ({ items: [], has_more: true }),
+      async () => ({ items: [], next_cursor: "repeat" }),
+      ({ cursor }) =>
+        cursor
+          ? new Promise(() => {})
+          : Promise.resolve({ items: [], next_cursor: "slow" }),
+    ]) {
+      const progress = [];
+      const pending = loadInboxSources({
+        client: clientWith({
+          listInboxItems: (options) =>
+            options.status === "completed"
+              ? completed(options)
+              : Promise.resolve({ items: [{ id: "ask" }] }),
+        }),
+        onProgress: (snapshot) => progress.push(snapshot),
+      });
+      await vi.advanceTimersByTimeAsync(5000);
+      const result = await pending;
+      expect(progress.length).toBeGreaterThan(0);
+      for (const snapshot of [...progress, result])
+        expect(hasCompleteInboxHistory(snapshot)).toBe(false);
+    }
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("stops pagination and publication on cancellation, ignoring late responses", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    let finish;
+    const slow = new Promise((resolve) => {
+      finish = resolve;
+    });
+    const progress = [];
+    const listWork = vi.fn(() => slow);
+    const pending = loadInboxSources({
+      client: clientWith({ listWork }),
+      signal: controller.signal,
+      onProgress: (snapshot) => progress.push(snapshot),
+    });
+    await vi.advanceTimersByTimeAsync(800);
+    controller.abort();
+    await pending;
+    const count = progress.length;
+    finish({ work: [], next_cursor: "never-request" });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(progress).toHaveLength(count);
+    expect(listWork).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
   });
   it("keeps partial results when a feed repeats its cursor", async () => {
     const calls = [];
@@ -170,4 +309,12 @@ describe("Inbox sources", () => {
       ]),
     );
   });
+});
+
+it("keeps a feed's partial marker even when it has no usable next cursor", async () => {
+  const result = await listAllPages(
+    async () => ({ items: [{ id: "first" }], has_more: true }),
+    "items",
+  );
+  expect(result).toMatchObject({ items: [{ id: "first" }], has_more: true });
 });

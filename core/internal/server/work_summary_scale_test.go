@@ -150,3 +150,74 @@ func TestPerformanceWorkSummaryBudgetAndPlans(t *testing.T) {
 		}
 	}
 }
+
+func TestPerformanceAgentSummarySelection(t *testing.T) {
+	requirePerformanceTest(t)
+	env := newPerformanceEnv(t)
+	if _, err := env.db.Exec(`UPDATE cards SET assignee='scale-summary-actor' WHERE id LIKE 'scale-card-%'`); err != nil {
+		t.Fatal(err)
+	}
+	var sequence int
+	var name, path string
+	if err := env.db.QueryRow(`PRAGMA database_list`).Scan(&sequence, &name, &path); err != nil {
+		t.Fatal(err)
+	}
+	db, capture, err := perfguard.Open("file:" + path + "?_pragma=busy_timeout(20000)&_pragma=journal_mode(WAL)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	s := primitives.NewTestStore(db, "")
+	for _, private := range []bool{false, true} {
+		if private {
+			if _, err := env.db.Exec(`UPDATE cards SET board_id='scale-board-1' WHERE id LIKE 'scale-card-%'`); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for _, principal := range env.principals {
+			ctx := primitives.WithRequestAccessScope(context.Background(), primitives.AccessScope{ActorID: principal.ActorID, PMActorID: env.agent.ActorID})
+			ctx, closeRead, err := s.BeginOverviewRead(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			capture.Start()
+			cards, truncated, err := s.AgentSummaryCards(ctx, "actor:scale-summary-actor", nil)
+			statements, queries, rows := capture.Stop()
+			work := capture.Work()
+			closeRead()
+			if err != nil || capture.WorkError() != nil || len(cards) > 50 || !truncated || queries > 10 || rows > 150 || work.VMSteps > 50000 {
+				t.Fatalf("agent selection cards=%d truncated=%v SQL=%d rows=%d VM=%d err=%v instrumentation=%v", len(cards), truncated, queries, rows, work.VMSteps, err, capture.WorkError())
+			}
+			if private && principal.ActorID == "scale-stranger-actor" && len(cards) != 0 {
+				t.Fatal("dense private candidates leaked", cards)
+			}
+			if !private && len(cards) == 0 {
+				t.Fatal("public positive control missing")
+			}
+			indexed := false
+			for _, statement := range statements {
+				if !strings.Contains(statement.SQL, "assigned_raw AS MATERIALIZED") {
+					continue
+				}
+				details, err := perfguard.Explain(context.Background(), env.db, statement)
+				if err != nil {
+					t.Fatal(err)
+				}
+				plan := strings.Join(details, "\n")
+				indexed = strings.Count(plan, "SEARCH cards USING INDEX idx_cards_agent_summary (assignee=?)") == 2
+				if !indexed {
+					t.Fatalf("assignment selectors lost indexed seeks: %s", plan)
+				}
+			}
+			if !indexed {
+				t.Fatal("agent selector was not exercised")
+			}
+			for _, card := range cards {
+				if strings.Contains(anyString(card["title"]), "PrivatePerformanceSecret") {
+					t.Fatal("private card leaked")
+				}
+			}
+			t.Logf("agent selector private_prefix=%v actor=%s cards=%d SQL=%d rows=%d VM=%d", private, principal.ActorID, len(cards), queries, rows, work.VMSteps)
+		}
+	}
+}

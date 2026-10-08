@@ -932,6 +932,9 @@ conversational_pm:
   action_status: [pending_delivery, sending, delivered, acknowledged, source_reported, verified, failed, unknown]
   channel_identity: [transport, tenant_id, channel_id, thread_id, external_user_id]
   invariants:
+    - Conversations persist at most eight pinned context_refs including legacy work_ref; turns copy these refs for scoped runner prompts.
+    - Only the configured PM actor holding the live lease may append turn activity via heartbeat. Increasing sequence numbers make identical retries idempotent; conflicting retries fail. Retain at most fifty short status or tool labels and targets, never raw tool payloads.
+    - Partial answer snapshots require an increasing partial_sequence, are bounded by max_output_bytes, and remain drafts until complete; reads share conversation visibility and never expose lease credentials.
     - All work.phase proposals validate payload shape before persistence using the dispatch validation sentence.
     - Identical request-key proposal replays return HTTP 200 with response-only replayed true; non-awaiting decisions also expose replayed_terminal_status without creating another request.
     - Decision deliverable and delivery_path are read-only projections of the action executor registry; absent delivery routes project none.
@@ -1244,7 +1247,8 @@ work_summary:
   semantics:
     - Supported card-bearing reads opt in with summary=1 to computed work_summary.status with state, label and reason. Default card collections preserve legacy shapes and complete results. Board roles select cards only.
     - Card and work write inputs retain their string summary. Card revision content remains prose. Default responses add no summary fields or pagination; summary=1 adds work_summary, aliases it at summary and preserves prose in summary_text. Stored phase and legacy plan fields remain unchanged.
-    - Status uses shared plan health, including phase and due date for planless cards. set_status is included only when stored phase disagrees.
+    - Planned cards use shared plan health. Planless cards use workflow phase (backlog, ready, in_progress, review, done or cancelled), overridden only by blocked, overdue (at_risk) or inactivity beyond the threshold (stale). no_plan is never a summary status; hints contains no_plan for absent or empty plans. Clients decide whether that hint matters in context. set_status is included only when stored phase genuinely disagrees with the computed state.
+    - Agent detail opts in with summary=1 to at most 50 recent-card candidates, selected through indexed assignment and current/recent-run refs before hydration and batch enrichment; cards_truncated marks the bounded preview and is always true for scoped readers so hidden candidate counts cannot be inferred.
     - Progress appears for a nonempty plan or explicit child relations; next and steps appear only for a plan. Owner, due, age, last_movement_at and external source appear only when known.
     - Opt-in card and board-card pages contain at most 50 cards with next_cursor. Topic and card timeline bundles and board workspace computed previews cap candidates at 50 before enrichment and signal cards_truncated; their legacy bundles remain complete. Summary SQL batches contain at most 50 card ids. Plan/child refs share bounded resolution and truncated refs remain unknown. Attention samples indexed oldest-first candidates before canonical visibility and recipient checks; a truncated count is a lower bound.
     - Inbox related_cards is a bounded batch of readable card previews, never an authority grant. Work search uses the same summary as work lists; document-only search contains no cards.

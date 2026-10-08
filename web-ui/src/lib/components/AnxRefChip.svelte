@@ -55,7 +55,7 @@
     aria-hidden="true"
   ></span>
   <span class="anx-ref-chip__title">{model.title}</span>
-  {#if !model.resolvable}
+  {#if !model.resolvable && model.resolutionKnown}
     <span class="anx-ref-chip__kind">not found</span>
   {:else}
     <!--
@@ -114,7 +114,9 @@
     title={model.raw}
     aria-label={model.resolvable
       ? `${model.kindLabel || "Ref"}: ${model.title}`
-      : `Not found: ${model.raw}`}
+      : model.resolutionKnown
+        ? `Not found: ${model.raw}`
+        : `Ref: ${model.raw}`}
     onmouseenter={open}
     onfocusin={open}
     onmouseleave={close}

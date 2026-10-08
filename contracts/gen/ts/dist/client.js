@@ -8721,6 +8721,10 @@ export const commandRegistry = [
             ],
             "optional": [
                 {
+                    "name": "context_refs",
+                    "type": "list\u003cstring\u003e"
+                },
+                {
                     "name": "work_ref",
                     "type": "string"
                 }
@@ -9522,6 +9526,10 @@ export const commandRegistry = [
             ],
             "optional": [
                 {
+                    "name": "context_ref",
+                    "type": "string"
+                },
+                {
                     "name": "cursor",
                     "type": "string"
                 },
@@ -9860,6 +9868,24 @@ export const commandRegistry = [
                 {
                     "name": "lease_token",
                     "type": "string"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "activity",
+                    "type": "list\u003cany\u003e"
+                },
+                {
+                    "name": "activity_append",
+                    "type": "list\u003cany\u003e"
+                },
+                {
+                    "name": "partial_response",
+                    "type": "string"
+                },
+                {
+                    "name": "partial_sequence",
+                    "type": "integer"
                 }
             ]
         },

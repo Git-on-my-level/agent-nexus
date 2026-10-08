@@ -251,6 +251,7 @@ export function refChipModel(ref, resolved, context = {}) {
     lastMovedAt: asText(hit?.lastMovedAt),
     progress: hit?.progress ?? null,
     resolvable,
+    resolutionKnown: externalIdentity || Boolean(hit && !hit.unreadable),
     isExternal: externalIdentity,
     authority,
     authorityLabel,

@@ -2,6 +2,7 @@ package primitives
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,54 @@ import (
 	"agent-nexus-core/internal/storage"
 	"agent-nexus-core/internal/testsql"
 )
+
+func TestWorkSummaryPlanlessWorkflowAndRiskFixture(t *testing.T) {
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	counts := map[string]int{}
+	for _, tc := range []struct {
+		name, phase, due, want string
+		old, planned, mismatch bool
+	}{
+		{name: "backlog", phase: "backlog", want: "backlog"},
+		{name: "ready", phase: "ready", want: "ready"},
+		{name: "in-progress", phase: "in_progress", want: "in_progress"},
+		{name: "empty-plan", phase: "in_progress", want: "in_progress", planned: true},
+		{name: "review", phase: "review", want: "review"},
+		{name: "review-alias", phase: "in_review", want: "review"},
+		{name: "done", phase: "done", due: "2020-01-01", old: true, want: "done"},
+		{name: "cancelled", phase: "cancelled", old: true, want: "cancelled"},
+		{name: "blocked", phase: "blocked", due: "2020-01-01", old: true, want: "blocked"},
+		{name: "overdue", phase: "in_progress", due: "2026-10-08T11:00:00Z", want: "at_risk", mismatch: true},
+		{name: "stalled", phase: "in_progress", old: true, want: "stale", mismatch: true},
+		{name: "due-soon", phase: "in_progress", due: "2026-10-08T13:00:00Z", want: "in_progress"},
+		{name: "quiet-due-soon", phase: "in_progress", due: "2026-10-08T13:00:00Z", old: true, want: "stale", mismatch: true},
+		{name: "custom-phase", phase: "vendor_waiting", want: "vendor_waiting"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			input := cardHealthInput{Phase: tc.phase, Due: tc.due, Created: now.Add(-200 * time.Hour), Activity: now}
+			if tc.old {
+				input.Activity = now.Add(-100 * time.Hour)
+			}
+			var p *plans.Plan
+			if tc.planned {
+				p = &plans.Plan{Steps: []plans.Step{}}
+			}
+			got := buildWorkSummary(input, p, plans.State{}, nil, now, 0)
+			if got.Status.State != tc.want || (got.SetStatus != nil) != tc.mismatch || !reflect.DeepEqual(got.Hints, []string{"no_plan"}) {
+				t.Fatalf("summary=%+v want=%s mismatch=%v", got, tc.want, tc.mismatch)
+			}
+			counts[got.Status.State]++
+		})
+	}
+	p := plans.Plan{Steps: []plans.Step{{ID: "a", Title: "Work", Status: "active"}}}
+	state := plans.Compute(p, nil, now, now, 0)
+	got := buildWorkSummary(cardHealthInput{Phase: "in_progress", Activity: now}, &p, state, nil, now, 0)
+	if got.Status.State != "on_track" || got.SetStatus != nil || len(got.Hints) != 0 {
+		t.Fatalf("planned summary changed: %+v", got)
+	}
+	counts[got.Status.State]++
+	t.Logf("15-row status fixture distribution: %v", counts)
+}
 
 func TestWorkSummaryPartsAndMismatch(t *testing.T) {
 	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
@@ -33,7 +82,7 @@ func TestWorkSummaryPartsAndMismatch(t *testing.T) {
 	if got := buildWorkSummary(input, &p, state, nil, now, 0); got.SetStatus != nil {
 		t.Fatal("matching status should be omitted", got.SetStatus)
 	}
-	for _, tc := range []struct{ phase, due, want string }{{"blocked", "", "blocked"}, {"done", "2026-10-01T00:00:00Z", "done"}, {"ready", "2026-10-01T00:00:00Z", "at_risk"}, {"ready", "", "no_plan"}} {
+	for _, tc := range []struct{ phase, due, want string }{{"blocked", "", "blocked"}, {"done", "2026-10-01T00:00:00Z", "done"}, {"ready", "2026-10-01T00:00:00Z", "at_risk"}, {"ready", "", "ready"}} {
 		input.Phase, input.Due = tc.phase, tc.due
 		got := buildWorkSummary(input, nil, plans.State{}, nil, now, 0)
 		if got.Status.State != tc.want || got.Progress != nil || got.Next != nil || got.Steps != nil {

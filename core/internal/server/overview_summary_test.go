@@ -77,6 +77,11 @@ func TestOverviewSummaryCompatibilityAndPrivacy(t *testing.T) {
 	for i := range fi {
 		f := fi[i].(map[string]any)
 		c := ci[i].(map[string]any)
+		for _, key := range []string{"summary", "summary_text", "work_summary"} {
+			if _, ok := c[key]; ok {
+				t.Fatalf("legacy compact response gained %s", key)
+			}
+		}
 		if err := workSchema.VisitJSON(c); err != nil {
 			t.Fatalf("summary work %v violates Work schema: %v", c["ref"], err)
 		}
