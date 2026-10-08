@@ -21,17 +21,21 @@ INSERT INTO ref_edges VALUES('secondary','board','secondary','card','card','boar
 	if err != nil {
 		t.Fatal(err)
 	}
-	tx, err := db.BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatal(err)
+	repair := func() {
+		t.Helper()
+		tx, err := db.BeginTx(context.Background(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = repairPrimaryCardPhases(context.Background(), tx); err != nil {
+			tx.Rollback()
+			t.Fatal(err)
+		}
+		if err = tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err = repairPrimaryCardPhases(context.Background(), tx); err != nil {
-		tx.Rollback()
-		t.Fatal(err)
-	}
-	if err = tx.Commit(); err != nil {
-		t.Fatal(err)
-	}
+	repair()
 	check := func(want string) {
 		t.Helper()
 		var phase, at string
@@ -47,6 +51,7 @@ INSERT INTO ref_edges VALUES('secondary','board','secondary','card','card','boar
 		if _, err := db.Exec(`UPDATE ref_edges SET metadata_json=json_set(metadata_json,'$.column_key',?) WHERE id=?`, edit.phase, edit.id); err != nil {
 			t.Fatal(err)
 		}
+		repair()
 		check(edit.want)
 	}
 }

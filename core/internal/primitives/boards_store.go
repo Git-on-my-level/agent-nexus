@@ -4394,7 +4394,12 @@ func upsertBoardCardRefEdge(ctx context.Context, tx *accessTx, boardID, cardID, 
 	if err != nil {
 		return fmt.Errorf("upsert board card ref edge: %w", err)
 	}
-	return nil
+	// Keep the typed primary phase in the same canonical write transaction.
+	// Secondary board placement remains independent. Do this in the runtime
+	// writer, so unrelated ref-edge writes on plain SQLite connections do not
+	// acquire dependencies on the card timestamp indexes' SQL functions.
+	_, err = tx.ExecContext(ctx, `UPDATE cards SET column_key=? WHERE id=? AND board_id=? AND column_key<>?`, strings.TrimSpace(columnKey), cardID, boardID, strings.TrimSpace(columnKey))
+	return err
 }
 
 func normalizeBoardRefs(board map[string]any) ([]string, error) {

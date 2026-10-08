@@ -99,8 +99,8 @@ func maintainWorkSummaryAttention(ctx context.Context, tx *sql.Tx) (bool, error)
 
 // Board moves historically updated membership metadata without the primary
 // card column. Restore the canonical typed phase once, in bounded migration
-// pages, then keep it atomic with membership writes. This changes neither
-// activity timestamps nor events and never materializes metadata on a read.
+// pages. The canonical writer keeps new membership changes atomic. The repair
+// preserves activity timestamps/events and never loads metadata on a read.
 func repairPrimaryCardPhases(ctx context.Context, tx *sql.Tx) error {
 	for _, table := range []string{"cards", "ref_edges"} {
 		exists, err := sqliteTableExists(ctx, tx, table)
@@ -114,16 +114,7 @@ func repairPrimaryCardPhases(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 	}
-	const phase = `json_extract(NEW.metadata_json,'$.column_key')`
 	const allowed = ` IN ('backlog','in_progress','review','blocked','done','cancelled')`
-	for _, operation := range []string{"INSERT", "UPDATE"} {
-		_, err := tx.ExecContext(ctx, `CREATE TRIGGER IF NOT EXISTS work_summary_primary_phase_`+operation+` AFTER `+operation+` ON ref_edges
- WHEN NEW.source_type='board' AND NEW.target_type='card' AND NEW.edge_type='board_card' AND `+phase+allowed+`
- BEGIN UPDATE cards SET column_key=`+phase+` WHERE id=NEW.target_id AND board_id=NEW.source_id AND column_key<>`+phase+`; END`)
-		if err != nil {
-			return err
-		}
-	}
 	cursor := ""
 	for {
 		rows, err := tx.QueryContext(ctx, `SELECT id FROM cards WHERE id>? ORDER BY id LIMIT 64`, cursor)
