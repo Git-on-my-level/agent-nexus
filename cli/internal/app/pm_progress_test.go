@@ -19,12 +19,12 @@ func TestPMProgressProtocolIsBoundedAndDoesNotForwardPayloads(t *testing.T) {
 	p.Write([]byte(`{"type":"pm_partial","text":"Draft answer"}` + "\n"))
 	p.Write([]byte(`{"type":"tool","label":"raw native event","arguments":{"secret":"never-forward"}}` + "\n"))
 	body := p.body("lease")
-	events := body["activity"].([]map[string]any)
-	if len(events) != 2 || events[1]["arguments"] != nil || body["partial_response"] != "Draft answer" || body["partial_sequence"] != 1 {
+	events := body["activity_append"].([]map[string]any)
+	if len(events) != 3 || events[2]["arguments"] != nil || body["partial_response"] != "Draft answer" || body["partial_sequence"] != 1 {
 		t.Fatalf("body %+v", body)
 	}
 	p.Write([]byte(strings.Repeat("x", 3000) + "\n" + `{"type":"pm_activity","kind":"status","label":"Recovered"}` + "\n"))
-	if len(p.line) > 1792 || p.body("lease")["activity"].([]map[string]any)[2]["label"] != "Recovered" {
+	if len(p.line) > 1792 || p.body("lease")["activity_append"].([]map[string]any)[0]["label"] != "Recovered" {
 		t.Fatal("oversized line recovery")
 	}
 	raw := []byte("{\"type\":\"pm_activity\",\"kind\":\"status\",\"label\":\"Step\"}\nFinal answer")
@@ -41,13 +41,15 @@ func TestDirectRunnerFlushesShortTurnActivityBeforeCompletion(t *testing.T) {
 	var mu sync.Mutex
 	var toolSeen bool
 	var answer string
+	states := map[string]bool{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
 		json.NewDecoder(r.Body).Decode(&body)
 		mu.Lock()
 		defer mu.Unlock()
 		if strings.HasSuffix(r.URL.Path, "/heartbeat") {
-			for _, raw := range asSlice(body["activity"]) {
+			for _, raw := range asSlice(body["activity_append"]) {
+				states[anyString(asMap(raw)["label"])] = true
 				if asMap(raw)["label"] == "Reading the task" {
 					toolSeen = true
 				}
@@ -76,6 +78,11 @@ func TestDirectRunnerFlushesShortTurnActivityBeforeCompletion(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
+	for _, state := range []string{"Claimed", "Preparing runtime", "Running", "Finished"} {
+		if !states[state] {
+			t.Errorf("missing state %s", state)
+		}
+	}
 	if !toolSeen || answer != "It is awaiting review." {
 		t.Fatalf("tool=%v answer=%q", toolSeen, answer)
 	}

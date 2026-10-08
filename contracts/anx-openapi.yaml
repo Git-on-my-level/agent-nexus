@@ -9279,12 +9279,25 @@ components:
           format: date-time
           readOnly: true
           description: Timestamp assigned by core.
+    PMActivityAppend:
+      type: object
+      additionalProperties: false
+      required: [kind, label]
+      properties:
+        kind: {type: string, enum: [status, tool]}
+        label: {type: string, minLength: 1, maxLength: 120}
+        target: {type: string, maxLength: 160}
     PMHeartbeatRequest:
       type: object
       additionalProperties: false
       required:
       - lease_token
       properties:
+        activity_append:
+          type: array
+          maxItems: 50
+          items: {$ref: '#/components/schemas/PMActivityAppend'}
+          description: Best-effort append with core-assigned sequence numbers under the lease lock, for concurrent runner and CLI emitters. Never automatically retry; delivery uncertainty may duplicate a step if retried. Cannot be combined with activity.
         activity:
           type: array
           maxItems: 50

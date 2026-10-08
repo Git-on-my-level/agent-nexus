@@ -9626,6 +9626,10 @@ export const commandRegistry: CommandSpec[] = [
           "type": "list\u003cany\u003e"
         },
         {
+          "name": "activity_append",
+          "type": "list\u003cany\u003e"
+        },
+        {
           "name": "partial_response",
           "type": "string"
         },

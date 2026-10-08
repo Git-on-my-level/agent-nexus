@@ -202,11 +202,17 @@ type TurnActivity struct {
 	Target     string    `json:"target,omitempty"`
 	RecordedAt time.Time `json:"recorded_at,omitempty"`
 }
+type ActivityAppend struct {
+	Kind   string `json:"kind"`
+	Label  string `json:"label"`
+	Target string `json:"target,omitempty"`
+}
 type HeartbeatInput struct {
-	PartialSequence int            `json:"partial_sequence,omitempty"`
-	Activity        []TurnActivity `json:"activity,omitempty"`
-	PartialResponse *string        `json:"partial_response,omitempty"`
-	LeaseToken      string         `json:"lease_token"`
+	ActivityAppend  []ActivityAppend `json:"activity_append,omitempty"`
+	PartialSequence int              `json:"partial_sequence,omitempty"`
+	Activity        []TurnActivity   `json:"activity,omitempty"`
+	PartialResponse *string          `json:"partial_response,omitempty"`
+	LeaseToken      string           `json:"lease_token"`
 }
 type ReleaseInput struct {
 	RunnerID   string `json:"runner_id"`

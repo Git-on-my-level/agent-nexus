@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 )
 
@@ -129,5 +130,53 @@ func TestTurnContextUsesPinnedSelectorAndRequestingPrincipal(t *testing.T) {
 	}
 	if _, err = s.GetTurnPinnedContextPage(ctx, agent, turn.ID, "card:unrelated", "", "", 10, claimed.LeaseToken); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("unrelated selector %v", err)
+	}
+}
+
+func TestConcurrentActivityAppendAllocatesOrderedBoundedSequences(t *testing.T) {
+	s, _, human, _ := fixture(t)
+	ctx := context.Background()
+	c, _ := s.CreateConversation(ctx, human, CreateConversation{RequestKey: "append", Title: "Question"})
+	turn, _ := s.PostMessage(ctx, human, c.ID, MessageInput{RequestKey: "m", Text: "Explain"})
+	agent := Principal{WorkspaceID: "ws", ActorID: "pm-agent"}
+	claim, err := s.ClaimTurn(ctx, agent, ClaimInput{RunnerID: "runner"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < 60; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := s.HeartbeatTurn(ctx, agent, turn.ID, HeartbeatInput{LeaseToken: claim.LeaseToken, ActivityAppend: []ActivityAppend{{Kind: "tool", Label: "anx work get", Target: "card:release"}}})
+			if err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	got, err := s.GetTurn(ctx, human, turn.ID)
+	if err != nil || len(got.Activity) != 50 {
+		t.Fatalf("%d %v", len(got.Activity), err)
+	}
+	for i, event := range got.Activity {
+		if event.Sequence != i+11 || event.RecordedAt.IsZero() {
+			t.Fatalf("event %+v", event)
+		}
+	}
+	for _, in := range []HeartbeatInput{
+		{LeaseToken: "stale", ActivityAppend: []ActivityAppend{{Kind: "status", Label: "Finished"}}},
+		{LeaseToken: claim.LeaseToken, ActivityAppend: []ActivityAppend{{Kind: "tool", Label: "bad\nlabel"}}},
+		{LeaseToken: claim.LeaseToken, ActivityAppend: []ActivityAppend{{Kind: "tool", Label: "safe"}}, Activity: []TurnActivity{{Sequence: 61, Kind: "tool", Label: "safe"}}},
+	} {
+		if _, err := s.HeartbeatTurn(ctx, agent, turn.ID, in); err == nil {
+			t.Fatal("invalid append accepted")
+		}
+	}
+	if _, err := s.CompleteTurnWithLease(ctx, agent, turn.ID, "Answer", nil, claim.LeaseToken); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.HeartbeatTurn(ctx, agent, turn.ID, HeartbeatInput{LeaseToken: claim.LeaseToken, ActivityAppend: []ActivityAppend{{Kind: "tool", Label: "late"}}}); !errors.Is(err, ErrTurnClosed) {
+		t.Fatalf("closed %v", err)
 	}
 }

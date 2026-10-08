@@ -4439,6 +4439,7 @@ Inputs:
   - body `lease_token` (string)
   Optional:
   - body `activity` (list<any>)
+  - body `activity_append` (list<any>)
   - body `partial_response` (string)
   - body `partial_sequence` (integer)
 

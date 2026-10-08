@@ -16,7 +16,6 @@ type pmProgressKey struct{}
 type pmProgress struct {
 	mu              sync.Mutex
 	events          []map[string]any
-	sequence        int
 	partial         string
 	hasPartial      bool
 	disabled        bool
@@ -28,14 +27,8 @@ type pmProgress struct {
 
 func newPMProgress(turn map[string]any, maxBytes int) *pmProgress {
 	p := &pmProgress{maxBytes: maxBytes}
-	for _, row := range asSlice(turn["activity"]) {
-		if n, _ := intFromAny(asMap(row)["sequence"]); n > p.sequence {
-			p.sequence = n
-		}
-	}
 	p.partialSequence, _ = intFromAny(turn["partial_sequence"])
-	p.sequence++
-	p.events = []map[string]any{{"sequence": p.sequence, "kind": "status", "label": "Preparing an answer"}}
+	p.events = []map[string]any{{"kind": "status", "label": "Claimed"}, {"kind": "status", "label": "Preparing runtime"}}
 	return p
 }
 
@@ -79,8 +72,7 @@ func (p *pmProgress) accept(line []byte) {
 		if (row.Kind != "status" && row.Kind != "tool") || !progressText(row.Label, 120, true) || !progressText(row.Target, 160, false) {
 			return
 		}
-		p.sequence++
-		p.events = append(p.events, map[string]any{"sequence": p.sequence, "kind": row.Kind, "label": row.Label, "target": row.Target})
+		p.events = append(p.events, map[string]any{"kind": row.Kind, "label": row.Label, "target": row.Target})
 		if len(p.events) > 50 {
 			p.events = p.events[len(p.events)-50:]
 		}
@@ -101,7 +93,13 @@ func (p *pmProgress) body(token string) map[string]any {
 		return map[string]any{"lease_token": token}
 	}
 	events := append([]map[string]any(nil), p.events...)
-	body := map[string]any{"lease_token": token, "activity": events}
+	// Drain before sending: progress is best effort, never replayed after an
+	// uncertain write. Core allocates sequences for all concurrent emitters.
+	p.events = nil
+	body := map[string]any{"lease_token": token}
+	if len(events) > 0 {
+		body["activity_append"] = events
+	}
 	if p.hasPartial {
 		body["partial_sequence"] = p.partialSequence
 		body["partial_response"] = p.partial
@@ -129,3 +127,12 @@ func progressFromContext(ctx context.Context) *pmProgress {
 }
 
 func (p *pmProgress) disable() { p.mu.Lock(); p.disabled = true; p.mu.Unlock() }
+
+func (p *pmProgress) status(label string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.events = append(p.events, map[string]any{"kind": "status", "label": label})
+	if len(p.events) > 50 {
+		p.events = p.events[len(p.events)-50:]
+	}
+}

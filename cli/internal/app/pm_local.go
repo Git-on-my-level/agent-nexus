@@ -817,12 +817,25 @@ func (a *App) runClaimedTurn(ctx, shutdownCtx context.Context, cfg config.Resolv
 		maxBytes = n
 	}
 	direct := runnerUsesPromptPlaceholder(argv)
+	var progress *pmProgress
+	if supported, _ := turn["activity_supported"].(bool); supported && !turnIsTerminal(turn) {
+		progress = newPMProgress(turn, maxBytes)
+		a.emitPMProgress(ctx, cfg, turnID, leaseToken, progress)
+	}
 	fail := func(reason string, raw []byte) (bool, bool) {
+		if progress != nil {
+			progress.status("Finished")
+			a.emitPMProgress(ctx, cfg, turnID, leaseToken, progress)
+		}
 		return a.settleFailedTurn(ctx, shutdownCtx, cfg, workDir, turn, started, reason, raw, direct), false
 	}
 	complete := func(text, provider, model string, raw []byte) (bool, bool) {
 		if shuttingDown(shutdownCtx) {
 			return false, false
+		}
+		if progress != nil {
+			progress.status("Finished")
+			a.emitPMProgress(ctx, cfg, turnID, leaseToken, progress)
 		}
 		_, err := a.completeTurnUntil(ctx, shutdownCtx, cfg, turnID, leaseToken, text, raw, maxBytes, deadline)
 		if err == nil {
@@ -882,14 +895,22 @@ func (a *App) runClaimedTurn(ctx, shutdownCtx context.Context, cfg config.Resolv
 	}
 	a.turnMem().noteHarnessRun(turnID)
 	env = overlayEnv(env, "ANX_PM_LEASE_TOKEN", leaseToken)
+	if progress != nil {
+		env = overlayEnv(env, "ANX_PM_TURN_ID", turnID)
+		env = overlayEnv(env, "ANX_PM_ACTIVITY_ENABLED", "1")
+		env = overlayEnv(env, "ANX_PM_BASE_URL", cfg.BaseURL)
+		env = overlayEnv(env, "ANX_PM_AGENT", cfg.Agent)
+	}
 	base := harnessBase
 	if base == nil {
 		base = ctx
 	}
 	runCtx, cancel := context.WithTimeout(base, remain)
 	defer cancel()
-	if supported, _ := turn["activity_supported"].(bool); supported && runnerUsesPromptPlaceholder(argv) {
-		runCtx = context.WithValue(runCtx, pmProgressKey{}, newPMProgress(turn, maxBytes))
+	if progress != nil {
+		runCtx = context.WithValue(runCtx, pmProgressKey{}, progress)
+		progress.status("Running")
+		a.emitPMProgress(runCtx, cfg, turnID, leaseToken, progress)
 	}
 	leaseLost := a.watchTurnLease(runCtx, cancel, cfg, turn)
 	ifLeaseLost := func(text string) (bool, bool, bool) {

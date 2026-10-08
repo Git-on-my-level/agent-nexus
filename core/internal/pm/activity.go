@@ -56,7 +56,7 @@ func safeActivityText(s string, max int, required bool) bool {
 }
 
 func applyTurnActivity(t *Turn, in HeartbeatInput, now time.Time) error {
-	if len(in.Activity) > 50 {
+	if len(in.Activity) > 50 || len(in.ActivityAppend) > 50 || (len(in.Activity) > 0 && len(in.ActivityAppend) > 0) {
 		return ErrInvalid
 	}
 	if in.PartialResponse != nil && (in.PartialSequence <= 0 || !utf8.ValidString(*in.PartialResponse) || len(*in.PartialResponse) > t.MaxOutputBytes || strings.ContainsRune(*in.PartialResponse, 0)) {
@@ -92,6 +92,19 @@ func applyTurnActivity(t *Turn, in HeartbeatInput, now time.Time) error {
 		}
 		event.RecordedAt = now
 		t.Activity = append(t.Activity, event)
+		if len(t.Activity) > 50 {
+			t.Activity = t.Activity[len(t.Activity)-50:]
+		}
+	}
+	for _, event := range in.ActivityAppend {
+		if (event.Kind != "status" && event.Kind != "tool") || !safeActivityText(event.Label, 120, true) || !safeActivityText(event.Target, 160, false) {
+			return ErrInvalid
+		}
+		sequence := 1
+		if len(t.Activity) > 0 {
+			sequence = t.Activity[len(t.Activity)-1].Sequence + 1
+		}
+		t.Activity = append(t.Activity, TurnActivity{Sequence: sequence, Kind: event.Kind, Label: event.Label, Target: event.Target, RecordedAt: now})
 		if len(t.Activity) > 50 {
 			t.Activity = t.Activity[len(t.Activity)-50:]
 		}

@@ -12,7 +12,7 @@ No new route or SSE connection is introduced. The existing conversation poll
 returns the retained log, latest draft and final answer under the same reader
 permissions. Core retains at most 50 events with a short label (120 bytes) and
 optional target (160 bytes). Only `status` and `tool` kinds are accepted. Increasing
-sequence numbers make identical retries safe; conflicting or evicted retries
+sequence numbers in `activity` make identical retries safe; conflicting or evicted retries
 fail with 409. Core stamps `recorded_at`. Send `partial_response` with increasing
 `partial_sequence` for a full draft snapshot, bounded by `max_output_bytes`.
 An omitted draft preserves it; an empty snapshot clears it. Drafts are not final
@@ -31,12 +31,11 @@ JSON on stdout while it executes:
 {"role":"assistant","content":"The task is awaiting review."}
 ```
 
-The CLI recognizes only the two explicit progress types, assigns sequence
-numbers, retains a bounded snapshot and forwards it with lease heartbeats at
+The CLI recognizes only the two explicit progress types, retains a bounded snapshot and forwards it with lease heartbeats at
 most five seconds apart. It removes progress lines before extracting the final
 answer. Invalid or oversized progress is ignored. Other native stdout does not
-become activity. The initial status says “Preparing an answer”; the adapter
-must report actual tools and model steps. On an older core that rejects the new
+become activity. Every supported runner emits coarse states: “Claimed”, “Preparing runtime”,
+“Running”, and “Finished”. The adapter may report additional model steps. On an older core that rejects the new
 heartbeat fields, the CLI falls back to lease-only renewal. Agentctl result
 collection does not expose live native events through this protocol.
 
@@ -46,6 +45,26 @@ prompts or raw native event payloads. Emit partial text only when the native
 runner supports an actual draft stream. Keep provider-specific translation in
 the deployment adapter, outside OSS. A runner may also call the heartbeat route
 directly using the same contract.
+
+## Activity from CLI tools
+
+`pm serve` exports `ANX_PM_ACTIVITY_ENABLED=1`, `ANX_PM_TURN_ID`,
+`ANX_PM_LEASE_TOKEN`, `ANX_PM_BASE_URL`, and `ANX_PM_AGENT` only for a supported
+live turn. Child `anx` invocations report a canonical command name and, when
+available, a syntactically validated typed resource selector. Free text, search,
+paths, URLs, bodies, arguments, results and credentials are excluded. Transport,
+authentication and secret-management commands are silent. Workspace or actor
+overrides disable reporting. This works even when the native runner produces
+only a final answer and cannot stream tool events or partial answer text.
+
+CLI events and coarse runner states use heartbeat `activity_append`, whose
+sequences are allocated atomically by core under the existing lease lock.
+Never combine `activity_append` with manually sequenced `activity` in one
+request. Append is best effort: no retries after uncertain writes, preventing
+duplicate tool steps. Each CLI invocation makes at most one additional indexed
+heartbeat request, with a 250 ms total deadline; telemetry failure does not
+change command output or success. Events may be lost under load. Drafts remain
+optional and require actual native streaming support.
 
 ## Latency evidence and rollout
 
