@@ -46,7 +46,7 @@ const SELF = {
 };
 
 /**
- * The core endpoints a Tasks list and a task card touch, each answering after
+ * The bounded Inbox feeds and selected-item context, each answering after
  * `LATENCY_MS`. Returns the recorded request log.
  */
 async function installScaleCore(page, { latency = LATENCY_MS } = {}) {
@@ -58,6 +58,17 @@ async function installScaleCore(page, { latency = LATENCY_MS } = {}) {
   calls.state = state;
 
   await page.addInitScript(() => {
+    const observer = new MutationObserver(() => {
+      const button = document.querySelector('[data-inbox-proposal="1"]');
+      if (!button || button.disabled || !button.getClientRects().length) return;
+      window.__inboxInteractive = { at: performance.now(), wallAt: Date.now() };
+      observer.disconnect();
+    });
+    observer.observe(document, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+    });
     localStorage.setItem("workspaceTourSeen.local", "1");
     localStorage.setItem("workspaceTourSeen.local:local", "1");
   });
@@ -189,7 +200,7 @@ async function installScaleCore(page, { latency = LATENCY_MS } = {}) {
       return null;
     })();
 
-    calls.push({ path, at: Date.now() - started });
+    calls.push({ path, at: Date.now() - started, wallAt: Date.now() });
     await new Promise((resolve) => setTimeout(resolve, latency));
     if (!body) {
       return route.fulfill({
@@ -220,18 +231,19 @@ test("Inbox asks are interactive before the bounded scale history finishes", asy
   await expect(row).toBeVisible();
   await expect(page.getByRole("button", { name: /^1 Proceed/ })).toBeEnabled();
   const inboxStart = calls.find((call) => call.path === "/inbox").at;
-  // calls.at is relative to helper creation; the fixture also records browser
-  // request timing below so the report is independent of the server startup.
+  const enabled = await page.evaluate(() => window.__inboxInteractive);
+  // Measure the actual enabled DOM control, not the return of Playwright's
+  // host-side assertions (which can lag when other checks occupy the machine).
   const resources = await page.evaluate(() =>
     performance
       .getEntriesByType("resource")
       .filter((entry) => new URL(entry.name).pathname === "/inbox")
       .map((entry) => entry.startTime),
   );
-  const interactiveMs = Math.round(
-    (await page.evaluate(() => performance.now())) - Math.min(...resources),
-  );
-  const earlyWorkPages = calls.filter((call) => call.path === "/work").length;
+  const interactiveMs = Math.round(enabled.at - Math.min(...resources));
+  const earlyWorkPages = calls.filter(
+    (call) => call.path === "/work" && call.wallAt <= enabled.wallAt,
+  ).length;
   const report = {
     fixtureWorkRecords: SCALE_WORK.length,
     latencyMs: LATENCY_MS,
