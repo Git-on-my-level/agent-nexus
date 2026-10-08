@@ -8657,6 +8657,11 @@ components:
           type: string
         actor_id: &id003
           type: string
+        context_refs:
+          type: array
+          maxItems: 8
+          items: {type: string, maxLength: 512}
+          description: Pinned typed refs, persisted on the conversation. work_ref remains the primary task for compatibility.
         work_ref: &id004
           type: string
         created_at: &id005
@@ -8695,6 +8700,18 @@ components:
           type: string
         text:
           type: string
+        context_refs:
+          type: array
+          maxItems: 8
+          items: {type: string}
+        activity:
+          type: array
+          maxItems: 50
+          items: {$ref: '#/components/schemas/PMTurnActivity'}
+        partial_sequence: {type: integer, minimum: 1}
+        partial_response:
+          type: string
+          description: Latest draft answer snapshot, bounded by max_output_bytes. Not a completed answer.
         response:
           type: string
         wakeup_id:
@@ -8764,6 +8781,10 @@ components:
       - $ref: '#/components/schemas/PMTurn'
       - type: object
         properties:
+          activity_supported:
+            type: boolean
+            readOnly: true
+            description: True when this core supports bounded activity in heartbeats. Older cores omit it; direct runners then keep lease-only heartbeats.
           lease_token:
             type: string
           lease_owner:
@@ -9041,6 +9062,11 @@ components:
           type: string
         title:
           type: string
+        context_refs:
+          type: array
+          maxItems: 8
+          items: {type: string, maxLength: 512}
+          description: Pinned typed refs, persisted on the conversation. work_ref remains the primary task for compatibility.
         work_ref:
           type: string
       required:
@@ -9137,6 +9163,10 @@ components:
         lease_token:
           type: string
           minLength: 1
+        context_ref:
+          type: string
+          maxLength: 512
+          description: Optional pinned ref selector. Must belong to the conversation context_refs or legacy work_ref. Defaults to the primary work_ref or first pinned ref. Reads always use the requesting reader's scope.
         query:
           type: string
         cursor:
@@ -9235,12 +9265,35 @@ components:
         runner_id:
           type: string
           description: Stable identity for one serial worker; defaults to the authenticated actor ID when omitted. Reuse on restart to recover its existing lease.
+    PMTurnActivity:
+      type: object
+      additionalProperties: false
+      required: [sequence, kind, label]
+      properties:
+        sequence: {type: integer, minimum: 1}
+        kind: {type: string, enum: [status, tool]}
+        label: {type: string, minLength: 1, maxLength: 120}
+        target: {type: string, maxLength: 160}
+        recorded_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp assigned by core.
     PMHeartbeatRequest:
       type: object
       additionalProperties: false
       required:
       - lease_token
       properties:
+        activity:
+          type: array
+          maxItems: 50
+          description: Append events with increasing sequence numbers. Identical retries are ignored; conflicting sequences are rejected. Only short safe labels and targets, never tool arguments, output, credentials or raw payloads.
+          items: {$ref: '#/components/schemas/PMTurnActivity'}
+        partial_sequence: {type: integer, minimum: 1}
+        partial_response:
+          type: string
+          description: Optional latest draft snapshot, bounded by the turn output limit. Requires increasing partial_sequence; identical retries are accepted. Omitted preserves the draft; empty clears it.
         lease_token:
           type: string
           minLength: 1

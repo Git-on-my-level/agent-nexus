@@ -255,9 +255,21 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		deps.Dispatch = bridge.Dispatch
 	}
 	deps.ReadContextPage = func(ctx context.Context, p pm.Principal, ref, query, cursor string, limit int) (pm.ContextPage, error) {
+		ctx = primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: p.ActorID, PMActorID: cfg.PM.AgentActorID})
 		if ref != "" {
 			if cursor != "" {
 				return pm.ContextPage{}, pm.ErrContextWorkCursor
+			}
+			if !strings.HasPrefix(ref, "card:") && !strings.HasPrefix(ref, "work:") {
+				previews, err := store.ResolveRefs(ctx, []string{ref}, nil, time.Now().UTC(), planStalledAfter())
+				if err != nil {
+					return pm.ContextPage{}, err
+				}
+				items := make([]any, 0, len(previews))
+				for _, preview := range previews {
+					items = append(items, preview)
+				}
+				return pm.ContextPage{Items: items}, nil
 			}
 			w, err := store.GetWork(ctx, ref)
 			if err != nil {

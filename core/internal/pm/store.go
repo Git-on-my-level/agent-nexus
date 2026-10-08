@@ -477,7 +477,7 @@ func rejectPendingHumanProposal(ctx context.Context, tx *resourceaccess.Tx, d De
 
 // Renew under the same SQLite write lock as claim, so an expired owner can
 // never renew over a replacement lease or a terminal write.
-func (s *Store) heartbeatTurn(ctx context.Context, id, token string, ttl time.Duration) (Turn, error) {
+func (s *Store) heartbeatTurn(ctx context.Context, id, token string, ttl time.Duration, in HeartbeatInput) (Turn, error) {
 	tx, err := s.database().BeginTx(ctx, nil)
 	if err != nil {
 		return Turn{}, err
@@ -503,6 +503,9 @@ func (s *Store) heartbeatTurn(ctx context.Context, id, token string, ttl time.Du
 	now := time.Now().UTC()
 	if !t.Deadline.After(now) {
 		return Turn{}, closedTurnError(t)
+	}
+	if err := applyTurnActivity(&t, in, now); err != nil {
+		return Turn{}, err
 	}
 	t.LeaseExpiresAt = leaseDeadline(t.Deadline, now, ttl)
 	t.Revision++

@@ -145,7 +145,7 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if in.Limit < 1 || in.Limit > 50 {
 				err = ErrInvalid
 			} else {
-				out, err = s.GetTurnContextPage(ctx, p, path[1], in.Query, in.Cursor, in.Limit, in.LeaseToken)
+				out, err = s.GetTurnPinnedContextPage(ctx, p, path[1], in.ContextRef, in.Query, in.Cursor, in.Limit, in.LeaseToken)
 			}
 		}
 	case len(path) == 3 && path[0] == "turns" && path[2] == "decisions" && r.Method == http.MethodPost:
@@ -318,6 +318,7 @@ func writeError(w http.ResponseWriter, err error) {
 
 // Expose the active runner identity; reserve lease credentials for claims.
 type turnView struct {
+	ActivitySupported bool `json:"activity_supported,omitempty"`
 	Turn
 	Claimed        bool       `json:"claimed"`
 	LeaseToken     string     `json:"lease_token,omitempty"`
@@ -333,6 +334,7 @@ func turnResponse(t Turn, includeLease bool) turnView {
 		out.LeaseOwner = t.LeaseOwner
 	}
 	if includeLease {
+		out.ActivitySupported = true
 		out.LeaseToken = t.LeaseToken
 		out.LeaseOwner = t.LeaseOwner
 		out.LeaseExpiresAt = &t.LeaseExpiresAt

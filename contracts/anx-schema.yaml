@@ -932,6 +932,9 @@ conversational_pm:
   action_status: [pending_delivery, sending, delivered, acknowledged, source_reported, verified, failed, unknown]
   channel_identity: [transport, tenant_id, channel_id, thread_id, external_user_id]
   invariants:
+    - Conversations persist at most eight pinned context_refs including legacy work_ref; turns copy these refs for scoped runner prompts.
+    - Only the configured PM actor holding the live lease may append turn activity via heartbeat. Increasing sequence numbers make identical retries idempotent; conflicting retries fail. Retain at most fifty short status or tool labels and targets, never raw tool payloads.
+    - Partial answer snapshots require an increasing partial_sequence, are bounded by max_output_bytes, and remain drafts until complete; reads share conversation visibility and never expose lease credentials.
     - All work.phase proposals validate payload shape before persistence using the dispatch validation sentence.
     - Identical request-key proposal replays return HTTP 200 with response-only replayed true; non-awaiting decisions also expose replayed_terminal_status without creating another request.
     - Decision deliverable and delivery_path are read-only projections of the action executor registry; absent delivery routes project none.

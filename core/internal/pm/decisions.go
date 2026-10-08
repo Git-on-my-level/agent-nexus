@@ -429,6 +429,9 @@ func (s *Service) GetTurnContext(ctx context.Context, p Principal, turnID, query
 	return s.GetTurnContextPage(ctx, p, turnID, query, "", limit, leaseToken)
 }
 func (s *Service) GetTurnContextPage(ctx context.Context, p Principal, turnID, query, cursor string, limit int, leaseToken string) (ContextPage, error) {
+	return s.GetTurnPinnedContextPage(ctx, p, turnID, "", query, cursor, limit, leaseToken)
+}
+func (s *Service) GetTurnPinnedContextPage(ctx context.Context, p Principal, turnID, contextRef, query, cursor string, limit int, leaseToken string) (ContextPage, error) {
 	if err := s.authorize(ctx, p, "pm.respond", ""); err != nil {
 		return ContextPage{}, err
 	}
@@ -449,7 +452,25 @@ func (s *Service) GetTurnContextPage(ctx context.Context, p Principal, turnID, q
 	if err := s.store.get(ctx, "conversation", t.ConversationID, &c); err != nil {
 		return ContextPage{}, err
 	}
-	return s.QueryContextPage(ctx, Principal{WorkspaceID: c.WorkspaceID, ActorID: c.ActorID}, c.WorkRef, query, cursor, limit)
+	refs, err := conversationRefs(c.WorkRef, c.ContextRefs)
+	if err != nil {
+		return ContextPage{}, err
+	}
+	if contextRef != "" {
+		found := false
+		for _, ref := range refs {
+			if ref == contextRef {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return ContextPage{}, ErrInvalid
+		}
+	} else if len(refs) > 0 {
+		contextRef = refs[0]
+	}
+	return s.QueryContextPage(ctx, Principal{WorkspaceID: c.WorkspaceID, ActorID: c.ActorID}, contextRef, query, cursor, limit)
 }
 
 // ProposeForTurn records a proposal under the requesting actor so that it is
