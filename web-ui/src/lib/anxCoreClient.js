@@ -383,6 +383,7 @@ const adapterCommandTable = [
     true,
   ],
   ["getWorkCapabilities", "work.capabilities"],
+  ["getPmPresence", "pm.presence"],
   [
     "listPmConversations",
     "pm.conversations.list",

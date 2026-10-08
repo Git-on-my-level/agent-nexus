@@ -126,6 +126,17 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		if p.WorkspaceID != cfg.PM.WorkspaceID {
 			return pm.ErrForbidden
 		}
+		// Presence contains only workspace connection timestamps. HTTP auth has
+		// already verified revocation and bound this principal to the request;
+		// loading its resource-bearing host summary would construct a workspace
+		// denial graph for this metadata-only point lookup.
+		if permission == "pm.presence" && ref == "" {
+			actual, ok := ctx.Value(principalContextKey{}).(*auth.Principal)
+			if ok && actual != nil && actual.ActorID == p.ActorID {
+				return nil
+			}
+			return pm.ErrForbidden
+		}
 		if ref != "" {
 			if err := store.CheckResourceValues(ctx, []string{ref}); err != nil {
 				return pm.ErrNotFound

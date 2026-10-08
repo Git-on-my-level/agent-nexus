@@ -407,7 +407,11 @@ func (s *Service) HeartbeatTurn(ctx context.Context, p Principal, turnID string,
 	if err := s.requireOpenTurn(ctx, t); err != nil {
 		return Turn{}, err
 	}
-	return s.store.heartbeatTurn(ctx, t.ID, in.LeaseToken, s.cfg.LeaseTTL, in)
+	out, err := s.store.heartbeatTurn(ctx, t.ID, in.LeaseToken, s.cfg.LeaseTTL, in)
+	if err == nil && p.ActorID == s.cfg.AgentActorID {
+		_ = s.notePresence(ctx, p, "heartbeat")
+	}
+	return out, err
 }
 
 // ReleaseTurn relinquishes an active lease without terminating the turn.
@@ -461,7 +465,11 @@ func (s *Service) ClaimTurn(ctx context.Context, p Principal, in ClaimInput) (Tu
 	if err := s.ExpireTurns(ctx, now); err != nil {
 		return Turn{}, err
 	}
-	return s.store.claimTurn(ctx, p, runner, now, s.cfg.MaxConcurrent, s.cfg.LeaseTTL, s.cfg.MaxOutputBytes)
+	out, err := s.store.claimTurn(ctx, p, runner, now, s.cfg.MaxConcurrent, s.cfg.LeaseTTL, s.cfg.MaxOutputBytes)
+	if err == nil || errors.Is(err, ErrEmpty) || errors.Is(err, ErrBusy) {
+		_ = s.notePresence(ctx, p, "claim")
+	}
+	return out, err
 }
 
 const turnDeadlineFailure = "The PM did not answer before the deadline. Retry, or check that a runner is attached."

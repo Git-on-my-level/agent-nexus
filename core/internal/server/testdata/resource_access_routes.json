@@ -799,6 +799,12 @@
   },
   {
     "method": "GET",
+    "path": "/pm/presence",
+    "policy": "independent",
+    "reason": "Workspace-scoped connection timestamps contain no resource data; PM permission and actor binding are checked before the exact-key read."
+  },
+  {
+    "method": "GET",
     "path": "/pm/context",
     "policy": "collection"
   },

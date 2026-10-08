@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 220
+- Command count: 221
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -29,7 +29,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | ops | 3 |
 | overview | 2 |
 | plan | 2 |
-| pm | 24 |
+| pm | 25 |
 | ref-edges | 1 |
 | refs | 1 |
 | report | 2 |
@@ -47,7 +47,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 80 |
+| exposed_read | 81 |
 | exposed_write | 67 |
 | gated_admin | 28 |
 | gated_sensitive | 13 |
@@ -61,8 +61,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 147 | exposed_read + exposed_write + adapted |
-| hosted default | 65 | explicit read-only private-app allowlist |
+| standalone default | 148 | exposed_read + exposed_write + adapted |
+| hosted default | 66 | explicit read-only private-app allowlist |
 | gated | 41 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
 | unsupported | 32 | not represented as direct MCP tools in v1 |
@@ -235,6 +235,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | pm.decisions.dispatch | pm | POST | /pm/decisions/{decision_id}/dispatch | gated_sensitive | Human approval or consequential source handoff; explicit exposure never bypasses core authorization. |
 | pm.decisions.get | pm | GET | /pm/decisions/{decision_id} | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | pm.decisions.list | pm | GET | /pm/decisions | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
+| pm.presence | pm | GET | /pm/presence | exposed_read | Read authenticated workspace PM connection timestamps without turn or runner data. |
 | pm.turns.claim | pm | POST | /pm/turns/claim | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | pm.turns.complete | pm | POST | /pm/turns/{turn_id}/complete | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | pm.turns.context | pm | POST | /pm/turns/{turn_id}/context | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |

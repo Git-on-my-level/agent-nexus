@@ -506,6 +506,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PMErrorResponse'
+  /pm/presence:
+    get:
+      operationId: pmPresence
+      summary: Read recent PM connection state
+      tags: [pm]
+      x-anx-surface: canonical
+      x-anx-command-id: pm.presence
+      x-anx-cli-path: pm presence
+      x-anx-why: Check whether a PM runner is connected before requesting help.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `PMPresence`.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, unavailable]
+      x-anx-concepts: [agents]
+      x-anx-stability: beta
+      x-anx-agent-notes: Only accepted claims and lease heartbeats from the configured PM count. No turn text or runner identity is returned.
+      responses:
+        '200':
+          description: Workspace PM connection state; connected expires after 90 seconds.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMPresence'
   /pm/context:
     get:
       operationId: pmContext
@@ -9497,6 +9520,20 @@ components:
       type: object
       additionalProperties: true
       properties: &id006 {}
+    PMPresence:
+      type: object
+      required: [configured, connected]
+      properties:
+        configured:
+          type: boolean
+        connected:
+          type: boolean
+        last_seen_at:
+          type: string
+          format: date-time
+        signal:
+          type: string
+          enum: [claim, heartbeat]
     PMContextResponse:
       type: object
       additionalProperties: true

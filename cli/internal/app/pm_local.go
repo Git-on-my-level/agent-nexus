@@ -39,10 +39,10 @@ func init() {
 			Composition: "Local runner. Claims one leased turn, writes a small prompt file, launches the configured harness through agentctl, then completes or fails the turn. Does not call a model in-process.",
 			Examples: []string{
 				"anx --as pm pm serve --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'",
-				"anx --as pm pm serve --runner 'hermes -p --provider zai --model glm-5.3 -- {prompt}'",
+				"anx --as pm pm serve --runner 'hermes chat --query-file {prompt_file} -Q'",
 			},
 			Flags: []localHelperFlag{
-				{Name: "--runner <argv>", Description: "Harness argv. Without {prompt}, this is passed to `agentctl run --`. With {prompt}, argv is executed directly after substituting the prompt file path. Evidence refs come from a trailing ---evidence--- block or a JSON evidence_refs array on the reply object (the same object assistant text is read from), never from prose or nested tool output. Topic and document refs are verified like card/work/artifact/event/decision. Replies over the turn's max_output_bytes (default 64000, core's turn-text ceiling) are stored with a visible truncation marker."},
+				{Name: "--runner <argv>", Description: "Harness argv. Without {prompt}, this is passed to `agentctl run --`. With {prompt_file} (or legacy {prompt}), argv is executed directly after substituting the prompt file path. Evidence refs come from a trailing ---evidence--- block or a JSON evidence_refs array on the reply object (the same object assistant text is read from), never from prose or nested tool output. Topic and document refs are verified like card/work/artifact/event/decision. Replies over the turn's max_output_bytes (default 64000, core's turn-text ceiling) are stored with a visible truncation marker."},
 				{Name: "--work-dir <dir>", Description: "Directory for prompt files and the runner id (default .tmp/pm-runner). Must be the agentctl working root when agentctl is used."},
 				{Name: "--poll-interval <duration>", Description: "Sleep between empty claims and after a released turn (default 2s)."},
 				{Name: "--max-concurrent <n>", Description: "In-process cap on turns this runner executes at once (default 1). Each worker claims with a distinct runner id (<id>-<slot>). Core also bounds workspace sending turns."},
@@ -642,6 +642,9 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 		}
 		slotID := workerIDs[slot-1]
 		claimed, claimErr := a.invokeRawJSON(serveCtx, cfg, "pm turns claim", "POST", "/pm/turns/claim", map[string]any{"runner_id": slotID})
+		if claimErr == nil {
+			_ = writePMPrivateFile(filepath.Join(absDir, "last-claim"), []byte(nowFn().UTC().Format(time.RFC3339Nano)))
+		}
 		if cap, ok := parsePMClaimCapacity(claimed, claimErr); ok {
 			forbiddenStreak = 0
 			nonRetryableStreak = 0
@@ -883,9 +886,10 @@ func (a *App) runClaimedTurn(ctx, shutdownCtx context.Context, cfg config.Resolv
 	}
 	prompt := buildPMPrompt(cfg.Agent, turn, maxBytes)
 	promptPath := filepath.Join(workDir, "turn-"+sanitizeFilePart(turnID)+".md")
-	if err := os.WriteFile(promptPath, []byte(prompt), 0o600); err != nil {
+	if err := writePMPrivateFile(promptPath, []byte(prompt)); err != nil {
 		return fail("failed to write prompt file: "+err.Error(), nil)
 	}
+	defer os.Remove(promptPath)
 	remain := time.Until(deadline)
 	if remain < time.Second {
 		return fail(humanTurnFailure("deadline", ""), nil)
@@ -1660,7 +1664,7 @@ func buildPMPrompt(agent string, turn map[string]any, maxBytes int) string {
 
 func runnerUsesPromptPlaceholder(argv []string) bool {
 	for _, a := range argv {
-		if strings.Contains(a, "{prompt}") {
+		if strings.Contains(a, "{prompt}") || strings.Contains(a, "{prompt_file}") {
 			return true
 		}
 	}
@@ -1670,7 +1674,7 @@ func runnerUsesPromptPlaceholder(argv []string) bool {
 func expandPromptPlaceholder(argv []string, promptPath string) []string {
 	out := make([]string, len(argv))
 	for i, a := range argv {
-		out[i] = strings.ReplaceAll(a, "{prompt}", promptPath)
+		out[i] = strings.ReplaceAll(strings.ReplaceAll(a, "{prompt}", promptPath), "{prompt_file}", promptPath)
 	}
 	return out
 }

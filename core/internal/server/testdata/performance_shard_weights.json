@@ -244,6 +244,10 @@
     "milliseconds": 3998
   },
   {
+    "key": "GET /pm/presence",
+    "milliseconds": 100
+  },
+  {
     "key": "GET /pm/context",
     "milliseconds": 4667
   },

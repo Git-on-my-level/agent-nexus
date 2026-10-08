@@ -31,7 +31,11 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeAuthenticationError(w, r)
 		return
 	}
-	if err = h.Service.authorize(r.Context(), p, "pm.access", ""); err != nil {
+	permission := "pm.access"
+	if r.Method == http.MethodGet && r.URL.Path == "/pm/presence" {
+		permission = "pm.presence"
+	}
+	if err = h.Service.authorize(r.Context(), p, permission, ""); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -42,6 +46,8 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	status := http.StatusOK
 	decode := func(v any) error { return decodeBody(w, r, v) }
 	switch {
+	case len(path) == 1 && path[0] == "presence" && r.Method == http.MethodGet:
+		out, err = s.Presence(ctx, p)
 	case len(path) == 1 && path[0] == "conversations" && r.Method == http.MethodGet:
 		var limit int
 		var cursor string

@@ -244,6 +244,9 @@ func (a *App) Run(args []string) int {
 }
 
 func needsAgentIdentity(args []string) bool {
+	if len(args) >= 2 && args[0] == "pm" && (args[1] == "install" || args[1] == "status" || args[1] == "uninstall") {
+		return false
+	}
 	if len(args) == 0 {
 		return false
 	}

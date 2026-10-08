@@ -26,6 +26,7 @@ type workCommandSpec struct {
 }
 
 var workCommands = map[string]workCommandSpec{
+	"pm presence":                {path: "/pm/presence", method: "GET", summary: "Read recent PM connection state."},
 	"report render":              {path: "/docs/{id}/report", method: "GET", idFlag: "document-id", summary: "Materialize a visual report’s live panels from current, authorized workspace data."},
 	"sessions register":          {path: "/sessions", method: "POST", body: true, summary: "Register or refresh a private provider session with a monotonic sequence; never creates an agent credential or assigns work."},
 	"sessions get":               {path: "/sessions/{id}", method: "GET", idFlag: "session-id", summary: "Read your own registered provider session and bounded activity; does not expose conversation history."},
@@ -201,6 +202,9 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) >= 2 && args[0] == "pm" {
 		switch args[1] {
+		case "install", "status", "uninstall":
+			result, err := a.runPMService(ctx, args[1], args[2:], cfg)
+			return result, "pm " + args[1], err
 		case "serve":
 			result, err := a.runPMServe(ctx, args[2:], cfg)
 			return result, "pm serve", err

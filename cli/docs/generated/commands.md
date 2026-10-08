@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `220`
+- Commands: `221`
 
 ## `actors.create`
 
@@ -2075,6 +2075,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMDecisionListResponse`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+
+## `pm.presence`
+
+- CLI path: `pm presence`
+- HTTP: `GET /pm/presence`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Check whether a PM runner is connected before requesting help.
+- Concepts: `agents`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `unavailable`
+- Output: Returns `PMPresence`.
+- Agent notes: Only accepted claims and lease heartbeats from the configured PM count. No turn text or runner identity is returned.
 
 ## `pm.turns.claim`
 

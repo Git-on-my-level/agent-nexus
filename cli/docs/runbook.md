@@ -563,6 +563,51 @@ posts through the same `/pm/conversations/{id}/messages` pipeline; those turns
 are claimed, completed, and failed identically. The channels lane owns
 transport authentication.
 
+### Install the PM on your computer
+
+The PM runs on **your own computer**, including when your workspace core is remote.
+Keep the computer awake and online while asking PM questions. Enroll its host key
+and select the workspace with `anx config use <alias>` (or `--workspace <alias>`).
+The workspace must designate the same PM actor as the local `--as pm` profile.
+
+Install once with a runner of your choice. These are optional examples; runner
+commands and provider credentials remain your responsibility:
+
+```sh
+# Claude Code reads the private prompt file through stdin.
+anx pm install --runner "sh -c 'exec claude -p < \"\$1\"' sh {prompt_file}"
+# Hermes supports a query file; no question text appears in its argv.
+anx pm install --runner 'hermes chat --query-file {prompt_file} -Q'
+anx pm status
+anx pm install                  # idempotent repair using saved runner config
+anx pm uninstall               # stop and remove this workspace/profile service
+```
+
+The default service profile is `pm`; `--as <name>` chooses another profile.
+`install` snapshots the selected workspace URL, absolute credential config dir,
+CLI binary path and runner command. It stores the runner in a mode-0600
+`settings.json`; subsequent installs reuse it unless `--runner` overrides it.
+Run install again after moving/replacing the CLI binary or changing the workspace URL.
+No access tokens or provider keys are copied into service definitions. Configure
+provider authentication in the runner's existing local credential store, or use a
+local wrapper that reads it; shell-exported keys do not survive service installation.
+The service inherits only your home and PATH. Never put credentials in runner argv.
+
+macOS uses a per-user LaunchAgent (requires a graphical login). Linux uses
+`systemd --user` (requires a user manager; service lifetime follows your login
+unless you configure lingering yourself). Both restart the runner automatically.
+Logs, prompt files and last accepted claim live under
+`$XDG_STATE_HOME/anx/pm/<service>` (default `~/.local/state/anx/pm/<service>`).
+Prompt files are mode 0600 and removed after execution. `{prompt_file}` substitutes
+only the path; legacy `{prompt}` also means a path. Without a placeholder, agentctl
+receives `--prompt-file`. Do not use command substitution to put prompt text in argv.
+`status --json` reports installed/running, workspace, profile, logs and last claim.
+Uninstall removes only the selected service and its state; workspace credentials stay.
+
+Ask PM and PM-routed Inbox decisions show **No PM connected** when the configured
+PM has not made an accepted claim or lease heartbeat in 90 seconds. A connected
+runner can still fail a turn; presence is a connection signal, not a model health guarantee.
+
 ### PM runner (`anx pm serve`)
 
 The PM is an external agent. Do not call a model in-process. `make serve` seeds
@@ -708,19 +753,18 @@ stdout/stderr are copied to stderr. On restart, `pm turns claim` with the same
 worker runner ids (`<runner_id>-<slot>`) recovers in-flight leases;
 past-deadline sending turns expire to `failed` with a visible reason.
 
-Hermes and Codex are the same runner with a `{prompt}` argv (do not run Hermes
-from this checkout unless asked):
+Hermes and Codex can also run directly with a private prompt file:
 
 ```sh
 # Hermes (direct)
 ANX_AS=pm ./cli/anx --as pm pm serve \
   --work-dir .tmp/pm-runner \
-  --runner 'hermes -p --provider zai --model glm-5.3 -- {prompt}'
+  --runner 'hermes chat --query-file {prompt_file} -Q'
 
 # Codex (direct)
 ANX_AS=pm ./cli/anx --as pm pm serve \
   --work-dir .tmp/pm-runner \
-  --runner 'codex exec --skip-git-repo-check -- {prompt}'
+  --runner "sh -c 'exec codex exec --skip-git-repo-check - < \"\$1\"' sh {prompt_file}"
 
 # Same harnesses through agentctl (no {prompt} placeholder)
 ANX_AS=pm ./cli/anx --as pm pm serve \

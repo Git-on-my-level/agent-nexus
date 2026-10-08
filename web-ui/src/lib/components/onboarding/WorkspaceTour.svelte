@@ -105,7 +105,7 @@
             selector: '[data-tour="pm"]',
             eyebrow: "6 of 7 · PM",
             title: "PM is the conversation",
-            body: "Ask what needs a decision, then follow the receipt. The PM runs through the existing agent harnesses.",
+            body: "Ask what needs a decision, then follow the receipt. The PM runs on your computer with your chosen agent harness.",
           },
           {
             selector: '[data-tour="access"]',

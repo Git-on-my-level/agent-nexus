@@ -1,4 +1,5 @@
 <script>
+  import PMConnection from "$lib/components/pm/PMConnection.svelte";
   import { onMount, tick, untrack } from "svelte";
   import { page } from "$app/stores";
   import { beforeNavigate, goto } from "$app/navigation";
@@ -596,6 +597,8 @@
 />
 <svelte:head><title>PM · Agent Nexus</title></svelte:head>
 <WorkspacePageShell class="pm-page">
+  {#key `${$page.params.organization}/${$page.params.workspace}`}<PMConnection
+    />{/key}
   <div class="pm-head">
     <WorkspacePageHeader title="Ask PM">
       {#snippet subtitle()}Ask about your tasks. If the PM proposes a change,

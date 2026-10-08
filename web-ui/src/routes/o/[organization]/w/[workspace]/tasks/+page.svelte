@@ -1,4 +1,5 @@
 <script>
+  import PMConnection from "$lib/components/pm/PMConnection.svelte";
   import { onMount, tick } from "svelte";
   import { page } from "$app/stores";
   import { goto } from "$app/navigation";
@@ -844,6 +845,10 @@
     {/snippet}
   </WorkspacePageHeader>
 
+  {#if records.some((work) => !isNexusOwned(work))}
+    {#key `${$page.params.organization}/${$page.params.workspace}`}<PMConnection
+      />{/key}
+  {/if}
   <div class="flex flex-wrap items-center gap-2">
     <form
       class="min-w-48 flex-1"

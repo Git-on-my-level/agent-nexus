@@ -824,3 +824,53 @@ test("PM pins multiple refs in history and resolves answer chips with streamed a
     page.getByRole("navigation", { name: "Conversation history" }),
   ).toContainText("review");
 });
+
+test("disconnected PM points to local installation on Ask PM and Inbox", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.route("**/pm/presence", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ configured: true, connected: false }),
+    }),
+  );
+  await page.goto(`${root}/pm`);
+  await expect(page.getByLabel("PM connection")).toContainText(
+    "No PM connected",
+  );
+  await expect(page.getByLabel("PM connection")).toContainText(
+    "anx pm install",
+  );
+  await page.goto(`${root}/inbox?mailbox=needs-you`);
+  await expect(page.getByLabel("PM connection")).toContainText(
+    "runs on your computer",
+  );
+  await page.goto(`${root}/tasks`);
+  await expect(page.getByLabel("PM connection")).toContainText(
+    "No PM connected",
+  );
+});
+
+test("connected PM does not show a disconnected installation state", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.route("**/pm/presence", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        configured: true,
+        connected: true,
+        last_seen_at: new Date().toISOString(),
+        signal: "claim",
+      }),
+    }),
+  );
+  const presence = page.waitForResponse((response) =>
+    new URL(response.url()).pathname.endsWith("/pm/presence"),
+  );
+  await page.goto(`${root}/pm`);
+  await presence;
+  await expect(page.getByLabel("PM connection")).toHaveCount(0);
+});

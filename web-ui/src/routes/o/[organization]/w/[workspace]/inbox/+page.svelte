@@ -1,4 +1,5 @@
 <script>
+  import PMConnection from "$lib/components/pm/PMConnection.svelte";
   import { humanActorIdSet } from "$lib/humanActors.js";
   import { onMount, tick, untrack } from "svelte";
   import { page } from "$app/stores";
@@ -1248,6 +1249,8 @@
       <a class="ui-btn-secondary" href={workspaceHref("/pm")}>Ask PM</a>
     {/snippet}
   </WorkspacePageHeader>
+  {#if selectedDecision || decisions.some((entry) => entry.status === "awaiting_answer")}{#key `${$page.params.organization}/${$page.params.workspace}`}<PMConnection
+      />{/key}{/if}
   <nav class="flex flex-wrap items-center gap-1" aria-label="Inbox mailbox">
     {#each INBOX_MAILBOXES as [key, title]}
       <a
