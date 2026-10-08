@@ -191,6 +191,13 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 
+	release, err := opts.streamReads.acquire(r.Context(), opts.primitiveStore)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to observe stream changes")
+		return
+	}
+	defer release()
+
 	controller, flusher, ok := prepareSSE(w)
 	if !ok {
 		writeError(w, http.StatusInternalServerError, "stream_unavailable", "streaming is not supported by this server")
@@ -210,6 +217,8 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	scanDone := make(chan struct{})
 	go func() {
 		defer close(scanDone)
+		var lastRevision int64
+		caughtUp := false
 		for {
 			select {
 			case <-scanCtx.Done():
@@ -217,6 +226,23 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 			case <-requests:
 			}
 			var result scanResult
+			revision, observed, err := opts.streamReads.revision(scanCtx)
+			if err != nil {
+				select {
+				case <-scanCtx.Done():
+					return
+				case results <- scanResult{err: err}:
+				}
+				continue
+			}
+			if observed && caughtUp && revision == lastRevision {
+				select {
+				case <-scanCtx.Done():
+					return
+				case results <- result:
+				}
+				continue
+			}
 			for candidates := 0; candidates < primitives.EventStreamChunkCandidateBudget; candidates += primitives.EventStreamPageSize {
 				result.page, result.err = opts.primitiveStore.ListEventStreamPage(scanCtx, primitives.EventListFilter{
 					ThreadID: threadID, ThreadIDs: threadIDs, Types: eventTypes,
@@ -230,6 +256,8 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 					break
 				}
 			}
+			caughtUp = result.err == nil && !result.page.HasMore
+			lastRevision = revision
 			select {
 			case <-scanCtx.Done():
 				return
@@ -240,7 +268,7 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	defer func() { cancelScan(); <-scanDone }()
 
 	visibleSinceResume := 0
-	ticker := time.NewTicker(opts.streamPollInterval)
+	ticker := time.NewTicker(streamPollInterval(opts))
 	defer ticker.Stop()
 	keepalive := func() bool {
 		if err := writeSSEKeepalive(controller, w); err != nil {
@@ -321,6 +349,13 @@ func handleInboxStream(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			return
 		}
 	}
+	release, err := opts.streamReads.acquire(r.Context(), opts.primitiveStore)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to observe stream changes")
+		return
+	}
+	defer release()
+
 	controller, flusher, ok := prepareSSE(w)
 	if !ok {
 		writeError(w, http.StatusInternalServerError, "stream_unavailable", "streaming is not supported by this server")
@@ -330,18 +365,41 @@ func handleInboxStream(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	lastDigestByItem := map[string]string{}
 	firstPoll := true
 	partialSweep := filter.BeforeID != ""
-	ticker := time.NewTicker(opts.streamPollInterval)
+	var lastRevision, sweepRevision int64
+	caughtUp := false
+	ticker := time.NewTicker(streamPollInterval(opts))
 	defer ticker.Stop()
 
 	for {
 		// Reuse the list's permission and subject-visibility filters on every
 		// poll, before constructing payload digests or SSE records.
-		items, page, err := loadInboxStreamPage(r, opts, filter)
+		revision, observed, err := opts.streamReads.revision(r.Context())
+		if err != nil {
+			writeSSEErrorEvent(controller, w, flusher, "internal_error", "failed to observe stream changes")
+			return
+		}
+		if observed && caughtUp && revision == lastRevision {
+			if err := writeSSEKeepalive(controller, w); err != nil {
+				clearSSEWriteDeadline(controller)
+				return
+			}
+			flushSSE(controller, flusher)
+			select {
+			case <-r.Context().Done():
+				return
+			case <-ticker.C:
+			}
+			continue
+		}
+		if filter.BeforeID == "" || sweepRevision == 0 {
+			sweepRevision = revision
+			caughtUp = false
+		}
+		allRecords, page, err := opts.streamReads.inboxPage(r, opts, filter, revision, observed)
 		if err != nil {
 			writeSSEErrorEvent(controller, w, flusher, "internal_error", "failed to load inbox projections for stream")
 			return
 		}
-		allRecords := buildInboxStreamRecords(items)
 		records := allRecords
 		if firstPoll {
 			records = inboxRecordsAfterID(records, lastEventID)
@@ -376,6 +434,12 @@ func handleInboxStream(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			partialSweep = partialSweep || sentAny
 		} else {
 			filter = primitives.DerivedInboxListFilter{}
+		}
+		// If commits happened during a multi-page sweep, revisit the head on
+		// the next tick; otherwise early pages could miss those mutations.
+		caughtUp = !page.More
+		if caughtUp {
+			lastRevision = sweepRevision
 		}
 		if partialSweep {
 			cursor := encodeInboxStreamCursor(r, filter)
@@ -434,6 +498,13 @@ func handleAgentNotificationReceiptsStream(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	release, err := opts.streamReads.acquire(r.Context(), opts.primitiveStore)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to observe stream changes")
+		return
+	}
+	defer release()
+
 	controller, flusher, ok := prepareSSE(w)
 	if !ok {
 		writeError(w, http.StatusInternalServerError, "stream_unavailable", "streaming is not supported by this server")
@@ -453,6 +524,8 @@ func handleAgentNotificationReceiptsStream(w http.ResponseWriter, r *http.Reques
 	scanDone := make(chan struct{})
 	go func() {
 		defer close(scanDone)
+		var lastRevision int64
+		caughtUp := false
 		for {
 			select {
 			case <-scanCtx.Done():
@@ -460,6 +533,23 @@ func handleAgentNotificationReceiptsStream(w http.ResponseWriter, r *http.Reques
 			case <-requests:
 			}
 			var result scanResult
+			revision, observed, err := opts.streamReads.revision(scanCtx)
+			if err != nil {
+				select {
+				case <-scanCtx.Done():
+					return
+				case results <- scanResult{err: err}:
+				}
+				continue
+			}
+			if observed && caughtUp && revision == lastRevision {
+				select {
+				case <-scanCtx.Done():
+					return
+				case results <- result:
+				}
+				continue
+			}
 			for candidates := 0; candidates < primitives.ReceiptStreamChunkCandidateBudget; candidates += primitives.ReceiptStreamPageSize {
 				if scanCtx.Err() != nil {
 					result.err = scanCtx.Err()
@@ -480,6 +570,8 @@ func handleAgentNotificationReceiptsStream(w http.ResponseWriter, r *http.Reques
 					break
 				}
 			}
+			caughtUp = result.err == nil && !result.page.HasMore
+			lastRevision = revision
 			select {
 			case <-scanCtx.Done():
 				return
@@ -493,7 +585,7 @@ func handleAgentNotificationReceiptsStream(w http.ResponseWriter, r *http.Reques
 	if cursor.AcceptedWakeupID != "" && cursor.AcceptedDigest != "" {
 		lastDigestByWakeup[cursor.AcceptedWakeupID] = cursor.AcceptedDigest
 	}
-	ticker := time.NewTicker(opts.streamPollInterval)
+	ticker := time.NewTicker(streamPollInterval(opts))
 	defer ticker.Stop()
 	keepalive := func() bool {
 		if err := writeSSEKeepalive(controller, w); err != nil {

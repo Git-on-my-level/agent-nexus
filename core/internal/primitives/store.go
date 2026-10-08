@@ -176,6 +176,7 @@ type EventCursor struct {
 type Store struct {
 	scopeInbox        *scopeInboxRuntime
 	db                *accessDB
+	streamDB          *sql.DB // Used only by the read-only commit-version observer.
 	blob              blob.Backend
 	blobRoot          string
 	dbPath            string
@@ -214,7 +215,7 @@ func NewStore(db *sql.DB, blobBackend blob.Backend, blobRoot string, options ...
 	if db != nil {
 		scopedDB = resourceaccess.NewDB(db)
 	}
-	store := &Store{db: scopedDB, blob: blobBackend, blobRoot: blobRoot}
+	store := &Store{db: scopedDB, streamDB: db, blob: blobBackend, blobRoot: blobRoot}
 	for _, option := range options {
 		option(store)
 	}

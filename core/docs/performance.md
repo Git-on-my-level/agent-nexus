@@ -5,6 +5,48 @@ filtering before materialization. Hot-path O(workspace) work is a merge-blocking
 P1, including an authorization query that rebuilds a graph or scans stored text.
 A LIMIT applied after loading, sorting, or enriching every record is not a bound.
 
+## Idle streaming
+
+Inbox, event and notification-receipt streams observe SQLite `data_version` on
+one dedicated connection shared by the handler. The connection performs only
+the version PRAGMA, holds no transaction and is released when the last stream
+disconnects. An unchanged tick performs O(1) metadata work and a keepalive,
+without authorization graph, projection or summary recomputation. Poll intervals
+have a 100 ms floor; the default remains one second.
+
+Every committed database write invalidates this conservative cursor, including
+external writers, non-event permission changes and derived projection updates.
+On changes, streams retain the existing bounded page readers and authorization
+checks. Inbox pages (200 candidates plus lookahead) share computation for matching
+authorization scope, recipient and pagination position. The cache holds at most
+128 pages and expires delivered pages after a poll interval so a late subscriber
+gets current ages and health. An incomplete inbox sweep always continues; commits
+during a sweep cause another sweep from the head. Event/receipt history chunks
+continue without waiting for the poll timer. Global commit versions are never
+exposed as client cursors.
+
+Custom stores without the observer, and SQLite pools explicitly limited to one
+connection, retain uncached polling rather than reserving their only connection.
+The new cursor needs no table scans, indexes or migration. Existing changed-page
+authorization and enrichment costs remain covered by their separate scale gates.
+
+Reproduce the five-stream synthetic CPU/latency measurement (fixture setup and
+initial multi-page delivery are outside the CPU profile):
+
+```sh
+cd core
+ANX_STREAM_PROFILE="$PWD/stream-idle.pprof" go test ./internal/server \
+  -run '^TestStreamIdleScaleProfile$' -count=1 -v -timeout=15m
+go tool pprof -top -cum stream-idle.pprof
+go test ./internal/server ./internal/primitives -run \
+  'TestFiveIdleInbox|TestSharedInbox|TestInboxCommitDuringSweep|TestStreamRevision'
+```
+
+The profile includes ten bounded page latency probes; their recomputations are
+reported explicitly. The deterministic regression requires zero page reads on
+idle ticks, one shared page for five matching readers after a non-event commit,
+and complete delivery after a mutation to an earlier page during a sweep.
+
 ## Running the gates
 
 Run the cheap route-inventory, SQL-hook/classifier and migration-progress checks:
