@@ -132,10 +132,33 @@
    * caps a batch at 200.
    */
   const RECENT_CARD_LIMIT = 20;
-  /** The window shown, newest first, as core already ordered them. */
-  let recentCards = $derived(
-    (detail?.recent_cards ?? []).slice(0, RECENT_CARD_LIMIT),
-  );
+
+  /**
+   * The window shown, most recently updated first.
+   *
+   * The sort is the point, not a nicety. Core returns these in board,
+   * column and rank order — every backlog card on the lowest board comes
+   * before anything in progress — so slicing what arrives would have cut the
+   * card the agent is working right now and called the twenty backlog rows
+   * left behind the freshest. Cards with no instant sort last rather than
+   * jumping the queue.
+   */
+  function recentWindow(cards) {
+    const at = (card) => {
+      const parsed = Date.parse(card?.updated_at ?? "");
+      return Number.isFinite(parsed) ? parsed : -Infinity;
+    };
+    return [...(Array.isArray(cards) ? cards : [])]
+      .sort((a, b) => at(b) - at(a))
+      .slice(0, RECENT_CARD_LIMIT);
+  }
+  let recentCards = $derived(recentWindow(detail?.recent_cards));
+  /**
+   * How many core sent — which is every card this agent is assigned, since
+   * the route has no limit of its own. If it ever grows one, this becomes
+   * "of what we were given" and the sentence below understates; the response
+   * carries no total to read instead.
+   */
   let recentCardTotal = $derived(detail?.recent_cards?.length ?? 0);
 
   function cardRef(card) {
@@ -161,8 +184,9 @@
    */
   let recentCardSummaries = $state(new Map());
   async function loadRecentCardSummaries(key, cards) {
-    const refs = (Array.isArray(cards) ? cards : [])
-      .slice(0, RECENT_CARD_LIMIT)
+    // The same window the list renders, so the resolve answers the rows on
+    // screen and nothing else.
+    const refs = recentWindow(cards)
       .map(cardRef)
       .filter((ref) => ref && ref !== "card:");
     if (!refs.length) {
@@ -730,13 +754,12 @@
                   its own underneath until there is room beside them.
                 -->
                 <li
-                  class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t border-line-subtle px-4 py-2 first:border-t-0 sm:grid-cols-[minmax(6rem,1fr)_auto_auto]"
+                  class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t border-line-subtle px-4 py-2 first:border-t-0 sm:grid-cols-[minmax(10rem,1fr)_auto_auto]"
                 >
                   <a
                     class="col-start-1 row-start-1 min-w-0 truncate text-meta text-fg hover:underline"
-                    href={workspaceHref(
-                      taskPath(card.ref || `card:${card.handle}`),
-                    )}>{card.title}</a
+                    href={workspaceHref(taskPath(cardRef(card)))}
+                    >{card.title}</a
                   >
                   <!-- The shared summary, not the stored column: a card an
                        agent is working could sit in `in_progress` with a

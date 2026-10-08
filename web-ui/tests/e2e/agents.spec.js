@@ -131,14 +131,20 @@ function isApiCall(route) {
   );
 }
 
-/** One recent task, as `/agents/{id}` returns them. */
-const recentCard = (index) => ({
+/**
+ * One recent task, as `/agents/{id}` returns them.
+ *
+ * `minutes` is explicit because core does *not* order these by recency — it
+ * orders by board, column and rank — so a fixture that happens to arrive
+ * newest-first cannot tell a sort from a slice.
+ */
+const recentCard = (index, minutes = 30 + index) => ({
   id: `card-uuid-${index}`,
   ref: `card:recent-${index}`,
   handle: `recent-${index}`,
   title: `Recent task ${index}`,
   column_key: "in_progress",
-  updated_at: ago(30 + index),
+  updated_at: ago(minutes),
 });
 
 /**
@@ -436,7 +442,9 @@ test("a loud status never squeezes the task link off a phone", async ({
   const link = row.getByRole("link", { name: "Tune core combat loop" });
   await expect(link).toBeVisible();
   const box = await link.boundingBox();
-  expect(box.width).toBeGreaterThan(80);
+  // A real target, not merely non-zero: the old flex layout left about 90px
+  // at the narrowest desktop column, so a low floor proves little.
+  expect(box.width).toBeGreaterThan(150);
 
   // The status is on its own line, under the title rather than beside it.
   const summary = row.locator("[data-work-summary]").first();
@@ -445,6 +453,29 @@ test("a loud status never squeezes the task link off a phone", async ({
   // And the link does what a link does.
   await link.click();
   await expect(page).toHaveURL(/\/tasks\/card%3Atune-core-combat-loop$/);
+});
+
+test("the task link stays a usable target at every audited width", async ({
+  page,
+}) => {
+  /*
+   * 1024 is the tightest: the sidebar appears there, so the content column
+   * is narrower than it is at 768 with no sidebar. That is where the title
+   * column sits on its floor, and a floor of six rems left about ten
+   * characters — clickable, but not a title anybody could read.
+   */
+  await installAgentsApi(page);
+  await page.goto(`${BASE}/agents/codex.workstation-a`);
+  const link = page
+    .locator("[data-agent-tasks] li")
+    .first()
+    .getByRole("link", { name: "Tune core combat loop" });
+  for (const width of [640, 768, 1024, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(link).toBeVisible();
+    const box = await link.boundingBox();
+    expect(box.width, `${width}px`).toBeGreaterThan(150);
+  }
 });
 
 test("the recent task list and its summary reads are bounded", async ({
@@ -456,8 +487,16 @@ test("the recent task list and its summary reads are bounded", async ({
    * of them made the summary work grow with how much the agent had ever been
    * given. Both are the window now, and the window is one batch.
    */
+  /*
+   * Deliberately *not* newest-first on the wire: core orders by board,
+   * column and rank, so the freshest card can arrive anywhere. Card 24 is
+   * the one the agent touched a minute ago and it arrives last; card 0 is
+   * two months stale and arrives first.
+   */
   const api = await installAgentsApi(page, {
-    recentCards: Array.from({ length: 25 }, (_, index) => recentCard(index)),
+    recentCards: Array.from({ length: 25 }, (_, index) =>
+      recentCard(index, 25 - index),
+    ),
   });
   await page.goto(`${BASE}/agents/codex.workstation-a`);
 
@@ -466,9 +505,13 @@ test("the recent task list and its summary reads are bounded", async ({
   await expect(page.locator("[data-agent-tasks-capped]")).toContainText(
     "20 most recently updated of 25",
   );
-  // Newest first, as core ordered them, and cut from the end.
-  await expect(rows.first()).toContainText("Recent task 0");
-  await expect(page.getByText("Recent task 20")).toHaveCount(0);
+  // The window is the twenty freshest, so the newest leads and the five
+  // stalest are the ones cut — not the twenty that happened to arrive first.
+  await expect(rows.first()).toContainText("Recent task 24");
+  await expect(page.getByText("Recent task 0", { exact: true })).toHaveCount(0);
+  await expect(page.locator("[data-agent-tasks]")).toContainText(
+    "Recent task 5",
+  );
 
   await expect.poll(() => api.resolveCalls.length, { timeout: 10_000 }).toBe(1);
   expect(api.resolveCalls[0]).toHaveLength(20);

@@ -1,7 +1,7 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { globSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -22,7 +22,8 @@ import { describe, expect, it } from "vitest";
  */
 
 const root = fileURLToPath(new URL("../../src", import.meta.url));
-const relative = (file) => file.slice(root.length - 3).replaceAll("\\", "/");
+/** Already repo-relative from the walk below; kept so call sites read alike. */
+const relative = (file) => file;
 
 /**
  * The file's code, without its comments.
@@ -38,7 +39,7 @@ const relative = (file) => file.slice(root.length - 3).replaceAll("\\", "/");
  * repo opens its own line, and an anchored match can only strip less.
  */
 const read = (file) => {
-  const raw = readFileSync(file, "utf8")
+  const raw = readFileSync(join(root, "..", file), "utf8")
     .replaceAll(/^[ \t]*\/\*[\s\S]*?\*\//gm, " ")
     .replaceAll(/^[ \t]*<!--[\s\S]*?-->/gm, " ");
   /*
@@ -56,11 +57,34 @@ const read = (file) => {
   );
 };
 
-const sources = globSync("**/*.{svelte,js}", { cwd: root, withFileTypes: true })
-  .filter((entry) => entry.isFile())
-  .map((entry) => `${entry.parentPath ?? entry.path}/${entry.name}`)
-  .filter((file) => !file.includes("/generated/"))
-  .sort();
+/**
+ * Every source file under `src`, as repo-relative paths.
+ *
+ * A plain recursive walk rather than `globSync` with `withFileTypes`: a
+ * Dirent's `parentPath` is absolute on one Node and relative to `cwd` on
+ * another, and the slice arithmetic that turned it into a name silently
+ * produced different file sets on this machine and in CI — the guard passed
+ * here and failed there, naming files that do not contain what it claimed.
+ * A walk that joins its own paths cannot drift.
+ */
+function sourceFiles(dir = root, prefix = "src") {
+  const out = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+    a.name.localeCompare(b.name),
+  )) {
+    const name = `${prefix}/${entry.name}`;
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === "generated") continue;
+      out.push(...sourceFiles(full, name));
+    } else if (/\.(svelte|js)$/.test(entry.name)) {
+      out.push(name);
+    }
+  }
+  return out;
+}
+
+const sources = sourceFiles();
 
 describe("the computed summary is read in one module", () => {
   /**

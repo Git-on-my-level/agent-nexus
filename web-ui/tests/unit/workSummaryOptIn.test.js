@@ -1,6 +1,6 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { globSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
@@ -68,26 +68,41 @@ describe("no card read is left opted out", () => {
    * nothing fails, which is the failure mode this whole change exists to end.
    */
   const root = fileURLToPath(new URL("../../src", import.meta.url));
-  const sources = globSync("**/*.{svelte,js}", {
-    cwd: root,
-    withFileTypes: true,
-  })
-    .filter((entry) => entry.isFile())
-    .map((entry) => `${entry.parentPath ?? entry.path}/${entry.name}`)
-    .filter(
-      (file) =>
-        !file.includes("/generated/") &&
-        !file.includes("/dev/") &&
-        !file.endsWith("anxCoreClient.js"),
-    )
-    .sort();
+  /**
+   * Every source file under `src`, as repo-relative paths.
+   *
+   * A plain walk rather than `globSync` with `withFileTypes`: a Dirent's
+   * `parentPath` is absolute on one Node and relative to `cwd` on another,
+   * and the arithmetic that turned it into a name produced different file
+   * sets here and in CI.
+   */
+  function sourceFiles(dir = root, prefix = "src") {
+    const out = [];
+    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
+      const name = `${prefix}/${entry.name}`;
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === "generated" || entry.name === "dev") continue;
+        out.push(...sourceFiles(full, name));
+      } else if (
+        /\.(svelte|js)$/.test(entry.name) &&
+        name !== "src/lib/anxCoreClient.js"
+      ) {
+        out.push(name);
+      }
+    }
+    return out;
+  }
+  const sources = sourceFiles();
 
   /**
    * Reads that show no card state, and so should not pay for one.
    *
-   * Each one is here because it renders titles, counts or source identity
-   * only. A read that grows a status badge has to drop out of this list, and
-   * a reviewer can check that by looking at the file.
+   * Keyed on the method as well as the file: keyed on the file alone,
+   * excusing the task page's mirrors `listWork` also excused the card read
+   * the whole page is built on.
    */
   const NO_STATE_SHOWN = new Map([
     [
@@ -111,7 +126,7 @@ describe("no card read is left opted out", () => {
   it.each(["listWork", "getWork"])("%s always asks for it", (method) => {
     const offenders = [];
     for (const file of sources) {
-      const body = readFileSync(file, "utf8");
+      const body = readFileSync(join(root, "..", file), "utf8");
       const pattern = new RegExp(`\\.${method}\\(`, "g");
       for (const match of body.matchAll(pattern)) {
         // The call's arguments, up to the balanced close. Calls here are
@@ -129,7 +144,7 @@ describe("no card read is left opted out", () => {
           }
         }
         const args = body.slice(match.index, end + 1);
-        const name = file.slice(root.length - 3);
+        const name = file;
         /*
          * Keyed on the method as well as the file. Keyed on the file alone,
          * excusing the task page's mirrors `listWork` also excused its two
@@ -148,7 +163,7 @@ describe("no card read is left opted out", () => {
   });
 
   it("every read excused from the opt-in is still a real file", () => {
-    const present = new Set(sources.map((f) => f.slice(root.length - 3)));
+    const present = new Set(sources);
     for (const key of NO_STATE_SHOWN.keys()) {
       const name = key.slice(key.indexOf(" ") + 1);
       expect(present.has(name), `${key} is excused but missing`).toBe(true);
