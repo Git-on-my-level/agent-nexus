@@ -9,22 +9,21 @@ set -m
 
 token_still_running() {
   local receipt="$1"
-  python3 - "$receipt" <<'PY'
-import json, subprocess, sys
+  # Use the helper's own Linux /proc or macOS ps -E listing. Do not print it:
+  # that listing contains other processes' environments.
+  python3 - "$receipt" "$ROOT/scripts/owned_process.py" <<'PY'
+import importlib.util
+import json
+import sys
+
 receipt = json.load(open(sys.argv[1]))
 token = receipt.get("token", "")
-field = f"OWNED_PROCESS_TOKEN={token}".encode()
-out = subprocess.check_output(["ps", "-axww", "-E", "-o", "pid=", "-o", "command="])
-for line in out.splitlines():
-    stripped = line.strip()
-    if not stripped:
-        continue
-    pid_text, sep, rest = stripped.partition(b" ")
-    if not sep or not pid_text.isdigit():
-        continue
-    padded = b" " + rest + b" "
-    if b" " + field + b" " in padded:
-        raise SystemExit(1)
+spec = importlib.util.spec_from_file_location("owned_process_probe", sys.argv[2])
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+found = mod._pids_with_exact_env(token)
+if found is None or found:
+    raise SystemExit(1)
 raise SystemExit(0)
 PY
 }
