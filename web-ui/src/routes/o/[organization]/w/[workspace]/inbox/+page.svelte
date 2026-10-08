@@ -75,6 +75,7 @@
   import {
     loadInboxSources,
     mergeInboxItems,
+    mergeInboxSnapshot,
     hasCompleteInboxHistory,
   } from "$lib/inboxSources.js";
   import { createInboxOrder } from "$lib/inboxOrder.js";
@@ -487,7 +488,11 @@
           (result) => Boolean(result.reason) && isSessionExpired(result.reason),
         );
         if (results[0].status === "fulfilled") {
-          decisions = results[0].value.items || [];
+          decisions = mergeInboxSnapshot(
+            decisions,
+            results[0].value.items || [],
+            results[0].complete,
+          );
         } else if (results[0].status === "rejected")
           nextError = errorMessage(results[0].reason);
         // Lists follow cursors up to a bound. Counts drawn from a capped list
@@ -501,7 +506,11 @@
                 Boolean(result.value?.next_cursor))),
         );
         if (results[1].status === "fulfilled") {
-          actions = results[1].value.items || [];
+          actions = mergeInboxSnapshot(
+            actions,
+            results[1].value.items || [],
+            results[1].complete,
+          );
           receiptsUnavailable = !results[1].complete;
         } else if (results[1].status === "pending") {
           receiptsUnavailable = true;
@@ -515,23 +524,39 @@
           receiptsUnavailable = true;
           nextError = nextError || errorMessage(results[1].reason);
         }
-        // Later completed pages may contain the answer to any blocked card.
-        // Until both histories are complete, work rows are unsafe, including
-        // a previous refresh's rows after the local response overlay expires.
-        if (
-          results[2].status === "fulfilled" &&
-          hasCompleteInboxHistory(results)
-        ) {
-          work = results[2].value.work || [];
-        } else {
-          work = [];
-          if (results[2].status === "rejected")
-            nextError = nextError || errorMessage(results[2].reason);
-        }
+        // Keep validated work during refreshes. New work needs both histories
+        // to finish: an answer to a blocked card may be on a later page.
+        const historyComplete = hasCompleteInboxHistory(results);
+        if (results[2].status === "fulfilled" && historyComplete) {
+          work = mergeInboxSnapshot(
+            work,
+            results[2].value.work || [],
+            results[2].complete,
+            "ref",
+          );
+        } else if (results[2].status === "rejected")
+          nextError = nextError || errorMessage(results[2].reason);
+        // Replace the histories together. Dropping a known answer while an
+        // older open snapshot remains would resurrect the answered ask.
         if (results[3].status === "fulfilled")
-          openInboxItems = results[3].value.items || [];
+          openInboxItems = mergeInboxSnapshot(
+            openInboxItems,
+            results[3].value.items || [],
+            historyComplete,
+          );
         if (results[4].status === "fulfilled")
-          completedInboxItems = results[4].value.items || [];
+          completedInboxItems = mergeInboxSnapshot(
+            completedInboxItems,
+            results[4].value.items || [],
+            historyComplete,
+          );
+        const hiddenRefs = new Set([
+          ...archivedWorkRefs,
+          ...(results[2].value?.archived_refs || []),
+        ]);
+        work = work.filter((item) => !hiddenRefs.has(item.ref));
+        decisions = decisions.filter((item) => !hiddenRefs.has(item.work_ref));
+        actions = actions.filter((item) => !hiddenRefs.has(item.work_ref));
         inboxItems = mergeInboxItems(openInboxItems, completedInboxItems);
         if (results[3].status === "rejected") {
           nextError = nextError || errorMessage(results[3].reason);
@@ -539,7 +564,12 @@
           nextError = nextError || errorMessage(results[4].reason);
         }
         if (results[5].status === "fulfilled") {
-          updates = results[5].value.groups || [];
+          updates = mergeInboxSnapshot(
+            updates,
+            results[5].value.groups || [],
+            results[5].complete,
+            "group_ref",
+          );
         }
         if (nextError) {
           error = nextError;
@@ -1131,8 +1161,18 @@
       },
     });
     const stopCommitted = onInboxResponseCommitted((itemId) => {
-      // The server confirmed this answer. Do not keep its old open snapshot
-      // if both refresh feeds fail beyond the temporary response overlay.
+      // Keep the server-confirmed answer beyond the temporary overlay, until
+      // complete histories replace it. Retained work must stay suppressed too.
+      const answered = applyResponseOverlay(
+        inboxItems.filter((item) => item.id === itemId),
+        { [itemId]: $inboxResponseOverlay[itemId] },
+        Date.now(),
+      );
+      completedInboxItems = mergeInboxSnapshot(
+        completedInboxItems,
+        answered,
+        false,
+      );
       // Invalidate reads begun before the commit so they cannot restore it.
       requestId++;
       loadController?.abort();

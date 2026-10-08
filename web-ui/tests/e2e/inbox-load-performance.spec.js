@@ -61,6 +61,7 @@ async function installScaleCore(
     expireWorkAfterFirst = false,
     completedRecords = [],
     openRecords = [ASK],
+    inboxPages,
     actionPages,
   } = {},
 ) {
@@ -68,7 +69,13 @@ async function installScaleCore(
   /** @type {{ path: string, at: number }[]} */
   const calls = [];
   const started = Date.now();
-  const state = { responded: false, historyReads: 0, archived: [] };
+  const state = {
+    responded: false,
+    respondStarted: false,
+    historyReads: 0,
+    archived: [],
+    inboxPages,
+  };
   calls.state = state;
 
   await page.addInitScript(() => {
@@ -138,6 +145,8 @@ async function installScaleCore(
       });
     }
     if (path.endsWith("/respond") && request.method() === "POST") {
+      state.respondStarted = true;
+      if (gates[path]) await gates[path].promise;
       state.responded = true;
       return route.fulfill({
         status: 201,
@@ -198,15 +207,19 @@ async function installScaleCore(
       if (path === "/boards")
         return { boards: [{ id: "board-1", title: "Delivery" }] };
       if (path === "/inbox")
-        return {
-          items:
-            url.searchParams.get("status") === "completed" || state.responded
-              ? state.responded
-                ? []
-                : completedRecords
-              : openRecords,
-          status: url.searchParams.get("status") || "open",
-        };
+        return (
+          state.inboxPages?.[
+            `${url.searchParams.get("status") || "open"}:${url.searchParams.get("cursor") || ""}`
+          ] || {
+            items:
+              url.searchParams.get("status") === "completed" || state.responded
+                ? state.responded
+                  ? []
+                  : completedRecords
+                : openRecords,
+            status: url.searchParams.get("status") || "open",
+          }
+        );
       if (path === "/home/unread")
         return {
           groups: [],
@@ -406,6 +419,224 @@ function deferred() {
     resolve = done;
   });
   return { promise, resolve };
+}
+
+async function observeRefreshRows(page) {
+  await page.evaluate(() => {
+    window.__refreshRows = [];
+    const capture = () =>
+      window.__refreshRows.push({
+        ids: [...document.querySelectorAll("[data-inbox-row]")].map(
+          (row) => row.dataset.inboxRow,
+        ),
+        selected: document.querySelector(
+          '[data-inbox-row][aria-current="page"]',
+        )?.dataset.inboxRow,
+        detail: [...document.querySelectorAll("h2,h3")].map((heading) =>
+          heading.textContent.trim(),
+        ),
+      });
+    capture();
+    new MutationObserver(capture).observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+    });
+  });
+}
+
+test("partial archive refresh preserves a validated task, detail, and ordering", async ({
+  page,
+}) => {
+  const gates = {};
+  await installScaleCore(page, {
+    latency: 0,
+    gates,
+    openRecords: [],
+    workRecords: [
+      blockedTask("before", { movedDays: 1 }),
+      blockedTask("survivor", { movedDays: 1 }),
+      blockedTask("stale"),
+    ],
+  });
+  await page.goto(`${ROOT}/inbox?item=task:card:survivor`);
+  const selected = page.getByTestId("inbox-row-task:card:survivor");
+  await expect(selected).toHaveAttribute("aria-current", "page");
+  await expect(
+    page.getByText("Not everything is loaded; the counts are lower bounds."),
+  ).toHaveCount(0);
+  const before = await page
+    .locator("[data-inbox-row]")
+    .evaluateAll((rows) => rows.map((row) => row.dataset.inboxRow));
+  gates["/inbox:completed:"] = deferred();
+  await page.getByRole("button", { name: "Stale (1)", exact: true }).click();
+  await observeRefreshRows(page);
+  await page
+    .getByRole("button", { name: "Archive Blocked stale", exact: true })
+    .click();
+  await expect(
+    page.getByText("Not everything is loaded; the counts are lower bounds."),
+  ).toBeVisible();
+  await expect(selected).toHaveAttribute("aria-current", "page");
+  await expect(
+    page.getByRole("heading", { name: "Blocked survivor", exact: true }),
+  ).toBeVisible();
+  gates["/inbox:completed:"].resolve();
+  await expect(
+    page.getByText("Not everything is loaded; the counts are lower bounds."),
+  ).toHaveCount(0);
+  await expect(selected).toHaveAttribute("aria-current", "page");
+  expect(
+    await page
+      .locator("[data-inbox-row]")
+      .evaluateAll((rows) => rows.map((row) => row.dataset.inboxRow)),
+  ).toEqual(before);
+  const snapshots = await page.evaluate(() => window.__refreshRows);
+  expect(
+    snapshots.every(
+      (snapshot) =>
+        snapshot.ids.includes("task:card:survivor") &&
+        JSON.stringify(
+          snapshot.ids.filter((id) => id !== "task:card:stale"),
+        ) === JSON.stringify(before) &&
+        snapshot.selected === "task:card:survivor" &&
+        snapshot.detail.includes("Blocked survivor"),
+    ),
+  ).toBe(true);
+});
+
+test("committing one answer does not retain another answer whose Undo is pending", async ({
+  page,
+}) => {
+  const second = {
+    ...ASK,
+    id: "inbox:second",
+    title: "Second ask",
+    subject_ref: "card:second",
+    related_refs: ["card:second", "thread:second"],
+    thread_id: "second",
+  };
+  const gate = deferred();
+  const calls = await installScaleCore(page, {
+    latency: 0,
+    gates: { [`/inbox/${ASK.id}/respond`]: gate },
+    openRecords: [ASK, second],
+    workRecords: [],
+    failOpenAfterAnswer: true,
+  });
+  await page.clock.install();
+  await page.goto(`${ROOT}/inbox?item=${encodeURIComponent(ASK.id)}`);
+  await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible();
+  await page.getByTestId(`inbox-row-${ASK.id}`).click();
+  await expect(
+    page.getByRole("heading", { name: ASK.title, exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("textbox", { name: "Reply", exact: true })
+    .fill("Answer A");
+  await page.getByRole("button", { name: "Send reply", exact: true }).click();
+  await page.clock.runFor(5_001);
+  await expect.poll(() => calls.state.respondStarted).toBe(true);
+  await page.getByTestId(`inbox-row-${second.id}`).click();
+  await expect(
+    page.getByRole("heading", { name: second.title, exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("textbox", { name: "Reply", exact: true })
+    .fill("Answer B");
+  await page.getByRole("button", { name: "Send reply", exact: true }).click();
+  await page.clock.pauseAt(
+    new Date(await page.evaluate(() => Date.now() + 1_000)),
+  );
+  gate.resolve();
+  await expect.poll(() => calls.state.responded).toBe(true);
+  await page.waitForTimeout(100);
+  // Flush the confirmed answer's refresh, with B still in its Undo window.
+  await page.clock.runFor(1_000);
+  await expect.poll(() => calls.state.historyReads).toBeGreaterThan(1);
+  await page.clock.resume();
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(page.getByTestId(`inbox-row-${second.id}`)).toBeVisible();
+  await expect(page.getByRole("button", { name: /^1 Proceed/ })).toBeEnabled();
+  await page.clock.fastForward(61_000);
+  await expect(page.getByTestId(`inbox-row-${second.id}`)).toBeVisible();
+  await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toHaveCount(0);
+});
+
+for (const completedStillPartial of [true, false]) {
+  test(`refresh retains known answers while open is pending and completed is ${completedStillPartial ? "partial" : "complete"}`, async ({
+    page,
+  }) => {
+    const gates = {};
+    const answered = blockedTask("scale-0", { movedDays: 1 });
+    answered.updated_at = stamp(6);
+    const calls = await installScaleCore(page, {
+      latency: 0,
+      gates,
+      workRecords: [answered, blockedTask("stale")],
+      inboxPages: {
+        "completed:": { items: [], next_cursor: "next" },
+        "completed:next": {
+          items: [
+            {
+              ...ASK,
+              id: "answer",
+              inbox_item_id: ASK.id,
+              status: "completed",
+              responded_at: stamp(1),
+            },
+          ],
+        },
+      },
+    });
+    await page.goto(`${ROOT}/inbox`);
+    await expect(
+      page.getByRole("button", { name: "Stale (1)", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toHaveCount(0);
+    await expect(
+      page.getByText("Not everything is loaded; the counts are lower bounds."),
+    ).toHaveCount(0);
+    gates["/inbox:open:"] = deferred();
+    if (completedStillPartial) gates["/inbox:completed:next"] = deferred();
+    else
+      calls.state.inboxPages = {
+        "completed:": { items: [] },
+        "open:": { items: [] },
+      };
+    await page.getByRole("button", { name: "Stale (1)", exact: true }).click();
+    await observeRefreshRows(page);
+    await page
+      .getByRole("button", { name: "Archive Blocked stale", exact: true })
+      .click();
+    await expect(
+      page.getByText("Not everything is loaded; the counts are lower bounds."),
+    ).toBeVisible();
+    await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toHaveCount(0);
+    await expect(page.getByTestId("inbox-row-task:card:scale-0")).toHaveCount(
+      0,
+    );
+    if (completedStillPartial) gates["/inbox:completed:next"].resolve();
+    // Keep the open snapshot pending: even a finished completed read cannot
+    // discard known answers until the newer open snapshot can replace it.
+    await page.waitForTimeout(100);
+    expect(
+      (await page.evaluate(() => window.__refreshRows)).every(
+        (snapshot) =>
+          !snapshot.ids.includes(ASK.id) &&
+          !snapshot.ids.includes("task:card:scale-0"),
+      ),
+    ).toBe(true);
+    gates["/inbox:open:"].resolve();
+    await expect(
+      page.getByText("Not everything is loaded; the counts are lower bounds."),
+    ).toHaveCount(0);
+    await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toHaveCount(0);
+    if (!completedStillPartial)
+      await expect(
+        page.getByTestId("inbox-row-task:card:scale-0"),
+      ).toBeVisible();
+  });
 }
 
 function blockedTask(

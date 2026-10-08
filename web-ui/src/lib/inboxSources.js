@@ -200,6 +200,16 @@ export function hasCompleteInboxHistory(results) {
   );
 }
 
+/** A partial read adds knowledge; only a complete read may remove records. */
+export function mergeInboxSnapshot(previous, incoming, complete, key = "id") {
+  if (complete) return incoming;
+  return [
+    ...new Map(
+      [...previous, ...incoming].map((item) => [item[key], item]),
+    ).values(),
+  ];
+}
+
 /** Completed rows have their own ids; match their original inbox_item_id too. */
 export function mergeInboxItems(openItems = [], completedItems = []) {
   const answered = new Set(

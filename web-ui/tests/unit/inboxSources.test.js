@@ -3,10 +3,34 @@ import {
   listAllPages,
   loadInboxSources,
   mergeInboxItems,
+  mergeInboxSnapshot,
   hasCompleteInboxHistory,
 } from "../../src/lib/inboxSources.js";
 
 describe("Inbox sources", () => {
+  it("retains missing records across partial reads but replaces a complete snapshot", () => {
+    const previous = [{ id: "selected" }, { id: "updated", title: "Old" }];
+    const incoming = [{ id: "updated", title: "New" }, { id: "late" }];
+    expect(mergeInboxSnapshot(previous, incoming, false)).toEqual([
+      previous[0],
+      ...incoming,
+    ]);
+    expect(mergeInboxSnapshot(previous, [], false)).toEqual(previous);
+    expect(mergeInboxSnapshot(previous, incoming, true)).toEqual(incoming);
+    expect(mergeInboxSnapshot([{ ref: "task" }], [], false, "ref")).toEqual([
+      { ref: "task" },
+    ]);
+  });
+
+  it("retains a known answer when a partial history omits it", () => {
+    const answer = { id: "answer", inbox_item_id: "ask", status: "completed" };
+    const completed = mergeInboxSnapshot([answer], [{ id: "other" }], false);
+    expect(mergeInboxItems([{ id: "ask" }], completed)).toEqual([
+      answer,
+      { id: "other" },
+    ]);
+  });
+
   it("filters archived work from the settled PM snapshot", async () => {
     const progress = [];
     const client = {
