@@ -72,7 +72,9 @@ it("preserves the backend plan geometry and visit digest wire fixtures", async (
   };
   const result = await loadOverview({
     getOverview: async (filters) => {
-      expect(filters).toEqual({ work_view: "summary" });
+      // `summary=1` is the opt-in: core computes `work_summary` only when
+      // asked, and every card surface renders it.
+      expect(filters).toEqual({ work_view: "summary", summary: 1 });
       return {
         work: {
           status: "ok",

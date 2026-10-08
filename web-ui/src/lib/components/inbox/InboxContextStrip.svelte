@@ -1,6 +1,7 @@
 <script>
   import { agentRegistry, findAgentSummary } from "$lib/actorSession";
   import AgentPresenceLine from "$lib/components/agents/AgentPresenceLine.svelte";
+  import WorkSummary from "$lib/components/WorkSummary.svelte";
   import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
 
   /**
@@ -19,6 +20,7 @@
     noteAuthor = "",
     loading = false,
     presenceActorId = "",
+    now = Date.now(),
   } = $props();
 
   let presence = $derived(
@@ -51,6 +53,17 @@
         {#if subject.status}<span class="text-fg-subtle">{" · "}</span
           >{subject.status}{/if}
       </p>
+      {#if subject.summary}
+        <!-- The same renderer the Tasks table and the board use. The box used
+             to print the stored phase, so an ask could say "In progress"
+             about a card the table called blocked. -->
+        <WorkSummary
+          summary={subject.summary}
+          density="row"
+          title={subject.title}
+          {now}
+        />
+      {/if}
     {/if}
     {#if presence}
       <AgentPresenceLine actorId={presenceActorId} />

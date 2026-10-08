@@ -167,7 +167,7 @@ export function readWorkSnapshot(id, now = Date.now()) {
  * is safe to call on every `pointerenter` of every row.
  *
  * @param {string} id
- * @param {{ getWork: (id: string) => Promise<{work?: object}> }} client
+ * @param {{ getWork: (id: string, filters?: object) => Promise<{work?: object}> }} client
  */
 export function prefetchWork(id, client) {
   const name = asText(id);
@@ -180,7 +180,9 @@ export function prefetchWork(id, client) {
   const existing = inflight.get(key);
   if (existing) return existing;
   const promise = Promise.resolve()
-    .then(() => client.getWork(name))
+    // Same opt-in as the page that will read this card again, so a
+    // prefetched row and a fresh read are the same shape.
+    .then(() => client.getWork(name, { summary: 1 }))
     .then((result) => {
       const work = result?.work ?? null;
       /*

@@ -17,7 +17,7 @@
     loadOverview,
   } from "$lib/overview.js";
   import SinceYouLastLooked from "$lib/components/SinceYouLastLooked.svelte";
-  import { initiativeTiles } from "$lib/initiativeTiles.js";
+  import { workSummaryCards } from "$lib/workSummaryCards.js";
   import {
     asksFromSnapshot,
     readWorkspaceOpenAsks,
@@ -132,9 +132,9 @@
   /** Ticks so a freshness badge on screen does not go quietly out of date. */
   let now = $state(Date.now());
 
-  let initiativeTileList = $derived(
+  let initiativeCardList = $derived(
     model?.initiatives?.status === "ok"
-      ? initiativeTiles(model.initiatives.items, {
+      ? workSummaryCards(model.initiatives.items, {
           href: (ref) => workspaceHref(`/tasks/${encodeURIComponent(ref)}`),
           now,
         })
@@ -178,7 +178,7 @@
           : []),
         ...otherWorkspaceAsks,
       ],
-      tiles: briefOwnsThisWorkspace ? [] : initiativeTileList,
+      cards: briefOwnsThisWorkspace ? [] : initiativeCardList,
       notCovered: unreadableWorkspaces,
     }),
   );
@@ -382,7 +382,7 @@
       of the page that answers "what should I look at" rather than "here is
       everything". `MorningBrief.svelte` has the reasoning for each section.
     -->
-    <MorningBrief {brief} />
+    <MorningBrief {brief} {now} />
     <!--
       One urgent band, not a second Inbox. Without a brief it is the top of the
       page and covers every workspace this reader can reach. With one, the

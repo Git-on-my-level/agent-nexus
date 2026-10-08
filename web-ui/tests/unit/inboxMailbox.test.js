@@ -630,8 +630,42 @@ describe("inbox subjects", () => {
       kind: "card",
       noun: "Task",
       title: "Lock hub quest path",
-      phaseLabel: "In progress",
     });
+    // The state comes from the shared summary, so the "Blocks …" box cannot
+    // say something the Tasks table contradicts.
+    expect(subject.summary.status).toMatchObject({
+      state: "in_progress",
+      label: "In progress",
+    });
+  });
+
+  it("prefers core's bounded related-card preview over the row it has", () => {
+    // `related_cards` carries a computed summary per visible item, so the box
+    // can show state for a card whose row this page never loaded.
+    const subject = inboxItemSubject({
+      subject_ref: "card:lock-hub-quest",
+      related_cards: [
+        {
+          ref: "card:lock-hub-quest",
+          resolvable: true,
+          title: "Lock hub quest path",
+          summary: {
+            status: { state: "blocked", label: "Blocked", reason: "waiting" },
+          },
+        },
+      ],
+    });
+    expect(subject.summary.status).toMatchObject({
+      state: "blocked",
+      label: "Blocked",
+      reason: "waiting",
+    });
+  });
+
+  it("gives a document or a topic no card state to show", () => {
+    expect(
+      inboxItemSubject({ subject_ref: "document:brief" }).summary,
+    ).toBeNull();
   });
 
   it("scopes rows to one task for ?work_ref= links", () => {

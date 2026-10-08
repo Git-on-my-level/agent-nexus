@@ -6,8 +6,6 @@ import {
   humanizeStepId,
   nextStepModel,
   planHealthModel,
-  planHealthTitle,
-  planStatusMismatch,
 } from "../../src/lib/planHealth.js";
 
 describe("attentionRank", () => {
@@ -113,18 +111,6 @@ describe("planHealthModel", () => {
   });
 });
 
-describe("planHealthTitle", () => {
-  it("joins the label and core's reason", () => {
-    expect(
-      planHealthTitle({ label: "Stale", reason: "no movement for 9 days" }),
-    ).toBe("Stale — no movement for 9 days");
-  });
-
-  it("is just the label when there is no reason", () => {
-    expect(planHealthTitle({ label: "On track" })).toBe("On track");
-  });
-});
-
 describe("nextStepModel", () => {
   it("reads the computed next_step field", () => {
     const next = nextStepModel({
@@ -170,51 +156,5 @@ describe("humanizeStepId", () => {
   it("reads a slug as a sentence", () => {
     expect(humanizeStepId("pick-launch-date")).toBe("Pick launch date");
     expect(humanizeStepId("")).toBe("");
-  });
-});
-
-describe("planStatusMismatch", () => {
-  const health = (state) => ({ state });
-
-  it("flags a done card whose plan still has open steps", () => {
-    expect(
-      planStatusMismatch("done", health("on_track"), { done: 3, total: 7 }),
-    ).toContain("4 open steps");
-  });
-
-  it("flags a blocked card whose plan reads on track", () => {
-    expect(planStatusMismatch("blocked", health("on_track"), null)).toContain(
-      "on track",
-    );
-  });
-
-  it("flags an unblocked card whose plan is blocked", () => {
-    expect(
-      planStatusMismatch("in_progress", health("blocked"), null),
-    ).toContain("plan is blocked");
-  });
-
-  it("flags a finished plan on an unfinished card", () => {
-    expect(
-      planStatusMismatch("in_progress", health("done"), { done: 7, total: 7 }),
-    ).toContain("in progress");
-  });
-
-  it("says nothing when the two agree", () => {
-    expect(
-      planStatusMismatch("done", health("done"), { done: 7, total: 7 }),
-    ).toBe("");
-    expect(
-      planStatusMismatch("in_progress", health("on_track"), {
-        done: 2,
-        total: 7,
-      }),
-    ).toBe("");
-    expect(planStatusMismatch("blocked", health("blocked"), null)).toBe("");
-  });
-
-  it("says nothing without both a phase and a computed health", () => {
-    expect(planStatusMismatch("", health("blocked"), null)).toBe("");
-    expect(planStatusMismatch("done", health(""), null)).toBe("");
   });
 });

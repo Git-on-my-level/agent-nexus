@@ -38,6 +38,8 @@ export async function searchWork(query, limit = 20) {
   const response = await coreClient.listWork({
     q: query,
     limit,
+    // Results show the computed status, which core sends only when asked.
+    summary: 1,
   });
   return Array.isArray(response.work) ? response.work : [];
 }

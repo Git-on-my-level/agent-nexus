@@ -1,8 +1,11 @@
 /**
- * Plan health, as one vocabulary.
+ * Plan health, for a core that computes no card summary.
  *
- * Core computes health; this normalizes it so every surface says the same
- * thing in the same order. Two shapes arrive:
+ * `workSummary.js` is the one status vocabulary now, and `WorkSummary.svelte`
+ * the one renderer. This is its back-compatibility reader, and nothing else
+ * should import it: core publishes `work_summary` on every card-bearing read,
+ * and this reads the separate fields an older core sent instead. Two shapes
+ * arrive:
  *
  * - `plan_health {state, reason, since}` — the computed field, where `state`
  *   is one of `no_plan | stale | blocked | at_risk | on_track | done`.
@@ -14,9 +17,9 @@
  * progress and the presence of a plan. Nothing else is inferred: a row with no
  * health at all gets no badge rather than an invented "on track".
  *
- * `ATTENTION_ORDER` is the sort the Overview uses, and the reason the order is
- * here rather than in the page: a tile, a list row and a page header must not
- * disagree about which of two initiatives is more urgent.
+ * `ATTENTION_ORDER` and `PLAN_HEALTH` stay here because this file is what
+ * turns a legacy row into the one vocabulary; `workSummary.js` owns the order
+ * and the tone every surface actually renders.
  */
 
 const asText = (value) => String(value ?? "").trim();
@@ -175,19 +178,6 @@ export function planHealthModel(item, options = {}) {
 }
 
 /**
- * The sentence a health badge puts in its `title` and accessible name: the
- * full label, plus the reason core gave for it when there is one.
- *
- * @param {{ label?: string, reason?: string }} health
- */
-export function planHealthTitle(health) {
-  const label = asText(health?.label);
-  const reason = asText(health?.reason);
-  if (!label) return reason;
-  return reason ? `${label} — ${reason}` : label;
-}
-
-/**
  * The next step a surface should name.
  *
  * `next_step {id, title, ref}` is the computed field. Without it, the plan
@@ -240,50 +230,4 @@ export function humanizeStepId(id) {
   if (!text) return "";
   const words = text.replaceAll("-", " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
-/**
- * A phase as it reads inside a sentence. `in_progress` is already "in
- * progress", so "this task is in in progress" is what naive interpolation
- * gets you.
- */
-function phaseWords(phase) {
-  const words = asText(phase).replaceAll("_", " ");
-  return /^(in |on |at )/.test(words) ? words : `in ${words}`;
-}
-
-/**
- * Does the card's own status disagree with what the plan says?
- *
- * A card parked in `done` whose plan still has open steps, or a card in
- * `blocked` whose plan is on track, is worth a quiet hint on the page — not an
- * error, because either one can be legitimately ahead of the other.
- *
- * @param {string} phase the card's phase
- * @param {{state?: string}} health
- * @param {{done: number, total: number}|null} progress
- * @returns {string} the hint, or "" when they agree
- */
-export function planStatusMismatch(phase, health, progress) {
-  const cardPhase = asText(phase);
-  const state = asText(health?.state);
-  if (!cardPhase || !state) return "";
-
-  const planDone = Boolean(progress && progress.done >= progress.total);
-  if (cardPhase === "done" && !planDone && state !== "done") {
-    const remaining = progress ? progress.total - progress.done : 0;
-    return remaining
-      ? `This task is marked done, but its plan still has ${remaining} open ${remaining === 1 ? "step" : "steps"}.`
-      : "This task is marked done, but its plan is not.";
-  }
-  if (cardPhase === "blocked" && state === "on_track") {
-    return "This task is marked blocked, but its plan reads on track.";
-  }
-  if (cardPhase !== "blocked" && state === "blocked") {
-    return `This task is ${phaseWords(cardPhase)}, but its plan is blocked.`;
-  }
-  if (cardPhase !== "done" && state === "done") {
-    return `Every step in the plan is done, but this task is still ${phaseWords(cardPhase)}.`;
-  }
-  return "";
 }

@@ -227,7 +227,9 @@
       let results;
       try {
         if (!id) throw new Error("A saved document is required.");
-        const response = await coreClient.renderReport(id);
+        // `summary=1` opts the native card panels into the computed summary
+        // the shared renderer draws.
+        const response = await coreClient.renderReport(id, { summary: 1 });
         if (
           !Array.isArray(response?.panels) ||
           (expectedRevision && response.revision_ref !== expectedRevision)

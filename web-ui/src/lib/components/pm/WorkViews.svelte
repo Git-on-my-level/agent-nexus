@@ -3,6 +3,7 @@
   import { flip } from "svelte/animate";
   import WorkCard from "./WorkCard.svelte";
   import SignalBadge from "./SignalBadge.svelte";
+  import WorkSummary from "$lib/components/WorkSummary.svelte";
   import ActorLabel from "$lib/components/ActorLabel.svelte";
   import {
     actorDisplayLabel,
@@ -11,8 +12,6 @@
   } from "$lib/actorSession";
   import {
     phaseGroups,
-    label,
-    PHASE_LABELS,
     isNexusOwned,
     workKey,
     taskDetailPath,
@@ -25,6 +24,7 @@
   import { formatTimestamp, formatAbsoluteDateTime } from "$lib/formatDate";
   import { coreClient } from "$lib/coreClient";
   import { prefetchWork, primeWorkSummary } from "$lib/workCache.js";
+  import { isComputedClosed, workSummaryModel } from "$lib/workSummary.js";
   import {
     DRAG_THRESHOLD_PX,
     columnAtPoint,
@@ -51,8 +51,20 @@
   // Attention order: Blocked, In progress, In review, Ready, Backlog; closed
   // work after a toggle.
   let ordered = $derived(sortWorkByAttention(records));
-  let openRows = $derived(ordered.filter((work) => !isClosedWork(work)));
-  let closedRows = $derived(ordered.filter((work) => isClosedWork(work)));
+  /**
+   * Which rows the table folds away.
+   *
+   * Both halves have to agree it is over. The board files a card by its
+   * stored phase, so that is what fills a column; but a card somebody marked
+   * done whose plan is still blocked is not finished, and folding it away on
+   * the strength of the phase alone hid exactly the row the new Status column
+   * exists to surface — "Blocked · marked done", invisible.
+   */
+  function isFolded(work) {
+    return isClosedWork(work) && isComputedClosed(work);
+  }
+  let openRows = $derived(ordered.filter((work) => !isFolded(work)));
+  let closedRows = $derived(ordered.filter((work) => isFolded(work)));
   let tableRows = $derived(showClosed ? ordered : openRows);
   let closedLabel = $derived.by(() => {
     const done = closedRows.filter((work) => work.phase === "done").length;
@@ -119,33 +131,33 @@
   }
 
   /**
-   * Status is a dot plus its name. Only the two states a reader has to act on
-   * — blocked and done — are loud enough to earn a badge; badging all six made
-   * "Backlog" shout as loudly as "Blocked".
+   * One computed summary per row, built once per records change.
+   *
+   * Every row and card on this page reads this, and so does the Overview —
+   * which is the point: the Status column used to print the stored phase, so
+   * a card whose plan was blocked could sit in the table reading "In
+   * progress" while the dashboard called it blocked.
+   *
+   * Keyed by the row object, not by `workKey`: that is `ref || handle`, which
+   * a payload missing both makes undefined, and two such rows would then
+   * share one entry and show each other's status.
+   *
+   * `Date.now()` rather than the page's `now`, deliberately. A table of two
+   * thousand rows would otherwise rebuild every model, step digest and plan
+   * segment every thirty seconds — and nothing the row renders is clocked:
+   * row density shows no age, and the badges that are clocked take `now` as
+   * a prop and tick on their own.
    */
-  const DOT_CLASS = {
-    in_progress: "bg-accent",
-    review: "bg-accent",
-    ready: "bg-fg-muted",
-  };
-  function dotClass(phase) {
-    return DOT_CLASS[phase] ?? "bg-line-strong";
-  }
-  /**
-   * A source can report a state Nexus has no name for. Printing the raw token
-   * ("vendor_waiting") at a reader is worse than printing the source's own
-   * words, so an unfamiliar phase shows `native_status` when the source sent
-   * one. The status column used to carry both on two lines.
-   */
-  function statusText(work) {
-    const phase = work?.phase || "unknown";
-    if (PHASE_LABELS[phase]) return PHASE_LABELS[phase];
-    return String(work?.source?.native_status ?? "").trim() || label(phase);
-  }
-  function badgeTone(phase) {
-    if (phase === "blocked") return "warn";
-    if (phase === "done") return "ok";
-    return "";
+  let summaries = $derived(
+    new Map(
+      records.map((work) => [
+        work,
+        workSummaryModel(work, { now: Date.now() }),
+      ]),
+    ),
+  );
+  function summaryOf(work) {
+    return summaries.get(work) ?? workSummaryModel(work, { now: Date.now() });
   }
 
   function boardLabel(work) {
@@ -542,6 +554,7 @@
                 {#if !slot.placeholder}
                   <WorkCard
                     {work}
+                    summary={summaryOf(work)}
                     href={href(work)}
                     {now}
                     onprefetch={prefetch}
@@ -575,7 +588,9 @@
     >
       <WorkCard
         work={drag.work}
+        summary={summaryOf(drag.work)}
         href={href(drag.work)}
+        {now}
         boardTitle={multipleBoards ? boardLabel(drag.work) : ""}
         requested={Boolean(requested[drag.key] || requestedDecisions[drag.key])}
       />
@@ -620,7 +635,7 @@
           {#each tableRows as work (workKey(work))}
             {@const checked = lastChecked(work, now)}
             {@const read = workFreshness(work, now)}
-            {@const tone = badgeTone(work.phase)}
+            {@const summary = summaryOf(work)}
             <tr
               class="h-10 align-middle hover:bg-panel-hover"
               data-work-ref={work.ref}
@@ -640,19 +655,6 @@
                       .join(" — ")}
                   </p>
                 {/if}
-                <span class="work-row-meta text-micro text-fg-muted">
-                  <span class="min-w-0 flex-1 truncate"
-                    >{[multipleBoards ? boardLabel(work) : "", statusText(work)]
-                      .filter(Boolean)
-                      .join(" · ")}</span
-                  >
-                  {#if read.key === "error"}
-                    <SignalBadge tone="warn">{read.label}</SignalBadge>
-                  {/if}
-                  {#if checked.text}
-                    <span class="shrink-0 tabular-nums">{checked.text}</span>
-                  {/if}
-                </span>
               </th>
               {#if multipleBoards}
                 <td class="max-w-40 px-3 py-1.5">
@@ -661,25 +663,36 @@
                   >
                 </td>
               {/if}
-              <!-- A source can report a status of any length; capped and
-                 truncated so one verbose one cannot push Last checked off
-                 the right edge of the table for every row. -->
-              <td class="max-w-48 px-3 py-1.5">
-                {#if tone}
-                  <SignalBadge {tone}>{statusText(work)}</SignalBadge>
-                {:else}
-                  <span
-                    class="flex items-center gap-1.5 text-fg-muted"
-                    title={statusText(work)}
+              <!--
+                The computed status, not the stored phase. Core says what
+                state the card is actually in and, when the board disagrees,
+                what it is filed as — "Blocked · marked in progress" — which
+                is the disagreement this column used to hide. Capped so one
+                verbose source status cannot push Last checked off the right
+                edge of the table for every row.
+              -->
+              <td class="work-status-cell max-w-48 px-3 py-1.5">
+                <WorkSummary {summary} density="row" title={work.title} {now} />
+              </td>
+              <!--
+                Below 640px the columns to the right are gone, so what they
+                said rides on a second line under the status: where the card
+                lives, whether its read is failing, and when it was last read.
+                A cell rather than a span inside the title, so the status line
+                comes first — and one cell, not a hidden duplicate of the
+                summary, which cost a second component tree on every row.
+              -->
+              <td class="work-meta-cell text-micro text-fg-muted">
+                {#if multipleBoards}
+                  <span class="min-w-0 truncate">{boardLabel(work)}</span>
+                {/if}
+                {#if read.key === "error"}
+                  <SignalBadge tone="warn">{read.label}</SignalBadge>
+                {/if}
+                {#if checked.text}
+                  <span class="ml-auto shrink-0 tabular-nums"
+                    >{checked.text}</span
                   >
-                    <span
-                      class="h-1.5 w-1.5 shrink-0 rounded-full {dotClass(
-                        work.phase,
-                      )}"
-                      aria-hidden="true"
-                    ></span>
-                    <span class="truncate">{statusText(work)}</span>
-                  </span>
                 {/if}
               </td>
               <td class="max-w-40 overflow-hidden px-3 py-1.5">
@@ -744,8 +757,12 @@
 {/if}
 
 <style>
-  /* Two-line rows below 640px: same rows, no second markup. */
-  .work-row-meta {
+  /*
+   * The phone row's second line. It is a real cell so the status can sit
+   * above it; above 640px its contents have columns of their own, so it is
+   * removed from the layout and from the accessibility tree with it.
+   */
+  .work-meta-cell {
     display: none;
   }
 
@@ -762,6 +779,24 @@
       display: none;
     }
 
+    /*
+     * Two exceptions: a row's state follows its title, and the second line
+     * carries what the dropped columns said. Everything else is gone.
+     */
+    .work-table td.work-status-cell {
+      display: block;
+      max-width: none;
+      padding: 0 12px 2px;
+    }
+
+    .work-table td.work-meta-cell {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      padding: 0 12px 8px;
+    }
+
     .work-table tr {
       height: auto;
     }
@@ -769,14 +804,7 @@
     .work-table th[scope="row"] {
       max-width: none;
       min-width: 0;
-      padding: 8px 12px;
-    }
-
-    .work-row-meta {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      min-width: 0;
+      padding: 8px 12px 2px;
     }
   }
 

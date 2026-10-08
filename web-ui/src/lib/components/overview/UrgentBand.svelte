@@ -15,7 +15,7 @@
    * of the screen on good news.
    */
   import FreshnessBadge from "$lib/components/FreshnessBadge.svelte";
-  import HealthBadge from "$lib/components/HealthBadge.svelte";
+  import WorkSummary from "$lib/components/WorkSummary.svelte";
 
   let {
     /** `urgentBandModel` output. */
@@ -128,20 +128,25 @@
         </li>
       {/each}
 
-      {#each initiatives.rows as tile (tile.ref)}
-        <li class="urgent__row" data-urgent-initiative={tile.ref}>
-          <a class="urgent__link" href={tile.href}>
-            <span class="urgent__row-title">{tile.title}</span>
+      {#each initiatives.rows as card (card.ref)}
+        <li class="urgent__row" data-urgent-initiative={card.ref}>
+          <a class="urgent__link" href={card.href}>
+            <span class="urgent__row-title">{card.title}</span>
           </a>
           <span class="urgent__row-meta">
-            {#if tile.showHealth}
-              <HealthBadge health={tile.health} variant="pill" />
-            {/if}
-            {#if tile.movedAt}
+            <!-- The same renderer the card grid uses, at row density: a band
+                 row and the card it points at cannot disagree. -->
+            <WorkSummary
+              summary={card.summary}
+              density="row"
+              title={card.title}
+              {now}
+            />
+            {#if card.summary?.freshness}
               <FreshnessBadge
-                at={tile.movedAt}
-                kind={tile.freshnessKind}
-                row={tile}
+                at={card.summary.lastMovementAt}
+                kind={card.summary.freshnessKind}
+                expectationHours={card.summary.expectationHours}
                 verb="moved"
                 {now}
               />

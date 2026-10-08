@@ -121,14 +121,44 @@ async function installCard(page, { externalResolve = true } = {}) {
       return json({ participants: [], next_cursor: "" });
     }
     if (path.startsWith("/work/") && request.method() === "GET") {
+      const card = {
+        ref: CARD_REF,
+        handle: "renderer",
+        title: "One shared renderer",
+        summary: BODY,
+        phase: "in_progress",
+        source: { authority: "nexus" },
+      };
+      /*
+       * Answer the way core does for the parameter the page sent.
+       *
+       * `summary=1` puts the computed object at `summary` and moves the body
+       * to `summary_text`. A mock that returns prose either way renders the
+       * body no matter what the page reads, and that is how a page passing
+       * the object straight to the markdown renderer passed this spec with
+       * every planned card's body blank.
+       */
+      if (new URL(request.url()).searchParams.get("summary") !== "1") {
+        return json({ work: card });
+      }
+      // The summary core would compute for this plan: on track, its two
+      // steps, moving when the plan state says it moved. Core's word for
+      // `on_track` is "In progress".
+      const computed = {
+        status: {
+          state: "on_track",
+          label: "In progress",
+          reason: "Open steps are progressing.",
+        },
+        progress: { done: 0, total: 2, unit: "steps" },
+        last_movement_at: planState.last_movement_at,
+      };
       return json({
         work: {
-          ref: CARD_REF,
-          handle: "renderer",
-          title: "One shared renderer",
-          summary: BODY,
-          phase: "in_progress",
-          source: { authority: "nexus" },
+          ...card,
+          summary_text: BODY,
+          summary: computed,
+          work_summary: computed,
         },
       });
     }
@@ -259,10 +289,18 @@ test("badges stay compact and show their full text at once on hover", async ({
   test.setTimeout(90_000);
   await openCard(page);
 
-  // Health: a pill with the label, never truncated.
-  const health = page.locator("[data-initiative-plan] [data-health]").first();
+  /*
+   * Status: a pill with the label, never truncated. It lives in the page
+   * header now, through the one `WorkSummary` every surface renders — the
+   * Plan section used to badge it separately.
+   *
+   * The label is core's own wording, shown verbatim: core calls `on_track`
+   * "In progress". The state is what the colour and the sort read.
+   */
+  const summary = page.locator('[data-work-summary="header"]');
+  const health = summary.locator("[data-health]").first();
   await expect(health).toHaveAttribute("data-health", "on_track");
-  await expect(health).toContainText("On track");
+  await expect(health).toContainText("In progress");
   const clipped = await health.evaluate(
     (node) => node.scrollWidth > node.clientWidth + 1,
   );
@@ -273,7 +311,7 @@ test("badges stay compact and show their full text at once on hover", async ({
    * initiative is expected to move every three days. The verb, the exact
    * instant and the expectation are in the tooltip.
    */
-  const age = page.locator("[data-initiative-plan] [data-freshness]").first();
+  const age = summary.locator("[data-freshness]").first();
   await expect(age).toHaveText("8h");
   await expect(age).toHaveClass(/ui-badge--ok/);
   await expect(age).toHaveAttribute(

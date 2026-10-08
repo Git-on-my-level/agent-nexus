@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   BRIEF_SECTIONS,
   briefClock,
-  briefHealth,
+  briefSummary,
   morningBriefModel,
 } from "../../src/lib/morningBrief.js";
 
@@ -213,32 +213,41 @@ describe("morningBriefModel", () => {
     const planless = model.sections.initiatives.rows.find(
       (row) => row.ref === "card:i1",
     );
-    expect(planless.health.state).toBe("no_plan");
-    expect(planless.health.short).toBe("No plan");
-    expect(planless.health.tone).toBe("neutral");
+    expect(planless.summary.status.state).toBe("no_plan");
+    expect(planless.summary.status.label).toBe("No plan");
+    expect(planless.summary.status.tone).toBe("neutral");
     expect(planless.progress).toEqual({ done: 0, total: 3, percent: 0 });
 
     // The state counts are the point: five initiatives with no plan is a
-    // sentence, where five green chips were a lie.
-    expect(model.sections.initiatives.chips).toEqual([
-      { state: "blocked", count: 1, rank: 0, label: "Blocked", tone: "danger" },
-      { state: "on_track", count: 1, rank: 3, label: "On track", tone: "ok" },
-      {
-        state: "no_plan",
-        count: 5,
-        rank: 5,
-        label: "No plan",
-        tone: "neutral",
-      },
+    // sentence, where five green chips were a lie. Labels and tones come from
+    // `workSummary.js`, so a chip and the cards it counts agree.
+    /*
+     * Worst first, by state rather than by magic number: the ranks are
+     * positions in a list `workSummary.js` owns and may grow, and pinning the
+     * integers made adding a state look like a regression here.
+     */
+    expect(
+      model.sections.initiatives.chips.map(({ state, count, label, tone }) => ({
+        state,
+        count,
+        label,
+        tone,
+      })),
+    ).toEqual([
+      { state: "blocked", count: 1, label: "Blocked", tone: "danger" },
+      { state: "on_track", count: 1, label: "In progress", tone: "ok" },
+      { state: "no_plan", count: 5, label: "No plan", tone: "neutral" },
     ]);
+    const ranks = model.sections.initiatives.chips.map((chip) => chip.rank);
+    expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
   });
 
   it("keeps a risk row's computed reason and its progress", () => {
     const model = morningBriefModel(brief());
     const row = model.sections.risk.rows[0];
-    expect(row.health.state).toBe("blocked");
+    expect(row.summary.status.state).toBe("blocked");
     expect(row.reason).toBe("An unfinished step or dependency is blocked.");
-    expect(row.health.reason).toBe(row.reason);
+    expect(row.summary.status.reason).toBe(row.reason);
     expect(row.progress).toEqual({ done: 1, total: 4, percent: 25 });
     expect(row.since).toBe("2026-10-06T06:12:00Z");
   });
@@ -365,19 +374,30 @@ describe("morningBriefModel", () => {
   });
 });
 
-describe("briefHealth", () => {
-  it("uses the shared health vocabulary and never invents one", () => {
+describe("briefSummary", () => {
+  it("renders a brief row through the one summary renderer", () => {
+    // Core ranked these rows from the same computation that fills a card's
+    // `work_summary`, so the row and the card must read the same.
     expect(
-      briefHealth("no_plan", "Initiative has no plan steps."),
+      briefSummary({
+        state: "no_plan",
+        reason: "Initiative has no plan steps.",
+      }).status,
     ).toMatchObject({
       state: "no_plan",
-      short: "No plan",
-      known: true,
-      rank: 5,
+      label: "No plan",
+      tone: "neutral",
+      reason: "Initiative has no plan steps.",
     });
-    expect(briefHealth("at_risk").rank).toBe(1);
-    expect(briefHealth("")).toBeNull();
-    expect(briefHealth("invented")).toBeNull();
+    expect(briefSummary({ state: "at_risk" }).status.tone).toBe("warn");
+    expect(briefSummary({ state: "" })).toBeNull();
+    // Core's status vocabulary is open: a state this client has not seen
+    // still renders, neutrally, rather than losing the row.
+    expect(briefSummary({ state: "invented" }).status).toMatchObject({
+      state: "invented",
+      label: "invented",
+      tone: "neutral",
+    });
   });
 });
 

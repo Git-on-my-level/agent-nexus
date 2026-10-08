@@ -970,7 +970,7 @@ async function installLiveDashboard(page) {
   state.live = liveObservation();
   state.liveReads = 0;
   state.liveFailure = false;
-  await page.route(`**/docs/${DOC_ID}/report`, async (route) => {
+  await page.route(`**/docs/${DOC_ID}/report?*`, async (route) => {
     state.liveReads++;
     state.requests.push({
       path: `/docs/${DOC_ID}/report`,
@@ -1003,7 +1003,14 @@ for (const viewport of [
     ).toBeVisible();
     await expect(report).toContainText("3/7");
     await expect(report).toContainText("Needs Alex: choose the launch date");
-    await expect(report.getByText("stale", { exact: true })).toBeVisible();
+    /*
+     * The initiative's state, through the one `WorkSummary` the Overview and
+     * the Tasks table also render: a badge reading the label rather than this
+     * panel's own lowercased copy of the raw state token.
+     */
+    await expect(
+      report.locator("[data-work-summary] [data-health='stale']"),
+    ).toContainText("Stale");
     const initiative = report.locator('[data-report-initiative="card:launch"]');
     const initiativePlan = initiative.locator("[data-initiative-plan]");
     await expect(
@@ -1032,9 +1039,16 @@ for (const viewport of [
       report.locator("[data-anx-provenance^='authored']"),
     ).toContainText("Written by");
     await expect(report).not.toContainText("No automatic source refresh");
+    /*
+     * Progress, as the one summary renderer states it. A compact row carries
+     * the count rather than a bar, and the sentence is its accessible name:
+     * "3/7" alone reads as a date.
+     */
     await expect(
-      report.getByRole("progressbar", { name: "Launch readiness checklist" }),
-    ).toHaveAttribute("value", "3");
+      report.getByRole("img", {
+        name: "Launch readiness: 3 of 7 steps done",
+      }),
+    ).toHaveText("3/7");
     const scan = await new AxeBuilder({ page })
       .include('[aria-label="Visual report"]')
       .analyze();

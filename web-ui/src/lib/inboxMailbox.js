@@ -10,12 +10,12 @@ import {
 } from "./inboxUtils.js";
 import {
   decisionSummary,
-  label as phaseLabel,
   receiptSignal,
   sourceLabel,
   workFreshness,
   workKey,
 } from "./pm/presentation.js";
+import { workSummaryModel } from "./workSummary.js";
 
 export const INBOX_MAILBOXES = [
   ["needs-you", "Needs you"],
@@ -345,7 +345,7 @@ function humanizeSlug(value) {
  */
 export function inboxItemSubject(
   item,
-  { titleFor = () => "", work = [] } = {},
+  { titleFor = () => "", work = [], now = Date.now() } = {},
 ) {
   const explicit = String(getInboxSubjectRef(item) ?? "").trim();
   const related = (Array.isArray(item?.related_refs) ? item.related_refs : [])
@@ -373,13 +373,30 @@ export function inboxItemSubject(
     titleFor(ref) ||
     (ref === explicit ? String(item?.subject_title ?? "").trim() : "") ||
     humanizeSlug(id);
+  /*
+   * The card's computed summary, so the "Blocks …" box says what the Tasks
+   * table and the board say. Core sends a bounded preview per visible item in
+   * `related_cards`; it is preferred over the task row because it is present
+   * even when the row was never loaded. Null for a document or a topic, which
+   * have no card state.
+   */
+  const preview =
+    prefix === "card"
+      ? (Array.isArray(item?.related_cards) ? item.related_cards : []).find(
+          (entry) => String(entry?.ref ?? "").trim() === ref,
+        ) || null
+      : null;
+  const summarySource = preview ?? task;
   return {
     ref,
     kind: prefix,
     noun: inboxSubjectNoun(prefix),
     title,
     phase: task?.phase || "",
-    phaseLabel: task?.phase ? phaseLabel(task.phase) : "",
+    summary:
+      prefix === "card" && summarySource
+        ? workSummaryModel(summarySource, { now })
+        : null,
     work: task,
   };
 }

@@ -9,11 +9,11 @@
  * empty section says, because a blank box tells a reader nothing about
  * whether the answer is "nothing" or "we did not look".
  *
- * Health vocabulary comes from `planHealth.js`, so a brief row, a tile and a
+ * Status vocabulary comes from `workSummary.js`, so a brief row, a card and a
  * list row cannot disagree about what `no_plan` is called or how urgent it is.
  */
 
-import { attentionRank, PLAN_HEALTH } from "$lib/planHealth.js";
+import { statusChip, summaryFromStatus } from "$lib/workSummary.js";
 
 const asText = (value) => String(value ?? "").trim();
 
@@ -53,17 +53,21 @@ export function briefClock(iso, locale = undefined) {
   });
 }
 
-/** A health chip for a state core already decided. */
-export function briefHealth(state, reason) {
-  const key = asText(state);
-  const definition = PLAN_HEALTH[key];
-  if (!definition) return null;
-  return {
-    ...definition,
-    reason: asText(reason),
-    rank: attentionRank(key),
-    known: true,
-  };
+/**
+ * A brief row's status, as the one summary renderer draws it.
+ *
+ * Core ranked these rows from the same computation that fills a card's
+ * `work_summary`, and sends the state, its reason and its progress rather
+ * than the whole card. `summaryFromStatus` turns that into the same model, so
+ * a brief row and the card below it cannot say different things.
+ */
+export function briefSummary(item) {
+  return summaryFromStatus({
+    state: asText(item?.state),
+    reason: asText(item?.reason),
+    since: asText(item?.since),
+    progress: item?.progress ?? null,
+  });
 }
 
 function link(href, hrefFor) {
@@ -190,7 +194,7 @@ function riskSection(brief, hrefFor) {
       href: link(item.href, hrefFor),
       reason: asText(item.reason),
       since: asText(item.since),
-      health: briefHealth(item.state, item.reason),
+      summary: briefSummary(item),
       progress: progressOf(item.progress),
     })),
     more: count(source.more),
@@ -285,19 +289,10 @@ function initiativesSection(brief, hrefFor) {
    * plan" is the sentence a reader needs when seven initiatives all report
    * no_plan, and the one the old default on_track hid.
    */
-  const chips = Object.keys(PLAN_HEALTH)
-    .map((state) => ({
-      state,
-      count: count(byState[state]),
-      rank: attentionRank(state),
-    }))
+  const chips = Object.keys(byState)
+    .map((state) => statusChip(state, count(byState[state])))
     .filter((chip) => chip.count > 0)
-    .sort((a, b) => a.rank - b.rank)
-    .map((chip) => ({
-      ...chip,
-      label: PLAN_HEALTH[chip.state].short,
-      tone: PLAN_HEALTH[chip.state].tone,
-    }));
+    .sort((a, b) => a.rank - b.rank || a.state.localeCompare(b.state));
   const total = count(source.count);
   return {
     key: "initiatives",
@@ -314,7 +309,7 @@ function initiativesSection(brief, hrefFor) {
       href: link(item.href, hrefFor),
       reason: asText(item.reason),
       nextStep: asText(item.next_step),
-      health: briefHealth(item.state, item.reason),
+      summary: briefSummary(item),
       progress: progressOf(item.progress),
     })),
     more: count(source.more),

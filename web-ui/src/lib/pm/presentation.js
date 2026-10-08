@@ -467,7 +467,9 @@ export function filterWork(records, filters = {}, now = Date.now()) {
       (!query ||
         [
           work.title,
-          work.summary,
+          // Prose only: `summary=1` puts the computed object here, and
+          // stringifying it matched every query against "[object Object]".
+          typeof work.summary === "string" ? work.summary : work.summary_text,
           work.ref,
           work.source?.native_id,
           work.next_action,

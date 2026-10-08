@@ -1,8 +1,9 @@
 <script>
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import PlanView from "$lib/components/PlanView.svelte";
+  import WorkSummary from "$lib/components/WorkSummary.svelte";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
-  import { healthState } from "$lib/healthState.js";
+  import { workProse, workSummaryModel } from "$lib/workSummary.js";
 
   let {
     items = [],
@@ -11,13 +12,13 @@
     workspaceSlug = "",
     onpreview = null,
     onpreviewclose = null,
+    now = Date.now(),
   } = $props();
   let canNavigate = $derived(Boolean(organizationSlug && workspaceSlug));
   let workspaceHref = $derived(
     canNavigate ? bindWorkspaceHref(organizationSlug, workspaceSlug) : null,
   );
 
-  const healthLabel = healthState;
   const itemRefs = (item) => {
     const refs = new Map(resolved ?? []);
     const stepStates = new Map(
@@ -40,7 +41,7 @@
 <ul class="initiatives" aria-label="Initiative details">
   {#each items as item (item.ref)}
     {@const resolvedItemRefs = itemRefs(item)}
-    {@const planProgress = item.plan_state?.progress ?? item.progress}
+    {@const summary = workSummaryModel(item, { now })}
     {@const assignees = item.assignee_refs ?? []}
     <li data-report-initiative={item.ref}>
       <header>
@@ -51,15 +52,13 @@
             >{:else}<strong>{item.title}</strong>{/if}
           <span class="meta">
             {#if item.priority}<span>{item.priority}</span>{/if}
-            {#if item.phase}<span
-                >{String(item.phase).replaceAll("_", " ")}</span
-              >{/if}
-            {#if healthLabel(item)}<span data-health={healthLabel(item)}
-                >{healthLabel(item).replaceAll("_", " ")}</span
-              >{/if}
+            <!-- The shared summary, so a report panel and the Overview card
+                 for the same initiative cannot disagree. Priority stays
+                 beside it: it is not a state. -->
+            <WorkSummary {summary} density="row" title={item.title} {now} />
           </span>
         </div>
-        {#if item.summary}
+        {#if workProse(item)}
           <!-- Authored markdown, like every other body in the product. A
                report panel printing `**Goal:**` was the one surface still
                showing its source. Block rendering, not inline: a summary with
@@ -67,7 +66,7 @@
                together. Clamped to two lines — a dashboard panel is a glance,
                and the initiative page has the whole body. -->
           <MarkdownRenderer
-            source={item.summary}
+            source={workProse(item)}
             class="summary"
             {resolved}
             {organizationSlug}
@@ -76,14 +75,6 @@
             {onpreviewclose}
           />
         {/if}
-        {#if planProgress?.total > 0}<div class="progress">
-            <progress
-              value={planProgress.done}
-              max={planProgress.total}
-              aria-label={`${item.title} checklist`}
-            ></progress>
-            <span>{planProgress.done}/{planProgress.total}</span>
-          </div>{/if}
       </header>
 
       <section data-initiative-plan>
@@ -174,11 +165,6 @@
     font-size: 10px;
     text-transform: capitalize;
   }
-  .meta [data-health="blocked"],
-  .meta [data-health="stale"] {
-    color: var(--warn-text);
-  }
-  .progress,
   .assignees,
   .muted {
     color: var(--fg-muted);
@@ -199,17 +185,6 @@
     color: var(--fg-muted);
     font-size: 11px;
     line-height: 1.6;
-  }
-  .progress {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 5px;
-  }
-  progress {
-    width: 120px;
-    height: 5px;
-    accent-color: var(--accent-solid);
   }
   h4 {
     margin: 0 0 8px;

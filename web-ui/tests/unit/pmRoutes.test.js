@@ -270,12 +270,13 @@ describe("PM operator interactions", () => {
           next_steps: ["ship"],
         },
       });
-      render(WorkDetail);
-      const heading = await screen.findByRole("heading", {
-        name: "Plan",
-        exact: true,
-      });
-      expect(within(heading.parentElement).getByText(badge)).toBeTruthy();
+      const { container } = render(WorkDetail);
+      // One summary per page: the header carries the card's state, and the
+      // Plan section no longer badges it a second time.
+      await screen.findByRole("heading", { name: "Plan", exact: true });
+      const header = container.querySelector('[data-work-summary="header"]');
+      expect(header).toBeTruthy();
+      expect(within(header).getByText(badge)).toBeTruthy();
     },
   );
   it("does not promote the claimed verification field, and refresh only queues", async () => {

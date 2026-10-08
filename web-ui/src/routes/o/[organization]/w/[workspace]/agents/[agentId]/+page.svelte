@@ -23,7 +23,8 @@
   import { authenticatedAgent } from "$lib/authSession";
   import { coreClient } from "$lib/coreClient";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
-  import { label as phaseLabel } from "$lib/pm/presentation.js";
+  import WorkSummary from "$lib/components/WorkSummary.svelte";
+  import { workSummaryModel } from "$lib/workSummary.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import TaskParticipation from "$lib/components/participation/TaskParticipation.svelte";
   import AgentBridgeIndicator from "$lib/components/agents/AgentBridgeIndicator.svelte";
@@ -120,6 +121,63 @@
     Boolean(agent?.name && host?.excluded_names?.includes(agent.name)),
   );
 
+  /**
+   * How many recent tasks this page shows.
+   *
+   * `/agents/{id}` returns every card assigned to the agent, with no limit of
+   * its own, so the page has to impose one: an agent with four hundred cards
+   * is four hundred rows nobody scrolls and four hundred refs to resolve.
+   * Twenty is a glance, and it is one `refs.resolve` batch — the contract
+   * caps a batch at 200.
+   */
+  const RECENT_CARD_LIMIT = 20;
+
+  /**
+   * The window shown, most recently updated first.
+   *
+   * The sort is the point, not a nicety. Core returns these in board,
+   * column and rank order — every backlog card on the lowest board comes
+   * before anything in progress — so slicing what arrives would have cut the
+   * card the agent is working right now and called the twenty backlog rows
+   * left behind the freshest. Cards with no instant sort last rather than
+   * jumping the queue.
+   */
+  function recentWindow(cards) {
+    const at = (card) => {
+      const parsed = Date.parse(card?.updated_at ?? "");
+      return Number.isFinite(parsed) ? parsed : -Infinity;
+    };
+    return [...(Array.isArray(cards) ? cards : [])]
+      .sort((a, b) => at(b) - at(a))
+      .slice(0, RECENT_CARD_LIMIT);
+  }
+  let recentCards = $derived(recentWindow(detail?.recent_cards));
+  /**
+   * How many core sent, and whether that was itself a cut.
+   *
+   * `summary=1` bounds the candidate window, so a prolific agent's count is
+   * core's cap rather than its true total — `cards_truncated` says so, and
+   * the line below reads "50+" rather than claiming 50 is all of them.
+   */
+  let recentCardTotal = $derived(detail?.recent_cards?.length ?? 0);
+  let recentCardsTruncated = $derived(detail?.cards_truncated === true);
+
+  function cardRef(card) {
+    return String(card?.ref || `card:${card?.handle ?? ""}`).trim();
+  }
+
+  /**
+   * The computed summary for one recent task.
+   *
+   * It rides on the row: `summary=1` is what makes `/agents/{id}` compute it,
+   * and the page used to resolve the refs itself because the route had no
+   * opt-in. It does now, and core bounds its own candidate window there too,
+   * so the extra request is gone.
+   */
+  function recentCardSummary(card) {
+    return workSummaryModel(card, { now });
+  }
+
   async function load(key = agentKey, { quiet = false } = {}) {
     if (!quiet) {
       loading = true;
@@ -127,7 +185,10 @@
       notFound = false;
     }
     try {
-      const response = await coreClient.getAgent(key);
+      // `summary=1`: the computed summary on every recent card, from a
+      // candidate window core bounds, instead of a scan over everything the
+      // agent has ever been assigned.
+      const response = await coreClient.getAgent(key, { summary: 1 });
       if (key !== agentKey) return;
       detail = response ?? null;
       const actorId = response?.agent?.actor_id;
@@ -646,31 +707,60 @@
 
         <section aria-labelledby="agent-tasks">
           <h2 id="agent-tasks" class="ui-label">Recent tasks</h2>
-          {#if detail?.recent_cards?.length}
+          {#if recentCards.length}
             <ul
               class="overflow-hidden rounded-md border border-line bg-bg-soft"
+              data-agent-tasks
             >
-              {#each detail.recent_cards as card (card.id)}
+              {#each recentCards as card (card.id)}
+                <!--
+                  Two rows on a phone, one on a desktop.
+
+                  As a single flex row the status sat beside the title and
+                  refused to shrink, so at 390px "Blocked · marked in
+                  progress" with a progress count and an ask left the task
+                  link nothing at all — zero pixels wide, and unclickable.
+                  The title and the age keep the first line; the status takes
+                  its own underneath until there is room beside them.
+                -->
                 <li
-                  class="flex items-center gap-3 border-t border-line-subtle px-4 py-2 first:border-t-0"
+                  class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t border-line-subtle px-4 py-2 first:border-t-0 sm:grid-cols-[minmax(10rem,1fr)_auto_auto]"
                 >
                   <a
-                    class="min-w-0 flex-1 truncate text-meta text-fg hover:underline"
-                    href={workspaceHref(
-                      taskPath(card.ref || `card:${card.handle}`),
-                    )}>{card.title}</a
+                    class="col-start-1 row-start-1 min-w-0 truncate text-meta text-fg hover:underline"
+                    href={workspaceHref(taskPath(cardRef(card)))}
+                    >{card.title}</a
                   >
-                  <span class="shrink-0 text-micro text-fg-muted"
-                    >{phaseLabel(card.column_key)}</span
-                  >
+                  <!-- The shared summary, not the stored column: a card an
+                       agent is working could sit in `in_progress` with a
+                       blocked plan. -->
                   <span
-                    class="w-16 shrink-0 text-right text-micro tabular-nums text-fg-subtle"
+                    class="col-span-2 row-start-2 min-w-0 text-micro text-fg-muted sm:col-span-1 sm:col-start-2 sm:row-start-1"
+                  >
+                    <WorkSummary
+                      summary={recentCardSummary(card)}
+                      density="row"
+                      title={card.title}
+                      {now}
+                    />
+                  </span>
+                  <span
+                    class="col-start-2 row-start-1 w-16 text-right text-micro tabular-nums text-fg-subtle sm:col-start-3"
                     title={formatAbsoluteDateTime(card.updated_at)}
                     >{formatAge(card.updated_at, now)}</span
                   >
                 </li>
               {/each}
             </ul>
+            {#if recentCardTotal > recentCards.length || recentCardsTruncated}
+              <!-- Say what was left out rather than implying this is all of
+                   it: core returns every card the agent is assigned. -->
+              <p class="mt-1 text-micro text-fg-subtle" data-agent-tasks-capped>
+                Showing the {recentCards.length} most recently updated of {recentCardTotal}{recentCardsTruncated
+                  ? "+"
+                  : ""}.
+              </p>
+            {/if}
           {:else}
             <p
               class="rounded-md border border-line bg-bg-soft px-4 py-3 text-meta text-fg-muted"

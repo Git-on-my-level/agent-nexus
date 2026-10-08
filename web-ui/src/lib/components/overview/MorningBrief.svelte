@@ -22,11 +22,13 @@
    * every row is a link to the surface that owns it. The band never answers
    * anything itself.
    */
-  import HealthBadge from "$lib/components/HealthBadge.svelte";
+  import WorkSummary from "$lib/components/WorkSummary.svelte";
 
   let {
     /** `morningBriefModel` output, or null on a core with no brief. */
     brief = null,
+    /** Reference time, so an age on screen does not go quietly out of date. */
+    now = Date.now(),
   } = $props();
 
   let decisions = $derived(brief?.sections.decisions ?? null);
@@ -145,7 +147,14 @@
           <ul class="brief__rows">
             {#each risk.rows as row (row.ref)}
               <li class="brief__row" data-brief-risk={row.ref}>
-                <HealthBadge health={row.health} />
+                <!-- The one status renderer, at row density: a brief row and
+                     the card it links to cannot disagree. -->
+                <WorkSummary
+                  summary={row.summary}
+                  density="row"
+                  title={row.title}
+                  {now}
+                />
                 <a class="brief__row-link" href={row.href}>{row.title}</a>
                 <span class="brief__reason" data-brief-reason title={row.reason}
                   >{row.reason}</span
