@@ -278,7 +278,7 @@ func resolveResourceByTypedValue(ctx context.Context, q queryRower, typ, value s
 	}
 	var id string
 	var handle sql.NullString
-	err := q.QueryRowContext(ctx, `SELECT id, handle FROM `+table+` WHERE handle = ?`, normalized).Scan(&id, &handle)
+	err := q.QueryRowContext(ctx, `SELECT id, handle FROM `+table+` WHERE handle = ? AND handle IS NOT NULL AND trim(handle) <> ''`, normalized).Scan(&id, &handle)
 	if err == nil {
 		h := strings.TrimSpace(handle.String)
 		return ResolvedResourceRef{Type: typ, ID: id, Handle: h, CanonicalRef: makeTypedRef(typ, h)}, nil

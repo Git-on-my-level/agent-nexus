@@ -535,6 +535,17 @@ func TestAskLegacyClientSubjectsBecomeTasks(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Legacy client","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
 	thread := integrationSeedThread(t, h, "actor-1", paginationTestThread("legacy-ask-thread", "Legacy ask thread"))
 	store := h.primitiveStore.(*primitives.Store)
+	// No active board is readable by this legacy client. In particular, the
+	// reserved default identity and its backing thread belong to another actor.
+	if _, err := store.CreateBoard(context.Background(), "private-owner", map[string]any{"id": "workspace-default", "title": "Private default"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.PatchThread(context.Background(), "private-owner", "workspace-default", map[string]any{"pm_actor_id": "private-owner"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if store.CanAccessResource(primitives.WithAccessScope(context.Background(), primitives.AccessScope{ActorID: "actor-1"}), "board", "workspace-default") {
+		t.Fatal("legacy caller can read private default")
+	}
 	topic, err := store.CreateTopic(context.Background(), "actor-1", map[string]any{"title": "Legacy subject topic", "summary": "Legacy context"})
 	if err != nil {
 		t.Fatal(err)

@@ -151,6 +151,10 @@
       "latency_ms": "internal:delivery",
       "status_code": "internal:delivery"
     },
+    "ask_subject_boards": {
+      "actor_id": "internal:delivery",
+      "board_id": "internal:delivery"
+    },
     "ask_subject_close_queue": {
       "card_id": "parent:card"
     },
@@ -1412,7 +1416,8 @@
     "../primitives/ask_lifecycle.go:*Store:MaintainAskLifecycleBatch": "a886ea543f424fb2bbf8bdfe8d4256cabc2d5b77df13297cd09f43448bedf259",
     "../primitives/ask_lifecycle.go:*Store:RunAskLifecycle": "6cf4789829306f16b4e4c585e06490bf4814a5e8b2425b542dd936e577f146d2",
     "../primitives/ask_outcome.go:*Store:AskOutcome": "3159fb5ac14567b7e872d3c7983dd6ac556fb169ddc9018e3ac8b82c94dc8277",
-    "../primitives/ask_request.go:*Store:AppendTaskAttentionEvent": "da8af4b1f76c5b37563c88174076fa651349461b4f8d1051b070a184bd6e367f",
+    "../primitives/ask_request.go:*Store:AppendTaskAttentionEvent": "d54b769a400d917b7e263b7165223612191621b17ffdbeb3c2103105cbec58eb",
+    "../primitives/ask_subject_board.go:ensureAskSubjectBoardTx": "b51db8b961b21c73ac9e731886ba08e0cf13bbaf86c173dee6ba67f83fd57d49",
     "../primitives/ask_subscriptions.go:*Store:CreateAskSubscription": "f5d66e730e18de1a824036da20b15149d7e91a5d472bc841ed3dad704a577763",
     "../primitives/ask_subscriptions.go:*Store:RecordAskDelivery": "4806682668b319aeecc94637a783acd86e5fe1bf4e23c76f8828a975b34c7cff",
     "../primitives/ask_subscriptions.go:*Store:askDeliveries": "4e5ee870450ed2f763bfe8d9080b8185754f0616db788514668a5421d4cd9be5",
@@ -1563,7 +1568,7 @@
     "../primitives/handles.go:resolveResourceRef": "e2e2670f56774781cdebd7be5e36926f29ab5c07b85ee3401ad99c85e5fa3ba4",
     "../primitives/handles.go:resolveRevisionResourceRef": "37e0b366927a0db6584e2b7e7c88ae7d61ab4b4fcd0d5dd6c2d1625ce5955649",
     "../primitives/handles.go:rowExistsByID": "6cb7e206acb0519c035ebcb4114fb80b6b292ae39df55ef9718c36338cfd93de",
-    "../primitives/handles.go:uniqueHandleTx": "ccd426d2aee17907423c109751e152508793da97927a72d48e0096baa66a8edb",
+    "../primitives/handles.go:uniqueHandleTx": "860e89f9756c0ffc9621454a51eb59c2285d77f8a4109d550cc5174aa2a3396d",
     "../primitives/human_attention_answer_wake_batches.go:*Store:CountOpenHumanAttentionAsks": "4622bb79e62390cdaa381c7e290312bb7274e2db2bb59623fa37262b160accc7",
     "../primitives/human_attention_answer_wake_batches.go:*Store:DeleteHumanAttentionAnswerWakeBatch": "9a87423ebdf0b7782a6807ff4a8d1ce30915732b2a1d1e55518d3793f911f4a6",
     "../primitives/human_attention_answer_wake_batches.go:*Store:DeliverHumanAttentionAnswerWakeBatch": "63fa7d5b3d95bfaccfeb2f76bd659dffd7266a1f78532fe19ed43c1c90a2c106",
@@ -1662,7 +1667,7 @@
     "../primitives/resource_helpers.go:replaceRefEdges": "12323dabf1c6a60d385d3e92e86cf279f9e71e7e5e0796d7134ccc8f6854d699",
     "../primitives/resource_helpers.go:replaceRefEdgesSelective": "56b67073a751e923c458aaab88de1fd1339e2f26cddcefe0c5222db026183f0f",
     "../primitives/resource_helpers.go:resolvePublicResourceRef": "56af654599ec5040803d5a88fc5b569d6567442b4e223e26eb43740ec2f54fe4",
-    "../primitives/resource_helpers.go:resolveResourceByTypedValue": "b3f9e67632972009bc870f746fbe29e2ad7afc46da631d550bc7eff7bf70cb82",
+    "../primitives/resource_helpers.go:resolveResourceByTypedValue": "2d664b07043bd3cb3d1e970caf0f8bb1dd5435bc288470ad4aa0d430c03cb10a",
     "../primitives/resource_helpers.go:resolvedTypedRefEdgeTargets": "a315722556d0aa2c1c7e1fe1a13c40a7d84831dc8ebf2f920d1b8b8a4d8688bf",
     "../primitives/scope_feeds.go:ScopeInboxOrderSchemaProposal": "75dbc87c1f7a534abc6fd2d57e9c3415bd096b7968a46cb0c80b5fa03e2d155a",
     "../primitives/scope_feeds.go:type:scopeInboxEnvelope": "7694979d5c4053451599e000b6b9e0b5bbadc5c32718a904065b9197cc86a269",
@@ -2509,7 +2514,7 @@
     "../storage/migrations.go:migration25BackfillHandles": "0b1a8866c4541f58041168cea6b043ee880a43a3afe56eca68a658ffe31fa3b6",
     "../storage/migrations.go:migration25HandleExpressions": "8981e5f9b2e01ce392b77c0763fa38a47b68b5ca20d4cadcf0d7795952dc84c8",
     "../storage/migrations.go:migration25UniqueHandle": "6bed0b1e2baf92af71deb2b6a7f9e281bd75894a80f37d4bbbb09e632befe7d3",
-    "../storage/migrations.go:migrations": "dcd3fc5929e1f4011a1067b79d223a13422115f8403b46bc121aa678dfb610a2",
+    "../storage/migrations.go:migrations": "c4227d47fda4f532a3a978d4826131ca62321a416dd67250927f707b3fa72d56",
     "../storage/migrations.go:repairLegacyReferenceAccess": "03b66e0fb21f24a185a0127b607c51d9760f17b8abfbe904451d093c732ac5ab",
     "../storage/migrations.go:repairNULReferenceAccess": "7579edda9e055e69a0e88914fcd02f919d26c1f02a5b456a6ac3bf25f422fed9",
     "../storage/migrations.go:sqliteTableExists": "c0fa57bdf9800dd6002c1c4dcfcb6ab9f2a889101a7f21b61f434439a39a3ac4",

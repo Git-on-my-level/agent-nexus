@@ -5,7 +5,10 @@ these commands create a ready task on `ANX_ASK_DEFAULT_BOARD` (a board ref), or
 the workspace default board. Explicit non-card subjects are rejected; put native
 evidence in `--ref`. Core also accepts older CLI/MCP requests with typed non-card
 subjects: it creates a ready card atomically with the ask, preserving the original
-subject as evidence and inheriting the ask's full privacy. Existing non-card asks
+subject as evidence and inheriting the ask's full privacy. These compatibility
+cards use a reusable Asks board for the requester. Core checks access on every
+use and creates a replacement if that board becomes hidden, archived or trashed;
+it does not depend on the reserved workspace default. Existing non-card asks
 remain readable and answerable.
 
 An answer and the card decision commit together. The decision links both events.

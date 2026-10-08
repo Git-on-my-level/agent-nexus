@@ -116,3 +116,89 @@ func TestAskDeliveryReadBudgets(t *testing.T) {
 		}
 	}
 }
+
+// Measure the actual board lookup SQL emitted by legacy publication, isolated
+// from unrelated card/blob writes and the shared authorization engine.
+func TestAskCompatibilityBoardLookupBudget(t *testing.T) {
+	ctx := context.Background()
+	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	pool, capture, err := perfguard.Open("file:" + ws.Layout().DatabasePath + "?_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	s := p.NewStore(pool, blob.NewFilesystemBackend(ws.Layout().ArtifactContentDir), ws.Layout().ArtifactContentDir)
+	topic, err := s.CreateTopic(ctx, "requester", map[string]any{"title": "Public legacy subject", "summary": "Public topic"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	publish := func(actor string) error {
+		_, e := s.AppendTaskAttentionEvent(ctx, actor, map[string]any{"type": "human_attention_requested", "thread_id": topic.Topic["thread_id"], "refs": []string{fmt.Sprint(topic.Topic["ref"])}, "payload": map[string]any{"subject_ref": topic.Topic["ref"], "title": "Legacy ask", "requester_actor_id": actor}})
+		return e
+	}
+	for _, size := range []int{0, 4096} {
+		if size > 0 {
+			_, err = ws.DB().Exec(`WITH RECURSIVE n(i) AS(VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<4096) INSERT INTO boards(id,handle,title,thread_id,column_schema_json,created_at,created_by,updated_at,updated_by) SELECT 'board-noise-'||i,'board-noise-'||i,'Unrelated board','board-noise-'||i,'[]','2000-01-01','other','2000-01-01','other' FROM n`)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		for _, phase := range []string{"first", "reuse"} {
+			t.Run(fmt.Sprintf("%d/%s", size, phase), func(t *testing.T) {
+				capture.Start()
+				if err = publish(fmt.Sprintf("writer-%d", size)); err != nil {
+					t.Fatal(err)
+				}
+				statements, _, _ := capture.Stop()
+				var lookups []perfguard.Statement
+				sawPointer := false
+				for _, stmt := range statements {
+					q := strings.Join(strings.Fields(stmt.SQL), " ")
+					if strings.HasPrefix(q, "SELECT ") && (strings.Contains(q, " FROM boards ") || strings.Contains(q, " FROM ask_subject_boards ")) {
+						lookups = append(lookups, stmt)
+						sawPointer = sawPointer || strings.Contains(q, " FROM ask_subject_boards ")
+						plan, e := perfguard.Explain(ctx, ws.DB(), stmt)
+						if e != nil {
+							t.Fatal(e)
+						}
+						for _, line := range plan {
+							if strings.Contains(line, "SCAN ") || strings.Contains(line, "TEMP B-TREE") {
+								t.Fatalf("unbounded board lookup: %s SQL=%s", line, q)
+							}
+						}
+					}
+				}
+				if !sawPointer {
+					t.Fatal("publication did not use indexed subject-board pointer")
+				}
+				capture.Start()
+				for _, stmt := range lookups {
+					rows, e := pool.QueryContext(ctx, stmt.SQL, stmt.Args...)
+					if e != nil {
+						t.Fatal(e)
+					}
+					for rows.Next() {
+					}
+					e = rows.Err()
+					rows.Close()
+					if e != nil {
+						t.Fatal(e)
+					}
+				}
+				_, queries, rows := capture.Stop()
+				work := capture.Work()
+				if e := capture.WorkError(); e != nil {
+					t.Fatal(e)
+				}
+				t.Logf("queries=%d rows=%d work=%+v", queries, rows, work)
+				if queries > 10 || rows > 8 || work.VMSteps > 250 || work.FullScanSteps != 0 || work.Sorts != 0 {
+					t.Fatalf("unbounded board lookup: %+v", work)
+				}
+			})
+		}
+	}
+}

@@ -26,7 +26,6 @@ func (s *Store) AppendTaskAttentionEvent(ctx context.Context, actor string, even
 	if err != nil {
 		return nil, err
 	}
-	boardID := ""
 	subjectType, _, err := schema.SplitTypedRef(subject)
 	if err != nil {
 		return nil, workInvalid("subject_ref must be a typed reference")
@@ -34,10 +33,6 @@ func (s *Store) AppendTaskAttentionEvent(ctx context.Context, actor string, even
 	compatibility := subjectType != "card"
 	if compatibility {
 		if err := s.CheckResourceValues(ctx, body); err != nil {
-			return nil, err
-		}
-		boardID, err = s.ensureDefaultBoard(ctx, actor)
-		if err != nil {
 			return nil, err
 		}
 	}
@@ -74,10 +69,11 @@ func (s *Store) AppendTaskAttentionEvent(ctx context.Context, actor string, even
 		return nil, err
 	}
 	if compatibility {
-		board, err := loadBoardRow(ctx, tx, boardID)
+		board, err := ensureAskSubjectBoardTx(ctx, tx, actor)
 		if err != nil {
 			return nil, err
 		}
+		boardID := board.ID
 		refs, err := normalizeStringSlice(body["refs"])
 		if err != nil {
 			return nil, err
