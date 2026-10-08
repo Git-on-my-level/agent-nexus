@@ -677,7 +677,7 @@
       <!-- TODO(SCA-694): use WorkSummary when the shared component lands. -->
       <div class="pm-context" aria-label="Conversation context">
         {#each contextRefs as ref (ref)}
-          <div class="flex flex-wrap items-center gap-2">
+          <div class="flex max-w-full min-w-0 flex-wrap items-center gap-2">
             <AnxRefChip
               refValue={ref}
               resolved={resolvedRefs}
@@ -1067,6 +1067,9 @@
   }
   .pm-context {
     display: flex;
+    flex-wrap: wrap;
+    min-width: 0;
+    overflow-wrap: anywhere;
     align-items: baseline;
     gap: 0.5rem;
     margin-top: 0.375rem;

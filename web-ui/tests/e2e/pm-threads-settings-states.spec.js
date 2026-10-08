@@ -268,13 +268,14 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(page.getByText("Partial history")).toBeVisible();
       await expectCleanLayout(page, "history partial");
 
-      // Deep link from a task: the context line shows the ref with no thread.
+      // Deep link from a task: the pinned context shows the ref with no thread.
       await page.goto(
         `${ROOT}/pm?new=1&work_ref=${encodeURIComponent(`card:${LONG_TOKEN}`)}`,
       );
+      await expect(page.getByLabel("Conversation context")).toBeVisible();
       await expect(
-        page.getByRole("link", { name: "Open the task" }),
-      ).toBeVisible();
+        page.getByLabel("Conversation context").locator("[data-anx-ref]"),
+      ).toHaveAttribute("data-anx-ref", `card:${LONG_TOKEN}`);
       await expectCleanLayout(page, "new conversation for a task", bothEnds);
       await expectNoClippedContent(page, "new conversation for a task");
     });
