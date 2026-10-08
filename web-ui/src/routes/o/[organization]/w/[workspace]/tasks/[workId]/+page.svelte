@@ -28,10 +28,9 @@
   } from "$lib/actorSession";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
   import AnxRefPreview from "$lib/components/AnxRefPreview.svelte";
-  import FreshnessBadge from "$lib/components/FreshnessBadge.svelte";
   import AnxRefChip from "$lib/components/AnxRefChip.svelte";
   import FinePrint from "$lib/components/FinePrint.svelte";
-  import HealthBadge from "$lib/components/HealthBadge.svelte";
+  import WorkSummary from "$lib/components/WorkSummary.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import PanelToggle from "$lib/components/layout/PanelToggle.svelte";
   import PlanView from "$lib/components/PlanView.svelte";
@@ -52,7 +51,6 @@
     isNexusOwned,
     workFreshness,
     workKey,
-    label,
     errorMessage,
     readErrorExplanation,
     receiptSignal,
@@ -60,12 +58,7 @@
     humanizeInstants,
     connectionName,
   } from "$lib/pm/presentation.js";
-  import { freshnessKindForPhase } from "$lib/freshness.js";
-  import {
-    nextStepModel,
-    planHealthModel,
-    planStatusMismatch,
-  } from "$lib/planHealth.js";
+  import { workSummaryModel } from "$lib/workSummary.js";
   import { authoredProvenance, liveProvenance } from "$lib/reportProvenance.js";
   import {
     panelAutoCollapsed,
@@ -112,55 +105,39 @@
      * the read, which only the client knows.
      */
     planReadAt = $state(""),
+    /**
+     * The summary the plan read returned.
+     *
+     * Core recomputes status, progress and the next step on every plan read,
+     * so this is fresher than the one the card row carried; the header shows
+     * whichever it has.
+     */
+    planSummary = $state(null),
     planError = $state("");
   /** Ticks so a relative age on screen does not go quietly out of date. */
   let now = $state(Date.now());
   let requestId = 0;
   let refPreview = $state();
 
-  let planProgress = $derived(
-    Number(planState?.progress?.total) > 0 ? planState.progress : null,
-  );
   /**
-   * One health vocabulary, shared with the Overview tiles, so the badge on
-   * this page and the badge on the dashboard cannot disagree.
+   * This card's summary, as the one renderer every other surface uses.
+   *
+   * The Tasks table, the board, the Overview and this header all render
+   * `WorkSummary` over this model, which is what keeps them from disagreeing
+   * about the same card. The plan read's own summary wins when there is one,
+   * because core recomputed it more recently than the card row did; the plan
+   * state is merged in either way so the progress bar is drawn from the steps
+   * this page has actually read.
    */
-  let planHealth = $derived(
-    planHealthModel(
-      {
-        plan_health: work?.plan_health,
-        plan_state: planState,
-        health: { status: planState?.health },
-      },
-      { hasPlan: Boolean(plan), progress: planProgress },
-    ),
-  );
-  /*
-   * Finished work gets no freshness badge. The badge is a prompt to go and
-   * look; a delivered card is not asking for anything, so "9d, expected every
-   * 3d" on it would be chasing work that is already done.
-   */
-  let planFreshnessKind = $derived(
-    planHealth.state === "done" ||
-      freshnessKindForPhase(work?.phase, work?.state) === "closed"
-      ? "closed"
-      : "initiative",
-  );
+  let cardSummary = $derived.by(() => {
+    if (!work) return null;
+    return workSummaryModel(
+      { ...work, plan_state: planState ?? work.plan_state ?? null },
+      { now, summary: planSummary },
+    );
+  });
   /** "Next" comes from the computed next step, with the plan's own title. */
-  let nextStep = $derived(
-    nextStepModel(
-      { next_step: work?.next_step, plan_state: planState },
-      { plan },
-    ),
-  );
-  /**
-   * A card parked in `done` whose plan still has open steps is worth a quiet
-   * hint: either one can legitimately be ahead of the other, so it is a note
-   * rather than an error.
-   */
-  let statusMismatch = $derived(
-    plan ? planStatusMismatch(work?.phase, planHealth, planProgress) : "",
-  );
+  let nextStep = $derived(cardSummary?.next ?? null);
 
   /**
    * The right rail collapses, remembered per viewer. It stacks below the
@@ -217,6 +194,10 @@
         if (steps.length) {
           plan = result.plan;
           planState = result.plan_state ?? null;
+          planSummary =
+            result.summary && typeof result.summary === "object"
+              ? result.summary
+              : null;
           planReadAt = new Date().toISOString();
         }
         return steps;
@@ -326,6 +307,7 @@
     nextCursor = "";
     plan = null;
     planState = null;
+    planSummary = null;
     planRefs = new Map();
     planReadAt = "";
     planError = "";
@@ -562,14 +544,20 @@
     <WorkspacePageHeader title={work.title || "Untitled task"}>
       {#snippet subtitle()}
         <span class="flex flex-wrap items-center gap-1.5">
-          <SignalBadge tone={work.phase === "blocked" ? "warn" : "neutral"}
-            >{label(work.phase)}</SignalBadge
-          >
+          <!--
+            The card's computed state, with the reason core gave for it and,
+            when the board disagrees, what it is filed as. The header used to
+            print the stored phase on its own, which is exactly the thing the
+            Tasks table and the Overview could then contradict.
+          -->
+          <WorkSummary
+            summary={cardSummary}
+            density="header"
+            title={work.title}
+            {now}
+          />
           {#if !nexusOwned}
             <SignalBadge tone={signal.tone}>{signal.label}</SignalBadge>
-          {/if}
-          {#if work.source?.native_status}
-            <SignalBadge>{work.source.native_status}</SignalBadge>
           {/if}
           {#if !workPartial && !work.definition_of_done?.length}
             <!-- A badge, not a sentence: the reader needs the fact, not a
@@ -620,7 +608,9 @@
               <h2 class="ui-label">Plan</h2>
               <div class="flex flex-wrap items-center gap-2">
                 <!-- Computed on every read, not maintained by hand. Saying so
-                     here is what distinguishes it from the card body below. -->
+                     here is what distinguishes it from the card body below.
+                     The plan's status, progress and age are in the page
+                     header above: one summary per page, not two. -->
                 <ProvenanceChip
                   model={liveProvenance(
                     planReadAt,
@@ -628,33 +618,8 @@
                     now,
                   )}
                 />
-                <HealthBadge health={planHealth} variant="pill" />
-                {#if planProgress}
-                  <span class="text-micro text-fg-muted" data-plan-progress
-                    >{planProgress.done}/{planProgress.total} steps</span
-                  >
-                {/if}
-                {#if planState?.last_movement_at}
-                  <!-- Judged against the three-day initiative cadence, the
-                       same way the Overview tiles are, so the dashboard and
-                       this page cannot disagree about what "3d" means. -->
-                  <FreshnessBadge
-                    at={planState.last_movement_at}
-                    kind={planFreshnessKind}
-                    row={work}
-                    verb="moved"
-                    {now}
-                  />
-                {/if}
               </div>
             </div>
-            {#if statusMismatch}
-              <!-- A note, not an alert: a card and its plan can legitimately
-                   be a step apart, and the reader decides which is right. -->
-              <p class="mt-1 text-micro text-warn-text" data-plan-mismatch>
-                {statusMismatch}
-              </p>
-            {/if}
             {#if planError}
               <p class="mt-2 text-meta text-fg-muted">{planError}</p>
             {:else}
@@ -711,8 +676,8 @@
               <!-- The step core computed, named by the plan's own title rather
                    than by its raw id. -->
               <p class="text-meta text-fg" data-next-step>
-                {nextStep.title}{#if nextStep.extra}<span class="text-fg-muted"
-                    >{" "}+{nextStep.extra} more</span
+                {nextStep.title}{#if nextStep.more}<span class="text-fg-muted"
+                    >{" "}+{nextStep.more} more</span
                   >{/if}
                 {#if nextStep.ref}
                   <span class="ml-1 align-middle">

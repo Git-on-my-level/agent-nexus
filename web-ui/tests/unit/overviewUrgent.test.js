@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { initiativeTiles } from "../../src/lib/initiativeTiles.js";
+import { workSummaryCards } from "../../src/lib/workSummaryCards.js";
 import {
   asksFromSnapshot,
   criticalInitiatives,
@@ -127,14 +127,14 @@ describe("readWorkspaceOpenAsks", () => {
 
 describe("criticalInitiatives", () => {
   it("keeps only initiatives that have stopped moving, worst first", () => {
-    const tiles = initiativeTiles([
+    const cards = workSummaryCards([
       row({ ref: "card:ok", health: { status: "on_track" } }),
       row({ ref: "card:stale", health: { status: "stalled" } }),
       row({ ref: "card:blocked", health: { status: "blocked" } }),
       row({ ref: "card:risk", plan_health: { state: "at_risk" } }),
       row({ ref: "card:none" }),
     ]);
-    expect(criticalInitiatives(tiles).map((tile) => tile.ref)).toEqual([
+    expect(criticalInitiatives(cards).map((card) => card.ref)).toEqual([
       "card:blocked",
       "card:risk",
       "card:stale",
@@ -148,7 +148,7 @@ describe("criticalInitiatives", () => {
 });
 
 describe("urgentBandModel", () => {
-  const tiles = initiativeTiles([
+  const cards = workSummaryCards([
     row({ ref: "card:blocked", health: { status: "blocked" } }),
     row({ ref: "card:ok", health: { status: "on_track" } }),
   ]);
@@ -164,7 +164,7 @@ describe("urgentBandModel", () => {
           count: 1,
         },
       ],
-      tiles,
+      cards,
     });
     expect(band.asks.count).toBe(3);
     expect(band.asks.rows).toHaveLength(3);
@@ -173,8 +173,8 @@ describe("urgentBandModel", () => {
   });
 
   it("puts critical initiatives in the band and leaves healthy ones out", () => {
-    const band = urgentBandModel({ asks: [], tiles });
-    expect(band.initiatives.rows.map((tile) => tile.ref)).toEqual([
+    const band = urgentBandModel({ asks: [], cards });
+    expect(band.initiatives.rows.map((card) => card.ref)).toEqual([
       "card:blocked",
     ]);
     expect(band.initiatives.count).toBe(1);
@@ -186,7 +186,7 @@ describe("urgentBandModel", () => {
         asksFromSnapshot(snapshot(), here),
         { status: "unavailable", workspace: there, message: "no access" },
       ],
-      tiles: [],
+      cards: [],
     });
     expect(band.unavailable).toEqual([
       { workspace: there, message: "no access" },
@@ -197,7 +197,7 @@ describe("urgentBandModel", () => {
   it("is empty when nothing is waiting and nothing has stalled", () => {
     const band = urgentBandModel({
       asks: [asksFromSnapshot(snapshot({ count: 0, rows: [] }), here)],
-      tiles: initiativeTiles([
+      cards: workSummaryCards([
         row({ ref: "card:ok", health: { status: "on_track" } }),
       ]),
     });
@@ -214,7 +214,7 @@ describe("urgentBandModel", () => {
     }));
     const band = urgentBandModel({
       asks: [{ status: "ok", workspace: here, rows: many, count: 10 }],
-      tiles: [],
+      cards: [],
       askLimit: 3,
     });
     expect(band.asks.rows).toHaveLength(3);
@@ -258,7 +258,7 @@ describe("refsCoveredByAsks", () => {
 });
 
 describe("the band says each thing once", () => {
-  const blockedTile = initiativeTiles([
+  const blockedCards = workSummaryCards([
     row({ ref: "card:rollback-wording", health: { status: "blocked" } }),
     row({ ref: "card:other", health: { status: "stalled" } }),
   ]);
@@ -283,10 +283,10 @@ describe("the band says each thing once", () => {
           ],
         },
       ],
-      tiles: blockedTile,
+      cards: blockedCards,
     });
     expect(band.asks.rows).toHaveLength(1);
-    expect(band.initiatives.rows.map((tile) => tile.ref)).toEqual([
+    expect(band.initiatives.rows.map((card) => card.ref)).toEqual([
       "card:other",
     ]);
   });
@@ -294,9 +294,9 @@ describe("the band says each thing once", () => {
   it("still lists a critical initiative nothing is asking about", () => {
     const band = urgentBandModel({
       asks: [asksFromSnapshot(snapshot(), here)],
-      tiles: blockedTile,
+      cards: blockedCards,
     });
-    expect(band.initiatives.rows.map((tile) => tile.ref)).toEqual([
+    expect(band.initiatives.rows.map((card) => card.ref)).toEqual([
       "card:rollback-wording",
       "card:other",
     ]);
@@ -312,7 +312,7 @@ describe("coverage, not outage", () => {
   it("names the workspaces it did not look at, without calling them failures", () => {
     const band = urgentBandModel({
       asks: [asksFromSnapshot(snapshot({ count: 0, rows: [] }), here)],
-      tiles: [],
+      cards: [],
       notCovered: unreadable,
     });
     expect(band.notCovered).toEqual(unreadable);
@@ -327,7 +327,7 @@ describe("coverage, not outage", () => {
         asksFromSnapshot(snapshot(), here),
         { status: "unavailable", workspace: there, message: "403" },
       ],
-      tiles: [],
+      cards: [],
       notCovered: [{ slug: "beta", label: "Beta" }],
     });
     expect(band.unavailable).toHaveLength(1);

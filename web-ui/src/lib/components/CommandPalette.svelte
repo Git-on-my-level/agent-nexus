@@ -38,6 +38,8 @@
     rankCommands,
   } from "$lib/commandPaletteModel.js";
   import { workspacePath } from "$lib/workspacePaths";
+  import WorkSummary from "$lib/components/WorkSummary.svelte";
+  import { workSummaryModel } from "$lib/workSummary.js";
 
   /**
    * ⌘K: go anywhere, act on what is on screen, or search.
@@ -430,12 +432,15 @@
       group: "Tasks",
       kind: "task",
       label: work.title || "Untitled task",
-      subtitle: [
-        phaseLabel(work.phase),
+      /*
+       * A result's state is the shared summary, not a phase this row looked
+       * up for itself: a search hit used to read "In progress" for a card the
+       * Tasks table called blocked. The source stays a plain subtitle — it is
+       * where the card lives, not what state it is in.
+       */
+      summary: workSummaryModel(work),
+      subtitle:
         work.source && !isNexusOwned(work) ? sourceLabel(work.source) : "",
-      ]
-        .filter(Boolean)
-        .join(" · "),
       icon: "tasks",
       run: () => go(`/tasks/${encodeURIComponent(workKey(work))}`),
     })),
@@ -768,6 +773,14 @@
               </svg>
               <div class="cmd-result-text">
                 <span class="cmd-result-title">{command.label}</span>
+                {#if command.summary}
+                  <WorkSummary
+                    summary={command.summary}
+                    density="row"
+                    title={command.label}
+                    class="cmd-result-summary"
+                  />
+                {/if}
                 {#if command.subtitle}
                   <span class="cmd-result-subtitle">{command.subtitle}</span>
                 {/if}
@@ -1006,6 +1019,10 @@
     gap: 3px;
   }
 
+  /* The summary sits on the subtitle line's own scale. */
+  .cmd-result-text :global(.cmd-result-summary) {
+    font-size: 11px;
+  }
   .cmd-result-badge {
     flex-shrink: 0;
     font-size: 10px;

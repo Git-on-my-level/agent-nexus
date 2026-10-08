@@ -23,7 +23,8 @@
   import { authenticatedAgent } from "$lib/authSession";
   import { coreClient } from "$lib/coreClient";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
-  import { label as phaseLabel } from "$lib/pm/presentation.js";
+  import WorkSummary from "$lib/components/WorkSummary.svelte";
+  import { workSummaryModel } from "$lib/workSummary.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import TaskParticipation from "$lib/components/participation/TaskParticipation.svelte";
   import AgentBridgeIndicator from "$lib/components/agents/AgentBridgeIndicator.svelte";
@@ -660,9 +661,17 @@
                       taskPath(card.ref || `card:${card.handle}`),
                     )}>{card.title}</a
                   >
-                  <span class="shrink-0 text-micro text-fg-muted"
-                    >{phaseLabel(card.column_key)}</span
-                  >
+                  <!-- The shared summary, not the stored column: a card an
+                       agent is working could sit in `in_progress` with a
+                       blocked plan. -->
+                  <span class="shrink-0 text-micro text-fg-muted">
+                    <WorkSummary
+                      summary={workSummaryModel(card, { now })}
+                      density="row"
+                      title={card.title}
+                      {now}
+                    />
+                  </span>
                   <span
                     class="w-16 shrink-0 text-right text-micro tabular-nums text-fg-subtle"
                     title={formatAbsoluteDateTime(card.updated_at)}

@@ -18,7 +18,7 @@
  * step occupies, where its edges run, and where today falls on a timeline.
  */
 
-import { healthState } from "./healthState.js";
+import { planStateHealth } from "./healthState.js";
 
 /** Step statuses, in the order a reader scans them. */
 export const PLAN_STEP_STATUSES = Object.freeze([
@@ -212,7 +212,7 @@ export function planComponents(steps) {
 function readPlanState(planState) {
   if (!planState || typeof planState !== "object") return null;
   const shape = asText(planState.shape);
-  const health = healthState({ plan_state: planState });
+  const health = planStateHealth(planState);
   const statusById = {};
   for (const step of Array.isArray(planState.steps) ? planState.steps : []) {
     const id = asText(step?.id);

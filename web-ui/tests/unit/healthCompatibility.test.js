@@ -1,22 +1,34 @@
 import { describe, expect, it } from "vitest";
-import { initiativeTileModel } from "../../src/lib/initiativeTiles.js";
+import { workSummaryModel } from "../../src/lib/workSummary.js";
 import { planLayout } from "../../src/lib/planShape.js";
 import { sinceYouLastLookedStrip } from "../../src/lib/sinceYouLastLooked.js";
 
 describe("health wire compatibility", () => {
+  it("prefers the computed summary over every legacy spelling", () => {
+    // Core's `work_summary` is the field the UI renders; the older fields
+    // remain on the wire and must not override it.
+    expect(
+      workSummaryModel({
+        health: { status: "on_track" },
+        plan_health: { state: "stale" },
+        work_summary: { status: { state: "blocked", label: "Blocked" } },
+      }).status.state,
+    ).toBe("blocked");
+  });
+
   it("prefers canonical state while accepting legacy badges", () => {
     expect(
-      initiativeTileModel({ health: { status: "stalled" } }).health.state,
+      workSummaryModel({ health: { status: "stalled" } }).status.state,
     ).toBe("stale");
     expect(
-      initiativeTileModel({
+      workSummaryModel({
         health: { status: "on_track" },
         plan_health: { state: "no_plan" },
-      }).health.state,
+      }).status.state,
     ).toBe("no_plan");
     expect(
-      initiativeTileModel({ health: { status: "on_track", state: "at_risk" } })
-        .health.state,
+      workSummaryModel({ health: { status: "on_track", state: "at_risk" } })
+        .status.state,
     ).toBe("at_risk");
   });
 

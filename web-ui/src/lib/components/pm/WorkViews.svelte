@@ -3,6 +3,7 @@
   import { flip } from "svelte/animate";
   import WorkCard from "./WorkCard.svelte";
   import SignalBadge from "./SignalBadge.svelte";
+  import WorkSummary from "$lib/components/WorkSummary.svelte";
   import ActorLabel from "$lib/components/ActorLabel.svelte";
   import {
     actorDisplayLabel,
@@ -11,8 +12,6 @@
   } from "$lib/actorSession";
   import {
     phaseGroups,
-    label,
-    PHASE_LABELS,
     isNexusOwned,
     workKey,
     taskDetailPath,
@@ -25,6 +24,7 @@
   import { formatTimestamp, formatAbsoluteDateTime } from "$lib/formatDate";
   import { coreClient } from "$lib/coreClient";
   import { prefetchWork, primeWorkSummary } from "$lib/workCache.js";
+  import { workSummaryModel } from "$lib/workSummary.js";
   import {
     DRAG_THRESHOLD_PX,
     columnAtPoint,
@@ -119,33 +119,20 @@
   }
 
   /**
-   * Status is a dot plus its name. Only the two states a reader has to act on
-   * — blocked and done — are loud enough to earn a badge; badging all six made
-   * "Backlog" shout as loudly as "Blocked".
+   * One computed summary per row, built once per render rather than per cell.
+   *
+   * The table's Status column, its two-line phone row and every board card
+   * read this, and so does the Overview — which is the point: the column used
+   * to print the stored phase, so a card whose plan was blocked could sit in
+   * the table reading "In progress" while the dashboard called it blocked.
    */
-  const DOT_CLASS = {
-    in_progress: "bg-accent",
-    review: "bg-accent",
-    ready: "bg-fg-muted",
-  };
-  function dotClass(phase) {
-    return DOT_CLASS[phase] ?? "bg-line-strong";
-  }
-  /**
-   * A source can report a state Nexus has no name for. Printing the raw token
-   * ("vendor_waiting") at a reader is worse than printing the source's own
-   * words, so an unfamiliar phase shows `native_status` when the source sent
-   * one. The status column used to carry both on two lines.
-   */
-  function statusText(work) {
-    const phase = work?.phase || "unknown";
-    if (PHASE_LABELS[phase]) return PHASE_LABELS[phase];
-    return String(work?.source?.native_status ?? "").trim() || label(phase);
-  }
-  function badgeTone(phase) {
-    if (phase === "blocked") return "warn";
-    if (phase === "done") return "ok";
-    return "";
+  let summaries = $derived(
+    new Map(
+      records.map((work) => [workKey(work), workSummaryModel(work, { now })]),
+    ),
+  );
+  function summaryOf(work) {
+    return summaries.get(workKey(work)) ?? workSummaryModel(work, { now });
   }
 
   function boardLabel(work) {
@@ -542,6 +529,7 @@
                 {#if !slot.placeholder}
                   <WorkCard
                     {work}
+                    summary={summaryOf(work)}
                     href={href(work)}
                     {now}
                     onprefetch={prefetch}
@@ -575,7 +563,9 @@
     >
       <WorkCard
         work={drag.work}
+        summary={summaryOf(drag.work)}
         href={href(drag.work)}
+        {now}
         boardTitle={multipleBoards ? boardLabel(drag.work) : ""}
         requested={Boolean(requested[drag.key] || requestedDecisions[drag.key])}
       />
@@ -620,7 +610,7 @@
           {#each tableRows as work (workKey(work))}
             {@const checked = lastChecked(work, now)}
             {@const read = workFreshness(work, now)}
-            {@const tone = badgeTone(work.phase)}
+            {@const summary = summaryOf(work)}
             <tr
               class="h-10 align-middle hover:bg-panel-hover"
               data-work-ref={work.ref}
@@ -640,17 +630,25 @@
                       .join(" — ")}
                   </p>
                 {/if}
+                <!-- Below 640px the Status column is gone, so the same
+                     summary rides on the row's second line. -->
                 <span class="work-row-meta text-micro text-fg-muted">
-                  <span class="min-w-0 flex-1 truncate"
-                    >{[multipleBoards ? boardLabel(work) : "", statusText(work)]
-                      .filter(Boolean)
-                      .join(" · ")}</span
-                  >
+                  {#if multipleBoards}
+                    <span class="min-w-0 truncate">{boardLabel(work)}</span>
+                  {/if}
+                  <WorkSummary
+                    {summary}
+                    density="row"
+                    title={work.title}
+                    {now}
+                  />
                   {#if read.key === "error"}
                     <SignalBadge tone="warn">{read.label}</SignalBadge>
                   {/if}
                   {#if checked.text}
-                    <span class="shrink-0 tabular-nums">{checked.text}</span>
+                    <span class="ml-auto shrink-0 tabular-nums"
+                      >{checked.text}</span
+                    >
                   {/if}
                 </span>
               </th>
@@ -661,26 +659,16 @@
                   >
                 </td>
               {/if}
-              <!-- A source can report a status of any length; capped and
-                 truncated so one verbose one cannot push Last checked off
-                 the right edge of the table for every row. -->
+              <!--
+                The computed status, not the stored phase. Core says what
+                state the card is actually in and, when the board disagrees,
+                what it is filed as — "Blocked · marked in progress" — which
+                is the disagreement this column used to hide. Capped so one
+                verbose source status cannot push Last checked off the right
+                edge of the table for every row.
+              -->
               <td class="max-w-48 px-3 py-1.5">
-                {#if tone}
-                  <SignalBadge {tone}>{statusText(work)}</SignalBadge>
-                {:else}
-                  <span
-                    class="flex items-center gap-1.5 text-fg-muted"
-                    title={statusText(work)}
-                  >
-                    <span
-                      class="h-1.5 w-1.5 shrink-0 rounded-full {dotClass(
-                        work.phase,
-                      )}"
-                      aria-hidden="true"
-                    ></span>
-                    <span class="truncate">{statusText(work)}</span>
-                  </span>
-                {/if}
+                <WorkSummary {summary} density="row" title={work.title} {now} />
               </td>
               <td class="max-w-40 overflow-hidden px-3 py-1.5">
                 {#if work.owner}

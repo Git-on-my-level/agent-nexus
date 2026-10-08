@@ -3,19 +3,19 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { initiativeTileModel } from "../../src/lib/initiativeTiles.js";
 import { indexResolvedRefs, refChipModel } from "../../src/lib/refResolve.js";
+import { workSummaryCard } from "../../src/lib/workSummaryCards.js";
 import { sinceYouLastLookedStrip } from "../../src/lib/sinceYouLastLooked.js";
 
 /**
  * The initiative UI reads three backend shapes, and these are the serialized
  * ones core checks its own production output against. Importing them directly
  * is the point: a fixture invented here could drift from the wire without
- * anything failing, which is exactly how the tile model ended up expecting a
+ * anything failing, which is exactly how the card model ended up expecting a
  * string `health` when core had always sent `{status, reason}`.
  *
  * `contracts/fixtures/initiative-overview/README.md` says UI tests should do
- * this rather than invent tile fields.
+ * this rather than invent card fields.
  */
 const contractFixture = (name) =>
   JSON.parse(
@@ -35,53 +35,54 @@ const refs = contractFixture("refs.json");
 const digest = contractFixture("digest.json");
 
 const NOW = Date.parse("2026-10-04T14:00:00Z");
-const model = (overrides = {}) =>
-  initiativeTileModel(
+const card = (overrides = {}) =>
+  workSummaryCard(
     { ...tile, ...overrides },
     { now: NOW, href: (ref) => `/w/${encodeURIComponent(ref)}` },
   );
+const model = (overrides = {}) => card(overrides).summary;
 
-describe("the Overview tile reads core's serialized initiative", () => {
-  it("takes health from the object core sends, not a string", () => {
-    expect(tile.health).toEqual({
-      status: "on_track",
+describe("the Overview card reads core's serialized initiative", () => {
+  it("renders the computed status core sends, with core's own label", () => {
+    expect(tile.work_summary.status).toEqual({
       state: "on_track",
+      label: "In progress",
       reason: "Open steps are progressing.",
+      since: "2026-10-04T12:00:00Z",
     });
-    expect(model().health).toMatchObject({
+    expect(model().status).toMatchObject({
       state: "on_track",
-      label: "On track",
-      short: "On track",
+      label: "In progress",
+      reason: "Open steps are progressing.",
       tone: "ok",
-      reason: "Open steps are progressing.",
-      known: true,
     });
   });
 
-  it("prefers the computed plan_health field once core sends it", () => {
-    // The parallel core change adds `plan_health {state, reason, since}`; the
-    // tile has to read it in preference to the older status field.
-    expect(
-      model({
-        plan_health: {
-          state: "at_risk",
-          reason: "two steps slipped",
-          since: "2026-10-02T00:00:00Z",
-        },
-      }).health,
-    ).toMatchObject({
-      state: "at_risk",
-      reason: "two steps slipped",
-      since: "2026-10-02T00:00:00Z",
+  it("shows the stored phase core says disagrees with the computed status", () => {
+    // The fixture's card sits in `backlog` with an untouched plan that core
+    // computes as on track, so the card has to say both: "In progress ·
+    // marked backlog" is exactly the disagreement this change exists to show.
+    expect(tile.work_summary.set_status).toEqual({
+      state: "backlog",
+      label: "Backlog",
+    });
+    expect(model().setStatus).toMatchObject({
+      state: "backlog",
+      label: "Backlog",
     });
   });
 
-  it("takes progress from the plan, matching the summary core also sends", () => {
-    expect(model().progress).toEqual(tile.plan_state.progress);
-    expect(model().progress).toEqual(tile.progress);
+  it("takes progress and its unit from the computed summary", () => {
+    expect(model().progress).toMatchObject({
+      done: tile.work_summary.progress.done,
+      total: tile.work_summary.progress.total,
+      unit: "steps",
+      count: "1/2",
+    });
   });
 
-  it("takes the shape from the geometry", () => {
+  it("takes the shape from the geometry the same row carries", () => {
+    expect(card()).toMatchObject({});
     expect(model()).toMatchObject({ shape: "chain", shapeLabel: "Timeline" });
   });
 
@@ -103,18 +104,16 @@ describe("the Overview tile reads core's serialized initiative", () => {
   it("reports what the bounded geometry omitted", () => {
     expect(model().overflow).toBe(tile.geometry.collapsed_nodes);
     expect(
-      model({
-        geometry: { ...tile.geometry, collapsed_nodes: 9 },
-      }).overflow,
+      model({ geometry: { ...tile.geometry, collapsed_nodes: 9 } }).overflow,
     ).toBe(9);
   });
 
-  it("reads the step lists from the digest core serializes", () => {
+  it("reads the step lists from the digest core computes", () => {
     // The fixture's plan has one inline-done step and one unstarted step, so
     // core sends an empty completed list: a step marked done inline has no
-    // completion time to date it from. The tile must say nothing about it
+    // completion time to date it from. The card must say nothing about it
     // rather than invent one.
-    expect(tile.plan_step_digest.window_hours).toBe(168);
+    expect(tile.work_summary.steps.window_hours).toBe(168);
     expect(model().steps.groups.map((list) => list.key)).toEqual(["next"]);
     expect(model().steps.next.items[0]).toMatchObject({
       id: "build",
@@ -124,39 +123,63 @@ describe("the Overview tile reads core's serialized initiative", () => {
     expect(model().steps.completed.items).toEqual([]);
   });
 
-  it("names the next step from the id core sends", () => {
-    expect(model().next).toMatchObject({ id: "build", title: "Build" });
+  it("names the next step core computed", () => {
+    expect(model().next).toMatchObject({
+      id: "build",
+      title: "Build",
+      more: 0,
+    });
   });
 
-  it("prefers the computed next_step, with the title core gives it", () => {
-    expect(
-      model({
-        next_step: { id: "build", title: "Build the thing", ref: "card:build" },
-      }).next,
-    ).toMatchObject({ title: "Build the thing", ref: "card:build" });
+  it("takes the age badge's instant from the computed movement", () => {
+    expect(model().lastMovementAt).toBe(tile.work_summary.last_movement_at);
   });
 
-  it("prefers the plan's last movement for the age badge", () => {
-    expect(model().movedAt).toBe(tile.plan_state.last_movement_at);
+  it("always marks a scoped reader's asks as sampled", () => {
+    // Core sends `attention_truncated` to every scoped reader whether or not
+    // asks were omitted, so a private candidate count cannot be inferred from
+    // its absence. The client must carry that marker rather than drop it.
+    expect(tile.work_summary.attention_truncated).toBe(true);
+    expect(model().attentionTruncated).toBe(true);
+    expect(model().attention).toBeNull();
   });
 
   it("degrades for a planless initiative without inventing a plan", () => {
-    // Core sends null plan_state and geometry, and a health reason from the
-    // native phase; the tile still has to render.
+    // Core sends no progress, next or steps, and a no_plan status.
     const planless = model({
       plan_state: null,
       geometry: null,
-      next_step: null,
-      plan_health: { state: "no_plan" },
+      work_summary: {
+        status: {
+          state: "no_plan",
+          label: "No plan",
+          reason: "Card has no plan steps.",
+        },
+      },
     });
-    expect(planless.hasPlan).toBe(false);
     expect(planless.segments).toEqual([]);
     expect(planless.shape).toBe("");
     expect(planless.next).toBeNull();
-    expect(planless.health.state).toBe("no_plan");
-    expect(planless.group).toBe("no_plan");
-    // The summary progress core preserves is still shown.
-    expect(planless.progress).toEqual(tile.progress);
+    expect(planless.progress).toBeNull();
+    expect(planless.status.state).toBe("no_plan");
+    expect(
+      card({
+        plan_state: null,
+        geometry: null,
+        work_summary: { status: { state: "no_plan", label: "No plan" } },
+      }).group,
+    ).toBe("no_plan");
+  });
+
+  it("still reads the legacy fields from a core that computes no summary", () => {
+    // Dropping `work_summary` is what an older core looks like on the wire.
+    const legacyRow = { ...tile };
+    delete legacyRow.work_summary;
+    const legacy = workSummaryCard(legacyRow, { now: NOW }).summary;
+    expect(legacy.status.state).toBe("on_track");
+    expect(legacy.progress).toMatchObject({ done: 1, total: 2 });
+    expect(legacy.next).toMatchObject({ id: "build", title: "Build" });
+    expect(legacy.steps.groups.map((list) => list.key)).toEqual(["next"]);
   });
 });
 

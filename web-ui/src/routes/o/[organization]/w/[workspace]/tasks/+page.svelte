@@ -61,7 +61,12 @@
     now = $state(Date.now());
   let requested = $state({});
   let boards = $state([]);
-  let boardsLoaded = false;
+  // Two flags, because they answer different questions: `boardsRequested`
+  // stops a second request, and `boardsLoaded` says the roles are actually in
+  // hand — the Initiatives filter cannot narrow before they are, and "no
+  // matching tasks" while they are in flight would be a lie.
+  let boardsRequested = false;
+  let boardsLoaded = $state(false);
   let decisions = $state([]);
   let decisionsLoaded = $state(false);
   let shortcutsOpen = $state(false);
@@ -157,6 +162,10 @@
   // `human=1` is not a core filter. Overview links here for tasks whose
   // next actor is a person; this page reads enough rows to apply it locally.
   let humanOnly = $derived($page.url.searchParams.get("human") === "1");
+  // Neither is a core filter: both narrow the rows this page read.
+  let initiativesOnly = $derived(
+    $page.url.searchParams.get("initiatives") === "1",
+  );
   let humanIds = $derived(humanActorIdSet($actorRegistry, $principalRegistry));
   let peopleIncomplete = $derived(
     $actorDirectoryIncomplete || $principalDirectoryIncomplete,
@@ -164,10 +173,19 @@
   // One row per source item: a GitHub issue read through two connections is
   // one task to the operator. The folded rows stay reachable from the kept
   // task's page.
+  /** The Initiatives filter is on but the board roles have not landed yet. */
+  let initiativesPending = $derived(initiativesOnly && !boardsLoaded);
   let visible = $derived.by(() => {
-    const rows = dedupeWorkBySource(records).records;
-    if (!humanOnly) return rows;
-    return rows.filter((work) => isHumanNextActor(work, humanIds));
+    if (initiativesPending) return [];
+    let rows = dedupeWorkBySource(records).records;
+    if (humanOnly)
+      rows = rows.filter((work) => isHumanNextActor(work, humanIds));
+    if (initiativesOnly) {
+      rows = rows.filter((work) =>
+        initiativeBoardRefs.has(String(work?.board_ref ?? "").trim()),
+      );
+    }
+    return rows;
   });
   // Done and Cancelled fold under a toggle unless the operator asked for them.
   let showClosed = $derived(
@@ -175,7 +193,7 @@
       CLOSED_PHASES.has(filters.phase),
   );
   let activeFilters = $derived(
-    humanOnly || Object.values(filters).some(Boolean),
+    humanOnly || initiativesOnly || Object.values(filters).some(Boolean),
   );
   let blockedCount = $derived(
     visible.filter((work) => work.phase === "blocked").length,
@@ -197,6 +215,33 @@
       return read.key === "error" && !read.kept;
     }).length,
   );
+  /*
+   * The boards Overview draws its initiatives from.
+   *
+   * `role=initiatives` is core's own selection — the same board role the
+   * Overview reads — so the filter reuses it rather than inventing a second
+   * rule for what an initiative is. It filters the rows this page already
+   * holds; `work.list` has no board parameter, so like the person filter it
+   * reads the full page cap and narrows locally.
+   */
+  let initiativeBoardRefs = $derived(
+    new Set(
+      boards
+        .map((entry) => entry?.board ?? entry)
+        .filter(
+          (board) =>
+            String(board?.role ?? "")
+              .trim()
+              .toLowerCase() === "initiatives",
+        )
+        .flatMap((board) =>
+          [board.ref, board.handle, board.id].map((value) =>
+            String(value ?? "").trim(),
+          ),
+        )
+        .filter(Boolean),
+    ),
+  );
   let boardTitles = $derived(
     Object.fromEntries(
       boards
@@ -211,7 +256,9 @@
   let filterCount = $derived(
     ["source", "phase", "freshness", "project_ref", "owner"].filter(
       (key) => filters[key],
-    ).length + (humanOnly ? 1 : 0),
+    ).length +
+      (humanOnly ? 1 : 0) +
+      (initiativesOnly ? 1 : 0),
   );
   let actions = $state([]);
   let requestedDecisions = $derived(
@@ -221,11 +268,20 @@
   $effect(() => {
     search = filters.q;
   });
+  /*
+   * The Initiatives filter needs the board roles whether or not the list read
+   * succeeded; without this a failing list left the filter waiting forever on
+   * a request nothing was going to make.
+   */
+  $effect(() => {
+    if (initiativesOnly && !boardsRequested) void loadBoards();
+  });
   $effect(() => {
     const key = filterKey;
-    // Re-read when the person filter is toggled; it is not part of `filters`.
-    const person = humanOnly;
-    if (loaded) void load(false, JSON.parse(key), { scanAll: person });
+    // Re-read when a local filter is toggled; neither is part of `filters`,
+    // and both need more than the first page to narrow honestly.
+    const local = humanOnly || initiativesOnly;
+    if (loaded) void load(false, JSON.parse(key), { scanAll: local });
   });
 
   function queryHref(changes) {
@@ -275,7 +331,7 @@
         nextCursor = cursor && rows.length >= WORK_ROW_CAP ? cursor : "";
         error = "";
         if (!decisionsLoaded) void loadDecisions();
-        if (!boardsLoaded) void loadBoards();
+        if (!boardsRequested) void loadBoards();
         return;
       }
       const result = await coreClient.listWork({
@@ -298,7 +354,7 @@
       nextCursor = result.next_cursor || "";
       error = "";
       if (!decisionsLoaded) void loadDecisions();
-      if (!boardsLoaded) void loadBoards();
+      if (!boardsRequested) void loadBoards();
     } catch (err) {
       if (id === requestId) {
         error = errorMessage(err);
@@ -309,12 +365,15 @@
     }
   }
   async function loadBoards() {
-    boardsLoaded = true;
+    boardsRequested = true;
     try {
       const result = await coreClient.listBoards({ limit: 200 });
       boards = Array.isArray(result?.boards) ? result.boards : [];
     } catch {
-      // Fail soft: the Board column falls back to the board_ref slug.
+      // Fail soft: the Board column falls back to the board_ref slug, and
+      // the Initiatives filter says it found no initiatives board.
+    } finally {
+      boardsLoaded = true;
     }
   }
   const DECISION_PREFETCH_PAGES = 25;
@@ -790,6 +849,15 @@
     </nav>
   </div>
 
+  {#if initiativesOnly && !initiativesPending}
+    <p class="text-micro text-fg-muted" data-task-initiatives-filter>
+      {initiativeBoardRefs.size
+        ? "Showing tasks on the initiatives board."
+        : "No board has the initiatives role, so there is nothing to show. Set it on a board to use this filter."}
+      <a class="ui-prose-link" href={queryHref({ initiatives: "" })}>Clear</a>
+    </p>
+  {/if}
+
   {#if humanOnly}
     <p class="text-micro text-fg-muted" data-task-human-filter>
       Showing tasks whose next actor is a person.
@@ -839,6 +907,26 @@
           <option value="">All statuses</option>
           {#each PHASES as phase}<option value={phase}>{label(phase)}</option
             >{/each}
+        </select>
+      </div>
+      <!--
+        Initiatives, as a filter rather than a second view. Overview selects
+        its cards by the `initiatives` board role; this reuses that selection,
+        so "the initiatives" means one thing in the product.
+      -->
+      <div class="flex items-end gap-2">
+        <label class="ui-label mb-0" for="task-filter-initiatives"
+          >Initiatives</label
+        >
+        <select
+          id="task-filter-initiatives"
+          class="ui-input w-auto"
+          value={initiativesOnly ? "1" : ""}
+          onchange={(event) =>
+            setFilter("initiatives", event.currentTarget.value)}
+        >
+          <option value="">All tasks</option>
+          <option value="1">Initiatives only</option>
         </select>
       </div>
       <div class="flex items-end gap-2">
@@ -998,7 +1086,7 @@
     {/if}
   {/if}
 
-  {#if loading && !records.length}
+  {#if (loading && !records.length) || initiativesPending}
     <p class="py-10 text-center text-meta text-fg-muted" role="status">
       Loading tasks…
     </p>

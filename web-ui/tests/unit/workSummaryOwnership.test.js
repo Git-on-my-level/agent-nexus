@@ -1,0 +1,182 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+import { globSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+
+/**
+ * One renderer for a card's state, enforced.
+ *
+ * Before `WorkSummary`, six surfaces each decided for themselves what a
+ * card's status was: the Tasks table read `work.phase`, the board card read it
+ * again and badged `Blocked` on its own, the Overview read `plan_health`, a
+ * report panel read `plan_state.health`, and the task header printed the
+ * stored phase. The same task could read In progress in the table, Blocked on
+ * the board and At risk on the dashboard, all at once and all from one
+ * response.
+ *
+ * So the rule is structural rather than a convention: the computed summary is
+ * read in exactly one module, and status is rendered by exactly one component.
+ * Every exception below is a phase naming an *action* or a *column* — "Move to
+ * In review" is a button, not a claim about what state a card is in.
+ */
+
+const root = fileURLToPath(new URL("../../src", import.meta.url));
+const relative = (file) => file.slice(root.length - 3).replaceAll("\\", "/");
+
+/**
+ * The file's code, without its comments.
+ *
+ * A comment naming a field is documentation, which is what these rules are
+ * for in the first place; matching it would make explaining the rule a
+ * violation of it.
+ */
+const read = (file) =>
+  readFileSync(file, "utf8")
+    .replaceAll(/\/\*[\s\S]*?\*\//g, " ")
+    .replaceAll(/<!--[\s\S]*?-->/g, " ")
+    .replaceAll(/^\s*\/\/.*$/gm, " ");
+
+const sources = globSync("**/*.{svelte,js}", { cwd: root, withFileTypes: true })
+  .filter((entry) => entry.isFile())
+  .map((entry) => `${entry.parentPath ?? entry.path}/${entry.name}`)
+  .filter((file) => !file.includes("/generated/"))
+  .sort();
+
+describe("the computed summary is read in one module", () => {
+  /**
+   * The fields core computes a card's presentation from. A page that reads one
+   * of these directly is deciding for itself what the card's state is.
+   */
+  const COMPUTED_FIELDS = [
+    "work_summary",
+    "plan_health",
+    "plan_step_digest",
+    "status_mismatch",
+  ];
+
+  const ALLOWED = new Set([
+    // The one reader: it normalizes every spelling into one model.
+    "src/lib/workSummary.js",
+    // Its back-compatibility reader for a core that computes no summary.
+    "src/lib/planHealth.js",
+  ]);
+
+  it.each(COMPUTED_FIELDS)("only one module reads %s", (field) => {
+    const pattern = new RegExp(`\\b${field}\\b`);
+    const offenders = sources
+      .filter((file) => pattern.test(read(file)))
+      .map(relative)
+      .filter((file) => !ALLOWED.has(file));
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe("card status is rendered in one component", () => {
+  /**
+   * What rendering a card's status looks like in markup. Each pattern is
+   * something that put a state or a phase on screen before `WorkSummary`.
+   */
+  const RENDERS_STATUS = [
+    { what: "a phase label", re: /\b(phaseLabel|PHASE_LABELS)\b/ },
+    {
+      what: "a phase through label()",
+      re: /\blabel\([^)]*\b(phase|column_key)\b/,
+    },
+    { what: "a health badge attribute", re: /data-health=/ },
+    { what: "a raw phase", re: /\{[^}]*\.(phase|column_key)\b[^}]*\}/ },
+    /*
+     * The per-page formatters this change deleted, by name. The rules above
+     * are the general net; this one makes a straight revert fail rather than
+     * quietly reintroducing a second vocabulary under a local helper. A plan
+     * step's own status is a different thing and keeps its own name.
+     */
+    {
+      what: "a local card-status formatter",
+      re: /\b(statusText|phaseText|healthLabel|badgeTone|dotClass)\s*\(/,
+    },
+  ];
+
+  /**
+   * Phases that name an action or a column, not a card's state. Each entry
+   * says why, because an entry without a reason is how a second renderer gets
+   * back in.
+   */
+  const ALLOWED = new Map([
+    ["src/lib/components/WorkSummary.svelte", "is the one renderer"],
+    [
+      "src/lib/components/CommandPalette.svelte",
+      "names the target of a move command: a button, not a claim about state",
+    ],
+    [
+      "src/routes/o/[organization]/w/[workspace]/tasks/+page.svelte",
+      "lists phases as filter options and labels the move confirmations",
+    ],
+    [
+      "src/lib/components/pm/WorkViews.svelte",
+      "labels the board's phase columns, which group cards rather than state them",
+    ],
+    [
+      "src/lib/components/pm/DecisionPanel.svelte",
+      "names the phase a proposal would write, and the read-back of that write",
+    ],
+    [
+      "src/routes/o/[organization]/w/[workspace]/overview/+page.svelte",
+      "labels the columns of a counts-by-phase matrix, not any one card",
+    ],
+  ]);
+
+  const offenders = sources
+    .filter((file) => file.endsWith(".svelte"))
+    .flatMap((file) => {
+      const body = read(file);
+      const name = relative(file);
+      if (ALLOWED.has(name)) return [];
+      return RENDERS_STATUS.filter(({ re }) => re.test(body)).map(
+        ({ what }) => `${name} renders ${what}`,
+      );
+    });
+
+  it("no component outside WorkSummary renders a card's status or phase", () => {
+    expect(offenders).toEqual([]);
+  });
+
+  it("would catch each presenter this change deleted", () => {
+    /*
+     * A guard whose patterns match nothing is a guard that passes forever.
+     * These are the exact lines the migrated surfaces used to carry, so a
+     * regression that reintroduces one of them fails here.
+     */
+    const regressions = [
+      // The Tasks table's own status column.
+      "<SignalBadge {tone}>{statusText(work)}</SignalBadge>",
+      // The board card deciding Blocked for itself.
+      '{#if work.phase === "blocked"}',
+      // The task header printing the stored phase.
+      ">{label(work.phase)}</SignalBadge",
+      // The Overview tile's health pill.
+      "<span data-health={tile.health.state}></span>",
+      // A report panel's own phase line.
+      '{String(item.phase ?? "").replaceAll("_", " ")}',
+      // The ⌘K result subtitle.
+      "subtitle: [phaseLabel(work.phase)].join()",
+    ];
+    for (const line of regressions) {
+      expect(
+        RENDERS_STATUS.some(({ re }) => re.test(line)),
+        `no rule catches: ${line}`,
+      ).toBe(true);
+    }
+  });
+
+  it("every allowed exception is still a real file", () => {
+    // An allowlist entry for a file that no longer exists is an exemption
+    // nobody is checking.
+    const present = new Set(sources.map(relative));
+    for (const name of ALLOWED.keys()) {
+      expect(present.has(name), `${name} is allowlisted but missing`).toBe(
+        true,
+      );
+    }
+  });
+});

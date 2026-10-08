@@ -1,12 +1,12 @@
 <script>
-  import FreshnessBadge from "$lib/components/FreshnessBadge.svelte";
   import SignalBadge from "./SignalBadge.svelte";
+  import WorkSummary from "$lib/components/WorkSummary.svelte";
   import {
     isNexusOwned,
     sourceLabel,
     workFreshness,
   } from "$lib/pm/presentation.js";
-  import { freshnessKindForPhase } from "$lib/freshness.js";
+  import { workSummaryModel } from "$lib/workSummary.js";
   import {
     actorDisplayLabel,
     actorRegistry,
@@ -14,26 +14,38 @@
   } from "$lib/actorSession";
 
   /**
-   * One board card: a title, one status line, one meta line. Everything else a
-   * card used to carry — a blocker count, a separate progress line — repeated
-   * what the column and the row already said.
+   * One board card: a title, the shared summary, and the two signals that are
+   * about the card rather than its state — a failing source read and a request
+   * waiting in the Inbox.
    *
-   * The title owns its full width. The status badges and the freshness badge
-   * share the line under it, so a long task name is never squeezed by a pill
-   * it is not competing with for attention.
+   * Status, the stored phase when it disagrees with it, progress and the age
+   * all come from `WorkSummary`, which is also what the Tasks table and the
+   * Overview render. The card used to decide "Blocked" for itself from
+   * `work.phase`, so the same task could read Blocked here, In progress in the
+   * table and At risk on the dashboard.
+   *
+   * The title owns its full width. The badges share the line under it, so a
+   * long task name is never squeezed by a pill it is not competing with for
+   * attention.
    */
   let {
     work,
+    /**
+     * A `workSummaryModel` result. The parent builds one per row so a board
+     * of fifty cards models each once; a card given none models its own.
+     */
+    summary = null,
     href,
     boardTitle = "",
     requested = false,
     requestedHref = "",
-    /** Reference time, injectable so the freshness badge is testable. */
+    /** Reference time, injectable so the age badge is testable. */
     now = Date.now(),
-    /** Primes the card cache and prefetches on hover; see `workPrefetch`. */
+    /** Primes the card cache and prefetches on hover; see `workCache.js`. */
     onprefetch = null,
   } = $props();
 
+  let model = $derived(summary ?? workSummaryModel(work, { now }));
   let ownerLabel = $derived(
     actorDisplayLabel(work?.owner, $actorRegistry, $principalRegistry),
   );
@@ -42,18 +54,9 @@
   let placeLabel = $derived(
     boardTitle || (isNexusOwned(work) ? "" : sourceLabel(work?.source)),
   );
-  let meta = $derived([ownerLabel, placeLabel].filter(Boolean).join(" · "));
-  // When it last moved, judged against the cadence its phase implies: a card
-  // in progress is expected daily, one in a backlog every fortnight.
-  let movedAt = $derived(
-    work?.freshness?.last_observed_at || work?.updated_at || "",
-  );
-  // Phase and lifecycle both end a card: done, cancelled, archived, trashed.
-  let freshnessKind = $derived(freshnessKindForPhase(work?.phase, work?.state));
-  let blocked = $derived(work?.phase === "blocked");
-  // A read that is failing is worth a badge: the reader cannot tell from
-  // the column that this card's evidence is going stale.
-  let readError = $derived(workFreshness(work));
+  // A read that is failing is worth a badge: the reader cannot tell from the
+  // column that this card's evidence is going stale.
+  let readError = $derived(workFreshness(work, now));
   let critical = $derived(
     ["critical", "urgent", "p0"].includes(
       String(work?.priority ?? "")
@@ -62,7 +65,7 @@
     ),
   );
   let showSignals = $derived(
-    blocked || critical || readError.key === "error" || requested,
+    critical || readError.key === "error" || requested,
   );
 </script>
 
@@ -82,15 +85,17 @@
     >
       {work.title || "Untitled task"}
     </h3>
-    {#if meta}
-      <p class="mt-1 truncate text-micro text-fg-muted">{meta}</p>
-    {/if}
   </a>
-  {#if showSignals || movedAt}
-    <div class="flex flex-wrap items-center gap-1.5 px-3 pb-2.5">
-      {#if blocked}
-        <SignalBadge tone="warn">Blocked</SignalBadge>
-      {/if}
+  <div class="flex flex-wrap items-center gap-1.5 px-3 pb-2.5">
+    <WorkSummary
+      summary={model}
+      density="row"
+      title={work.title}
+      {ownerLabel}
+      {placeLabel}
+      {now}
+    />
+    {#if showSignals}
       {#if readError.key === "error"}
         <SignalBadge tone="warn">{readError.label}</SignalBadge>
       {/if}
@@ -112,18 +117,8 @@
           <SignalBadge tone="warn">Requested</SignalBadge>
         {/if}
       {/if}
-      {#if movedAt}
-        <FreshnessBadge
-          class="ml-auto"
-          at={movedAt}
-          kind={freshnessKind}
-          row={work}
-          verb="updated"
-          {now}
-        />
-      {/if}
-    </div>
-  {/if}
+    {/if}
+  </div>
 </div>
 
 <style>

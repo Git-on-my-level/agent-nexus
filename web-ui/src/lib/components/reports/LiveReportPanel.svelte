@@ -1,6 +1,8 @@
 <script>
   import LiveInitiativeDetails from "./LiveInitiativeDetails.svelte";
   import UnavailableValue from "$lib/components/UnavailableValue.svelte";
+  import WorkSummary from "$lib/components/WorkSummary.svelte";
+  import { workSummaryModel } from "$lib/workSummary.js";
   import { inboxItemMailboxId } from "$lib/inboxUtils.js";
   import { LIVE_REPORT_TYPES, formatLiveAge } from "$lib/liveReports.js";
   import { formatAge } from "$lib/ageBadge.js";
@@ -88,9 +90,10 @@
     {:else}<p class="muted">No asks in this view.</p>{/if}
   {:else if panel.type === "live-cards"}
     <!--
-      Cards matching a filter, not initiatives: no plan, no health, no
-      progress bar. One line of what it is and where it stands, so a reader
-      scanning ten rows is reading ten facts rather than ten summaries.
+      Cards matching a filter. One line of what it is and where it stands,
+      through the one summary renderer: this panel used to print the stored
+      phase, so the same card could read "in progress" here and Blocked on
+      the Overview.
     -->
     {#if items.length}
       <ul class="rows">
@@ -101,12 +104,13 @@
                 >{item.title}</a
               >{:else}<strong class="row-title">{item.title}</strong>{/if}
             <p class="muted">
-              {[
-                String(item.phase ?? "").replaceAll("_", " "),
-                item.priority ? item.priority.toUpperCase() : "",
-              ]
-                .filter(Boolean)
-                .join(" · ")}
+              <WorkSummary
+                summary={workSummaryModel(item, { now })}
+                density="row"
+                title={item.title}
+                {now}
+              />
+              {#if item.priority}<span>{item.priority.toUpperCase()}</span>{/if}
               <!-- `date(null)` is the epoch, which is finite; the age is the
                    honest test, and it is empty for a row with no instant. -->
               {#if formatAge(item.updated_at, now)}<span

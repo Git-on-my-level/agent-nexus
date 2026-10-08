@@ -57,7 +57,7 @@
   } from "$lib/inboxUtils";
   import { MAX_KEYED_PROPOSALS } from "$lib/inboxProposalChoice.js";
   import { formatShortcut } from "$lib/keyboardHints.js";
-  import { label as phaseLabel, sentenceCase } from "$lib/pm/presentation.js";
+  import { sentenceCase } from "$lib/pm/presentation.js";
   import { buildPrimitiveRefRoutes, resolveRefLink } from "$lib/refLinkModel";
   import { searchActors } from "$lib/searchHelpers";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
@@ -441,10 +441,7 @@
           : "",
       };
     }
-    return {
-      title: subject.title,
-      status: subject.phase ? phaseLabel(subject.phase) : "",
-    };
+    return { title: subject.title, summary: subject.summary };
   });
   let contextRelation = $derived(
     itemKind(item) === "review"

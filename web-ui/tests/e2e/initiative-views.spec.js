@@ -140,13 +140,21 @@ test("initiative page leads with the plan, and the card body follows", async ({
   const planSection = page.locator("[data-initiative-plan]");
   await expect(planSection).toBeVisible({ timeout: 60_000 });
 
-  // Status line and health lead the page. Scoped to the health badge, since
-  // "Blocked" also labels the blocked steps inside the diagram. The page has
-  // room for words, so the badge is the pill form: a glyph and the label.
-  const planHealth = planSection.locator("[data-health]").first();
+  /*
+   * The page header carries the state, once: the shared `WorkSummary` at
+   * header density, which the Tasks table and the board also render. The
+   * Plan section no longer badges it a second time — one summary per page.
+   * Scoped to the summary, since "Blocked" also labels the blocked steps
+   * inside the diagram.
+   */
+  const summary = page.locator('[data-work-summary="header"]');
+  const planHealth = summary.locator("[data-health]").first();
   await expect(planHealth).toHaveAttribute("data-health", "blocked");
   await expect(planHealth).toContainText("Blocked");
-  await expect(page.locator("[data-plan-progress]")).toHaveText("1/4 steps");
+  await expect(summary.locator("[data-summary-progress]")).toHaveText(
+    "1/4 steps",
+  );
+  await expect(planSection.locator("[data-health]")).toHaveCount(0);
 
   // The plan's shape picks the view: this one branches, so it is a tree.
   await expect(page.locator("[data-plan-shape='dag']")).toBeVisible();
@@ -478,7 +486,7 @@ for (const viewport of [
      * the sentence is ours (`data-tooltip`), not the browser's slow `title`.
      */
     const status = tiles.first().locator("[data-tile-status]");
-    const title = tiles.first().locator(".tile-title");
+    const title = tiles.first().locator(".card-title");
     expect((await status.boundingBox()).y).toBeGreaterThan(
       (await title.boundingBox()).y,
     );
@@ -507,8 +515,14 @@ for (const viewport of [
 
     /*
      * The stale initiative has not moved in eight days, nearly three times
-     * its expectation: the freshness badge is red and says so, and the
-     * separate "Stale" pill is gone because it said the same thing twice.
+     * its expectation: the freshness badge is red and says so.
+     *
+     * The "Stale" badge stays beside it. A tile used to drop it here, on the
+     * grounds that the red age said the same thing — but the same renderer
+     * now fills a table column headed Status, and a column that renders empty
+     * for exactly the rows a reader is looking for is worse than a badge that
+     * agrees with the age next to it. The two are not redundant anyway: the
+     * age carries the expectation it is late against, which "Stale" does not.
      */
     const staleTile = tiles.nth(1);
     const staleAge = staleTile.locator("[data-freshness]");
@@ -518,7 +532,10 @@ for (const viewport of [
       "data-tooltip",
       /expected every 3d$/,
     );
-    await expect(staleTile.locator("[data-health]")).toHaveCount(0);
+    await expect(staleTile.locator("[data-health]")).toHaveAttribute(
+      "data-health",
+      "stale",
+    );
 
     await expect(tiles.nth(1)).toContainText("Agent ergonomics");
     await expect(tiles.nth(1)).toContainText("Lanes");
@@ -533,7 +550,7 @@ for (const viewport of [
      * named, and the graph itself is a click away on the initiative page.
      */
     for (const index of [0, 1, 2]) {
-      const bar = tiles.nth(index).locator(".tile-bar");
+      const bar = tiles.nth(index).locator(".summary__bar");
       await expect(bar).toHaveCount(1);
       // A single row: every segment shares one offsetTop.
       const rows = await bar.evaluate(
@@ -551,7 +568,7 @@ for (const viewport of [
       expect(height).toBe(8);
     }
     // Release B's plan has four steps, so the bar has four segments.
-    await expect(tiles.first().locator(".tile-bar .seg")).toHaveCount(4);
+    await expect(tiles.first().locator(".summary__bar .seg")).toHaveCount(4);
 
     // What changed since this viewer last looked, from the server digest.
     const strip = page.locator("[data-since-you-last-looked]");

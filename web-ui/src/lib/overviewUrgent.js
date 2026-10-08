@@ -189,18 +189,18 @@ export function refsCoveredByAsks(rows = []) {
 }
 
 /**
- * Critical initiatives, worst first, from tiles already built for the grid.
+ * Critical initiatives, worst first, from cards already built for the grid.
  *
- * The band reuses the tiles rather than re-deriving health: one vocabulary,
- * one sort, and a tile and its band row cannot say different things.
+ * The band reuses the cards rather than re-deriving status: one vocabulary,
+ * one sort, and a card and its band row cannot say different things.
  *
- * @param {object[]} tiles `initiativeTiles` output
+ * @param {object[]} cards `workSummaryCards` output
  * @param {Set<string>} [covered] refs an ask row already stands for
  */
-export function criticalInitiatives(tiles = [], covered = new Set()) {
-  return (Array.isArray(tiles) ? tiles : [])
-    .filter((tile) => CRITICAL_STATES.includes(tile?.health?.state))
-    .filter((tile) => !covered.has(asText(tile?.ref)))
+export function criticalInitiatives(cards = [], covered = new Set()) {
+  return (Array.isArray(cards) ? cards : [])
+    .filter((card) => CRITICAL_STATES.includes(card?.summary?.status?.state))
+    .filter((card) => !covered.has(asText(card?.ref)))
     .sort((a, b) => a.rank - b.rank);
 }
 
@@ -209,7 +209,7 @@ export function criticalInitiatives(tiles = [], covered = new Set()) {
  *
  * @param {{
  *   asks?: Array<{status: string, rows?: object[], count?: number, truncated?: boolean, workspace?: object, message?: string}>,
- *   tiles?: object[],
+ *   cards?: object[],
  *   notCovered?: Array<{slug?: string, label?: string}>,
  *   askLimit?: number,
  *   initiativeLimit?: number,
@@ -217,7 +217,7 @@ export function criticalInitiatives(tiles = [], covered = new Set()) {
  */
 export function urgentBandModel({
   asks = [],
-  tiles = [],
+  cards = [],
   notCovered = [],
   askLimit = 6,
   initiativeLimit = 6,
@@ -235,7 +235,7 @@ export function urgentBandModel({
     ok.some((read) => read.truncated) || askRows.length > askLimit;
 
   // An initiative already named by an ask row is not listed again below it.
-  const critical = criticalInitiatives(tiles, refsCoveredByAsks(askRows));
+  const critical = criticalInitiatives(cards, refsCoveredByAsks(askRows));
 
   return {
     asks: {

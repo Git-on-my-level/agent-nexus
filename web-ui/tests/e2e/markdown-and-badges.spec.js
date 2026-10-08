@@ -259,8 +259,19 @@ test("badges stay compact and show their full text at once on hover", async ({
   test.setTimeout(90_000);
   await openCard(page);
 
-  // Health: a pill with the label, never truncated.
-  const health = page.locator("[data-initiative-plan] [data-health]").first();
+  /*
+   * Status: a pill with the label, never truncated. It lives in the page
+   * header now, through the one `WorkSummary` every surface renders — the
+   * Plan section used to badge it separately.
+   *
+   * This mock sends the legacy `plan_state.health` and no `work_summary`, so
+   * the badge reads the back-compatibility label "On track". A core that
+   * computes the summary sends its own wording ("In progress") and the client
+   * shows that verbatim; the state is what the colour and the sort read
+   * either way.
+   */
+  const summary = page.locator('[data-work-summary="header"]');
+  const health = summary.locator("[data-health]").first();
   await expect(health).toHaveAttribute("data-health", "on_track");
   await expect(health).toContainText("On track");
   const clipped = await health.evaluate(
@@ -273,7 +284,7 @@ test("badges stay compact and show their full text at once on hover", async ({
    * initiative is expected to move every three days. The verb, the exact
    * instant and the expectation are in the tooltip.
    */
-  const age = page.locator("[data-initiative-plan] [data-freshness]").first();
+  const age = summary.locator("[data-freshness]").first();
   await expect(age).toHaveText("8h");
   await expect(age).toHaveClass(/ui-badge--ok/);
   await expect(age).toHaveAttribute(

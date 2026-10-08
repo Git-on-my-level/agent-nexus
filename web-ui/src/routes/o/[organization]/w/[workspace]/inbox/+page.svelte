@@ -369,7 +369,7 @@
           : "",
       };
     }
-    return { title: subject.title, status: subject.phaseLabel };
+    return { title: subject.title, summary: subject.summary };
   });
   let contextRelation = $derived.by(() => {
     const kind = String(selected?.category ?? "").toLowerCase();
@@ -1668,6 +1668,7 @@
                 <InboxContextStrip
                   relation={contextRelation}
                   subject={contextSubject}
+                  {now}
                   subjectHref={subjectHref(selected.subject)}
                   note={context?.note || null}
                   noteAuthor={context?.note
