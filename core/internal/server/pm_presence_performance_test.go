@@ -51,7 +51,11 @@ func TestPerformancePMPresence(t *testing.T) {
 			if sample == 6 {
 				invalidatePerformanceCache(t, env)
 			}
-			req := httptest.NewRequest("GET", "/pm/presence", nil)
+			path := "/pm/presence"
+			if sample%2 == 0 {
+				path += "/"
+			}
+			req := httptest.NewRequest("GET", path, nil)
 			req.Header.Set("Authorization", "Bearer "+p.AccessToken)
 			w := httptest.NewRecorder()
 			capture.Start()

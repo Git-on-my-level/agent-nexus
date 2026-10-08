@@ -31,15 +31,15 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeAuthenticationError(w, r)
 		return
 	}
+	path := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/pm"), "/"), "/")
 	permission := "pm.access"
-	if r.Method == http.MethodGet && r.URL.Path == "/pm/presence" {
+	if r.Method == http.MethodGet && len(path) == 1 && path[0] == "presence" {
 		permission = "pm.presence"
 	}
 	if err = h.Service.authorize(r.Context(), p, permission, ""); err != nil {
 		writeError(w, err)
 		return
 	}
-	path := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/pm"), "/"), "/")
 	ctx := r.Context()
 	s := h.Service
 	var out any
