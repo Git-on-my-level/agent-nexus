@@ -13,7 +13,12 @@
  */
 
 import { markdownExcerpt } from "./markdown.js";
-import { hasHint, workProse, workSummaryModel } from "./workSummary.js";
+import {
+  hasHint,
+  needsAttention,
+  workProse,
+  workSummaryModel,
+} from "./workSummary.js";
 
 const asText = (value) => String(value ?? "").trim();
 
@@ -41,6 +46,13 @@ export const CARD_GROUPS = Object.freeze({
 export function cardGroup(summary) {
   const key = asText(summary?.status?.state);
   if (key === "done" || key === "cancelled") return CARD_GROUPS.DONE;
+  /*
+   * A card in trouble is never folded away, plan or no plan. Core applies a
+   * risk state over the phase-derived one precisely because the card needs
+   * looking at, and "nobody wrote it a plan" is not a reason to hide a
+   * blocked one — it is arguably a reason it is blocked.
+   */
+  if (needsAttention(summary)) return CARD_GROUPS.ATTENTION;
   if (hasHint(summary, "no_plan") || !key) return CARD_GROUPS.NO_PLAN;
   return CARD_GROUPS.ATTENTION;
 }

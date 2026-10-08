@@ -27,10 +27,17 @@
  * how many workspaces it could not read rather than pretending it saw them.
  */
 
+import { ATTENTION_STATES, needsAttention } from "./workSummary.js";
+
 const asText = (value) => String(value ?? "").trim();
 
 /** Initiative health states that belong in the urgent band. */
-export const CRITICAL_STATES = Object.freeze(["blocked", "at_risk", "stale"]);
+/**
+ * Re-exported, not redefined: the band and the Overview's "No plan" fold ask
+ * the same question — is this card in trouble — and a second copy of the
+ * answer is how they would come to disagree.
+ */
+export { ATTENTION_STATES as CRITICAL_STATES };
 
 /** One workspace's open asks, read at most this deep. */
 export const OPEN_ASKS_LIMIT = 20;
@@ -199,7 +206,7 @@ export function refsCoveredByAsks(rows = []) {
  */
 export function criticalInitiatives(cards = [], covered = new Set()) {
   return (Array.isArray(cards) ? cards : [])
-    .filter((card) => CRITICAL_STATES.includes(card?.summary?.status?.state))
+    .filter((card) => needsAttention(card?.summary))
     .filter((card) => !covered.has(asText(card?.ref)))
     .sort((a, b) => a.rank - b.rank);
 }

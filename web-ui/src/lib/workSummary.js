@@ -131,6 +131,22 @@ export function statusChip(state, count) {
 const CLOSED_STATES = new Set(["done", "cancelled"]);
 
 /**
+ * States that mean something is wrong, as opposed to in hand.
+ *
+ * These are the risk overrides: core computes a card's state from its phase
+ * and replaces it with one of these only when the card is blocked, overdue or
+ * has gone quiet. They are what the urgent band lists, and what keeps a card
+ * out of a collapsed fold — one definition, so the band and the fold cannot
+ * disagree about which cards a reader must not miss.
+ */
+export const ATTENTION_STATES = Object.freeze(["blocked", "at_risk", "stale"]);
+
+/** Is this card asking for someone's attention? */
+export function needsAttention(summary) {
+  return ATTENTION_STATES.includes(asText(summary?.status?.state));
+}
+
+/**
  * What a hint is called.
  *
  * Hints are not statuses. `no_plan` used to be one, and a planless card then

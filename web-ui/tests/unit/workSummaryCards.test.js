@@ -105,6 +105,24 @@ describe("cardGroup", () => {
   it("still folds a core that reports no plan as the status", () => {
     expect(cardGroup(summary("no_plan"))).toBe("no_plan");
   });
+
+  it("never folds a card that is in trouble, plan or no plan", () => {
+    /*
+     * Core replaces the phase-derived state with a risk state precisely
+     * because the card needs looking at. "Nobody wrote it a plan" is not a
+     * reason to collapse a blocked one out of the dashboard — it is
+     * arguably a reason it is blocked.
+     */
+    for (const state of ["blocked", "at_risk", "stale"]) {
+      expect(cardGroup(summary(state, ["no_plan"])), state).toBe("attention");
+    }
+    // The quiet ones still fold.
+    for (const state of ["in_progress", "ready", "backlog", "review"]) {
+      expect(cardGroup(summary(state, ["no_plan"])), state).toBe("no_plan");
+    }
+    // And finished still wins over everything.
+    expect(cardGroup(summary("done", ["no_plan"]))).toBe("done");
+  });
 });
 
 describe("workSummaryCards", () => {
