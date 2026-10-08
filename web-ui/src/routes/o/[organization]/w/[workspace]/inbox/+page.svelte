@@ -59,6 +59,7 @@
   import { claimInboxCount, publishInboxCount } from "$lib/inboxCount.js";
   import {
     applyResponseOverlay,
+    captureInboxResponseBinding,
     defaultNotifyMode,
     flushInboxResponse,
     dismissInboxResponseFailure,
@@ -826,6 +827,9 @@
       // whose draft is not the one Undo has to hand back.
       draft = reply,
       from = mailbox,
+      // Where it is going, captured with it: the reader can switch workspace
+      // inside the flash, and the answer still belongs to this one.
+      binding = undefined,
     } = {},
   ) {
     const item = row?.item;
@@ -839,6 +843,7 @@
     queueInboxResponse({
       itemId: item.id,
       item,
+      binding,
       request,
       message: acknowledge
         ? "Acknowledged"
@@ -1548,6 +1553,12 @@
                       id: selected.id,
                       draft: reply,
                       mailbox,
+                      /*
+                       * Where this answer is going, decided now: the sender is
+                       * bound to this workspace and this reader, and the flash
+                       * is long enough for the reader to switch away from both.
+                       */
+                      binding: captureInboxResponseBinding(),
                     })}
                     onSend={(text, outcome, context) => {
                       /*
@@ -1565,6 +1576,7 @@
                           : "",
                         draft: context?.draft ?? reply,
                         from: context?.mailbox ?? mailbox,
+                        binding: context?.binding,
                       });
                     }}
                     onAcknowledge={selected.access

@@ -65,10 +65,20 @@ const client = vi.hoisted(() =>
   ),
 );
 const navigation = vi.hoisted(() => ({ goto: vi.fn(), guards: [] }));
+/** Where each captured sender was bound, newest last. */
+const capturedScopes = vi.hoisted(() => []);
 vi.mock("$app/stores", () => ({ page: { subscribe: state.subscribe } }));
 vi.mock("$lib/coreClient", () => ({
   coreClient: client,
-  captureInboxResponseSender: () => client.respondInboxItem.bind(client),
+  // The sender is bound to one workspace; record which, so a test can tell
+  // where an answer was actually sent.
+  captureInboxResponseSender: () => {
+    capturedScopes.push([
+      getStore(currentOrganizationSlug),
+      getStore(currentWorkspaceSlug),
+    ]);
+    return client.respondInboxItem.bind(client);
+  },
 }));
 vi.mock("$lib/authSession", () => ({
   initializeAuthSession: vi.fn().mockResolvedValue({ actor_id: "human" }),
@@ -99,7 +109,13 @@ vi.mock("$app/navigation", () => ({
 import WorkPage from "../../src/routes/o/[organization]/w/[workspace]/tasks/+page.svelte";
 import WorkDetail from "../../src/routes/o/[organization]/w/[workspace]/tasks/[workId]/+page.svelte";
 import PMPage from "../../src/routes/o/[organization]/w/[workspace]/pm/+page.svelte";
+import { get as getStore } from "svelte/store";
+import {
+  currentOrganizationSlug,
+  currentWorkspaceSlug,
+} from "../../src/lib/workspaceContext.js";
 import InboxPage from "../../src/routes/o/[organization]/w/[workspace]/inbox/+page.svelte";
+import { PROPOSAL_FLASH_MS } from "../../src/lib/inboxProposalChoice.js";
 import {
   flushInboxResponse,
   resetInboxResponseQueue,
@@ -145,6 +161,9 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   resetInboxResponseQueue();
+  capturedScopes.length = 0;
+  currentOrganizationSlug.set("");
+  currentWorkspaceSlug.set("");
 });
 
 describe("PM operator interactions", () => {
@@ -598,6 +617,49 @@ describe("PM operator interactions", () => {
     await flushInboxResponse();
     expect(client.respondInboxItem).not.toHaveBeenCalled();
     expect(screen.queryByText("Sent to Omar Reed")).toBeNull();
+  });
+  /*
+   * The pane's half of the same blocker as the item page: the sender is bound
+   * to one workspace, and a suggestion sends a moment after it is chosen. A
+   * reader who switches workspace inside that moment used to have their
+   * answer sent to the workspace they had just arrived in.
+   */
+  it("sends a suggestion to the workspace it was chosen in, not the one switched to", async () => {
+    state.route("/inbox");
+    currentOrganizationSlug.set("org-a");
+    currentWorkspaceSlug.set("workspace-a");
+    client.listInboxItems.mockImplementation(async ({ status }) => ({
+      items:
+        status === "open"
+          ? [
+              {
+                id: "inbox:ask-one",
+                kind: "ask",
+                title: "Pick the default path",
+                requester_label: "Omar Reed",
+                source_event_time: new Date(Date.now() - 60_000).toISOString(),
+                response_proposals: ["Combat first", "Hub first"],
+              },
+            ]
+          : [],
+    }));
+    client.respondInboxItem.mockResolvedValue({ event: { id: "e1" } });
+    const { container } = render(InboxPage);
+    await screen.findByRole("heading", { name: "Pick the default path" });
+
+    // Choose, then leave for another workspace before the flash ends.
+    await fireEvent.click(container.querySelector('[data-inbox-proposal="2"]'));
+    currentWorkspaceSlug.set("workspace-b");
+    await new Promise((resolve) =>
+      setTimeout(resolve, PROPOSAL_FLASH_MS + 100),
+    );
+    await flushInboxResponse();
+
+    expect(client.respondInboxItem).toHaveBeenCalledTimes(1);
+    const [itemId, request] = client.respondInboxItem.mock.calls[0];
+    expect(itemId).toBe("inbox:ask-one");
+    expect(request).toMatchObject({ response_text: "Hub first" });
+    expect(capturedScopes).toEqual([["org-a", "workspace-a"]]);
   });
   it("loads older PM turns without losing the latest reply", async () => {
     state.route("/pm?conversation=conversation-one");

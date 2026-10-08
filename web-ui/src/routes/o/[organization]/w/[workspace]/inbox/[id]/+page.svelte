@@ -34,6 +34,7 @@
   import { loadInboxContext } from "$lib/inboxContext.js";
   import { inboxItemIsReminder, inboxItemSubject } from "$lib/inboxMailbox.js";
   import {
+    captureInboxResponseBinding,
     defaultNotifyMode,
     dismissInboxResponseFailure,
     flushInboxResponse,
@@ -467,6 +468,13 @@
     return {
       itemId: String(item?.id ?? ""),
       item,
+      /*
+       * Where this answer is going, decided now. The sender is bound to this
+       * workspace and this reader; capturing it when the response is finally
+       * queued would aim a suggestion chosen here at whichever workspace the
+       * reader had switched to during the flash.
+       */
+      binding: captureInboxResponseBinding(),
       href: $page.url.pathname,
       draft: responseDraft,
       proposals: proposalStrings,
@@ -536,6 +544,7 @@
       // screen: the overlay files it under Handled, so it has to be the one
       // the reader chose on.
       item: sending.item,
+      binding: sending.binding,
       request,
       message: acknowledge
         ? "Acknowledged"

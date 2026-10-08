@@ -40,6 +40,8 @@ const coreClientMock = vi.hoisted(() => ({
   getInboxItem: vi.fn(),
   respondInboxItem: vi.fn(),
   createArtifactAttachment: vi.fn(),
+  /** Where each sender was bound, recorded when it is captured. */
+  capturedScopes: [],
 }));
 
 const searchActorsMock = vi.hoisted(() => vi.fn());
@@ -65,9 +67,17 @@ vi.mock("$app/stores", () => ({
 vi.mock("$lib/coreClient", () => ({
   coreClient: coreClientMock,
   // The response queue captures the sender when it enqueues, so the commit
-  // survives the navigation that follows.
-  captureInboxResponseSender: () =>
-    coreClientMock.respondInboxItem.bind(coreClientMock),
+  // survives the navigation that follows. The sender is bound to one
+  // workspace and reader: record which, so a test can tell where an answer
+  // was actually sent.
+  captureInboxResponseSender: () => {
+    coreClientMock.capturedScopes.push([
+      get(currentOrganizationSlug),
+      get(currentWorkspaceSlug),
+      get(authenticatedAgent)?.actor_id,
+    ]);
+    return coreClientMock.respondInboxItem.bind(coreClientMock);
+  },
 }));
 
 vi.mock("$lib/searchHelpers", () => ({
@@ -80,6 +90,11 @@ import {
   inboxResponseOverlay,
   resetInboxResponseQueue,
 } from "../../src/lib/inboxResponseQueue.js";
+import { authenticatedAgent } from "../../src/lib/authSession.js";
+import {
+  currentOrganizationSlug,
+  currentWorkspaceSlug,
+} from "../../src/lib/workspaceContext.js";
 import InboxDetailPage from "../../src/routes/o/[organization]/w/[workspace]/inbox/[id]/+page.svelte";
 
 function inboxItem(id, title, overrides = {}) {
@@ -114,6 +129,10 @@ afterEach(() => {
   resetInboxResponseQueue();
   vi.useRealTimers();
   vi.clearAllMocks();
+  coreClientMock.capturedScopes.length = 0;
+  currentOrganizationSlug.set("");
+  currentWorkspaceSlug.set("");
+  authenticatedAgent.set(null);
   localStorage.clear();
   pageStore.reset();
 });
@@ -325,6 +344,46 @@ describe("inbox detail route state", () => {
       outcome: "answered",
     });
     resolveSecond({ item: inboxItem("inbox-second", "Second item") });
+  });
+
+  /*
+   * The sender is bound to one workspace and one reader. Capturing it when the
+   * response is finally queued aimed a suggestion chosen here at whichever
+   * workspace the reader had switched to during the flash: one send, right
+   * item id, wrong workspace.
+   */
+  it("sends to the workspace the answer was written in, not the one switched to", async () => {
+    currentOrganizationSlug.set("org-a");
+    currentWorkspaceSlug.set("workspace-a");
+    authenticatedAgent.set({ agent_id: "human-a", actor_id: "actor-a" });
+    coreClientMock.getInboxItem.mockResolvedValue({
+      item: inboxItem("inbox-first", "First item", {
+        response_proposals: ["Ship it"],
+      }),
+    });
+    coreClientMock.respondInboxItem.mockResolvedValue({
+      event: { id: "evt-1" },
+    });
+
+    const { getByRole, findByRole } = render(InboxDetailPage);
+    await findByRole("heading", { name: "First item" });
+    await fireEvent.click(getByRole("button", { name: /Ship it/ }));
+
+    // Inside the flash: the reader switches workspace.
+    currentWorkspaceSlug.set("workspace-b");
+    await new Promise((resolve) =>
+      setTimeout(resolve, PROPOSAL_FLASH_MS + 100),
+    );
+    await flushInboxResponse();
+
+    expect(coreClientMock.respondInboxItem).toHaveBeenCalledTimes(1);
+    expect(coreClientMock.respondInboxItem.mock.calls[0][0]).toBe(
+      "inbox-first",
+    );
+    // One sender, bound where the reader answered.
+    expect(coreClientMock.capturedScopes).toEqual([
+      ["org-a", "workspace-a", "actor-a"],
+    ]);
   });
 
   it("leaves the item the reader moved to alone when the earlier answer lands", async () => {
