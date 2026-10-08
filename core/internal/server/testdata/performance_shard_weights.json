@@ -442,5 +442,17 @@
   {
     "key": "POST /secrets/{secret_id}/reveal",
     "milliseconds": 25359
+  },
+  {
+    "key": "GET /asks/{ask_id}",
+    "milliseconds": 1000
+  },
+  {
+    "key": "GET /stream/asks/{ask_id}",
+    "milliseconds": 1000
+  },
+  {
+    "key": "GET /stream/agent-wakeups",
+    "milliseconds": 1000
   }
 ]

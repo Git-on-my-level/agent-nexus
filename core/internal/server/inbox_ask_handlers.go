@@ -349,7 +349,8 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 	}
 
 	response := map[string]any{
-		"event": responseStored,
+		"event":        responseStored,
+		"task_outcome": storedResponse["task_outcome"],
 		"notify": map[string]any{
 			"requested":       notifyRequested,
 			"queued":          notifyQueued,

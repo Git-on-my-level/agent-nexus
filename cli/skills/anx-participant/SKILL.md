@@ -5,7 +5,7 @@ description: Keep substantive Agent Nexus work visible with explicit task refs, 
 
 # ANX participant
 
-Skill contract: anx.participant.v14. Installation does not prove that a session loaded this version.
+Skill contract: anx.participant.v15. Installation does not prove that a session loaded this version.
 
 Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence.
 
@@ -25,7 +25,7 @@ Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence
 2. Preserve sequence and identical payload on retries. Increment only for a new observation. Sessions can participate in several tasks. Always report against the explicit task ref; participation does not update legacy current-card selection.
 3. Post meaningful progress with `anx cards message card:<slug> --body "What changed, evidence, uncertainty, and next step"`. Report facts with provenance, distinguish claims from verification, and avoid unchanged updates or raw chat copies.
 4. Report blockers on that same task. If one answer gates work, use `anx ask "Question" --subject-ref card:<slug> --recommend "Preferred answer"`, then `anx await <ask-id>`. To wait for a debounced answer batch, use `anx await --answers`; inspect replies with `anx inbox list --status answered` or `anx orient`. Withdraw a superseded open ask with `anx ask withdraw <event:ask-id> --reason "<short reason>"`.
-5. Hermes, Claude Code, and Codex harnesses consume the same durable workspace-local agent notification. On wake, read `anx inbox list --unread` or `anx orient`, then mark each processed answer with `anx inbox read event:<ask-id>`. Answer read state is per response and works before wake delivery; use `anx notifications read --wakeup-id <id>` to mark the wake notification separately. Exit 8 is timeout; exit 9 is rejected. Preserve human approval gates.
+5. Hermes, Claude Code, and Codex harnesses consume the same durable workspace-local agent notification. On wake, read `anx inbox list --unread` or `anx orient`, then mark each processed answer with `anx inbox read event:<ask-id>`. Answer read state is per response and works before wake delivery; use `anx notifications read --wakeup-id <id>` to mark the wake notification separately. Exit 8 is timeout; exit 9 is rejected; 10 needs context; 11 withdrawn; 12 expired. A needs-context response returns the next action to the owner/requester; publish a clarified ask with `--supersedes event:<prior-ask-id>`. Preserve human approval gates.
 6. Verify acceptance criteria before reporting completion. Only for an authorized Nexus-native task, `anx work start card:<slug>` assigns and moves work, and `anx work done card:<slug> --evidence <url|event:ref|artifact:ref>` completes it. Source-owned completion needs its authorized source workflow. A finished run or closed session never completes a task.
 
 ## Keep the workspace executive-readable
@@ -83,3 +83,11 @@ timestamp, or duration such as `7d` relative to `authored_at`). Validate before
 publishing. Status-like authored panels warn with a live alternative; expired
 explicit deadlines are rejected on writes. Legacy panels default to seven days,
 and pinned dashboard review reminders remain scoped to the author.
+
+## Decision asks and answer delivery
+
+New asks, reviews, and escalations belong to a card. Prefer an explicit `--subject-ref card:<slug>`; otherwise the CLI uses the current card or creates a ready card on the configured default board. Answering records the decision and next actor atomically. Only a matching sole ask blocker moves a blocked task to ready. Only an explicit resolved outcome can complete a native card; source-owned state keeps its source authority.
+
+Use `anx ask --help` for the authoring structure: Decision, two to five sentences of self-contained context, two or three options with consequences and a recommendation, and Evidence. Name internal artifacts with typed refs and external evidence with a label plus URL. A named PR, document, or code file needs its matching resolvable reference; code evidence uses a commit-pinned line URL. Do not paste code or send a pointer-only request. `--force --reason` records a deliberate lint override.
+
+`anx await <ask-id>` subscribes to a single indexed ask stream and reports its terminal outcome. For unattended local continuation, register `--on-answer '<local command>'` (or `ANX_RESUME_CMD`) and run `anx bridge run` on that enrolled host and agent. The command remains in a mode-0600 local registry; the bridge accepts only that local command and sends the outcome through stdin. Native agentctl runs with a real `AGENTCTL_EXECUTION_ID` register their continuation automatically. Resume callbacks are at-least-once across a host crash: make them idempotent. Inspect `anx help bridge run` and the ask-delivery documentation before configuring a service.

@@ -2,22 +2,32 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
 	"fmt"
+	"net/url"
+	"os"
 	"strings"
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/output"
 )
 
 const humanAttentionRequestedEventType = "human_attention_requested"
 
 func humanUsageText() string {
 	return strings.TrimSpace(`Ask an operator: anx ask|review|escalate "<title>" --recommend "<answer>" [--alt "<other>"] [--subject-ref <ref>] [--dry-run].
-Subject defaults to the current card. Use --from-file <path.md> for a Markdown request with frontmatter.
+Subject defaults to the current card; without one, creates a ready card on ANX_ASK_DEFAULT_BOARD or the workspace default. Use --from-file <path.md> for a Markdown request with frontmatter.
 The recommended response and each alternative are trimmed, empty entries are dropped, and exact duplicates are removed. Supply 1–6 distinct responses; each may contain at most 240 Unicode characters.
 Use --dry-run to validate and preview the request without sending it.
 Withdraw your still-open ask with anx ask withdraw <event:ask-id> --reason "<short reason>".
-The result contains an ask id and a runnable anx await next action. For multiple answers use anx await --answers; inspect and mark batches with anx inbox list --status answered and anx inbox read <ask-id>.`)
+Delivery: --on-answer <command> stores a host-only 0600 resume command; ANX_RESUME_CMD or AGENTCTL_EXECUTION_ID can register it automatically. Run anx bridge run on that host. --webhook <https-url> creates a signed subscription. --evidence <label=url> adds external evidence; --supersedes event:<old-ask> links a re-ask.
+The result contains an ask id and a runnable anx await next action. For multiple answers use anx await --answers; inspect and mark batches with anx inbox list --status answered and anx inbox read <ask-id>.
+
+Authoring template (--from-file); use --force --reason only to override lint with an audit reason:
+`) + "\n" + askAuthoringTemplate
 }
 
 func rejectHumanFromFileFlagConflicts(
@@ -65,23 +75,26 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 
 	fs := newSilentFlagSet(kind)
 	var (
-		threadIDFlag            trackedString
-		subjectRefFlag          trackedString
-		bodyFlag                trackedString
-		bodyFileFlag            trackedString
-		titleFlag               trackedString
-		requestIDFlag           trackedString
-		requesterActorIDFlag    trackedString
-		requesterAgentIDFlag    trackedString
-		requesterLabelFlag      trackedString
-		coverageHintFlag        trackedString
-		severityFlag            trackedString
-		actorIDFlag             trackedString
-		refFlags                trackedStrings
-		fromFileFlag            trackedString
-		recommendedResponseFlag trackedString
-		proposalFlags           trackedStrings
-		dryRunFlag              trackedBool
+		threadIDFlag                                          trackedString
+		subjectRefFlag                                        trackedString
+		bodyFlag                                              trackedString
+		bodyFileFlag                                          trackedString
+		titleFlag                                             trackedString
+		requestIDFlag                                         trackedString
+		requesterActorIDFlag                                  trackedString
+		requesterAgentIDFlag                                  trackedString
+		requesterLabelFlag                                    trackedString
+		coverageHintFlag                                      trackedString
+		severityFlag                                          trackedString
+		actorIDFlag                                           trackedString
+		refFlags                                              trackedStrings
+		fromFileFlag                                          trackedString
+		recommendedResponseFlag                               trackedString
+		proposalFlags                                         trackedStrings
+		dryRunFlag                                            trackedBool
+		forceFlag                                             trackedBool
+		reasonFlag, supersedesFlag, onAnswerFlag, webhookFlag trackedString
+		evidenceFlags                                         trackedStrings
 	)
 	fs.Var(&threadIDFlag, "thread-id", "Backing thread id")
 	fs.Var(&subjectRefFlag, "subject-ref", "Subject typed ref")
@@ -99,6 +112,12 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	fs.Var(&fromFileFlag, "from-file", "Markdown file with YAML frontmatter for the human attention request")
 	fs.Var(&recommendedResponseFlag, "recommend", "First (recommended) response proposal for operators")
 	fs.Var(&proposalFlags, "alt", "Additional response proposal (repeatable)")
+	fs.Var(&forceFlag, "force", "Override authoring lint with --reason")
+	fs.Var(&reasonFlag, "reason", "Recorded authoring override reason")
+	fs.Var(&supersedesFlag, "supersedes", "Previous ask event ref")
+	fs.Var(&evidenceFlags, "evidence", "Label=URL evidence (repeatable)")
+	fs.Var(&onAnswerFlag, "on-answer", "Host-only command to resume on answer")
+	fs.Var(&webhookFlag, "webhook", "HTTPS answer subscription URL")
 	fs.Var(&dryRunFlag, "dry-run", "Validate and render the request without sending it")
 	if err := fs.Parse(flagArgs); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
@@ -192,12 +211,49 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 		}
 	}
 
+	links := append([]askEvidenceLink(nil), fmFromFile.Evidence...)
+	for _, raw := range evidenceFlags.values {
+		label, u, ok := strings.Cut(raw, "=")
+		if !ok {
+			return nil, errnorm.Usage("invalid_request", "--evidence requires Label=URL")
+		}
+		links = append(links, askEvidenceLink{Label: label, URL: u})
+	}
+	warnings, lintErr := lintAskAuthoring(body, relatedRefs, links)
+	if forceFlag.value && strings.TrimSpace(reasonFlag.value) == "" {
+		return nil, errnorm.Usage("invalid_request", "--force requires --reason")
+	}
+	if lintErr != nil && !forceFlag.value {
+		return nil, errnorm.Usage("ask_authoring", lintErr.Error()+"; or use --force --reason <explanation>")
+	}
 	if subjectRef == "" {
 		var err error
 		subjectRef, err = a.currentCardRef(ctx, cfg)
 		if err != nil {
-			return nil, err
+			var typed *errnorm.Error
+			if !errors.As(err, &typed) || typed.Code != "no_current_task" {
+				return nil, err
+			}
+			if dryRunFlag.value {
+				return &commandResult{Data: map[string]any{"auto_create_subject": true, "title": title, "default_board": a.Getenv("ANX_ASK_DEFAULT_BOARD"), "body": body}}, nil
+			}
+			input := map[string]any{"title": title, "summary": body, "phase": "ready", "owner": requesterActorID}
+			if board := strings.TrimSpace(a.Getenv("ANX_ASK_DEFAULT_BOARD")); board != "" {
+				input["board_ref"] = board
+			}
+			created, e := a.invokeRawJSON(ctx, cfg, "ask subject", "POST", "/work", input)
+			if e != nil {
+				return nil, e
+			}
+			work := asMap(commandResultBody(created)["work"])
+			subjectRef = firstNonEmpty(anyString(work["ref"]), anyString(work["card_ref"]))
+			if subjectRef == "" {
+				return nil, errnorm.Local("invalid_response", "created subject has no card ref")
+			}
 		}
+	}
+	if !strings.HasPrefix(subjectRef, "card:") {
+		return nil, errnorm.Usage("invalid_request", "asks require a card subject; put documents or topics in --ref evidence")
 	}
 	if err := validateTypedRefShape(subjectRef); err != nil {
 		return nil, err
@@ -232,6 +288,18 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 		"requester_agent_id": requesterAgentID,
 		"requester_label":    requesterLabel,
 		"response_proposals": responseProposals,
+	}
+	payload["evidence"] = links
+	payload["authoring_warnings"] = warnings
+	if forceFlag.value {
+		payload["authoring_override_reason"] = strings.TrimSpace(reasonFlag.value)
+	}
+	if supersedes := firstNonEmpty(supersedesFlag.value, fmFromFile.Supersedes); supersedes != "" {
+		if !strings.HasPrefix(supersedes, "event:") {
+			return nil, errnorm.Usage("invalid_request", "--supersedes requires event:<ask-id>")
+		}
+		payload["supersedes"] = supersedes
+		refs = uniqueStringsInOrder(append(refs, supersedes))
 	}
 	if body != "" {
 		payload["body"] = body
@@ -289,13 +357,58 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	if dryRunFlag.set && dryRunFlag.value {
 		return dryRunResult(kind, "events.create", nil, nil, bodyMap), nil
 	}
+	// Allocate the local registry key before publishing the ask. The command
+	// never enters event JSON or a request to the server.
+	random := make([]byte, 16)
+	if _, err := rand.Read(random); err != nil {
+		return nil, err
+	}
+	localAskID := "ev_" + hex.EncodeToString(random)
+	command := a.resumeCommand(onAnswerFlag.value, localAskID)
+	registryPath := ""
+	var registration askResumeRegistration
+	if command != "" {
+		dir, err := a.askRegistryDir(cfg)
+		if err != nil {
+			return nil, err
+		}
+		cwd, err := os.Getwd()
+		if err != nil {
+			return nil, err
+		}
+		registryPath = askRegistryPath(dir, "event:"+localAskID)
+		registration = askResumeRegistration{AskID: "event:" + localAskID, BaseURL: cfg.BaseURL, ActorID: cfg.ActorID, Command: command, Dir: cwd, ThreadID: threadID, State: "pending"}
+	}
+	asMap(bodyMap["event"])["id"] = localAskID
 	result, err := a.invokeTypedJSON(ctx, cfg, kind, "events.create", nil, nil, bodyMap)
 	if err != nil {
 		return nil, err
 	}
 	event := asMap(asMap(commandResultBody(result))["event"])
 	if id := strings.TrimSpace(anyString(event["id"])); id != "" {
+		if command != "" {
+			registration.AskID = "event:" + id
+			registration.AskRef = anyString(event["ref"])
+			if err = writeAskRegistration(registryPath, registration); err != nil {
+				return nil, errnorm.WithDetails(errnorm.Local("registration_failed", "ask created; could not save local resume registration"), map[string]any{"ask_id": "event:" + id})
+			}
+			_, e := a.invokeRawJSON(ctx, cfg, "ask subscribe", "POST", "/asks/"+url.PathEscape(id)+"/subscriptions", map[string]any{"kind": "bridge", "label": "host resume"})
+			if e != nil {
+				return nil, errnorm.WithDetails(errnorm.Local("subscription_failed", "ask was created but bridge subscription failed"), map[string]any{"ask_id": "event:" + id})
+			}
+		}
 		asMap(result.Data)["body"] = map[string]any{"ask_id": "event:" + id, "subject_ref": subjectRef, "kind": kind, "event": event}
+	}
+	if webhookFlag.value != "" {
+		id := anyString(event["id"])
+		sub, e := a.invokeRawJSON(ctx, cfg, "ask webhook", "POST", "/asks/"+url.PathEscape(id)+"/subscriptions", map[string]any{"kind": "webhook", "label": "answer webhook", "url": webhookFlag.value})
+		if e != nil {
+			return nil, e
+		}
+		asMap(asMap(result.Data)["body"])["webhook"] = commandResultBody(sub)
+	}
+	for _, warning := range warnings {
+		result.Warnings = append(result.Warnings, output.Warning{Code: "ask_authoring", Message: warning})
 	}
 	return result, nil
 }

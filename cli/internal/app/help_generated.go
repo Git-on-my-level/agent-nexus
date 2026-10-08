@@ -1191,8 +1191,11 @@ func helpTopicTextRaw(topic string) (string, bool) {
 	if topic == "orient" {
 		return "anx orient [--stale-hours N]: bounded personal snapshot (read_only)\n", true
 	}
+	if topic == "bridge run" {
+		return "anx bridge run [--max-attempts 5] [--command-timeout 30m]: consume host-signed answer wakes and execute locally registered commands. See docs/ask-delivery.md.\n", true
+	}
 	if topic == "await" {
-		return "anx await <ask-id|card-ref> [--until answered|state=<phase>] [--timeout <dur>]: wait on events (read_only)\n  anx await --answers [--timeout <dur>]: wait for a debounced batch of answers to your asks (read_only)\n", true
+		return "anx await <ask-id|card-ref> [--until answered|state=<phase>] [--timeout <dur>]: wait on a single indexed ask stream (records an await subscription); exits 0 answered, 9 rejected, 10 needs_context, 11 withdrawn, 12 expired, 8 timeout.\n  anx await --answers [--timeout <dur>]: wait for a debounced batch of answers to your asks (read_only)\n", true
 	}
 	if topic == "ask" || topic == "review" || topic == "escalate" {
 		return humanUsageText() + "\n", true

@@ -459,6 +459,10 @@ func TestProjectionMaintainerKeepsProjectionPendingForConcurrentWrites(t *testin
 	if err := maintainer.Step(context.Background(), time.Now().UTC()); err != nil {
 		t.Fatalf("initial step: %v", err)
 	}
+	card, err := baseStore.CreateWork(context.Background(), "actor-1", "", map[string]any{"title": "Concurrent decisions", "phase": "ready"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	store.threadID = threadID
 
 	// Non-human event dirties projections without synchronous human-attention RefreshThread on append,
@@ -493,7 +497,7 @@ func TestProjectionMaintainerKeepsProjectionPendingForConcurrentWrites(t *testin
 			"thread_id":"`+threadID+`",
 			"refs":["thread:`+threadID+`"],
 			"summary":"Need a first decision",
-			"payload":{"kind":"ask","title":"Need a first decision","subject_ref":"thread:`+threadID+`","requester_actor_id":"actor-1","response_proposals":["Approve"]},
+			"payload":{"kind":"ask","title":"Need a first decision","subject_ref":"`+anyString(card["ref"])+`","requester_actor_id":"actor-1","response_proposals":["Approve"]},
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusCreated).Body.Close()
@@ -513,7 +517,7 @@ func TestProjectionMaintainerKeepsProjectionPendingForConcurrentWrites(t *testin
 			"thread_id":"`+threadID+`",
 			"refs":["thread:`+threadID+`"],
 			"summary":"Need a second decision",
-			"payload":{"kind":"ask","title":"Need a second decision","subject_ref":"thread:`+threadID+`","requester_actor_id":"actor-1","response_proposals":["Approve"]},
+			"payload":{"kind":"ask","title":"Need a second decision","subject_ref":"`+anyString(card["ref"])+`","requester_actor_id":"actor-1","response_proposals":["Approve"]},
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusCreated).Body.Close()

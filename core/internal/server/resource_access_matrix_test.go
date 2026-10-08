@@ -136,6 +136,9 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 		t.Fatal(err)
 	}
 	seedReceiptStreamWakeup(t, store, primitives.AgentWakeup{WakeupID: "matrix-private-wakeup", ThreadID: threadID, TargetActorID: agent.ActorID, TargetHandle: agent.Username, Status: primitives.AgentWakeupStatusRequested, TriggerText: "Confidential wakeup", Refs: []string{"card:" + cardID}})
+	if _, err = store.AppendEvent(ctx, owner.ActorID, map[string]any{"id": "matrix-task-ask", "type": "human_attention_requested", "thread_id": threadID, "refs": []string{"card:" + cardID}, "payload": map[string]any{"subject_ref": "card:" + cardID, "requester_actor_id": agent.ActorID}}); err != nil {
+		t.Fatal(err)
+	}
 	askID := "matrix-private-ask"
 	item := streamPrivacyInboxItem(threadID, askID, "Confidential ask sentinel")
 	item.SourceCardID = cardID
@@ -192,7 +195,7 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 	if _, err = db.ExecContext(ctx, `INSERT INTO access_requests(id,principal_id,actor_id,username,grant_name,reason,created_at,request_event_id,inbox_item_id) VALUES('matrix-private-access',?,?,?,'auth-admin','Confidential access reason','now',?,'matrix-access-inbox')`, agent.AgentID, agent.ActorID, "matrix.agent", event["id"]); err != nil {
 		t.Fatal(err)
 	}
-	replacements := strings.NewReplacer("{request_id}", "matrix-private-access", "{host_id}", rosterAgent.Host.ID, "{run_id}", "matrix-private-run", "{agent_id}", agent.AgentID, "{conversation_id}", conversation.ID, "{decision_id}", "matrix-private-decision", "{action_id}", "matrix-private-action", "{turn_id}", "matrix-private-turn", "{document_id}", anyString(document["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{comment_id}", anyString(event["id"]), "{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{artifact_id}", anyString(artifact["id"]), "{event_id}", anyString(event["id"]), "{inbox_id}", askID, "{revision_id}", anyString(card.Card["head_revision_id"]))
+	replacements := strings.NewReplacer("{ask_id}", "matrix-task-ask", "{request_id}", "matrix-private-access", "{host_id}", rosterAgent.Host.ID, "{run_id}", "matrix-private-run", "{agent_id}", agent.AgentID, "{conversation_id}", conversation.ID, "{decision_id}", "matrix-private-decision", "{action_id}", "matrix-private-action", "{turn_id}", "matrix-private-turn", "{document_id}", anyString(document["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{comment_id}", anyString(event["id"]), "{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{artifact_id}", anyString(artifact["id"]), "{event_id}", anyString(event["id"]), "{inbox_id}", askID, "{revision_id}", anyString(card.Card["head_revision_id"]))
 	hidden := []string{boardID, cardID, threadID, boardThread, anyString(event["id"]), anyString(artifact["id"]), askID, conversation.ID, "matrix-private-decision", "matrix-private-action", "matrix-private-turn", "matrix-private-run", "Confidential"}
 	snapshot := func() string {
 		var v string
@@ -220,6 +223,12 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 					// Point routes use their actual private path selector, without
 					// unrelated private IDs injected into the request body.
 					payload := map[string]any{}
+					if p.Path == "/asks/{ask_id}/subscriptions" {
+						payload = map[string]any{"kind": "await", "label": "privacy"}
+					}
+					if p.Path == "/asks/{ask_id}/delivery" {
+						payload = map[string]any{"subscription_id": "private-sub", "state": "delivered", "attempts": 1}
+					}
 					if p.Method == "PATCH" && p.Path == "/hosts/{host_id}" {
 						payload["display_name"] = "Privacy roster fixture"
 					}
@@ -288,7 +297,14 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 					if err != nil && p.Policy != "stream" {
 						t.Fatal(err)
 					}
-					if p.Policy == "stream" && p.Path != "/stream/agent-notification-receipts" {
+					if p.Policy == "stream" && (p.Path == "/stream/asks/{ask_id}" || p.Path == "/stream/agent-wakeups") {
+						if p.Path == "/stream/asks/{ask_id}" && resp.StatusCode != 404 {
+							t.Errorf("private ask stream %d", resp.StatusCode)
+						}
+						if p.Path == "/stream/agent-wakeups" && resp.StatusCode != 200 && resp.StatusCode != 403 {
+							t.Errorf("actor stream %d", resp.StatusCode)
+						}
+					} else if p.Policy == "stream" && p.Path != "/stream/agent-notification-receipts" {
 						if resp.StatusCode != 200 || !strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
 							t.Errorf("stream failed: %d %s", resp.StatusCode, out)
 						}
@@ -366,6 +382,8 @@ func privacyWritePayload(t *testing.T, path, actor, board, card, thread, doc, ev
 	t.Helper()
 	refs := []string{"card:" + card}
 	switch path {
+	case "/agent-inbox/subscriptions":
+		return map[string]any{"kind": "webhook", "label": "card:" + card, "url": "https://example.com/answer"}
 	case "/auth/access-requests":
 		return map[string]any{"grant": "auth-admin", "reason": "card:" + card}
 	case "/boards":

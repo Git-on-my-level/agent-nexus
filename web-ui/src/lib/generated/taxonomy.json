@@ -105,7 +105,9 @@
         "acknowledged",
         "answered",
         "approved",
-        "rejected"
+        "needs_context",
+        "rejected",
+        "resolved"
       ]
     },
     "lifecycle_state": {

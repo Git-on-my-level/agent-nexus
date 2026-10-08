@@ -419,6 +419,9 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 	if targetIsCard && !strings.HasPrefix(condition, "state=") || !targetIsCard && condition != "answered" {
 		return nil, errnorm.Usage("invalid_request", "ask targets require answered; card targets require state=<phase>")
 	}
+	if !targetIsCard {
+		return a.runAwaitAsk(ctx, cfg, target, wait)
+	}
 	waitCtx, cancel := context.WithTimeout(ctx, wait)
 	defer cancel()
 	threadID := ""

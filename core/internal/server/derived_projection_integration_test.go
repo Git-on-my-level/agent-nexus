@@ -48,7 +48,11 @@ func TestRefreshDerivedTopicProjectionBasicFlow(t *testing.T) {
 		t.Fatalf("refreshDerivedTopicProjection: %v", err)
 	}
 
-	requestEvent := createHumanAttentionEvent(t, h.baseURL, threadID, "ask", "Need a decision", "card:decision-card-1", nil, map[string]any{
+	subject, err := h.primitiveStore.(*primitives.Store).CreateWork(context.Background(), "actor-1", "", map[string]any{"title": "Decision subject", "phase": "ready"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	requestEvent := createHumanAttentionEvent(t, h.baseURL, threadID, "ask", "Need a decision", anyString(subject["ref"]), nil, map[string]any{
 		"body":          "Need a decision",
 		"coverage_hint": "thin - 0 decisions",
 	})
@@ -97,7 +101,7 @@ func TestRefreshDerivedTopicProjectionBasicFlow(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected human inbox item from human_attention_requested event, got %#v", items)
 	}
-	if asString(item["subject_ref"]) != "card:decision-card-1" {
+	if asString(item["subject_ref"]) != anyString(subject["ref"]) {
 		t.Fatalf("unexpected inbox item subject_ref: %#v", item["subject_ref"])
 	}
 

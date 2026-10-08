@@ -1,0 +1,19 @@
+[Unit]
+Description=Agent Nexus answer bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=ANX_AS=worker
+ExecStart=/usr/local/bin/anx --workspace workspace-alias bridge run --max-attempts 5 --command-timeout 30m
+Restart=on-failure
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=15
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

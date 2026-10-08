@@ -1,6 +1,8 @@
 package server
 
 import (
+	"agent-nexus-core/internal/primitives"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -283,6 +285,19 @@ func createHumanAttentionEvent(t *testing.T, baseURL, threadID, kind, title, sub
 	if relatedRefs == nil {
 		relatedRefs = []string{}
 	}
+	// Successful new-ask fixtures use real cards; prior non-card subjects remain
+	// related evidence so the test still exercises their original relationships.
+	if !strings.HasPrefix(subjectRef, "card:") {
+		relatedRefs = append(relatedRefs, subjectRef)
+		resp := postJSONExpectStatus(t, baseURL+"/work", string(mustJSON(t, map[string]any{"actor_id": "actor-1", "title": title, "phase": "ready"})), http.StatusCreated)
+		var body map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		subjectRef = asString(body["work"].(map[string]any)["ref"])
+	}
+
 	payload := map[string]any{
 		"kind":               kind,
 		"title":              title,
@@ -463,4 +478,49 @@ func asString(value any) string {
 		return s
 	}
 	return fmt.Sprint(value)
+}
+
+func TestAskCanonicalSubjectSurvivesIDHandleCollision(t *testing.T) {
+	requireIntegrationTest(t)
+	h := newPrimitivesTestServerWithHumanPrincipal(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+	store := h.primitiveStore.(*primitives.Store)
+	ctx := context.Background()
+	first, err := store.CreateWork(ctx, "actor-1", "", map[string]any{"title": "Original subject", "phase": "ready"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := store.CreateWork(ctx, "actor-1", "", map[string]any{"title": "Colliding handle", "phase": "ready"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = h.workspace.DB().Exec(`UPDATE cards SET handle=anx_normalize_handle(?) WHERE id=?`, first["id"], second["id"]); err != nil {
+		t.Fatal(err)
+	}
+	card, err := store.GetBoardCard(ctx, "", asString(first["id"]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ask := createHumanAttentionEvent(t, h.baseURL, asString(card["thread_id"]), "ask", "Resolve original subject", asString(card["ref"]), nil, nil)
+	if ask["payload"].(map[string]any)["subject_ref"] != card["ref"] {
+		t.Fatalf("wrong canonical subject: %#v", ask)
+	}
+	var mapped string
+	if err = h.workspace.DB().QueryRow(`SELECT card_id FROM ask_subjects WHERE ask_id=?`, ask["id"]).Scan(&mapped); err != nil || mapped != first["id"] {
+		t.Fatalf("mapped to %s: %v", mapped, err)
+	}
+	item, ok := findInboxItem(getInboxItems(t, h.baseURL), func(item map[string]any) bool { return item["source_event_id"] == ask["id"] })
+	if !ok {
+		t.Fatal("ask missing")
+	}
+	postJSONExpectStatusWithHeaders(t, h.baseURL+"/inbox/"+url.PathEscape(asString(item["id"]))+"/respond", json.RawMessage(`{"actor_id":"human-purge-principal-actor","response_text":"Resolved","outcome":"resolved","notify_mode":"none"}`), map[string]string{"Authorization": "Bearer " + h.humanAccessToken}, http.StatusCreated).Body.Close()
+	for _, entry := range []struct {
+		id    any
+		phase string
+	}{{first["id"], "done"}, {second["id"], "ready"}} {
+		var phase string
+		if err = h.workspace.DB().QueryRow(`SELECT column_key FROM cards WHERE id=?`, entry.id).Scan(&phase); err != nil || phase != entry.phase {
+			t.Fatalf("card %s phase %s: %v", entry.id, phase, err)
+		}
+	}
 }

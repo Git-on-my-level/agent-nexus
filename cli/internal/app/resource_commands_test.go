@@ -505,7 +505,7 @@ func TestHumanAskCommandCreatesHumanAttentionRequestedEvent(t *testing.T) {
 		"--json", "--base-url", server.URL, "--as", "agent-a",
 		"ask", "Should we ship Friday?",
 		"--thread-id", "thread_1",
-		"--subject-ref", "topic:launch",
+		"--subject-ref", "card:launch",
 		"--ref", "artifact:receipt_1",
 		"--coverage-hint", "thin - 0 decisions",
 		"--recommend", "Ship Friday with a rollback plan ready.",
@@ -540,7 +540,7 @@ func TestHumanAskCommandCreatesHumanAttentionRequestedEvent(t *testing.T) {
 	for _, raw := range rawRefs {
 		refs = append(refs, strings.TrimSpace(anyStringValue(raw)))
 	}
-	if !hasString(refs, "thread:thread_1") || !hasString(refs, "topic:launch") || !hasString(refs, "artifact:receipt_1") {
+	if !hasString(refs, "thread:thread_1") || !hasString(refs, "card:launch") || !hasString(refs, "artifact:receipt_1") {
 		t.Fatalf("expected human refs to include thread/topic/artifact, got %#v", refs)
 	}
 
@@ -612,7 +612,7 @@ func TestAskWithdrawCommandRecordsDistinctWithdrawalEvent(t *testing.T) {
 	}
 }
 
-func TestHumanAskCommandResolvesThreadIDFromTopicSubjectRef(t *testing.T) {
+func TestHumanAskCommandResolvesThreadIDFromCardSubjectRef(t *testing.T) {
 	t.Parallel()
 
 	var captured map[string]any
@@ -621,13 +621,13 @@ func TestHumanAskCommandResolvesThreadIDFromTopicSubjectRef(t *testing.T) {
 		seen = append(seen, r.Method+" "+r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/topics/topic:launch":
-			_, _ = w.Write([]byte(`{"topic":{"id":"topic_internal_1","ref":"topic:launch","handle":"launch","thread_id":"thread_from_topic"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/cards/card:launch":
+			_, _ = w.Write([]byte(`{"card":{"id":"card_internal_1","ref":"card:launch","handle":"launch","thread_id":"thread_from_card"}}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/events":
 			if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
 				t.Fatalf("decode human ask body: %v", err)
 			}
-			_, _ = w.Write([]byte(`{"event":{"id":"event_ask_1","type":"human_attention_requested","thread_id":"thread_from_topic"}}`))
+			_, _ = w.Write([]byte(`{"event":{"id":"event_ask_1","type":"human_attention_requested","thread_id":"thread_from_card"}}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -640,24 +640,24 @@ func TestHumanAskCommandResolvesThreadIDFromTopicSubjectRef(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json", "--base-url", server.URL, "--as", "agent-a",
 		"ask", "Should we ship Friday?",
-		"--subject-ref", "topic:launch",
+		"--subject-ref", "card:launch",
 		"--recommend", "Ship Friday with a rollback plan ready.",
 	})
 	assertEnvelopeOK(t, raw)
 
-	if len(seen) != 2 || seen[0] != "GET /topics/topic:launch" || seen[1] != "POST /events" {
-		t.Fatalf("expected topic lookup before event create, got %#v", seen)
+	if len(seen) != 2 || seen[0] != "GET /cards/card:launch" || seen[1] != "POST /events" {
+		t.Fatalf("expected card lookup before event create, got %#v", seen)
 	}
 	event, _ := captured["event"].(map[string]any)
-	if got := strings.TrimSpace(anyStringValue(event["thread_id"])); got != "thread_from_topic" {
-		t.Fatalf("expected thread_from_topic from topic lookup, got %#v", captured)
+	if got := strings.TrimSpace(anyStringValue(event["thread_id"])); got != "thread_from_card" {
+		t.Fatalf("expected thread_from_card from card lookup, got %#v", captured)
 	}
 	rawRefs, _ := event["refs"].([]any)
 	refs := make([]string, 0, len(rawRefs))
 	for _, raw := range rawRefs {
 		refs = append(refs, strings.TrimSpace(anyStringValue(raw)))
 	}
-	if !hasString(refs, "thread:thread_from_topic") || !hasString(refs, "topic:launch") {
+	if !hasString(refs, "thread:thread_from_card") || !hasString(refs, "card:launch") {
 		t.Fatalf("expected resolved thread and subject refs, got %#v", refs)
 	}
 }

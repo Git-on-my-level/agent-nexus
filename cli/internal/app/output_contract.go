@@ -69,7 +69,10 @@ func commandSideEffectClass(command string) string {
 	if parts[0] == "version" || parts[0] == "doctor" || parts[0] == "workspace" || parts[0] == "read" || parts[0] == "url" || parts[0] == "concepts" || parts[0] == "primitives" || parts[0] == "provenance" {
 		return "read_only"
 	}
-	if parts[0] == "orient" || parts[0] == "await" {
+	if parts[0] == "await" {
+		return "remote_coordination_write"
+	}
+	if parts[0] == "orient" {
 		return "read_only"
 	}
 	if command == "auth access-requests request" || command == "auth access-requests approve" || command == "auth access-requests deny" {
@@ -110,7 +113,7 @@ func commandSideEffectClass(command string) string {
 		switch parts[1] {
 		case "install", "stop":
 			return "local_operational_write"
-		case "start":
+		case "start", "run":
 			return "external_side_effect"
 		case "doctor":
 			return "remote_coordination_write"

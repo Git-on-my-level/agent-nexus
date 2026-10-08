@@ -129,6 +129,33 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 
+	if typeValue == humanAttentionRequestedEventType {
+		payload, _ := req.Event["payload"].(map[string]any)
+		if principal, ok := cachedAuthenticatedPrincipal(r); ok && isAgentPrincipal(principal) && anyString(payload["requester_actor_id"]) != principal.ActorID {
+			writeError(w, 403, "forbidden", "requester must be the authenticated agent")
+			return
+		}
+		if cards, ok := opts.primitiveStore.(interface {
+			GetBoardCard(context.Context, string, string) (map[string]any, error)
+		}); ok {
+			cardID, ok := resolveHTTPResourceID(w, r, opts, "card", anyString(payload["subject_ref"]), "card")
+			if !ok {
+				return
+			}
+			card, err := cards.GetBoardCard(r.Context(), "", cardID)
+			if err != nil {
+				writeError(w, 404, "not_found", "subject card not found")
+				return
+			}
+			// Preserve the public ref: an internal ID can also be another card's handle.
+			payload["subject_ref"] = card["ref"]
+			if anyString(card["column_key"]) == "done" || anyString(card["archived_at"]) != "" || anyString(card["trashed_at"]) != "" {
+				writeError(w, 409, "conflict", "subject card is closed")
+				return
+			}
+		}
+	}
+
 	var stored map[string]any
 	if typeValue == humanAttentionWithdrawnEventType {
 		principal, ok := requireAuthenticatedPrincipal(w, r, opts)

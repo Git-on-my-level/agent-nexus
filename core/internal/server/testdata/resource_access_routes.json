@@ -52,6 +52,11 @@
     "policy": "collection"
   },
   {
+    "method": "POST",
+    "path": "/agent-inbox/subscriptions",
+    "policy": "reference-write"
+  },
+  {
     "method": "GET",
     "path": "/agent-notifications",
     "policy": "collection"
@@ -149,6 +154,21 @@
   {
     "method": "POST",
     "path": "/artifacts/{artifact_id}/unarchive",
+    "policy": "record"
+  },
+  {
+    "method": "GET",
+    "path": "/asks/{ask_id}",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/asks/{ask_id}/delivery",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/asks/{ask_id}/subscriptions",
     "policy": "record"
   },
   {
@@ -994,7 +1014,17 @@
   },
   {
     "method": "GET",
+    "path": "/stream/agent-wakeups",
+    "policy": "stream"
+  },
+  {
+    "method": "GET",
     "path": "/stream/agents",
+    "policy": "stream"
+  },
+  {
+    "method": "GET",
+    "path": "/stream/asks/{ask_id}",
     "policy": "stream"
   },
   {
