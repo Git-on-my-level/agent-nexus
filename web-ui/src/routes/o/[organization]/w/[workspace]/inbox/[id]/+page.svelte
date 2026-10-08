@@ -18,6 +18,9 @@
   import { dismissOnEscape } from "$lib/actions/dismissOnEscape.js";
   import InboxActorName from "$lib/components/inbox/InboxActorName.svelte";
   import InboxContextStrip from "$lib/components/inbox/InboxContextStrip.svelte";
+  import InboxDelivery from "$lib/components/inbox/InboxDelivery.svelte";
+  import InboxDocPanel from "$lib/components/inbox/InboxDocPanel.svelte";
+  import InboxEvidence from "$lib/components/inbox/InboxEvidence.svelte";
   import InboxRespondPanel from "$lib/components/inbox/InboxRespondPanel.svelte";
   import InboxUndoToast from "$lib/components/inbox/InboxUndoToast.svelte";
   import KeyboardShortcutsDialog from "$lib/components/KeyboardShortcutsDialog.svelte";
@@ -32,6 +35,14 @@
   import { threadTimelineEventHref } from "$lib/deepLinkTargets";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
   import { loadInboxContext } from "$lib/inboxContext.js";
+  import { loadAskDetail } from "$lib/askDetail.js";
+  import {
+    NEEDS_CONTEXT_OUTCOME,
+    askDeliveryModel,
+    askEvidenceModel,
+    linkifyAskEvidence,
+    supportsNeedsContext,
+  } from "$lib/askDelivery.js";
   import { inboxItemIsReminder, inboxItemSubject } from "$lib/inboxMailbox.js";
   import {
     captureInboxResponseBinding,
@@ -105,6 +116,19 @@
   let subject = $state(null);
   let context = $state(null);
   let contextLoading = $state(false);
+  /*
+   * The ask behind this item: its durable outcome and its own event. Two
+   * bounded point reads for the one item on screen, loaded beside the context
+   * read this page already makes.
+   */
+  let askDetail = $state(null);
+  let askDetailLoading = $state(false);
+  /** The evidence document open in the side sheet, or "". */
+  let docPanelRef = $state("");
+  /* An answered item that was sent back for context rather than answered. */
+  let sentBack = $derived(
+    String(item?.outcome ?? "") === NEEDS_CONTEXT_OUTCOME,
+  );
 
   // One map, shared with the Inbox pane: two copies meant the same item read
   // "Review due" in the list and "REPORT_REVIEW" on its own page.
@@ -298,6 +322,9 @@
     subject = null;
     context = null;
     contextLoading = false;
+    askDetail = null;
+    askDetailLoading = false;
+    docPanelRef = "";
   }
 
   function handleNotifyTargetInput(event) {
@@ -360,6 +387,7 @@
       }
       applyRestore(takeInboxRestore(loaded.id));
       void loadContext(loaded, routeKey);
+      void loadAsk(loaded, routeKey);
     } catch (error) {
       if (seq !== inboxLoadSeq || routeKey !== inboxRouteKey()) return;
       if (error?.status === 404) {
@@ -419,14 +447,32 @@
     }
   }
 
+  async function loadAsk(loaded, routeKey) {
+    askDetailLoading = true;
+    try {
+      const value = await loadAskDetail(loaded);
+      if (routeKey === inboxRouteKey()) askDetail = value;
+    } catch {
+      // The item's own fields still carry the question and its native refs.
+    } finally {
+      if (routeKey === inboxRouteKey()) askDetailLoading = false;
+    }
+  }
+
   function subjectHref(value) {
-    const ref = String(value?.ref ?? "");
-    if (value?.kind === "card")
-      return workspaceHref(`/tasks/${encodeURIComponent(ref)}`);
-    if (value?.kind === "document")
+    return refHref(value?.ref);
+  }
+
+  /** Where a native ref lives in this workspace, or "" when it has no page. */
+  function refHref(value) {
+    const raw = String(value ?? "").trim();
+    if (raw.startsWith("card:"))
+      return workspaceHref(`/tasks/${encodeURIComponent(raw)}`);
+    if (raw.startsWith("document:"))
       return workspaceHref(
-        `/docs/${encodeURIComponent(ref.slice("document:".length))}`,
+        `/docs/${encodeURIComponent(raw.slice("document:".length))}`,
       );
+    // Projects and boards have no operator page; the ref still renders, as text.
     return "";
   }
 
@@ -452,6 +498,39 @@
         ? "Blocks"
         : "On",
   );
+  let askEvidence = $derived(
+    item
+      ? askEvidenceModel({
+          item,
+          event: askDetail?.event,
+          subjectRef: subject?.ref ?? "",
+        })
+      : null,
+  );
+  let askDelivery = $derived(
+    askDetail?.outcome
+      ? askDeliveryModel(askDetail.outcome, {
+          nextActorLabel: actorName(askDetail.outcome.task_outcome?.next_actor),
+        })
+      : null,
+  );
+  /*
+   * The question, with every name the ask itself backed with evidence turned
+   * into a link; prose that names nothing is left exactly as written.
+   */
+  let askBody = $derived(
+    item?.body && askEvidence && !askEvidence.empty
+      ? linkifyAskEvidence(item.body, askEvidence, { hrefFor: refHref })
+      : (item?.body ?? ""),
+  );
+  let supersedesLink = $derived.by(() => {
+    const ref = askEvidence?.supersedes || "";
+    if (!ref.startsWith("event:")) return null;
+    return {
+      ref,
+      href: `${workspaceHref("/events")}?q=${encodeURIComponent(ref)}`,
+    };
+  });
 
   /**
    * The item a response belongs to, and the composer state that goes with it,
@@ -547,9 +626,17 @@
       request,
       message: acknowledge
         ? "Acknowledged"
-        : sending.who
-          ? `Sent to ${sending.who}`
-          : "Response recorded",
+        : /*
+           * A context request is not an answer: it goes back to whoever wrote
+           * the ask, to be re-asked with what was missing.
+           */
+          outcome === NEEDS_CONTEXT_OUTCOME
+          ? sending.who
+            ? `Sent back to ${sending.who} for context`
+            : "Sent back for context"
+          : sending.who
+            ? `Sent to ${sending.who}`
+            : "Response recorded",
       restore: {
         origin: "item",
         href: sending.href,
@@ -807,13 +894,41 @@
           loading={contextLoading && !context}
           presenceActorId={requesterId()}
         />
-        {#if item.body}
+        {#if askDelivery?.isStale && !isCompleted}
+          <p class="text-micro text-fg-muted" data-inbox-ask-stale>
+            The task behind this ask has not changed in a while, so the Inbox
+            folds it under Stale. It is still answerable.
+          </p>
+        {/if}
+        {#if supersedesLink}
+          <p class="text-micro text-fg-muted">
+            Re-asked (supersedes
+            <a
+              class="ui-prose-link"
+              href={supersedesLink.href}
+              data-inbox-supersedes={supersedesLink.ref}>{supersedesLink.ref}</a
+            >)
+          </p>
+        {/if}
+        {#if askBody}
           <div
             class="rounded-md border border-line bg-panel px-3 py-2 text-meta leading-relaxed text-fg"
           >
-            <MarkdownRenderer source={item.body} />
+            <MarkdownRenderer
+              source={askBody}
+              {organizationSlug}
+              {workspaceSlug}
+            />
           </div>
         {/if}
+        <InboxEvidence
+          evidence={askEvidence}
+          hrefFor={refHref}
+          labelFor={(ref) =>
+            ref === subject?.ref ? String(subject?.title ?? "") : ""}
+          onOpenDoc={(ref) => (docPanelRef = docPanelRef === ref ? "" : ref)}
+          openDocRef={docPanelRef}
+        />
         {#if inboxRefs.length > 0}
           <div
             class="flex flex-wrap items-center gap-2 text-micro max-md:gap-x-2 max-md:gap-y-1"
@@ -844,7 +959,12 @@
             </p>
           {/if}
           <p class="text-micro text-fg-muted [overflow-wrap:anywhere]">
-            {#if item.responding_actor_id}Answered by <InboxActorName
+            {#if sentBack}<span data-inbox-sent-back>Sent back for context</span
+              >{#if item.responding_actor_id}
+                by <InboxActorName
+                  name={actorName(item.responding_actor_id)}
+                  id={item.responding_actor_id}
+                />{/if}{:else if item.responding_actor_id}Answered by <InboxActorName
                 name={actorName(item.responding_actor_id)}
                 id={item.responding_actor_id}
               />{:else}Answered{/if}{#if item.responded_at}{" "}{formatAbsoluteDateTime(
@@ -855,13 +975,20 @@
             <div
               class="text-micro font-medium uppercase tracking-wide text-fg-muted"
             >
-              Final response
+              {sentBack ? "What was missing" : "Final response"}
             </div>
             <MarkdownRenderer
               source={item.response_text ?? ""}
               class="mt-1 text-meta text-fg [overflow-wrap:anywhere]"
             />
           </div>
+          <InboxDelivery
+            model={askDelivery}
+            taskSummary={subject?.summary ?? null}
+            taskTitle={subject?.title ?? ""}
+            taskHref={subjectHref(subject)}
+            loading={askDetailLoading}
+          />
           <div class="flex flex-wrap gap-2 pt-1">
             {#if completedTimelineHref()}
               <Button
@@ -938,6 +1065,7 @@
           access={accessRequest}
           canDecideAccess={decidesAccess}
           proposals={proposalStrings}
+          needsContext={supportsNeedsContext(item)}
           itemKey={String(item?.id ?? "")}
           bind:draft={responseDraft}
           {chosen}
@@ -1198,4 +1326,16 @@
     title="Inbox shortcuts"
   />
   <InboxUndoToast onUndo={undoLastResponse} />
+  <!--
+    Evidence read without leaving the item: a sheet over the page, because this
+    surface is one column at every width.
+  -->
+  <InboxDocPanel
+    ref={docPanelRef}
+    hrefFor={refHref}
+    onClose={() => (docPanelRef = "")}
+    {organizationSlug}
+    {workspaceSlug}
+    variant="sheet"
+  />
 </div>

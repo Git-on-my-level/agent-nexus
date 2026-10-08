@@ -1,4 +1,5 @@
 import { get, writable } from "svelte/store";
+import { isInboxResponseOutcome } from "$lib/askDelivery.js";
 import { captureInboxResponseSender } from "$lib/coreClient";
 import { errorMessage } from "$lib/pm/presentation.js";
 import { authenticatedAgent } from "$lib/authSession.js";
@@ -175,11 +176,7 @@ export function queueInboxResponse({
 }) {
   const id = String(itemId ?? "").trim();
   if (!id) throw new Error("queueInboxResponse requires itemId");
-  if (
-    !["answered", "approved", "rejected", "acknowledged"].includes(
-      request?.outcome,
-    )
-  ) {
+  if (!isInboxResponseOutcome(request?.outcome)) {
     throw new Error("queueInboxResponse requires a valid outcome");
   }
   if (pending) void commit(pending);

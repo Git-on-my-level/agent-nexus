@@ -52,6 +52,15 @@
     invalidateInboxContext,
     loadInboxContext,
   } from "$lib/inboxContext.js";
+  import { invalidateAskDetail, loadAskDetail } from "$lib/askDetail.js";
+  import {
+    askDeliveryModel,
+    askEvidenceModel,
+    askRefForInboxItem,
+    linkifyAskEvidence,
+    NEEDS_CONTEXT_OUTCOME,
+    supportsNeedsContext,
+  } from "$lib/askDelivery.js";
   import {
     liveWorkspaceEvents,
     liveInboxChanges,
@@ -95,6 +104,9 @@
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import InboxActorName from "$lib/components/inbox/InboxActorName.svelte";
   import InboxContextStrip from "$lib/components/inbox/InboxContextStrip.svelte";
+  import InboxDelivery from "$lib/components/inbox/InboxDelivery.svelte";
+  import InboxDocPanel from "$lib/components/inbox/InboxDocPanel.svelte";
+  import InboxEvidence from "$lib/components/inbox/InboxEvidence.svelte";
   import InboxRespondPanel from "$lib/components/inbox/InboxRespondPanel.svelte";
   import InboxUndoToast from "$lib/components/inbox/InboxUndoToast.svelte";
 
@@ -355,6 +367,99 @@
       },
     );
   });
+  /*
+   * The ask behind the selected item: its durable outcome (status, staleness,
+   * the task decision, delivery rows) and its own event, which is where the
+   * authoring evidence lives. Two bounded point reads for the one item the
+   * reader selected — never one per row, so a page of Handled items costs the
+   * page rather than its rows.
+   */
+  let askDetail = $state(null);
+  let askDetailFor = $state("");
+  let askDetailLoading = $state(false);
+  $effect(() => {
+    const id = selectedId;
+    void contextEpoch;
+    const row = untrack(() => selected);
+    const askRef = row?.kind === "inbox" ? askRefForInboxItem(row.item) : "";
+    if (!askRef) {
+      askDetail = null;
+      askDetailFor = "";
+      askDetailLoading = false;
+      return;
+    }
+    if (askDetailFor !== id) {
+      askDetail = null;
+      askDetailFor = id;
+    }
+    askDetailLoading = true;
+    void loadAskDetail(row.item).then(
+      (value) => {
+        if (askDetailFor !== id) return;
+        askDetail = value;
+        askDetailLoading = false;
+      },
+      () => {
+        if (askDetailFor === id) askDetailLoading = false;
+      },
+    );
+  });
+  let askEvidence = $derived(
+    selected?.kind === "inbox"
+      ? askEvidenceModel({
+          item: selected.item,
+          event: askDetail?.event,
+          subjectRef: selected.subject?.ref ?? "",
+        })
+      : null,
+  );
+  let askDelivery = $derived(
+    askDetail?.outcome
+      ? askDeliveryModel(askDetail.outcome, {
+          now,
+          nextActorLabel: actorName(askDetail.outcome.task_outcome?.next_actor),
+        })
+      : null,
+  );
+  /*
+   * The question, with every name the ask itself backed with evidence turned
+   * into a link. Nothing is guessed: a name only becomes a link when the ask
+   * carries a matching ref or pull-request URL.
+   */
+  let askBody = $derived(
+    selected?.kind === "inbox" && askEvidence && !askEvidence.empty
+      ? linkifyAskEvidence(selected.body, askEvidence, { hrefFor: refHref })
+      : selected?.body || "",
+  );
+  /* The ask this one replaces, when the agent re-asked after a context request. */
+  let supersedesLink = $derived.by(() => {
+    const ref = askEvidence?.supersedes || "";
+    if (!ref.startsWith("event:")) return null;
+    const earlier = rows.find(
+      (row) => row.kind === "inbox" && askRefForInboxItem(row.item) === ref,
+    );
+    return {
+      ref,
+      href: earlier
+        ? href({ item: earlier.id })
+        : `${workspaceHref("/events")}?q=${encodeURIComponent(ref)}`,
+      label: earlier?.title || ref,
+    };
+  });
+  /* An answered item that was sent back for context rather than answered. */
+  let selectedSentBack = $derived(
+    String(selected?.item?.outcome ?? "") === NEEDS_CONTEXT_OUTCOME,
+  );
+  /** The evidence document open in the side panel, or "". */
+  let docPanelRef = $state("");
+  $effect(() => {
+    // A document opened as one item's evidence is not the next item's.
+    void selectedId;
+    untrack(() => {
+      docPanelRef = "";
+    });
+  });
+
   const OPERATOR_SUBJECTS = new Set(["card", "document", "topic"]);
   let contextSubject = $derived.by(() => {
     const subject = selected?.kind === "inbox" ? selected.subject : null;
@@ -381,12 +486,18 @@
   });
 
   function subjectHref(subject) {
-    if (!subject?.ref) return "";
-    const { prefix, id } = splitTypedRef(subject.ref);
+    return refHref(subject?.ref);
+  }
+
+  /** Where a native ref lives in this workspace, or "" when it has no page. */
+  function refHref(value) {
+    const { prefix, id } = splitTypedRef(value);
+    if (!prefix || !id) return "";
     if (prefix === "card")
-      return workspaceHref(`/tasks/${encodeURIComponent(subject.ref)}`);
+      return workspaceHref(`/tasks/${encodeURIComponent(`${prefix}:${id}`)}`);
     if (prefix === "document")
       return workspaceHref(`/docs/${encodeURIComponent(id)}`);
+    // Projects and boards have no operator page; the ref still renders, as text.
     return "";
   }
 
@@ -608,6 +719,7 @@
         return;
       }
       invalidateInboxContext();
+      invalidateAskDetail();
       contextEpoch += 1;
       void load({ quiet: true });
     }, LIVE_REFRESH_DELAY_MS);
@@ -909,17 +1021,26 @@
     const request = acknowledge
       ? { response_text: body, outcome: "acknowledged", notify_mode: "none" }
       : { response_text: body, outcome, notify_mode: defaultNotifyMode(item) };
+    /*
+     * A context request is not an answer, and the toast must not claim it was
+     * one: the ask goes back to whoever wrote it, to be re-asked with what was
+     * missing.
+     */
+    const sentMessage =
+      outcome === NEEDS_CONTEXT_OUTCOME
+        ? who
+          ? `Sent back to ${who} for context`
+          : "Sent back for context"
+        : who
+          ? `Sent to ${who}`
+          : "Response sent";
     const next = neighbourId(row.id);
     queueInboxResponse({
       itemId: item.id,
       item,
       binding,
       request,
-      message: acknowledge
-        ? "Acknowledged"
-        : who
-          ? `Sent to ${who}`
-          : "Response sent",
+      message: acknowledge ? "Acknowledged" : sentMessage,
       restore: {
         origin: "pane",
         rowId: row.id,
@@ -1323,12 +1444,15 @@
     </div>
   {:else}
     {@const showDetail = Boolean(selectedId)}
+    {@const showDoc = Boolean(selectedId && docPanelRef)}
     <div
       class="grid overflow-hidden rounded-md border border-line bg-panel {visible.length
         ? 'lg:min-h-[30rem]'
-        : ''} {showDetail
-        ? 'lg:grid-cols-[minmax(16rem,0.9fr)_minmax(0,1.4fr)]'
-        : ''}"
+        : ''} {showDoc
+        ? 'lg:grid-cols-[minmax(13rem,0.7fr)_minmax(0,1.1fr)_minmax(0,1fr)]'
+        : showDetail
+          ? 'lg:grid-cols-[minmax(16rem,0.9fr)_minmax(0,1.4fr)]'
+          : ''}"
     >
       <section
         class="min-w-0 border-line {showDetail ? 'lg:border-r' : ''} {explicitId
@@ -1680,12 +1804,40 @@
                   loading={contextLoading && !context}
                   presenceActorId={selected.requester?.id || ""}
                 />
-                {#if selected.body}
+                {#if askDelivery?.isStale && needsResponse}
+                  <p class="text-micro text-fg-muted" data-inbox-ask-stale>
+                    The task behind this ask has not changed in a while, so it
+                    is folded under Stale. It is still answerable.
+                  </p>
+                {/if}
+                {#if supersedesLink}
+                  <p class="text-micro text-fg-muted">
+                    Re-asked (supersedes
+                    <a
+                      class="ui-prose-link"
+                      href={supersedesLink.href}
+                      data-inbox-supersedes={supersedesLink.ref}
+                      >{supersedesLink.label}</a
+                    >)
+                  </p>
+                {/if}
+                {#if askBody}
                   <MarkdownRenderer
-                    source={selected.body}
+                    source={askBody}
                     class="text-meta leading-relaxed text-fg [overflow-wrap:anywhere]"
+                    organizationSlug={$page.params.organization}
+                    workspaceSlug={$page.params.workspace}
                   />
                 {/if}
+                <InboxEvidence
+                  evidence={askEvidence}
+                  hrefFor={refHref}
+                  labelFor={(ref) =>
+                    work.find((item) => workKey(item) === ref)?.title || ""}
+                  onOpenDoc={(ref) =>
+                    (docPanelRef = docPanelRef === ref ? "" : ref)}
+                  openDocRef={docPanelRef}
+                />
                 {#if selected.responseError}
                   <!--
                     The send failed and nothing was recorded. The item is still
@@ -1728,6 +1880,7 @@
                     access={selected.access}
                     canDecideAccess={decidesAccess}
                     proposals={selected.responseProposals}
+                    needsContext={supportsNeedsContext(selected.item)}
                     itemKey={selected.id}
                     bind:draft={reply}
                     {chosen}
@@ -1814,7 +1967,13 @@
                     data-inbox-answer
                   >
                     <p class="text-micro text-fg-muted">
-                      {#if selected.responder?.id && selected.responder.id === $selectedActorId}You
+                      {#if selectedSentBack}<span data-inbox-sent-back
+                          >Sent back for context</span
+                        >{#if selected.responder}
+                          by <InboxActorName
+                            name={selected.responder.name}
+                            id={selected.responder.id}
+                          />{/if}{:else if selected.responder?.id && selected.responder.id === $selectedActorId}You
                         answered{:else if selected.responder}Answered by <InboxActorName
                           name={selected.responder.name}
                           id={selected.responder.id}
@@ -1830,6 +1989,14 @@
                       />
                     {/if}
                   </div>
+                  <InboxDelivery
+                    model={askDelivery}
+                    taskSummary={selected.subject?.summary ?? null}
+                    taskTitle={selected.subject?.title ?? ""}
+                    taskHref={subjectHref(selected.subject)}
+                    loading={askDetailLoading}
+                    {now}
+                  />
                   <a
                     class="ui-btn-secondary inline-flex"
                     href={workspaceHref(
@@ -1967,6 +2134,18 @@
             </p>
           {/if}
         </section>
+        <!--
+          Evidence read beside the question. Below lg it is a sheet over the
+          page rather than a third column: a phone has one column, and pushing
+          the doc under a long ask body put it where nobody would look.
+        -->
+        <InboxDocPanel
+          ref={docPanelRef}
+          hrefFor={refHref}
+          onClose={() => (docPanelRef = "")}
+          organizationSlug={$page.params.organization}
+          workspaceSlug={$page.params.workspace}
+        />
       {/if}
     </div>
   {/if}
