@@ -13,7 +13,7 @@
  */
 
 import { markdownExcerpt } from "./markdown.js";
-import { workSummaryModel } from "./workSummary.js";
+import { workProse, workSummaryModel } from "./workSummary.js";
 
 const asText = (value) => String(value ?? "").trim();
 
@@ -59,15 +59,11 @@ export function workSummaryCard(item, options = {}) {
     title: asText(item?.title) || ref,
     href: href(ref),
     /*
-     * The prose body, as a plain line. `summary=1` moves it to `summary_text`
-     * and leaves the computed object at `summary`, so both spellings are
-     * read; a summary that is an object is never prose.
+     * The prose body, as a plain line. `workProse` reads whichever spelling
+     * the response used — `summary=1` moves the prose to `summary_text` and
+     * leaves the computed object at `summary`.
      */
-    excerpt: markdownExcerpt(
-      asText(item?.summary_text) ||
-        (typeof item?.summary === "string" ? item.summary : ""),
-      { limit: excerptLimit },
-    ),
+    excerpt: markdownExcerpt(workProse(item), { limit: excerptLimit }),
     needs,
     summary,
     rank: summary.status?.rank ?? Number.MAX_SAFE_INTEGER,

@@ -281,6 +281,27 @@ describe("the legacy fallback", () => {
     );
   });
 
+  it("names an unfamiliar phase in the source's words, not the raw token", () => {
+    /*
+     * The rule the deleted `statusText` had: printing "vendor_waiting" at a
+     * reader is worse than printing what the tracker's own users read. Core's
+     * label for a state it does not name is the token with its underscores
+     * replaced, which carries nothing more, so the source's word wins over
+     * that too — and then no separate badge repeats it.
+     */
+    const model = workSummaryModel(
+      {
+        ref: "card:x",
+        phase: "vendor_waiting",
+        source: { authority: "multica", native_status: "Custom waiting state" },
+      },
+      { now: NOW },
+    );
+    expect(model.status.state).toBe("vendor_waiting");
+    expect(model.status.label).toBe("Custom waiting state");
+    expect(model.sourceStatusShown).toBe(false);
+  });
+
   it("keeps the source's own status word beside the computed one", () => {
     const model = workSummaryModel(
       {
@@ -292,6 +313,8 @@ describe("the legacy fallback", () => {
     );
     expect(model.status.label).toBe("In progress");
     expect(model.sourceStatus).toBe("In UAT");
+    // A named state keeps its name, and the source's word earns its own badge.
+    expect(model.sourceStatusShown).toBe(true);
   });
 
   it("gives a card created here no source status to show", () => {
@@ -378,6 +401,23 @@ describe("counting and folding share the renderer's vocabulary", () => {
       { ref: "card:x", phase: "review" },
       { ref: "card:x", column_key: "backlog" },
       { ref: "card:x" },
+      /*
+       * Malformed statuses, which the contract forbids but a client cannot
+       * assume away. The shortcut used to fall through to the stored phase
+       * for these while the renderer showed Unknown, and a card filed done
+       * was then folded into Closed work reading "Unknown".
+       */
+      {
+        ref: "card:x",
+        phase: "done",
+        work_summary: { status: { state: " " } },
+      },
+      { ref: "card:x", phase: "ready", work_summary: { status: {} } },
+      {
+        ref: "card:x",
+        phase: "ready",
+        work_summary: { status: { label: "Shipping" } },
+      },
     ]) {
       expect(statusStateOf(input)).toBe(
         workSummaryModel(input, { now: NOW }).status.state,
@@ -397,6 +437,14 @@ describe("counting and folding share the renderer's vocabulary", () => {
     // that folded this away hid the disagreement the status line exists for.
     expect(isComputedClosed(marked("blocked"))).toBe(false);
     expect(isComputedClosed({ ref: "card:x", state: "archived" })).toBe(true);
+    // And a malformed status is not evidence that the work is over.
+    expect(
+      isComputedClosed({
+        ref: "card:x",
+        phase: "done",
+        work_summary: { status: { state: " " } },
+      }),
+    ).toBe(false);
   });
 });
 

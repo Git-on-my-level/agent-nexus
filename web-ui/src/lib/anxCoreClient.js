@@ -325,7 +325,10 @@ const adapterCommandTable = [
   [
     "renderReport",
     "report.render",
-    (documentId) => p(pathParams({ document_id: documentId })),
+    // `filters` carries `summary=1`, which opts the native card panels into
+    // the computed summary the UI renders.
+    (documentId, filters) =>
+      pq(pathParams({ document_id: documentId }), filters),
   ],
   [
     "getDashboardReports",
@@ -344,7 +347,13 @@ const adapterCommandTable = [
   // keeps a table of chips off an N+1. The contract caps a batch at 200.
   ["resolveRefs", "refs.resolve", (refs) => ({ options: b({ refs }) })],
   ["getCardPlan", "plan.show", (cardId) => p(pathParams({ card_id: cardId }))],
-  ["getWork", "work.get", (ref) => p(pathParams({ card_ref: ref }))],
+  [
+    "getWork",
+    "work.get",
+    // `filters` carries `summary=1`; without it core answers with the legacy
+    // prose `summary` and no computed parts.
+    (ref, filters) => pq(pathParams({ card_ref: ref }), filters),
+  ],
   ["createWork", "work.create", (payload) => ({ options: b(payload) }), true],
   [
     "patchWork",

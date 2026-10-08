@@ -3,7 +3,7 @@
   import PlanView from "$lib/components/PlanView.svelte";
   import WorkSummary from "$lib/components/WorkSummary.svelte";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
-  import { workSummaryModel } from "$lib/workSummary.js";
+  import { workProse, workSummaryModel } from "$lib/workSummary.js";
 
   let {
     items = [],
@@ -58,7 +58,7 @@
             <WorkSummary {summary} density="row" title={item.title} {now} />
           </span>
         </div>
-        {#if item.summary}
+        {#if workProse(item)}
           <!-- Authored markdown, like every other body in the product. A
                report panel printing `**Goal:**` was the one surface still
                showing its source. Block rendering, not inline: a summary with
@@ -66,7 +66,7 @@
                together. Clamped to two lines — a dashboard panel is a glance,
                and the initiative page has the whole body. -->
           <MarkdownRenderer
-            source={item.summary}
+            source={workProse(item)}
             class="summary"
             {resolved}
             {organizationSlug}

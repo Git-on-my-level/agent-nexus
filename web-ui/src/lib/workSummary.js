@@ -155,9 +155,22 @@ function stateLabel(state) {
   return FALLBACK_LABELS[key] || key.replaceAll("_", " ");
 }
 
-function statusPart(raw) {
+/**
+ * @param {object|null|undefined} raw the `status` or `set_status` part
+ * @param {string} [sourceStatus] the source's own word for this state
+ *
+ * A state Nexus has no name for gets the source's word instead, even over
+ * core's label: `summaryLabel` falls back to the state token with its
+ * underscores replaced, so "vendor waiting" carries nothing the token did
+ * not. "Custom waiting state" is what the tracker's own users read.
+ */
+function statusPart(raw, sourceStatus = "") {
   const state = asText(raw?.state);
-  const label = asText(raw?.label) || stateLabel(state);
+  // "Unknown" counts as unnamed: it is the one label that carries less than
+  // the source's own word does.
+  const named = state !== "unknown" && Boolean(FALLBACK_LABELS[state]);
+  const label =
+    (!named && asText(sourceStatus)) || asText(raw?.label) || stateLabel(state);
   if (!state && !label) return null;
   return {
     state,
@@ -169,12 +182,20 @@ function statusPart(raw) {
   };
 }
 
-function progressPart(raw) {
+/**
+ * @param {object|null|undefined} raw the `progress` part
+ * @param {boolean} [unresolved] `resolution_truncated`: linked plan or child
+ *   work that could not be resolved at all. It makes `done` a lower bound in
+ *   exactly the same way `progress.truncated` does — core's plan branch sets
+ *   one without the other — so it marks the count rather than hiding in a
+ *   tooltip the Overview showed and the Tasks row did not.
+ */
+function progressPart(raw, unresolved = false) {
   const total = Number(raw?.total);
   if (!Number.isFinite(total) || total <= 0) return null;
   const done = Math.max(0, Math.min(Number(raw?.done) || 0, total));
   const unit = asText(raw?.unit) || "steps";
-  const truncated = raw?.truncated === true;
+  const truncated = raw?.truncated === true || unresolved === true;
   /*
    * `3+/7`, not `3/7+`, when linked work could not all be read. The marker
    * belongs to the number that is a lower bound: the total is exact in both
@@ -222,6 +243,13 @@ function attentionPart(raw) {
   const oldest = Number(raw?.oldest_age);
   return {
     count,
+    /*
+     * The instant the oldest ask fired, which is what an age on screen has
+     * to be computed from. `oldest_age` is seconds measured at read time and
+     * core excludes it from change detection for that reason; a page left
+     * open would keep reporting the age it had when it loaded.
+     */
+    oldestAt: asText(raw?.oldest_at),
     oldestAge: Number.isFinite(oldest) && oldest >= 0 ? oldest : null,
     truncated: raw?.truncated === true,
     /** `2 asks`, with a `+` when the sampled window was full. */
@@ -339,8 +367,20 @@ export function planSegments(planState, geometry = null, limit = 24) {
  */
 export function statusStateOf(row) {
   const raw = rawWorkSummary(row);
-  const computed = asText(raw?.status?.state);
-  if (computed) return computed;
+  /*
+   * The same branch `fromComputed` takes, and through the same reader: on the
+   * presence of `status`, not on its contents. Branching on a non-empty
+   * `state` instead let a malformed `status` fall through to the stored
+   * phase here while the renderer showed Unknown — so a card filed done was
+   * folded into Closed work while reading "Unknown".
+   */
+  if (raw?.status) {
+    // `?? "unknown"` on the part, not `|| "unknown"` on the state: a status
+    // with a label and no state renders an empty state, and the shortcut has
+    // to render the same nothing rather than guessing Unknown.
+    const part = statusPart(raw.status);
+    return part ? part.state : "unknown";
+  }
   const health = planHealthModel({
     ...row,
     health:
@@ -368,6 +408,21 @@ export function isComputedClosed(row) {
     CLOSED_STATES.has(statusStateOf(row)) ||
     freshnessKindForPhase("", asText(row?.state ?? row?.lifecycle_state)) ===
       "closed"
+  );
+}
+
+/**
+ * A card's prose body, whichever way the response spells it.
+ *
+ * `summary=1` puts the computed object at `summary` and moves the prose to
+ * `summary_text`; without it the prose stays at `summary`. Anything that
+ * renders a card's body has to read both, or a surface that opted in paints
+ * `[object Object]` where the body should be.
+ */
+export function workProse(row) {
+  return (
+    asText(row?.summary_text) ||
+    (typeof row?.summary === "string" ? row.summary.trim() : "")
   );
 }
 
@@ -459,6 +514,7 @@ function baseModel(row) {
     phaseHint: "",
     hasPlan: false,
     sourceStatus: "",
+    sourceStatusShown: false,
     lifecycleState: asText(row?.state ?? row?.lifecycle_state),
     setStatus: null,
     progress: null,
@@ -467,6 +523,7 @@ function baseModel(row) {
     owner: "",
     due: "",
     age: null,
+    createdAt: "",
     lastMovementAt: "",
     source: null,
     attention: null,
@@ -476,8 +533,9 @@ function baseModel(row) {
 }
 
 function fromComputed(raw, row, { now }) {
-  const status = statusPart(raw.status);
-  const setStatus = statusPart(raw.set_status);
+  const sourceStatus = asText(raw.source?.native_status);
+  const status = statusPart(raw.status, sourceStatus);
+  const setStatus = statusPart(raw.set_status, sourceStatus);
   const age = Number(raw.age);
   return finish(
     {
@@ -493,7 +551,7 @@ function fromComputed(raw, row, { now }) {
         asText(setStatus?.state) ||
         asText(row?.phase ?? row?.column_key) ||
         asText(status?.state),
-      progress: progressPart(raw.progress),
+      progress: progressPart(raw.progress, raw.resolution_truncated === true),
       next: nextPart(raw.next),
       steps: stepListsModel(raw.steps, { now }),
       // Core emits a step digest only for a card with a plan, and counts
@@ -502,6 +560,11 @@ function fromComputed(raw, row, { now }) {
       owner: asText(raw.owner),
       due: asText(raw.due),
       age: Number.isFinite(age) && age >= 0 ? age : null,
+      /*
+       * The creation instant behind `age`. Same reason as the oldest ask:
+       * `age` is seconds at read time, so an age rendered from it freezes.
+       */
+      createdAt: asText(raw.created_at),
       lastMovementAt: asText(raw.last_movement_at),
       source: raw.source && typeof raw.source === "object" ? raw.source : null,
       /*
@@ -512,7 +575,15 @@ function fromComputed(raw, row, { now }) {
        * has no name for reads better in the source's words than mapped to the
        * nearest one we do have.
        */
-      sourceStatus: asText(raw.source?.native_status),
+      sourceStatus,
+      /*
+       * Whether the word is worth a badge of its own. When the computed state
+       * had no Nexus name the label above already *is* the source's word, and
+       * a badge beside it would say the same thing twice.
+       */
+      sourceStatusShown: Boolean(
+        sourceStatus && sourceStatus !== status?.label,
+      ),
       attention: attentionPart(raw.attention),
       attentionTruncated: raw.attention_truncated === true,
       resolutionTruncated: raw.resolution_truncated === true,
@@ -533,6 +604,12 @@ function fromComputed(raw, row, { now }) {
  * known, which is what the Tasks table showed before this field existed.
  */
 function fromLegacy(row, { now }) {
+  // Core gates the computed part to non-Nexus authorities; match that, so a
+  // Nexus card does not grow a badge the computed path never gives it.
+  const sourceStatus =
+    asText(row?.source?.authority).toLowerCase() === "nexus"
+      ? ""
+      : asText(row?.source?.native_status);
   /*
    * `plan_state.health` is the oldest spelling of all and the one a plan read
    * still returns, so it is normalized into the field `planHealth.js` reads
@@ -547,19 +624,16 @@ function fromLegacy(row, { now }) {
   });
   const phase = asText(row?.phase ?? row?.column_key);
   const status = health.known
-    ? statusPart({
-        state: health.state,
-        label: health.label,
-        reason: health.reason,
-        since: health.since,
-      })
-    : statusPart(
-        phase
-          ? { state: phase }
-          : // A source can report a state Nexus has no name for; its own
-            // words beat printing nothing.
-            { state: "unknown", label: asText(row?.source?.native_status) },
-      );
+    ? statusPart(
+        {
+          state: health.state,
+          label: health.label,
+          reason: health.reason,
+          since: health.since,
+        },
+        sourceStatus,
+      )
+    : statusPart(phase ? { state: phase } : { state: "unknown" }, sourceStatus);
   const rawProgress =
     Number(row?.plan_state?.progress?.total) > 0
       ? row.plan_state.progress
@@ -574,10 +648,13 @@ function fromLegacy(row, { now }) {
       // the computed health would be this client's own claim.
       setStatus:
         health.known && phase && phase !== health.state
-          ? statusPart({ state: phase })
+          ? statusPart({ state: phase }, sourceStatus)
           : null,
       phaseHint: phase || asText(status?.state),
-      progress: progressPart({ ...rawProgress, unit: "steps" }),
+      progress: progressPart(
+        { ...rawProgress, unit: "steps" },
+        row?.plan_resolution_truncated === true,
+      ),
       hasPlan: Array.isArray(row?.plan_state?.steps)
         ? row.plan_state.steps.length > 0
         : Boolean(row?.plan_state),
@@ -587,15 +664,14 @@ function fromLegacy(row, { now }) {
       steps: stepListsModel(row?.plan_step_digest, { now }),
       owner: asText(row?.owner),
       due: asText(row?.due_at),
+      createdAt: asText(row?.created_at),
       lastMovementAt:
         asText(row?.plan_state?.last_movement_at) || asText(row?.updated_at),
       source: row?.source && typeof row.source === "object" ? row.source : null,
-      // Core gates the computed part to non-Nexus authorities; match that, so
-      // a Nexus card does not grow a badge the computed path never gives it.
-      sourceStatus:
-        asText(row?.source?.authority).toLowerCase() === "nexus"
-          ? ""
-          : asText(row?.source?.native_status),
+      sourceStatus,
+      sourceStatusShown: Boolean(
+        sourceStatus && sourceStatus !== status?.label,
+      ),
       resolutionTruncated: row?.plan_resolution_truncated === true,
     },
     row,

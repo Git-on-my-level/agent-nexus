@@ -446,7 +446,16 @@ export async function loadPendingReports(client, pending = [], existing = []) {
 
 /** The core snapshot is shared with `anx overview --json`. */
 export async function loadOverview(client, { now = Date.now() } = {}) {
-  const snapshot = await client.getOverview({ work_view: "summary" });
+  /*
+   * `summary=1` opts into the computed `work_summary` every card surface
+   * renders. Core omits it otherwise, and the Overview would fall back to
+   * reading plan health out of the separate legacy fields — which is the
+   * disagreement with the Tasks table that this exists to end.
+   */
+  const snapshot = await client.getOverview({
+    work_view: "summary",
+    summary: 1,
+  });
   const records = dedupeWorkBySource(snapshot.work.items).records;
   const blocked = records.filter((item) => item.phase === "blocked");
   return {

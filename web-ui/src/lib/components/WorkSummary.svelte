@@ -16,7 +16,8 @@
    *   and the viewer's asks. For a table cell, a board card and a search
    *   result. No age: a row-density host is a list, and it either has a time
    *   column of its own or no room for one, so where the age goes is its
-   *   call. A fourth badge here turned every Tasks row two lines tall.
+   *   call — and no source status word, for the same reason: a fourth badge
+   *   here turned every Tasks row two lines tall.
    * - `card` — the Overview card: a status line with its age, a progress bar,
    *   the step lists or the next step, and a meta line.
    * - `header` — a page header, which has room for words: the status with its
@@ -66,22 +67,26 @@
   );
   let dueText = $derived(summary?.due ? formatTimestamp(summary.due) : "");
   /*
-   * The sentence behind the count. `resolution_truncated` is a different
-   * fact from `progress.truncated` — linked plan or child work that could not
-   * be resolved at all, which the count cannot show — so it rides here rather
-   * than turning into a second marker on the number.
+   * How old the card is — a different question from when it last moved.
+   *
+   * Core sends both a creation instant and the seconds it measured at read
+   * time, and marks the seconds as excluded from change detection for this
+   * reason: an age computed from them freezes on a page left open. The
+   * instant wins; the seconds are the fallback for a core that sends only
+   * those, anchored once so the age still counts up.
    */
+  let openedAt = $derived.by(() => {
+    if (summary?.createdAt) return summary.createdAt;
+    if (summary?.age == null) return "";
+    return new Date(now - summary.age * 1000).toISOString();
+  });
+  let ageText = $derived(openedAt ? formatAge(openedAt, now) : "");
+  let ageTitle = $derived(
+    openedAt ? `Opened ${formatAbsoluteDateTime(openedAt)}` : "",
+  );
+  /** The sentence behind the count. */
   let progressLabel = $derived(
-    progress
-      ? [
-          `${title || "Checklist"}: ${progress.sentence}`,
-          summary?.resolutionTruncated && !progress.truncated
-            ? "some linked work could not be read"
-            : "",
-        ]
-          .filter(Boolean)
-          .join("; ")
-      : "",
+    progress ? `${title || "Checklist"}: ${progress.sentence}` : "",
   );
   // Core samples the viewer's open asks; a capped window is a lower bound and
   // has to read as one rather than as an exact count.
@@ -93,10 +98,12 @@
      * to format: rounding straight to hours called an ask raised a minute
      * ago "1h" and one from a month ago "720h".
      */
-    const oldest =
-      attention.oldestAge == null
+    const firedAt =
+      attention.oldestAt ||
+      (attention.oldestAge == null
         ? ""
-        : `oldest ${formatAge(new Date(now - attention.oldestAge * 1000), now)}`;
+        : new Date(now - attention.oldestAge * 1000).toISOString());
+    const oldest = firedAt ? `oldest ${formatAge(firedAt, now)}` : "";
     const bound = attention.truncated || summary?.attentionTruncated;
     return [
       `${attention.count}${bound ? " or more" : ""} open ${attention.count === 1 ? "ask" : "asks"} for you`,
@@ -130,13 +137,20 @@
           >· marked {setStatus.label.toLocaleLowerCase()}</span
         >
       {/if}
-      {#if summary.sourceStatus}
+      {#if density !== "row" && summary.sourceStatusShown}
         <!--
           The source's own word for where this stands — "In UAT", "awaiting
           triage". It sits beside the computed status rather than replacing
           it: the two answer different questions, and a tracker's vocabulary
           is the one its users speak. Core sends it only for a non-Nexus
           authority, so a card created here never grows this badge.
+
+          Not at row density: the badge cannot wrap by design, and a fourth
+          one in a 12rem Status cell is what made every Tasks row two lines
+          tall. A row still shows the word where it is the only readable
+          answer — for a state Nexus has no name for the status label *is*
+          the source's word, which is also why this badge is skipped when it
+          would repeat it.
         -->
         <span
           class="ui-badge ui-badge--neutral summary__badge"
@@ -192,7 +206,7 @@
             <span class="summary__count" data-summary-progress
               >{progress.count}</span
             >
-            {#if progress.truncated || summary.resolutionTruncated}
+            {#if progress.truncated}
               <span
                 class="summary__partial"
                 use:tooltip={"Some linked work could not be read, so this is a lower bound."}
@@ -283,7 +297,17 @@
             class="summary__due"
             data-summary-due
             datetime={summary.due}
-            title={dueTitle}>Due {dueText}</time
+            use:tooltip={dueTitle}>Due {dueText}</time
+          >
+        {/if}
+        {#if density === "header" && ageText}
+          <!-- A page header has room to say how long this has been open,
+               which the age badge beside the status does not answer. -->
+          <time
+            class="summary__due"
+            data-summary-age
+            datetime={summary.createdAt || undefined}
+            use:tooltip={ageTitle}>Opened {ageText}</time
           >
         {/if}
         {#if attention}

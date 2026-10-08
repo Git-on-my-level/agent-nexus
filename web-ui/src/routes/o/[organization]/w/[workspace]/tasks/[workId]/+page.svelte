@@ -58,7 +58,7 @@
     humanizeInstants,
     connectionName,
   } from "$lib/pm/presentation.js";
-  import { workSummaryModel } from "$lib/workSummary.js";
+  import { workProse, workSummaryModel } from "$lib/workSummary.js";
   import { authoredProvenance, liveProvenance } from "$lib/reportProvenance.js";
   import {
     panelAutoCollapsed,
@@ -136,6 +136,14 @@
       { now, summary: planSummary },
     );
   });
+  /**
+   * The card body, as prose.
+   *
+   * `summary=1` puts the computed object at `summary` and moves the prose to
+   * `summary_text`. Reading `summary` directly rendered `[object Object]`
+   * where the body should be.
+   */
+  let cardProse = $derived(workProse(work));
   /** "Next" comes from the computed next step, with the plan's own title. */
   let nextStep = $derived(cardSummary?.next ?? null);
 
@@ -220,7 +228,7 @@
     if (ticket !== requestId) return;
     const refs = collectPageRefs(
       [
-        work?.summary,
+        workProse(work),
         work?.next_action,
         work?.wake_condition,
         ...(work?.definition_of_done ?? []),
@@ -331,7 +339,8 @@
     const planLoaded = loadPlanRequest(ticket, id);
     const decisionsLoaded = decisionsRequest(ticket);
     const results = await Promise.allSettled([
-      coreClient.getWork(id),
+      // `summary=1`: core computes the shared summary only when asked.
+      coreClient.getWork(id, { summary: 1 }),
       coreClient.listWorkObservations(id, { limit: 30 }),
     ]);
     if (ticket !== requestId) return;
@@ -364,7 +373,7 @@
   async function refreshWorkRecord() {
     const ticket = requestId;
     try {
-      const result = await coreClient.getWork(workId);
+      const result = await coreClient.getWork(workId, { summary: 1 });
       if (ticket === requestId && result?.work) work = result.work;
     } catch {
       // The next change or Reload tries again.
@@ -636,9 +645,9 @@
               </div>
             {/if}
           </section>
-        {:else if work.summary}
+        {:else if cardProse}
           <MarkdownRenderer
-            source={work.summary}
+            source={cardProse}
             class="text-meta text-fg [overflow-wrap:anywhere]"
             resolved={planRefs}
             organizationSlug={$page.params.organization}

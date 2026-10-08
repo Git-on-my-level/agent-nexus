@@ -2,7 +2,7 @@
   import LiveInitiativeDetails from "./LiveInitiativeDetails.svelte";
   import UnavailableValue from "$lib/components/UnavailableValue.svelte";
   import WorkSummary from "$lib/components/WorkSummary.svelte";
-  import { workSummaryModel } from "$lib/workSummary.js";
+  import { workProse, workSummaryModel } from "$lib/workSummary.js";
   import { inboxItemMailboxId } from "$lib/inboxUtils.js";
   import { LIVE_REPORT_TYPES, formatLiveAge } from "$lib/liveReports.js";
   import { formatAge } from "$lib/ageBadge.js";
@@ -119,7 +119,7 @@
                   ></span
                 >{/if}
             </p>
-            {#if item.summary}<p>{item.summary}</p>{/if}
+            {#if workProse(item)}<p>{workProse(item)}</p>{/if}
             {#each item.needs ?? [] as need}<p class="partial">{need}</p>{/each}
           </li>
         {/each}
@@ -259,7 +259,7 @@
           {@const title = item.title ?? item.label ?? item.ref ?? ""}
           <li>
             {#if title}<strong class="row-title">{title}</strong>{/if}
-            {#if item.summary}<p>{item.summary}</p>{/if}
+            {#if workProse(item)}<p>{workProse(item)}</p>{/if}
             {#if item.detail}<p>{item.detail}</p>{/if}
             {#if date(at)}<p class="muted">
                 <time datetime={at}>{date(at)}</time>

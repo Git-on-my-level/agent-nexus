@@ -400,7 +400,9 @@
     try {
       if (next?.kind === "card") {
         try {
-          const response = await coreClient.getWork(next.ref);
+          const response = await coreClient.getWork(next.ref, {
+            summary: 1,
+          });
           const task = response?.work ?? null;
           if (task) {
             next = inboxItemSubject(loaded, { work: [task] });

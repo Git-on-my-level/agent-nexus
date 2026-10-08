@@ -120,6 +120,26 @@ const boards = [
   },
 ];
 
+/**
+ * The response core actually sends, for the parameter the client sent.
+ *
+ * Core computes `work_summary` only for `?summary=1`, and when it does it
+ * moves the prose to `summary_text` and puts the object at `summary`. The
+ * mock has to do the same or the spec passes on a shape production never
+ * returns — which is how the first draft of this change shipped a Tasks
+ * table that silently rendered the legacy fields.
+ */
+function asCore(row, optedIn) {
+  if (!row.work_summary) return row;
+  if (!optedIn) {
+    const { work_summary, summary_text, ...legacy } = row;
+    void work_summary;
+    void summary_text;
+    return legacy;
+  }
+  return { ...row, summary: row.work_summary };
+}
+
 async function install(page) {
   await installWorkspaceApi(page, {
     actors: [{ id: "operator", display_name: "Alex", tags: ["human"] }],
@@ -128,10 +148,22 @@ async function install(page) {
   });
   await page.route("**/*", async (route) => {
     // Decoded: a card ref carries a colon, so the path arrives percent-encoded.
-    const path = decodeURIComponent(new URL(route.request().url()).pathname);
+    const url = new URL(route.request().url());
+    const path = decodeURIComponent(url.pathname);
+    const optedIn = url.searchParams.get("summary") === "1";
     if (path === "/boards") return route.fulfill({ json: { boards } });
+    if (path === "/work")
+      return route.fulfill({
+        json: {
+          work: [card, sideCard, legacyCard].map((row) => asCore(row, optedIn)),
+        },
+      });
     if (path === `/work/${CARD_REF}`)
-      return route.fulfill({ json: { work: card } });
+      return route.fulfill({ json: { work: asCore(card, optedIn) } });
+    if (path === `/work/${legacyCard.ref}`)
+      return route.fulfill({ json: { work: legacyCard } });
+    if (path.startsWith(`/work/${legacyCard.ref}/`))
+      return route.fulfill({ json: { observations: [], participants: [] } });
     if (path === `/work/${CARD_REF}/observations`)
       return route.fulfill({ json: { observations: [] } });
     if (path === `/work/${CARD_REF}/participants`)
@@ -147,11 +179,18 @@ async function install(page) {
       return route.fulfill({
         json: {
           generated_at: NOW,
-          work: { status: "ok", total: 2, human_count: 0, items: [card] },
+          work: {
+            status: "ok",
+            total: 2,
+            human_count: 0,
+            items: [asCore(card, optedIn)],
+          },
           initiatives: {
             status: "ok",
             count: 1,
-            items: [{ ...card, href: `/tasks/${card.handle}` }],
+            items: [
+              { ...asCore(card, optedIn), href: `/tasks/${card.handle}` },
+            ],
           },
           needs_you: { status: "ok", count: 0, rows: [], href: "/inbox" },
           dashboard: { status: "ok", has_more: false, reports: [] },
@@ -299,18 +338,63 @@ test("a card from a core with no computed summary still reads a state", async ({
   // And it has no plan, so there is no progress to state — an omitted part
   // stays omitted rather than becoming an invented 0/0.
   expect(legacy.progress).toBe("");
-  // And the tracker's own word for where it stands sits beside the computed
-  // state rather than being dropped.
-  await expect(row.locator("[data-summary-source-status]")).toHaveText(
-    "In UAT",
-  );
-
   // Same card, same answer, on the board.
   await page.goto(`${TASKS}?view=board`);
   const board = await readSummary(
     page.locator('[data-work-slot][data-work-ref="card:legacy"]'),
   );
   expect(board).toEqual(legacy);
+
+  /*
+   * And the tracker's own word for where it stands is back on the page
+   * header, which is where it was before this change and where there is room
+   * for it. A list row does not carry it: the badge cannot wrap by design,
+   * and a fourth one in the Status cell made every row two lines tall.
+   */
+  await page.goto(`${TASKS}/${encodeURIComponent("card:legacy")}`);
+  const header = page.locator('[data-work-summary="header"]');
+  await expect(header).toBeVisible({ timeout: 60_000 });
+  await expect(header.locator("[data-summary-source-status]")).toHaveText(
+    "In UAT",
+  );
+});
+
+test("the surfaces ask core to compute the summary", async ({ page }) => {
+  /*
+   * The mock answers the way core does: no `summary=1`, no computed parts.
+   * So if a surface forgets the parameter it falls back to the legacy fields
+   * and still renders — which is exactly why this has to be asserted rather
+   * than assumed.
+   */
+  test.setTimeout(120_000);
+  await install(page);
+  await page.setViewportSize({ width: 1440, height: 1100 });
+
+  const asked = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    // The card reads themselves, not their sub-resources: observations and
+    // participants carry no card state and should not pay for a summary.
+    if (/^\/overview$|^\/work$|^\/work\/[^/]+$/.test(url.pathname)) {
+      asked.push(`${url.pathname}?summary=${url.searchParams.get("summary")}`);
+    }
+  });
+
+  await page.goto(OVERVIEW);
+  await expect(
+    page.locator(`[data-initiative-tile="${CARD_REF}"]`),
+  ).toBeVisible({ timeout: 60_000 });
+  await page.goto(`${TASKS}?view=table`);
+  await expect(page.locator(`[data-work-ref="${CARD_REF}"]`)).toBeVisible({
+    timeout: 60_000,
+  });
+  await page.goto(`${TASKS}/${encodeURIComponent(CARD_REF)}`);
+  await expect(page.locator('[data-work-summary="header"]')).toBeVisible({
+    timeout: 60_000,
+  });
+
+  expect(asked.length).toBeGreaterThan(0);
+  expect(asked.filter((entry) => !entry.endsWith("?summary=1"))).toEqual([]);
 });
 
 test("the Initiatives filter reuses the board role Overview selects by", async ({

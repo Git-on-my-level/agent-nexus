@@ -37,11 +37,24 @@ const relative = (file) => file.slice(root.length - 3).replaceAll("\\", "/");
  * between — a whole status renderer — went unchecked. Every comment in this
  * repo opens its own line, and an anchored match can only strip less.
  */
-const read = (file) =>
-  readFileSync(file, "utf8")
+const read = (file) => {
+  const raw = readFileSync(file, "utf8")
     .replaceAll(/^[ \t]*\/\*[\s\S]*?\*\//gm, " ")
-    .replaceAll(/^[ \t]*<!--[\s\S]*?-->/gm, " ")
-    .replaceAll(/^\s*\/\/.*$/gm, " ");
+    .replaceAll(/^[ \t]*<!--[\s\S]*?-->/gm, " ");
+  /*
+   * `//` is a comment in script, and ordinary text in markup. Stripping such
+   * lines everywhere let a renderer hide behind one in a template, so in a
+   * component only the script is swept.
+   */
+  const scriptEnd = file.endsWith(".svelte")
+    ? raw.indexOf("</script>")
+    : raw.length;
+  if (scriptEnd < 0) return raw;
+  return (
+    raw.slice(0, scriptEnd).replaceAll(/^\s*\/\/.*$/gm, " ") +
+    raw.slice(scriptEnd)
+  );
+};
 
 const sources = globSync("**/*.{svelte,js}", { cwd: root, withFileTypes: true })
   .filter((entry) => entry.isFile())
@@ -75,6 +88,63 @@ describe("the computed summary is read in one module", () => {
       .map(relative)
       .filter((file) => !ALLOWED.has(file));
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("the vocabulary lives in one place", () => {
+  /**
+   * A second vocabulary always looks the same: a table mapping card states to
+   * display strings.
+   *
+   * This is the rule the DOM-shaped ones below cannot reach. A presenter does
+   * not have to live beside a component — `src/lib` is where this codebase
+   * keeps them — and it does not have to be called anything in particular. It
+   * does have to decide what `blocked` is *called*, and that decision is a
+   * literal in a file, wherever the file is.
+   */
+  /*
+   * The distinctive words only. `review` and `cancelled` are also an ask kind
+   * and a run state, and matching them turned two unrelated vocabularies into
+   * false positives.
+   */
+  const STATES = "in_progress|blocked|at_risk|no_plan|on_track|backlog";
+  const pattern = new RegExp(`\\b(${STATES})\\s*:\\s*["'\`]`, "g");
+
+  const ALLOWED = new Map([
+    ["src/lib/workSummary.js", "is the vocabulary: labels, tones and order"],
+    [
+      "src/lib/planHealth.js",
+      "normalizes the legacy spellings into that vocabulary",
+    ],
+    ["src/lib/pm/presentation.js", "owns the stored phase's names"],
+    [
+      "src/lib/refResolve.js",
+      "names what an external record calls itself — merged, draft, open",
+    ],
+    [
+      "src/lib/inboxDigest.js",
+      'names the column a card was moved *to*, as the object of a verb: "moved 2 tasks to review"',
+    ],
+  ]);
+
+  it("no other module decides what a card state is called", () => {
+    const offenders = [];
+    for (const file of sources) {
+      const name = relative(file);
+      if (ALLOWED.has(name)) continue;
+      const keys = new Set(
+        [...read(file).matchAll(pattern)].map((match) => match[1]),
+      );
+      // One key is a row, a filter or a fixture; two or more is a table.
+      if (keys.size > 1) offenders.push(`${name}: ${[...keys].join(", ")}`);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("would catch a second vocabulary wherever it is written", () => {
+    const table =
+      'const WORDS = { in_progress: "In progress", blocked: "Blocked" };';
+    expect(new Set([...table.matchAll(pattern)].map((m) => m[1])).size).toBe(2);
   });
 });
 

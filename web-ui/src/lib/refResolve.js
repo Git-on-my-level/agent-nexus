@@ -26,6 +26,7 @@ import {
 } from "./refText.js";
 import { parseRef } from "./typedRefs.js";
 import { workspacePath } from "./workspacePaths.js";
+import { hasWorkSummary, workSummaryModel } from "./workSummary.js";
 
 /*
  * Finding refs in text lives in `refText.js`, which is deliberately free of
@@ -138,7 +139,18 @@ export function indexResolvedRefs(response, requested = []) {
       // `status` carries the workflow phase for a chip to show; `phase` is the
       // same value on the derivation path. Either may be absent for a context
       // ref such as a doc or a topic, which has lifecycle state only.
+      //
+      // The *stored* phase, note — which is why the computed summary below
+      // takes precedence for a card. A preview whose plan core computes as
+      // blocked would otherwise colour its dot from `in_progress` and
+      // contradict the Overview card for the same task.
       status: asText(row?.status || row?.phase),
+      /*
+       * The computed summary core sends on a card preview, read through the
+       * one model so a chip's dot and a card's badge cannot disagree. Null
+       * for a doc or a topic, which have no card state.
+       */
+      summary: hasWorkSummary(row) ? workSummaryModel(row) : null,
       owner: asText(row?.owner),
       url: asText(row?.url),
       progress: normalizeProgress(row?.progress),
@@ -229,7 +241,19 @@ export function refChipModel(ref, resolved, context = {}) {
     asText(hit?.nativeId) ||
     (resolvable ? raw : "");
 
-  const status = asText(hit?.status);
+  /*
+   * The state a chip shows.
+   *
+   * For a card, core's computed status wins over the stored phase the
+   * preview also carries, and its tone comes from the same table every card
+   * badge reads — a chip is one dot of the shared summary, not a second
+   * opinion about it. An external record's own word ("merged", "draft") is
+   * not a card state and keeps the external table.
+   */
+  const computed = externalIdentity ? null : (hit?.summary ?? null);
+  const status = asText(computed?.status?.state) || asText(hit?.status);
+  const statusTone =
+    computed?.status?.tone ?? STATUS_TONES[status] ?? "neutral";
   const authorityLabel = AUTHORITY_LABELS[authority] ?? "";
   return {
     raw,
@@ -243,7 +267,7 @@ export function refChipModel(ref, resolved, context = {}) {
     title: title || raw,
     status,
     statusLabel: status ? status.replaceAll("_", " ") : "",
-    statusTone: STATUS_TONES[status] ?? "neutral",
+    statusTone,
     owner: asText(hit?.ownerDisplay) || asText(hit?.owner),
     priority: asText(hit?.priority),
     board: asText(hit?.board),

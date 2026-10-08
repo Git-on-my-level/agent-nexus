@@ -970,7 +970,7 @@ async function installLiveDashboard(page) {
   state.live = liveObservation();
   state.liveReads = 0;
   state.liveFailure = false;
-  await page.route(`**/docs/${DOC_ID}/report`, async (route) => {
+  await page.route(`**/docs/${DOC_ID}/report?*`, async (route) => {
     state.liveReads++;
     state.requests.push({
       path: `/docs/${DOC_ID}/report`,

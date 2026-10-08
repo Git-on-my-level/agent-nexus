@@ -105,7 +105,7 @@
     // Re-read the task on every open: an agent may have moved it since.
     if (task)
       void coreClient
-        .getWork(task)
+        .getWork(task, { summary: 1 })
         .then((result) => {
           if (ticket === contextRequestId) contextWork = result?.work ?? null;
         })
@@ -208,7 +208,9 @@
     close();
     // Patch against the card as it is now, not as it was when the palette
     // opened: the write is fenced on its updated_at.
-    const work = (await coreClient.getWork(workKey(contextWork)))?.work;
+    const work = (
+      await coreClient.getWork(workKey(contextWork), { summary: 1 })
+    )?.work;
     if (!work) throw new Error("This task is no longer available.");
     const ref = `actor:${actorId}`;
     const current = Array.isArray(work.assignee_refs) ? work.assignee_refs : [];

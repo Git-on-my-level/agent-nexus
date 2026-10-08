@@ -437,7 +437,7 @@ test("a live panel whose read fails says so, and is not also badged", async ({
   await installDashboard(page);
   // Installed after the dashboard so this route wins: the rendered report is
   // forbidden, which is what a reader without access to the query sees.
-  await page.route(`**/docs/${DOC_ID}/report`, (route) =>
+  await page.route(`**/docs/${DOC_ID}/report?*`, (route) =>
     route.fulfill({
       status: 403,
       contentType: "application/json",

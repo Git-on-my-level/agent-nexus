@@ -302,6 +302,14 @@
     void goto(queryHref({ [key]: value }), { keepFocus: true, noScroll: true });
   }
   const PAGE_SIZE = 50;
+  /*
+   * Core computes `work_summary` only when asked. Without this every row
+   * would fall back to reading plan health out of the separate legacy
+   * fields, which is exactly the disagreement with the Overview that one
+   * shared summary exists to end. The enrichment is bounded per page by
+   * core, not by workspace size.
+   */
+  const SUMMARY_READ = { summary: 1 };
   async function load(
     append = false,
     query = filters,
@@ -317,6 +325,7 @@
         while (rows.length < WORK_ROW_CAP) {
           const result = await coreClient.listWork({
             ...query,
+            ...SUMMARY_READ,
             limit: Math.min(WORK_PAGE_LIMIT, WORK_ROW_CAP - rows.length),
             cursor: cursor || undefined,
           });
@@ -342,6 +351,7 @@
       }
       const result = await coreClient.listWork({
         ...query,
+        ...SUMMARY_READ,
         // A live re-read keeps as many rows as the operator already paged in.
         limit: live
           ? Math.min(200, Math.max(PAGE_SIZE, records.length))

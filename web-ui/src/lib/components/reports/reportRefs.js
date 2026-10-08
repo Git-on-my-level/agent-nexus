@@ -101,6 +101,8 @@ function pushLiveRefStrings(panel, push) {
   if (live?.status !== "ok") return;
   for (const item of Array.isArray(live.data?.items) ? live.data.items : []) {
     push(item?.ref);
-    push(item?.summary);
+    // Prose only: with `summary=1` the row's `summary` is the computed
+    // object, whose stringification names no refs.
+    push(typeof item?.summary === "string" ? item.summary : item?.summary_text);
   }
 }
