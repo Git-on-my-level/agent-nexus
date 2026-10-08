@@ -441,7 +441,7 @@ test("golden path integration runs against a real anx-core", async ({
         kind: "ask",
         title: `Review handoff ${runSuffix}`,
         body: "Please review the inbox item.",
-        subject_ref: `thread:${threadId}`,
+        subject_ref: cardBody.card.ref,
         requester_actor_id: actorId,
         response_proposals: ["Approve", "Request changes"],
       },
