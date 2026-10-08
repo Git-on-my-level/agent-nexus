@@ -22,17 +22,64 @@ mkdir -p "$HOME_DIR"
 CLI_BIN="$TMP_DIR/anx"
 AGENT_NAME="smoke-agent"
 USERNAME="smoke-agent.smoke-host"
+OWNED_PROCESS_PY="$ROOT_DIR/scripts/owned_process.py"
+CORE_RECEIPT="$TMP_DIR/core-process.json"
+UI_RECEIPT="$TMP_DIR/web-ui-process.json"
+# Integer seconds. The supervisor also enforces this as the child shutdown bound.
+SMOKE_SHUTDOWN_DEADLINE="${SMOKE_SHUTDOWN_DEADLINE:-15}"
+
+# Background the supervisor in this shell. Command substitution would reparent it
+# and the supervisor would treat that as launcher death.
+start_supervised() {
+  local receipt="$1"
+  local label="$2"
+  local log="$3"
+  local cwd="$4"
+  shift 4
+  python3 "$OWNED_PROCESS_PY" supervise \
+    --receipt "$receipt" \
+    --label "$label" \
+    --shutdown-deadline "$SMOKE_SHUTDOWN_DEADLINE" \
+    --cwd "$cwd" \
+    -- "$@" >"$log" 2>&1 &
+  SUPERVISED_PID=$!
+}
+
+stop_supervised() {
+  local pid="$1"
+  local receipt="$2"
+  local attempt
+  if [[ -n "${pid:-}" ]] && kill -0 "$pid" >/dev/null 2>&1; then
+    kill -TERM "$pid" >/dev/null 2>&1 || true
+  fi
+  for attempt in $(seq 1 200); do
+    if [[ -z "${pid:-}" ]] || ! kill -0 "$pid" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 0.1
+  done
+  if [[ -f "$receipt" ]]; then
+    python3 "$OWNED_PROCESS_PY" stop \
+      --receipt "$receipt" \
+      --shutdown-deadline "$SMOKE_SHUTDOWN_DEADLINE" || true
+  fi
+  if [[ -n "${pid:-}" ]] && kill -0 "$pid" >/dev/null 2>&1; then
+    kill -KILL "$pid" >/dev/null 2>&1 || true
+    wait "$pid" >/dev/null 2>&1 || true
+  fi
+}
 
 cleanup() {
   local code=$?
-  if [[ -n "${UI_PID:-}" ]] && kill -0 "$UI_PID" >/dev/null 2>&1; then
-    kill "$UI_PID" >/dev/null 2>&1 || true
-    wait "$UI_PID" >/dev/null 2>&1 || true
-  fi
-  if [[ -n "${CORE_PID:-}" ]] && kill -0 "$CORE_PID" >/dev/null 2>&1; then
-    kill "$CORE_PID" >/dev/null 2>&1 || true
-    wait "$CORE_PID" >/dev/null 2>&1 || true
-  fi
+  trap - EXIT INT TERM
+  # Stop the UI first so it drops core connections, then the core tree.
+  # Each supervisor reaps its own session, including go/node/esbuild grandchildren.
+  # SIGKILL of this script is not catchable: a supervisor that is still alive
+  # notices the parent pid change and reaps. SIGKILL of the supervisor itself,
+  # or a grandchild that leaves the group and clears OWNED_PROCESS_TOKEN, can
+  # still leave a process. This trap does not signal any pid outside those receipts.
+  stop_supervised "${UI_SUP_PID:-}" "$UI_RECEIPT"
+  stop_supervised "${CORE_SUP_PID:-}" "$CORE_RECEIPT"
 
   if [[ $code -ne 0 ]]; then
     echo "smoke failed; artifacts kept at: $TMP_DIR" >&2
@@ -227,6 +274,7 @@ require_cmd curl
 require_cmd go
 require_cmd node
 require_cmd pnpm
+require_cmd python3
 
 CORE_PORT="$(resolve_port "${REQUESTED_CORE_PORT}" "anx-core")"
 UI_PORT="$(resolve_port "${REQUESTED_UI_PORT}" "web-ui")"
@@ -252,18 +300,20 @@ if [[ -z "${MIN_CLI_VERSION}" ]]; then
   exit 1
 fi
 
-# Start core.
+# Start core under a supervisor whose session owns go run and the server it execs.
 mkdir -p "$TMP_DIR/workspace"
 touch "$TMP_DIR/workspace/.anx-dev-insecure-auth"
-(
-  cd "$ROOT_DIR/core"
-  ANX_BOOTSTRAP_TOKEN="$BOOTSTRAP_TOKEN" ANX_ALLOW_PASSKEY_DEV_BYPASS=1 ANX_HOSTED_DEV_MODE=1 ANX_ENABLE_DEV_ACTOR_MODE=1 go run ./cmd/anx-core \
+start_supervised "$CORE_RECEIPT" "anx-e2e-core" "$CORE_LOG" "$ROOT_DIR/core" \
+  env \
+    ANX_BOOTSTRAP_TOKEN="$BOOTSTRAP_TOKEN" \
+    ANX_ALLOW_PASSKEY_DEV_BYPASS=1 \
+    ANX_HOSTED_DEV_MODE=1 \
+    ANX_ENABLE_DEV_ACTOR_MODE=1 \
+    go run ./cmd/anx-core \
     --listen-addr "${CORE_HOST}:${CORE_PORT}" \
     --workspace-root "$TMP_DIR/workspace" \
-    --schema-path "$ROOT_DIR/contracts/anx-schema.yaml" \
-    >"$CORE_LOG" 2>&1
-) &
-CORE_PID=$!
+    --schema-path "$ROOT_DIR/contracts/anx-schema.yaml"
+CORE_SUP_PID=$SUPERVISED_PID
 
 if ! wait_for_url "$CORE_BASE_URL/readyz" 320 0.15; then
   echo "core did not become healthy" >&2
@@ -271,15 +321,14 @@ if ! wait_for_url "$CORE_BASE_URL/readyz" 320 0.15; then
   exit 1
 fi
 
-# Start web-ui against core and verify startup handshake route.
-(
-  cd "$ROOT_DIR"
-  ANX_WORKSPACES="[{\"organizationSlug\":\"local\",\"slug\":\"${UI_WORKSPACE_SLUG}\",\"label\":\"${UI_WORKSPACE_SLUG}\",\"coreBaseUrl\":\"${CORE_BASE_URL}\"}]" \
-  ANX_DEFAULT_ORGANIZATION="${ANX_DEFAULT_ORGANIZATION:-local}" \
-  ANX_DEFAULT_WORKSPACE="$UI_WORKSPACE_SLUG" \
-  pnpm -C web-ui exec vite dev --host "$UI_HOST" --port "$UI_PORT" >"$UI_LOG" 2>&1
-) &
-UI_PID=$!
+# Start web-ui under its own supervisor so pnpm, vite, and esbuild die with it.
+start_supervised "$UI_RECEIPT" "anx-e2e-web-ui" "$UI_LOG" "$ROOT_DIR" \
+  env \
+    ANX_WORKSPACES="[{\"organizationSlug\":\"local\",\"slug\":\"${UI_WORKSPACE_SLUG}\",\"label\":\"${UI_WORKSPACE_SLUG}\",\"coreBaseUrl\":\"${CORE_BASE_URL}\"}]" \
+    ANX_DEFAULT_ORGANIZATION="${ANX_DEFAULT_ORGANIZATION:-local}" \
+    ANX_DEFAULT_WORKSPACE="$UI_WORKSPACE_SLUG" \
+    pnpm -C web-ui exec vite dev --host "$UI_HOST" --port "$UI_PORT"
+UI_SUP_PID=$SUPERVISED_PID
 
 if ! wait_for_url "$UI_BASE_URL/meta/handshake" 180 0.2 \
   -H "x-anx-organization-slug: ${UI_ORG_SLUG}" \
