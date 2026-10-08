@@ -91,7 +91,7 @@ func (h projectionMaintenanceTestHarness) stepErr(now time.Time) error {
 }
 
 type blockingProjectionStore struct {
-	PrimitiveStore
+	*primitives.Store
 	threadID string
 	blocked  chan struct{}
 	release  chan struct{}
@@ -113,7 +113,7 @@ func (s *blockingProjectionStore) PutDerivedTopicProjection(ctx context.Context,
 			}
 		}
 	}
-	return s.PrimitiveStore.PutDerivedTopicProjection(ctx, projection)
+	return s.Store.PutDerivedTopicProjection(ctx, projection)
 }
 
 func TestProjectionMaintainerEmitsStaleExceptionsAndRefreshesInbox(t *testing.T) {
@@ -416,9 +416,9 @@ func TestProjectionMaintainerKeepsProjectionPendingForConcurrentWrites(t *testin
 	registry := actors.NewStore(workspace.DB())
 	baseStore := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
 	store := &blockingProjectionStore{
-		PrimitiveStore: baseStore,
-		blocked:        make(chan struct{}),
-		release:        make(chan struct{}),
+		Store:   baseStore,
+		blocked: make(chan struct{}),
+		release: make(chan struct{}),
 	}
 	maintainer := NewProjectionMaintainer(ProjectionMaintainerConfig{
 		PrimitiveStore: store,

@@ -214,7 +214,7 @@ func enrichAccessRequestInboxItem(ctx context.Context, opts handlerOptions, item
 }
 
 func applyAccessRequestInboxMetadata(item map[string]any, request primitives.AccessRequest) {
-	item["allowed_response_outcomes"] = []string{"approved", "rejected"}
+	item["allowed_response_outcomes"] = []any{"approved", "rejected"}
 	item["access_request_id"] = request.ID
 	item["requested_grant"] = request.Grant
 	item["requester_principal_id"] = request.PrincipalID
