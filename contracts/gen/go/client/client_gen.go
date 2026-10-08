@@ -128,7 +128,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"agents", "inbox", "write"},
-		Adjacent:  []string{"agent.inbox.asks.list", "agent.notifications.dismiss", "agent.notifications.list", "agent.notifications.read"},
+		Adjacent:  []string{"agent.inbox.asks.list", "agent.inbox.subscribe", "agent.notifications.dismiss", "agent.notifications.list", "agent.notifications.read", "agent.wakeups.stream"},
 	},
 	{
 		CommandID: "agent.inbox.asks.list",
@@ -139,7 +139,18 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"agents", "inbox"},
-		Adjacent:  []string{"agent.inbox.answers.read", "agent.notifications.dismiss", "agent.notifications.list", "agent.notifications.read"},
+		Adjacent:  []string{"agent.inbox.answers.read", "agent.inbox.subscribe", "agent.notifications.dismiss", "agent.notifications.list", "agent.notifications.read", "agent.wakeups.stream"},
+	},
+	{
+		CommandID: "agent.inbox.subscribe",
+		CLIPath:   "agent inbox subscribe",
+		Group:     "agent",
+		Method:    "POST",
+		Path:      "/agent-inbox/subscriptions",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"inbox", "write"},
+		Adjacent:  []string{"agent.inbox.answers.read", "agent.inbox.asks.list", "agent.notifications.dismiss", "agent.notifications.list", "agent.notifications.read", "agent.wakeups.stream"},
 	},
 	{
 		CommandID: "agent.notification-receipts.stream",
@@ -159,7 +170,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"agents", "notifications", "write"},
-		Adjacent:  []string{"agent.inbox.answers.read", "agent.inbox.asks.list", "agent.notifications.list", "agent.notifications.read"},
+		Adjacent:  []string{"agent.inbox.answers.read", "agent.inbox.asks.list", "agent.inbox.subscribe", "agent.notifications.list", "agent.notifications.read", "agent.wakeups.stream"},
 	},
 	{
 		CommandID: "agent.notifications.list",
@@ -170,7 +181,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"agents", "notifications"},
-		Adjacent:  []string{"agent.inbox.answers.read", "agent.inbox.asks.list", "agent.notifications.dismiss", "agent.notifications.read"},
+		Adjacent:  []string{"agent.inbox.answers.read", "agent.inbox.asks.list", "agent.inbox.subscribe", "agent.notifications.dismiss", "agent.notifications.read", "agent.wakeups.stream"},
 	},
 	{
 		CommandID: "agent.notifications.read",
@@ -181,7 +192,18 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"agents", "notifications", "write"},
-		Adjacent:  []string{"agent.inbox.answers.read", "agent.inbox.asks.list", "agent.notifications.dismiss", "agent.notifications.list"},
+		Adjacent:  []string{"agent.inbox.answers.read", "agent.inbox.asks.list", "agent.inbox.subscribe", "agent.notifications.dismiss", "agent.notifications.list", "agent.wakeups.stream"},
+	},
+	{
+		CommandID: "agent.wakeups.stream",
+		CLIPath:   "agent wakeups stream",
+		Group:     "agent",
+		Method:    "GET",
+		Path:      "/stream/agent-wakeups",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"inbox"},
+		Adjacent:  []string{"agent.inbox.answers.read", "agent.inbox.asks.list", "agent.inbox.subscribe", "agent.notifications.dismiss", "agent.notifications.list", "agent.notifications.read"},
 	},
 	{
 		CommandID:  "agents.get",
@@ -355,6 +377,54 @@ var CommandRegistry = []CommandSpec{
 		Stability:  "beta",
 		Concepts:   []string{"artifacts", "write"},
 		Adjacent:   []string{"artifacts.archive", "artifacts.attachments.create", "artifacts.content", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash"},
+	},
+	{
+		CommandID:  "asks.delivery",
+		CLIPath:    "asks delivery",
+		Group:      "asks",
+		Method:     "POST",
+		Path:       "/asks/{ask_id}/delivery",
+		PathParams: []string{"ask_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"inbox", "write"},
+		Adjacent:   []string{"asks.get", "asks.stream", "asks.subscribe"},
+	},
+	{
+		CommandID:  "asks.get",
+		CLIPath:    "asks get",
+		Group:      "asks",
+		Method:     "GET",
+		Path:       "/asks/{ask_id}",
+		PathParams: []string{"ask_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"inbox"},
+		Adjacent:   []string{"asks.delivery", "asks.stream", "asks.subscribe"},
+	},
+	{
+		CommandID:  "asks.stream",
+		CLIPath:    "asks stream",
+		Group:      "asks",
+		Method:     "GET",
+		Path:       "/stream/asks/{ask_id}",
+		PathParams: []string{"ask_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"inbox"},
+		Adjacent:   []string{"asks.delivery", "asks.get", "asks.subscribe"},
+	},
+	{
+		CommandID:  "asks.subscribe",
+		CLIPath:    "asks subscribe",
+		Group:      "asks",
+		Method:     "POST",
+		Path:       "/asks/{ask_id}/subscriptions",
+		PathParams: []string{"ask_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"inbox", "write"},
+		Adjacent:   []string{"asks.delivery", "asks.get", "asks.stream"},
 	},
 	{
 		CommandID:  "auth.access-requests.approve",
@@ -2782,6 +2852,10 @@ func (c *Client) AgentInboxAsksList(ctx context.Context, opts RequestOptions) (*
 	return c.Invoke(ctx, "agent.inbox.asks.list", nil, opts)
 }
 
+func (c *Client) AgentInboxSubscribe(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "agent.inbox.subscribe", nil, opts)
+}
+
 func (c *Client) AgentNotificationReceiptsStream(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "agent.notification-receipts.stream", nil, opts)
 }
@@ -2796,6 +2870,10 @@ func (c *Client) AgentNotificationsList(ctx context.Context, opts RequestOptions
 
 func (c *Client) AgentNotificationsRead(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "agent.notifications.read", nil, opts)
+}
+
+func (c *Client) AgentWakeupsStream(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "agent.wakeups.stream", nil, opts)
 }
 
 func (c *Client) AgentsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
@@ -2856,6 +2934,22 @@ func (c *Client) ArtifactsTrash(ctx context.Context, pathParams map[string]strin
 
 func (c *Client) ArtifactsUnarchive(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "artifacts.unarchive", pathParams, opts)
+}
+
+func (c *Client) AsksDelivery(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "asks.delivery", pathParams, opts)
+}
+
+func (c *Client) AsksGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "asks.get", pathParams, opts)
+}
+
+func (c *Client) AsksStream(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "asks.stream", pathParams, opts)
+}
+
+func (c *Client) AsksSubscribe(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "asks.subscribe", pathParams, opts)
 }
 
 func (c *Client) AuthAccessRequestsApprove(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

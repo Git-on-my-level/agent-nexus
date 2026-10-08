@@ -54,6 +54,9 @@ func validateEventReferenceConventions(contract *schema.Contract, event map[stri
 		if !hasPayload || rawPayload == nil || !ok {
 			return fmt.Errorf("event.payload must be an object for event.type=%q", eventType)
 		}
+		if err := schema.ValidateTypedRefs(contract, []string{strings.TrimSpace(anyString(payloadMap["subject_ref"]))}); err != nil {
+			return fmt.Errorf("event.payload.subject_ref: %w", err)
+		}
 		if err := mutateHumanAttentionResponseProposalsInPayload(payloadMap); err != nil {
 			return fmt.Errorf("event.payload: %w", err)
 		}

@@ -389,9 +389,11 @@ export const commandRegistry: CommandSpec[] = [
     },
     "adjacent_commands": [
       "agent.inbox.asks.list",
+      "agent.inbox.subscribe",
       "agent.notifications.dismiss",
       "agent.notifications.list",
-      "agent.notifications.read"
+      "agent.notifications.read",
+      "agent.wakeups.stream"
     ],
     "go_method": "AgentInboxAnswersRead",
     "ts_method": "agentInboxAnswersRead"
@@ -424,12 +426,74 @@ export const commandRegistry: CommandSpec[] = [
     "agent_notes": "Results are scoped to the authenticated requester and keyset-paginated; do not infer open state from a partial event timeline.",
     "adjacent_commands": [
       "agent.inbox.answers.read",
+      "agent.inbox.subscribe",
       "agent.notifications.dismiss",
       "agent.notifications.list",
-      "agent.notifications.read"
+      "agent.notifications.read",
+      "agent.wakeups.stream"
     ],
     "go_method": "AgentInboxAsksList",
     "ts_method": "agentInboxAsksList"
+  },
+  {
+    "command_id": "agent.inbox.subscribe",
+    "cli_path": "agent inbox subscribe",
+    "group": "agent",
+    "method": "POST",
+    "path": "/agent-inbox/subscriptions",
+    "operation_id": "subscribeAgentAsks",
+    "summary": "Subscribe to future asks by the authenticated agent",
+    "why": "Subscribe to future asks by the authenticated agent.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns subscription or receipt.",
+    "error_codes": [
+      "not_found",
+      "auth_required",
+      "invalid_request"
+    ],
+    "concepts": [
+      "inbox",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Requester-only subscription; webhook secrets are returned once and encrypted at rest. Labels must not contain secrets.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "kind",
+          "type": "string",
+          "enum_values": [
+            "await",
+            "bridge",
+            "webhook"
+          ]
+        },
+        {
+          "name": "label",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "url",
+          "type": "string"
+        }
+      ]
+    },
+    "adjacent_commands": [
+      "agent.inbox.answers.read",
+      "agent.inbox.asks.list",
+      "agent.notifications.dismiss",
+      "agent.notifications.list",
+      "agent.notifications.read",
+      "agent.wakeups.stream"
+    ],
+    "go_method": "AgentInboxSubscribe",
+    "ts_method": "agentInboxSubscribe"
   },
   {
     "command_id": "agent.notification-receipts.stream",
@@ -488,8 +552,10 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "agent.inbox.answers.read",
       "agent.inbox.asks.list",
+      "agent.inbox.subscribe",
       "agent.notifications.list",
-      "agent.notifications.read"
+      "agent.notifications.read",
+      "agent.wakeups.stream"
     ],
     "go_method": "AgentNotificationsDismiss",
     "ts_method": "agentNotificationsDismiss"
@@ -521,8 +587,10 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "agent.inbox.answers.read",
       "agent.inbox.asks.list",
+      "agent.inbox.subscribe",
       "agent.notifications.dismiss",
-      "agent.notifications.read"
+      "agent.notifications.read",
+      "agent.wakeups.stream"
     ],
     "go_method": "AgentNotificationsList",
     "ts_method": "agentNotificationsList"
@@ -557,11 +625,48 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "agent.inbox.answers.read",
       "agent.inbox.asks.list",
+      "agent.inbox.subscribe",
       "agent.notifications.dismiss",
-      "agent.notifications.list"
+      "agent.notifications.list",
+      "agent.wakeups.stream"
     ],
     "go_method": "AgentNotificationsRead",
     "ts_method": "agentNotificationsRead"
+  },
+  {
+    "command_id": "agent.wakeups.stream",
+    "cli_path": "agent wakeups stream",
+    "group": "agent",
+    "method": "GET",
+    "path": "/stream/agent-wakeups",
+    "operation_id": "streamAgentAnswerWakes",
+    "summary": "Stream durable agent wakes",
+    "why": "Consume bounded positions from the existing wake update log for the authenticated agent.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "sse"
+    },
+    "output_envelope": "SSE notification_receipt contains the authorized wake.",
+    "error_codes": [
+      "not_found",
+      "auth_required"
+    ],
+    "concepts": [
+      "inbox"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Current resource access applies on every poll.",
+    "adjacent_commands": [
+      "agent.inbox.answers.read",
+      "agent.inbox.asks.list",
+      "agent.inbox.subscribe",
+      "agent.notifications.dismiss",
+      "agent.notifications.list",
+      "agent.notifications.read"
+    ],
+    "go_method": "AgentWakeupsStream",
+    "ts_method": "agentWakeupsStream"
   },
   {
     "command_id": "agents.get",
@@ -1263,6 +1368,200 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "go_method": "ArtifactsUnarchive",
     "ts_method": "artifactsUnarchive"
+  },
+  {
+    "command_id": "asks.delivery",
+    "cli_path": "asks delivery",
+    "group": "asks",
+    "method": "POST",
+    "path": "/asks/{ask_id}/delivery",
+    "operation_id": "recordAskDelivery",
+    "summary": "Record a local delivery receipt",
+    "why": "Record a local delivery receipt.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns subscription or receipt.",
+    "error_codes": [
+      "not_found",
+      "auth_required",
+      "invalid_request"
+    ],
+    "concepts": [
+      "inbox",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Requester-only subscription; webhook secrets are returned once and encrypted at rest. Labels must not contain secrets.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "attempts",
+          "type": "integer"
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "enum_values": [
+            "delivered",
+            "failed",
+            "pending"
+          ]
+        },
+        {
+          "name": "subscription_id",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "ask_id"
+    ],
+    "adjacent_commands": [
+      "asks.get",
+      "asks.stream",
+      "asks.subscribe"
+    ],
+    "go_method": "AsksDelivery",
+    "ts_method": "asksDelivery"
+  },
+  {
+    "command_id": "asks.get",
+    "cli_path": "asks get",
+    "group": "asks",
+    "method": "GET",
+    "path": "/asks/{ask_id}",
+    "operation_id": "getAskOutcome",
+    "summary": "Read one durable ask outcome",
+    "why": "Read one ask and its task outcome without recomputing Inbox projections.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns AskOutcome.",
+    "error_codes": [
+      "not_found",
+      "auth_required"
+    ],
+    "concepts": [
+      "inbox"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Current resource access applies on every read.",
+    "path_params": [
+      "ask_id"
+    ],
+    "adjacent_commands": [
+      "asks.delivery",
+      "asks.stream",
+      "asks.subscribe"
+    ],
+    "go_method": "AsksGet",
+    "ts_method": "asksGet"
+  },
+  {
+    "command_id": "asks.stream",
+    "cli_path": "asks stream",
+    "group": "asks",
+    "method": "GET",
+    "path": "/stream/asks/{ask_id}",
+    "operation_id": "streamAskOutcome",
+    "summary": "Await one durable ask outcome",
+    "why": "Await one ask with indexed point reads and no projection recomputation.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "sse"
+    },
+    "output_envelope": "SSE outcome contains AskOutcome; stream ends on terminal state.",
+    "error_codes": [
+      "not_found",
+      "auth_required"
+    ],
+    "concepts": [
+      "inbox"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Current resource access applies on every poll.",
+    "path_params": [
+      "ask_id"
+    ],
+    "adjacent_commands": [
+      "asks.delivery",
+      "asks.get",
+      "asks.subscribe"
+    ],
+    "go_method": "AsksStream",
+    "ts_method": "asksStream"
+  },
+  {
+    "command_id": "asks.subscribe",
+    "cli_path": "asks subscribe",
+    "group": "asks",
+    "method": "POST",
+    "path": "/asks/{ask_id}/subscriptions",
+    "operation_id": "subscribeAsk",
+    "summary": "Subscribe to one ask",
+    "why": "Subscribe to one ask.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns subscription or receipt.",
+    "error_codes": [
+      "not_found",
+      "auth_required",
+      "invalid_request"
+    ],
+    "concepts": [
+      "inbox",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Requester-only subscription; webhook secrets are returned once and encrypted at rest. Labels must not contain secrets.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "kind",
+          "type": "string",
+          "enum_values": [
+            "await",
+            "bridge",
+            "webhook"
+          ]
+        },
+        {
+          "name": "label",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "url",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "ask_id"
+    ],
+    "adjacent_commands": [
+      "asks.delivery",
+      "asks.get",
+      "asks.stream"
+    ],
+    "go_method": "AsksSubscribe",
+    "ts_method": "asksSubscribe"
   },
   {
     "command_id": "auth.access-requests.approve",
@@ -5797,6 +6096,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/events",
     "operation_id": "createEvent",
     "summary": "Create event",
+    "description": "Generic attention asks are stored against an open subject card. For compatibility, legacy typed non-card subjects (including thread, document and topic) create a ready card atomically with the ask; the original subject and references remain evidence. Existing card subjects resolve canonically and must be effectively open, including source-owned work.",
     "why": "Append an event that links first-class resources and evidence through typed refs.",
     "input_mode": "json-body",
     "streaming": {
@@ -7248,7 +7548,9 @@ export const commandRegistry: CommandSpec[] = [
             "acknowledged",
             "answered",
             "approved",
-            "rejected"
+            "needs_context",
+            "rejected",
+            "resolved"
           ]
         },
         {
@@ -12593,6 +12895,10 @@ export class AnxClient {
     return this.invoke("agent.inbox.asks.list", {}, options);
   }
 
+  agentInboxSubscribe(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("agent.inbox.subscribe", {}, options);
+  }
+
   agentNotificationReceiptsStream(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("agent.notification-receipts.stream", {}, options);
   }
@@ -12607,6 +12913,10 @@ export class AnxClient {
 
   agentNotificationsRead(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("agent.notifications.read", {}, options);
+  }
+
+  agentWakeupsStream(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("agent.wakeups.stream", {}, options);
   }
 
   agentsGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
@@ -12667,6 +12977,22 @@ export class AnxClient {
 
   artifactsUnarchive(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("artifacts.unarchive", pathParams, options);
+  }
+
+  asksDelivery(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("asks.delivery", pathParams, options);
+  }
+
+  asksGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("asks.get", pathParams, options);
+  }
+
+  asksStream(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("asks.stream", pathParams, options);
+  }
+
+  asksSubscribe(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("asks.subscribe", pathParams, options);
   }
 
   authAccessRequestsApprove(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {

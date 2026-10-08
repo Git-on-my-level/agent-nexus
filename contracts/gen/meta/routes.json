@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 220,
+  "route_count": 226,
   "routes": [
     {
       "method": "GET",
@@ -45,6 +45,11 @@
     {
       "method": "GET",
       "path": "/agent-inbox/asks",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/agent-inbox/subscriptions",
       "access_class": "workspace_business_surface"
     },
     {
@@ -145,6 +150,21 @@
     {
       "method": "POST",
       "path": "/artifacts/{artifact_id}/unarchive",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/asks/{ask_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/asks/{ask_id}/delivery",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/asks/{ask_id}/subscriptions",
       "access_class": "workspace_business_surface"
     },
     {
@@ -939,8 +959,18 @@
     },
     {
       "method": "GET",
+      "path": "/stream/agent-wakeups",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
       "path": "/stream/agents",
       "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/stream/asks/{ask_id}",
+      "access_class": "workspace_business_surface"
     },
     {
       "method": "GET",

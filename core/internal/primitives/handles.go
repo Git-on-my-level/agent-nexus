@@ -264,7 +264,7 @@ func uniqueHandleTx(ctx context.Context, q queryRower, typ, desired, fallbackSee
 			}
 		}
 		var n int
-		if err := q.QueryRowContext(ctx, `SELECT COUNT(1) FROM `+table+` WHERE handle = ?`, candidate).Scan(&n); err != nil {
+		if err := q.QueryRowContext(ctx, `SELECT COUNT(1) FROM `+table+` WHERE handle = ? AND handle IS NOT NULL AND trim(handle) <> ''`, candidate).Scan(&n); err != nil {
 			return "", err
 		}
 		var idN int

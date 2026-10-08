@@ -79,6 +79,24 @@ hosted_default_commands:
   - "work.observations.list"
   - "work.refresh.get"
 commands:
+  "agent.inbox.subscribe":
+    classification: unsupported_other
+    reason: "Ask delivery is available through the CLI and HTTP API; MCP exposure requires separate qualification"
+  "agent.wakeups.stream":
+    classification: unsupported_streaming
+    reason: "SSE stream needs a bounded read adapter before MCP exposure"
+  "asks.delivery":
+    classification: unsupported_other
+    reason: "Ask delivery is available through the CLI and HTTP API; MCP exposure requires separate qualification"
+  "asks.get":
+    classification: unsupported_other
+    reason: "Ask delivery is available through the CLI and HTTP API; MCP exposure requires separate qualification"
+  "asks.stream":
+    classification: unsupported_streaming
+    reason: "SSE stream needs a bounded read adapter before MCP exposure"
+  "asks.subscribe":
+    classification: unsupported_other
+    reason: "Ask delivery is available through the CLI and HTTP API; MCP exposure requires separate qualification"
   "actors.create":
     classification: unsupported_bootstrap_auth
     reason: "dev-only actor registration is not an MCP auth path"

@@ -1351,5 +1351,39 @@
     "reason": "Credential read with an audit write; both authenticated principals may reveal under the existing independent policy. Actual encrypted fixture exercises decryption and audit SQL.",
     "latency_ms": 500,
     "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "path": "/asks/{ask_id}",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Point ask lookups or bounded actor wake positions; no Inbox projection.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "path": "/stream/asks/{ask_id}",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Point ask lookups or bounded actor wake positions; no Inbox projection.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "path": "/stream/agent-wakeups",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 403,
+    "reason": "Point ask lookups or bounded actor wake positions; no Inbox projection.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000,
+    "authorized_as": "agent"
   }
 ]

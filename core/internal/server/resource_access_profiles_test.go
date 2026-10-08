@@ -52,6 +52,8 @@ func TestResourceAccessEveryProfileField(t *testing.T) {
 			columns = append(columns, name)
 			var value any = "fixture-" + name
 			switch {
+			case source.Table == "ask_subscriptions" && name == "kind":
+				value = "await"
 			case strings.Contains(typ, "INT"):
 				value = 0
 			case typ == "BLOB":

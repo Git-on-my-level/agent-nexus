@@ -1,6 +1,8 @@
 package server
 
 import (
+	"agent-nexus-core/internal/primitives"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -177,7 +179,11 @@ func TestInboxReadsMaterializedProjectionWithFreshness(t *testing.T) {
 		"key_artifacts":   []any{},
 		"provenance":      map[string]any{"sources": []any{"inferred"}},
 	})
-	created := createHumanAttentionEvent(t, h.baseURL, threadID, "ask", "Need materialized answer", "thread:"+threadID, nil, nil)
+	// Use an explicit board so this projection-read test does not also exercise
+	// lazy default-board provisioning, whose backing thread starts unmaterialized.
+	board := workPostJSON(t, h.baseURL+"/boards", `{"actor_id":"actor-1","board":{"title":"Materialized ask subjects"}}`, http.StatusCreated)["board"].(map[string]any)
+	work := workPostJSON(t, h.baseURL+"/work", fmt.Sprintf(`{"actor_id":"actor-1","board_ref":%q,"title":"Need materialized answer","phase":"ready"}`, board["ref"]), http.StatusCreated)["work"].(map[string]any)
+	created := createHumanAttentionEvent(t, h.baseURL, threadID, "ask", "Need materialized answer", asString(work["ref"]), []string{"thread:" + threadID}, nil)
 	requestEventID := asString(created["id"])
 
 	standard := getInboxPayload(t, h.baseURL+"/inbox")
@@ -283,6 +289,19 @@ func createHumanAttentionEvent(t *testing.T, baseURL, threadID, kind, title, sub
 	if relatedRefs == nil {
 		relatedRefs = []string{}
 	}
+	// Successful new-ask fixtures use real cards; prior non-card subjects remain
+	// related evidence so the test still exercises their original relationships.
+	if !strings.HasPrefix(subjectRef, "card:") {
+		relatedRefs = append(relatedRefs, subjectRef)
+		resp := postJSONExpectStatus(t, baseURL+"/work", string(mustJSON(t, map[string]any{"actor_id": "actor-1", "title": title, "phase": "ready"})), http.StatusCreated)
+		var body map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		subjectRef = asString(body["work"].(map[string]any)["ref"])
+	}
+
 	payload := map[string]any{
 		"kind":               kind,
 		"title":              title,
@@ -463,4 +482,110 @@ func asString(value any) string {
 		return s
 	}
 	return fmt.Sprint(value)
+}
+
+func TestAskCanonicalSubjectSurvivesIDHandleCollision(t *testing.T) {
+	requireIntegrationTest(t)
+	h := newPrimitivesTestServerWithHumanPrincipal(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+	store := h.primitiveStore.(*primitives.Store)
+	ctx := context.Background()
+	first, err := store.CreateWork(ctx, "actor-1", "", map[string]any{"title": "Original subject", "phase": "ready"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := store.CreateWork(ctx, "actor-1", "", map[string]any{"title": "Colliding handle", "phase": "ready"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = h.workspace.DB().Exec(`UPDATE cards SET handle=anx_normalize_handle(?) WHERE id=?`, first["id"], second["id"]); err != nil {
+		t.Fatal(err)
+	}
+	card, err := store.GetBoardCard(ctx, "", asString(first["id"]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ask := createHumanAttentionEvent(t, h.baseURL, asString(card["thread_id"]), "ask", "Resolve original subject", asString(card["ref"]), nil, nil)
+	if ask["payload"].(map[string]any)["subject_ref"] != card["ref"] {
+		t.Fatalf("wrong canonical subject: %#v", ask)
+	}
+	var mapped string
+	if err = h.workspace.DB().QueryRow(`SELECT card_id FROM ask_subjects WHERE ask_id=?`, ask["id"]).Scan(&mapped); err != nil || mapped != first["id"] {
+		t.Fatalf("mapped to %s: %v", mapped, err)
+	}
+	item, ok := findInboxItem(getInboxItems(t, h.baseURL), func(item map[string]any) bool { return item["source_event_id"] == ask["id"] })
+	if !ok {
+		t.Fatal("ask missing")
+	}
+	postJSONExpectStatusWithHeaders(t, h.baseURL+"/inbox/"+url.PathEscape(asString(item["id"]))+"/respond", json.RawMessage(`{"actor_id":"human-purge-principal-actor","response_text":"Resolved","outcome":"resolved","notify_mode":"none"}`), map[string]string{"Authorization": "Bearer " + h.humanAccessToken}, http.StatusCreated).Body.Close()
+	for _, entry := range []struct {
+		id    any
+		phase string
+	}{{first["id"], "done"}, {second["id"], "ready"}} {
+		var phase string
+		if err = h.workspace.DB().QueryRow(`SELECT column_key FROM cards WHERE id=?`, entry.id).Scan(&phase); err != nil || phase != entry.phase {
+			t.Fatalf("card %s phase %s: %v", entry.id, phase, err)
+		}
+	}
+}
+
+func TestAskLegacyClientSubjectsBecomeTasks(t *testing.T) {
+	requireIntegrationTest(t)
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Legacy client","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+	thread := integrationSeedThread(t, h, "actor-1", paginationTestThread("legacy-ask-thread", "Legacy ask thread"))
+	store := h.primitiveStore.(*primitives.Store)
+	// No active board is readable by this legacy client. In particular, the
+	// reserved default identity and its backing thread belong to another actor.
+	if _, err := store.CreateBoard(context.Background(), "private-owner", map[string]any{"id": "workspace-default", "title": "Private default"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.PatchThread(context.Background(), "private-owner", "workspace-default", map[string]any{"pm_actor_id": "private-owner"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if store.CanAccessResource(primitives.WithAccessScope(context.Background(), primitives.AccessScope{ActorID: "actor-1"}), "board", "workspace-default") {
+		t.Fatal("legacy caller can read private default")
+	}
+	topic, err := store.CreateTopic(context.Background(), "actor-1", map[string]any{"title": "Legacy subject topic", "summary": "Legacy context"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, _, err := store.CreateDocument(context.Background(), "actor-1", map[string]any{"title": "Legacy subject document"}, "Decision context", "text", []string{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, subject := range []string{"thread:" + thread, asString(topic.Topic["ref"]), asString(doc["ref"])} {
+		t.Run(subject, func(t *testing.T) {
+			request := map[string]any{"actor_id": "actor-1", "request_key": "legacy-" + subject, "event": map[string]any{"type": "human_attention_requested", "thread_id": thread, "refs": []string{"thread:" + thread}, "summary": "Legacy decision", "payload": map[string]any{"kind": "ask", "title": "Legacy decision", "subject_ref": subject, "requester_actor_id": "actor-1", "response_proposals": []string{"Proceed"}}, "provenance": eventProvenance()}}
+			var firstID, firstCard string
+			before := countTableRows(t, h.workspace.DB(), "cards")
+			for i := 0; i < 2; i++ {
+				response := postJSONExpectStatus(t, h.baseURL+"/events", string(mustJSON(t, request)), http.StatusCreated)
+				var body map[string]any
+				if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+					t.Fatal(err)
+				}
+				response.Body.Close()
+				event := body["event"].(map[string]any)
+				payload := event["payload"].(map[string]any)
+				ref := asString(payload["subject_ref"])
+				if !strings.HasPrefix(ref, "card:") || !strings.Contains(fmt.Sprint(payload["related_refs"]), subject) {
+					t.Fatalf("lost subject: %#v", event)
+				}
+				work, err := store.GetWork(context.Background(), ref)
+				if err != nil || work["phase"] != "ready" {
+					t.Fatalf("invalid subject: %#v %v", work, err)
+				}
+				if i == 0 {
+					firstID = asString(event["id"])
+					firstCard = ref
+				} else if firstID != asString(event["id"]) || firstCard != ref {
+					t.Fatalf("replay created another ask: %#v", event)
+				}
+			}
+			if got := countTableRows(t, h.workspace.DB(), "cards"); got != before+1 {
+				t.Fatalf("cards %d want %d", got, before+1)
+			}
+		})
+	}
 }

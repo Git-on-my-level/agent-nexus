@@ -25,6 +25,7 @@ import (
 	"agent-nexus-core/internal/handles"
 	"agent-nexus-core/internal/resourceaccess"
 	"agent-nexus-core/internal/schema"
+	"agent-nexus-core/internal/secrets"
 )
 
 var ErrNotFound = errors.New("not found")
@@ -174,17 +175,21 @@ type EventCursor struct {
 }
 
 type Store struct {
-	scopeInbox        *scopeInboxRuntime
-	db                *accessDB
-	streamDB          *sql.DB // Used only by the read-only commit-version observer.
-	blob              blob.Backend
-	blobRoot          string
-	dbPath            string
-	quota             WorkspaceQuota
-	quotaMu           sync.Mutex
-	contentUsageMu    sync.Mutex
-	contentUsageBytes int64
-	contentUsageAt    time.Time
+	askWebhookEncryption *secrets.Encryptor
+	askWebhookAllowHosts []string
+	askNextActorOrder    []string
+	askStaleAfter        time.Duration
+	scopeInbox           *scopeInboxRuntime
+	streamDB             *sql.DB // Used only by the read-only commit-version observer.
+	db                   *accessDB
+	blob                 blob.Backend
+	blobRoot             string
+	dbPath               string
+	quota                WorkspaceQuota
+	quotaMu              sync.Mutex
+	contentUsageMu       sync.Mutex
+	contentUsageBytes    int64
+	contentUsageAt       time.Time
 }
 
 type eventExec interface {

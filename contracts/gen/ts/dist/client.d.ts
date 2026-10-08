@@ -64,10 +64,12 @@ export declare class AnxClient {
     adaptersToken(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     agentInboxAnswersRead(options?: RequestOptions): Promise<InvokeResult>;
     agentInboxAsksList(options?: RequestOptions): Promise<InvokeResult>;
+    agentInboxSubscribe(options?: RequestOptions): Promise<InvokeResult>;
     agentNotificationReceiptsStream(options?: RequestOptions): Promise<InvokeResult>;
     agentNotificationsDismiss(options?: RequestOptions): Promise<InvokeResult>;
     agentNotificationsList(options?: RequestOptions): Promise<InvokeResult>;
     agentNotificationsRead(options?: RequestOptions): Promise<InvokeResult>;
+    agentWakeupsStream(options?: RequestOptions): Promise<InvokeResult>;
     agentsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     agentsList(options?: RequestOptions): Promise<InvokeResult>;
     agentsMeGet(options?: RequestOptions): Promise<InvokeResult>;
@@ -83,6 +85,10 @@ export declare class AnxClient {
     artifactsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     artifactsTrash(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     artifactsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    asksDelivery(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    asksGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    asksStream(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    asksSubscribe(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     authAccessRequestsApprove(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     authAccessRequestsDeny(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     authAccessRequestsList(options?: RequestOptions): Promise<InvokeResult>;

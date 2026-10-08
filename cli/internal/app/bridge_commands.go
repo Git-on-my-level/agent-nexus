@@ -36,6 +36,7 @@ type bridgePythonRuntime struct {
 func init() {
 	runtimeHelpManualDocTopics = append(runtimeHelpManualDocTopics, runtimeHelpDocTopic{Path: "bridge", Kind: "manual", Summary: "One bridge per enrolled host for derived-agent wake routing."})
 	localHelperTopics = append(localHelperTopics,
+		localHelperTopic{Path: "bridge run", Summary: "Run registered answer commands for the selected agent on this host.", JSONShape: "`stopped`", Composition: "Long-lived signed wake consumer; command registry stays local.", Examples: []string{"anx --as worker bridge run"}},
 		localHelperTopic{Path: "bridge install", Summary: "Install the host bridge runtime.", JSONShape: "`install_dir`, `bin_dir`, `wrapper_path`, `python`, `bridge_binary`, `package_ref`", Composition: "Install a managed Python virtualenv and wrapper.", Examples: []string{"anx bridge install"}},
 		localHelperTopic{Path: "bridge doctor", Summary: "Check one enrolled-host bridge and its configured runtimes.", JSONShape: "`host`, `agents`, `agentctl`", Composition: "Invoke the bridge's host roster validation.", Examples: []string{"anx bridge doctor --config ./bridge.toml"}, Flags: []localHelperFlag{{Name: "--config <path>", Description: "One host bridge config."}}},
 	)
@@ -47,6 +48,9 @@ func (a *App) runBridgeCommand(ctx context.Context, args []string, cfg config.Re
 	}
 	sub := bridgeSubcommandSpec.normalize(args[0])
 	switch sub {
+	case "run":
+		result, err := a.runAskBridge(ctx, args[1:], cfg)
+		return result, "bridge run", err
 	case "install":
 		result, err := a.runBridgeInstall(ctx, args[1:])
 		return result, "bridge install", err
@@ -69,6 +73,7 @@ func (a *App) runBridgeCommand(ctx context.Context, args []string, cfg config.Re
 
 func bridgeUsageText() string {
 	return "Bridge: one process per enrolled host\n\n" +
+		"anx --as <agent> bridge run [--max-attempts 5] [--command-timeout 30m]\n" +
 		"anx host enroll\n" +
 		"anx bridge install\n" +
 		"anx bridge start --config ./bridge.toml\n" +

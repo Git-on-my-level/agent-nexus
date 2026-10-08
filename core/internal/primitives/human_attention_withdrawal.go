@@ -1,6 +1,7 @@
 package primitives
 
 import (
+	"agent-nexus-core/internal/workprojection"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -12,6 +13,9 @@ import (
 // with the request's unique resolution claim. A concurrent human response and
 // withdrawal can therefore never both resolve the same ask.
 func (s *Store) AppendHumanAttentionWithdrawal(ctx context.Context, actorID, sourceEventID string, event map[string]any) (map[string]any, error) {
+	return s.appendHumanAttentionWithdrawal(ctx, actorID, sourceEventID, event, false)
+}
+func (s *Store) appendHumanAttentionWithdrawal(ctx context.Context, actorID, sourceEventID string, event map[string]any, onlyIfClosed bool) (map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -69,6 +73,24 @@ func (s *Store) AppendHumanAttentionWithdrawal(ctx context.Context, actorID, sou
 		return nil, fmt.Errorf("withdrawal reason is required")
 	}
 
+	if onlyIfClosed {
+		resolved, e := resolveResourceRef(ctx, tx, ResourceRefInput{Type: "card", Ref: anyStringValue(sourcePayload["subject_ref"])})
+		if e != nil {
+			return nil, e
+		}
+		var closed bool
+		e = tx.QueryRowContext(ctx, `SELECT `+workprojection.ClosedSQL()+` FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id WHERE c.id=?`, resolved.ID).Scan(&closed)
+		if e != nil {
+			return nil, e
+		}
+		if !closed {
+			// An imported/backfilled due row may also predate a reopening.
+			if _, e = tx.ExecContext(ctx, `UPDATE ask_subjects SET due_at=COALESCE(julianday(?),1e20),close_reason='expired' WHERE ask_id=?`, anyStringValue(sourcePayload["expires_at"]), sourceEventID); e != nil {
+				return nil, e
+			}
+			return nil, tx.Commit()
+		}
+	}
 	refs := []string{"event:" + sourceEventID}
 	if threadID != "" {
 		refs = append(refs, "thread:"+threadID)

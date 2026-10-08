@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Groups: `30`
+- Groups: `31`
 
 ## `topics`
 
@@ -50,13 +50,15 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `agent`
 
-- Commands: `5`
+- Commands: `7`
 - Command IDs:
   - `agent.inbox.answers.read` (`agent inbox answers read`)
   - `agent.inbox.asks.list` (`agent inbox asks list`)
+  - `agent.inbox.subscribe` (`agent inbox subscribe`)
   - `agent.notifications.dismiss` (`agent notifications dismiss`)
   - `agent.notifications.list` (`agent notifications list`)
   - `agent.notifications.read` (`agent notifications read`)
+  - `agent.wakeups.stream` (`agent wakeups stream`)
 
 ## `agents`
 
@@ -81,6 +83,15 @@ Generated from `contracts/anx-openapi.yaml`.
   - `artifacts.restore` (`artifacts restore`)
   - `artifacts.trash` (`artifacts trash`)
   - `artifacts.unarchive` (`artifacts unarchive`)
+
+## `asks`
+
+- Commands: `4`
+- Command IDs:
+  - `asks.delivery` (`asks delivery`)
+  - `asks.get` (`asks get`)
+  - `asks.stream` (`asks stream`)
+  - `asks.subscribe` (`asks subscribe`)
 
 ## `auth`
 

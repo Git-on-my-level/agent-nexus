@@ -19,6 +19,9 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 		return "help", nil
 	}
 
+	if len(args) >= 2 && args[0] == "bridge" && args[1] == "run" {
+		return "bridge run", preflightFlagUsage(args[2:], map[string]preflightFlagSpec{"max-attempts": {kind: preflightFlagString}, "command-timeout": {kind: preflightFlagString}})
+	}
 	if args[0] == "update" {
 		o, err := parseUpdateOptions(args[1:])
 		name := "update"
@@ -543,6 +546,7 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 	})
 	for _, kind := range []string{"ask", "review", "escalate"} {
 		addLayer(map[string]map[string]preflightFlagSpec{kind: {
+			"force": {kind: preflightFlagBool}, "reason": {kind: preflightFlagString}, "supersedes": {kind: preflightFlagString}, "evidence": {kind: preflightFlagString}, "on-answer": {kind: preflightFlagString}, "webhook": {kind: preflightFlagString},
 			"recommend": {kind: preflightFlagString}, "alt": {kind: preflightFlagString},
 			"from-file": {kind: preflightFlagString}, "subject-ref": {kind: preflightFlagString},
 			"thread-id": {kind: preflightFlagString}, "ref": {kind: preflightFlagString},

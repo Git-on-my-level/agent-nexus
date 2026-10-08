@@ -588,5 +588,20 @@
     "method": "PUT",
     "path": "/workspace/dashboard",
     "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
+  },
+  {
+    "method": "POST",
+    "path": "/asks/{ask_id}/subscriptions",
+    "reason": "Bounded subscription creation or acknowledgement; records no host command."
+  },
+  {
+    "method": "POST",
+    "path": "/asks/{ask_id}/delivery",
+    "reason": "Bounded subscription creation or acknowledgement; records no host command."
+  },
+  {
+    "method": "POST",
+    "path": "/agent-inbox/subscriptions",
+    "reason": "Bounded subscription creation or acknowledgement; records no host command."
   }
 ]

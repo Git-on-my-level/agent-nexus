@@ -61,6 +61,9 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 	for _, token := range sqlIdentifiers.FindAllString(query, -1) {
 		needed[strings.ToLower(token)] = true
 	}
+	if needed["ask_delivery_attempts"] {
+		needed["ask_deliveries"] = true
+	}
 	graph := ""
 	pointPredicates := map[string]string{}
 
@@ -102,6 +105,11 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 	add("work_participants", denied("card", "_row.card_id")+" AND "+denied("participant", "_row.id"))
 	add("card_plans", denied("plan", "_row.card_id"))
 	add("agent_wakeups", denied("wakeup", "_row.wakeup_id"))
+	add("ask_subscriptions", "(_row.ask_id='' OR "+denied("event", "_row.ask_id")+") AND "+denied("filter/ask_subscriptions", "_row.id"))
+	add("ask_deliveries", denied("event", "_row.ask_id")+" AND "+denied("filter/ask_deliveries", "_row.id"))
+	add("ask_delivery_attempts", "EXISTS (SELECT 1 FROM ask_deliveries d WHERE d.id=_row.delivery_id)")
+	add("ask_subject_close_queue", denied("card", "_row.card_id"))
+	add("ask_subjects", denied("event", "_row.ask_id")+" AND "+denied("card", "_row.card_id"))
 	add("access_requests", denied("event", "_row.request_event_id")+" AND "+cleanJSON("_row.reason"))
 	add("human_attention_response_claims", denied("event", "_row.request_event_id")+" AND "+denied("event", "_row.response_event_id")+" AND "+cleanJSON("_row.response_json"))
 	for _, table := range []string{"derived_topic_dirty_queue"} {
@@ -121,7 +129,7 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 	add("workspace_dashboard", denied("document", "_row.document_id"))
 	add("idempotency_replays", cleanJSON("_row.response_json"))
 	for _, source := range resourceaccess.FilterOwnershipSources() {
-		if source.Table == "series_adapters" {
+		if source.Table == "series_adapters" || source.Table == "ask_subscriptions" || source.Table == "ask_deliveries" {
 			continue // Custom projection below also filters shared freshness.
 		}
 		add(source.Table, denied(source.Kind, "_row."+source.ID))

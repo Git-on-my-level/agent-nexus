@@ -257,7 +257,8 @@ func updateInvocationEligible(command string, args []string, results ...*command
 		}
 	}
 	for _, verb := range strings.Fields(command) {
-		if verb == "doctor" || verb == "status" {
+		// Await writes delivery receipts but must retain its no-update waiting behavior.
+		if verb == "doctor" || verb == "status" || verb == "await" {
 			return false
 		}
 	}

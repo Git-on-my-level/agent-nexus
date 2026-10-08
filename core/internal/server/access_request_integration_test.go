@@ -63,6 +63,9 @@ func TestAccessRequestHumanDecisionAndReplay(t *testing.T) {
 		item := raw.(map[string]any)
 		if item["id"] == inboxID {
 			found = true
+			if fmt.Sprint(item["allowed_response_outcomes"]) != "[approved rejected]" {
+				t.Fatalf("unsafe outcomes: %#v", item)
+			}
 			if item["access_request_id"] != id || item["requested_grant"] != "auth-admin" {
 				t.Fatalf("correlation: %#v", item)
 			}
@@ -80,6 +83,8 @@ func TestAccessRequestHumanDecisionAndReplay(t *testing.T) {
 		hostStatus(t, status, 403, p)
 	}
 	status, p = hostHTTP(t, "POST", base+"/inbox/"+url.PathEscape(inboxID)+"/respond", human, map[string]any{"response_text": "Let me think", "outcome": "answered", "notify_mode": "none"})
+	hostStatus(t, status, 400, p)
+	status, p = hostHTTP(t, "POST", base+"/inbox/"+url.PathEscape(inboxID)+"/respond", human, map[string]any{"response_text": "Need details", "outcome": "needs_context", "notify_mode": "none"})
 	hostStatus(t, status, 400, p)
 	status, p = hostHTTP(t, "GET", base+"/auth/access/summary", human, nil)
 	hostStatus(t, status, 200, p)
@@ -154,7 +159,11 @@ func TestAccessRequestInboxDecisionsAndForgedMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	threadID := source["thread_id"].(string)
-	status, p = hostHTTP(t, "POST", base+"/events", requester.AccessToken, map[string]any{"event": map[string]any{"type": "human_attention_requested", "thread_id": threadID, "refs": []string{"thread:" + threadID}, "summary": "Ordinary review", "payload": map[string]any{"kind": "review", "requester_actor_id": requester.ActorID, "requester_agent_id": requester.AgentID, "title": "Ordinary review", "request_id": "forged", "body": "Harmless text", "subject_ref": "thread:" + threadID, "related_refs": []string{"thread:" + threadID}, "response_proposals": []string{"Approve"}, "access_request_id": id, "requested_grant": "auth-admin", "requester_principal_id": other.AgentID}, "provenance": eventProvenance()}})
+	card, err := store.CreateWork(context.Background(), requester.ActorID, "", map[string]any{"title": "Review subject", "phase": "ready"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, p = hostHTTP(t, "POST", base+"/events", requester.AccessToken, map[string]any{"event": map[string]any{"type": "human_attention_requested", "thread_id": threadID, "refs": []string{"thread:" + threadID}, "summary": "Ordinary review", "payload": map[string]any{"kind": "review", "requester_actor_id": requester.ActorID, "requester_agent_id": requester.AgentID, "title": "Ordinary review", "request_id": "forged", "body": "Harmless text", "subject_ref": card["ref"], "related_refs": []string{"thread:" + threadID}, "response_proposals": []string{"Approve"}, "access_request_id": id, "requested_grant": "auth-admin", "requester_principal_id": other.AgentID}, "provenance": eventProvenance()}})
 	hostStatus(t, status, 201, p)
 	forgedEventID := p["event"].(map[string]any)["id"].(string)
 	// This harness has no background projection maintainer. Explicitly rebuild
@@ -346,6 +355,10 @@ func TestInboxSummaryRanksProjectedAskSeverity(t *testing.T) {
 		t.Fatal(err)
 	}
 	threadID := source["thread_id"].(string)
+	card, err := store.CreateWork(context.Background(), agent.ActorID, "", map[string]any{"title": "Ranking subject", "phase": "ready"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	ids := []string{}
 	for i, severity := range []string{"low", "high", " HIGH ", ""} {
 		event := map[string]any{
@@ -354,7 +367,7 @@ func TestInboxSummaryRanksProjectedAskSeverity(t *testing.T) {
 			"refs": []string{"thread:" + threadID}, "summary": "Summary ranking",
 			"payload": map[string]any{"kind": "ask", "title": "Summary ranking", "body": "A decision is needed", "severity": severity,
 				"requester_actor_id": agent.ActorID, "requester_agent_id": agent.AgentID,
-				"subject_ref": "thread:" + threadID, "related_refs": []string{"thread:" + threadID}, "response_proposals": []string{"Proceed"}},
+				"subject_ref": card["ref"], "related_refs": []string{"thread:" + threadID}, "response_proposals": []string{"Proceed"}},
 			"provenance": eventProvenance(),
 		}
 		status, p = hostHTTP(t, "POST", env.server.URL+"/events", agent.AccessToken, map[string]any{"event": event})

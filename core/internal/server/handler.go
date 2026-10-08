@@ -2588,6 +2588,37 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleGetInbox(w, r, opts)
 	})
 
+	registerRoute("/agent-inbox/subscriptions", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) { handleAskSubscription(w, r, opts, "") })
+	registerRoute("/asks/", func(r *http.Request) routeAccessRequirement {
+		rest := strings.TrimPrefix(r.URL.Path, "/asks/")
+		parts := strings.Split(rest, "/")
+		if len(parts) == 1 && parts[0] != "" && r.Method == http.MethodGet {
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+		}
+		if len(parts) == 2 && parts[0] != "" && r.Method == http.MethodPost && (parts[1] == "subscriptions" || parts[1] == "delivery") {
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+		}
+		return routeAccessRequirement{}
+	}, func(w http.ResponseWriter, r *http.Request) {
+		rest := strings.TrimPrefix(r.URL.Path, "/asks/")
+		parts := strings.Split(rest, "/")
+		if len(parts) == 2 && r.Method == http.MethodPost {
+			switch parts[1] {
+			case "subscriptions":
+				handleAskSubscription(w, r, opts, parts[0])
+				return
+			case "delivery":
+				handleAskDeliveryReceipt(w, r, opts, parts[0])
+				return
+			}
+		}
+		handleAskOutcome(w, r, opts, false)
+	})
+	registerStreamRoute("agent-wakeups", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleAskWakeStream(w, r, opts) })
+	registerStreamRoute("asks/{ask_id}", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
+		handleAskOutcome(w, r, opts, true)
+	})
+
 	registerRoute("/inbox/summary", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, 405, "method_not_allowed", "only GET is supported")

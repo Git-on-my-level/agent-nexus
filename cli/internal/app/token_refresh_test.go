@@ -50,6 +50,8 @@ func TestAwaitRenewsExpiredDerivedTokenAndResumes(t *testing.T) {
 	var streams, grants atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/asks/ask-1/subscriptions", "/asks/ask-1/delivery":
+			fmt.Fprint(w, `{"id":"sub-1"}`)
 		case "/events/ask-1":
 			fmt.Fprint(w, `{"event":{"id":"ask-1","type":"human_attention_requested","thread_id":"thread-1"}}`)
 		case "/events":
@@ -57,7 +59,7 @@ func TestAwaitRenewsExpiredDerivedTokenAndResumes(t *testing.T) {
 		case "/auth/token":
 			grants.Add(1)
 			refreshGrant(w)
-		case "/stream/events":
+		case "/stream/asks/ask-1":
 			n := streams.Add(1)
 			w.Header().Set("Content-Type", "text/event-stream")
 			if n == 1 {
@@ -73,10 +75,7 @@ func TestAwaitRenewsExpiredDerivedTokenAndResumes(t *testing.T) {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
-			if got := r.URL.Query().Get("last_event_id"); got != "first" || r.Header.Get("Last-Event-ID") != "first" {
-				t.Errorf("lost resume cursor: query=%q header=%q", got, r.Header.Get("Last-Event-ID"))
-			}
-			fmt.Fprint(w, "id: response\nevent: event\ndata: {\"event\":{\"id\":\"response\",\"type\":\"human_attention_responded\",\"payload\":{\"request_event_ref\":\"event:ask-1\",\"outcome\":\"answered\",\"response_text\":\"Approved\"}}}\n\n")
+			fmt.Fprint(w, "event: outcome\ndata: {\"status\":\"answered\",\"response\":{\"outcome\":\"answered\",\"response_text\":\"Approved\"}}\n\n")
 		default:
 			http.NotFound(w, r)
 		}

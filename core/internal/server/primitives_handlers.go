@@ -129,6 +129,15 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 
+	if typeValue == humanAttentionRequestedEventType {
+		payload, _ := req.Event["payload"].(map[string]any)
+		if principal, ok := cachedAuthenticatedPrincipal(r); ok && isAgentPrincipal(principal) && anyString(payload["requester_actor_id"]) != principal.ActorID {
+			writeError(w, 403, "forbidden", "requester must be the authenticated agent")
+			return
+		}
+
+	}
+
 	var stored map[string]any
 	if typeValue == humanAttentionWithdrawnEventType {
 		principal, ok := requireAuthenticatedPrincipal(w, r, opts)
@@ -165,6 +174,15 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			return
 		}
 		stored, err = withdrawalStore.AppendHumanAttentionWithdrawal(r.Context(), actorID, requestEventID, req.Event)
+	} else if typeValue == humanAttentionRequestedEventType {
+		store, ok := opts.primitiveStore.(interface {
+			AppendTaskAttentionEvent(context.Context, string, map[string]any) (map[string]any, error)
+		})
+		if !ok {
+			writeError(w, 503, "primitives_unavailable", "task attention store is not configured")
+			return
+		}
+		stored, err = store.AppendTaskAttentionEvent(r.Context(), actorID, req.Event)
 	} else {
 		stored, err = opts.primitiveStore.AppendEvent(r.Context(), actorID, req.Event)
 	}
@@ -177,7 +195,11 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			writeError(w, http.StatusForbidden, "forbidden", "only the requesting agent may withdraw this ask")
 			return
 		}
-		if errors.Is(err, primitives.ErrNotFound) && typeValue == humanAttentionWithdrawnEventType {
+		if errors.Is(err, primitives.ErrInvalidWorkRequest) {
+			writeError(w, 400, "invalid_request", err.Error())
+			return
+		}
+		if errors.Is(err, primitives.ErrNotFound) && (typeValue == humanAttentionWithdrawnEventType || typeValue == humanAttentionRequestedEventType) {
 			writeError(w, http.StatusNotFound, "not_found", "human attention request not found")
 			return
 		}

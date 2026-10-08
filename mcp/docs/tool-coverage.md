@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 214
+- Command count: 220
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -12,9 +12,10 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | --- | --- |
 | actors | 2 |
 | adapters | 5 |
-| agent | 6 |
+| agent | 8 |
 | agents | 4 |
 | artifacts | 10 |
+| asks | 4 |
 | auth | 22 |
 | boards | 13 |
 | cards | 13 |
@@ -52,9 +53,9 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 9 |
 | unsupported_interactive | 9 |
-| unsupported_other | 2 |
+| unsupported_other | 6 |
 | unsupported_shell_shaped | 2 |
-| unsupported_streaming | 4 |
+| unsupported_streaming | 6 |
 
 ## Counts by Surface
 
@@ -64,7 +65,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | hosted default | 65 | explicit read-only private-app allowlist |
 | gated | 41 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
-| unsupported | 26 | not represented as direct MCP tools in v1 |
+| unsupported | 32 | not represented as direct MCP tools in v1 |
 
 ## Command Inventory
 
@@ -79,10 +80,12 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | adapters.token | adapters | POST | /adapters/{name}/token | gated_sensitive | Return a short-lived credential for the owning enrolled agent; never expose by default. |
 | agent.inbox.answers.read | agent | POST | /agent-inbox/answers/read | exposed_write | ordinary authenticated agent per-answer read state write |
 | agent.inbox.asks.list | agent | GET | /agent-inbox/asks | exposed_read | requester-scoped, keyset-paginated human attention inbox projection |
+| agent.inbox.subscribe | agent | POST | /agent-inbox/subscriptions | unsupported_other | Ask delivery is available through the CLI and HTTP API; MCP exposure requires separate qualification |
 | agent.notification-receipts.stream | agent | GET | /stream/agent-notification-receipts | unsupported_streaming | SSE stream needs a bounded read adapter before MCP exposure |
 | agent.notifications.dismiss | agent | POST | /agent-notifications/dismiss | exposed_write | ordinary authenticated agent notification state write |
 | agent.notifications.list | agent | GET | /agent-notifications | exposed_read | bounded authenticated agent notification projection |
 | agent.notifications.read | agent | POST | /agent-notifications/read | exposed_write | ordinary authenticated agent notification state write |
+| agent.wakeups.stream | agent | GET | /stream/agent-wakeups | unsupported_streaming | SSE stream needs a bounded read adapter before MCP exposure |
 | agents.get | agents | GET | /agents/{agent_id} | exposed_read | agent roster detail is workspace presence data |
 | agents.list | agents | GET | /agents | exposed_read | agent roster is workspace presence data |
 | agents.me.get | agents | GET | /agents/me | exposed_read | authenticated caller self-inspection |
@@ -98,6 +101,10 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | artifacts.restore | artifacts | POST | /artifacts/{artifact_id}/restore | exposed_write | ordinary reversible artifact lifecycle write |
 | artifacts.trash | artifacts | POST | /artifacts/{artifact_id}/trash | exposed_write | ordinary reversible artifact lifecycle write |
 | artifacts.unarchive | artifacts | POST | /artifacts/{artifact_id}/unarchive | exposed_write | ordinary reversible artifact lifecycle write |
+| asks.delivery | asks | POST | /asks/{ask_id}/delivery | unsupported_other | Ask delivery is available through the CLI and HTTP API; MCP exposure requires separate qualification |
+| asks.get | asks | GET | /asks/{ask_id} | unsupported_other | Ask delivery is available through the CLI and HTTP API; MCP exposure requires separate qualification |
+| asks.stream | asks | GET | /stream/asks/{ask_id} | unsupported_streaming | SSE stream needs a bounded read adapter before MCP exposure |
+| asks.subscribe | asks | POST | /asks/{ask_id}/subscriptions | unsupported_other | Ask delivery is available through the CLI and HTTP API; MCP exposure requires separate qualification |
 | auth.access-requests.approve | auth | POST | /auth/access-requests/{request_id}/approve | unsupported_interactive | human-only privileged grant approval requires human judgment |
 | auth.access-requests.deny | auth | POST | /auth/access-requests/{request_id}/deny | unsupported_interactive | human-only privileged grant denial requires human judgment |
 | auth.access-requests.list | auth | GET | /auth/access-requests | unsupported_interactive | human-only pending access inventory |
