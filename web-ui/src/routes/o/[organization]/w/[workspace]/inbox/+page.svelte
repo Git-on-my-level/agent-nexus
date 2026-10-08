@@ -1,5 +1,4 @@
 <script>
-  import PMConnection from "$lib/components/pm/PMConnection.svelte";
   import { humanActorIdSet } from "$lib/humanActors.js";
   import { onMount, tick, untrack } from "svelte";
   import { page } from "$app/stores";
@@ -91,6 +90,8 @@
   import StateError from "$lib/components/state/StateError.svelte";
   import SkeletonInboxRow from "$lib/components/state/SkeletonInboxRow.svelte";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
+  import { pmFeaturesVisible } from "$lib/pm/onboardingState.js";
+  import { pmPresence } from "$lib/pm/presence.js";
   import DecisionPanel from "$lib/components/pm/DecisionPanel.svelte";
   import KeyboardShortcutsDialog from "$lib/components/KeyboardShortcutsDialog.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
@@ -147,6 +148,17 @@
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
+  /*
+   * Gates the PM affordances and wording only, never a read: a proposal filed
+   * earlier still waits for a yes whether or not a PM is running now, and the
+   * Inbox is the only place to answer it.
+   */
+  let pmState = $derived(
+    $pmPresence.workspace === ($page.data?.workspace?.slug ?? "")
+      ? $pmPresence
+      : null,
+  );
+  let pmVisible = $derived(pmFeaturesVisible(pmState));
   let mailbox = $derived.by(() => {
     const value = $page.url.searchParams.get("mailbox") || "";
     return INBOX_MAILBOXES.some(([key]) => key === value) ? value : "needs-you";
@@ -1246,11 +1258,11 @@
           <path d={navIconPath("search")} />
         </svg>
       </button>
-      <a class="ui-btn-secondary" href={workspaceHref("/pm")}>Ask PM</a>
+      {#if pmVisible}
+        <a class="ui-btn-secondary" href={workspaceHref("/pm")}>Ask PM</a>
+      {/if}
     {/snippet}
   </WorkspacePageHeader>
-  {#if selectedDecision || decisions.some((entry) => entry.status === "awaiting_answer")}{#key `${$page.params.organization}/${$page.params.workspace}`}<PMConnection
-      />{/key}{/if}
   <nav class="flex flex-wrap items-center gap-1" aria-label="Inbox mailbox">
     {#each INBOX_MAILBOXES as [key, title]}
       <a
@@ -1537,7 +1549,7 @@
                     ? actorDisplayLabel(id, $actorRegistry, $principalRegistry)
                     : ""}
                 currentActorId={$selectedActorId || ""}
-                pmHref={workspaceHref("/pm")}
+                pmHref={pmVisible ? workspaceHref("/pm") : ""}
                 replacement={selectedDecision?.superseded_by
                   ? decisions.find(
                       (item) => item.id === selectedDecision.superseded_by,
@@ -1607,13 +1619,15 @@
                   </p>
                 {/if}
                 <div class="flex flex-wrap gap-2">
+                  {#if pmVisible}
+                    <a
+                      class="ui-btn-primary"
+                      href={`${workspaceHref("/pm")}?work_ref=${encodeURIComponent(selected.ref)}`}
+                      >Ask PM about this</a
+                    >
+                  {/if}
                   <a
-                    class="ui-btn-primary"
-                    href={`${workspaceHref("/pm")}?work_ref=${encodeURIComponent(selected.ref)}`}
-                    >Ask PM about this</a
-                  >
-                  <a
-                    class="ui-btn-secondary"
+                    class={pmVisible ? "ui-btn-secondary" : "ui-btn-primary"}
                     href={workspaceHref(taskDetailPath(taskItem))}
                     data-inbox-shortcut="open">Open task</a
                   >

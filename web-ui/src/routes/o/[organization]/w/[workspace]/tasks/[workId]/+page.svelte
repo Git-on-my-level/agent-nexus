@@ -74,6 +74,8 @@
     observationStatusLabel,
     observationStatusTone,
   } from "$lib/pm/evidence.js";
+  import { pmFeaturesVisible } from "$lib/pm/onboardingState.js";
+  import { pmPresence } from "$lib/pm/presence.js";
   let work = $state(null),
     /**
      * True while `work` is the row the list already had rather than the card
@@ -252,6 +254,14 @@
   );
   let workId = $derived($page.params.workId);
   let signal = $derived(workFreshness(work));
+  let pmState = $derived(
+    $pmPresence.workspace === ($page.data?.workspace?.slug ?? "")
+      ? $pmPresence
+      : null,
+  );
+  // Gates the PM affordances and wording only, never a read: a proposal
+  // filed earlier still waits for a yes whether or not a PM is running now.
+  let pmVisible = $derived(pmFeaturesVisible(pmState));
   let pmHref = $derived(
     workspaceHref(`/pm?work_ref=${encodeURIComponent(work?.ref || workId)}`),
   );
@@ -597,7 +607,8 @@
           class="ui-btn-secondary"
           onclick={() => load()}
           disabled={loading}>{loading ? "Reloading…" : "Reload"}</button
-        ><a class="ui-btn-primary" href={pmHref}>Ask PM</a>{/snippet}
+        >{#if pmVisible}<a class="ui-btn-primary" href={pmHref}>Ask PM</a
+          >{/if}{/snippet}
     </WorkspacePageHeader>
     <div
       class="grid gap-6 {railCollapsed
@@ -1214,8 +1225,12 @@
             </dl>
             {#if work.source?.authority !== "nexus"}
               <p class="mt-2 text-micro text-fg-subtle">
-                Status and workflow are owned by the source. Ask PM to request a
-                change.
+                Status and workflow are owned by the source.
+                {#if pmVisible}
+                  Ask PM to request a change.
+                {:else}
+                  A change there has to be requested and approved here first.
+                {/if}
               </p>
             {/if}
             {#if !sourceDetailsWorthShowing}

@@ -825,34 +825,80 @@ test("PM pins multiple refs in history and resolves answer chips with streamed a
   ).toContainText("review");
 });
 
-test("disconnected PM points to local installation on Ask PM and Inbox", async ({
+/*
+ * A PM agent runs on the reader's own computer, so a workspace can have none.
+ * Core reports that, and the UI then offers setup in the slot Ask PM
+ * occupies rather than a conversation nothing can answer. The full state
+ * matrix lives in `pm-onboarding.spec.js`; these two keep the real work
+ * surfaces honest.
+ */
+test("a workspace with no PM offers setup instead of Ask PM", async ({
   page,
 }) => {
   await setup(page);
   await page.route("**/pm/presence", (route) =>
     route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({ configured: true, connected: false }),
+      body: JSON.stringify({ configured: false, connected: false }),
     }),
   );
-  await page.goto(`${root}/pm`);
-  await expect(page.getByLabel("PM connection")).toContainText(
-    "No PM connected",
-  );
-  await expect(page.getByLabel("PM connection")).toContainText(
-    "anx pm install",
-  );
-  await page.goto(`${root}/inbox?mailbox=needs-you`);
-  await expect(page.getByLabel("PM connection")).toContainText(
-    "runs on your computer",
-  );
+
   await page.goto(`${root}/tasks`);
-  await expect(page.getByLabel("PM connection")).toContainText(
-    "No PM connected",
-  );
+  await expect(page.locator('[data-pm-nav="setup"]').first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Ask PM" })).toHaveCount(0);
+
+  await page.goto(`${root}/inbox?mailbox=needs-you`);
+  await expect(page.getByRole("link", { name: "Ask PM" })).toHaveCount(0);
+
+  // The conversation itself is not reachable; setup is what it leads to.
+  await page.goto(`${root}/pm`);
+  await expect(page).toHaveURL(new RegExp(`${root}/pm/setup$`));
+  await expect(page.locator("[data-pm-install-command]")).toContainText("anx");
 });
 
-test("connected PM does not show a disconnected installation state", async ({
+/*
+ * Moving work another system owns is a request a PM carries out at the source
+ * and the reader answers in the Inbox. With no PM there is nobody to carry it
+ * out, so the affordance is gone and nothing is written — rather than a
+ * proposal waiting in an Inbox that cannot show it.
+ */
+test("a source-owned move is not offered with no PM, and writes nothing", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.route("**/pm/presence", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ configured: false, connected: false }),
+    }),
+  );
+  const writes = [];
+  await page.route("**/pm/decisions", async (route) => {
+    const request = route.request();
+    if (request.method() === "POST") writes.push(request.postDataJSON());
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ items: [], has_more: false }),
+    });
+  });
+
+  // `card:release` is owned by GitHub in this fixture.
+  await page.goto(`${root}/tasks/card%3Arelease`);
+  await expect(
+    page.getByRole("heading", { name: "Release the sample workspace" }),
+  ).toBeVisible();
+
+  await page.keyboard.press("ControlOrMeta+k");
+  const palette = page.getByRole("dialog", { name: "Command palette" });
+  await expect(palette).toBeVisible();
+  await expect(palette.getByRole("option", { name: /Move to/ })).toHaveCount(0);
+  await expect(palette.getByRole("option", { name: /Ask PM/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  expect(writes).toEqual([]);
+});
+
+test("a connected PM keeps Ask PM and says nothing about setup", async ({
   page,
 }) => {
   await setup(page);
@@ -872,5 +918,7 @@ test("connected PM does not show a disconnected installation state", async ({
   );
   await page.goto(`${root}/pm`);
   await presence;
-  await expect(page.getByLabel("PM connection")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Ask PM" })).toBeVisible();
+  await expect(page.locator('[data-pm-nav="setup"]')).toHaveCount(0);
+  await expect(page.locator("[data-pm-offline-note]")).toHaveCount(0);
 });

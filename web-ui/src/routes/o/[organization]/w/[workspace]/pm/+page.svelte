@@ -1,5 +1,4 @@
 <script>
-  import PMConnection from "$lib/components/pm/PMConnection.svelte";
   import { onMount, tick, untrack } from "svelte";
   import { page } from "$app/stores";
   import { beforeNavigate, goto } from "$app/navigation";
@@ -42,6 +41,18 @@
   import { pinnedRefs, activityLabel } from "$lib/pm/context.js";
   import RefChip from "$lib/components/RefChip.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
+  import PmStatusBadge from "$lib/components/pm/PmStatusBadge.svelte";
+  import {
+    PM_STATES,
+    isPmNotOnboardedRefusal,
+    pmOffline,
+    pmSetupOffered,
+  } from "$lib/pm/onboardingState.js";
+  import {
+    pmPresence,
+    publishPmPresence,
+    refreshPmPresence,
+  } from "$lib/pm/presence.js";
 
   let conversations = $state([]),
     conversation = $state(null),
@@ -81,6 +92,12 @@
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
+  // The resolved slug the shell keys PM state by, not the URL segment.
+  let workspaceSlug = $derived($page.data?.workspace?.slug ?? "");
+  let pmState = $derived(
+    $pmPresence.workspace === workspaceSlug ? $pmPresence : null,
+  );
+  let pmIsOffline = $derived(pmOffline(pmState));
   let selectedId = $derived($page.url.searchParams.get("conversation") || "");
   let workRef = $derived($page.url.searchParams.get("work_ref") || "");
   let selectedKey = $derived(`${selectedId}\n${workRef}`);
@@ -223,6 +240,18 @@
     const timer = setInterval(() => {
       now = Date.now();
     }, 1000);
+    return () => clearInterval(timer);
+  });
+  /*
+   * An offline PM's "last seen" also ages on screen, far more slowly, and
+   * outlives any pending turn — without this it froze at whatever it read
+   * when the page opened.
+   */
+  $effect(() => {
+    if (waiting || !pmIsOffline) return;
+    const timer = setInterval(() => {
+      now = Date.now();
+    }, 30_000);
     return () => clearInterval(timer);
   });
   // Auto-grow: reset then measure, capped so the thread keeps most of the height.
@@ -411,6 +440,18 @@
         workspaceSlug: $page.params.workspace,
         authDriver: "pm-conversation",
       });
+      /*
+       * A PM agent runs on the reader's computer, so this surface can be
+       * reached (a bookmark, a stale tab) with no PM at all. Core would
+       * refuse every call; send them to setup instead of to an error.
+       */
+      const { presence } = await refreshPmPresence(workspaceSlug, {
+        force: true,
+      });
+      if (pmSetupOffered(presence)) {
+        await goToSetup();
+        return;
+      }
       await loadList();
 
       ready = true;
@@ -419,10 +460,29 @@
       // the URL (?conversation=, ?work_ref=, or ?new=1).
       if (!selectedId) loading = false;
     } catch (err) {
+      if (await redirectIfPmGone(err)) return;
       error = errorMessage(err);
       loading = false;
     }
   }
+
+  /** Leave for setup, without keeping a dead PM page in the back history. */
+  async function goToSetup() {
+    loading = false;
+    await goto(workspaceHref("/pm/setup"), { replaceState: true });
+  }
+
+  /**
+   * Core refused because there is no PM to serve this. Record that and move
+   * the reader to setup; retrying the same call cannot repair it.
+   */
+  async function redirectIfPmGone(err) {
+    if (!isPmNotOnboardedRefusal(err)) return false;
+    publishPmPresence(workspaceSlug, PM_STATES.NOT_ONBOARDED);
+    await goToSetup();
+    return true;
+  }
+
   async function send(event) {
     event?.preventDefault?.();
     const pointerSend =
@@ -476,6 +536,7 @@
         await goto(workspaceHref(`/pm?conversation=${encodeURIComponent(id)}`));
       } else await loadConversation(id, true);
     } catch (err) {
+      if (await redirectIfPmGone(err)) return;
       error = errorMessage(err);
       errorFromSend = true;
     } finally {
@@ -597,12 +658,16 @@
 />
 <svelte:head><title>PM · Agent Nexus</title></svelte:head>
 <WorkspacePageShell class="pm-page">
-  {#key `${$page.params.organization}/${$page.params.workspace}`}<PMConnection
-    />{/key}
   <div class="pm-head">
     <WorkspacePageHeader title="Ask PM">
-      {#snippet subtitle()}Ask about your tasks. If the PM proposes a change,
-        you approve it in Inbox.{/snippet}
+      {#snippet subtitle()}<span class="block"
+          >Ask about your tasks. If the PM proposes a change, you approve it in
+          Inbox.</span
+        ><PmStatusBadge
+          presence={pmState}
+          {now}
+          manageHref={workspaceHref("/pm/setup")}
+        />{/snippet}
       {#snippet actions()}
         <details
           class="pm-history"
@@ -673,6 +738,18 @@
       {/snippet}
     </WorkspacePageHeader>
 
+    {#if pmIsOffline}
+      <!--
+        The PM is installed but not running: the reader can still ask, and the
+        answer arrives when their machine does. Say that once, quietly.
+      -->
+      <p class="text-micro text-fg-muted" data-pm-offline-note>
+        Your PM is not running right now, so answers wait until it is back.
+        Check it with <code class="font-mono text-micro text-fg"
+          >anx pm status</code
+        > on your computer.
+      </p>
+    {/if}
     {#if conversation?.title && conversation.title !== turns[0]?.text}
       <p class="pm-context">{conversation.title}</p>
     {/if}

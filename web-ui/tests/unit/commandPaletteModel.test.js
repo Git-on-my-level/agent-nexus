@@ -77,4 +77,38 @@ describe("command palette model", () => {
     commands.find((c) => c.label === "Audit").run();
     expect(go).toHaveBeenCalledWith("/events");
   });
+
+  /*
+   * A PM agent runs on the reader's own computer, so a workspace can have
+   * none. The palette must then offer setup, not a conversation nothing can
+   * answer — and never both.
+   */
+  it("offers setup instead of Ask PM when no PM agent is onboarded", () => {
+    const go = vi.fn();
+    const commands = goToCommands({
+      go,
+      pmVisible: false,
+      pmNeedsSetup: true,
+    });
+    const ids = commands.map((command) => command.id);
+    expect(ids).toContain("go:pm-setup");
+    expect(ids).not.toContain("go:pm");
+    commands.find((command) => command.id === "go:pm-setup").run();
+    expect(go).toHaveBeenCalledWith("/pm/setup");
+  });
+
+  /*
+   * An older core reports no PM state. That is not evidence of no PM, so Ask
+   * PM stays and no setup is offered — the palette must not invite the reader
+   * to install a PM that may already be running.
+   */
+  it("keeps Ask PM, and offers no setup, when core does not say", () => {
+    const ids = goToCommands({
+      go: vi.fn(),
+      pmVisible: true,
+      pmNeedsSetup: false,
+    }).map((command) => command.id);
+    expect(ids).toContain("go:pm");
+    expect(ids).not.toContain("go:pm-setup");
+  });
 });
