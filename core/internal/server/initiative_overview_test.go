@@ -202,9 +202,7 @@ func TestOverviewDigestDistinctDecisionRefsQueryBudget(t *testing.T) {
 				t.Fatalf("items=%d truncated=%v", len(d.Items), d.Truncated)
 			}
 			// Each full 200-row page needs an empty-page check for previews and plan facts.
-			// One indexed onboarding check per request, independent of decision count.
-			const onboardingQueries = 1
-			wantQueries := int64(7 + onboardingQueries + 2*(i/200) + 2*((i+49)/50-1))
+			wantQueries := int64(7 + 2*(i/200) + 2*((i+49)/50-1))
 			// Main captures the immutable denial snapshot on the first read only;
 			// later writes use its statement-level epoch fallback without recapture.
 			if i == 1 {

@@ -96,12 +96,22 @@ func (s *Service) Presence(ctx context.Context, p Principal) (Presence, error) {
 
 func (s *Service) presence(ctx context.Context) (Presence, error) {
 	out := Presence{State: "not_onboarded", Configured: s.AgentActorID() != ""}
-	if !out.Configured {
-		return out, nil
-	}
 	var runner, host sql.NullString
 	err := s.store.database().QueryRowContext(ctx, `SELECT p.last_seen_at,p.signal,r.runner,r.host FROM pm_presence p LEFT JOIN pm_registration r ON r.workspace_id=p.workspace_id AND r.actor_id=p.actor_id WHERE p.workspace_id=? AND p.actor_id=?`, s.cfg.WorkspaceID, s.AgentActorID()).Scan(&out.LastSeenAt, &out.Signal, &runner, &host)
 	if errors.Is(err, sql.ErrNoRows) {
+		var first, last sql.NullString
+		err = s.store.database().QueryRowContext(ctx, `SELECT first_seen_at,last_seen_at FROM pm_onboarding_backfill WHERE workspace_id=? AND (actor_id=? OR (actor_id='' AND NOT EXISTS (SELECT 1 FROM pm_registration WHERE workspace_id=?)))`, s.cfg.WorkspaceID, s.AgentActorID(), s.cfg.WorkspaceID).Scan(&first, &last)
+		if errors.Is(err, sql.ErrNoRows) {
+			return out, nil
+		}
+		if err != nil {
+			return out, err
+		}
+		if first.Valid && last.Valid {
+			out.State = "offline"
+			out.LastSeenAt = last.String
+			out.LastSeen = &out.LastSeenAt
+		}
 		return out, nil
 	}
 	if err != nil {

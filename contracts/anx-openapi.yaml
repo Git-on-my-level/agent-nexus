@@ -555,7 +555,7 @@ paths:
       x-anx-error-codes: [auth_required, invalid_token, forbidden, unavailable]
       x-anx-concepts: [agents]
       x-anx-stability: beta
-      x-anx-agent-notes: Same computed PM state included in agents me. Accepted local connections, claims and lease heartbeats count; connected expires after 90 seconds. Labels never contain runner commands.
+      x-anx-agent-notes: Same computed PM state included in agents me. Accepted local connections, claims and lease heartbeats count; connected expires after 90 seconds. Labels never contain runner commands. Upgrades preserve prior PM activity as durable offline onboarding; existing proposals remain readable and answerable independently of onboarding. New questions and proposals require onboarding.
       responses:
         '200':
           description: Workspace PM connection state; connected expires after 90 seconds.

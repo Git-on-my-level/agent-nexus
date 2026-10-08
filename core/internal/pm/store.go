@@ -29,7 +29,8 @@ func NewStore(db *sql.DB) (*Store, error) {
 		return nil, err
 	}
 	defer tx.Rollback()
-	_, err = tx.Exec(`CREATE TABLE IF NOT EXISTS pm_registration (workspace_id TEXT PRIMARY KEY, actor_id TEXT NOT NULL, runner TEXT NOT NULL, host TEXT NOT NULL);
+	_, err = tx.Exec(`CREATE TABLE IF NOT EXISTS pm_onboarding_backfill (workspace_id TEXT PRIMARY KEY, actor_id TEXT NOT NULL, first_seen_at TEXT, last_seen_at TEXT);
+ CREATE TABLE IF NOT EXISTS pm_registration (workspace_id TEXT PRIMARY KEY, actor_id TEXT NOT NULL, runner TEXT NOT NULL, host TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS pm_presence (workspace_id TEXT NOT NULL, actor_id TEXT NOT NULL, last_seen_at TEXT NOT NULL, signal TEXT NOT NULL, PRIMARY KEY(workspace_id,actor_id));
  CREATE TABLE IF NOT EXISTS pm_records (
  kind TEXT NOT NULL, id TEXT NOT NULL, workspace_id TEXT NOT NULL, actor_id TEXT NOT NULL,
@@ -546,4 +547,56 @@ func (s *Store) heartbeatTurn(ctx context.Context, id, token string, ttl time.Du
 		return Turn{}, err
 	}
 	return t, tx.Commit()
+}
+
+// backfillOnboarding runs once per workspace at startup. Each signal uses the
+// existing kind/workspace/created-at index and materializes at most two dates.
+// It never scans PM bodies on a request or invents a current runner heartbeat.
+func (s *Store) backfillOnboarding(ctx context.Context, workspace, actor string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO pm_onboarding_backfill(workspace_id,actor_id) VALUES(?,?)`, workspace, actor)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return tx.Commit()
+	}
+	var first, last time.Time
+	for _, kind := range []string{"conversation", "turn", "decision"} {
+		for _, order := range []string{"ASC", "DESC"} {
+			var date string
+			err = tx.QueryRowContext(ctx, `SELECT rtrim(COALESCE(json_extract(body,'$.created_at'),''),'Z') FROM pm_records WHERE kind=? AND workspace_id=? AND rtrim(COALESCE(json_extract(body,'$.created_at'),''),'Z')>'' ORDER BY rtrim(COALESCE(json_extract(body,'$.created_at'),''),'Z') `+order+` LIMIT 1`, kind, workspace).Scan(&date)
+			if errors.Is(err, sql.ErrNoRows) {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			stamp, e := time.Parse(time.RFC3339Nano, date+"Z")
+			if e != nil {
+				return e
+			}
+			if first.IsZero() || stamp.Before(first) {
+				first = stamp
+			}
+			if last.IsZero() || stamp.After(last) {
+				last = stamp
+			}
+		}
+	}
+	if !first.IsZero() {
+		_, err = tx.ExecContext(ctx, `UPDATE pm_onboarding_backfill SET first_seen_at=?,last_seen_at=? WHERE workspace_id=?`, first.UTC().Format(time.RFC3339Nano), last.UTC().Format(time.RFC3339Nano), workspace)
+		if err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }

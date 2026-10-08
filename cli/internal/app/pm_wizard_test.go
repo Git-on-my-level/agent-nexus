@@ -158,3 +158,33 @@ func TestPMInstallNoFlagsWizardPrecedesAmbiguousWorkspaceResolution(t *testing.T
 		t.Fatalf("wizard blocked by ambiguity: %d %s", code, stderr.String())
 	}
 }
+
+func TestCopiedPMSetupCommandEntersWizardWithGlobalFlags(t *testing.T) {
+	for _, args := range [][]string{{"--base-url", "https://workspace.test", "pm", "install"}, {"--workspace", "selected", "pm", "install"}, {"--base-url=https://workspace.test", "--as", "pm", "pm", "install", "--wait"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			home := t.TempDir()
+			dir := filepath.Join(home, ".config", "anx")
+			if err := os.MkdirAll(dir, 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "workspaces.json"), []byte(`{"aliases":{"selected":"https://workspace.test","other":"https://other.test"}}`), 0600); err != nil {
+				t.Fatal(err)
+			}
+			a := newTestAppWithHome(home)
+			a.StdinIsTTY = func() bool { return true }
+			a.Stdin = strings.NewReader("")
+			var stderr bytes.Buffer
+			a.Stderr = &stderr
+			if code := a.Run(args); code == 0 || !strings.Contains(stderr.String(), "Runner number:") || !strings.Contains(stderr.String(), "https://workspace.test") || strings.Contains(stderr.String(), "runner_required") {
+				t.Fatalf("copied setup missed wizard: %d %s", code, stderr.String())
+			}
+		})
+	}
+	a := newTestApp(t)
+	a.StdinIsTTY = func() bool { return false }
+	var stderr bytes.Buffer
+	a.Stderr = &stderr
+	if code := a.Run([]string{"--base-url", "https://workspace.test", "pm", "install"}); code == 0 || !strings.Contains(stderr.String(), "runner_required") || !strings.Contains(stderr.String(), "wizard") {
+		t.Fatalf("non-TTY repair missing: %d %s", code, stderr.String())
+	}
+}

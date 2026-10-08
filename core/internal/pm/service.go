@@ -55,6 +55,9 @@ func NewService(store *Store, cfg Config, deps Dependencies) (*Service, error) {
 		return nil, err
 	}
 	s.selected.Store(actor)
+	if err = store.backfillOnboarding(context.Background(), cfg.WorkspaceID, s.AgentActorID()); err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 func (s *Service) authorize(ctx context.Context, p Principal, permission, ref string) error {
@@ -88,7 +91,7 @@ func (s *Service) authorize(ctx context.Context, p Principal, permission, ref st
 		}
 		return ErrForbidden
 	}
-	if permission != "pm.access" && permission != "pm.presence" && (permission != "pm.respond" || ctx.Value(bootstrapConnectionKey{}) != true) && permission != "pm.connect" && !(permission == "pm.read" && ref != "") {
+	if permission != "pm.access" && permission != "pm.presence" && (permission != "pm.respond" || ctx.Value(bootstrapConnectionKey{}) != true) && permission != "pm.connect" && permission != "pm.read" && permission != "pm.approve" && !strings.HasPrefix(permission, "pm.action.") {
 		if err := s.RequireOnboarded(ctx); err != nil {
 			return err
 		}
@@ -194,10 +197,8 @@ func (s *Service) QueryContextPage(ctx context.Context, p Principal, workRef, qu
 	if err := s.authorize(ctx, p, "pm.read", workRef); err != nil {
 		return ContextPage{}, err
 	}
-	if workRef != "" {
-		if err := s.RequireOnboarded(ctx); err != nil {
-			return ContextPage{}, err
-		}
+	if err := s.RequireOnboarded(ctx); err != nil {
+		return ContextPage{}, err
 	}
 	if workRef != "" && cursor != "" {
 		return ContextPage{}, ErrContextWorkCursor
@@ -612,9 +613,6 @@ func (s *Service) GetTurn(ctx context.Context, p Principal, id string) (Turn, er
 			return Turn{}, err
 		}
 	} else if _, err := s.conversation(ctx, p, t.ConversationID); err != nil {
-		return Turn{}, err
-	}
-	if err := s.RequireOnboarded(ctx); err != nil {
 		return Turn{}, err
 	}
 	if err := s.ExpireTurns(ctx, time.Now().UTC()); err != nil {

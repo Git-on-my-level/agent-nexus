@@ -3,6 +3,9 @@ package pm
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -145,5 +148,88 @@ func TestFirstSeenMigrationAndReconnectAreDurable(t *testing.T) {
 	}
 	if _, err := NewStore(st.db); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestUpgradeBackfillsOnboardingAndNeverStrandsPendingDecision(t *testing.T) {
+	original, st, human, _ := fixture(t)
+	ctx := context.Background()
+	decision, err := original.ProposeDecision(ctx, human, DecisionInput{RequestKey: "old-pending", WorkRef: "card:one", Instruction: `{"next_action":"Review"}`, Scope: "work.annotate", TargetRevision: "r1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = st.db.Exec(`UPDATE pm_records SET body=json_set(body,'$.created_at','2020-01-01T00:00:00Z') WHERE kind='decision'; DROP TABLE pm_presence; DROP TABLE pm_onboarding_backfill;`); err != nil {
+		t.Fatal(err)
+	}
+	st, err = NewStore(st.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, direction := range []string{"ASC", "DESC"} {
+		rows, e := st.db.Query(`EXPLAIN QUERY PLAN SELECT rtrim(COALESCE(json_extract(body,'$.created_at'),''),'Z') FROM pm_records WHERE kind=? AND workspace_id=? AND rtrim(COALESCE(json_extract(body,'$.created_at'),''),'Z')>'' ORDER BY rtrim(COALESCE(json_extract(body,'$.created_at'),''),'Z') `+direction+` LIMIT 1`, "decision", "ws")
+		if e != nil {
+			t.Fatal(e)
+		}
+		indexed := false
+		for rows.Next() {
+			var id, parent, unused int
+			var detail string
+			if e = rows.Scan(&id, &parent, &unused, &detail); e != nil {
+				t.Fatal(e)
+			}
+			indexed = indexed || strings.Contains(detail, "pm_records_page") && strings.Contains(detail, "INDEX")
+			if strings.Contains(detail, "SCAN") {
+				t.Fatal(detail)
+			}
+		}
+		e = rows.Err()
+		rows.Close()
+		if e != nil || !indexed {
+			t.Fatalf("backfill plan indexed=%t err=%v", indexed, e)
+		}
+	}
+	upgraded, err := NewService(st, original.cfg, original.deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := upgraded.Presence(ctx, human)
+	if err != nil || state.State != "offline" || state.LastSeen == nil || *state.LastSeen != "2020-01-01T00:00:00Z" {
+		t.Fatalf("upgrade state %+v %v", state, err)
+	}
+	var first string
+	if err = st.db.QueryRow(`SELECT first_seen_at FROM pm_onboarding_backfill WHERE workspace_id='ws'`).Scan(&first); err != nil || first != "2020-01-01T00:00:00Z" {
+		t.Fatalf("first seen %q %v", first, err)
+	}
+	cfg := original.cfg
+	cfg.AgentActorID = "replacement-pm"
+	replacement, err := NewService(st, cfg, original.deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err = replacement.Presence(ctx, human)
+	if err != nil || state.State != "not_onboarded" {
+		t.Fatalf("replacement state %+v %v", state, err)
+	}
+	handler := Handler{Service: replacement, Authenticate: func(*http.Request) (Principal, error) { return human, nil }}
+	call := func(method, path, body string, want int) string {
+		t.Helper()
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequest(method, path, strings.NewReader(body)))
+		if w.Code != want {
+			t.Fatalf("%s %s: %d %s", method, path, w.Code, w.Body.String())
+		}
+		return w.Body.String()
+	}
+	if body := call("GET", "/pm/decisions", "", 200); !strings.Contains(body, decision.ID) || !strings.Contains(body, "awaiting_answer") {
+		t.Fatal(body)
+	}
+	call("GET", "/pm/decisions/"+decision.ID, "", 200)
+	if body := call("POST", "/pm/decisions/"+decision.ID+"/answer", `{"revision":1,"approve":false,"text":"Declined"}`, 200); !strings.Contains(body, "declined") {
+		t.Fatal(body)
+	}
+	call("POST", "/pm/decisions", `{}`, 409)
+	call("POST", "/pm/conversations", `{}`, 409)
+	if _, err = replacement.AnswerDecision(ctx, Principal{WorkspaceID: "ws", ActorID: "other", Human: true}, decision.ID, AnswerInput{Revision: 1, Text: "deny"}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("approval boundary %v", err)
 	}
 }

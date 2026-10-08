@@ -3732,7 +3732,7 @@ Generated Help: pm presence
 - Output: Returns `PMPresence`.
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `unavailable`
 - Concepts: `agents`
-- Agent notes: Same computed PM state included in agents me. Accepted local connections, claims and lease heartbeats count; connected expires after 90 seconds. Labels never contain runner commands.
+- Agent notes: Same computed PM state included in agents me. Accepted local connections, claims and lease heartbeats count; connected expires after 90 seconds. Labels never contain runner commands. Upgrades preserve prior PM activity as durable offline onboarding; existing proposals remain readable and answerable independently of onboarding. New questions and proposals require onboarding.
 - Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.

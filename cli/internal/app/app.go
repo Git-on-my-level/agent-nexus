@@ -175,11 +175,17 @@ func (a *App) Run(args []string) int {
 			return a.renderError(resolveMachineCommandIdentity(configErrorCommand), jsonMode, wrapped)
 		}
 	}
-	wizard := len(args) == 2 && args[0] == "pm" && args[1] == "install" && !resolved.JSON && a.StdinIsTTY != nil && a.StdinIsTTY()
+	hasRunner := false
+	for _, arg := range remaining {
+		if arg == "--runner" || arg == "-runner" || strings.HasPrefix(arg, "--runner=") || strings.HasPrefix(arg, "-runner=") {
+			hasRunner = true
+		}
+	}
+	wizard := cmdPeek == "pm" && subPeek == "install" && !hasRunner && !resolved.JSON && a.StdinIsTTY != nil && a.StdinIsTTY()
 	if wizard {
 		resolved.Sources["pm_install_mode"] = "interactive"
 	}
-	if !wizard && (!workspaceIndependentCommand(remaining) || cmdPeek == "config" && subPeek == "workspaces" && overrides.Workspace != nil) {
+	if (!wizard || overrides.Workspace != nil) && (!workspaceIndependentCommand(remaining) || cmdPeek == "config" && subPeek == "workspaces" && overrides.Workspace != nil) {
 		resolved, err = a.resolveWorkspace(resolved, overrides.Workspace)
 		if err != nil {
 			return a.renderError(resolveMachineCommandIdentity(preflightCommandName), resolved.JSON, err)

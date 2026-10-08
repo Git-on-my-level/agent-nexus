@@ -153,7 +153,7 @@ func (a *App) runPMService(ctx context.Context, verb string, args []string, cfg 
 		settings.Runner = firstNonEmpty(runner.value, settings.Runner)
 		argv, e := splitRunnerArgv(settings.Runner)
 		if e != nil || len(argv) == 0 {
-			return nil, errnorm.Usage("runner_required", "set --runner once; subsequent installs reuse settings.json")
+			return nil, errnorm.Usage("runner_required", "set --runner once, or run anx pm install in an interactive terminal for the setup wizard; subsequent non-interactive installs reuse settings.json")
 		}
 		binary, e := os.Executable()
 		if e != nil {

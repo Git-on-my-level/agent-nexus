@@ -36,20 +36,27 @@ func (a *App) pmInstallWizard(ctx context.Context, cfg config.Resolved) (config.
 		}
 		return n, nil
 	}
-	if len(catalog.Workspaces) == 0 {
+	explicitWorkspace := cfg.Sources["base_url"] == "flag:--base-url" || cfg.Sources["base_url"] == "flag:--workspace"
+	if !explicitWorkspace && len(catalog.Workspaces) == 0 {
 		return cfg, "", errnorm.Usage("workspace_required", "Enroll this computer first with anx host enroll; then run anx pm install")
 	}
-	fmt.Fprintln(a.Stderr, "Set up the PM on this computer. Choose a workspace:")
-	for i, ws := range catalog.Workspaces {
-		fmt.Fprintf(a.Stderr, "%d. %s (%s)\n", i+1, ws.Alias, ws.BaseURL)
+	var n int
+	if !explicitWorkspace {
+		fmt.Fprintln(a.Stderr, "Set up the PM on this computer. Choose a workspace:")
+		for i, ws := range catalog.Workspaces {
+			fmt.Fprintf(a.Stderr, "%d. %s (%s)\n", i+1, ws.Alias, ws.BaseURL)
+		}
+		n, err = choose("Workspace number: ", len(catalog.Workspaces))
+		if err != nil {
+			return cfg, "", err
+		}
+		cfg.BaseURL = catalog.Workspaces[n-1].BaseURL
+		cfg.Sources["base_url"] = "wizard"
+
+	} else {
+		fmt.Fprintf(a.Stderr, "Set up the PM for %s on this computer.\n", cfg.BaseURL)
 	}
-	n, err := choose("Workspace number: ", len(catalog.Workspaces))
-	if err != nil {
-		return cfg, "", err
-	}
-	cfg.BaseURL = catalog.Workspaces[n-1].BaseURL
-	cfg.Sources["base_url"] = "wizard"
-	cfg.As = "pm"
+	cfg.As = firstNonEmpty(cfg.As, "pm")
 	fmt.Fprintln(a.Stderr, "1. Hermes\n2. Claude Code\n3. Custom command")
 	n, err = choose("Runner number: ", 3)
 	if err != nil {

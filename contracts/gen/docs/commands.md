@@ -2100,7 +2100,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `agents`
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `unavailable`
 - Output: Returns `PMPresence`.
-- Agent notes: Same computed PM state included in agents me. Accepted local connections, claims and lease heartbeats count; connected expires after 90 seconds. Labels never contain runner commands.
+- Agent notes: Same computed PM state included in agents me. Accepted local connections, claims and lease heartbeats count; connected expires after 90 seconds. Labels never contain runner commands. Upgrades preserve prior PM activity as durable offline onboarding; existing proposals remain readable and answerable independently of onboarding. New questions and proposals require onboarding.
 
 ## `pm.turns.claim`
 

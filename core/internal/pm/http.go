@@ -45,7 +45,9 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	bootstrap := len(path) == 2 && path[0] == "turns" && path[1] == "claim" && r.Method == http.MethodPost || len(path) == 3 && path[0] == "turns" && path[2] == "heartbeat" && r.Method == http.MethodPost
-	if permission == "pm.access" && !bootstrap {
+	existingRead := r.Method == http.MethodGet && len(path) > 0 && (path[0] == "conversations" || path[0] == "decisions" || path[0] == "actions" || path[0] == "turns")
+	existingAnswer := r.Method == http.MethodPost && len(path) == 3 && (path[0] == "decisions" && (path[2] == "answer" || path[2] == "dispatch") || path[0] == "actions" && (path[2] == "reconcile" || path[2] == "acknowledge"))
+	if permission == "pm.access" && !bootstrap && !existingRead && !existingAnswer {
 		if err = h.Service.RequireOnboarded(ctx); err != nil {
 			writeError(w, err)
 			return

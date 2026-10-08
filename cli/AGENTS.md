@@ -19,7 +19,7 @@ The CLI is **for agents and automation** (LLM tooling, CI, scripts, integrations
 ## CLI Responsibilities
 
 - Map stable command identities to contract-defined API behavior.
-- Optimize for agent and script use: no hidden interactivity and explicit side effects. The sole onboarding exception is exact no-flag `anx pm install` on a terminal: it runs the local workspace/runner wizard. Flags, `--json`, and non-terminal stdin remain non-interactive.
+- Optimize for agent and script use: no hidden interactivity and explicit side effects. The sole onboarding exception is `anx pm install` without `--runner` on a terminal: it runs the local workspace/runner wizard. Global workspace/profile flags still enter that wizard; `--runner`, `--json`, and non-terminal stdin remain non-interactive.
 - Preserve deterministic I/O across flags, env vars, host credentials, stdin, stdout, stderr, and exit codes.
 - Provide dual output modes: concise **text by default** (direct consumption, including LLM tool output) and strict **`--json` envelopes** for programmatic use (scripts, services, `jq`).
 - Normalize transport and API errors into stable local behavior that orchestrators can reason about.

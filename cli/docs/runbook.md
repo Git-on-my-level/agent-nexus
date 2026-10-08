@@ -571,13 +571,15 @@ and select the workspace with `anx config use <alias>` (or `--workspace <alias>`
 The default `pm` host profile is registered and selected automatically when its
 local runner first connects. An explicitly selected workspace PM remains authoritative.
 
-Run `anx pm install` with no flags in a terminal for the onboarding wizard. Pick
+Run `anx pm install` without a `--runner` flag in a terminal for the onboarding wizard.
+Global flags such as `--base-url`, `--workspace` and `--as` still enter the wizard;
+an explicitly selected workspace is retained. Pick
 a workspace and Hermes, Claude Code, or a custom command. The wizard tests the
 runner once, installs the service, then waits for a fresh local claim and server
 heartbeat before printing **PM connected**. Runner credentials must already work
 on this computer. EOF or an invalid choice cancels before installation.
 
-Flags select the non-interactive path. Add `--wait --wait-timeout 90s` to wait for
+`--runner` selects the non-interactive path. Add `--wait --wait-timeout 90s` to wait for
 connection; `--json` remains non-interactive. These are optional runner examples:
 
 ```sh
@@ -617,7 +619,10 @@ workspace PM requires that actor to connect before its features become available
 
 PM features require onboarding: a registered PM has connected through `anx pm serve`
 at least once. Before that, PM-only requests return HTTP 409 `pm_not_onboarded`
-and do not queue questions. Ordinary workspace features remain available.
+and do not queue new questions or proposals. Existing history, proposals and
+human approval/decline remain accessible even before onboarding. Upgrades infer
+legacy onboarding from indexed prior PM activity and report it as offline until
+a real runner connects. Ordinary workspace features remain available.
 The existing `GET /agents/me` bootstrap includes `pm` with `state`
 (`not_onboarded`, `connected`, or `offline`), nullable `last_seen`, `runner`, and
 `host`. `GET /pm/presence` exposes the same state plus legacy presence fields.

@@ -78,11 +78,14 @@ func TestPMOnboardingHTTPGateBootstrapAndIdentitySelection(t *testing.T) {
 	if state["state"] != "not_onboarded" || state["last_seen"] != nil {
 		t.Fatal(state)
 	}
-	for _, path := range []string{"/pm/conversations", "/pm/context", "/pm/decisions", "/pm/actions", "/pm/bindings", "/pm/turns/missing", "/pm/turns/missing/context"} {
+	for _, path := range []string{"/pm/context", "/pm/bindings"} {
 		out := call("GET", path, human.AccessToken, "", 409)
 		if out["error"].(map[string]any)["code"] != "pm_not_onboarded" {
 			t.Fatal(out)
 		}
+	}
+	for _, path := range []string{"/pm/conversations", "/pm/decisions", "/pm/actions"} {
+		call("GET", path, human.AccessToken, "", 200)
 	}
 	call("POST", "/pm/conversations", human.AccessToken, `{"request_key":"blocked","title":"Question"}`, 409)
 	for _, action := range []string{"complete", "activity", "fail"} {
