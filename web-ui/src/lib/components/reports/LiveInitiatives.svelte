@@ -148,9 +148,46 @@
         </span>
       {/if}
 
-      <!-- The next step. The age used to share this line; it is a freshness
-           badge on the status line now, next to the state it qualifies. -->
-      {#if tile.next}
+      <!--
+        What landed, what is moving, what is next. Three short lists instead of
+        one "Next:" line, because the question a reader opens the Overview with
+        is "where is this" and a single next step answers a third of it. Core
+        bounds each list to three rows and counts the rest.
+      -->
+      {#if tile.steps?.groups.length}
+        <span class="tile-steps" data-tile-steps>
+          {#each tile.steps.groups as list (list.key)}
+            <span class="step-label" data-tile-step-group={list.key}
+              >{list.label}</span
+            >
+            <span class="step-rows">
+              {#each list.items as step (step.key)}
+                <span class="step-row" data-tile-step={step.id}>
+                  <span class="step-title">{step.title}</span>
+                  {#if step.status === "blocked"}
+                    <span class="step-flag" data-tile-step-blocked>blocked</span
+                    >
+                  {/if}
+                  {#if step.age}
+                    <time
+                      class="step-age"
+                      datetime={step.at}
+                      title={step.ageTitle}>{step.age}</time
+                    >
+                  {/if}
+                </span>
+              {/each}
+              {#if list.more}
+                <span class="step-row step-more" data-tile-step-more={list.key}
+                  >+{list.more} more</span
+                >
+              {/if}
+            </span>
+          {/each}
+        </span>
+      {:else if tile.next}
+        <!-- An older core computes no step lists; the one next step it does
+             compute is still worth a line. -->
         <span class="tile-foot">
           <span class="tile-next" data-tile-next
             >Next: {tile.next.title}{tile.next.extra
@@ -366,5 +403,60 @@
   .tile-next {
     min-width: 0;
     overflow-wrap: anywhere;
+  }
+  /*
+   * The three lists: a short label, then its rows beside it. One grid, so the
+   * labels line up down the tile and the rows share one left edge — on a phone
+   * as well, where a stacked label per group would cost three lines to say
+   * three words.
+   */
+  .tile-steps {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 4px 10px;
+    align-items: baseline;
+    font-size: 12.5px;
+  }
+  .step-label {
+    color: var(--fg-subtle, var(--fg-muted));
+    font-size: 11px;
+    line-height: 1.5;
+    white-space: nowrap;
+  }
+  .step-rows {
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+  }
+  .step-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+    color: var(--fg-muted);
+    line-height: 1.4;
+  }
+  .step-title {
+    min-width: 0;
+    /* One line per step. A tile is a glance; the plan is one click away. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .step-flag {
+    flex: none;
+    color: var(--warn-text);
+    font-size: 11px;
+  }
+  .step-age {
+    flex: none;
+    margin-left: auto;
+    color: var(--fg-subtle, var(--fg-muted));
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+  .step-more {
+    color: var(--fg-subtle, var(--fg-muted));
+    font-size: 11px;
   }
 </style>

@@ -1,12 +1,16 @@
 <script>
   /**
-   * The morning brief: five answers at the top of Overview.
+   * The morning brief: four answers at the top of Overview.
    *
    *   What needs my decision?       ranked, with the reason for the rank
-   *   What changed since I looked?  grouped counts that open into items
    *   What is at risk?              computed reasons only
+   *   What changed since I looked?  grouped counts that open into items
    *   Is the machine running?       working / finished / stuck
-   *   Where is each initiative?     progress, and an honest health chip
+   *
+   * The fifth question — where is each initiative — is answered by the
+   * initiative cards directly below this band, not by a line in it. A row per
+   * initiative here and a card per initiative there was the same answer twice,
+   * and the row was the half that could not say what had just landed.
    *
    * Everything here is computed by core. The band's whole job is to be
    * readable in about thirty seconds, which means: one line per row, the
@@ -14,7 +18,7 @@
    * where a section is empty rather than a blank panel. An empty section is an
    * answer — it is just a short one.
    *
-   * The five sections are a grid that collapses to one column on a phone, and
+   * The four sections are a grid that collapses to one column on a phone, and
    * every row is a link to the surface that owns it. The band never answers
    * anything itself.
    */
@@ -29,7 +33,6 @@
   let changes = $derived(brief?.sections.changes ?? null);
   let risk = $derived(brief?.sections.risk ?? null);
   let machine = $derived(brief?.sections.machine ?? null);
-  let initiatives = $derived(brief?.sections.initiatives ?? null);
 
   /** Which digest groups are open. Counts first; items on request. */
   let opened = $state(new Set());
@@ -116,7 +119,47 @@
         {/if}
       </section>
 
-      <!-- 2. Since you last looked. Counts read first; the items are one
+      <!-- 2. At risk, with the computed reason. A row with no reason is not
+           shown at all: core omits it rather than guessing, and a bare
+           "at risk" chip is the kind of thing nobody can act on. -->
+      <section class="brief__panel" data-brief-panel="risk">
+        <header class="brief__panel-head">
+          <h3 class="brief__panel-title">{risk.title}</h3>
+          {#if risk.total}
+            <span class="brief__stamp brief__stamp--warn" data-brief-risk-count
+              >{risk.total}{risk.truncated ? "+" : ""}</span
+            >
+          {/if}
+        </header>
+        {#if risk.status === "unavailable"}
+          <p
+            class="brief__note brief__note--warn"
+            role="status"
+            data-brief-empty="risk"
+          >
+            {risk.message}
+          </p>
+        {:else if risk.empty}
+          <p class="brief__note" data-brief-empty="risk">{risk.emptyLine}</p>
+        {:else}
+          <ul class="brief__rows">
+            {#each risk.rows as row (row.ref)}
+              <li class="brief__row" data-brief-risk={row.ref}>
+                <HealthBadge health={row.health} />
+                <a class="brief__row-link" href={row.href}>{row.title}</a>
+                <span class="brief__reason" data-brief-reason title={row.reason}
+                  >{row.reason}</span
+                >
+              </li>
+            {/each}
+          </ul>
+          {#if risk.more}
+            <p class="brief__note" data-brief-more="risk">+{risk.more} more</p>
+          {/if}
+        {/if}
+      </section>
+
+      <!-- 3. Since you last looked. Counts read first; the items are one
            click behind them, because "4 finished" is the answer and the four
            titles are the follow-up question. -->
       <section class="brief__panel" data-brief-panel="changes">
@@ -162,46 +205,6 @@
               </li>
             {/each}
           </ul>
-        {/if}
-      </section>
-
-      <!-- 3. At risk, with the computed reason. A row with no reason is not
-           shown at all: core omits it rather than guessing, and a bare
-           "at risk" chip is the kind of thing nobody can act on. -->
-      <section class="brief__panel" data-brief-panel="risk">
-        <header class="brief__panel-head">
-          <h3 class="brief__panel-title">{risk.title}</h3>
-          {#if risk.total}
-            <span class="brief__stamp brief__stamp--warn" data-brief-risk-count
-              >{risk.total}{risk.truncated ? "+" : ""}</span
-            >
-          {/if}
-        </header>
-        {#if risk.status === "unavailable"}
-          <p
-            class="brief__note brief__note--warn"
-            role="status"
-            data-brief-empty="risk"
-          >
-            {risk.message}
-          </p>
-        {:else if risk.empty}
-          <p class="brief__note" data-brief-empty="risk">{risk.emptyLine}</p>
-        {:else}
-          <ul class="brief__rows">
-            {#each risk.rows as row (row.ref)}
-              <li class="brief__row" data-brief-risk={row.ref}>
-                <HealthBadge health={row.health} />
-                <a class="brief__row-link" href={row.href}>{row.title}</a>
-                <span class="brief__reason" data-brief-reason title={row.reason}
-                  >{row.reason}</span
-                >
-              </li>
-            {/each}
-          </ul>
-          {#if risk.more}
-            <p class="brief__note" data-brief-more="risk">+{risk.more} more</p>
-          {/if}
         {/if}
       </section>
 
@@ -251,80 +254,6 @@
               </li>
             {/each}
           </ul>
-        {/if}
-      </section>
-
-      <!-- 5. Where each initiative is. The state counts are the honest part:
-           seven initiatives reporting "no plan" is a sentence a reader can
-           act on, where seven green chips were a lie. -->
-      <section
-        class="brief__panel brief__panel--wide"
-        data-brief-panel="initiatives"
-      >
-        <header class="brief__panel-head">
-          <h3 class="brief__panel-title">{initiatives.title}</h3>
-          <a class="brief__link" href={initiatives.moreHref}
-            >{initiatives.total}{initiatives.truncated ? "+" : ""} total</a
-          >
-        </header>
-        {#if initiatives.empty}
-          <p class="brief__note" data-brief-empty="initiatives">
-            {initiatives.emptyLine}
-          </p>
-        {:else}
-          {#if initiatives.chips.length}
-            <ul class="brief__chips">
-              {#each initiatives.chips as chip (chip.state)}
-                <li
-                  class="brief__chip brief__chip--{chip.tone}"
-                  data-brief-state={chip.state}
-                >
-                  {chip.count}
-                  {chip.label}
-                </li>
-              {/each}
-            </ul>
-          {/if}
-          <ul class="brief__rows">
-            {#each initiatives.rows as row (row.ref)}
-              <li
-                class="brief__row brief__row--initiative"
-                data-brief-initiative={row.ref}
-              >
-                <HealthBadge health={row.health} />
-                <a class="brief__row-link" href={row.href}>{row.title}</a>
-                {#if row.progress}
-                  <span
-                    class="brief__progress"
-                    data-brief-progress={row.progress.percent}
-                  >
-                    <span class="brief__track" aria-hidden="true">
-                      <span
-                        class="brief__fill"
-                        style="width: {row.progress.percent}%"
-                      ></span>
-                    </span>
-                    <span class="brief__progress-text"
-                      >{row.progress.done}/{row.progress.total}</span
-                    >
-                  </span>
-                {:else}
-                  <span
-                    class="brief__reason"
-                    data-brief-reason
-                    title={row.reason}>{row.reason}</span
-                  >
-                {/if}
-              </li>
-            {/each}
-          </ul>
-          {#if initiatives.more}
-            <a
-              class="brief__more"
-              href={initiatives.moreHref}
-              data-brief-more="initiatives">+{initiatives.more} more</a
-            >
-          {/if}
         {/if}
       </section>
     </div>
@@ -427,8 +356,7 @@
   .brief__rows,
   .brief__groups,
   .brief__sub,
-  .brief__stats,
-  .brief__chips {
+  .brief__stats {
     margin: 0;
     padding: 0;
     list-style: none;
@@ -552,58 +480,6 @@
   .brief__stat-label {
     color: var(--fg-muted);
     font-size: 11px;
-  }
-  .brief__chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 6px;
-  }
-  .brief__chip {
-    padding: 0 6px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-full, 999px);
-    background: var(--bg-soft);
-    color: var(--fg-muted);
-    font-size: 11px;
-    white-space: nowrap;
-  }
-  .brief__chip--warn {
-    border-color: var(--warn-text);
-    color: var(--warn-text);
-  }
-  .brief__chip--danger {
-    border-color: var(--danger-text);
-    color: var(--danger-text);
-  }
-  /* Progress as a bar with its own numbers beside it, so an initiative reads
-     "1/4" and looks like 25% in the same glance. */
-  .brief__progress {
-    flex: none;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-left: auto;
-  }
-  .brief__track {
-    width: 60px;
-    height: 3px;
-    overflow: hidden;
-    border-radius: 2px;
-    background: var(--line);
-  }
-  .brief__fill {
-    display: block;
-    height: 100%;
-    background: var(--accent-text);
-  }
-  .brief__progress-text {
-    color: var(--fg-muted);
-    font-size: 11px;
-    font-variant-numeric: tabular-nums;
-  }
-  .brief__row--initiative .brief__row-link {
-    flex: 1 1 auto;
-    min-width: 0;
   }
   /*
    * On a phone the reason takes its own line under the title and reads

@@ -566,7 +566,30 @@ describe("PM operator interactions", () => {
       container.querySelector("[data-inbox-blocked-for]")?.textContent,
     ).toBe("3h 12m");
     expect(screen.getByText("Recommended")).toBeTruthy();
+    // The recommendation wears a badge; nothing is selected until the reader
+    // acts, so no option arrives pre-highlighted.
+    expect(container.querySelector("[data-inbox-proposal-armed]")).toBeNull();
 
+    // One press selects. A number key is one keystroke from its neighbour, so
+    // it must not send on its own.
+    const armedKey = () =>
+      container
+        .querySelector("[data-inbox-proposal-armed]")
+        ?.getAttribute("data-inbox-proposal") ?? "";
+    await fireEvent.keyDown(window, { key: "2" });
+    expect(armedKey()).toBe("2");
+    expect(screen.queryByText("Sent to Omar Reed")).toBeNull();
+
+    // A different number moves the highlight rather than sending.
+    await fireEvent.keyDown(window, { key: "1" });
+    expect(armedKey()).toBe("1");
+    // Escape clears it.
+    await fireEvent.keyDown(window, { key: "Escape" });
+    expect(container.querySelector("[data-inbox-proposal-armed]")).toBeNull();
+    expect(screen.queryByText("Sent to Omar Reed")).toBeNull();
+
+    // The same key again confirms, and the send still waits behind undo.
+    await fireEvent.keyDown(window, { key: "2" });
     await fireEvent.keyDown(window, { key: "2" });
     expect(client.respondInboxItem).not.toHaveBeenCalled();
     expect(await screen.findByText("Sent to Omar Reed")).toBeTruthy();

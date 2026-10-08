@@ -548,6 +548,36 @@ function overviewInitiatives(work) {
     last_movement_at: qaHoursAgo(5),
     ...overrides,
   });
+  // The three bounded lists core computes per plan: what landed in the last
+  // week, what is moving, what is ready next. Titles come from the step ids,
+  // which is enough for a screenshot sweep.
+  const stepTitle = (id) =>
+    String(id)
+      .replace(/-/g, " ")
+      .replace(/^./, (first) => first.toUpperCase());
+  const digestFor = (statuses) => {
+    const pick = (match, extra = () => ({})) => {
+      const all = statuses.filter(([, status]) => match(status));
+      return {
+        items: all.slice(0, 3).map(([id, status], index) => ({
+          id,
+          title: stepTitle(id),
+          status,
+          ...extra(index),
+        })),
+        more: Math.max(0, all.length - 3),
+      };
+    };
+    return {
+      window_hours: 168,
+      completed: pick(
+        (status) => status === "done",
+        (index) => ({ at: qaHoursAgo(18 * (index + 1)) }),
+      ),
+      current: pick((status) => status === "active" || status === "blocked"),
+      next: pick((status) => status === "not_started"),
+    };
+  };
   const geometryFor = (statuses) => ({
     shape: "chain",
     total_nodes: statuses.length,
@@ -618,6 +648,7 @@ function overviewInitiatives(work) {
         board_ref: "board:launch",
         plan_state: null,
         geometry: null,
+        plan_step_digest: null,
       };
     }
     const { statuses, ...rest } = extra;
@@ -628,6 +659,7 @@ function overviewInitiatives(work) {
       board_ref: "board:launch",
       plan_state: planFor(statuses),
       geometry: geometryFor(statuses),
+      plan_step_digest: digestFor(statuses),
       progress: planFor(statuses).progress,
       ...rest,
     };
@@ -654,6 +686,10 @@ function overviewInitiatives(work) {
       ["agree", "done"],
       ["ship", "done"],
     ]),
+    plan_step_digest: digestFor([
+      ["agree", "done"],
+      ["ship", "done"],
+    ]),
     progress: { done: 2, total: 2 },
   });
   items.push({
@@ -668,6 +704,7 @@ function overviewInitiatives(work) {
     board_ref: "board:launch",
     plan_state: null,
     geometry: null,
+    plan_step_digest: null,
     progress: { done: 0, total: 0 },
   });
 

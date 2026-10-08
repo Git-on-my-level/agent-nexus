@@ -261,6 +261,14 @@ Planless initiatives have null plan_state/geometry and phase-based health.
 Geometry supplies shape, effective node status, dependency layer and included
 `after` edges, capped at 24 nodes; `total_nodes` and `collapsed_nodes` describe
 the remainder. Clients render geometry without re-deriving workflow semantics.
+`plan_step_digest` adds what just finished, what is moving and what is next as
+three lists of at most three steps with the remainder counted in `more`, over
+the same steps and referenced facts the read already loaded. `completed` lists
+steps whose linked resource moved within `window_hours` (168), newest first; a
+step marked done inline has no completion time and is omitted rather than dated
+from the plan's last edit. `current` lists active and blocked steps and `next`
+lists ready unstarted steps, both in plan order, so one step is never in both.
+It is null without a plan and appears on card and work reads as well.
 The projection reads at most 100 open and 100 closed active-lifecycle candidate
 cards for completion digests, reuses the report batch privacy context, and
 declares `truncated` on work and initiatives when more candidates exist.

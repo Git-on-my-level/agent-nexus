@@ -1129,13 +1129,14 @@ live_series:
 initiative_overview:
   max_initiatives: 2000
   geometry_max_nodes: 24
-  fields: [plan_state, plan_health, plan_resolution_truncated, next_step, status_mismatch, health, geometry]
+  fields: [plan_state, plan_health, plan_resolution_truncated, next_step, plan_step_digest, status_mismatch, health, geometry]
   semantics:
     - If any board has role initiatives, only its cards appear as initiatives. Other active cards remain in work. Without a designated board, Overview keeps the existing selection and returns initiatives.hint suggesting the role.
     - Overview uses the same principal-scoped batch plan computation as card reads and live reports, never one query per initiative.
     - Planless initiatives return null plan_state and geometry, with no_plan health until the stale threshold and stale afterward. Summary progress is preserved.
     - Health contains status (no_plan, stale, blocked, at_risk, on_track, done) and a reason. Geometry contains shape, nodes (id, status, layer, after), total_nodes and collapsed_nodes.
     - Geometry uses dependency depth as layer, topological order with lexicographic ties, and at most 24 nodes. Edges only name included nodes; collapsed_nodes counts omitted nodes.
+    - plan_step_digest answers what just finished, what is moving and what is next as three lists of at most 3 steps each with the remainder counted in more, from the same steps and referenced facts the read already loaded. completed lists steps whose linked resource moved within window_hours (168), newest first; a step marked done inline has no completion time and is omitted rather than dated from the plan's last edit. current lists active and blocked steps and next lists ready unstarted steps, both in plan order, so one step never appears in both. Null without a plan, and present on card reads and lists alongside plan_state.
     - Open initiatives are selected before closed history, newest update first; counts describe the visible bounded candidate set and truncated declares that additional candidates exist.
     - Ref preview owner_display resolves workspace actor names, falling back to the owner ref. Board metadata requires independent board visibility.
     - Native preview url is a workspace-relative route. Hosted clients prefix it with /o/<org>/w/<ws>; absolute source URLs are used as-is. Never concatenate a hosted prefix onto an absolute URL.

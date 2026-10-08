@@ -126,9 +126,15 @@ describe("morningBriefModel", () => {
     expect(morningBriefModel(brief())).not.toBeNull();
   });
 
-  it("keeps the five questions in order and binds every row to this workspace", () => {
+  it("keeps the panels in order and binds every row to this workspace", () => {
     const model = morningBriefModel(brief(), { hrefFor: scoped });
     expect(model.order).toEqual([...BRIEF_SECTIONS]);
+    // Decisions and At risk first: they are the two answers that change what a
+    // reader does next. Initiatives is computed but is not a panel — the cards
+    // under the band answer it, and a row per initiative said it twice.
+    expect(model.order).toEqual(["decisions", "risk", "changes", "machine"]);
+    expect(model.order).not.toContain("initiatives");
+    expect(model.sections.initiatives.chips.length).toBeGreaterThan(0);
     expect(model.sections.decisions.rows[0].href).toBe(scoped("/tasks/gate"));
     expect(model.sections.decisions.moreHref).toBe(
       scoped("/inbox?mailbox=needs-you"),

@@ -97,6 +97,8 @@
   let inboxLoadSeq = 0;
   let loadedInboxRouteKey = $state("");
   let chosen = $state("");
+  /* The respond panel owns which suggestion is highlighted; see the pane. */
+  let respondPanel = $state(null);
   let helpOpen = $state(false);
   let subject = $state(null);
   let context = $state(null);
@@ -564,11 +566,12 @@
         undoLastResponse();
         break;
       case "proposal": {
-        const button = find(
-          `[data-inbox-proposal="${shortcut.index}"]:not([disabled])`,
-        );
-        if (!button) return;
-        button.click();
+        if (!respondPanel?.pressProposalKey(shortcut.index)) return;
+        break;
+      }
+      case "clear-choice": {
+        // Escape that cleared nothing is not ours; let it keep travelling.
+        if (!respondPanel?.clearProposalChoice()) return;
         break;
       }
       case "reply": {
@@ -883,10 +886,12 @@
           </div>
         {/if}
         <InboxRespondPanel
+          bind:this={respondPanel}
           kind={itemKind(item)}
           access={accessRequest}
           canDecideAccess={decidesAccess}
           proposals={proposalStrings}
+          itemKey={String(item?.id ?? "")}
           bind:draft={responseDraft}
           {chosen}
           replyId="human-response-input"

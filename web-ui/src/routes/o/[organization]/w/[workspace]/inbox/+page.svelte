@@ -117,6 +117,12 @@
   let receiptsUnavailable = $state(false);
   let noticeElement = $state(null);
   let detailPane = $state(null);
+  /*
+   * The respond panel owns which suggestion is highlighted, so the number keys
+   * go through it rather than clicking a button: a click sends, where the first
+   * press of a number only selects.
+   */
+  let respondPanel = $state(null);
   // After an action, keyboard focus lands on the outcome, not on <body>.
   $effect(() => {
     if (notice && noticeElement) noticeElement.focus();
@@ -177,10 +183,22 @@
     workRef ? rows.filter((row) => rowMatchesWorkRef(row, workRef)) : rows,
   );
   let visible = $derived(filterMailbox(scoped, mailbox));
+  let handled = $derived(filterMailbox(scoped, "handled"));
   let counts = $derived({
     "needs-you": filterMailbox(scoped, "needs-you").length,
     watching: filterMailbox(scoped, "watching").length,
-    handled: filterMailbox(scoped, "handled").length,
+    handled: handled.length,
+  });
+  /*
+   * When the reader last finished something, for the empty state. It is the
+   * newest row already in the handled mailbox, so it costs no request; an
+   * inbox with nothing handled yet simply says nothing.
+   */
+  let lastHandledAt = $derived.by(() => {
+    const times = handled
+      .map((row) => Date.parse(row.time || ""))
+      .filter((value) => Number.isFinite(value));
+    return times.length ? new Date(Math.max(...times)).toISOString() : "";
   });
   let workRefTitle = $derived.by(() => {
     if (!workRef) return "";
@@ -890,11 +908,12 @@
         break;
       }
       case "proposal": {
-        const button = paneElement(
-          `[data-inbox-proposal="${shortcut.index}"]:not([disabled])`,
-        );
-        if (!button) return;
-        button.click();
+        if (!respondPanel?.pressProposalKey(shortcut.index)) return;
+        break;
+      }
+      case "clear-choice": {
+        // Escape that cleared nothing is not ours; let it keep travelling.
+        if (!respondPanel?.clearProposalChoice()) return;
         break;
       }
       case "reply": {
@@ -1148,7 +1167,9 @@
   {:else}
     {@const showDetail = Boolean(selectedId)}
     <div
-      class="grid overflow-hidden rounded-md border border-line bg-panel lg:min-h-[30rem] {showDetail
+      class="grid overflow-hidden rounded-md border border-line bg-panel {visible.length
+        ? 'lg:min-h-[30rem]'
+        : ''} {showDetail
         ? 'lg:grid-cols-[minmax(16rem,0.9fr)_minmax(0,1.4fr)]'
         : ''}"
     >
@@ -1214,27 +1235,48 @@
               </a>
             </li>
           {:else}
-            <li class="px-5 py-10 text-center">
-              {#if mailbox === "needs-you"}
-                <p class="text-meta font-medium text-fg">
-                  You're clear.{#if counts.watching}
+            <!--
+              An empty inbox is good news, and good news is one line. It used to
+              be a sentence and a link run together inside a half-screen of
+              whitespace; it is a short headline, what is still being watched,
+              and when the reader last finished something — centred, and no
+              taller than it needs to be (the grid drops its minimum height
+              when there is nothing to list).
+            -->
+            <li class="px-5 py-8">
+              <div
+                class="mx-auto flex max-w-sm flex-col items-center gap-1 text-center"
+                data-inbox-empty={mailbox}
+              >
+                {#if mailbox === "needs-you"}
+                  <p class="text-meta font-medium text-fg">You're clear.</p>
+                  {#if counts.watching}
                     <a
-                      class="ui-prose-link"
+                      class="text-micro text-accent-text hover:underline"
                       href={href({ mailbox: "watching", item: "" })}
+                      data-inbox-empty-watching
                       >{counts.watching}
-                      {counts.watching === 1 ? "thing is" : "things are"} being watched.</a
-                    >{/if}
-                </p>
-              {:else if mailbox === "watching"}
-                <p class="text-meta font-medium text-fg">
-                  Nothing is waiting on a source or a delivery.
-                </p>
-              {:else}
-                <p class="text-meta font-medium text-fg">
-                  Nothing handled yet. Answered decisions and dismissed items
-                  land here.
-                </p>
-              {/if}
+                      {counts.watching === 1 ? "thing" : "things"} being watched</a
+                    >
+                  {/if}
+                {:else if mailbox === "watching"}
+                  <p class="text-meta font-medium text-fg">
+                    Nothing is waiting on a source or a delivery.
+                  </p>
+                {:else}
+                  <p class="text-meta font-medium text-fg">
+                    Nothing handled yet.
+                  </p>
+                  <p class="text-micro text-fg-muted">
+                    Answered decisions and dismissed items land here.
+                  </p>
+                {/if}
+                {#if lastHandledAt && mailbox === "needs-you"}
+                  <p class="text-micro text-fg-subtle" data-inbox-empty-handled>
+                    Last handled {formatTimestamp(lastHandledAt)}
+                  </p>
+                {/if}
+              </div>
             </li>
           {/each}
         </ul>
@@ -1474,10 +1516,12 @@
                 {/if}
                 {#if needsResponse}
                   <InboxRespondPanel
+                    bind:this={respondPanel}
                     kind={selected.category}
                     access={selected.access}
                     canDecideAccess={decidesAccess}
                     proposals={selected.responseProposals}
+                    itemKey={selected.id}
                     bind:draft={reply}
                     {chosen}
                     {busy}
@@ -1661,7 +1705,7 @@
                 <span
                   ><kbd class="inbox-kbd"
                     >{proposalCount > 1 ? `1–${proposalCount}` : "1"}</kbd
-                  > send</span
+                  > select, press again to send</span
                 >
                 <span><kbd class="inbox-kbd">R</kbd> reply</span>
                 <span><kbd class="inbox-kbd">E</kbd> acknowledge</span>

@@ -131,13 +131,6 @@
 
   /** Ticks so a freshness badge on screen does not go quietly out of date. */
   let now = $state(Date.now());
-  /*
-   * The tile grid, collapsed by default once the brief covers the same
-   * initiatives and opened by the reader from there. `null` means "nobody has
-   * chosen", so the default follows the brief rather than freezing at
-   * whatever the first render happened to be.
-   */
-  let initiativeTilesOpen = $state(null);
 
   let initiativeTileList = $derived(
     model?.initiatives?.status === "ok"
@@ -164,12 +157,19 @@
    * past the second copy.
    *
    * So when the brief is present the band keeps only what the brief cannot
-   * see — asks in the other workspaces this reader can reach — and the
-   * initiative tiles below fold away. Nothing is lost: the band still fans
-   * out, the tiles are one click down, and on a single-workspace deployment
-   * the band simply has nothing left to say and does not render.
+   * see — asks in the other workspaces this reader can reach. On a
+   * single-workspace deployment it has nothing left to say and does not
+   * render. The initiative cards below are never folded away: they are what
+   * the reader came for, and hiding them behind a toggle meant loading the
+   * Overview and learning nothing about any initiative.
    */
   let briefOwnsThisWorkspace = $derived(Boolean(brief));
+  /*
+   * State counts for the initiatives header: core's own by_state tally, worst
+   * first. They used to sit in the brief's initiatives panel, which is gone;
+   * they belong beside the cards they count rather than above them.
+   */
+  let initiativeStates = $derived(brief?.sections.initiatives.chips ?? []);
   let urgentBand = $derived(
     urgentBandModel({
       asks: [
@@ -188,9 +188,6 @@
    * something the brief does not: a row, a failed read, or a workspace this
    * browser has no session for.
    */
-  let showInitiativeTiles = $derived(
-    initiativeTilesOpen ?? !briefOwnsThisWorkspace,
-  );
   let showUrgentBand = $derived(
     !briefOwnsThisWorkspace ||
       urgentBand.asks.count > 0 ||
@@ -407,33 +404,44 @@
       cannot disagree about which initiative is more urgent. Done and planless
       initiatives collapse at the bottom rather than pushing live work off the
       first screen.
+
+      Open, always. This was behind an "All initiatives" toggle while the brief
+      carried a one-line row per initiative; the row is gone and the cards are
+      the answer, so there is nothing left to expand. The state counts moved
+      onto this header, because "3 no plan" is the honest summary a reader
+      needs when seven cards all report no plan.
     -->
     <section
       class="rounded-md border border-line bg-panel"
       aria-labelledby="overview-initiatives"
       data-overview-section="initiatives"
-      data-overview-initiatives-folded={briefOwnsThisWorkspace
-        ? "true"
-        : "false"}
     >
       <header
-        class="flex items-baseline justify-between border-b border-line px-3 py-2"
+        class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-line px-3 py-2"
       >
         <h2 id="overview-initiatives" class="text-subtitle text-fg">
-          {#if briefOwnsThisWorkspace}
-            <button
-              class="text-subtitle text-fg hover:underline"
-              type="button"
-              aria-expanded={showInitiativeTiles}
-              onclick={() => (initiativeTilesOpen = !showInitiativeTiles)}
-              data-overview-initiatives-toggle
-            >
-              {showInitiativeTiles ? "▾" : "▸"} All initiatives
-            </button>
-          {:else}
-            Initiatives
-          {/if}
+          Initiatives
         </h2>
+        {#if initiativeStates.length}
+          <ul
+            class="order-last flex w-full flex-wrap items-center gap-x-2 gap-y-1 sm:order-none sm:w-auto sm:flex-1"
+          >
+            {#each initiativeStates as chip (chip.state)}
+              <li
+                class="whitespace-nowrap rounded-full border px-1.5 text-micro {chip.tone ===
+                'danger'
+                  ? 'border-danger text-danger-text'
+                  : chip.tone === 'warn'
+                    ? 'border-warn text-warn-text'
+                    : 'border-line text-fg-muted'}"
+                data-overview-initiative-state={chip.state}
+              >
+                {chip.count}
+                {chip.label}
+              </li>
+            {/each}
+          </ul>
+        {/if}
         <a
           class="text-meta text-accent-text hover:underline"
           href={workspaceHref("/tasks")}>All tasks</a
@@ -448,7 +456,7 @@
             retrying={refreshing}
           />
         </div>
-      {:else if showInitiativeTiles}
+      {:else}
         <div class="p-3">
           <LiveInitiatives items={model.initiatives.items} {now} />
         </div>

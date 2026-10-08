@@ -109,6 +109,21 @@ describe("the Overview tile reads core's serialized initiative", () => {
     ).toBe(9);
   });
 
+  it("reads the step lists from the digest core serializes", () => {
+    // The fixture's plan has one inline-done step and one unstarted step, so
+    // core sends an empty completed list: a step marked done inline has no
+    // completion time to date it from. The tile must say nothing about it
+    // rather than invent one.
+    expect(tile.plan_step_digest.window_hours).toBe(168);
+    expect(model().steps.groups.map((list) => list.key)).toEqual(["next"]);
+    expect(model().steps.next.items[0]).toMatchObject({
+      id: "build",
+      title: "Build",
+      status: "not_started",
+    });
+    expect(model().steps.completed.items).toEqual([]);
+  });
+
   it("names the next step from the id core sends", () => {
     expect(model().next).toMatchObject({ id: "build", title: "Build" });
   });
