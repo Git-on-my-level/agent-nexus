@@ -14,7 +14,7 @@ func TestPointSnapshotMissingAndExpiredProofDenies(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ws.Close()
-	snapshot := &denialSnapshot{rows: `[["card","private"],["work_evidence_alias",42],[null,null]]`}
+	snapshot := &denialSnapshot{rows: `[["card","private"],["card","private\u0000tail"],["work_evidence_alias",42],[null,null]]`}
 	snapshot.preparePointIndex()
 	token := pointSnapshotSequence.Add(1)
 	pointSnapshots.Store(token, snapshot)
@@ -22,11 +22,12 @@ func TestPointSnapshotMissingAndExpiredProofDenies(t *testing.T) {
 	check := func(key any, kind any, id any, want int) {
 		t.Helper()
 		var got int
-		if err := ws.DB().QueryRowContext(ctx, `SELECT anx_point_snapshot_denied(?,?,?)`, key, kind, id).Scan(&got); err != nil || got != want {
+		if err := ws.DB().QueryRowContext(ctx, `SELECT anx_point_snapshot_denied(?,?,CAST(? AS BLOB))`, key, kind, id).Scan(&got); err != nil || got != want {
 			t.Fatalf("got=%d want=%d error=%v", got, want, err)
 		}
 	}
 	check(token, "card", "private", 1)
+	check(token, "card", "private\x00tail", 1)
 	check(token, "work_evidence_alias", int64(42), 1)
 	check(token, "work_evidence_alias", int64(43), 0)
 	check(token, "card", "public", 0)
@@ -35,4 +36,12 @@ func TestPointSnapshotMissingAndExpiredProofDenies(t *testing.T) {
 	check(int64(-1), "card", "public", 1)
 	pointSnapshots.Delete(token)
 	check(token, "card", "public", 1)
+}
+
+func TestPointSnapshotInvalidUTF8RetainsCanonicalFallback(t *testing.T) {
+	snapshot := &denialSnapshot{rows: "[[\"card\",\"private\xff\"]]"}
+	snapshot.preparePointIndex()
+	if snapshot.pointIndex != nil {
+		t.Fatal("lossy UTF-8 proof admitted")
+	}
 }

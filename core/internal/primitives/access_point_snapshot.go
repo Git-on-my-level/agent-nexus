@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"unicode/utf8"
 
 	"modernc.org/sqlite"
 )
@@ -34,6 +35,9 @@ func init() {
 		snapshot := value.(*denialSnapshot)
 		kind, kindOK := args[1].(string)
 		id, idOK := args[2].(string)
+		if raw, ok := args[2].([]byte); ok {
+			id, idOK = string(raw), true
+		}
 		if numeric, ok := args[2].(int64); ok {
 			id, idOK = strconv.FormatInt(numeric, 10), true
 		}
@@ -51,7 +55,7 @@ func init() {
 // their equality spelling and skip NULL identities, which cannot match a row.
 func (s *denialSnapshot) preparePointIndex() {
 	s.pointOnce.Do(func() {
-		if !strings.HasPrefix(strings.TrimSpace(s.rows), "[") {
+		if !utf8.ValidString(s.rows) || !strings.HasPrefix(strings.TrimSpace(s.rows), "[") {
 			return
 		}
 		decoder := json.NewDecoder(strings.NewReader(s.rows))

@@ -66,7 +66,7 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 
 	denied := func(kind, id string) string {
 		predicate := "NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind='" + kind + "' AND id=" + id + ")"
-		pointPredicates[predicate] = "anx_point_snapshot_denied((SELECT token FROM _anx_point_snapshot),'" + kind + "'," + id + ")=0"
+		pointPredicates[predicate] = "anx_point_snapshot_denied((SELECT token FROM _anx_point_snapshot),'" + kind + "',CAST(" + id + " AS BLOB))=0"
 		return predicate
 	}
 	cleanJSON := func(column string) string {
