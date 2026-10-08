@@ -211,6 +211,7 @@ type handlerOptions struct {
 	coreInstanceID                 string
 	metaCommandsPath               string
 	streamPollInterval             time.Duration
+	streamReads                    *streamReadHub
 	corsAllowedOrigins             []string
 	projectionMaintainer           *ProjectionMaintainer
 	requestBodyLimits              RequestBodyLimits
@@ -676,6 +677,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	opts.routeRateLimits = opts.routeRateLimits.normalize()
 	opts.rateLimiter = newRouteRateLimiter(opts.routeRateLimits)
 	opts.agentChanges = newAgentChangeHub()
+	opts.streamReads = &streamReadHub{}
 	if (opts.workspaceHumanGrantVerifier != nil || opts.workspaceManagedGrantVerifier != nil) && opts.workspaceHumanGrantRateLimiter == nil {
 		opts.workspaceHumanGrantRateLimiter = newRouteRateLimiter(RouteRateLimits{
 			AuthRequestsPerMinute:  10,
