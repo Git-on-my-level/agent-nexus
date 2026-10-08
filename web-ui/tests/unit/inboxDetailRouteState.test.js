@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/svelte";
+import { get } from "svelte/store";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const pageStore = vi.hoisted(() => {
@@ -76,6 +77,7 @@ vi.mock("$lib/searchHelpers", () => ({
 import { PROPOSAL_FLASH_MS } from "../../src/lib/inboxProposalChoice.js";
 import {
   flushInboxResponse,
+  inboxResponseOverlay,
   resetInboxResponseQueue,
 } from "../../src/lib/inboxResponseQueue.js";
 import InboxDetailPage from "../../src/routes/o/[organization]/w/[workspace]/inbox/[id]/+page.svelte";
@@ -299,10 +301,25 @@ describe("inbox detail route state", () => {
       setTimeout(resolve, PROPOSAL_FLASH_MS + 100),
     );
 
+    /*
+     * The answered item itself travels with the response, not just its id:
+     * the overlay files it under Handled until core catches up, which is how
+     * an answered ask stays out of the open inbox. Captured, so it is the
+     * item that was answered rather than the one now on screen.
+     */
+    expect(get(inboxResponseOverlay)["inbox-first"]).toMatchObject({
+      status: "pending",
+      item: { id: "inbox-first", title: "First item" },
+    });
+
     await flushInboxResponse();
     expect(coreClientMock.respondInboxItem).toHaveBeenCalledTimes(1);
     const [itemId, request] = coreClientMock.respondInboxItem.mock.calls[0];
     expect(itemId).toBe("inbox-first");
+    expect(get(inboxResponseOverlay)["inbox-first"]).toMatchObject({
+      status: "committed",
+      item: { id: "inbox-first" },
+    });
     expect(request).toMatchObject({
       response_text: "Ship it",
       outcome: "answered",
