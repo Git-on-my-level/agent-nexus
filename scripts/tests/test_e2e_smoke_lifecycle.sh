@@ -80,10 +80,17 @@ if [[ -z "$receipt" ]]; then
 fi
 token_still_running "$receipt"
 
+foreign_began="$(date +%s)"
 SMOKE_ARTIFACT_DIR="$tmp/foreign" SMOKE_LIFECYCLE_SELFTEST=foreign "$SMOKE" >"$tmp/foreign.log" 2>&1
+foreign_elapsed="$(( $(date +%s) - foreign_began ))"
+if (( foreign_elapsed > 15 )); then
+  echo "foreign stop waited ${foreign_elapsed}s without receipt proof" >&2
+  exit 1
+fi
 state="$(find "$tmp/foreign" -name foreign-state -print -quit)"
-if [[ "$(cat "$state")" != "foreign-alive" ]]; then
-  echo "stop_supervised signalled a pid that the receipt did not prove" >&2
+stop_status="$(find "$tmp/foreign" -name stop-status -print -quit)"
+if [[ "$(cat "$state")" != "foreign-alive" || "$(cat "$stop_status")" != "stop-failed" ]]; then
+  echo "stop_supervised must refuse an unproved pid and say so (state=$(cat "$state" 2>/dev/null) status=$(cat "$stop_status" 2>/dev/null))" >&2
   cat "$tmp/foreign.log" >&2 || true
   exit 1
 fi

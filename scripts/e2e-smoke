@@ -48,15 +48,20 @@ start_supervised() {
 stop_supervised() {
   local pid="$1"
   local receipt="$2"
+  local status=0
   # Receipt proof is the only signal path. A bare pid may have been reused.
   if [[ -f "$receipt" ]]; then
-    python3 "$OWNED_PROCESS_PY" stop \
+    if ! python3 "$OWNED_PROCESS_PY" stop \
       --receipt "$receipt" \
-      --shutdown-deadline "$SMOKE_SHUTDOWN_DEADLINE" || true
+      --shutdown-deadline "$SMOKE_SHUTDOWN_DEADLINE"; then
+      status=1
+    fi
   fi
+  # Reap a child that has already exited. A live pid was not proved; do not wait on it.
   if [[ -n "${pid:-}" ]] && ! kill -0 "$pid" >/dev/null 2>&1; then
     wait "$pid" >/dev/null 2>&1 || true
   fi
+  return "$status"
 }
 
 cleanup() {
@@ -68,8 +73,10 @@ cleanup() {
   # notices the parent pid change and reaps. SIGKILL of the supervisor itself,
   # or a grandchild that leaves the group and clears OWNED_PROCESS_TOKEN, can
   # still leave a process. This trap does not signal any pid outside those receipts.
-  stop_supervised "${UI_SUP_PID:-}" "$UI_RECEIPT"
-  stop_supervised "${CORE_SUP_PID:-}" "$CORE_RECEIPT"
+  # Both trees are attempted. The caller that invoked stop_supervised directly
+  # sees a non-zero status; this trap must not skip the second tree.
+  stop_supervised "${UI_SUP_PID:-}" "$UI_RECEIPT" || true
+  stop_supervised "${CORE_SUP_PID:-}" "$CORE_RECEIPT" || true
 
   if [[ $code -ne 0 ]]; then
     echo "smoke failed; artifacts kept at: $TMP_DIR" >&2
@@ -121,7 +128,11 @@ payload = {
 }
 open(path, "w").write(json.dumps(payload))
 PY
-  stop_supervised "$foreign" "$CORE_RECEIPT"
+  if stop_supervised "$foreign" "$CORE_RECEIPT"; then
+    printf 'stop-ok\n' > "$TMP_DIR/stop-status"
+  else
+    printf 'stop-failed\n' > "$TMP_DIR/stop-status"
+  fi
   if kill -0 "$foreign" >/dev/null 2>&1; then
     printf 'foreign-alive\n' > "$TMP_DIR/foreign-state"
   else
