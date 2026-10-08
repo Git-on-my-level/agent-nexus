@@ -10370,6 +10370,41 @@ components:
         state: {type: string, enum: [no_plan, stale, blocked, at_risk, on_track, done]}
         reason: {type: string}
         since: {type: string, format: date-time, nullable: true}
+    PlanStepDigestList:
+      type: object
+      required: [items, more]
+      properties:
+        items:
+          type: array
+          maxItems: 3
+          items:
+            type: object
+            required: [id, title, status]
+            properties:
+              id: {type: string}
+              title: {type: string}
+              ref: {type: string, description: Absent for unlinked steps.}
+              status: {type: string, enum: [done, active, blocked, not_started]}
+              at: {type: string, format: date-time, description: The linked resource's last movement, which is the completion time core holds for a step its resource finished. Absent on current and next steps.}
+        more: {type: integer, description: Steps this list omitted, never listed.}
+    PlanStepDigest:
+      type: object
+      nullable: true
+      required: [window_hours, completed, current, next]
+      description: >
+        Three bounded lists over the plan's effective steps, computed from the same steps and referenced
+        facts the read already loaded: at most three rows each with the remainder counted, and no query of
+        its own. Emitted on Overview initiatives only. completed holds steps a linked resource finished,
+        whose resource moved within window_hours, newest movement first; a step marked done inline, or
+        linked to a resource whose state says nothing, carries no completion time anywhere and is omitted
+        rather than dated from a plan edit or a comment. current holds active and blocked steps; next holds
+        ready unstarted steps, so an active step is never listed twice. Both keep the plan's topological
+        order with lexicographic ties, the order geometry uses. Null when the card has no plan.
+      properties:
+        window_hours: {type: integer, description: How recently a completed step must have moved to be listed.}
+        completed: { $ref: '#/components/schemas/PlanStepDigestList' }
+        current: { $ref: '#/components/schemas/PlanStepDigestList' }
+        next: { $ref: '#/components/schemas/PlanStepDigestList' }
     NextPlanStep:
       type: object
       nullable: true
@@ -12141,12 +12176,13 @@ components:
 
     OverviewInitiative:
       type: object
-      required: [ref, title, summary, progress, priority, needs, phase, board_ref, updated_at, plan_state, health, geometry]
+      required: [ref, title, summary, progress, priority, needs, phase, board_ref, updated_at, plan_state, plan_step_digest, health, geometry]
       properties:
         plan_state: {type: object, nullable: true, allOf: [{ $ref: '#/components/schemas/PlanState' }]}
         plan_resolution_truncated: {type: boolean, description: True when the shared 4000 distinct plan-ref budget was exceeded; omitted refs remain unknown.}
         plan_health: { $ref: '#/components/schemas/PlanHealth' }
         next_step: { $ref: '#/components/schemas/NextPlanStep' }
+        plan_step_digest: { $ref: '#/components/schemas/PlanStepDigest' }
         status_mismatch: {type: boolean}
         health: { $ref: '#/components/schemas/InitiativeHealth' }
         geometry: {type: object, nullable: true, allOf: [{ $ref: '#/components/schemas/InitiativeGeometry' }]}

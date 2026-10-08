@@ -24,13 +24,20 @@ const count = (value) => {
 
 const rows = (value) => (Array.isArray(value) ? value : []);
 
-/** Section order. This is the order the five questions get asked in. */
+/**
+ * Panel order inside the band. Decisions and At risk come first because they
+ * are the two questions that can change what a reader does next.
+ *
+ * `initiatives` is computed but is deliberately not a panel: the Overview shows
+ * the initiative cards themselves directly under the band, and a one-line
+ * restatement of the same seven initiatives above them was the same answer
+ * twice. The section's counts still feed that card section's header.
+ */
 export const BRIEF_SECTIONS = Object.freeze([
   "decisions",
-  "changes",
   "risk",
+  "changes",
   "machine",
-  "initiatives",
 ]);
 
 /**
@@ -341,7 +348,7 @@ export function morningBriefModel(brief, { hrefFor = (path) => path } = {}) {
     /** True when every section has something worth reading. Used for nothing
      *  but the band's own aria summary, and deliberately not used to hide the
      *  band: a quiet morning is a result, not an absence. */
-    quiet: BRIEF_SECTIONS.every(
+    quiet: [...BRIEF_SECTIONS, "initiatives"].every(
       (key) => sections[key].empty || key === "machine",
     ),
   };

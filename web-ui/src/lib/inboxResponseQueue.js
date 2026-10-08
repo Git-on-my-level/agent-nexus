@@ -134,12 +134,35 @@ function showToast(toast) {
 }
 
 /**
+ * Where a response is going, as of now: the workspace-bound sender and the
+ * scope that owns it.
+ *
+ * Queueing captures this itself, which is right when the reader answers and
+ * the response is queued in the same breath. It is not right when something
+ * sits between the two — the Inbox flashes a chosen suggestion for a moment
+ * before sending it, and a reader can switch workspace inside that moment.
+ * Capturing at the choice and handing the binding to `queueInboxResponse`
+ * keeps the answer pointed at the workspace it was written in.
+ *
+ * @returns {{ send: Function, scope: string, identity: string }}
+ */
+export function captureInboxResponseBinding() {
+  return {
+    send: captureInboxResponseSender(),
+    scope: responseScope(),
+    identity: scopeIdentity,
+  };
+}
+
+/**
  * Queue one response. A response already waiting is committed at once: only
  * the latest action is ever undoable, as in a mail client.
  *
- * @param {{ itemId: string, item?: object, request: object, message: string, restore?: any }} entry
+ * @param {{ itemId: string, item?: object, request: object, message: string, restore?: any, binding?: { send: Function, scope: string, identity: string } }} entry
  *   `request` is the exact `respondInboxItem` body; `message` is the toast
- *   copy ("Sent to Omar Reed"); `restore` is handed back on undo.
+ *   copy ("Sent to Omar Reed"); `restore` is handed back on undo; `binding`
+ *   is a `captureInboxResponseBinding()` taken earlier, for a response whose
+ *   send is separated from the reader's decision.
  * @returns {number} queue id
  */
 export function queueInboxResponse({
@@ -148,6 +171,7 @@ export function queueInboxResponse({
   request,
   message,
   restore,
+  binding,
 }) {
   const id = String(itemId ?? "").trim();
   if (!id) throw new Error("queueInboxResponse requires itemId");
@@ -161,19 +185,32 @@ export function queueInboxResponse({
   if (pending) void commit(pending);
   // Only this item's failure: answering B must not disarm Retry on A.
   forgetFailure(id);
+  const bound = binding ?? captureInboxResponseBinding();
   const entry = {
     id: ++sequence,
     itemId: id,
     item: item ? { ...item } : null,
-    scope: responseScope(),
-    identity: scopeIdentity,
-    send: captureInboxResponseSender(),
+    scope: bound.scope,
+    identity: bound.identity,
+    send: bound.send,
     request: { ...request, idempotency_key: crypto.randomUUID() },
     message: String(message ?? "Response sent"),
     restore: restore ?? null,
     deadline: Date.now() + UNDO_WINDOW_MS,
     timer: null,
   };
+  /*
+   * The reader has already left the workspace this answer belongs to. A
+   * response does not outlive a workspace switch — that is what the switch
+   * itself does to one already waiting — and an undo toast here would sit in
+   * a workspace that cannot even see the item. Send it now, with the sender
+   * it was written with.
+   */
+  if (entry.scope !== responseScope()) {
+    pending = entry;
+    void commit(entry);
+    return entry.id;
+  }
   entry.timer = setTimeout(() => void commit(entry), UNDO_WINDOW_MS);
   pending = entry;
   setOverlay(id, {

@@ -388,7 +388,7 @@ func (s *Store) OverviewVisible(ctx context.Context, humanIDs, agentNames map[st
 		ask := strings.Join(needsHuman, " · ")
 		ref := anyStringValue(w["ref"])
 		href := "/tasks/" + url.PathEscape(strings.TrimPrefix(ref, "card:"))
-		initiative := map[string]any{"ref": ref, "title": w["title"], "summary": summary, "progress": progress, "priority": firstNonEmptyString(anyStringValue(w["priority"]), "none"), "needs": needsHuman, "phase": phase, "board_ref": w["board_ref"], "updated_at": w["updated_at"], "plan_state": nil, "geometry": nil, "health": initiativeHealth(w), "plan_health": w["plan_health"], "next_step": w["next_step"], "status_mismatch": w["status_mismatch"], "plan_resolution_truncated": w["plan_resolution_truncated"]}
+		initiative := map[string]any{"ref": ref, "title": w["title"], "summary": summary, "progress": progress, "priority": firstNonEmptyString(anyStringValue(w["priority"]), "none"), "needs": needsHuman, "phase": phase, "board_ref": w["board_ref"], "updated_at": w["updated_at"], "plan_state": nil, "geometry": nil, "health": initiativeHealth(w), "plan_health": w["plan_health"], "next_step": w["next_step"], "status_mismatch": w["status_mismatch"], "plan_resolution_truncated": w["plan_resolution_truncated"], "plan_step_digest": w["plan_step_digest"]}
 		if state, ok := w["plan_state"].(plans.State); ok {
 			initiative["plan_state"] = state
 			initiative["progress"] = state.Progress

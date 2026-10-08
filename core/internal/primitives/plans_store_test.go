@@ -267,3 +267,72 @@ func TestCardAndStepMessagesResetPlanRecency(t *testing.T) {
 		})
 	}
 }
+
+// The three lists an initiative is read by, over a real card plan: a step whose
+// linked card is done carries the completion anchor the Overview dates it from,
+// a step in flight is current, and only ready unstarted work is next.
+func TestPlanStepDigestOverRealCards(t *testing.T) {
+	ctx := context.Background()
+	store, board := newWorkTestStore(t)
+	card := func(title string) map[string]any {
+		w, err := store.CreateWork(ctx, "actor-1", "", map[string]any{"title": title, "board_id": board})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return w
+	}
+	initiative, finished, plain := card("Initiative"), card("Design the flow"), card("Unplanned work")
+	evidence, err := store.AppendEvent(ctx, "actor-1", map[string]any{"type": "completion_evidence", "refs": []string{}, "summary": "Design reviewed"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	refs := []string{"event:" + evidence["id"].(string)}
+	resolution := "done"
+	if _, err = store.MoveBoardCard(ctx, "actor-1", board, finished["id"].(string), primitives.MoveBoardCardInput{ColumnKey: "done", Resolution: &resolution, ResolutionRefs: &refs}); err != nil {
+		t.Fatal(err)
+	}
+	p := plans.Plan{Steps: []plans.Step{
+		{ID: "design", Title: "Design the flow", Ref: finished["ref"].(string), After: []string{}},
+		{ID: "build", Title: "Build the flow", Status: "active", After: []string{"design"}},
+		{ID: "ship", Title: "Ship it", After: []string{"build"}},
+		{ID: "measure", Title: "Measure it", After: []string{"design"}},
+	}}
+	if err = store.SetCardPlan(ctx, "actor-1", initiative["id"].(string), initiative["updated_at"].(string), p); err != nil {
+		t.Fatal(err)
+	}
+	row, err := store.GetBoardCard(ctx, "", initiative["id"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = store.EnrichCardPlans(ctx, []map[string]any{row}, nil, time.Now().UTC(), 0); err != nil {
+		t.Fatal(err)
+	}
+	digest, ok := row["plan_step_digest"].(plans.StepDigest)
+	if !ok {
+		t.Fatalf("digest=%#v", row["plan_step_digest"])
+	}
+	if len(digest.Completed.Items) != 1 || digest.Completed.Items[0].ID != "design" || digest.Completed.Items[0].Ref != finished["ref"].(string) {
+		t.Fatalf("completed=%+v", digest.Completed)
+	}
+	if _, err = time.Parse(time.RFC3339Nano, digest.Completed.Items[0].At); err != nil {
+		t.Fatalf("completion anchor %q: %v", digest.Completed.Items[0].At, err)
+	}
+	if len(digest.Current.Items) != 1 || digest.Current.Items[0].ID != "build" || digest.Current.Items[0].At != "" {
+		t.Fatalf("current=%+v", digest.Current)
+	}
+	// Ship waits on a step in flight; Measure's only dependency is done.
+	if len(digest.Next.Items) != 1 || digest.Next.Items[0].ID != "measure" {
+		t.Fatalf("next=%+v", digest.Next)
+	}
+	// A card with no plan reports no digest rather than three empty lists.
+	planless, err := store.GetBoardCard(ctx, "", plain["id"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = store.EnrichCardPlans(ctx, []map[string]any{planless}, nil, time.Now().UTC(), 0); err != nil {
+		t.Fatal(err)
+	}
+	if planless["plan_step_digest"] != nil {
+		t.Fatalf("planless digest=%#v", planless["plan_step_digest"])
+	}
+}

@@ -316,6 +316,46 @@ const brief = {
   },
 };
 
+/**
+ * The three bounded lists core computes per initiative: what landed in the last
+ * week, what is moving, what is ready next.
+ */
+const stepDigest = (index) => ({
+  window_hours: 168,
+  completed: {
+    items: [
+      {
+        id: `done-${index}`,
+        title: `Finished step ${index}`,
+        ref: `card:step-done-${index}`,
+        status: "done",
+        at: at(30 + index),
+      },
+    ],
+    more: index === 1 ? 2 : 0,
+  },
+  current: {
+    items: [
+      {
+        id: `active-${index}`,
+        title: `Active step ${index}`,
+        status: index === 0 ? "blocked" : "active",
+      },
+    ],
+    more: 0,
+  },
+  next: {
+    items: [
+      {
+        id: `next-${index}`,
+        title: `Next step ${index}`,
+        status: "not_started",
+      },
+    ],
+    more: index === 1 ? 3 : 0,
+  },
+});
+
 async function installOverview(
   page,
   { withBrief = true, briefOverride = null } = {},
@@ -382,6 +422,8 @@ async function installOverview(
                   next_steps: [`step-${index}`],
                   last_movement_at: at(index + 1),
                 },
+          plan_step_digest:
+            initiative.state === "no_plan" ? null : stepDigest(index),
         })),
       },
       needs_you: {
@@ -438,15 +480,16 @@ test("the brief answers the five questions above the fold", async ({
     .locator("[data-overview-section]")
     .evaluateAll((nodes) => nodes.map((node) => node.dataset.overviewSection));
   expect(sections[0]).toBe("brief");
-  for (const panel of [
-    "decisions",
-    "changes",
-    "risk",
-    "machine",
-    "initiatives",
-  ]) {
+  for (const panel of ["decisions", "risk", "changes", "machine"]) {
     await expect(band.locator(`[data-brief-panel="${panel}"]`)).toBeVisible();
   }
+  // The initiatives row is not a panel any more: the cards below answer it.
+  await expect(band.locator('[data-brief-panel="initiatives"]')).toHaveCount(0);
+  // Decisions and At risk come first, because they change what to do next.
+  const panels = await band
+    .locator("[data-brief-panel]")
+    .evaluateAll((nodes) => nodes.map((node) => node.dataset.briefPanel));
+  expect(panels).toEqual(["decisions", "risk", "changes", "machine"]);
 
   // Decisions: the top five of twenty-six, ranked, each with its reason.
   const decisions = band.locator('[data-brief-panel="decisions"]');
@@ -494,22 +537,33 @@ test("the brief answers the five questions above the fold", async ({
     "Hosted billing",
   );
 
-  // Initiatives: three with no plan is a sentence, not three green chips.
-  const initiatives = band.locator('[data-brief-panel="initiatives"]');
-  await expect(initiatives.locator('[data-brief-state="no_plan"]')).toHaveText(
-    "3 No plan",
-  );
+  // Initiatives: the cards themselves, open, directly under the band. Three
+  // with no plan is still a sentence, now beside the cards it counts.
+  const initiatives = page.locator('[data-overview-section="initiatives"]');
   await expect(
-    initiatives.locator("[data-brief-initiative] [data-health]").first(),
-  ).toHaveAttribute("data-health", "blocked");
-  const planless = initiatives.locator(
-    '[data-brief-initiative="card:initiative-3"]',
+    initiatives.locator('[data-overview-initiative-state="no_plan"]'),
+  ).toHaveText("3 No plan");
+  await expect(
+    initiatives.locator("[data-initiative-tile]").first(),
+  ).toHaveAttribute("data-tile-health", "blocked");
+  // Each card answers "where is this": what landed, what is moving, what next.
+  const first = initiatives.locator("[data-initiative-tile]").first();
+  await expect(first.locator('[data-tile-step-group="completed"]')).toHaveText(
+    "Recently completed",
   );
-  await expect(planless.locator("[data-health]")).toHaveAttribute(
-    "data-health",
-    "no_plan",
+  await expect(first.locator('[data-tile-step="done-0"]')).toContainText(
+    "Finished step 0",
   );
-  await expect(planless.locator("[data-brief-progress]")).toHaveText("0/3");
+  await expect(first.locator('[data-tile-step="active-0"]')).toContainText(
+    "blocked",
+  );
+  await expect(first.locator('[data-tile-step="next-0"]')).toContainText(
+    "Next step 0",
+  );
+  const second = initiatives.locator("[data-initiative-tile]").nth(1);
+  await expect(second.locator('[data-tile-step-more="next"]')).toHaveText(
+    "+3 more",
+  );
 
   await mkdir(".screenshots/review", { recursive: true });
   await page.screenshot({
@@ -572,6 +626,17 @@ test("the brief reads on a phone", async ({ page }) => {
   await expect(
     band.locator('[data-brief-panel="decisions"] [data-brief-decision]'),
   ).toHaveCount(5);
+  /*
+   * The initiative cards are open here too, and the three step lists have to
+   * stay inside a 390px screen: a label column and one line per step, not a
+   * heading and a wrapped paragraph each.
+   */
+  const lists = page.locator("[data-initiative-tile] [data-tile-steps]");
+  await expect(lists.first()).toBeVisible();
+  const spill = await lists
+    .first()
+    .evaluate((node) => node.scrollWidth - node.clientWidth);
+  expect(spill).toBeLessThanOrEqual(1);
   await mkdir(".screenshots/review", { recursive: true });
   await page.screenshot({
     path: ".screenshots/review/morning-brief-phone.png",
@@ -639,16 +704,22 @@ test("the brief replaces the lower sections that repeat it", async ({
   await installOverview(page);
   await page.goto(OVERVIEW);
 
-  // The tile grid repeats the brief's initiatives and risks, so it folds.
-  const initiatives = page.locator('[data-overview-section="initiatives"]');
-  await expect(initiatives).toHaveAttribute(
-    "data-overview-initiatives-folded",
-    "true",
-  );
-  await expect(page.locator("[data-initiative-tile]")).toHaveCount(0);
-  // One click away, not gone.
-  await page.locator("[data-overview-initiatives-toggle]").click();
+  /*
+   * The initiative cards are the primary section after the brief, open on
+   * arrival. They used to be folded behind "All initiatives" while the brief
+   * carried a line per initiative; the line is gone, so nothing repeats and
+   * nothing is hidden. There is no toggle left to click.
+   */
+  // evaluateAll does not wait; the sections arrive with the snapshot fetch.
   await expect(page.locator("[data-initiative-tile]").first()).toBeVisible();
+  const sections = await page
+    .locator("[data-overview-section]")
+    .evaluateAll((nodes) => nodes.map((node) => node.dataset.overviewSection));
+  expect(sections.slice(0, 2)).toEqual(["brief", "initiatives"]);
+  await expect(page.locator("[data-initiative-tile]").first()).toBeVisible();
+  await expect(page.locator("[data-overview-initiatives-toggle]")).toHaveCount(
+    0,
+  );
 
   /*
    * The urgent band listed the same asks the brief now ranks. On this
@@ -668,10 +739,12 @@ test("without a brief the page keeps its original sections", async ({
   // The band is the top of the page again, and the tiles are open.
   await expect(page.locator('[data-overview-section="urgent"]')).toBeVisible();
   await expect(page.getByRole("heading", { name: "Needs you" })).toBeVisible();
-  await expect(
-    page.locator('[data-overview-section="initiatives"]'),
-  ).toHaveAttribute("data-overview-initiatives-folded", "false");
   await expect(page.locator("[data-initiative-tile]").first()).toBeVisible();
+  // No brief, no state counts; the cards still carry their own step lists.
+  await expect(page.locator("[data-overview-initiative-state]")).toHaveCount(0);
+  await expect(
+    page.locator("[data-initiative-tile] [data-tile-steps]").first(),
+  ).toBeVisible();
 });
 
 test("a reason is never truncated at phone width", async ({ page }) => {

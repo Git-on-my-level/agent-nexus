@@ -76,5 +76,26 @@
     "ref": ""
   },
   "status_mismatch": true,
-  "plan_resolution_truncated": false
+  "plan_resolution_truncated": false,
+  "plan_step_digest": {
+    "window_hours": 168,
+    "completed": {
+      "items": [],
+      "more": 0
+    },
+    "current": {
+      "items": [],
+      "more": 0
+    },
+    "next": {
+      "items": [
+        {
+          "id": "build",
+          "title": "Build",
+          "status": "not_started"
+        }
+      ],
+      "more": 0
+    }
+  }
 }

@@ -20,6 +20,7 @@
  *   a tile and a page header cannot disagree about which is worse.
  */
 
+import { formatAge, ageTitle } from "./ageBadge.js";
 import { freshnessKindForPhase, freshnessModel } from "./freshness.js";
 import { markdownExcerpt } from "./markdown.js";
 import { nextStepModel, planHealthModel } from "./planHealth.js";
@@ -76,6 +77,84 @@ export function planSegments(planState, geometry = null, limit = 24) {
       onCriticalPath: critical.has(asText(step?.id)),
     })),
     overflow: omitted,
+  };
+}
+
+/** How many steps one list shows before the rest become a count. */
+export const STEP_LIST_LIMIT = 3;
+
+/** The three lists, in reading order: what landed, what is moving, what is next. */
+export const STEP_LISTS = Object.freeze([
+  { key: "completed", label: "Recently completed" },
+  { key: "current", label: "Current" },
+  { key: "next", label: "Next" },
+]);
+
+function stepRows(key, source, limit, now) {
+  const rows = Array.isArray(source?.items) ? source.items : [];
+  const shown = rows.slice(0, limit);
+  const counted = Math.max(0, Number(source?.more) || 0);
+  return {
+    items: shown.map((step, index) => {
+      const at = asText(step?.at);
+      return {
+        id: asText(step?.id),
+        /*
+         * A row's identity for keyed rendering. Core gives every step a unique
+         * id, but a payload that repeats one (or omits it) must still render
+         * rather than throwing `each_key_duplicate` and taking the page down.
+         */
+        key: [key, asText(step?.id), index].join("#"),
+        // A step with no title is a step id; showing the id beats showing
+        // nothing, and core already requires a title on every written step.
+        title: asText(step?.title) || asText(step?.id),
+        status: asText(step?.status) || "not_started",
+        at,
+        /** `2d` for a completed step; empty where there is no instant. */
+        age: at ? formatAge(at, now) : "",
+        /*
+         * "Moved", not "finished". The instant core sends is the linked
+         * card's last movement — the best completion time it holds, and the
+         * same anchor the tile's own freshness badge uses — but a comment on
+         * a finished card moves it too, so the tooltip must not claim more
+         * precision than that.
+         */
+        ageTitle: at ? ageTitle(at, "moved", now) : "",
+      };
+    }),
+    // Core counts what it omitted; the client's own cut adds to that count
+    // rather than replacing it, so "+2 more" stays true if the caps differ.
+    more: counted + Math.max(0, rows.length - shown.length),
+  };
+}
+
+/**
+ * The tile's three short lists, from core's bounded `plan_step_digest`.
+ *
+ * Nothing is recomputed here: core decided which steps are recent, in flight
+ * and ready, from the plan and the linked cards the same request had loaded.
+ * This names the lists, formats one age per completed row, and reports whether
+ * there is anything at all to show — a core with no digest returns `null`, so
+ * the tile falls back to the single "Next:" line it has always had rather than
+ * rendering three empty headings.
+ *
+ * @param {object|null|undefined} digest `plan_step_digest` from core
+ * @param {{ limit?: number, now?: number }} [options]
+ */
+export function stepListsModel(digest, options = {}) {
+  const { limit = STEP_LIST_LIMIT, now = Date.now() } = options;
+  if (!digest || typeof digest !== "object") return null;
+  const lists = {};
+  for (const { key, label } of STEP_LISTS) {
+    lists[key] = { key, label, ...stepRows(key, digest[key], limit, now) };
+  }
+  return {
+    windowHours: Math.max(0, Number(digest.window_hours) || 0),
+    ...lists,
+    /** The ordered lists that actually have rows. */
+    groups: STEP_LISTS.map(({ key }) => lists[key]).filter(
+      (list) => list.items.length > 0,
+    ),
   };
 }
 
@@ -182,6 +261,11 @@ export function initiativeTileModel(item, options = {}) {
     hasPlan: Boolean(planState),
     ...bars,
     next,
+    /**
+     * Recently completed, current and next steps, or null on a core that does
+     * not compute them.
+     */
+    steps: stepListsModel(item?.plan_step_digest, { now }),
     needs,
     /** ISO instant for the age badge; the badge owns the wording. */
     movedAt,

@@ -34,6 +34,7 @@
   import { loadInboxContext } from "$lib/inboxContext.js";
   import { inboxItemIsReminder, inboxItemSubject } from "$lib/inboxMailbox.js";
   import {
+    captureInboxResponseBinding,
     defaultNotifyMode,
     dismissInboxResponseFailure,
     flushInboxResponse,
@@ -54,6 +55,7 @@
     decodeInboxItemId,
     inboxItemMailboxId,
   } from "$lib/inboxUtils";
+  import { MAX_KEYED_PROPOSALS } from "$lib/inboxProposalChoice.js";
   import { formatShortcut } from "$lib/keyboardHints.js";
   import { label as phaseLabel, sentenceCase } from "$lib/pm/presentation.js";
   import { buildPrimitiveRefRoutes, resolveRefLink } from "$lib/refLinkModel";
@@ -97,6 +99,8 @@
   let inboxLoadSeq = 0;
   let loadedInboxRouteKey = $state("");
   let chosen = $state("");
+  /* The respond panel owns which suggestion is highlighted; see the pane. */
+  let respondPanel = $state(null);
   let helpOpen = $state(false);
   let subject = $state(null);
   let context = $state(null);
@@ -190,6 +194,10 @@
   // A request from an agent for a grant. The panel then offers only the two
   // decisions core accepts, behind the same confirmation the Access page asks.
   let accessRequest = $derived(accessRequestFromInboxItem(item));
+  /** How many suggestions have a number key, for the hint line. */
+  let keyedProposalCount = $derived(
+    accessRequest ? 0 : Math.min(MAX_KEYED_PROPOSALS, proposalStrings.length),
+  );
   // Core accepts an access decision from a person only.
   let decidesAccess = $derived(isHumanWorkspacePrincipal($authenticatedAgent));
 
@@ -447,24 +455,64 @@
   );
 
   /**
+   * The item a response belongs to, and the composer state that goes with it,
+   * as they are right now.
+   *
+   * A suggested response sends after a short flash, and the reader can switch
+   * to another item inside it. `loadItem` nulls `item` and resets the composer
+   * before the next one arrives, so a send that read this page's state at that
+   * moment answered nothing at all. The answer carries its own context
+   * instead; see `sendContext` on the respond panel.
+   */
+  function responseContext() {
+    return {
+      itemId: String(item?.id ?? ""),
+      item,
+      /*
+       * Where this answer is going, decided now. The sender is bound to this
+       * workspace and this reader; capturing it when the response is finally
+       * queued would aim a suggestion chosen here at whichever workspace the
+       * reader had switched to during the flash.
+       */
+      binding: captureInboxResponseBinding(),
+      href: $page.url.pathname,
+      draft: responseDraft,
+      proposals: proposalStrings,
+      attachmentRefs: responseAttachmentRefs,
+      artifactsByRef: responseComposerArtifactsByRef,
+      notifyMode,
+      notifyTargetSelected,
+      notifyTargetActorID,
+      notifyTargetAgentID,
+      who:
+        notifyMode === "target"
+          ? notifyTargetLabel()
+          : notifyMode === "none"
+            ? ""
+            : requesterName(),
+    };
+  }
+
+  /**
    * Queues the response behind the undo toast and returns to the Inbox. The
    * committed request is this page's `inbox.respond` call, unchanged.
    */
   function submitResponseWithText(
     responseText,
-    { acknowledge = false, outcome = "answered" } = {},
+    { acknowledge = false, outcome = "answered", context = null } = {},
   ) {
-    if (!item) return;
+    const sending = context ?? responseContext();
+    if (!sending.itemId) return;
     const text = String(responseText ?? "").trim();
     if (!text) {
       submitError = "Response text is required.";
       return;
     }
-    const targetActorID = String(notifyTargetActorID ?? "").trim();
-    const targetAgentID = String(notifyTargetAgentID ?? "").trim();
+    const targetActorID = String(sending.notifyTargetActorID ?? "").trim();
+    const targetAgentID = String(sending.notifyTargetAgentID ?? "").trim();
     if (
       !acknowledge &&
-      notifyMode === "target" &&
+      sending.notifyMode === "target" &&
       !targetActorID &&
       !targetAgentID
     ) {
@@ -478,46 +526,48 @@
       : {
           response_text: text,
           outcome,
-          related_refs: responseAttachmentRefs,
-          notify_mode: notifyMode,
+          related_refs: sending.attachmentRefs,
+          notify_mode: sending.notifyMode,
           notify_target_actor_id:
-            notifyMode === "target" && targetActorID
+            sending.notifyMode === "target" && targetActorID
               ? targetActorID
               : undefined,
           notify_target_agent_id:
-            notifyMode === "target" && targetAgentID
+            sending.notifyMode === "target" && targetAgentID
               ? targetAgentID
               : undefined,
         };
-    const proposal = proposalStrings.includes(text) ? text : "";
-    const who =
-      notifyMode === "target"
-        ? notifyTargetLabel()
-        : notifyMode === "none"
-          ? ""
-          : requesterName();
+    const proposal = sending.proposals.includes(text) ? text : "";
     queueInboxResponse({
-      itemId: item.id,
-      item,
+      itemId: sending.itemId,
+      // The item that was answered, which is not necessarily the one on
+      // screen: the overlay files it under Handled, so it has to be the one
+      // the reader chose on.
+      item: sending.item,
+      binding: sending.binding,
       request,
       message: acknowledge
         ? "Acknowledged"
-        : who
-          ? `Sent to ${who}`
+        : sending.who
+          ? `Sent to ${sending.who}`
           : "Response recorded",
       restore: {
         origin: "item",
-        href: $page.url.pathname,
-        draft: acknowledge || proposal ? responseDraft : text,
+        href: sending.href,
+        draft: acknowledge || proposal ? sending.draft : text,
         chosen: proposal,
-        notifyMode,
-        notifyTargetSelected,
-        notifyTargetActorID,
-        notifyTargetAgentID,
-        attachmentRefs: responseAttachmentRefs,
-        artifactsByRef: responseComposerArtifactsByRef,
+        notifyMode: sending.notifyMode,
+        notifyTargetSelected: sending.notifyTargetSelected,
+        notifyTargetActorID: sending.notifyTargetActorID,
+        notifyTargetAgentID: sending.notifyTargetAgentID,
+        attachmentRefs: sending.attachmentRefs,
+        artifactsByRef: sending.artifactsByRef,
       },
     });
+    // Clearing the composer and leaving belong to the item that was answered.
+    // When the reader has already moved on, this page is showing something
+    // else and must be left exactly as they left it.
+    if (sending.itemId !== String(item?.id ?? "")) return;
     if (browser) localStorage.removeItem(draftStorageKey());
     responseDraft = "";
     chosen = "";
@@ -564,11 +614,12 @@
         undoLastResponse();
         break;
       case "proposal": {
-        const button = find(
-          `[data-inbox-proposal="${shortcut.index}"]:not([disabled])`,
-        );
-        if (!button) return;
-        button.click();
+        if (!respondPanel?.pressProposalKey(shortcut.index)) return;
+        break;
+      }
+      case "clear-choice": {
+        // Escape that cleared nothing is not ours; let it keep travelling.
+        if (!respondPanel?.clearProposalChoice()) return;
         break;
       }
       case "reply": {
@@ -883,10 +934,12 @@
           </div>
         {/if}
         <InboxRespondPanel
+          bind:this={respondPanel}
           kind={itemKind(item)}
           access={accessRequest}
           canDecideAccess={decidesAccess}
           proposals={proposalStrings}
+          itemKey={String(item?.id ?? "")}
           bind:draft={responseDraft}
           {chosen}
           replyId="human-response-input"
@@ -894,7 +947,9 @@
           placeholder="Write the response the agent should rely on."
           tall
           sendLabel="Send response"
-          onSend={(text, outcome) => submitResponseWithText(text, { outcome })}
+          sendContext={responseContext}
+          onSend={(text, outcome, context) =>
+            submitResponseWithText(text, { outcome, context })}
           onAcknowledge={accessRequest
             ? null
             : () =>
@@ -903,8 +958,11 @@
                 })}
         >
           {#snippet after()}
-            <span class="ml-auto hidden text-micro text-fg-subtle sm:inline"
-              >{formatShortcut("Enter")} to send · ? for shortcuts</span
+            <span class="ml-auto hidden text-micro text-fg-subtle sm:inline">
+              {#if keyedProposalCount}{keyedProposalCount > 1
+                  ? `1–${keyedProposalCount}`
+                  : "1"} select, press again to send ·
+              {/if}{formatShortcut("Enter")} to send · ? for shortcuts</span
             >
           {/snippet}
           {#snippet extras()}

@@ -6,6 +6,7 @@ import {
   initiativeTileModel,
   initiativeTiles,
   planSegments,
+  stepListsModel,
   tileGroup,
 } from "../../src/lib/initiativeTiles.js";
 
@@ -490,5 +491,115 @@ describe("finished initiatives get no freshness badge", () => {
     );
     expect(tile.freshnessKind).toBe("initiative");
     expect(tile.freshness).toMatchObject({ tone: "danger" });
+  });
+});
+
+describe("stepListsModel", () => {
+  const model = (overrides, options) =>
+    initiativeTileModel(row(overrides), { now: NOW, ...options });
+  const digest = (overrides = {}) => ({
+    window_hours: 168,
+    completed: {
+      items: [
+        {
+          id: "spec",
+          title: "Write the spec",
+          ref: "card:spec",
+          status: "done",
+          at: ago(36 * 3_600_000),
+        },
+      ],
+      more: 0,
+    },
+    current: {
+      items: [{ id: "build-it", title: "Build it", status: "active" }],
+      more: 0,
+    },
+    next: {
+      items: [{ id: "ship", title: "Ship it", status: "not_started" }],
+      more: 2,
+    },
+    ...overrides,
+  });
+
+  it("names the three lists and ages the completed rows", () => {
+    const model = stepListsModel(digest(), { now: NOW });
+    expect(model.groups.map((list) => list.key)).toEqual([
+      "completed",
+      "current",
+      "next",
+    ]);
+    expect(model.groups.map((list) => list.label)).toEqual([
+      "Recently completed",
+      "Current",
+      "Next",
+    ]);
+    expect(model.windowHours).toBe(168);
+    expect(model.completed.items[0]).toMatchObject({
+      title: "Write the spec",
+      age: "1d",
+    });
+    // Only a completed row has an instant to show.
+    expect(model.current.items[0].age).toBe("");
+    expect(model.next.more).toBe(2);
+  });
+
+  it("keeps core's omitted count and adds its own cut to it", () => {
+    const model = stepListsModel(
+      digest({
+        current: {
+          items: [
+            { id: "a", title: "A", status: "active" },
+            { id: "b", title: "B", status: "active" },
+            { id: "c", title: "C", status: "active" },
+            { id: "d", title: "D", status: "active" },
+          ],
+          more: 1,
+        },
+      }),
+      { now: NOW },
+    );
+    expect(model.current.items.map((step) => step.id)).toEqual(["a", "b", "c"]);
+    expect(model.current.more).toBe(2);
+  });
+
+  it("lists only the groups that have rows", () => {
+    const model = stepListsModel(
+      digest({
+        completed: { items: [], more: 0 },
+        current: { items: [], more: 0 },
+      }),
+      { now: NOW },
+    );
+    expect(model.groups.map((list) => list.key)).toEqual(["next"]);
+  });
+
+  it("returns nothing for a core that computes no digest", () => {
+    expect(stepListsModel(undefined)).toBeNull();
+    expect(stepListsModel(null)).toBeNull();
+    expect(model({ plan_step_digest: null }).steps).toBeNull();
+  });
+
+  it("gives every row a unique key even when core repeats an id", () => {
+    const model = stepListsModel(
+      digest({
+        current: {
+          items: [
+            { id: "dup", title: "First", status: "active" },
+            { id: "dup", title: "Second", status: "blocked" },
+          ],
+          more: 0,
+        },
+      }),
+      { now: NOW },
+    );
+    const keys = model.current.items.map((step) => step.key);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it("reaches the tile from the projection row", () => {
+    const tile = model({ plan_step_digest: digest() });
+    expect(tile.steps.groups).toHaveLength(3);
+    expect(tile.steps.completed.items[0].title).toBe("Write the spec");
   });
 });

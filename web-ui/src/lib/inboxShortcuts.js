@@ -14,14 +14,14 @@ export function inboxShortcutList() {
   return [
     ["Next item", ["J"]],
     ["Previous item", ["K"]],
-    ["Send suggested response", ["1", "–", "5"]],
+    ["Select a suggested response, press again to send", ["1", "–", "5"]],
     ["Write a reply", ["R"]],
     ["Send the reply", [mod, "Enter"]],
     ["Acknowledge, or mark read", ["E"]],
     ["Open the task or doc", ["O"]],
     ["Undo the last response", [mod, "Z"]],
     ["Shortcut help", ["?"]],
-    ["Close this help", ["Esc"]],
+    ["Clear the selection, or close this help", ["Esc"]],
   ];
 }
 
@@ -51,14 +51,24 @@ export function isTextEntryTarget(target) {
  * @param {KeyboardEvent} event
  * @param {{ helpOpen?: boolean, modalOpen?: boolean }} [state]
  * @returns {null | { type: "next" | "previous" | "proposal" | "reply" | "done"
- *   | "open" | "undo" | "help" | "close-help", index?: number }}
+ *   | "open" | "undo" | "help" | "close-help" | "clear-choice", index?: number }}
  */
 export function inboxShortcutAction(
   event,
   { helpOpen = false, modalOpen = false } = {},
 ) {
   if (!event || event.defaultPrevented || event.isComposing) return null;
-  if (event.key === "Escape") return helpOpen ? { type: "close-help" } : null;
+  /*
+   * Escape clears a highlighted suggestion. Two things keep it from stealing
+   * the key: a dialog that is open owns Escape outright, and the caller
+   * decides whether a highlight was actually there — an Escape that cleared
+   * nothing must keep falling through to whatever else listens for it (a
+   * popover, a draft-discarding blur).
+   */
+  if (event.key === "Escape") {
+    if (helpOpen) return { type: "close-help" };
+    return modalOpen ? null : { type: "clear-choice" };
+  }
   if (event.altKey || isTextEntryTarget(event.target)) return null;
   const mod = event.metaKey || event.ctrlKey;
   if (mod) {
@@ -76,6 +86,13 @@ export function inboxShortcutAction(
   if (event.key === "j") return { type: "next" };
   if (event.key === "k") return { type: "previous" };
   if (/^[1-5]$/.test(event.key)) {
+    /*
+     * A held key must not answer. The second press that sends has to be a
+     * second press: auto-repeat would select on the first keydown and send
+     * on the next one, half a second later, without the reader doing
+     * anything. Repeats are fine for J/K, which only move.
+     */
+    if (event.repeat) return null;
     return { type: "proposal", index: Number(event.key) };
   }
   if (event.key === "r") return { type: "reply" };

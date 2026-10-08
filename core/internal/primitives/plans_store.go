@@ -384,6 +384,7 @@ func (s *Store) EnrichCardPlans(ctx context.Context, cards []map[string]any, vis
 		card["next_step"] = nil
 		card["status_mismatch"] = false
 		card["plan_resolution_truncated"] = false
+		card["plan_step_digest"] = nil
 		if value, ok := ps[id]; ok {
 			p = &value
 			state = plans.Compute(value, facts, at, now, threshold)
@@ -391,6 +392,9 @@ func (s *Store) EnrichCardPlans(ctx context.Context, cards []map[string]any, vis
 			card["plan_resolution_truncated"] = planRefsTruncated(value, facts)
 			card["plan"], card["plan_state"] = value, state
 			card["next_step"] = plans.ReadyStep(value, state, func(step plans.Step) bool { return step.Ref == "" || facts[step.Ref].Known })
+			// Three bounded lists over the same steps and the same facts: no
+			// extra query, and no list longer than the digest limit.
+			card["plan_step_digest"] = plans.Digest(value, state, facts, now, plans.StepDigestWindow, plans.StepDigestLimit)
 			card["status_mismatch"] = firstNonEmptyString(workString(card["phase"]), workString(card["column_key"])) == "backlog" && state.Progress.Done > 0
 		}
 		health := plans.HealthFor(p, state, at, input.Created, now, threshold, input.Due)

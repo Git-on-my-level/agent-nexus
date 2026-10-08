@@ -652,6 +652,11 @@ describe("inbox shortcuts", () => {
     expect(inboxShortcutAction(key("Escape"), { helpOpen: true })).toEqual({
       type: "close-help",
     });
+    // Escape clears a highlighted suggestion, but a dialog owns it outright.
+    expect(inboxShortcutAction(key("Escape"))).toEqual({
+      type: "clear-choice",
+    });
+    expect(inboxShortcutAction(key("Escape"), { modalOpen: true })).toBeNull();
     const checkbox = document.createElement("input");
     checkbox.setAttribute("type", "checkbox");
     expect(isTextEntryTarget(checkbox)).toBe(false);
