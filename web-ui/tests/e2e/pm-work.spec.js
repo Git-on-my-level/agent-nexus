@@ -187,6 +187,23 @@ async function setup(page, overrides = {}) {
         group_count: 0,
         generated_at: stamp(),
       });
+    if (path === "/refs/resolve") {
+      const refs = request.postDataJSON().refs;
+      return reply({
+        items: refs.map((ref) => {
+          const item = work.find((row) => row.ref === ref);
+          return {
+            ref,
+            title:
+              item?.title || (ref === "topic:sample" ? "Sample project" : ref),
+            status: item?.phase || "active",
+            kind: ref.split(":")[0],
+            last_moved_at: stamp(3),
+            resolvable: Boolean(item || ref === "topic:sample"),
+          };
+        }),
+      });
+    }
     if (path === "/inbox") return reply({ items: [], total: 0 });
     if (path === "/boards")
       return reply({
@@ -331,6 +348,7 @@ async function setup(page, overrides = {}) {
           id: "conversation-sample",
           title: body.title,
           work_ref: body.work_ref,
+          context_refs: body.context_refs,
           created_at: stamp(),
         };
         conversations.push(item);
@@ -744,4 +762,65 @@ test("the ⌘K palette acts on the task in view and navigates by keyboard", asyn
   await page.keyboard.press("g");
   await page.keyboard.press("d");
   await expect(page).toHaveURL(/\/docs$/);
+});
+
+test("PM pins multiple refs in history and resolves answer chips with streamed activity", async ({
+  page,
+}) => {
+  const { conversations, turns } = await setup(page);
+  conversations.push({
+    id: "context-chat",
+    title: "Release question",
+    work_ref: "card:release",
+    context_refs: ["card:release", "topic:sample"],
+    created_at: stamp(),
+  });
+  turns.push({
+    id: "context-turn",
+    text: "What is this task?",
+    status: "sending",
+    claimed: true,
+    created_at: stamp(),
+    deadline: stamp(-1),
+    activity: [
+      {
+        sequence: 1,
+        kind: "tool",
+        label: "Reading the task",
+        target: "card:release",
+      },
+    ],
+    partial_response: "The release is in review.",
+  });
+  await page.goto(`${root}/pm?conversation=context-chat`);
+  await expect(page.getByLabel("Conversation context")).toContainText(
+    "Release the sample workspace",
+  );
+  await expect(page.getByLabel("Conversation context")).toContainText(
+    "Sample project",
+  );
+  await expect(page.getByLabel("Conversation context")).toContainText("review");
+  await expect(page.getByText("Draft answer", { exact: true })).toBeVisible();
+  await page.getByText("Reading the task · 1 steps").click();
+  await expect(page.getByLabel("Turn activity")).toContainText("card:release");
+  turns[0].status = "delivered";
+  turns[0].response = "Read card:release and topic:sample.";
+  // Wait for the five-second conversation poll before inspecting mounted chips.
+  await expect(page.locator(".pm-response")).toContainText("Read", {
+    timeout: 10000,
+  });
+  await expect(
+    page.locator(".pm-response [data-anx-ref='card:release']"),
+  ).toHaveText(/Release the sample workspace/);
+  await expect(
+    page.locator(".pm-response [data-anx-ref='topic:sample']"),
+  ).toHaveText(/Sample project/);
+  await expect(page.locator(".pm-response")).not.toContainText("not found");
+  await page.getByText("History", { exact: false }).first().click();
+  await expect(
+    page.getByRole("navigation", { name: "Conversation history" }),
+  ).toContainText("Release the sample workspace");
+  await expect(
+    page.getByRole("navigation", { name: "Conversation history" }),
+  ).toContainText("review");
 });

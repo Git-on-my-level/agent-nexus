@@ -32,6 +32,13 @@
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
   import ReceiptSignal from "$lib/components/pm/ReceiptSignal.svelte";
+  import AnxRefChip from "$lib/components/AnxRefChip.svelte";
+  import {
+    collectPageRefs,
+    resolveRefsInBatches,
+    keepReadableRefs,
+  } from "$lib/refResolve.js";
+  import { pinnedRefs, activityLabel } from "$lib/pm/context.js";
   import RefChip from "$lib/components/RefChip.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
 
@@ -76,7 +83,45 @@
   let selectedId = $derived($page.url.searchParams.get("conversation") || "");
   let workRef = $derived($page.url.searchParams.get("work_ref") || "");
   let selectedKey = $derived(`${selectedId}\n${workRef}`);
-  let activeWorkRef = $derived(conversation?.work_ref || workRef);
+  let contextRefs = $derived(pinnedRefs(conversation, $page.url.searchParams));
+  let resolvedRefs = $state(new Map());
+  let refRequest = 0;
+  let refsError = $state("");
+  let pageRefs = $derived(
+    collectPageRefs(
+      turns.flatMap((turn) => [turn.response, turn.partial_response]),
+      {
+        extraRefs: [
+          ...contextRefs,
+          ...turns.flatMap((turn) => evidenceRefsForTurn(turn)),
+          ...Object.values(decisionRecords).map((record) => record.work_ref),
+          ...conversations.flatMap((item) => pinnedRefs(item)),
+        ],
+      },
+    ),
+  );
+  $effect(() => {
+    const refs = pageRefs;
+    if (!ready) return;
+    const id = ++refRequest;
+    refsError = "";
+    if (!refs.length) {
+      resolvedRefs = new Map();
+      return;
+    }
+    resolveRefsInBatches(refs, (batch) => coreClient.resolveRefs(batch))
+      .then((result) => {
+        if (id === refRequest) {
+          resolvedRefs = keepReadableRefs(resolvedRefs, result);
+          if ([...result.values()].some((row) => row.unreadable))
+            refsError = "Context titles could not be loaded.";
+        }
+      })
+      .catch(() => {
+        if (id === refRequest)
+          refsError = "Context titles could not be loaded.";
+      });
+  });
   let turnDecisionIds = $derived(
     turns.flatMap((turn) => decisionIdsFromTurn(turn)),
   );
@@ -120,30 +165,8 @@
     });
   }
   // Task titles for the refs the PM names; a raw card ref is not a label.
-  let workTitles = $state({});
-  async function loadWorkTitles() {
-    try {
-      const titles = {};
-      let cursor = "";
-      for (let pages = 0; pages < 4; pages += 1) {
-        const result = await coreClient.listWork({ limit: 50, cursor });
-        for (const item of result?.work || []) {
-          const title = String(item?.title ?? "").trim();
-          if (!title) continue;
-          if (item.ref) titles[item.ref] = title;
-          if (item.id) titles[`card:${item.id}`] = title;
-          if (item.handle) titles[`card:${item.handle}`] = title;
-        }
-        cursor = result?.next_cursor || "";
-        if (!cursor) break;
-      }
-      workTitles = titles;
-    } catch {
-      // Titles are a courtesy; the refs still link.
-    }
-  }
   function workTitle(ref) {
-    return workTitles[String(ref ?? "")] || "";
+    return resolvedRefs.get(String(ref ?? ""))?.title || "";
   }
   let showJump = $derived(Boolean(turns.length) && !atBottom);
 
@@ -388,7 +411,7 @@
         authDriver: "pm-conversation",
       });
       await loadList();
-      void loadWorkTitles();
+
       ready = true;
       // No conversation in the URL means an empty thread; History lists prior
       // threads without implying one is open. Send creates or continues from
@@ -420,6 +443,7 @@
           request_key: creationKey,
           title: text.slice(0, 100),
           ...(workRef ? { work_ref: workRef } : {}),
+          ...(contextRefs.length ? { context_refs: contextRefs } : {}),
         });
         if (!result.id)
           throw new Error(
@@ -600,8 +624,21 @@
                   aria-current={item.id === selectedId ? "page" : undefined}
                 >
                   <span class="line-clamp-1 break-words">{item.title}</span>
-                  <span class="text-micro text-fg-subtle"
-                    >{formatTimestamp(item.created_at)}</span
+                  <span class="text-micro text-fg-subtle">
+                    {#each pinnedRefs(item) as ref (ref)}
+                      <span class="block"
+                        >{workTitle(ref) || ref}
+                        {#if resolvedRefs.get(ref)?.status}
+                          · {resolvedRefs
+                            .get(ref)
+                            .status.replaceAll("_", " ")}{/if}
+                        {#if resolvedRefs.get(ref)?.lastMovedAt}
+                          · {formatTimestamp(
+                            resolvedRefs.get(ref).lastMovedAt,
+                          )}{/if}
+                      </span>
+                    {/each}
+                    {formatTimestamp(item.created_at)}</span
                   >
                 </a>
               {:else}
@@ -633,18 +670,33 @@
       {/snippet}
     </WorkspacePageHeader>
 
-    {#if conversation?.title || activeWorkRef}
-      <p class="pm-context">
-        {#if conversation?.title && conversation.title !== turns[0]?.text}<span
-            class="line-clamp-1 min-w-0">{conversation.title}</span
-          >{/if}
-        {#if activeWorkRef}<a
-            class="ui-prose-link shrink-0"
-            href={workspaceHref(`/tasks/${encodeURIComponent(activeWorkRef)}`)}
-            title={activeWorkRef}>Open the task</a
-          >{/if}
-      </p>
+    {#if conversation?.title && conversation.title !== turns[0]?.text}
+      <p class="pm-context">{conversation.title}</p>
     {/if}
+    {#if contextRefs.length}
+      <!-- TODO(SCA-694): use WorkSummary when the shared component lands. -->
+      <div class="pm-context" aria-label="Conversation context">
+        {#each contextRefs as ref (ref)}
+          <div class="flex max-w-full min-w-0 flex-wrap items-center gap-2">
+            <AnxRefChip
+              refValue={ref}
+              resolved={resolvedRefs}
+              organizationSlug={$page.params.organization}
+              workspaceSlug={$page.params.workspace}
+            />
+            {#if resolvedRefs.get(ref)?.status}<span
+                class="text-micro text-fg-muted"
+                >{resolvedRefs.get(ref).status.replaceAll("_", " ")}</span
+              >{/if}
+            {#if resolvedRefs.get(ref)?.lastMovedAt}<span
+                class="text-micro text-fg-subtle"
+                >{formatTimestamp(resolvedRefs.get(ref).lastMovedAt)}</span
+              >{/if}
+          </div>
+        {/each}
+      </div>
+    {/if}
+    {#if refsError}<p class="text-micro text-warn-text">{refsError}</p>{/if}
   </div>
 
   <!-- A scrollable region must be reachable by keyboard (axe scrollable-region-focusable). -->
@@ -708,20 +760,49 @@
               {/if}
             </div>
             <div class="pm-answer">
+              {#if turn.activity?.length}
+                <details class="mb-2 text-micro text-fg-muted">
+                  <summary
+                    >{activityLabel(turn)} · {turn.activity.length} steps</summary
+                  >
+                  <ol aria-label="Turn activity">
+                    {#each turn.activity as event (event.sequence)}
+                      <li>
+                        {event.label}{#if event.target}
+                          · {event.target}{/if}
+                      </li>
+                    {/each}
+                  </ol>
+                </details>
+              {/if}
               {#if view.kind === "answered"}
                 <MarkdownRenderer
                   source={answerBody(turn.response, proposed)}
+                  resolved={resolvedRefs}
+                  organizationSlug={$page.params.organization}
+                  workspaceSlug={$page.params.workspace}
                   class="pm-response text-meta text-fg"
                 />
               {:else if view.kind === "pending"}
+                {#if turn.partial_response}
+                  <p class="text-micro text-fg-muted">Draft answer</p>
+                  <MarkdownRenderer
+                    source={turn.partial_response}
+                    resolved={resolvedRefs}
+                    organizationSlug={$page.params.organization}
+                    workspaceSlug={$page.params.workspace}
+                    class="pm-response text-meta text-fg"
+                  />
+                {/if}
                 <p class="pm-status" role="status">
                   {#if reducedMotion}
-                    <span>{view.claimed ? "Thinking…" : "Queued…"}</span>
+                    <span>{view.claimed ? activityLabel(turn) : "Queued…"}</span
+                    >
                   {:else}
                     <span class="pm-dots" aria-hidden="true"
                       ><i></i><i></i><i></i></span
                     >
-                    <span>{view.claimed ? "Thinking" : "Queued"}</span
+                    <span>{view.claimed ? activityLabel(turn) : "Queued"}</span
                     >{#if view.elapsed}<span aria-hidden="true"
                         >&nbsp;· {view.elapsed}</span
                       >{/if}
@@ -986,6 +1067,9 @@
   }
   .pm-context {
     display: flex;
+    flex-wrap: wrap;
+    min-width: 0;
+    overflow-wrap: anywhere;
     align-items: baseline;
     gap: 0.5rem;
     margin-top: 0.375rem;
