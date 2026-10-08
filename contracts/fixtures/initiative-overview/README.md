@@ -1,5 +1,5 @@
 These are serialized backend shapes for the initiative UI: `tile.json` is one
-`OverviewInitiative`, `refs.json` is a `/refs/resolve` response, and `digest.json`
+`OverviewInitiative` from `/overview?summary=1`, `refs.json` is a `/refs/resolve` response, and `digest.json`
 is an `/overview/changes` response. Core tests compare production serialization
 against these fixtures, normalizing only resource identities, row order and
 timestamps. UI tests can import them directly instead of inventing tile fields.

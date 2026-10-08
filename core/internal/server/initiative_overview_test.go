@@ -43,7 +43,7 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 		}
 		counter.Reset()
 		out := httptest.NewRecorder()
-		req := httptest.NewRequest("GET", "/overview", nil)
+		req := httptest.NewRequest("GET", "/overview?summary=1", nil)
 		attachResourceAccessScope(req, handlerOptions{primitiveStore: store})
 		handleGetOverview(out, req, handlerOptions{primitiveStore: store})
 		if out.Code != 200 {
@@ -72,10 +72,19 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 			t.Fatal(err)
 		}
 		health["since"] = "2026-10-04T12:00:00Z"
-		summary := item["work_summary"].(map[string]any)
-		summary["age"] = float64(0)
-		summary["last_movement_at"] = "2026-10-04T12:00:00Z"
-		summary["status"].(map[string]any)["since"] = "2026-10-04T12:00:00Z"
+		if !reflect.DeepEqual(item["summary"], item["work_summary"]) {
+			t.Fatal("computed summary alias differs from work_summary")
+		}
+		for _, key := range []string{"summary", "work_summary"} {
+			summary := item[key].(map[string]any)
+			if _, err = time.Parse(time.RFC3339Nano, summary["created_at"].(string)); err != nil {
+				t.Fatal(err)
+			}
+			summary["created_at"] = "2026-10-04T12:00:00Z"
+			summary["age"] = float64(0)
+			summary["last_movement_at"] = "2026-10-04T12:00:00Z"
+			summary["status"].(map[string]any)["since"] = "2026-10-04T12:00:00Z"
+		}
 		item["ref"] = "card:initiative"
 		item["title"] = "Initiative"
 		item["updated_at"] = "2026-10-04T12:00:00Z"
@@ -97,7 +106,7 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 	}
 	counter.Reset()
 	out := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/overview", nil)
+	req := httptest.NewRequest("GET", "/overview?summary=1", nil)
 	attachResourceAccessScope(req, handlerOptions{primitiveStore: store})
 	handleGetOverview(out, req, handlerOptions{primitiveStore: store})
 	if out.Code != 200 || strings.Contains(out.Body.String(), "Initiative 0") || strings.Contains(out.Body.String(), "Initiative 39") {
