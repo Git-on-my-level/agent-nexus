@@ -1,6 +1,6 @@
 import { expect as baseExpect, test } from "@playwright/test";
 
-import { installWorkspaceApi } from "../helpers/workspaceApiMock.js";
+import { deferred, installWorkspaceApi } from "../helpers/workspaceApiMock.js";
 import { expectCleanLayout } from "../helpers/layoutAudit.js";
 import { waitForAppReady } from "../helpers/pageReady.js";
 
@@ -53,6 +53,19 @@ const OFFLINE = {
 const LEGACY_REGISTERED = { configured: true, connected: false };
 
 const pmSlot = (page) => page.locator("[data-pm-nav]").first();
+
+/**
+ * Navigate to a page the app immediately redirects away from.
+ *
+ * The client-side redirect can abort the navigation before it commits, which
+ * rejects `goto` with ERR_ABORTED although nothing is wrong — where the
+ * reader lands is the assertion that matters, and the caller makes it.
+ */
+async function gotoRedirecting(page, url) {
+  await page.goto(url).catch((error) => {
+    if (!String(error?.message ?? "").includes("ERR_ABORTED")) throw error;
+  });
+}
 
 test.describe("no PM agent onboarded", () => {
   test("every PM surface is absent, and only setup is offered @states", async ({
@@ -112,9 +125,9 @@ test.describe("no PM agent onboarded", () => {
     await expect(palette).toHaveCount(0);
 
     // A bookmarked conversation lands on setup rather than on an error.
-    await page.goto(`${ROOT}/pm`);
-    await waitForAppReady(page);
+    await gotoRedirecting(page, `${ROOT}/pm`);
     await expect(page).toHaveURL(new RegExp(`${ROOT}/pm/setup$`));
+    await waitForAppReady(page);
   });
 
   test("the setup flow explains, offers the command, and waits @states", async ({
@@ -218,6 +231,77 @@ test.describe("an onboarded PM that is not running", () => {
   });
 });
 
+test.describe("before core answers, and when it never does", () => {
+  /*
+   * Presence is a separate read, so there is a moment on every load where
+   * the state is unknown. Rendering Ask PM on a guess makes it flash in and
+   * out; rendering "Set up your PM" invites a second PM alongside a running
+   * one. The slot holds its space and says neither until core answers.
+   */
+  test("shows no PM surface while the state is loading @states", async ({
+    page,
+  }) => {
+    const api = await installWorkspaceApi(page, { pm: CONNECTED });
+    api.hold.pmPresence = deferred();
+
+    await page.goto(`${ROOT}/tasks`);
+    await waitForAppReady(page);
+    await expect(page.getByRole("heading", { name: "Tasks" })).toBeVisible();
+
+    // Neither label, and no task affordance, while the read is in flight.
+    await expect(page.locator("[data-pm-nav]")).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Ask PM" })).toHaveCount(0);
+    await expect(
+      page.getByRole("link", { name: "Set up your PM" }),
+    ).toHaveCount(0);
+    await expectCleanLayout(page, "pm state loading");
+
+    api.hold.pmPresence.resolve();
+    // The answer lands and the slot commits to one label.
+    await expect(pmSlot(page)).toHaveAttribute("data-pm-nav", "ask");
+    await expect(
+      page.getByRole("link", { name: "Ask PM", exact: true }).first(),
+    ).toBeVisible();
+    await expectCleanLayout(page, "pm state resolved");
+  });
+
+  /*
+   * A read that never succeeds used to leave Ask PM on screen forever, which
+   * is a button that cannot work. It stays absent instead.
+   */
+  test("keeps PM surfaces absent when the state read fails @states", async ({
+    page,
+  }) => {
+    const api = await installWorkspaceApi(page, { pm: CONNECTED });
+    api.fail.pmPresence = { status: 500, message: "presence unavailable" };
+
+    await page.goto(`${ROOT}/tasks`);
+    await waitForAppReady(page);
+    await expect(page.getByRole("heading", { name: "Tasks" })).toBeVisible();
+
+    await expect(page.locator("[data-pm-nav]")).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Ask PM" })).toHaveCount(0);
+    await expect(
+      page.getByRole("link", { name: "Set up your PM" }),
+    ).toHaveCount(0);
+    // The failure belongs to the PM surface, not to Tasks: the page works.
+    await expect(page.getByRole("link", { name: "New task" })).toBeVisible();
+    await expectCleanLayout(page, "pm state unreadable");
+
+    // The palette offers neither a conversation nor an install.
+    await page.keyboard.press("ControlOrMeta+k");
+    const palette = page.getByRole("dialog", { name: "Command palette" });
+    await expect(palette).toBeVisible();
+    await expect(palette.getByRole("option", { name: /Ask PM/ })).toHaveCount(
+      0,
+    );
+    await expect(
+      palette.getByRole("option", { name: "Set up your PM" }),
+    ).toHaveCount(0);
+    await page.keyboard.press("Escape");
+  });
+});
+
 test.describe("a core that predates the computed PM state", () => {
   /*
    * It reports only `configured` / `connected`. A workspace that has used its
@@ -243,20 +327,27 @@ test.describe("a core that predates the computed PM state", () => {
   });
 });
 
-test.describe("a core that does not report PM state", () => {
+test.describe("a core with no presence route at all", () => {
   /*
-   * Back-compatibility: an older core carries no PM state. Hiding the
-   * product's primary verb on that evidence would break a workspace whose PM
-   * is running fine, so PM surfaces stay and no setup is offered.
+   * The route 404s, so the state never becomes known and no PM surface is
+   * shown — the same rule as a failed read. This is not a back-compatibility
+   * hole: `pm.presence` is in the command registry the shell checks against
+   * core's handshake at startup, so a core old enough to lack the route
+   * cannot serve this UI in the first place.
    */
-  test("leaves PM features alone @states", async ({ page }) => {
+  test("shows no PM surface, and no setup either @states", async ({ page }) => {
     await installWorkspaceApi(page, { pm: null, conversations: [] });
 
-    await page.goto(`${ROOT}/pm`);
+    await page.goto(`${ROOT}/tasks`);
     await waitForAppReady(page);
-    await expect(page.getByRole("heading", { name: "Ask PM" })).toBeVisible();
-    await expect(pmSlot(page)).toHaveAttribute("data-pm-nav", "ask");
+    await expect(page.getByRole("heading", { name: "Tasks" })).toBeVisible();
+    await expect(page.locator("[data-pm-nav]")).toHaveCount(0);
+    await expect(
+      page.getByRole("link", { name: "Set up your PM" }),
+    ).toHaveCount(0);
     await expect(page.locator("[data-pm-status]")).toHaveCount(0);
     await expect(page.locator("[data-pm-offline-note]")).toHaveCount(0);
+    // Tasks itself is unaffected.
+    await expect(page.getByRole("link", { name: "New task" })).toBeVisible();
   });
 });

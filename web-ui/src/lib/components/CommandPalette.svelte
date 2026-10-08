@@ -40,6 +40,7 @@
   import { workspacePath } from "$lib/workspacePaths";
   import {
     pmFeaturesVisible,
+    pmKnownAbsent,
     pmSetupOffered,
   } from "$lib/pm/onboardingState.js";
   import { pmPresence } from "$lib/pm/presence.js";
@@ -89,6 +90,8 @@
   );
   let pmVisible = $derived(pmFeaturesVisible(pmState));
   let pmNeedsSetup = $derived(pmSetupOffered(pmState));
+  // Refusing the move needs a confirmed absence, not an unproven one.
+  let pmAbsent = $derived(pmKnownAbsent(pmState));
 
   let workId = $derived(String($page.params?.workId ?? "").trim());
   let documentId = $derived(
@@ -196,7 +199,7 @@
     const work = contextWork;
     close();
     const result = await applyTaskPhaseMove(coreClient, work, phase, {
-      pmOnboarded: pmVisible,
+      pmOnboarded: !pmAbsent,
     });
     if (result.kind === "moved") {
       contextWork = { ...work, phase };
@@ -279,7 +282,7 @@
      * no PM onboarded there is nobody to carry it out, so the rows are absent
      * rather than filing a proposal that would wait forever.
      */
-    const movable = owned || pmVisible;
+    const movable = owned || !pmAbsent;
     const move = (movable ? moveTargets(work) : []).map((phase) => ({
       id: `move:${phase}`,
       group,

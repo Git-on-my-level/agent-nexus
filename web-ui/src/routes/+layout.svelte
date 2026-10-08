@@ -97,6 +97,7 @@
   import {
     pmFeaturesVisible,
     pmSetupOffered,
+    pmStateKnown,
   } from "$lib/pm/onboardingState.js";
   import {
     SHELL_REFRESH_MIN_MS,
@@ -332,14 +333,21 @@
    * A PM agent runs on the reader's own computer, so a workspace can have
    * none. Until one is onboarded the shell offers setup instead of Ask PM,
    * and every other PM surface is absent (see `pm/onboardingState.js`). State
-   * the shell has not read yet leaves PM where it was: hiding the product's
-   * primary verb on a failed read would be worse than a button core refuses.
+   * the shell has not read yet shows neither: naming the product's
+   * primary verb on a guess is worse than showing nothing for a moment.
    */
   let pmState = $derived(
     $pmPresence.workspace === activeWorkspaceSlug ? $pmPresence : null,
   );
   let pmVisible = $derived(pmFeaturesVisible(pmState));
   let pmNeedsSetup = $derived(pmSetupOffered(pmState));
+  /*
+   * Until core answers, the slot holds its space but says nothing: either
+   * label would be a guess, and guessing makes it flash in and out on every
+   * load. A read that never succeeds leaves it empty rather than offering a
+   * conversation that cannot happen.
+   */
+  let pmSlotKnown = $derived(pmStateKnown(pmState));
 
   let pageTitle = $derived(() => {
     const navItem = shellNavForTitle.find(
@@ -1101,34 +1109,42 @@
           <!--
             One slot for the PM, whatever state it is in: the product's
             primary verb once a PM is onboarded, and the single calm way in
-            before that. Never two entry points, and never a dead one.
+            before that. Never two entry points, and never a dead one — and
+            nothing at all until core says which it is, so the row cannot
+            flash the wrong label on the way in.
           -->
-          <a
-            class="shell-ask-pm {pmNeedsSetup ? 'shell-ask-pm--setup' : ''}"
-            href={pmActionHref}
-            data-tour="pm"
-            data-pm-nav={pmNeedsSetup ? "setup" : "ask"}
-            aria-label={pmActionLabel}
-            title={navCollapsed ? pmActionLabel : undefined}
-            aria-current={pmActionActive ? "page" : undefined}
-          >
-            <svg
-              class="shell-ask-pm-icon"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
+          {#if !pmSlotKnown}
+            <div class="shell-ask-pm shell-ask-pm--pending" aria-hidden="true">
+              <!-- Holds the row's space so the sidebar does not jump. -->
+            </div>
+          {:else}
+            <a
+              class="shell-ask-pm {pmNeedsSetup ? 'shell-ask-pm--setup' : ''}"
+              href={pmActionHref}
+              data-tour="pm"
+              data-pm-nav={pmNeedsSetup ? "setup" : "ask"}
+              aria-label={pmActionLabel}
+              title={navCollapsed ? pmActionLabel : undefined}
+              aria-current={pmActionActive ? "page" : undefined}
             >
-              <path d={navIconPath("askPm")} />
-            </svg>
-            <span class="shell-nav-copy">{pmActionLabel}</span>
-            {#if !pmNeedsSetup}
-              <kbd class="shell-search-kbd">⌘J</kbd>
-            {/if}
-          </a>
+              <svg
+                class="shell-ask-pm-icon"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d={navIconPath("askPm")} />
+              </svg>
+              <span class="shell-nav-copy">{pmActionLabel}</span>
+              {#if !pmNeedsSetup}
+                <kbd class="shell-search-kbd">⌘J</kbd>
+              {/if}
+            </a>
+          {/if}
         </div>
 
         <div class="shell-sidebar-main">
@@ -1597,28 +1613,19 @@
           {/if}
         </a>
       {/each}
-      <a
-        class="shell-bottom-nav-item {pmNeedsSetup
-          ? ''
-          : 'shell-bottom-nav-item--accent'}"
-        href={pmActionHref}
-        data-pm-nav={pmNeedsSetup ? "setup" : "ask"}
-        aria-current={pmActionActive ? "page" : undefined}
-      >
-        {#if pmNeedsSetup}
-          <svg
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <path d={navIconPath("askPm")} />
-          </svg>
-        {:else}
-          <span class="shell-bottom-nav-accent-glyph" aria-hidden="true">
+      <!-- Same rule as the sidebar slot: hold the tab, say nothing yet. -->
+      {#if !pmSlotKnown}
+        <span class="shell-bottom-nav-item" aria-hidden="true"></span>
+      {:else}
+        <a
+          class="shell-bottom-nav-item {pmNeedsSetup
+            ? ''
+            : 'shell-bottom-nav-item--accent'}"
+          href={pmActionHref}
+          data-pm-nav={pmNeedsSetup ? "setup" : "ask"}
+          aria-current={pmActionActive ? "page" : undefined}
+        >
+          {#if pmNeedsSetup}
             <svg
               fill="none"
               viewBox="0 0 24 24"
@@ -1626,14 +1633,28 @@
               stroke-width="1.5"
               stroke-linecap="round"
               stroke-linejoin="round"
+              aria-hidden="true"
             >
               <path d={navIconPath("askPm")} />
             </svg>
-          </span>
-        {/if}
-        <!-- "Set up your PM" does not fit a phone tab; the page says the rest. -->
-        <span>{pmNeedsSetup ? "Set up PM" : "Ask PM"}</span>
-      </a>
+          {:else}
+            <span class="shell-bottom-nav-accent-glyph" aria-hidden="true">
+              <svg
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d={navIconPath("askPm")} />
+              </svg>
+            </span>
+          {/if}
+          <!-- "Set up your PM" does not fit a phone tab; the page says the rest. -->
+          <span>{pmNeedsSetup ? "Set up PM" : "Ask PM"}</span>
+        </a>
+      {/if}
       <a
         class="shell-bottom-nav-item {moreBottomNavActive
           ? 'shell-bottom-nav-item--active'

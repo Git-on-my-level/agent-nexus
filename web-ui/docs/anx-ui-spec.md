@@ -438,7 +438,8 @@ workspace can have none. `GET /pm/presence` answers
 `{ state, last_seen, runner, host }` — `not_onboarded` until a PM has
 connected at least once, then `connected` or `offline` by heartbeat freshness
 — read in `lib/pm/onboardingState.js` and held for the shell by
-`lib/pm/presence.js`. The response's older `configured` / `connected`
+`lib/pm/presence.js`, which shows a PM surface only on a state core has
+positively reported. The response's older `configured` / `connected`
 booleans are used only when `state` is absent, so this UI still works against
 a core that predates it; there `configured` alone decides, and a missing
 `last_seen_at` is deliberately not read as "never connected", because that
@@ -486,9 +487,20 @@ read as "install a PM", which would throw away the reader's draft.
   last seen, and the runner and host the PM registered with, plus the
   `anx pm status` and `anx pm uninstall` commands), reached from the "Manage"
   link beside the PM status.
-- **A core without `/pm/presence`** cannot be asked. An unreadable state is
-  not evidence of no PM, so PM surfaces stay as they are and no setup is
-  offered. The same holds for a failed read.
+- **An unknown state shows nothing.** Before the first read returns, after a
+  read fails, and against a core with no `/pm/presence` at all, neither Ask PM
+  nor the setup entry is rendered: the slot holds its space and commits to a
+  label only once core answers. Showing a guess made the row flash in and out
+  on every load, and a read that never succeeded left a button that could not
+  work. Answering an existing proposal is never gated this way (see above), so
+  nothing already asked of the reader becomes unreachable. A core old enough
+  to lack the route cannot serve this UI anyway: `pm.presence` is in the
+  command registry the shell checks against core's handshake at startup.
+- **Refusing a PM write needs a confirmed absence**, not an unproven one.
+  `pmFeaturesVisible` and `pmKnownAbsent` are mirror images rather than
+  negations of each other — both false while the state is unknown — so a slow
+  or failed read defers the source-owned move to core instead of telling a
+  workspace that has a PM that it has none.
 - **Server-side gating** is core's, not the UI's: the PM routes answer
   `pm_not_onboarded` where there is no PM. The UI reads that refusal as "no
   PM" wherever it can arrive. A bare 503 `unavailable` is not read that way:

@@ -850,8 +850,12 @@ test("a workspace with no PM offers setup instead of Ask PM", async ({
   await page.goto(`${root}/inbox?mailbox=needs-you`);
   await expect(page.getByRole("link", { name: "Ask PM" })).toHaveCount(0);
 
-  // The conversation itself is not reachable; setup is what it leads to.
-  await page.goto(`${root}/pm`);
+  // The conversation itself is not reachable; setup is what it leads to. The
+  // redirect can abort the navigation before it commits, which rejects `goto`
+  // although nothing is wrong; where we land is the assertion that matters.
+  await page.goto(`${root}/pm`).catch((error) => {
+    if (!String(error?.message ?? "").includes("ERR_ABORTED")) throw error;
+  });
   await expect(page).toHaveURL(new RegExp(`${root}/pm/setup$`));
   await expect(page.locator("[data-pm-install-command]")).toContainText("anx");
 });

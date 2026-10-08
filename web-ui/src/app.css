@@ -855,6 +855,17 @@
     opacity: 0.7;
   }
 
+  /*
+   * Core has not said whether this workspace has a PM. The row keeps its
+   * space so the sidebar does not jump when the answer lands, and says
+   * nothing: either label would be a guess.
+   */
+  .shell-ask-pm--pending {
+    background: transparent;
+    border-color: transparent;
+    pointer-events: none;
+  }
+
   .shell-search-kbd {
     margin-left: auto;
     flex-shrink: 0;

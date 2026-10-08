@@ -141,27 +141,61 @@ export function pmStateFromPresenceResponse(payload) {
 }
 
 /**
- * Whether PM features may be shown at all.
+ * Whether core has answered at all yet.
  *
- * `not_onboarded` is the only state that hides them. `offline` keeps them
- * visible — the PM exists, it is just not running — and `unknown` keeps them
- * visible for back-compatibility with a core that does not report the state.
+ * `unknown` is the state before the first read returns and after one fails.
+ * Nothing about the PM is shown from it — see `pmFeaturesVisible`.
+ *
+ * @param {{ state?: string } | null | undefined} presence
+ */
+export function pmStateKnown(presence) {
+  return KNOWN_STATES.has(text(presence?.state));
+}
+
+/**
+ * Whether PM features may be shown.
+ *
+ * Only a PM core has positively reported counts: `connected`, or `offline`
+ * (it exists, it is just not running). An `unknown` state shows nothing,
+ * which covers both the moment before the first read returns and a read that
+ * failed — rendering Ask PM on a guess makes it flash in and out on every
+ * load, and leaves a button that cannot work when the read never succeeds.
+ *
+ * This governs what is *displayed*. It is deliberately not the test for
+ * whether to attempt a PM write: see `pmKnownAbsent`.
  *
  * @param {{ state?: string } | null | undefined} presence
  */
 export function pmFeaturesVisible(presence) {
-  return text(presence?.state) !== PM_STATES.NOT_ONBOARDED;
+  const state = text(presence?.state);
+  return state === PM_STATES.CONNECTED || state === PM_STATES.OFFLINE;
 }
 
 /**
- * Whether to offer the setup flow. Only when core positively says no PM has
- * ever connected, so an older core never grows a "Set up your PM" button for
- * a PM that is already running.
+ * Whether core positively says this workspace has no PM.
+ *
+ * The test for refusing a PM write, and the mirror image of
+ * `pmFeaturesVisible` rather than its negation: both are false while the
+ * state is unknown. Refusing a write on a guess would turn a slow read into
+ * "this workspace has no PM" for a workspace that has one, so an unknown
+ * state defers to core, which refuses with `pm_not_onboarded` if it really
+ * has none.
+ *
+ * @param {{ state?: string } | null | undefined} presence
+ */
+export function pmKnownAbsent(presence) {
+  return text(presence?.state) === PM_STATES.NOT_ONBOARDED;
+}
+
+/**
+ * Whether to offer the setup flow — only once core has said there is no PM,
+ * so a slow or failed read never invites the reader to install a second PM
+ * alongside one that is already running.
  *
  * @param {{ state?: string } | null | undefined} presence
  */
 export function pmSetupOffered(presence) {
-  return text(presence?.state) === PM_STATES.NOT_ONBOARDED;
+  return pmKnownAbsent(presence);
 }
 
 /** Whether a PM is onboarded and running right now. */

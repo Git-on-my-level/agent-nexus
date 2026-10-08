@@ -8,10 +8,12 @@ import {
   pmConnected,
   pmFeaturesVisible,
   pmInstallCommand,
+  pmKnownAbsent,
   pmLastSeenLabel,
   pmOffline,
   pmSetupOffered,
   pmStateFromPresenceResponse,
+  pmStateKnown,
   pmStatusCommand,
   pmStatusSummary,
   pmUninstallCommand,
@@ -174,12 +176,16 @@ describe("what each PM state may show", () => {
   const visibility = (state) => ({
     features: pmFeaturesVisible({ state }),
     setup: pmSetupOffered({ state }),
+    absent: pmKnownAbsent({ state }),
+    known: pmStateKnown({ state }),
   });
 
   it("hides every PM surface, and only offers setup, when none is onboarded", () => {
     expect(visibility(PM_STATES.NOT_ONBOARDED)).toEqual({
       features: false,
       setup: true,
+      absent: true,
+      known: true,
     });
   });
 
@@ -187,6 +193,8 @@ describe("what each PM state may show", () => {
     expect(visibility(PM_STATES.CONNECTED)).toEqual({
       features: true,
       setup: false,
+      absent: false,
+      known: true,
     });
     expect(pmConnected({ state: PM_STATES.CONNECTED })).toBe(true);
   });
@@ -195,25 +203,53 @@ describe("what each PM state may show", () => {
     expect(visibility(PM_STATES.OFFLINE)).toEqual({
       features: true,
       setup: false,
+      absent: false,
+      known: true,
     });
     expect(pmOffline({ state: PM_STATES.OFFLINE })).toBe(true);
   });
 
   /*
-   * Back-compatibility: an older core reports no PM state, and a read can
-   * fail. Neither is evidence that no PM exists, and hiding Ask PM on a
-   * failed read would break a workspace whose PM is running fine. Core's own
-   * refusal is what actually enforces the gate.
+   * Before the first read returns, and after one fails. Neither label is
+   * known, so nothing about the PM is shown: rendering Ask PM on a guess
+   * makes it flash in and out on every load, and a read that never succeeds
+   * would leave a button that cannot work. Setup is not offered either —
+   * that would invite a second PM alongside one already running.
    */
-  it("leaves PM features alone when the state is unknown, and offers no setup", () => {
-    expect(visibility(PM_STATES.UNKNOWN)).toEqual({
-      features: true,
+  it("shows nothing, and offers no setup, while the state is unknown", () => {
+    const nothing = {
+      features: false,
       setup: false,
-    });
-    expect(visibility(undefined)).toEqual({
-      features: true,
-      setup: false,
-    });
+      absent: false,
+      known: false,
+    };
+    expect(visibility(PM_STATES.UNKNOWN)).toEqual(nothing);
+    expect(visibility(undefined)).toEqual(nothing);
+    // `null` presence is the shell before it has read this workspace at all.
+    expect(pmFeaturesVisible(null)).toBe(false);
+    expect(pmSetupOffered(null)).toBe(false);
+    expect(pmStateKnown(null)).toBe(false);
+  });
+
+  /*
+   * `pmKnownAbsent` is the mirror image of `pmFeaturesVisible`, not its
+   * negation: both are false while the state is unknown. That is what keeps a
+   * slow or failed read from refusing a PM write for a workspace that has a
+   * PM — the write defers to core, which refuses it if there really is none.
+   */
+  it("never claims a PM is absent on an unproven state", () => {
+    for (const state of ["", "unknown", "retired", undefined]) {
+      expect(pmKnownAbsent({ state })).toBe(false);
+      expect(pmFeaturesVisible({ state })).toBe(false);
+    }
+    // Exactly one of the two is true for every state core can report.
+    for (const state of [
+      PM_STATES.NOT_ONBOARDED,
+      PM_STATES.CONNECTED,
+      PM_STATES.OFFLINE,
+    ]) {
+      expect(pmKnownAbsent({ state })).toBe(!pmFeaturesVisible({ state }));
+    }
   });
 });
 
@@ -234,6 +270,89 @@ describe("PM commands", () => {
   it("omits --base-url rather than printing an empty flag", () => {
     expect(pmInstallCommand()).toBe("anx pm install");
     expect(pmInstallCommand({ cliBaseUrl: "   " })).toBe("anx pm install");
+  });
+});
+
+/*
+ * The command `/pm/setup` tells the reader to run has to reach the CLI's
+ * install wizard, or they get `runner_required` and a dead end.
+ *
+ * `anx` detects the wizard from the argv shape: the subcommand is `pm
+ * install` and no runner flag was given. Global options come before the
+ * subcommand, so they shift its position — which is exactly how the first
+ * version of this broke (`app.go` matched `len(args) == 2`, true only for a
+ * bare `anx pm install`). These assertions pin the shape rather than the
+ * position, so the copied command keeps reaching the wizard whatever global
+ * options the workspace needs.
+ */
+describe("the setup command reaches the install wizard", () => {
+  /** Global options this UI can emit, and whether they take a value. */
+  const GLOBAL_OPTIONS_WITH_VALUES = new Set(["--base-url"]);
+
+  /** The subcommand, the way a CLI reads it: global options, then the verb. */
+  function subcommandOf(command) {
+    const tokens = command.split(" ").filter(Boolean);
+    expect(tokens.shift()).toBe("anx");
+    const words = [];
+    while (tokens.length) {
+      const token = tokens.shift();
+      if (!token.startsWith("-")) {
+        words.push(token);
+        continue;
+      }
+      if (token.includes("=")) continue;
+      if (GLOBAL_OPTIONS_WITH_VALUES.has(token)) {
+        expect(tokens.length).toBeGreaterThan(0);
+        tokens.shift();
+        continue;
+      }
+      words.push(token);
+    }
+    return words;
+  }
+
+  const SHAPES = [
+    ["no base URL configured", {}],
+    [
+      "a workspace-scoped base URL",
+      { cliBaseUrl: "https://anx.example.test/o/local/w/ops" },
+    ],
+  ];
+
+  it.each(SHAPES)("parses to the wizard path with %s", (_label, options) => {
+    const command = pmInstallCommand(options);
+    // The verb is `pm install`, and nothing else is passed to it.
+    expect(subcommandOf(command)).toEqual(["pm", "install"]);
+    // No runner flag, so the wizard asks rather than refusing.
+    expect(command).not.toMatch(/(^|\s)--runner(\s|=|$)/);
+    expect(command).not.toMatch(/(^|\s)--wait(-timeout)?(\s|=|$)/);
+    // Nothing that would make the CLI non-interactive.
+    expect(command).not.toMatch(/(^|\s)--json(\s|=|$)/);
+  });
+
+  it("puts every global option before the subcommand", () => {
+    const command = pmInstallCommand({
+      cliBaseUrl: "https://anx.example.test/o/local/w/ops",
+    });
+    expect(command).toBe(
+      "anx --base-url https://anx.example.test/o/local/w/ops pm install",
+    );
+    // `pm install` is last, so a parser that reads the verb from the tail
+    // and one that skips global options both land on the wizard.
+    expect(command.endsWith(" pm install")).toBe(true);
+  });
+
+  /*
+   * `status` and `uninstall` take the same global options and must stay
+   * parseable the same way; they have no wizard, only a verb to reach.
+   */
+  it("keeps the manage commands parseable too", () => {
+    const options = { cliBaseUrl: "https://anx.example.test/o/local/w/ops" };
+    expect(subcommandOf(pmStatusCommand(options))).toEqual(["pm", "status"]);
+    expect(subcommandOf(pmUninstallCommand(options))).toEqual([
+      "pm",
+      "uninstall",
+    ]);
   });
 });
 

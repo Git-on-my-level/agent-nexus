@@ -27,7 +27,7 @@
     workFreshness,
     workKey,
   } from "$lib/pm/presentation.js";
-  import { pmFeaturesVisible } from "$lib/pm/onboardingState.js";
+  import { pmFeaturesVisible, pmKnownAbsent } from "$lib/pm/onboardingState.js";
   import { pmPresence } from "$lib/pm/presence.js";
   import {
     actorDirectoryIncomplete,
@@ -160,6 +160,12 @@
   );
   // Gates the PM affordances and wording only, never a read.
   let pmVisible = $derived(pmFeaturesVisible(pmState));
+  /*
+   * Refusing the source-owned move needs the opposite test, not the negation:
+   * while presence is still loading neither is true, and refusing then would
+   * tell a workspace that has a PM that it has none. Core is the authority.
+   */
+  let pmAbsent = $derived(pmKnownAbsent(pmState));
   let view = $derived(
     $page.url.searchParams.get("view") === "board" ? "board" : "table",
   );
@@ -476,7 +482,7 @@
        * the Inbox. With no PM there is nobody to carry it out, so say that
        * instead of filing a proposal that would wait forever.
        */
-      if (!pmVisible) {
+      if (pmAbsent) {
         setMoveNotice(
           {
             text: `Changing work owned by ${source} is a request a PM carries out, and this workspace has none. Set one up to request the move.`,
@@ -528,7 +534,7 @@
       }
       const result = await applyTaskPhaseMove(coreClient, work, phase, {
         resolutionRefs,
-        pmOnboarded: pmVisible,
+        pmOnboarded: !pmAbsent,
         ...(Number.isInteger(index) ? { beforeCardId } : {}),
       });
       // The evidence form closes only once core accepted the ref; a rejected
