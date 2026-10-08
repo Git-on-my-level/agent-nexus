@@ -135,25 +135,7 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			writeError(w, 403, "forbidden", "requester must be the authenticated agent")
 			return
 		}
-		if cards, ok := opts.primitiveStore.(interface {
-			GetBoardCard(context.Context, string, string) (map[string]any, error)
-		}); ok {
-			cardID, ok := resolveHTTPResourceID(w, r, opts, "card", anyString(payload["subject_ref"]), "card")
-			if !ok {
-				return
-			}
-			card, err := cards.GetBoardCard(r.Context(), "", cardID)
-			if err != nil {
-				writeError(w, 404, "not_found", "subject card not found")
-				return
-			}
-			// Preserve the public ref: an internal ID can also be another card's handle.
-			payload["subject_ref"] = card["ref"]
-			if anyString(card["column_key"]) == "done" || anyString(card["archived_at"]) != "" || anyString(card["trashed_at"]) != "" {
-				writeError(w, 409, "conflict", "subject card is closed")
-				return
-			}
-		}
+
 	}
 
 	var stored map[string]any
@@ -192,6 +174,15 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			return
 		}
 		stored, err = withdrawalStore.AppendHumanAttentionWithdrawal(r.Context(), actorID, requestEventID, req.Event)
+	} else if typeValue == humanAttentionRequestedEventType {
+		store, ok := opts.primitiveStore.(interface {
+			AppendTaskAttentionEvent(context.Context, string, map[string]any) (map[string]any, error)
+		})
+		if !ok {
+			writeError(w, 503, "primitives_unavailable", "task attention store is not configured")
+			return
+		}
+		stored, err = store.AppendTaskAttentionEvent(r.Context(), actorID, req.Event)
 	} else {
 		stored, err = opts.primitiveStore.AppendEvent(r.Context(), actorID, req.Event)
 	}
@@ -204,7 +195,11 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			writeError(w, http.StatusForbidden, "forbidden", "only the requesting agent may withdraw this ask")
 			return
 		}
-		if errors.Is(err, primitives.ErrNotFound) && typeValue == humanAttentionWithdrawnEventType {
+		if errors.Is(err, primitives.ErrInvalidWorkRequest) {
+			writeError(w, 400, "invalid_request", err.Error())
+			return
+		}
+		if errors.Is(err, primitives.ErrNotFound) && (typeValue == humanAttentionWithdrawnEventType || typeValue == humanAttentionRequestedEventType) {
 			writeError(w, http.StatusNotFound, "not_found", "human attention request not found")
 			return
 		}

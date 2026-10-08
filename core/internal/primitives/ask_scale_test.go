@@ -70,7 +70,8 @@ func TestAskDeliveryReadBudgets(t *testing.T) {
 				_, e := measured.AskOutcome(p.WithReadTickSnapshot(scope), fmt.Sprint(ask["ref"]))
 				return e
 			},
-			"wake_page": func() error { _, e := measured.AskWakePage(p.WithReadTickSnapshot(scope), "requester", 0); return e },
+			"idle_lifecycle": func() error { return measured.MaintainAskLifecycleBatch(ctx) },
+			"wake_page":      func() error { _, e := measured.AskWakePage(p.WithReadTickSnapshot(scope), "requester", 0); return e },
 			"wake_snapshot": func() error {
 				_, _, _, _, e := measured.AskWakeSnapshotPage(p.WithReadTickSnapshot(scope), "requester", "", "")
 				return e

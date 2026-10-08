@@ -1032,6 +1032,7 @@ var migrations = []migration{
 	{Version: 73, AfterApply: indexAgentSummaryCards},
 	{Version: 74, AfterApply: installAskSubjects},
 	{Version: 75, AfterApply: installAskSubscriptions},
+	{Version: 76, AfterApply: installAskEffectiveClosure},
 }
 
 func repairNULReferenceAccess(ctx context.Context, tx *sql.Tx) error {

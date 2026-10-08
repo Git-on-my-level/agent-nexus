@@ -528,3 +528,53 @@ func TestAskCanonicalSubjectSurvivesIDHandleCollision(t *testing.T) {
 		}
 	}
 }
+
+func TestAskLegacyClientSubjectsBecomeTasks(t *testing.T) {
+	requireIntegrationTest(t)
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Legacy client","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+	thread := integrationSeedThread(t, h, "actor-1", paginationTestThread("legacy-ask-thread", "Legacy ask thread"))
+	store := h.primitiveStore.(*primitives.Store)
+	topic, err := store.CreateTopic(context.Background(), "actor-1", map[string]any{"title": "Legacy subject topic", "summary": "Legacy context"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, _, err := store.CreateDocument(context.Background(), "actor-1", map[string]any{"title": "Legacy subject document"}, "Decision context", "text", []string{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, subject := range []string{"thread:" + thread, asString(topic.Topic["ref"]), asString(doc["ref"])} {
+		t.Run(subject, func(t *testing.T) {
+			request := map[string]any{"actor_id": "actor-1", "request_key": "legacy-" + subject, "event": map[string]any{"type": "human_attention_requested", "thread_id": thread, "refs": []string{"thread:" + thread}, "summary": "Legacy decision", "payload": map[string]any{"kind": "ask", "title": "Legacy decision", "subject_ref": subject, "requester_actor_id": "actor-1", "response_proposals": []string{"Proceed"}}, "provenance": eventProvenance()}}
+			var firstID, firstCard string
+			before := countTableRows(t, h.workspace.DB(), "cards")
+			for i := 0; i < 2; i++ {
+				response := postJSONExpectStatus(t, h.baseURL+"/events", string(mustJSON(t, request)), http.StatusCreated)
+				var body map[string]any
+				if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+					t.Fatal(err)
+				}
+				response.Body.Close()
+				event := body["event"].(map[string]any)
+				payload := event["payload"].(map[string]any)
+				ref := asString(payload["subject_ref"])
+				if !strings.HasPrefix(ref, "card:") || !strings.Contains(fmt.Sprint(payload["related_refs"]), subject) {
+					t.Fatalf("lost subject: %#v", event)
+				}
+				work, err := store.GetWork(context.Background(), ref)
+				if err != nil || work["phase"] != "ready" {
+					t.Fatalf("invalid subject: %#v %v", work, err)
+				}
+				if i == 0 {
+					firstID = asString(event["id"])
+					firstCard = ref
+				} else if firstID != asString(event["id"]) || firstCard != ref {
+					t.Fatalf("replay created another ask: %#v", event)
+				}
+			}
+			if got := countTableRows(t, h.workspace.DB(), "cards"); got != before+1 {
+				t.Fatalf("cards %d want %d", got, before+1)
+			}
+		})
+	}
+}

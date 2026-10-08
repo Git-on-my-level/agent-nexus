@@ -3,7 +3,10 @@
 `anx ask`, `review` and `escalate` use the current card. With no current card,
 these commands create a ready task on `ANX_ASK_DEFAULT_BOARD` (a board ref), or
 the workspace default board. Explicit non-card subjects are rejected; put native
-evidence in `--ref`. Existing non-card asks remain readable and answerable.
+evidence in `--ref`. Core also accepts older CLI/MCP requests with typed non-card
+subjects: it creates a ready card atomically with the ask, preserving the original
+subject as evidence and inheriting the ask's full privacy. Existing non-card asks
+remain readable and answerable.
 
 An answer and the card decision commit together. The decision links both events.
 Only an explicitly matching sole ask blocker changes blocked to ready. Next actor
@@ -11,9 +14,11 @@ uses owner, requester, then board role; core's `ANX_ASK_NEXT_ACTOR_ORDER` accept
 comma-separated order of those names. `resolved` explicitly completes native work;
 free text never completes work. Source-owned phases remain unchanged.
 `needs_context` is a terminal request for more context, not an answered status.
+Structured access-grant requests support only approve/reject; their API exposes
+`allowed_response_outcomes` so clients can restrict those actions.
 Re-ask with `--supersedes event:<previous-ask>` after supplying the missing evidence.
 
-Card closure/archive and expiry reconcile through durable, indexed batches of
+Effective source cancellation, card closure/archive and expiry reconcile through durable, indexed batches of
 200; busy workspaces may take several ticks. Open asks expose `is_stale` when the
 card has not changed for `ANX_ASK_STALE_AFTER` (Go duration, default `168h`).
 Subscriptions accelerate delivery; a failed subscription never loses the task's

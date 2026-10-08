@@ -6,6 +6,7 @@ import (
 	"agent-nexus-core/internal/storage"
 	"context"
 	"errors"
+	"fmt"
 	"net/netip"
 	"strings"
 	"testing"
@@ -379,5 +380,235 @@ func TestAskNeedsContextRoutesToRequesterWithCustomPolicy(t *testing.T) {
 				t.Fatalf("next actor %v want %s", got, want)
 			}
 		})
+	}
+}
+
+func sourceAskFixture(t *testing.T, s *Store, board string) (map[string]any, map[string]any) {
+	t.Helper()
+	ctx := context.Background()
+	work, err := s.CreateWork(ctx, "requester", board, map[string]any{"title": "Source decision", "phase": "ready", "owner": "actor:source-owner", "source": map[string]any{"authority": "test-source", "connection_id": "test", "native_id": t.Name()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ask, err := s.AppendTaskAttentionEvent(ctx, "requester", map[string]any{"type": "human_attention_requested", "thread_id": work["thread_id"], "refs": []string{anyStringValue(work["ref"])}, "payload": map[string]any{"kind": "ask", "title": "Source question", "subject_ref": work["ref"], "requester_actor_id": "requester"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return work, ask
+}
+func sourceAskObservation(t *testing.T, s *Store, work map[string]any, key, status string, facts map[string]any) {
+	t.Helper()
+	_, err := s.SubmitWorkObservation(context.Background(), "requester", anyStringValue(work["ref"]), map[string]any{"idempotency_key": key, "reader_id": "test", "reader_revision": "1", "observed_at": time.Now().UTC().Format(time.RFC3339Nano), "status": status, "facts": facts, "error": "test failure"})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+func TestAskUsesEffectiveSourceOwner(t *testing.T) {
+	for _, outcome := range []string{"answered", "needs_context"} {
+		for _, observed := range []bool{false, true} {
+			t.Run(outcome+fmt.Sprint(observed), func(t *testing.T) {
+				s, _, card, _ := askDeliveryFixture(t)
+				work, ask := sourceAskFixture(t, s, anyStringValue(card["board_id"]))
+				want := "actor:source-owner"
+				if observed {
+					want = "actor:observed-owner"
+					sourceAskObservation(t, s, work, "owner", "reported", map[string]any{"owner": want, "phase": "review"})
+				}
+				sourceAskObservation(t, s, work, "failed", "error", map[string]any{"owner": "actor:wrong-owner", "phase": "cancelled"})
+				canonical, err := s.GetWork(context.Background(), anyStringValue(work["ref"]))
+				if err != nil {
+					t.Fatal(err)
+				}
+				result, err := answerDeliveryFixture(s, ask, outcome)
+				if err != nil {
+					t.Fatal(err)
+				}
+				task := asMapValue(result["task_outcome"])
+				if task["next_actor"] != want || task["next_actor"] != canonical["owner"] || task["phase"] != canonical["phase"] {
+					t.Fatalf("task=%#v canonical=%#v", task, canonical)
+				}
+			})
+		}
+	}
+}
+func TestAskSourceCancellationWithdrawsAndRejectsAnswers(t *testing.T) {
+	s, ws, card, _ := askDeliveryFixture(t)
+	work, ask := sourceAskFixture(t, s, anyStringValue(card["board_id"]))
+	sourceAskObservation(t, s, work, "cancel", "reported", map[string]any{"phase": "cancelled"})
+	canonical, err := s.GetWork(context.Background(), anyStringValue(work["ref"]))
+	if err != nil || canonical["phase"] != "cancelled" {
+		t.Fatalf("%#v %v", canonical, err)
+	}
+	var physical string
+	if err = ws.DB().QueryRow(`SELECT column_key FROM cards WHERE id=?`, work["id"]).Scan(&physical); err != nil || physical != "backlog" {
+		t.Fatalf("physical=%s %v", physical, err)
+	}
+	if _, err = answerDeliveryFixture(s, ask, "answered"); !errors.Is(err, ErrHumanAttentionAlreadyResponded) {
+		t.Fatalf("answered cancelled work: %v", err)
+	}
+	if err = s.MaintainAskLifecycleBatch(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	state, err := s.AskOutcome(context.Background(), anyStringValue(ask["ref"]))
+	if err != nil || state["status"] != "withdrawn" || asMapValue(state["response"])["reason"] != "subject_closed" {
+		t.Fatalf("%#v %v", state, err)
+	}
+	if _, err = s.AppendTaskAttentionEvent(context.Background(), "requester", map[string]any{"type": "human_attention_requested", "refs": []string{anyStringValue(work["ref"])}, "payload": map[string]any{"subject_ref": work["ref"]}}); !errors.Is(err, ErrHumanAttentionAlreadyResponded) {
+		t.Fatalf("new ask on cancelled subject: %v", err)
+	}
+}
+
+func TestAskCompatibilityCardRollsBackWithEvent(t *testing.T) {
+	s, ws, card, _ := askDeliveryFixture(t)
+	if _, err := ws.DB().Exec(`CREATE TRIGGER reject_compat_ask BEFORE INSERT ON events WHEN NEW.type='human_attention_requested' BEGIN SELECT RAISE(ABORT,'reject ask'); END`); err != nil {
+		t.Fatal(err)
+	}
+	var before int
+	if err := ws.DB().QueryRow(`SELECT count(*) FROM cards`).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	_, err := s.AppendTaskAttentionEvent(context.Background(), "requester", map[string]any{"type": "human_attention_requested", "thread_id": card["thread_id"], "refs": []string{"thread:" + anyStringValue(card["thread_id"])}, "payload": map[string]any{"subject_ref": "thread:" + anyStringValue(card["thread_id"]), "title": "Legacy question"}})
+	if err == nil {
+		t.Fatal("expected failed publication")
+	}
+	var after int
+	if err := ws.DB().QueryRow(`SELECT count(*) FROM cards`).Scan(&after); err != nil || after != before {
+		t.Fatalf("orphan compatibility card: %d -> %d %v", before, after, err)
+	}
+}
+
+func TestAskSourceClosureBackfillAndNullOwner(t *testing.T) {
+	s, ws, card, _ := askDeliveryFixture(t)
+	work, ask := sourceAskFixture(t, s, anyStringValue(card["board_id"]))
+	sourceAskObservation(t, s, work, "owner-clear", "reported", map[string]any{"owner": nil})
+	canonical, err := s.GetWork(context.Background(), anyStringValue(work["ref"]))
+	if err != nil || canonical["owner"] != nil {
+		t.Fatalf("null override %#v %v", canonical, err)
+	}
+	response, err := answerDeliveryFixture(s, ask, "needs_context")
+	if err != nil || asMapValue(response["task_outcome"])["next_actor"] != "requester" {
+		t.Fatalf("null owner %#v %v", response, err)
+	}
+	// A previously indexed open ask predating the effective-closure migration.
+	pending, err := s.AppendEvent(context.Background(), "requester", map[string]any{"type": "human_attention_requested", "refs": []string{anyStringValue(work["ref"])}, "thread_id": work["thread_id"], "payload": map[string]any{"subject_ref": work["ref"], "requester_actor_id": "requester"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceAskObservation(t, s, work, "cancel-backfill", "reported", map[string]any{"phase": "cancelled"})
+	for _, q := range []string{`DELETE FROM ask_subject_close_queue`, `UPDATE ask_subjects SET due_at=1e20,close_reason='expired' WHERE open=1`, `UPDATE ask_subjects_job SET cursor='',done=0`} {
+		if _, err = ws.DB().Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 10; i++ {
+		done, err := ws.MaintainAskSubjectsBatch(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if done {
+			break
+		}
+		if i == 9 {
+			t.Fatal("backfill did not finish")
+		}
+	}
+	if err = s.MaintainAskLifecycleBatch(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	state, err := s.AskOutcome(context.Background(), anyStringValue(pending["ref"]))
+	if err != nil || state["status"] != "withdrawn" {
+		t.Fatalf("backfilled cancellation %#v %v", state, err)
+	}
+}
+
+func TestAskCompatibilityCardInheritsEntireAskPrivacy(t *testing.T) {
+	for _, dependency := range []string{"body", "thread", "provenance"} {
+		t.Run(dependency, func(t *testing.T) {
+			s, _, public, _ := askDeliveryFixture(t)
+			ctx := context.Background()
+			hidden, err := s.CreateWork(ctx, "requester", anyStringValue(public["board_id"]), map[string]any{"title": "Private evidence"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = s.PatchThread(ctx, "requester", anyStringValue(hidden["thread_id"]), map[string]any{"pm_actor_id": "requester"}, nil); err != nil {
+				t.Fatal(err)
+			}
+			thread := anyStringValue(public["thread_id"])
+			event := map[string]any{"type": "human_attention_requested", "thread_id": thread, "summary": "Secret decision", "refs": []string{"thread:" + thread}, "payload": map[string]any{"kind": "ask", "title": "Secret decision", "subject_ref": "thread:" + thread, "requester_actor_id": "requester"}}
+			switch dependency {
+			case "body":
+				event["payload"].(map[string]any)["body"] = "Discuss " + anyStringValue(hidden["ref"])
+			case "thread":
+				event["thread_id"] = hidden["thread_id"]
+			case "provenance":
+				event["provenance"] = map[string]any{"sources": []string{anyStringValue(hidden["ref"])}}
+			}
+			ask, err := s.AppendTaskAttentionEvent(WithAccessScope(ctx, AccessScope{ActorID: "requester"}), "requester", event)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ref := anyStringValue(asMapValue(ask["payload"])["subject_ref"])
+			for _, actor := range []string{"stranger", "unauthorized-agent", "requester"} {
+				scope := WithAccessScope(ctx, AccessScope{ActorID: actor})
+				_, e := s.GetWork(scope, ref)
+				if actor == "requester" {
+					if e != nil {
+						t.Fatal(e)
+					}
+				} else if !errors.Is(e, ErrNotFound) {
+					t.Fatalf("%s read compatibility card: %v", actor, e)
+				}
+				if s.CanAccessResource(scope, "event", anyStringValue(ask["id"])) != (actor == "requester") {
+					t.Fatalf("event access %s", actor)
+				}
+			}
+		})
+	}
+}
+
+func TestAskSourceReopenDoesNotWithdrawNewAsk(t *testing.T) {
+	s, _, card, _ := askDeliveryFixture(t)
+	work, _ := sourceAskFixture(t, s, anyStringValue(card["board_id"]))
+	sourceAskObservation(t, s, work, "cancel", "reported", map[string]any{"phase": "cancelled"})
+	sourceAskObservation(t, s, work, "reopen", "reported", map[string]any{"phase": "ready"})
+	ask, err := s.AppendTaskAttentionEvent(context.Background(), "requester", map[string]any{"type": "human_attention_requested", "thread_id": work["thread_id"], "refs": []string{anyStringValue(work["ref"])}, "payload": map[string]any{"subject_ref": work["ref"], "requester_actor_id": "requester"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.appendHumanAttentionWithdrawal(context.Background(), "requester", anyStringValue(ask["id"]), map[string]any{"payload": map[string]any{"reason": "subject_closed"}}, true); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		if err = s.MaintainAskLifecycleBatch(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	state, err := s.AskOutcome(context.Background(), anyStringValue(ask["ref"]))
+	if err != nil || state["status"] != "open" {
+		t.Fatalf("new ask withdrawn after reopening %#v %v", state, err)
+	}
+}
+
+func TestAskEffectiveWorkLookupPlans(t *testing.T) {
+	_, ws, card, _ := askDeliveryFixture(t)
+	for _, projection := range []string{projectedWorkStringSQL("owner", `COALESCE(c.assignee,'')`), projectedWorkStringSQL("phase", `c.column_key`)} {
+		rows, err := ws.DB().Query(`EXPLAIN QUERY PLAN SELECT `+projection+` FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id WHERE c.id=?`, card["id"])
+		if err != nil {
+			t.Fatal(err)
+		}
+		for rows.Next() {
+			var id, parent, unused int
+			var detail string
+			if err = rows.Scan(&id, &parent, &unused, &detail); err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(strings.ToUpper(detail), "SCAN ") {
+				t.Fatalf("unbounded work lookup: %s", detail)
+			}
+		}
+		if err = rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+		rows.Close()
 	}
 }

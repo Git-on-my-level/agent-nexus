@@ -48,7 +48,7 @@ func (s *Store) applyAskTaskOutcomeTx(ctx context.Context, tx *accessTx, actor, 
 	if err != nil {
 		return nil, err
 	}
-	if card.ArchivedAt.Valid && card.ArchivedAt.String != "" || card.TrashedAt.Valid && card.TrashedAt.String != "" || card.ColumnKey == "done" {
+	if card.ArchivedAt.Valid && card.ArchivedAt.String != "" || card.TrashedAt.Valid && card.TrashedAt.String != "" {
 		return nil, ErrHumanAttentionAlreadyResponded
 	}
 	var metaRaw, authority string
@@ -74,6 +74,15 @@ func (s *Store) applyAskTaskOutcomeTx(ctx context.Context, tx *accessTx, actor, 
 	if err != nil {
 		return nil, err
 	}
+	// The same metadata/last-good observation precedence used by work reports.
+	var owner, effectivePhase string
+	err = tx.QueryRowContext(ctx, `SELECT `+projectedWorkStringSQL("owner", `COALESCE(c.assignee,'')`)+`,`+projectedWorkStringSQL("phase", `c.column_key`)+` FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id WHERE c.id=?`, card.CardID).Scan(&owner, &effectivePhase)
+	if err != nil {
+		return nil, err
+	}
+	if effectivePhase == "done" || effectivePhase == "cancelled" {
+		return nil, ErrHumanAttentionAlreadyResponded
+	}
 	next := ""
 	// A deployment may override this ordered chain with a store option. Every
 	// value comes from the task, requester, or board, never a fixed identity.
@@ -84,7 +93,7 @@ func (s *Store) applyAskTaskOutcomeTx(ctx context.Context, tx *accessTx, actor, 
 	for _, source := range order {
 		switch source {
 		case "owner":
-			next = card.Assignee.String
+			next = owner
 		case "requester":
 			next = firstNonEmpty(anyStringValue(ask["requester_label"]), anyStringValue(ask["requester_actor_id"]))
 		case "board_role":
@@ -97,9 +106,9 @@ func (s *Store) applyAskTaskOutcomeTx(ctx context.Context, tx *accessTx, actor, 
 	if outcome == "needs_context" {
 		// Clarification belongs to the author/owner even when ordinary answers
 		// route through a configured board role.
-		next = firstNonEmpty(card.Assignee.String, anyStringValue(ask["requester_label"]), anyStringValue(ask["requester_actor_id"]))
+		next = firstNonEmpty(owner, anyStringValue(ask["requester_label"]), anyStringValue(ask["requester_actor_id"]))
 	}
-	phase := card.ColumnKey
+	phase := effectivePhase
 	reason := ""
 	if authority == "nexus" {
 		blockers, _ := normalizeStringSlice(meta["blockers"])
@@ -131,7 +140,7 @@ func (s *Store) applyAskTaskOutcomeTx(ctx context.Context, tx *accessTx, actor, 
 	if _, err = tx.ExecContext(ctx, `INSERT INTO work_metadata(card_id,authority,metadata_json,version,updated_at,updated_by) VALUES(?,?,?,1,?,?) ON CONFLICT(card_id) DO UPDATE SET metadata_json=excluded.metadata_json,version=work_metadata.version+1,updated_at=excluded.updated_at,updated_by=excluded.updated_by`, card.CardID, authority, workJSON(meta), at, actor); err != nil {
 		return nil, err
 	}
-	if phase != card.ColumnKey {
+	if authority == "nexus" && phase != card.ColumnKey {
 		resolution := card.Resolution.String
 		resolutionRefs := card.ResolutionRefsJSON
 		if phase == "done" {

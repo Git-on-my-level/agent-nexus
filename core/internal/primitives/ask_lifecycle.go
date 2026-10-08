@@ -1,6 +1,7 @@
 package primitives
 
 import (
+	"agent-nexus-core/internal/workprojection"
 	"context"
 	"database/sql"
 	"errors"
@@ -15,6 +16,18 @@ func (s *Store) MaintainAskLifecycleBatch(ctx context.Context) error {
 	err := s.db.QueryRowContext(ctx, `SELECT card_id FROM ask_subject_close_queue ORDER BY card_id LIMIT 1`).Scan(&card)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
+	}
+	if card != "" {
+		// A queued close is a hint; a valid newer observation may reopen work.
+		result, e := s.db.ExecContext(ctx, `DELETE FROM ask_subject_close_queue WHERE card_id=? AND NOT EXISTS(SELECT 1 FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id WHERE c.id=? AND `+workprojection.ClosedSQL()+`)`, card, card)
+		if e != nil {
+			return e
+		}
+		if n, e := result.RowsAffected(); e != nil {
+			return e
+		} else if n > 0 {
+			return nil
+		}
 	}
 	query := `SELECT ask_id,requester,close_reason FROM ask_subjects WHERE open=1 AND due_at<=julianday('now') ORDER BY due_at,ask_id LIMIT 200`
 	args := []any{}
@@ -41,7 +54,7 @@ func (s *Store) MaintainAskLifecycleBatch(ctx context.Context) error {
 		return err
 	}
 	for _, p := range batch {
-		_, err = s.AppendHumanAttentionWithdrawal(ctx, p.actor, p.id, map[string]any{"payload": map[string]any{"reason": p.reason}})
+		_, err = s.appendHumanAttentionWithdrawal(ctx, p.actor, p.id, map[string]any{"payload": map[string]any{"reason": p.reason}}, p.reason == "subject_closed")
 		if err != nil && !errors.Is(err, ErrHumanAttentionAlreadyResponded) {
 			return err
 		}

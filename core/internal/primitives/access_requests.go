@@ -148,9 +148,6 @@ func (s *Store) applyAccessDecisionTx(ctx context.Context, tx *accessTx, sourceE
 	if err != nil {
 		return err
 	}
-	if outcome == "needs_context" {
-		return nil
-	}
 	if outcome != "approved" && outcome != "rejected" {
 		return ErrInvalidAccessDecision
 	}

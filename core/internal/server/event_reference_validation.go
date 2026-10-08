@@ -54,8 +54,8 @@ func validateEventReferenceConventions(contract *schema.Contract, event map[stri
 		if !hasPayload || rawPayload == nil || !ok {
 			return fmt.Errorf("event.payload must be an object for event.type=%q", eventType)
 		}
-		if !strings.HasPrefix(strings.TrimSpace(anyString(payloadMap["subject_ref"])), "card:") {
-			return fmt.Errorf("event.payload.subject_ref must be a card ref; create a subject through work.create first")
+		if err := schema.ValidateTypedRefs(contract, []string{strings.TrimSpace(anyString(payloadMap["subject_ref"]))}); err != nil {
+			return fmt.Errorf("event.payload.subject_ref: %w", err)
 		}
 		if err := mutateHumanAttentionResponseProposalsInPayload(payloadMap); err != nil {
 			return fmt.Errorf("event.payload: %w", err)

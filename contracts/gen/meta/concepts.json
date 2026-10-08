@@ -12052,6 +12052,7 @@
           "path": "/events",
           "operation_id": "createEvent",
           "summary": "Create event",
+          "description": "Generic attention asks are stored against an open subject card. For compatibility, legacy typed non-card subjects (including thread, document and topic) create a ready card atomically with the ask; the original subject and references remain evidence. Existing card subjects resolve canonically and must be effectively open, including source-owned work.",
           "why": "Append an event that links first-class resources and evidence through typed refs.",
           "input_mode": "json-body",
           "streaming": {
@@ -23872,6 +23873,7 @@
           "path": "/events",
           "operation_id": "createEvent",
           "summary": "Create event",
+          "description": "Generic attention asks are stored against an open subject card. For compatibility, legacy typed non-card subjects (including thread, document and topic) create a ready card atomically with the ask; the original subject and references remain evidence. Existing card subjects resolve canonically and must be effectively open, including source-owned work.",
           "why": "Append an event that links first-class resources and evidence through typed refs.",
           "input_mode": "json-body",
           "streaming": {

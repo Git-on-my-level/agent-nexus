@@ -4846,6 +4846,7 @@ paths:
     post:
       operationId: createEvent
       summary: Create event
+      description: Generic attention asks are stored against an open subject card. For compatibility, legacy typed non-card subjects (including thread, document and topic) create a ready card atomically with the ask; the original subject and references remain evidence. Existing card subjects resolve canonically and must be effectively open, including source-owned work.
       tags: [events]
       x-anx-surface: canonical
       x-anx-command-id: events.create
@@ -10964,6 +10965,10 @@ components:
         requester_agent_id: { type: string }
         requester_label: { type: string }
         severity: { type: string }
+        allowed_response_outcomes:
+          type: array
+          description: When present, clients must restrict response actions to these outcomes. Structured access requests expose only approved and rejected; clarification is not supported for grant decisions.
+          items: {$ref: '#/components/schemas/HumanAttentionResponseOutcome'}
         access_request_id: {type: string}
         requested_grant: {type: string}
         requester_principal_id: {type: string}
@@ -11668,7 +11673,7 @@ components:
       description: >
         Records a human response to a human attention inbox item. The response target must be
         resolvable unless `notify_mode` is `none` or a replacement target is supplied.
-        Server-linked access requests accept approved, rejected, or needs_context (no grant); other outcomes
+        Server-linked access requests accept only approved or rejected; needs_context and other outcomes
         return 400 without mutation. Approval atomically grants the persisted requested
         grant to its persisted principal. Event-supplied correlation never grants authority.
       properties:

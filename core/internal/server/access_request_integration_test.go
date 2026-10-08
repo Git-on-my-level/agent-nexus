@@ -63,6 +63,9 @@ func TestAccessRequestHumanDecisionAndReplay(t *testing.T) {
 		item := raw.(map[string]any)
 		if item["id"] == inboxID {
 			found = true
+			if fmt.Sprint(item["allowed_response_outcomes"]) != "[approved rejected]" {
+				t.Fatalf("unsafe outcomes: %#v", item)
+			}
 			if item["access_request_id"] != id || item["requested_grant"] != "auth-admin" {
 				t.Fatalf("correlation: %#v", item)
 			}
@@ -80,6 +83,8 @@ func TestAccessRequestHumanDecisionAndReplay(t *testing.T) {
 		hostStatus(t, status, 403, p)
 	}
 	status, p = hostHTTP(t, "POST", base+"/inbox/"+url.PathEscape(inboxID)+"/respond", human, map[string]any{"response_text": "Let me think", "outcome": "answered", "notify_mode": "none"})
+	hostStatus(t, status, 400, p)
+	status, p = hostHTTP(t, "POST", base+"/inbox/"+url.PathEscape(inboxID)+"/respond", human, map[string]any{"response_text": "Need details", "outcome": "needs_context", "notify_mode": "none"})
 	hostStatus(t, status, 400, p)
 	status, p = hostHTTP(t, "GET", base+"/auth/access/summary", human, nil)
 	hostStatus(t, status, 200, p)
