@@ -92,7 +92,7 @@ function nonCardState(file, source) {
   );
   for (const match of imports) {
     if (
-      /(?:coreClient|anxCoreClient|AnxClient|contracts[/\\]gen[/\\]ts|agent-nexus-contracts-ts-client|\b(?:get|list|create|patch|update|delete|archive|restore|purge|fetch|read|request|subscribe)\w*(?:Work|Cards?)(?:\b|[A-Z])|(?:^|[^a-zA-Z])(?:work|cards?)(?:$|[^a-z]|[A-Z]))/.test(
+      /(?:coreClient|anxCoreClient|AnxClient|contracts[/\\]gen[/\\]ts|agent-nexus-contracts-ts-client|\b(?:get|list|create|patch|update|delete|archive|restore|purge|fetch|read|request|subscribe|add|move|remove|search|resolve)\w*(?:Work|Cards?)(?:\b|[A-Z])|(?:^|[^a-zA-Z])(?:work|cards?)(?:$|[^a-z]|[A-Z]))/.test(
         match[0],
       )
     ) {
@@ -147,6 +147,9 @@ describe("explicit non-card state exemptions", () => {
     'import cardApi from "./cards/client.js";',
     'import { getCard as fetchItem } from "./api.js";',
     'import { listWork as rows } from "./api.js";',
+    'import { addBoardCard as add } from "./api.js";',
+    'import { moveBoardCard as move } from "./api.js";',
+    'import { removeBoardCard as remove } from "./api.js";',
     'export { getWork as fetchItem } from "./api.js";',
     'const api = await import("$lib/coreClient.js");',
     'const api = await import("$lib/coreClient.js", {});',
