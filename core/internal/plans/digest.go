@@ -48,12 +48,18 @@ func boundedSteps(items []DigestStep, limit int) DigestList {
 
 // Digest requires a validated plan and the state computed from it.
 //
-// A completed step is listed only when its linked resource carries a movement
-// anchor inside the window. A step marked done inline has no completion time
-// anywhere in the system, and dating it from the plan's last edit would report
-// every old step as finished this morning, so it is left out rather than
-// guessed at. Current is what is moving or stuck; Next is the ready work that
-// has not started, so the same step never appears in both.
+// A step is listed as completed only when a linked resource is what finished
+// it and that resource moved inside the window. A step marked done inline has
+// no completion time anywhere in the system, and dating it from the plan's
+// last edit — or from a comment on a card whose phase says nothing — would
+// report old work as finished this morning, so it is left out rather than
+// guessed at. The anchor is the resource's last movement, which for a card
+// that is done is the best completion time core holds.
+//
+// Current is what is moving or stuck; Next is the ready work that has not
+// started, so the same step never appears in both. Both keep the plan's
+// topological order with lexicographic ties, the same order geometry uses, so
+// a tile and a graph cannot disagree about which step comes first.
 func Digest(p Plan, state State, facts map[string]Fact, now time.Time, window time.Duration, limit int) StepDigest {
 	if window <= 0 {
 		window = StepDigestWindow
@@ -83,8 +89,15 @@ func Digest(p Plan, state State, facts map[string]Fact, now time.Time, window ti
 		row := DigestStep{ID: id, Title: step.Title, Ref: step.Ref, Status: status[id]}
 		switch row.Status {
 		case "done":
-			at := facts[step.Ref].MovementAt
-			if step.Ref == "" || at.IsZero() || at.Before(cutoff) {
+			/*
+			 * Done because the linked resource is done, not because the plan
+			 * says so: an inline "done" step that happens to point at a card
+			 * with no known phase would otherwise be dated by a comment on
+			 * that card and reported as finished yesterday.
+			 */
+			fact := facts[step.Ref]
+			at := fact.MovementAt
+			if step.Ref == "" || !fact.Known || Status(fact.Status) != "done" || at.IsZero() || at.Before(cutoff) {
 				continue
 			}
 			row.At = at.UTC().Format(time.RFC3339Nano)
@@ -97,8 +110,8 @@ func Digest(p Plan, state State, facts map[string]Fact, now time.Time, window ti
 			}
 		}
 	}
-	// Newest first; plan order breaks ties so two steps finished by the same
-	// movement do not swap between reads.
+	// Newest movement first; the plan's own order breaks ties, so two steps
+	// that moved together do not swap between reads.
 	sort.SliceStable(completed, func(i, j int) bool { return completed[i].at.After(completed[j].at) })
 	done := make([]DigestStep, 0, len(completed))
 	for _, row := range completed {

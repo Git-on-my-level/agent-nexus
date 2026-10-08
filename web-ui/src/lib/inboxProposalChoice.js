@@ -38,19 +38,6 @@ export function proposalKeyAction({ index, armed, count }) {
   return wanted === armed ? "send" : "arm";
 }
 
-/**
- * The shortcut hint for N suggestions: "1–3 select, press again to send".
- *
- * One suggestion needs no range, and no suggestions need no hint.
- *
- * @param {number} count
- */
-export function proposalHint(count) {
-  const keyed = Math.min(Math.max(0, Number(count) || 0), MAX_KEYED_PROPOSALS);
-  if (!keyed) return "";
-  return `${keyed > 1 ? `1–${keyed}` : "1"} select, press again to send`;
-}
-
 /** True when the reader asked for less motion, so the flash is skipped. */
 export function prefersReducedMotion() {
   if (typeof window === "undefined" || !window.matchMedia) return false;

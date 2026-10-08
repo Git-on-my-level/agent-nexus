@@ -86,6 +86,13 @@ export function inboxShortcutAction(
   if (event.key === "j") return { type: "next" };
   if (event.key === "k") return { type: "previous" };
   if (/^[1-5]$/.test(event.key)) {
+    /*
+     * A held key must not answer. The second press that sends has to be a
+     * second press: auto-repeat would select on the first keydown and send
+     * on the next one, half a second later, without the reader doing
+     * anything. Repeats are fine for J/K, which only move.
+     */
+    if (event.repeat) return null;
     return { type: "proposal", index: Number(event.key) };
   }
   if (event.key === "r") return { type: "reply" };

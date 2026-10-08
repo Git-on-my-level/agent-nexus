@@ -75,6 +75,8 @@
   let proposalListEl = $state(null);
   /** The suggestion mid-flash. Also the guard against a double send. */
   let flashing = $state(-1);
+  /** The answer the flash is for, held until it goes out. */
+  let pending = null;
   let flashTimer = null;
 
   /*
@@ -95,33 +97,47 @@
     // under a reader who is still deciding.
     void itemKey;
     const index = restoredIndex;
+    // The item changing mid-flash must not swallow the answer: send it for
+    // the item it was chosen on rather than dropping it silently.
+    flush();
+    armed = index;
+  });
+  onDestroy(flush);
+
+  /**
+   * Send what the flash was for, now.
+   *
+   * The timer calls this; so does anything that would otherwise throw the
+   * choice away — the reader moving on with J, a live refresh taking the row,
+   * the panel unmounting. The item the answer belongs to travels with it, so
+   * a late send cannot land on whatever is on screen by then.
+   */
+  function flush() {
     clearTimeout(flashTimer);
     flashTimer = null;
-    armed = index;
     flashing = -1;
-  });
-  onDestroy(() => clearTimeout(flashTimer));
+    const sending = pending;
+    pending = null;
+    if (!sending) return;
+    // Nothing stays selected once it is sent: a stray extra press of the same
+    // key then re-selects rather than sending the same answer twice.
+    armed = -1;
+    send(sending.proposal, "answered", sending.key);
+  }
 
   /** Flash the chosen option once, then send it. */
   function commit(index) {
     const proposal = proposals[index];
-    if (!proposal || busy || flashing >= 0) return;
+    if (!proposal || busy || pending) return;
     armed = index;
     flashing = index;
-    const finish = () => {
-      flashTimer = null;
-      flashing = -1;
-      // Nothing is selected once it is sent: a stray extra press of the same
-      // key then re-selects rather than sending the same answer twice.
-      armed = -1;
-      send(proposal);
-    };
+    pending = { proposal, key: itemKey };
     // Reduced motion keeps the confirmation, drops the animation and the wait.
     if (prefersReducedMotion()) {
-      finish();
+      flush();
       return;
     }
-    flashTimer = setTimeout(finish, PROPOSAL_FLASH_MS);
+    flashTimer = setTimeout(flush, PROPOSAL_FLASH_MS);
   }
 
   /**
@@ -131,7 +147,7 @@
    * @returns {boolean} true when the key did something here
    */
   export function pressProposalKey(number) {
-    if (!keyable || busy) return false;
+    if (!keyable || busy || pending) return false;
     const index = Number(number) - 1;
     const action = proposalKeyAction({
       index,
@@ -162,7 +178,7 @@
    *   whether Escape still belongs to whatever else is listening for it.
    */
   export function clearProposalChoice() {
-    if (armed < 0 || flashing >= 0) return false;
+    if (armed < 0 || pending) return false;
     armed = -1;
     return true;
   }
@@ -182,10 +198,16 @@
     describeGrantAuthority({ who, grant: access?.grant }),
   );
 
-  function send(text, outcome = "answered") {
+  /**
+   * @param {string} text
+   * @param {string} [outcome]
+   * @param {string} [key] which item this answers, for a send that lands
+   *   after the panel has moved on. Defaults to the one on screen.
+   */
+  function send(text, outcome = "answered", key = itemKey) {
     const body = String(text ?? "").trim();
     if (!body || busy) return;
-    onSend?.(body, outcome);
+    onSend?.(body, outcome, key);
   }
 
   async function startConfirm() {
@@ -340,7 +362,9 @@
   {/if}
 
   <!-- Core rejects every other outcome on an access-backed item, so the
-       freeform reply and Acknowledge are not offered there at all. -->
+       freeform reply and Acknowledge are not offered there at all. The reply
+       and Acknowledge are also held for the length of the flash: a second
+       answer inside it would leave two responses on one ask. -->
   {#if !isAccess}
     <form
       class="space-y-2"
@@ -363,7 +387,7 @@
         <button
           class="ui-btn-primary"
           type="submit"
-          disabled={busy || !draft.trim()}
+          disabled={busy || !draft.trim() || flashing >= 0}
           title={`${sendLabel} (${formatShortcut("Enter")})`}
           >{sendLabel}</button
         >
@@ -371,7 +395,7 @@
           <button
             class="ui-btn-secondary"
             type="button"
-            disabled={busy}
+            disabled={busy || flashing >= 0}
             data-inbox-shortcut="done"
             aria-keyshortcuts="E"
             title="Acknowledge (E)"

@@ -1173,6 +1173,7 @@
     "../observation/types.go:type:ReadError": "9604bb307c504b7e24b5d1534689354f053ed196f80d9d96f786ab992919de60",
     "../observation/types.go:type:Report": "29694c004d3fc6b13339957b3498c31383def989e3cf34e612f000cc56aab1af",
     "../observation/types.go:type:Target": "c8d2855438230d5b667ce85ffb440b2076a66cbfc2a462f5651a6b5dae36d054",
+    "../plans/digest.go:Digest": "0c91765f28df41163acfb8182d82b86d5585288ce8ac23bf86c33aac1b54432e",
     "../plans/digest.go:type:DigestList": "c314b999b11a8ea333523ba463d7f1f152f76910465f5622a3301c040af38cea",
     "../plans/digest.go:type:DigestStep": "f10d9fbea9c96666f0a76c68da4227db4f12d83770e51eb278edea7450bcd4b1",
     "../plans/digest.go:type:StepDigest": "6f68b1557a8c4d053519fe21c8fb9d810ac7a737f1fd2785aba63125bdc22a3e",

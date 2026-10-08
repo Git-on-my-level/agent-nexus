@@ -264,11 +264,14 @@ the remainder. Clients render geometry without re-deriving workflow semantics.
 `plan_step_digest` adds what just finished, what is moving and what is next as
 three lists of at most three steps with the remainder counted in `more`, over
 the same steps and referenced facts the read already loaded. `completed` lists
-steps whose linked resource moved within `window_hours` (168), newest first; a
-step marked done inline has no completion time and is omitted rather than dated
-from the plan's last edit. `current` lists active and blocked steps and `next`
-lists ready unstarted steps, both in plan order, so one step is never in both.
-It is null without a plan and appears on card and work reads as well.
+steps a linked resource finished whose resource moved within `window_hours`
+(168), newest movement first; a step marked done inline, or linked to a
+resource whose state says nothing, has no completion time and is omitted rather
+than dated from a plan edit or a comment. `current` lists active and blocked
+steps and `next` lists ready unstarted steps, so one step is never in both;
+both keep the topological order with lexicographic ties that geometry uses. It
+is null without a plan, and it is an Overview initiative field: card and work
+reads keep their existing plan fields unchanged.
 The projection reads at most 100 open and 100 closed active-lifecycle candidate
 cards for completion digests, reuses the report batch privacy context, and
 declares `truncated` on work and initiatives when more candidates exist.

@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_KEYED_PROPOSALS,
   PROPOSAL_FLASH_MS,
-  proposalHint,
   proposalKeyAction,
 } from "../../src/lib/inboxProposalChoice.js";
 
@@ -17,27 +16,19 @@ describe("proposalKeyAction", () => {
     expect(proposalKeyAction({ index: 2, armed: 0, count: 3 })).toBe("arm");
   });
 
+  it("caps the keyed suggestions at the five that have a key", () => {
+    expect(MAX_KEYED_PROPOSALS).toBe(5);
+    expect(
+      proposalKeyAction({ index: 5, armed: -1, count: MAX_KEYED_PROPOSALS }),
+    ).toBe("ignore");
+  });
+
   it("ignores a key with no suggestion behind it", () => {
     expect(proposalKeyAction({ index: 4, armed: -1, count: 3 })).toBe("ignore");
     expect(proposalKeyAction({ index: 0, armed: -1, count: 0 })).toBe("ignore");
     expect(proposalKeyAction({ index: -1, armed: -1, count: 3 })).toBe(
       "ignore",
     );
-  });
-});
-
-describe("proposalHint", () => {
-  it("names the range and the second press", () => {
-    expect(proposalHint(3)).toBe("1–3 select, press again to send");
-    expect(proposalHint(1)).toBe("1 select, press again to send");
-    expect(proposalHint(9)).toBe(
-      `1–${MAX_KEYED_PROPOSALS} select, press again to send`,
-    );
-  });
-
-  it("says nothing when there is nothing to choose", () => {
-    expect(proposalHint(0)).toBe("");
-    expect(proposalHint(undefined)).toBe("");
   });
 });
 

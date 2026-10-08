@@ -769,6 +769,16 @@ test("a suggested response is selected before a key sends it", async ({
   expect(respondCount).toBe(0);
   await expect(page.locator('[data-inbox-toast="pending"]')).toHaveCount(0);
 
+  // Holding the key down does not answer: the confirming press has to be a
+  // press, not the OS repeating the first one.
+  await page.locator('[data-inbox-proposal="2"]').evaluate((node) => {
+    node.ownerDocument.defaultView.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "2", repeat: true, bubbles: true }),
+    );
+  });
+  expect(respondCount).toBe(0);
+  await expect(page.locator('[data-inbox-toast="pending"]')).toHaveCount(0);
+
   // A different number moves the selection; Escape clears it.
   await page.keyboard.press("3");
   await expect(option(3)).toHaveAttribute("aria-pressed", "true");
@@ -819,8 +829,10 @@ test("an empty Needs you reads as one compact line", async ({ page }) => {
     subject_ref: "thread:thread-onboarding",
     related_refs: ["thread:thread-onboarding"],
     response_proposals: [],
-    responded_at: hoursAgo(26),
-    source_event_time: hoursAgo(26),
+    // Asked a fortnight ago, answered this morning: "last handled" has to
+    // read the answer, not the question.
+    responded_at: hoursAgo(3),
+    source_event_time: hoursAgo(14 * 24),
   };
 
   await page.addInitScript((selectedActorId) => {
@@ -890,8 +902,8 @@ test("an empty Needs you reads as one compact line", async ({ page }) => {
   await expect(empty.locator("[data-inbox-empty-watching]")).toHaveText(
     "2 things being watched",
   );
-  await expect(empty.locator("[data-inbox-empty-handled]")).toContainText(
-    "Last handled",
+  await expect(empty.locator("[data-inbox-empty-handled]")).toHaveText(
+    "Last handled 3h ago",
   );
   await empty.locator("[data-inbox-empty-watching]").click();
   await expect(page).toHaveURL(/mailbox=watching/);

@@ -112,7 +112,14 @@ function stepRows(key, source, limit, now) {
         at,
         /** `2d` for a completed step; empty where there is no instant. */
         age: at ? formatAge(at, now) : "",
-        ageTitle: at ? ageTitle(at, "finished", now) : "",
+        /*
+         * "Moved", not "finished". The instant core sends is the linked
+         * card's last movement — the best completion time it holds, and the
+         * same anchor the tile's own freshness badge uses — but a comment on
+         * a finished card moves it too, so the tooltip must not claim more
+         * precision than that.
+         */
+        ageTitle: at ? ageTitle(at, "moved", now) : "",
       };
     }),
     // Core counts what it omitted; the client's own cut adds to that count

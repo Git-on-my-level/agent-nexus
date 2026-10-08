@@ -54,6 +54,7 @@
     decodeInboxItemId,
     inboxItemMailboxId,
   } from "$lib/inboxUtils";
+  import { MAX_KEYED_PROPOSALS } from "$lib/inboxProposalChoice.js";
   import { formatShortcut } from "$lib/keyboardHints.js";
   import { label as phaseLabel, sentenceCase } from "$lib/pm/presentation.js";
   import { buildPrimitiveRefRoutes, resolveRefLink } from "$lib/refLinkModel";
@@ -192,6 +193,10 @@
   // A request from an agent for a grant. The panel then offers only the two
   // decisions core accepts, behind the same confirmation the Access page asks.
   let accessRequest = $derived(accessRequestFromInboxItem(item));
+  /** How many suggestions have a number key, for the hint line. */
+  let keyedProposalCount = $derived(
+    accessRequest ? 0 : Math.min(MAX_KEYED_PROPOSALS, proposalStrings.length),
+  );
   // Core accepts an access decision from a person only.
   let decidesAccess = $derived(isHumanWorkspacePrincipal($authenticatedAgent));
 
@@ -908,8 +913,11 @@
                 })}
         >
           {#snippet after()}
-            <span class="ml-auto hidden text-micro text-fg-subtle sm:inline"
-              >{formatShortcut("Enter")} to send · ? for shortcuts</span
+            <span class="ml-auto hidden text-micro text-fg-subtle sm:inline">
+              {#if keyedProposalCount}{keyedProposalCount > 1
+                  ? `1–${keyedProposalCount}`
+                  : "1"} select, press again to send ·
+              {/if}{formatShortcut("Enter")} to send · ? for shortcuts</span
             >
           {/snippet}
           {#snippet extras()}

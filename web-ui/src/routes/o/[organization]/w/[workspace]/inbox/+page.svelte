@@ -72,6 +72,7 @@
     undoInboxResponse,
   } from "$lib/inboxResponseQueue.js";
   import { loadInboxSources, mergeInboxItems } from "$lib/inboxSources.js";
+  import { MAX_KEYED_PROPOSALS } from "$lib/inboxProposalChoice.js";
   import {
     inboxShortcutAction,
     inboxShortcutList,
@@ -196,7 +197,14 @@
    */
   let lastHandledAt = $derived.by(() => {
     const times = handled
-      .map((row) => Date.parse(row.time || ""))
+      // When it was answered, not when it was asked: a row's `time` is the
+      // source event, so a month-old question answered this morning would
+      // have read "last handled 30d ago".
+      .map((row) =>
+        Date.parse(
+          row.item?.responded_at || row.item?.completed_at || row.time || "",
+        ),
+      )
       .filter((value) => Number.isFinite(value));
     return times.length ? new Date(Math.max(...times)).toISOString() : "";
   });
@@ -1525,13 +1533,21 @@
                     bind:draft={reply}
                     {chosen}
                     {busy}
-                    onSend={(text, outcome) =>
-                      respondInbox(selected, text, {
+                    onSend={(text, outcome, itemId) => {
+                      /*
+                       * The row the answer was chosen on, not whatever is on
+                       * screen when it lands: a suggestion sends after a
+                       * short flash, and the reader can move on inside it.
+                       */
+                      const row =
+                        rows.find((entry) => entry.id === itemId) || selected;
+                      respondInbox(row, text, {
                         outcome,
-                        proposal: selected.responseProposals.includes(text)
+                        proposal: row.responseProposals?.includes(text)
                           ? text
                           : "",
-                      })}
+                      });
+                    }}
                     onAcknowledge={selected.access
                       ? null
                       : () => acknowledgeInbox(selected)}
@@ -1689,7 +1705,10 @@
           {#if selected}
             {@const proposalCount =
               selected.kind === "inbox" && inboxItemNeedsResponse(selected.item)
-                ? Math.min(5, selected.responseProposals.length)
+                ? Math.min(
+                    MAX_KEYED_PROPOSALS,
+                    selected.responseProposals.length,
+                  )
                 : 0}
             {@const canOpen =
               selected.kind === "task" ||

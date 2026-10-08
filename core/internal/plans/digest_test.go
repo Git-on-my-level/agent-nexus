@@ -113,3 +113,69 @@ func TestDigestReportsBlockedStepsAsCurrent(t *testing.T) {
 		t.Fatalf("next=%+v", got.Next)
 	}
 }
+
+func TestDigestClaimsOnlyWhatALinkedResourceFinished(t *testing.T) {
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	p := Plan{Steps: []Step{
+		// Marked done by hand, and pointing at a card whose phase says
+		// nothing. A comment on that card moved it yesterday; that is not a
+		// completion time, so the step must not be dated by it.
+		{ID: "inline", Title: "Inline", Ref: "card:unknown", Status: "done", After: []string{}},
+		// Marked done by hand with nothing linked at all.
+		{ID: "bare", Title: "Bare", Status: "done", After: []string{}},
+		// Done because its card is done.
+		{ID: "linked", Title: "Linked", Ref: "card:shipped", After: []string{}},
+	}}
+	facts := map[string]Fact{
+		"card:unknown": {Known: true, Status: "unknown", MovementAt: now.Add(-24 * time.Hour)},
+		"card:shipped": {Known: true, Status: "done", MovementAt: now.Add(-48 * time.Hour)},
+	}
+	state := Compute(p, facts, now, now, 0)
+	got := Digest(p, state, facts, now, 0, 0)
+	if len(got.Completed.Items) != 1 || got.Completed.Items[0].ID != "linked" {
+		t.Fatalf("completed=%+v", got.Completed)
+	}
+}
+
+func TestDigestWindowBoundaryKeepsTheOldestRecentStep(t *testing.T) {
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	p := Plan{Steps: []Step{
+		{ID: "edge", Title: "Edge", Ref: "card:edge", After: []string{}},
+		{ID: "older", Title: "Older", Ref: "card:older", After: []string{}},
+	}}
+	facts := map[string]Fact{
+		"card:edge":  {Known: true, Status: "done", MovementAt: now.Add(-StepDigestWindow)},
+		"card:older": {Known: true, Status: "done", MovementAt: now.Add(-StepDigestWindow - time.Second)},
+	}
+	state := Compute(p, facts, now, now, 0)
+	got := Digest(p, state, facts, now, 0, 0)
+	if len(got.Completed.Items) != 1 || got.Completed.Items[0].ID != "edge" {
+		t.Fatalf("completed=%+v", got.Completed)
+	}
+}
+
+// The lists follow the plan's topological order with lexicographic ties — the
+// order geometry and the critical path already use — not the order the steps
+// were written in. A test whose ids happen to be in declaration order cannot
+// tell the two apart, so this one deliberately reverses them.
+func TestDigestOrdersStepsTopologicallyNotAsWritten(t *testing.T) {
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	p := Plan{Steps: []Step{
+		{ID: "zeta", Title: "Zeta", After: []string{}},
+		{ID: "alpha", Title: "Alpha", After: []string{}},
+	}}
+	state := Compute(p, nil, now, now, 0)
+	got := Digest(p, state, nil, now, 0, 0)
+	if fmt.Sprint(titles(got.Next)) != fmt.Sprint([]string{"Alpha", "Zeta"}) {
+		t.Fatalf("next=%+v", got.Next)
+	}
+	p = Plan{Steps: []Step{
+		{ID: "second", Title: "Second", After: []string{"first"}},
+		{ID: "first", Title: "First", After: []string{}},
+	}}
+	state = Compute(p, nil, now, now, 0)
+	// A dependency still comes before what depends on it.
+	if got = Digest(p, state, nil, now, 0, 0); got.Next.Items[0].ID != "first" {
+		t.Fatalf("next=%+v", got.Next)
+	}
+}
