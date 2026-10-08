@@ -1,8 +1,10 @@
 package server
 
 import (
+	"agent-nexus-core/internal/primitives"
 	"errors"
 	"strings"
+	"time"
 
 	"agent-nexus-core/internal/schema"
 )
@@ -26,6 +28,15 @@ func canonicalCardView(card map[string]any) map[string]any {
 	}
 	out["title"] = card["title"]
 	out["summary"] = strings.TrimSpace(anyString(card["summary"]))
+	if card["summary_format"] == true {
+		out["summary_text"] = out["summary"]
+		if computed, ok := card["work_summary"].(*primitives.WorkSummary); ok {
+			out["work_summary"] = computed
+		} else {
+			out["work_summary"] = primitives.BasicWorkSummary(card, time.Now().UTC(), planStalledAfter())
+		}
+		out["summary"] = out["work_summary"]
+	}
 
 	boardRef := strings.TrimSpace(anyString(card["board_ref"]))
 	if boardRef != "" {
@@ -84,6 +95,11 @@ func canonicalCardView(card map[string]any) map[string]any {
 	out["updated_at"] = card["updated_at"]
 	out["updated_by"] = card["updated_by"]
 	out["provenance"] = card["provenance"]
+	if card["summary_format"] == true {
+		if v, ok := card["plan_step_digest"]; ok {
+			out["plan_step_digest"] = v
+		}
+	}
 	for _, key := range []string{"plan", "plan_state", "plan_health", "next_step", "plan_resolution_truncated", "status_mismatch", "source_refs"} {
 		if v, ok := card[key]; ok {
 			out[key] = v

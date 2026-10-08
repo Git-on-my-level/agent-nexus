@@ -182,7 +182,12 @@ type BoardListFilter struct {
 
 // CardListFilter scopes global card listing (GET /cards).
 type CardListFilter struct {
-	States []string
+	States                 []string
+	BoardID                string
+	BeforeID               string
+	Limit                  int      // zero preserves internal unpaginated consumers
+	ids                    []string // Internal bounded timeline hydration; never an HTTP filter.
+	includeLifecycleHidden bool
 }
 
 type BoardListItem struct {
@@ -1442,16 +1447,65 @@ func (s *Store) ListCards(ctx context.Context, filter CardListFilter) ([]map[str
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
 	whereSQL := cardLifecycleWhere(filter.States)
+	from := `cards c ` + cardVisibilityJoins
+	boardID, boardHandle, column, rank := "c.board_id", "b.handle", "c.column_key", "c.rank"
+	prefix := ""
+	args := []any{}
+	order := ` ORDER BY c.board_id ASC, ` + boardColumnOrderSQL("c.column_key") + `, c.rank ASC,c.id ASC`
+	if len(filter.ids) > 0 {
+		if len(filter.ids) > summaryBatchSize {
+			return nil, invalidBoardRequest("card hydration ids must contain at most 50 strings")
+		}
+		if filter.includeLifecycleHidden {
+			// Explicit timeline subjects include lifecycle-hidden cards;
+			// canonical authorization remains enforced on scoped relations.
+			whereSQL = "1=1"
+		}
+		raw, _ := json.Marshal(filter.ids)
+		whereSQL += ` AND c.id IN (SELECT value FROM json_each(?))`
+		args = append(args, string(raw))
+		order = ` ORDER BY c.id ASC`
+	}
+	if filter.BoardID != "" {
+		// Membership (including a secondary board) is authoritative for placement.
+		from = `ref_edges re JOIN cards c ON c.id=re.target_id ` + cardVisibilityJoins + ` LEFT JOIN boards membership_board ON membership_board.id=re.source_id `
+		whereSQL += ` AND re.source_type='board' AND re.edge_type='board_card' AND re.target_type='card' AND re.source_id=?`
+		args = append(args, filter.BoardID)
+		boardID, boardHandle = "re.source_id", "membership_board.handle"
+		column, rank = "COALESCE(json_extract(re.metadata_json,'$.column_key'),'backlog')", "COALESCE(json_extract(re.metadata_json,'$.rank'),'')"
+	}
+	if filter.Limit > 0 {
+		if filter.Limit > 51 {
+			return nil, invalidBoardRequest("card page limit must be at most 50 plus lookahead")
+		}
+		key := "c.id"
+		if filter.BoardID != "" {
+			key = "re.target_id"
+		}
+		whereSQL += ` AND ` + key + `>?`
+		args = append(args, filter.BeforeID)
+		order = ` ORDER BY ` + key + ` ASC LIMIT ?`
+		args = append(args, filter.Limit)
+	}
+	if filter.BoardID != "" && filter.Limit > 0 {
+		// Authorize the indexed membership window first. Hydrate card bodies
+		// only after its immutable-ID keyset has been limited to <=51 rows.
+		prefix = `WITH card_page AS MATERIALIZED (SELECT re.source_id AS board_id,re.target_id AS card_id,re.metadata_json,membership_board.handle AS board_handle FROM ` + from + ` WHERE ` + whereSQL + order + `) `
+		from = `card_page page JOIN cards c ON c.id=page.card_id`
+		boardID, boardHandle = "page.board_id", "page.board_handle"
+		column, rank = "COALESCE(json_extract(page.metadata_json,'$.column_key'),'backlog')", "COALESCE(json_extract(page.metadata_json,'$.rank'),'')"
+		whereSQL, order = "1", ` ORDER BY c.id ASC`
+	}
 	rows, err := s.db.QueryContext(
 		ctx,
-		`SELECT c.board_id, b.handle, c.id, c.handle, c.column_key, c.rank, c.title, c.summary, c.version, c.head_revision_id, c.head_revision_number, c.thread_id, c.parent_thread_id, c.due_at,
+		prefix+`SELECT `+boardID+`, `+boardHandle+`, c.id, c.handle, `+column+`, `+rank+`, c.title, c.summary, c.version, c.head_revision_id, c.head_revision_number, c.thread_id, c.parent_thread_id, c.due_at,
 		        c.definition_of_done_json, c.pinned_document_id, c.assignee, c.risk, c.resolution, c.resolution_refs_json, c.refs_json,
 		        c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by,
 		        c.trashed_at, c.trashed_by, c.trash_reason
-		   FROM cards c
-		   `+cardVisibilityJoins+`
+		   FROM `+from+`
 		  WHERE `+whereSQL+`
-		  ORDER BY c.board_id ASC, `+boardColumnOrderSQL("c.column_key")+`, c.rank ASC, c.id ASC`,
+		  `+order,
+		args...,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query cards: %w", err)
@@ -4356,7 +4410,12 @@ func upsertBoardCardRefEdge(ctx context.Context, tx *accessTx, boardID, cardID, 
 	if err != nil {
 		return fmt.Errorf("upsert board card ref edge: %w", err)
 	}
-	return nil
+	// Keep the typed primary phase in the same canonical write transaction.
+	// Secondary board placement remains independent. Do this in the runtime
+	// writer, so unrelated ref-edge writes on plain SQLite connections do not
+	// acquire dependencies on the card timestamp indexes' SQL functions.
+	_, err = tx.ExecContext(ctx, `UPDATE cards SET column_key=? WHERE id=? AND board_id=? AND column_key<>?`, strings.TrimSpace(columnKey), cardID, boardID, strings.TrimSpace(columnKey))
+	return err
 }
 
 func normalizeBoardRefs(board map[string]any) ([]string, error) {

@@ -14,18 +14,45 @@ type NextStep struct {
 }
 
 // HealthFor supplies the shared plan and initiative health contract. Anchors are derived, never persisted transition times.
-func HealthFor(p *Plan, state State, movement, created, now time.Time, threshold time.Duration, cardDue string) Health {
+func HealthFor(p *Plan, state State, movement, created, now time.Time, threshold time.Duration, cardDue string, cardPhase ...string) Health {
 	if threshold <= 0 {
 		threshold = DefaultStalledAfter
 	}
 	anchor := movement
 	h := Health{State: "on_track", Reason: "Open steps are progressing."}
 	if p == nil || len(p.Steps) == 0 {
-		h.State, h.Reason, anchor = "no_plan", "Initiative has no plan steps.", created
-		if movement.IsZero() || now.Sub(movement) >= threshold {
-			h.State, h.Reason = "stale", "Initiative has no plan and no recent card or discussion activity."
-			if !movement.IsZero() {
-				anchor = movement.Add(threshold)
+		// Planless work still has workflow, blocked and due facts. Callers that
+		// omit phase retain the legacy initiative no-plan vocabulary.
+		phase := ""
+		if len(cardPhase) > 0 {
+			phase = cardPhase[0]
+		}
+		switch {
+		case Status(phase) == "done":
+			h.State, h.Reason = "done", "The card is complete."
+		case phase == "cancelled":
+			h.State, h.Reason = "cancelled", "The card was cancelled."
+		case phase == "blocked":
+			h.State, h.Reason = "blocked", "The card is blocked."
+		default:
+			h.State, h.Reason, anchor = "no_plan", "Card has no plan steps.", created
+			if len(cardPhase) == 0 {
+				h.Reason = "Initiative has no plan steps."
+			}
+			d, err := time.Parse(time.RFC3339, cardDue)
+			if err != nil {
+				d, err = time.Parse("2006-01-02", cardDue)
+			}
+			if len(cardPhase) > 0 && err == nil && !d.After(now.Add(24*time.Hour)) {
+				h.State, h.Reason, anchor = "at_risk", "The card is overdue or due within 24 hours.", d.Add(-24*time.Hour)
+			} else if movement.IsZero() || now.Sub(movement) >= threshold {
+				h.State, h.Reason = "stale", "Card has no plan and no recent card or discussion activity."
+				if len(cardPhase) == 0 {
+					h.Reason = "Initiative has no plan and no recent card or discussion activity."
+				}
+				if !movement.IsZero() {
+					anchor = movement.Add(threshold)
+				}
 			}
 		}
 	} else if state.Progress.Done == state.Progress.Total {
@@ -107,7 +134,7 @@ func LegacyHealth(state string) string {
 	switch state {
 	case "stale", "stalled":
 		return "stalled"
-	case "blocked", "no_plan", "at_risk", "done", "on_track":
+	case "blocked", "no_plan", "at_risk", "done", "on_track", "cancelled":
 		return state
 	default:
 		return "on_track"

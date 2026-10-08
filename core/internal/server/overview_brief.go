@@ -517,9 +517,20 @@ func briefAtRisk(in briefInputs) map[string]any {
 		}
 		risks = append(risks, risk{item: item, order: order, at: anchor, ref: ref})
 	}
+	blockedReasons := map[string]string{}
+	for _, w := range in.work {
+		if anyString(w["phase"]) == "blocked" {
+			if reason := briefBlockedReason(w); reason != "Task is in the blocked column." {
+				blockedReasons[anyString(w["ref"])] = reason
+			}
+		}
+	}
 	for _, initiative := range in.initiatives {
 		health, _ := initiative["health"].(map[string]any)
 		state, reason := anyString(health["state"]), anyString(health["reason"])
+		if state == "blocked" && blockedReasons[anyString(initiative["ref"])] != "" {
+			reason = blockedReasons[anyString(initiative["ref"])]
+		}
 		since := ""
 		if detailed, ok := initiative["plan_health"].(plans.Health); ok && detailed.Since != nil {
 			since = *detailed.Since
@@ -536,21 +547,10 @@ func briefAtRisk(in briefInputs) map[string]any {
 		if phase != "blocked" {
 			continue
 		}
-		reason := "Task is in the blocked column."
-		if blockers, _ := w["blockers"].([]any); len(blockers) > 0 {
-			named := []string{}
-			for _, raw := range blockers {
-				if text := strings.TrimSpace(anyString(raw)); text != "" {
-					named = append(named, text)
-				}
-			}
-			if len(named) > 0 {
-				reason = "Blocked on " + named[0]
-				if len(named) > 1 {
-					reason += " (+" + strconv.Itoa(len(named)-1) + " more)"
-				}
-			}
+		if summary, ok := w["work_summary"].(*primitives.WorkSummary); ok && summary.Status.State != "blocked" {
+			continue
 		}
+		reason := briefBlockedReason(w)
 		consider(anyString(w["ref"]), anyString(w["title"]), "blocked", reason, nil, anyString(w["updated_at"]))
 	}
 	sort.SliceStable(risks, func(i, j int) bool {
@@ -754,4 +754,23 @@ func buildOverviewBrief(in briefInputs) map[string]any {
 		"section_limit":    briefSectionLimit,
 		"throughput_hours": int(briefThroughputWindow.Hours()),
 	}
+}
+
+func briefBlockedReason(w map[string]any) string {
+	reason := "Task is in the blocked column."
+	if blockers, _ := w["blockers"].([]any); len(blockers) > 0 {
+		named := []string{}
+		for _, raw := range blockers {
+			if text := strings.TrimSpace(anyString(raw)); text != "" {
+				named = append(named, text)
+			}
+		}
+		if len(named) > 0 {
+			reason = "Blocked on " + named[0]
+			if len(named) > 1 {
+				reason += " (+" + strconv.Itoa(len(named)-1) + " more)"
+			}
+		}
+	}
+	return reason
 }

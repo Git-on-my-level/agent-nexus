@@ -59,3 +59,23 @@ func TestNextStepPrefersReadyCriticalPath(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestPlanlessCardHealthUsesPhaseAndDue(t *testing.T) {
+	now := time.Now().UTC()
+	for _, tc := range []struct {
+		phase, due string
+		movement   time.Time
+		want       string
+	}{
+		{"blocked", "", now, "blocked"},
+		{"done", "2020-01-01", now.Add(-100 * time.Hour), "done"},
+		{"cancelled", "2020-01-01", now.Add(-100 * time.Hour), "cancelled"},
+		{"ready", "2020-01-01", now, "at_risk"},
+		{"in_progress", "", now.Add(-100 * time.Hour), "stale"},
+	} {
+		got := HealthFor(nil, State{}, tc.movement, now.Add(-200*time.Hour), now, 0, tc.due, tc.phase)
+		if got.State != tc.want {
+			t.Fatalf("phase %q: got %+v want %s", tc.phase, got, tc.want)
+		}
+	}
+}

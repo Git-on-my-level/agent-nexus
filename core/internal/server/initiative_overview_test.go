@@ -43,7 +43,7 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 		}
 		counter.Reset()
 		out := httptest.NewRecorder()
-		req := httptest.NewRequest("GET", "/overview", nil)
+		req := httptest.NewRequest("GET", "/overview?summary=1", nil)
 		attachResourceAccessScope(req, handlerOptions{primitiveStore: store})
 		handleGetOverview(out, req, handlerOptions{primitiveStore: store})
 		if out.Code != 200 {
@@ -72,6 +72,19 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 			t.Fatal(err)
 		}
 		health["since"] = "2026-10-04T12:00:00Z"
+		if !reflect.DeepEqual(item["summary"], item["work_summary"]) {
+			t.Fatal("computed summary alias differs from work_summary")
+		}
+		for _, key := range []string{"summary", "work_summary"} {
+			summary := item[key].(map[string]any)
+			if _, err = time.Parse(time.RFC3339Nano, summary["created_at"].(string)); err != nil {
+				t.Fatal(err)
+			}
+			summary["created_at"] = "2026-10-04T12:00:00Z"
+			summary["age"] = float64(0)
+			summary["last_movement_at"] = "2026-10-04T12:00:00Z"
+			summary["status"].(map[string]any)["since"] = "2026-10-04T12:00:00Z"
+		}
 		item["ref"] = "card:initiative"
 		item["title"] = "Initiative"
 		item["updated_at"] = "2026-10-04T12:00:00Z"
@@ -93,7 +106,7 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 	}
 	counter.Reset()
 	out := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/overview", nil)
+	req := httptest.NewRequest("GET", "/overview?summary=1", nil)
 	attachResourceAccessScope(req, handlerOptions{primitiveStore: store})
 	handleGetOverview(out, req, handlerOptions{primitiveStore: store})
 	if out.Code != 200 || strings.Contains(out.Body.String(), "Initiative 0") || strings.Contains(out.Body.String(), "Initiative 39") {
@@ -189,7 +202,7 @@ func TestOverviewDigestDistinctDecisionRefsQueryBudget(t *testing.T) {
 				t.Fatalf("items=%d truncated=%v", len(d.Items), d.Truncated)
 			}
 			// Each full 200-row page needs an empty-page check for previews and plan facts.
-			wantQueries := int64(5 + 2*(i/200))
+			wantQueries := int64(7 + 2*(i/200) + 2*((i+49)/50-1))
 			// Main captures the immutable denial snapshot on the first read only;
 			// later writes use its statement-level epoch fallback without recapture.
 			if i == 1 {

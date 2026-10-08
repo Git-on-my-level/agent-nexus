@@ -36,8 +36,12 @@ func (w *Workspace) MaintainScopeInboxBatch(ctx context.Context) (bool, error) {
 	if err = tx.QueryRowContext(ctx, `SELECT cursor,done FROM scope_inbox_live_job WHERE singleton=1`).Scan(&cursor, &done); err != nil {
 		return false, err
 	}
+	attentionDone, err := maintainWorkSummaryAttention(ctx, tx)
+	if err != nil {
+		return false, err
+	}
 	if done {
-		return true, nil
+		return attentionDone, tx.Commit()
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT id FROM derived_inbox_items WHERE id>? ORDER BY id LIMIT ?`, cursor, inboxmodel.BatchSize)
 	if err != nil {
@@ -67,7 +71,7 @@ func (w *Workspace) MaintainScopeInboxBatch(ctx context.Context) (bool, error) {
 	if _, err = tx.ExecContext(ctx, `UPDATE scope_inbox_live_job SET cursor=?,done=? WHERE singleton=1`, cursor, done); err != nil {
 		return false, err
 	}
-	return done, tx.Commit()
+	return done && attentionDone, tx.Commit()
 }
 
 // RunScopeInboxMaintenance uses the server's maintenance lifecycle. Committed

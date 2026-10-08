@@ -25,9 +25,11 @@ func TestOverviewReadSnapshotAdmissionAndIsolation(t *testing.T) {
 	request := WithRequestAccessScope(ctx, AccessScope{ActorID: "stranger"})
 	assert := func(c context.Context, want bool) {
 		t.Helper()
-		var n int
-		if err := s.db.QueryRowContext(c, `SELECT count(*) FROM documents WHERE id=?`, id).Scan(&n); err != nil || (n == 1) != want {
-			t.Fatalf("visible=%d want=%v err=%v", n, want, err)
+		for _, read := range []context.Context{c, context.WithValue(c, summaryPointReadKey{}, true)} {
+			var n int
+			if err := s.db.QueryRowContext(read, `SELECT count(*) FROM documents WHERE id=?`, id).Scan(&n); err != nil || (n == 1) != want {
+				t.Fatalf("visible=%d want=%v err=%v", n, want, err)
+			}
 		}
 	}
 	assert(request, true) // Capture an empty closure before revocation.
@@ -63,6 +65,7 @@ func TestOverviewReadSnapshotAdmissionAndIsolation(t *testing.T) {
 	assert(WithAccessScope(pin, AccessScope{ActorID: "stranger"}), false)
 	setOwner("other")
 	// The proof belongs to the transaction handle, not merely the context.
+	pin = context.WithValue(pin, summaryPointReadKey{}, true)
 	policy, _ := resourceaccess.PolicyFrom(pin)
 	query, args := policy.ReadOnDB(pin, ws.DB(), `SELECT count(*) FROM documents WHERE id=?`, []any{id})
 	var outside int

@@ -314,8 +314,13 @@ func (reader *reportReader) materialize(panel reports.Panel) (map[string]any, bo
 			}
 			work = filtered
 		}
-		if store, ok := reader.opts.primitiveStore.(planStore); ok && panel.Type == "live-initiatives" {
-			if err := store.EnrichCardPlans(reader.r.Context(), work, planVisibility(reader.r, reader.opts), reader.now, planStalledAfter()); err != nil {
+		summaryFormat := reader.r.URL.Query().Get("summary") == "1"
+		if store, ok := reader.opts.primitiveStore.(planStore); ok && (panel.Type == "live-initiatives" || summaryFormat) {
+			ctx := reader.r.Context()
+			if !summaryFormat {
+				ctx = primitives.WithLegacyCardPlans(ctx)
+			}
+			if err := store.EnrichCardPlans(ctx, work, planVisibility(reader.r, reader.opts), reader.now, planStalledAfter()); err != nil {
 				return nil, false, err
 			}
 		}
@@ -350,6 +355,10 @@ func (reader *reportReader) materialize(panel reports.Panel) (map[string]any, bo
 			}
 			summary, progress, needs := reports.Summary(anyString(row["summary"]))
 			item := map[string]any{"ref": row["ref"], "title": row["title"], "summary": summary, "progress": progress, "needs": needs, "priority": anyString(row["priority"]), "phase": row["phase"], "board_ref": row["board_ref"], "updated_at": row["updated_at"]}
+			if summaryFormat {
+				item["work_summary"], item["summary"], item["summary_text"] = row["work_summary"], row["work_summary"], summary
+				item["plan_step_digest"] = row["plan_step_digest"]
+			}
 			// Keep the authored plan and ownership fields from the same bounded card
 			// projection. Plan refs are carried by plan.steps[].ref; no N+1 reads.
 			for _, key := range []string{"plan", "plan_state", "plan_health", "next_step", "status_mismatch", "plan_resolution_truncated", "source_refs", "assignee_refs"} {

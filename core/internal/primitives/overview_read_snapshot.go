@@ -22,9 +22,13 @@ type pinnedDenial struct {
 // inside that same transaction still validate the epoch, but need not compile
 // the unreachable canonical recursion again for every join and subquery.
 func (s *Store) BeginOverviewRead(ctx context.Context) (context.Context, func(), error) {
+	if _, pinned := ctx.Value(pinnedDenialKey{}).(pinnedDenial); pinned {
+		return ctx, func() {}, nil
+	}
 	if _, ok := ctx.Value(denialRequestKey{}).(*denialRequestState); !ok {
 		return ctx, func() {}, nil
 	}
+	var pointToken int64
 	next, close, err := s.db.PinReads(ctx, func(ctx context.Context, db resourceaccess.QueryRower) (context.Context, error) {
 		scope, _ := accessScopeFrom(ctx)
 		cached := denialSnapshotFrom(ctx)
@@ -43,10 +47,29 @@ func (s *Store) BeginOverviewRead(ctx context.Context) (context.Context, func(),
 		if snapshot.epoch < 0 {
 			return ctx, errOverviewSnapshotUnavailable
 		}
+		if snapshot.epoch == cached.epoch && snapshot.rows == cached.rows {
+			cached.preparePointIndex()
+			snapshot.pointOnce.Do(func() { snapshot.pointIndex = cached.pointIndex })
+		} else {
+			snapshot.preparePointIndex()
+		}
+		if snapshot.pointIndex == nil {
+			return context.WithValue(ctx, pinnedDenialKey{}, pinnedDenial{db, snapshot, scope}), nil
+		}
+		pointToken = pointSnapshotSequence.Add(1)
+		snapshot.pointToken = pointToken
+		pointSnapshots.Store(pointToken, snapshot)
 		return context.WithValue(ctx, pinnedDenialKey{}, pinnedDenial{db, snapshot, scope}), nil
 	})
 	if errors.Is(err, errOverviewSnapshotUnavailable) {
 		return ctx, func() {}, nil
 	}
-	return next, close, err
+	if err != nil {
+		pointSnapshots.Delete(pointToken)
+		return next, close, err
+	}
+	return next, func() {
+		close()
+		pointSnapshots.Delete(pointToken)
+	}, nil
 }

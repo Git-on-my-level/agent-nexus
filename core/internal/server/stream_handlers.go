@@ -584,7 +584,7 @@ func buildInboxStreamRecords(items []map[string]any) []inboxStreamRecord {
 			continue
 		}
 
-		dataBytes, err := json.Marshal(payload)
+		dataBytes, err := inboxChangeBytes(payload)
 		if err != nil {
 			continue
 		}
@@ -598,6 +598,40 @@ func buildInboxStreamRecords(items []map[string]any) []inboxStreamRecord {
 		})
 	}
 	return records
+}
+
+// Stream identity uses canonical summary inputs, including creation/oldest-ask
+// anchors, rather than elapsed ages, rolling windows or timer-only health.
+// Decode a copy so the SSE payload retains current ages and stored item data
+// (including unrelated user fields named "age") remains untouched.
+func inboxChangeBytes(payload map[string]any) ([]byte, error) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	var stable map[string]any
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber()
+	if err = decoder.Decode(&stable); err != nil {
+		return nil, err
+	}
+	if cards, ok := stable["related_cards"].([]any); ok {
+		previews, _ := payload["related_cards"].([]primitives.RefPreview)
+		for i, card := range cards {
+			preview, _ := card.(map[string]any)
+			if i < len(previews) && previews[i].SummaryChangeKey != "" {
+				preview["summary"] = previews[i].SummaryChangeKey
+				delete(preview, "plan_health")
+				continue
+			}
+			summary, _ := preview["summary"].(map[string]any)
+			delete(summary, "age")
+			if attention, ok := summary["attention"].(map[string]any); ok {
+				delete(attention, "oldest_age")
+			}
+		}
+	}
+	return json.Marshal(stable)
 }
 
 type notificationReceiptStreamRecord struct {

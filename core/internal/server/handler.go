@@ -179,6 +179,7 @@ type HandlerOption func(*handlerOptions)
 type handlerOptions struct {
 	routeObserver                  func(string, routeAccessClassifier)
 	readVisibility                 func(string, string) bool // Request-scoped access for composed resource reads.
+	summaryFormat                  bool                      // Explicit summary=1 migration for composed card collections.
 	observationRuntime             *ObservationRuntime
 	pmRuntime                      *PMRuntime
 	pmHandler                      http.Handler

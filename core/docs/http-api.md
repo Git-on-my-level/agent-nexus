@@ -242,9 +242,69 @@ Card and work reads expose `plan` and `plan_state`. State has effective `steps`,
 
 The existing live-initiatives report projection retains `progress` and `needs[]`. Plans replace markdown-derived progress with computed counts and needs with blocked step titles; `plan_state` and `health` are additional fields. Cards without plans retain the previous summary projection.
 
-Report hydration joins cards, metadata, latest good/attempt observations, board labels and thread privacy in one query for the bounded candidate set (up to 200 rows per native report scope). Plan enrichment uses one plan/activity query plus at most one fact query per referenced resource kind and one external-evidence scan, independent of card/step count. Batch ref resolution uses at most five initial kind queries, one plan/activity query and five linked-fact queries. Work and plan projection reads never call `GetWork` per row or ref. Native report event and decision reads each stop after one 200-candidate page, including uncached `POST /reports/preview`, and preserve `truncated` when more remain. `GET /work` applies its source, owner, phase, freshness, query and project filters in SQL before a bounded page is hydrated. Cursor ordering uses UTC timestamps and card IDs, including nanosecond precision.
+Report hydration joins cards, metadata, latest good/attempt observations, board labels and thread privacy in one query for the bounded candidate set (up to 200 rows per native report scope). Plan enrichment uses one plan/activity query per 50 selected cards plus at most one fact query per referenced resource kind and one external-evidence scan, independent of card/step count. Batch ref resolution uses at most five initial kind queries, one plan/activity query per 50 selected cards and five linked-fact queries. Work and plan projection reads never call `GetWork` per row or ref. Native report event and decision reads each stop after one 200-candidate page, including uncached `POST /reports/preview`, and preserve `truncated` when more remain. `GET /work` applies its source, owner, phase, freshness, query and project filters in SQL before a bounded page is hydrated. Cursor ordering uses UTC timestamps and card IDs, including nanosecond precision.
 
 `POST /refs/resolve` accepts `{refs:[...]}` (max 200). Results are `{items:[{ref,resolvable,kind?,title?,status?,phase?,owner?,owner_display?,board?,priority?,last_moved_at?,next_step?,progress?,url?}]}` in input order, retaining duplicates. Native card/document URLs are workspace-relative UI paths; topics and boards omit url because they have no current UI detail surface. Unknown, trashed or inaccessible native refs return only `{ref,resolvable:false}`. Native handles and internal ids resolve for cards, docs/documents, topics and boards. Plan-derived progress and status honor the requesting principal's access to every referenced resource. Responses are read-only and uncached. `board` contains `{ref,title}` and is independently visibility checked. `owner_display` is the workspace actor display name, falling back to the owner ref. `next_step` contains id, title and ref for a readable ready step, preferring the critical path when a plan exists. `last_moved_at` uses the same native update/source meaningful movement timestamp as plan facts, never a polling observation timestamp. Hosted clients prepend `/o/<org>/w/<ws>` to native relative URLs; absolute source URLs are used unchanged.
+
+## Computed card summaries
+
+Card and Work read payloads, Overview work and initiatives, native report cards,
+PM context cards and topic card bundles include `work_summary`, using the shared
+`WorkSummary` contract. Card previews from `POST /refs/resolve` use `summary`
+for this object. Inbox list/get responses include visible card previews in
+`related_cards`; at most 50 distinct card refs are resolved per response and
+`related_cards_truncated` signals more context. Canonical prose remains the
+string `summary`. Supported Card, Work and Overview reads accept `summary=1`
+to put the computed object at `summary` and retain prose at `summary_text`.
+This explicit opt-in allows clients to migrate without breaking Markdown readers.
+
+`status:{state,label,reason,since?}` is always present and uses effective health,
+including blocked steps, near due dates, stale movement and terminal card phase.
+`set_status:{state,label}` appears when the stored phase disagrees. Optional
+parts are omitted without a meaningful signal: `progress:{done,total,unit}`
+counts plan steps or explicit child-card relations; `next:{id,title,ref,more}`
+selects a readable ready step; `owner` prefers the latest source owner, then
+native assignment/execution actor; `due`, `age` and `last_movement_at` describe
+card timing. Ages are nonnegative seconds. `source` appears for external
+authority. `steps` retains the bounded plan-step digest. The same canonical
+inputs and rules apply on every enriched read surface; clients need no status
+or progress heuristics. Legacy phase, health, progress and plan fields remain.
+
+Summary inputs are loaded in batches of at most 50 canonical card IDs. Linked
+facts share the existing 4,000-ref resolution budget across plans and explicit
+children; unknown evidence stays unresolved, with `resolution_truncated` (and
+child-progress `truncated`) when the budget cannot establish completeness.
+Attention uses a trigger-maintained index and bounded oldest-ask candidate
+windows: at most eleven per UUID/handle and broadcast/current-reader audience
+(44 candidates per card). Candidates must pass canonical inbox visibility
+before contributing to `attention:{count,oldest_age,truncated}`. Counts are
+lower bounds when capped or while historical maintenance is unfinished.
+Scoped readers always receive `attention_truncated:true`, independently of
+hidden candidate counts, so the uncertainty flag cannot reveal private asks.
+No visible asks means no attention part. Maintenance advances 64 historical
+inbox IDs per transaction outside read/startup hydration; new writes are indexed
+atomically. No summary read scans inbox or event history.
+
+`GET /cards` and `GET /boards/{board_id}/cards` select an immutable-ID keyset page
+before hydration, default/max `limit=50`, returning `next_cursor` when another
+page exists. Reuse the opaque cursor with the same board/lifecycle selectors.
+Clients should use phase/rank fields for board placement rather than collection
+order, and follow cursors to obtain larger boards. Board workspace previews
+sample at most 50 cards and declare `cards_truncated`; their summary counts
+carry `truncated` when sampled. Work and Overview retain their existing page
+bounds. Regular reads and the read-only refs POST reuse epoch-validated request
+access snapshots; summary hydration admits an immutable SQLite transaction and
+uses the existing canonical denial map for constant-time exact identity checks.
+The transaction proof is bound only by internal policy code and expires on
+rollback; unavailable proof denies. Arbitrary text/ref projections retain their
+existing SQL policy, and writes retain canonical transaction checks.
+
+Native phase uses the primary board membership across every surface. Migration
+72 repairs the legacy card phase from that membership in 64-ID pages. The
+canonical membership writer synchronizes new primary phase changes atomically. This one-time upgrade visits existing cards; normal
+reads use the typed card column. It preserves activity timestamps and emits no
+events. Secondary-board placement remains local to that board and does not change
+the shared summary. Native movement includes meaningful card/metadata updates.
 
 ## Executive Overview and workspace dashboard
 
@@ -270,8 +330,8 @@ resource whose state says nothing, has no completion time and is omitted rather
 than dated from a plan edit or a comment. `current` lists active and blocked
 steps and `next` lists ready unstarted steps, so one step is never in both;
 both keep the topological order with lexicographic ties that geometry uses. It
-is null without a plan, and it is an Overview initiative field: card and work
-reads keep their existing plan fields unchanged.
+is null without a plan, and its legacy Overview initiative field remains available. Card and work
+reads also expose the digest under `work_summary.steps`.
 The projection reads at most 100 open and 100 closed active-lifecycle candidate
 cards for completion digests, reuses the report batch privacy context, and
 declares `truncated` on work and initiatives when more candidates exist.
@@ -376,6 +436,37 @@ OpenAPI, not a persisted historical transition timestamp. Ready steps prefer the
 critical path, then lexicographic id, skipping unreadable linked resources.
 `status_mismatch` is true for backlog cards with completed steps; computation
 never changes phase. `plan_state.health` and Overview `health.status` retain legacy values: stale maps to stalled, blocked to blocked, other detailed states to on_track. New clients read `plan_health.state`.
+
+### Computed card summaries
+
+Existing Card/Work reads keep their legacy response fields unless `summary=1`
+is requested. Opted-in reads add `work_summary`, alias that object at `summary`,
+and retain authored prose in `summary_text`. The computed `status` is always
+present; other parts appear only when supported by canonical data. Existing
+stored phase and plan fields remain available.
+
+`GET /cards` and `GET /boards/{board_id}/cards` remain complete and unpaged by
+default. With `summary=1`, they return at most 50 cards (optional `limit=1..50`)
+and a `next_cursor`; follow `cursor` until it is empty to read the full collection.
+The opt-in page order is immutable card ID order; legacy placement ordering is
+unchanged. An Archive consumer can keep using its existing default read.
+
+Opted-in topic workspace/timeline, card timeline and board workspace reads cap
+their computed card preview at 50 and report `cards_truncated`. Their default
+bundles remain complete. Use the paginated card collection or point card read
+with `summary=1` when a full computed card set is needed. Overview and native
+report card panels accept the same opt-in. Card plan reads and resolved card
+previews expose their computed `summary` directly; Inbox related-card context
+resolves at most 50 distinct card refs per visible page.
+
+Summary parts are `status`, `set_status`, `progress`, `next`, `owner`, `due`,
+`age`, `created_at`, `last_movement_at`, `source`, `steps`, `attention`,
+`resolution_truncated` and `attention_truncated`. Attention includes `count`,
+`oldest_age`, `oldest_at` and optional `truncated`. Ages are elapsed seconds;
+timestamps anchor them. Inbox event identity uses canonical inputs and anchors,
+so elapsed ages, timer-only health transitions and rolling step windows do not
+emit unchanged items. Actual plan, progress, owner, due, movement, source and
+attention changes still emit current summaries.
 
 ### Workspace-local asks summary
 

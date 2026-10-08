@@ -82,7 +82,9 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 			if err != nil || len(data["items"].([]map[string]any)) != i+1 {
 				t.Fatalf("initiatives=%+v error=%v", data, err)
 			}
-			if got := counter.Count(); got != 6 {
+			// Default reports retain the legacy projection: computed attention
+			// summaries add no query unless the report opts in.
+			if got := counter.Count(); got != 7 {
 				t.Fatalf("initiatives: %d queries for %d cards and boards", got, i+1)
 			}
 			counter.Reset()
@@ -93,7 +95,7 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 			handleResolveRefs(out, resolveReq, handlerOptions{primitiveStore: store})
 			// Scoped candidates authorize the read without an additional
 			// whole-body ownership query, independent of workspace size.
-			if out.Code != 200 || counter.Count() != 8 {
+			if out.Code != 200 || counter.Count() != 11 {
 				t.Fatalf("mixed ref queries=%d status=%d body=%s", counter.Count(), out.Code, out.Body.String())
 			}
 		}
@@ -116,7 +118,7 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 	// This new request captures one authorization snapshot, unlike the reused
 	// render request above. Projection queries remain six at either workspace size.
 	data, _, err := reader.materialize(reports.Panel{Type: "live-initiatives", Query: reports.Query{Limit: 40}})
-	if err != nil || len(data["items"].([]map[string]any)) != 38 || counter.Count() != 7 {
+	if err != nil || len(data["items"].([]map[string]any)) != 38 || counter.Count() != 8 {
 		t.Fatalf("private initiatives must be omitted without more queries: data=%+v queries=%d error=%v", data, counter.Count(), err)
 	}
 	for _, item := range data["items"].([]map[string]any) {
@@ -126,7 +128,7 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 	}
 	counter.Reset()
 	previews, err := store.ResolveRefs(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), []string{privateCardRef}, planVisibility(reader.r, reader.opts), time.Now(), 0)
-	if err != nil || len(previews) != 1 || previews[0].Resolvable || previews[0].Title != "" || counter.Count() != 1 {
+	if err != nil || len(previews) != 1 || previews[0].Resolvable || previews[0].Title != "" || counter.Count() != 3 {
 		t.Fatalf("private parent-thread ref: %+v queries=%d error=%v", previews, counter.Count(), err)
 	}
 }

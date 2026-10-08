@@ -64,11 +64,31 @@ func enrichPlans(w http.ResponseWriter, r *http.Request, opts handlerOptions, ca
 	if !ok {
 		return true
 	}
-	if err := store.EnrichCardPlans(r.Context(), cards, planVisibility(r, opts), time.Now().UTC(), planStalledAfter()); err != nil {
+	ctx := r.Context()
+	if r.URL.Query().Get("summary") != "1" && !strings.HasSuffix(r.URL.Path, "/plan") {
+		ctx = primitives.WithLegacyCardPlans(ctx)
+	}
+	if err := store.EnrichCardPlans(ctx, cards, planVisibility(r, opts), time.Now().UTC(), planStalledAfter()); err != nil {
 		workStoreError(w, r, err)
 		return false
 	}
+	if r.URL.Query().Get("summary") == "1" {
+		for _, card := range cards {
+			card["summary_format"] = true
+		}
+	}
 	return true
+}
+
+const summaryCandidateLimit = 50
+
+// Bound the complete enrichment input, not just individual SQL statements.
+// Bundle callers deduplicate and order first so the selected preview is stable.
+func summaryCandidates(cards []map[string]any) ([]map[string]any, bool) {
+	if len(cards) > summaryCandidateLimit {
+		return cards[:summaryCandidateLimit], true
+	}
+	return cards, false
 }
 
 func handleCardPlan(w http.ResponseWriter, r *http.Request, opts handlerOptions, identifier string) {
@@ -127,7 +147,7 @@ func handleCardPlan(w http.ResponseWriter, r *http.Request, opts handlerOptions,
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, 200, map[string]any{"card_ref": card["ref"], "if_updated_at": card["updated_at"], "plan": card["plan"], "plan_state": card["plan_state"], "plan_health": card["plan_health"], "next_step": card["next_step"], "status_mismatch": card["status_mismatch"]})
+	writeJSON(w, 200, map[string]any{"summary": card["work_summary"], "card_ref": card["ref"], "if_updated_at": card["updated_at"], "plan": card["plan"], "plan_state": card["plan_state"], "plan_health": card["plan_health"], "next_step": card["next_step"], "status_mismatch": card["status_mismatch"]})
 }
 
 func handleResolveRefs(w http.ResponseWriter, r *http.Request, opts handlerOptions) {

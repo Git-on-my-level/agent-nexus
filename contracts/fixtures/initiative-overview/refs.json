@@ -29,6 +29,51 @@
         "state": "on_track",
         "reason": "Open steps are progressing.",
         "since": "2026-10-04T12:00:00Z"
+      },
+      "summary": {
+        "status": {
+          "state": "on_track",
+          "label": "In progress",
+          "reason": "Open steps are progressing.",
+          "since": "2026-10-04T12:00:00Z"
+        },
+        "progress": {
+          "done": 0,
+          "total": 1,
+          "unit": "steps"
+        },
+        "next": {
+          "id": "build",
+          "title": "Build",
+          "ref": "",
+          "more": 0
+        },
+        "owner": "actor:actor-1",
+        "age": 0,
+        "last_movement_at": "2026-10-04T12:00:00Z",
+        "attention_truncated": true,
+        "steps": {
+          "window_hours": 168,
+          "completed": {
+            "items": [],
+            "more": 0
+          },
+          "current": {
+            "items": [],
+            "more": 0
+          },
+          "next": {
+            "items": [
+              {
+                "id": "build",
+                "title": "Build",
+                "status": "not_started"
+              }
+            ],
+            "more": 0
+          }
+        },
+        "created_at": "2026-10-04T12:00:00Z"
       }
     },
     {
