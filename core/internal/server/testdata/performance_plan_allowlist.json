@@ -3874,6 +3874,14 @@
     "reason": "Measured merged main ac77fae8 (schema66), captured by GET /topics/{topic_id} (authorized). Source: core/internal/primitives/access_graph.go:12; core/internal/primitives/access_scope.go:56. The final business SELECT and every non-policy business CTE match previously reviewed CI capture cef90ffbc31ae358e51333c43c363a118582c64c621063037575fc689351dc64/749f18bebf088aade0538793cf14322d28825523dbbea789bd6e40c7f6debc0c. Main275 adds evidence/external-key inheritance, changes denied refs/atoms and prunes unused reference CTEs; the exact compiler and ordered plan fingerprint therefore changed. Existing business scan/automatic-index/custom-WHERE findings remain explicitly included; their main/query projection repair is still required.   The SQL shape is unchanged from the previously reviewed main baseline; schema66 indexes change the full ordered plan with no added finding strings for this SQL. The snapshot epoch guard avoids the canonical denial closure only while the consuming epoch matches; an epoch mismatch activates the canonical fallback; an initial cache miss also computes closure during snapshot acquisition. Cached denied/ref membership and automatic lookup indexes remain active. Only this exact SQL/full ordered-plan pair and findings are permitted under SCA-663; route counts, successful/denied status, positive controls, privacy and two SSE ticks remain mandatory. Sparse external-evidence aliases and shallow histories do not certify dense fanout."
   },
   {
+    "sql_sha256": "7559289f6dc38092bc35fd2f2336b6fa3c7c5fc1b6956624c16827c7cccb79c4",
+    "plan_sha256": "2a155410dd15998f51996d44d707dba65292a9b4415a5e36af62bd9deb0e61b8",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "SCA-692 exact bounded timeline selector review: at most 50 request refs resolve via current-handle partial index and card primary keys, then at most 50 canonical IDs hydrate by card primary key with indexed board joins. The full ordered plans contain only indexed business lookups; the scalar membership function checks canonical denial evidence admitted in one immutable SQLite read transaction. No historical alias reason, navigation-edge metadata, history or denial-list scan is read. The generic custom-function finding is therefore confined to explicit bounded keys. Only this exact SQL/full ordered-plan pair is allowed; unchanged SQL/row/VM budgets and both-principal 1/50-card checks remain mandatory.",
+    "issue": "SCA-692",
+    "issue_url": "mention://issue/01a11a2c-6b75-72e6-89da-65bb19ec9e6e"
+  },
+  {
     "sql_sha256": "75705cd8878b7bc19ce4a1d5267d91f2c569a44d2c5b5f969951f1bfde607646",
     "plan_sha256": "0e9e3ea4f3765c9c830c7a8488d7ecd54cfa8e0dc6f53729915c3d24d79b9336",
     "findings": [
@@ -5532,6 +5540,14 @@
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2",
     "reason": "Measured merged main ac77fae8 (schema66), captured by GET /ref-edges (authorized). Source: core/internal/primitives/access_graph.go:12; core/internal/primitives/access_scope.go:56. The final business SELECT and every non-policy business CTE match previously reviewed CI capture 42bd6bce9ee2ca33096dd0265af36cbfe2ee6359af123d4d8965776764c618f1/cdc84fee4c81704d6062f85d6ab99f54c54cea1dbc513ea2a2497e4b39e0a0f0. Main275 adds evidence/external-key inheritance, changes denied refs/atoms and prunes unused reference CTEs; the exact compiler and ordered plan fingerprint therefore changed. Existing business scan/automatic-index/custom-WHERE findings remain explicitly included; their main/query projection repair is still required.   The SQL shape is unchanged from the previously reviewed main baseline; schema66 indexes change the full ordered plan with no added finding strings for this SQL. The snapshot epoch guard avoids the canonical denial closure only while the consuming epoch matches; an epoch mismatch activates the canonical fallback; an initial cache miss also computes closure during snapshot acquisition. Cached denied/ref membership and automatic lookup indexes remain active. Only this exact SQL/full ordered-plan pair and findings are permitted under SCA-663; route counts, successful/denied status, positive controls, privacy and two SSE ticks remain mandatory. Sparse external-evidence aliases and shallow histories do not certify dense fanout."
+  },
+  {
+    "sql_sha256": "a4844243d2d7d58ecc5ca8ab714d78416efc098e48b577eefdb0cfa9474f529f",
+    "plan_sha256": "697c0138467a02bab6d46d27357e6b5c8a5af5a63553ba5271ffffe45dfe1afb",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "SCA-692 exact bounded timeline selector review: at most 50 request refs resolve via current-handle partial index and card primary keys, then at most 50 canonical IDs hydrate by card primary key with indexed board joins. The full ordered plans contain only indexed business lookups; the scalar membership function checks canonical denial evidence admitted in one immutable SQLite read transaction. No historical alias reason, navigation-edge metadata, history or denial-list scan is read. The generic custom-function finding is therefore confined to explicit bounded keys. Only this exact SQL/full ordered-plan pair is allowed; unchanged SQL/row/VM budgets and both-principal 1/50-card checks remain mandatory.",
+    "issue": "SCA-692",
+    "issue_url": "mention://issue/01a11a2c-6b75-72e6-89da-65bb19ec9e6e"
   },
   {
     "sql_sha256": "a50e0e040a3428c5e220316ab07f20f2fe6d0626938a7a36666866b995064951",

@@ -108,6 +108,45 @@ func TestPerformanceWorkSummaryBudgetAndPlans(t *testing.T) {
 				}
 			}
 			t.Logf("summary actor=%s size=%d SQL=%d rows=%d VM=%d elapsed=%s", principal.ActorID, size, queries, rows, work.VMSteps, elapsed)
+			// Timeline refs are capped before this batched selector, including
+			// handle aliases. Certify hydration as well as summary computation.
+			refs := make([]string, len(page.Work))
+			for i, card := range page.Work {
+				refs[i] = anyString(card["ref"])
+			}
+			ctx = primitives.WithRequestAccessScope(context.Background(), primitives.AccessScope{ActorID: principal.ActorID, PMActorID: env.agent.ActorID})
+			ctx, closeRead, err = s.BeginOverviewRead(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			capture.Start()
+			loaded, err := s.SummaryCardSnapshots(ctx, refs)
+			statements, queries, rows = capture.Stop()
+			work = capture.Work()
+			closeRead()
+			if err != nil || capture.WorkError() != nil || len(loaded) != size || queries > 100 || rows > 1024 || work.VMSteps > 50000 {
+				t.Fatalf("timeline summary selector size=%d loaded=%d SQL=%d rows=%d VM=%d err=%v instrumentation=%v", size, len(loaded), queries, rows, work.VMSteps, err, capture.WorkError())
+			}
+			for _, statement := range statements {
+				details, err := perfguard.Explain(context.Background(), env.db, statement)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if findings := perfguard.Findings(statement.SQL, details, large); len(findings) > 0 {
+					hash, planHash := perfguard.PlanSQLHash(statement.SQL), perfguard.PlanHash(details)
+					key := hash + "\n" + planHash
+					if !seenPlans[key] {
+						seenPlans[key] = true
+						observed = append(observed, perfguard.PlanException{SQLHash: hash, PlanHash: planHash, Findings: findings})
+					}
+					for _, finding := range findings {
+						if !allowed[key+"\n"+finding] {
+							t.Errorf("unreviewed timeline query plan finding=%s sql_sha256=%s plan_sha256=%s", finding, hash, planHash)
+						}
+					}
+				}
+			}
+			t.Logf("timeline selector actor=%s size=%d SQL=%d rows=%d VM=%d", principal.ActorID, size, queries, rows, work.VMSteps)
 		}
 	}
 }

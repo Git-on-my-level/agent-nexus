@@ -1242,9 +1242,10 @@ work_summary:
   migrated_alias: summary (opt-in via summary=1)
   prose_read_field: summary_text
   semantics:
-    - Every current card-bearing read has one computed work_summary.status with state, label and reason. Board roles select cards only.
-    - Card and work write inputs retain their string summary. Card revision content remains prose. Default response summary remains prose; summary=1 aliases work_summary and preserves prose in summary_text. Stored phase and legacy plan fields remain unchanged.
+    - Supported card-bearing reads opt in with summary=1 to computed work_summary.status with state, label and reason. Default card collections preserve legacy shapes and complete results. Board roles select cards only.
+    - Card and work write inputs retain their string summary. Card revision content remains prose. Default responses add no summary fields or pagination; summary=1 adds work_summary, aliases it at summary and preserves prose in summary_text. Stored phase and legacy plan fields remain unchanged.
     - Status uses shared plan health, including phase and due date for planless cards. set_status is included only when stored phase disagrees.
     - Progress appears for a nonempty plan or explicit child relations; next and steps appear only for a plan. Owner, due, age, last_movement_at and external source appear only when known.
-    - Summary batches contain at most 50 card ids. Plan/child refs share bounded resolution and truncated refs remain unknown. Attention samples indexed oldest-first candidates before canonical visibility and recipient checks; a truncated count is a lower bound.
+    - Opt-in card and board-card pages contain at most 50 cards with next_cursor. Topic and card timeline bundles and board workspace computed previews cap candidates at 50 before enrichment and signal cards_truncated; their legacy bundles remain complete. Summary SQL batches contain at most 50 card ids. Plan/child refs share bounded resolution and truncated refs remain unknown. Attention samples indexed oldest-first candidates before canonical visibility and recipient checks; a truncated count is a lower bound.
     - Inbox related_cards is a bounded batch of readable card previews, never an authority grant. Work search uses the same summary as work lists; document-only search contains no cards.
+    - Inbox stream identity uses canonical summary inputs, creation and oldest-ask timestamps. Elapsed age, oldest_age, rolling digest windows and timer-only health changes never change event IDs; underlying plan, progress, ownership, due, movement, source and attention changes do.

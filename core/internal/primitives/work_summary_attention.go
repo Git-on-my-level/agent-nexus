@@ -101,10 +101,12 @@ func (s *Store) enrichSummaryAttention(ctx context.Context, inputs map[string]ca
 			out.AttentionTruncated = partial
 			if counts[c.ID] > 0 {
 				age := int64(0)
+				at := ""
 				if !oldest[c.ID].IsZero() {
 					age = ageSeconds(now, oldest[c.ID])
+					at = oldest[c.ID].UTC().Format(time.RFC3339Nano)
 				}
-				out.Attention = &SummaryAttention{Count: counts[c.ID], OldestAge: age, Truncated: partial}
+				out.Attention = &SummaryAttention{Count: counts[c.ID], OldestAge: age, OldestAt: at, Truncated: partial}
 			}
 		}
 	}

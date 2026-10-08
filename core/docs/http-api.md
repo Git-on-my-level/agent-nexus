@@ -437,6 +437,37 @@ critical path, then lexicographic id, skipping unreadable linked resources.
 `status_mismatch` is true for backlog cards with completed steps; computation
 never changes phase. `plan_state.health` and Overview `health.status` retain legacy values: stale maps to stalled, blocked to blocked, other detailed states to on_track. New clients read `plan_health.state`.
 
+### Computed card summaries
+
+Existing Card/Work reads keep their legacy response fields unless `summary=1`
+is requested. Opted-in reads add `work_summary`, alias that object at `summary`,
+and retain authored prose in `summary_text`. The computed `status` is always
+present; other parts appear only when supported by canonical data. Existing
+stored phase and plan fields remain available.
+
+`GET /cards` and `GET /boards/{board_id}/cards` remain complete and unpaged by
+default. With `summary=1`, they return at most 50 cards (optional `limit=1..50`)
+and a `next_cursor`; follow `cursor` until it is empty to read the full collection.
+The opt-in page order is immutable card ID order; legacy placement ordering is
+unchanged. An Archive consumer can keep using its existing default read.
+
+Opted-in topic workspace/timeline, card timeline and board workspace reads cap
+their computed card preview at 50 and report `cards_truncated`. Their default
+bundles remain complete. Use the paginated card collection or point card read
+with `summary=1` when a full computed card set is needed. Overview and native
+report card panels accept the same opt-in. Card plan reads and resolved card
+previews expose their computed `summary` directly; Inbox related-card context
+resolves at most 50 distinct card refs per visible page.
+
+Summary parts are `status`, `set_status`, `progress`, `next`, `owner`, `due`,
+`age`, `created_at`, `last_movement_at`, `source`, `steps`, `attention`,
+`resolution_truncated` and `attention_truncated`. Attention includes `count`,
+`oldest_age`, `oldest_at` and optional `truncated`. Ages are elapsed seconds;
+timestamps anchor them. Inbox event identity uses canonical inputs and anchors,
+so elapsed ages, timer-only health transitions and rolling step windows do not
+emit unchanged items. Actual plan, progress, owner, due, movement, source and
+attention changes still emit current summaries.
+
 ### Workspace-local asks summary
 
 `GET /inbox/summary?limit=5` returns `{open_ask_count, asks, generated_at}` from

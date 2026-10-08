@@ -520,6 +520,7 @@ func handlePurgeBoard(w http.ResponseWriter, r *http.Request, opts handlerOption
 }
 
 func handleGetBoardWorkspace(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID string) {
+	opts.summaryFormat = r.URL.Query().Get("summary") == "1"
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
@@ -567,11 +568,11 @@ func handleListBoardCards(w http.ResponseWriter, r *http.Request, opts handlerOp
 	if !enrichPlans(w, r, opts, cards) {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"board_id":    boardID,
-		"cards":       publicCardsView(cards),
-		"next_cursor": next,
-	})
+	response := map[string]any{"board_id": boardID, "cards": publicCardsView(cards)}
+	if r.URL.Query().Get("summary") == "1" {
+		response["next_cursor"] = next
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func handleGetBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID, identifier string) {
@@ -1416,14 +1417,19 @@ func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardI
 		}
 	}
 
-	cards, err := opts.primitiveStore.ListCards(ctx, primitives.CardListFilter{BoardID: boardID, States: []string{"active"}, Limit: 51})
+	var cards []map[string]any
+	if opts.summaryFormat {
+		cards, err = opts.primitiveStore.ListCards(ctx, primitives.CardListFilter{BoardID: boardID, States: []string{"active"}, Limit: summaryCandidateLimit + 1})
+	} else {
+		cards, err = opts.primitiveStore.ListBoardCards(ctx, boardID)
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	cardsTruncated := len(cards) > 50
-	if cardsTruncated {
-		cards = cards[:50]
+	cardsTruncated := false
+	if opts.summaryFormat {
+		cards, cardsTruncated = summaryCandidates(cards)
 	}
 	if len(visibility) > 0 {
 		if store, ok := opts.primitiveStore.(interface {
@@ -1435,13 +1441,16 @@ func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardI
 			}
 		}
 	}
-	if store, ok := opts.primitiveStore.(planStore); ok {
+	if store, ok := opts.primitiveStore.(planStore); ok && opts.summaryFormat {
 		var visible func(string, string) bool
 		if len(visibility) > 0 {
 			visible = visibility[0]
 		}
 		if err = store.EnrichCardPlans(ctx, cards, visible, time.Now().UTC(), planStalledAfter()); err != nil {
 			return nil, err
+		}
+		for _, card := range cards {
+			card["summary_format"] = true
 		}
 	}
 	threadIDs := collectBoardWorkspaceThreadIDs(backingThreadID, board, cards)
@@ -1471,8 +1480,7 @@ func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardI
 		boardSummary["truncated"] = true
 	}
 	freshness := aggregateTopicProjectionFreshness(states, threadIDs)
-	return map[string]any{
-		"cards_truncated":         cardsTruncated,
+	response := map[string]any{
 		"board_id":                boardID,
 		"board":                   board,
 		"primary_topic":           primaryTopic,
@@ -1486,7 +1494,11 @@ func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardI
 		"warnings":                map[string]any{"items": warnings, "count": len(warnings)},
 		"section_kinds":           map[string]any{"board": "canonical", "primary_topic": "canonical", "backing_thread": "canonical", "cards": "convenience", "documents": "derived", "inbox": "derived", "board_summary": "derived"},
 		"generated_at":            now.Format(time.RFC3339Nano),
-	}, nil
+	}
+	if opts.summaryFormat {
+		response["cards_truncated"] = cardsTruncated
+	}
+	return response, nil
 }
 
 func buildBoardWorkspaceCardsSection(ctx context.Context, opts handlerOptions, board map[string]any, cards []map[string]any, states map[string]topicProjectionState) (map[string]any, []map[string]any, error) {

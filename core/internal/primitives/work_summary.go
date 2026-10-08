@@ -1,6 +1,9 @@
 package primitives
 
 import (
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -19,6 +22,7 @@ type WorkSummary struct {
 	Owner               string            `json:"owner,omitempty"`
 	Due                 string            `json:"due,omitempty"`
 	Age                 *int64            `json:"age,omitempty"`
+	CreatedAt           string            `json:"created_at,omitempty"`
 	LastMovementAt      string            `json:"last_movement_at,omitempty"`
 	Source              map[string]any    `json:"source,omitempty"`
 	ResolutionTruncated bool              `json:"resolution_truncated,omitempty"`
@@ -44,9 +48,43 @@ type SummaryNext struct {
 	More  int    `json:"more"`
 }
 type SummaryAttention struct {
-	Count     int   `json:"count"`
-	OldestAge int64 `json:"oldest_age"`
-	Truncated bool  `json:"truncated,omitempty"`
+	Count     int    `json:"count"`
+	OldestAge int64  `json:"oldest_age"`
+	OldestAt  string `json:"oldest_at,omitempty"`
+	Truncated bool   `json:"truncated,omitempty"`
+}
+
+// Stream identity uses canonical inputs, never health age thresholds or the
+// rolling completed-step window. Select only this card's admitted facts; other
+// cards in the shared resolution batch cannot invalidate its event identity.
+func summaryChangeKey(input cardHealthInput, p *plans.Plan, facts map[string]plans.Fact, summary *WorkSummary, threshold time.Duration) string {
+	selected := map[string]plans.Fact{}
+	refs := append([]string{}, input.Children...)
+	if p != nil {
+		for _, step := range p.Steps {
+			if step.Ref != "" {
+				refs = append(refs, step.Ref)
+			}
+		}
+	}
+	for _, ref := range refs {
+		selected[ref] = facts[ref]
+	}
+	var attention *SummaryAttention
+	if summary.Attention != nil {
+		copy := *summary.Attention
+		copy.OldestAge = 0
+		attention = &copy
+	}
+	raw, _ := json.Marshal(struct {
+		Input              cardHealthInput
+		Plan               *plans.Plan
+		Facts              map[string]plans.Fact
+		Attention          *SummaryAttention
+		AttentionTruncated bool
+		Threshold          time.Duration
+	}{input, p, selected, attention, summary.AttentionTruncated, threshold})
+	return fmt.Sprintf("%x", sha256.Sum256(raw))
 }
 
 func summaryLabel(state string) string {
@@ -98,6 +136,7 @@ func buildWorkSummary(input cardHealthInput, p *plans.Plan, state plans.State, f
 	if !input.Created.IsZero() {
 		age := ageSeconds(now, input.Created)
 		out.Age = &age
+		out.CreatedAt = input.Created.UTC().Format(time.RFC3339Nano)
 	}
 	if !at.IsZero() {
 		out.LastMovementAt = at.UTC().Format(time.RFC3339Nano)

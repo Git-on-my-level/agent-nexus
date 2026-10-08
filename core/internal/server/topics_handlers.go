@@ -17,6 +17,7 @@ import (
 )
 
 type topicResourceBundle struct {
+	CardsTruncated      bool
 	PrimaryThread       map[string]any
 	Boards              []map[string]any
 	Cards               []map[string]any
@@ -361,6 +362,7 @@ func handleTopicLifecycleWithReason(w http.ResponseWriter, r *http.Request, opts
 }
 
 func handleGetTopicTimeline(w http.ResponseWriter, r *http.Request, opts handlerOptions, topicID string) {
+	opts.summaryFormat = r.URL.Query().Get("summary") == "1"
 	opts.readVisibility = planVisibility(r, opts)
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
@@ -386,6 +388,7 @@ func handleGetTopicTimeline(w http.ResponseWriter, r *http.Request, opts handler
 }
 
 func handleGetTopicWorkspace(w http.ResponseWriter, r *http.Request, opts handlerOptions, topicID string) {
+	opts.summaryFormat = r.URL.Query().Get("summary") == "1"
 	opts.readVisibility = planVisibility(r, opts)
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
@@ -435,7 +438,7 @@ func buildTopicTimelinePayload(ctx context.Context, opts handlerOptions, topicID
 		return nil, err
 	}
 
-	return map[string]any{
+	response := map[string]any{
 		"topic":                 topic,
 		"events":                events,
 		"artifacts":             artifacts,
@@ -443,7 +446,11 @@ func buildTopicTimelinePayload(ctx context.Context, opts handlerOptions, topicID
 		"documents":             bundle.Documents,
 		"threads":               bundle.Threads,
 		"notification_receipts": receipts,
-	}, nil
+	}
+	if opts.summaryFormat {
+		response["cards_truncated"] = bundle.CardsTruncated
+	}
+	return response, nil
 }
 
 func buildTopicWorkspacePayload(ctx context.Context, opts handlerOptions, topicID string) (map[string]any, error) {
@@ -457,7 +464,7 @@ func buildTopicWorkspacePayload(ctx context.Context, opts handlerOptions, topicI
 		return nil, err
 	}
 
-	return map[string]any{
+	response := map[string]any{
 		"topic":                topic,
 		"cards":                bundle.Cards,
 		"boards":               bundle.Boards,
@@ -466,7 +473,11 @@ func buildTopicWorkspacePayload(ctx context.Context, opts handlerOptions, topicI
 		"inbox":                bundle.Inbox,
 		"projection_freshness": bundle.ProjectionFreshness,
 		"generated_at":         time.Now().UTC().Format(time.RFC3339Nano),
-	}, nil
+	}
+	if opts.summaryFormat {
+		response["cards_truncated"] = bundle.CardsTruncated
+	}
+	return response, nil
 }
 
 func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic map[string]any) (topicResourceBundle, error) {
@@ -652,9 +663,17 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 		}
 	}
 
-	if store, ok := opts.primitiveStore.(planStore); ok {
+	cards = dedupeAndSortResourceMaps(cards)
+	cardsTruncated := false
+	if opts.summaryFormat {
+		cards, cardsTruncated = summaryCandidates(cards)
+	}
+	if store, ok := opts.primitiveStore.(planStore); ok && opts.summaryFormat {
 		if err := store.EnrichCardPlans(ctx, cards, opts.readVisibility, time.Now().UTC(), planStalledAfter()); err != nil {
 			return topicResourceBundle{}, err
+		}
+		for _, card := range cards {
+			card["summary_format"] = true
 		}
 	}
 	cards = publicCardsView(cards)
@@ -674,6 +693,7 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 	threads = dedupeAndSortResourceMaps(threads)
 
 	return topicResourceBundle{
+		CardsTruncated:      cardsTruncated,
 		PrimaryThread:       primaryThread,
 		Boards:              dedupeAndSortResourceMaps(boards),
 		Cards:               dedupeAndSortResourceMaps(cards),

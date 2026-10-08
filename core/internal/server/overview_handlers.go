@@ -85,6 +85,9 @@ func handleSetWorkspaceDashboard(w http.ResponseWriter, r *http.Request, opts ha
 }
 
 func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+	if r.URL.Query().Get("summary") != "1" {
+		r = r.WithContext(primitives.WithLegacyCardPlans(r.Context()))
+	}
 	view := r.URL.Query().Get("work_view")
 	if view != "" && view != "full" && view != "summary" {
 		writeError(w, 400, "invalid_request", "work_view must be full or summary")
@@ -170,6 +173,13 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 				for _, row := range rows {
 					row["summary"] = row["work_summary"]
 				}
+			}
+		}
+	} else if section, ok := payload["initiatives"].(map[string]any); ok {
+		if rows, ok := section["items"].([]map[string]any); ok {
+			for _, row := range rows {
+				delete(row, "work_summary")
+				delete(row, "summary_text")
 			}
 		}
 	}

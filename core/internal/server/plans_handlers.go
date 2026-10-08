@@ -64,7 +64,11 @@ func enrichPlans(w http.ResponseWriter, r *http.Request, opts handlerOptions, ca
 	if !ok {
 		return true
 	}
-	if err := store.EnrichCardPlans(r.Context(), cards, planVisibility(r, opts), time.Now().UTC(), planStalledAfter()); err != nil {
+	ctx := r.Context()
+	if r.URL.Query().Get("summary") != "1" && !strings.HasSuffix(r.URL.Path, "/plan") {
+		ctx = primitives.WithLegacyCardPlans(ctx)
+	}
+	if err := store.EnrichCardPlans(ctx, cards, planVisibility(r, opts), time.Now().UTC(), planStalledAfter()); err != nil {
 		workStoreError(w, r, err)
 		return false
 	}
@@ -74,6 +78,17 @@ func enrichPlans(w http.ResponseWriter, r *http.Request, opts handlerOptions, ca
 		}
 	}
 	return true
+}
+
+const summaryCandidateLimit = 50
+
+// Bound the complete enrichment input, not just individual SQL statements.
+// Bundle callers deduplicate and order first so the selected preview is stable.
+func summaryCandidates(cards []map[string]any) ([]map[string]any, bool) {
+	if len(cards) > summaryCandidateLimit {
+		return cards[:summaryCandidateLimit], true
+	}
+	return cards, false
 }
 
 func handleCardPlan(w http.ResponseWriter, r *http.Request, opts handlerOptions, identifier string) {

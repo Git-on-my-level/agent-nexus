@@ -182,10 +182,12 @@ type BoardListFilter struct {
 
 // CardListFilter scopes global card listing (GET /cards).
 type CardListFilter struct {
-	States   []string
-	BoardID  string
-	BeforeID string
-	Limit    int // zero preserves internal unpaginated consumers
+	States                 []string
+	BoardID                string
+	BeforeID               string
+	Limit                  int      // zero preserves internal unpaginated consumers
+	ids                    []string // Internal bounded timeline hydration; never an HTTP filter.
+	includeLifecycleHidden bool
 }
 
 type BoardListItem struct {
@@ -1450,6 +1452,20 @@ func (s *Store) ListCards(ctx context.Context, filter CardListFilter) ([]map[str
 	prefix := ""
 	args := []any{}
 	order := ` ORDER BY c.board_id ASC, ` + boardColumnOrderSQL("c.column_key") + `, c.rank ASC,c.id ASC`
+	if len(filter.ids) > 0 {
+		if len(filter.ids) > summaryBatchSize {
+			return nil, invalidBoardRequest("card hydration ids must contain at most 50 strings")
+		}
+		if filter.includeLifecycleHidden {
+			// Explicit timeline subjects include lifecycle-hidden cards;
+			// canonical authorization remains enforced on scoped relations.
+			whereSQL = "1=1"
+		}
+		raw, _ := json.Marshal(filter.ids)
+		whereSQL += ` AND c.id IN (SELECT value FROM json_each(?))`
+		args = append(args, string(raw))
+		order = ` ORDER BY c.id ASC`
+	}
 	if filter.BoardID != "" {
 		// Membership (including a secondary board) is authoritative for placement.
 		from = `ref_edges re JOIN cards c ON c.id=re.target_id ` + cardVisibilityJoins + ` LEFT JOIN boards membership_board ON membership_board.id=re.source_id `

@@ -32,6 +32,7 @@ type RefPreview struct {
 	ObservedAt              string          `json:"observed_at,omitempty"`
 	Source                  string          `json:"source,omitempty"`
 	Summary                 *WorkSummary    `json:"summary,omitempty"`
+	SummaryChangeKey        string          `json:"-"`
 	PlanHealth              *plans.Health   `json:"plan_health,omitempty"`
 	PlanResolutionTruncated bool            `json:"plan_resolution_truncated,omitempty"`
 	StatusMismatch          bool            `json:"status_mismatch,omitempty"`
@@ -434,10 +435,27 @@ func (s *Store) ResolveRefs(ctx context.Context, refs []string, visible func(str
 	if err = s.enrichSummaryAttention(ctx, movement, summaries, now); err != nil {
 		return nil, err
 	}
+	for i := range out {
+		if out[i].Summary != nil {
+			var p *plans.Plan
+			if value, ok := ps[out[i].ID]; ok {
+				p = &value
+			}
+			out[i].SummaryChangeKey = summaryChangeKey(movement[out[i].ID], p, facts, out[i].Summary, threshold)
+		}
+	}
 	return out, nil
 }
 
 // EnrichCardPlans batches both plans and referenced state for an entire read.
+type legacyCardPlansKey struct{}
+
+// WithLegacyCardPlans preserves existing unpaged consumers without adding
+// child/attention summary resolution to their legacy plan enrichment.
+func WithLegacyCardPlans(ctx context.Context) context.Context {
+	return context.WithValue(ctx, legacyCardPlansKey{}, true)
+}
+
 func (s *Store) EnrichCardPlans(ctx context.Context, cards []map[string]any, visible func(string, string) bool, now time.Time, threshold time.Duration) error {
 	if len(cards) == 0 {
 		return nil
@@ -462,7 +480,12 @@ func (s *Store) EnrichCardPlans(ctx context.Context, cards []map[string]any, vis
 	if err != nil {
 		return err
 	}
-	facts, err := s.planFacts(ctx, summaryFactPlans(ps, movement), visible)
+	legacy, _ := ctx.Value(legacyCardPlansKey{}).(bool)
+	factPlans := ps
+	if !legacy {
+		factPlans = summaryFactPlans(ps, movement)
+	}
+	facts, err := s.planFacts(ctx, factPlans, visible)
 	if err != nil {
 		return err
 	}
@@ -492,8 +515,14 @@ func (s *Store) EnrichCardPlans(ctx context.Context, cards []map[string]any, vis
 		}
 		health := plans.HealthFor(p, state, at, input.Created, now, threshold, input.Due, input.Phase)
 		card["plan_health"] = health
-		summaries[id] = buildWorkSummary(input, p, state, facts, now, threshold)
-		card["work_summary"] = summaries[id]
+		if legacy {
+			health = plans.HealthFor(p, state, at, input.Created, now, threshold, input.Due)
+			card["plan_health"] = health
+		}
+		if !legacy {
+			summaries[id] = buildWorkSummary(input, p, state, facts, now, threshold)
+			card["work_summary"] = summaries[id]
+		}
 		if p != nil {
 			state.HealthState = health.State
 			state.Health = plans.LegacyHealth(health.State)

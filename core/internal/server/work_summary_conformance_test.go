@@ -42,6 +42,13 @@ func TestWorkSummaryCardReadConformanceAndLegacyProse(t *testing.T) {
 			t.Run(target, func(t *testing.T) {
 				body := workGetJSON(t, h.baseURL+target, 200)
 				cards := collectSummaryCards(body)
+				if !optIn {
+					if len(cards) != 0 {
+						t.Fatal("legacy response gained computed fields", body)
+					}
+					assertLegacyCardShape(t, body)
+					return
+				}
 				if len(cards) == 0 {
 					t.Fatalf("no card summary in %s: %v", target, body)
 				}
@@ -146,13 +153,13 @@ func TestCardSummaryPageLimitsAndCursors(t *testing.T) {
 		}
 	}
 	for _, base := range []string{"/cards", "/boards/" + anyString(b["id"]) + "/cards"} {
-		first := workGetJSON(t, h.baseURL+base+"?limit=2", 200)
+		first := workGetJSON(t, h.baseURL+base+"?summary=1&limit=2", 200)
 		cards := first["cards"].([]any)
 		cursor := anyString(first["next_cursor"])
 		if len(cards) != 2 || cursor == "" {
 			t.Fatal(first)
 		}
-		second := workGetJSON(t, h.baseURL+base+"?limit=2&cursor="+cursor, 200)
+		second := workGetJSON(t, h.baseURL+base+"?summary=1&limit=2&cursor="+cursor, 200)
 		rest := second["cards"].([]any)
 		if len(rest) != 1 || second["next_cursor"] != "" {
 			t.Fatal(second)
@@ -162,6 +169,6 @@ func TestCardSummaryPageLimitsAndCursors(t *testing.T) {
 				t.Fatal("cursor repeated card")
 			}
 		}
-		workGetJSON(t, h.baseURL+base+"?limit=51", 400)
+		workGetJSON(t, h.baseURL+base+"?summary=1&limit=51", 400)
 	}
 }

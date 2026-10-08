@@ -13,6 +13,20 @@ import (
 // Card pages seek immutable UUIDs; clients use phase/rank for board placement.
 // The page selector precedes hydration and summary resolution.
 func readCardPage(w http.ResponseWriter, r *http.Request, opts handlerOptions, board string, states []string) ([]map[string]any, string, bool) {
+	if r.URL.Query().Get("summary") != "1" {
+		var cards []map[string]any
+		var err error
+		if board == "" {
+			cards, err = opts.primitiveStore.ListCards(r.Context(), primitives.CardListFilter{States: states})
+		} else {
+			cards, err = opts.primitiveStore.ListBoardCards(r.Context(), board)
+		}
+		if err != nil {
+			workStoreError(w, r, err)
+			return nil, "", false
+		}
+		return cards, "", true
+	}
 	limit := 50
 	if raw := r.URL.Query().Get("limit"); raw != "" {
 		n, err := strconv.Atoi(raw)

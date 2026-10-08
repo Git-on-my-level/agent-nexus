@@ -1,8 +1,10 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"net/http"
+	"sort"
 	"strings"
 
 	"agent-nexus-core/internal/primitives"
@@ -34,7 +36,11 @@ func handleListCards(w http.ResponseWriter, r *http.Request, opts handlerOptions
 	if !enrichPlans(w, r, opts, cards) {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"cards": publicCardsView(cards), "next_cursor": next})
+	response := map[string]any{"cards": publicCardsView(cards)}
+	if r.URL.Query().Get("summary") == "1" {
+		response["next_cursor"] = next
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func handleCreateCardGlobal(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
@@ -231,27 +237,66 @@ func handleGetCardTimeline(w http.ResponseWriter, r *http.Request, opts handlerO
 		}
 	}
 
-	cards := make([]map[string]any, 0, len(cardIDs))
+	ids := []string{cardID}
 	for id := range cardIDs {
-		loaded, err := opts.primitiveStore.GetBoardCard(r.Context(), "", id)
+		if id != cardID {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids[1:])
+	cardsTruncated := false
+	if r.URL.Query().Get("summary") == "1" && len(ids) > summaryCandidateLimit {
+		ids = ids[:summaryCandidateLimit]
+		cardsTruncated = true
+	}
+	cards := make([]map[string]any, 0, len(ids))
+	if batch, ok := opts.primitiveStore.(interface {
+		SummaryCardSnapshots(context.Context, []string) (map[string]map[string]any, error)
+	}); ok && r.URL.Query().Get("summary") == "1" {
+		refs := make([]string, len(ids))
+		for i, id := range ids {
+			refs[i] = "card:" + id
+		}
+		loaded, err := batch.SummaryCardSnapshots(r.Context(), refs)
 		if err != nil {
-			if errors.Is(err, primitives.ErrNotFound) {
-				continue
-			}
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load related cards")
+			workStoreError(w, r, err)
 			return
 		}
-		cards = append(cards, loaded)
+		for _, ref := range refs {
+			if loaded[ref] != nil {
+				cards = append(cards, loaded[ref])
+			}
+		}
+	} else {
+		for _, id := range ids {
+			loaded, err := opts.primitiveStore.GetBoardCard(r.Context(), "", id)
+			if err != nil {
+				if errors.Is(err, primitives.ErrNotFound) {
+					continue
+				}
+				writeError(w, http.StatusInternalServerError, "internal_error", "failed to load related cards")
+				return
+			}
+			cards = append(cards, loaded)
+		}
 	}
 	var accessible bool
 	cards, accessible = filterPlanCards(w, r, opts, cards)
 	if !accessible {
 		return
 	}
-	if !enrichPlans(w, r, opts, cards) {
-		return
+	cards = dedupeAndSortResourceMaps(cards)
+	if r.URL.Query().Get("summary") == "1" {
+		if !enrichPlans(w, r, opts, cards) {
+			return
+		}
+		for _, loaded := range cards {
+			if anyString(loaded["id"]) == cardID {
+				card = loaded
+			}
+		}
 	}
-	cards = publicCardsView(dedupeAndSortResourceMaps(cards))
+	cards = publicCardsView(cards)
 
 	threads := make([]map[string]any, 0, len(threadIDs))
 	for id := range threadIDs {
@@ -271,7 +316,7 @@ func handleGetCardTimeline(w http.ResponseWriter, r *http.Request, opts handlerO
 	}
 	threads = dedupeAndSortResourceMaps(threads)
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	response := map[string]any{
 		"card":               publicCardView(card),
 		"events":             exp.Events,
 		"artifacts":          mapsByIDToSortedSlice(exp.Artifacts),
@@ -279,7 +324,11 @@ func handleGetCardTimeline(w http.ResponseWriter, r *http.Request, opts handlerO
 		"documents":          mapsByIDToSortedSlice(exp.Documents),
 		"document_revisions": mapsByIDToSortedSlice(exp.DocumentRevisions),
 		"threads":            threads,
-	})
+	}
+	if r.URL.Query().Get("summary") == "1" {
+		response["cards_truncated"] = cardsTruncated
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func handleListCardRevisions(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {

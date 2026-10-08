@@ -36,14 +36,20 @@ func HealthFor(p *Plan, state State, movement, created, now time.Time, threshold
 			h.State, h.Reason = "blocked", "The card is blocked."
 		default:
 			h.State, h.Reason, anchor = "no_plan", "Card has no plan steps.", created
+			if len(cardPhase) == 0 {
+				h.Reason = "Initiative has no plan steps."
+			}
 			d, err := time.Parse(time.RFC3339, cardDue)
 			if err != nil {
 				d, err = time.Parse("2006-01-02", cardDue)
 			}
-			if err == nil && !d.After(now.Add(24*time.Hour)) {
+			if len(cardPhase) > 0 && err == nil && !d.After(now.Add(24*time.Hour)) {
 				h.State, h.Reason, anchor = "at_risk", "The card is overdue or due within 24 hours.", d.Add(-24*time.Hour)
 			} else if movement.IsZero() || now.Sub(movement) >= threshold {
 				h.State, h.Reason = "stale", "Card has no plan and no recent card or discussion activity."
+				if len(cardPhase) == 0 {
+					h.Reason = "Initiative has no plan and no recent card or discussion activity."
+				}
 				if !movement.IsZero() {
 					anchor = movement.Add(threshold)
 				}
