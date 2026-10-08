@@ -14,6 +14,7 @@ import (
 // card's summary until the HTTP boundary, so search and narrative derivation
 // cannot accidentally treat presentation data as card content.
 type WorkSummary struct {
+	Hints               []string          `json:"hints,omitempty"`
 	Steps               *plans.StepDigest `json:"steps,omitempty"`
 	Status              SummaryStatus     `json:"status"`
 	SetStatus           *SummaryStatus    `json:"set_status,omitempty"`
@@ -99,7 +100,52 @@ func ageSeconds(now, at time.Time) int64 {
 	}
 	return int64(now.Sub(at) / time.Second)
 }
+func summaryWorkflowPhase(phase string) string {
+	switch {
+	case plans.Status(phase) == "done":
+		return "done"
+	case phase == "in_review":
+		return "review"
+	case phase == "active" || phase == "open":
+		return "in_progress"
+	case phase == "" || phase == "no_plan":
+		return "unknown"
+	default:
+		return phase
+	}
+}
+
+func summaryHealth(input cardHealthInput, p *plans.Plan, state plans.State, at, now time.Time, threshold time.Duration) plans.Health {
+	health := plans.HealthFor(p, state, at, input.Created, now, threshold, input.Due, input.Phase)
+	if p != nil && len(p.Steps) > 0 {
+		return health
+	}
+	// Preserve legacy plan health. Presentation uses workflow and only an
+	// overdue date overrides it; near due dates must not hide inactivity risk.
+	if health.State == "at_risk" {
+		due, err := time.Parse(time.RFC3339, input.Due)
+		if err != nil {
+			due, err = time.Parse("2006-01-02", input.Due)
+		}
+		if err == nil && !due.After(now) {
+			health.Reason = "The card is overdue."
+			anchor := due.UTC().Format(time.RFC3339Nano)
+			health.Since = &anchor
+			return health
+		}
+		health = plans.HealthFor(nil, state, at, input.Created, now, threshold, "", input.Phase)
+	}
+	if health.State == "no_plan" {
+		health.State = summaryWorkflowPhase(input.Phase)
+		health.Reason = "The card is marked " + summaryLabel(health.State) + "."
+	}
+	return health
+}
+
 func summaryPhaseAgrees(phase string, health plans.Health, state plans.State) bool {
+	if summaryWorkflowPhase(phase) == health.State {
+		return true
+	}
 	switch health.State {
 	case "done":
 		return plans.Status(phase) == "done"
@@ -128,8 +174,11 @@ func buildWorkSummary(input cardHealthInput, p *plans.Plan, state plans.State, f
 	if moved, err := time.Parse(time.RFC3339Nano, state.LastMovementAt); err == nil && moved.After(at) {
 		at = moved
 	}
-	health := plans.HealthFor(p, state, at, input.Created, now, threshold, input.Due, input.Phase)
+	health := summaryHealth(input, p, state, at, now, threshold)
 	out := &WorkSummary{Status: SummaryStatus{State: health.State, Label: summaryLabel(health.State), Reason: health.Reason, Since: health.Since}, Owner: input.Owner, Due: input.Due}
+	if p == nil || len(p.Steps) == 0 {
+		out.Hints = []string{"no_plan"}
+	}
 	if input.Phase != "" && !summaryPhaseAgrees(input.Phase, health, state) {
 		out.SetStatus = &SummaryStatus{State: input.Phase, Label: summaryLabel(input.Phase)}
 	}

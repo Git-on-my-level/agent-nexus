@@ -316,7 +316,7 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	w.Header().Set("Cache-Control", "no-store")
 	if view == "summary" {
 		for i, item := range public {
-			public[i] = compactOverviewWork(item)
+			public[i] = compactOverviewWork(item, r.URL.Query().Get("summary") == "1")
 		}
 	}
 	writeJSON(w, 200, payload)

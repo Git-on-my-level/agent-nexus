@@ -49,6 +49,29 @@ and complete delivery after a mutation to an earlier page during a sweep.
 
 ## Running the gates
 
+Agent detail's `summary=1` recent-card preview admits at most 51 current/recent-run
+refs and two 51-position assignment windows (bare actor ID and typed ref).
+Migration 73 installs `idx_cards_agent_summary(assignee,id)` for active cards and
+the internal `agent_summary_card_positions` routing view. Handle/ID resolution
+uses the existing unique handle and primary-key indexes. Only routing keys pass
+through the view; canonical scoped card hydration receives at most 50 IDs in a
+pinned read snapshot, then uses the existing bounded summary batches. Scoped
+previews always mark `cards_truncated`, independent of hidden candidate counts.
+A private prefix may leave fewer visible cards; the reader never scans beyond
+the fixed candidate windows to fill the preview.
+
+The added selection/enrichment cost grows with those fixed windows, not the
+workspace. The preexisting command-center roster/open-ask projection and default
+unpaged agent cards retain their existing main baselines; this preview does not
+repair or expand those paths. Verify the new selector separately, including a
+dense denied prefix, and the shared enrichment budget:
+
+```sh
+cd core
+ANX_PERFORMANCE_TEST=1 go test -p=1 -parallel=1 ./internal/server \
+  -run '^TestPerformance(AgentSummarySelection|WorkSummaryBudgetAndPlans)$' -count=1 -v
+```
+
 Run the cheap route-inventory, SQL-hook/classifier and migration-progress checks:
 
 ```sh
