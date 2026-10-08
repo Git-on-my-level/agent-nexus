@@ -21,9 +21,8 @@ func handleListCards(w http.ResponseWriter, r *http.Request, opts handlerOptions
 		writeError(w, http.StatusBadRequest, "invalid_request", parseErr.Error())
 		return
 	}
-	cards, err := opts.primitiveStore.ListCards(r.Context(), primitives.CardListFilter{States: states})
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list cards")
+	cards, next, ok := readCardPage(w, r, opts, "", states)
+	if !ok {
 		return
 	}
 
@@ -35,7 +34,7 @@ func handleListCards(w http.ResponseWriter, r *http.Request, opts handlerOptions
 	if !enrichPlans(w, r, opts, cards) {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"cards": publicCardsView(cards)})
+	writeJSON(w, http.StatusOK, map[string]any{"cards": publicCardsView(cards), "next_cursor": next})
 }
 
 func handleCreateCardGlobal(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
@@ -242,14 +241,17 @@ func handleGetCardTimeline(w http.ResponseWriter, r *http.Request, opts handlerO
 			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load related cards")
 			return
 		}
-		cards = append(cards, publicCardView(loaded))
+		cards = append(cards, loaded)
 	}
 	var accessible bool
 	cards, accessible = filterPlanCards(w, r, opts, cards)
 	if !accessible {
 		return
 	}
-	cards = dedupeAndSortResourceMaps(cards)
+	if !enrichPlans(w, r, opts, cards) {
+		return
+	}
+	cards = publicCardsView(dedupeAndSortResourceMaps(cards))
 
 	threads := make([]map[string]any, 0, len(threadIDs))
 	for id := range threadIDs {

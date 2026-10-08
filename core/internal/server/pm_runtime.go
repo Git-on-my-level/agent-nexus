@@ -263,6 +263,9 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 			if err != nil {
 				return pm.ContextPage{}, err
 			}
+			if err = store.EnrichCardPlans(ctx, []map[string]any{w}, nil, time.Now().UTC(), planStalledAfter()); err != nil {
+				return pm.ContextPage{}, err
+			}
 			return pm.ContextPage{Items: []any{publicWork(w)}}, nil
 		}
 		page, err := store.ListWork(ctx, primitives.WorkListFilter{Query: query, Cursor: cursor, Limit: limit})
@@ -270,6 +273,9 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 			return pm.ContextPage{}, pm.ErrContextCursor
 		}
 		if err != nil {
+			return pm.ContextPage{}, err
+		}
+		if err = store.EnrichCardPlans(ctx, page.Work, nil, time.Now().UTC(), planStalledAfter()); err != nil {
 			return pm.ContextPage{}, err
 		}
 		items := make([]any, 0, len(page.Work))

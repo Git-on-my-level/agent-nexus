@@ -60,7 +60,7 @@ func boundedSteps(items []DigestStep, limit int) DigestList {
 // started, so the same step never appears in both. Both keep the plan's
 // topological order with lexicographic ties, the same order geometry uses, so
 // a tile and a graph cannot disagree about which step comes first.
-func Digest(p Plan, state State, facts map[string]Fact, now time.Time, window time.Duration, limit int) StepDigest {
+func Digest(p Plan, state State, facts map[string]Fact, now time.Time, window time.Duration, limit int, readable ...func(Step) bool) StepDigest {
 	if window <= 0 {
 		window = StepDigestWindow
 	}
@@ -86,6 +86,9 @@ func Digest(p Plan, state State, facts map[string]Fact, now time.Time, window ti
 	cutoff := now.Add(-window)
 	for _, id := range order(p) {
 		step := steps[id]
+		if len(readable) > 0 && readable[0] != nil && !readable[0](step) {
+			continue
+		}
 		row := DigestStep{ID: id, Title: step.Title, Ref: step.Ref, Status: status[id]}
 		switch row.Status {
 		case "done":

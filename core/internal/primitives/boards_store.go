@@ -182,7 +182,10 @@ type BoardListFilter struct {
 
 // CardListFilter scopes global card listing (GET /cards).
 type CardListFilter struct {
-	States []string
+	States   []string
+	BoardID  string
+	BeforeID string
+	Limit    int // zero preserves internal unpaginated consumers
 }
 
 type BoardListItem struct {
@@ -1442,6 +1445,21 @@ func (s *Store) ListCards(ctx context.Context, filter CardListFilter) ([]map[str
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
 	whereSQL := cardLifecycleWhere(filter.States)
+	args := []any{}
+	order := ` ORDER BY c.board_id ASC, ` + boardColumnOrderSQL("c.column_key") + `, c.rank ASC,c.id ASC`
+	if filter.BoardID != "" {
+		whereSQL += ` AND c.board_id=?`
+		args = append(args, filter.BoardID)
+	}
+	if filter.Limit > 0 {
+		if filter.Limit > 51 {
+			return nil, invalidBoardRequest("card page limit must be at most 50 plus lookahead")
+		}
+		whereSQL += ` AND c.id>?`
+		args = append(args, filter.BeforeID)
+		order = ` ORDER BY c.id ASC LIMIT ?`
+		args = append(args, filter.Limit)
+	}
 	rows, err := s.db.QueryContext(
 		ctx,
 		`SELECT c.board_id, b.handle, c.id, c.handle, c.column_key, c.rank, c.title, c.summary, c.version, c.head_revision_id, c.head_revision_number, c.thread_id, c.parent_thread_id, c.due_at,
@@ -1451,7 +1469,8 @@ func (s *Store) ListCards(ctx context.Context, filter CardListFilter) ([]map[str
 		   FROM cards c
 		   `+cardVisibilityJoins+`
 		  WHERE `+whereSQL+`
-		  ORDER BY c.board_id ASC, `+boardColumnOrderSQL("c.column_key")+`, c.rank ASC, c.id ASC`,
+		  `+order,
+		args...,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query cards: %w", err)

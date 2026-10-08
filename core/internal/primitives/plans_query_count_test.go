@@ -94,7 +94,7 @@ func TestPlanAndReportReadsHaveBoundedQueryCounts(t *testing.T) {
 			if err = s.EnrichCardPlans(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "selected-pm", PMActorID: "selected-pm"}), page.Work, func(string, string) bool { return true }, time.Now(), 0); err != nil {
 				t.Fatal(err)
 			}
-			if got := counter.Count(); got != int64(1+2*((size+199)/200)+size/200) {
+			if got := counter.Count(); got != int64(3+2*((size+49)/50)+2*((size+199)/200)+size/200) {
 				t.Fatalf("plan roll-up: %d queries for %d distinct linked refs", got, size)
 			}
 			for _, work := range page.Work {
@@ -112,7 +112,7 @@ func TestPlanAndReportReadsHaveBoundedQueryCounts(t *testing.T) {
 			if err != nil || len(items) != n {
 				t.Fatalf("batch=%d error=%v", len(items), err)
 			}
-			if got := counter.Count(); got != int64(3+2*(n/200)) {
+			if got := counter.Count(); got != int64(5+2*((n+49)/50)+2*(n/200)) {
 				t.Fatalf("batch resolve: %d queries for %d refs", got, n)
 			}
 		})

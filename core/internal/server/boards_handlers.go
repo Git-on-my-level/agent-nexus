@@ -554,13 +554,8 @@ func handleListBoardCards(w http.ResponseWriter, r *http.Request, opts handlerOp
 		return
 	}
 
-	cards, err := opts.primitiveStore.ListBoardCards(r.Context(), boardID)
-	if err != nil {
-		if errors.Is(err, primitives.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "board not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list board cards")
+	cards, next, ok := readCardPage(w, r, opts, boardID, []string{"active"})
+	if !ok {
 		return
 	}
 
@@ -573,8 +568,9 @@ func handleListBoardCards(w http.ResponseWriter, r *http.Request, opts handlerOp
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"board_id": boardID,
-		"cards":    publicCardsView(cards),
+		"board_id":    boardID,
+		"cards":       publicCardsView(cards),
+		"next_cursor": next,
 	})
 }
 
@@ -1420,11 +1416,15 @@ func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardI
 		}
 	}
 
-	cards, err := opts.primitiveStore.ListBoardCards(ctx, boardID)
+	cards, err := opts.primitiveStore.ListCards(ctx, primitives.CardListFilter{BoardID: boardID, States: []string{"active"}, Limit: 51})
 	if err != nil {
 		return nil, err
 	}
 
+	cardsTruncated := len(cards) > 50
+	if cardsTruncated {
+		cards = cards[:50]
+	}
 	if len(visibility) > 0 {
 		if store, ok := opts.primitiveStore.(interface {
 			FilterCardAccess(context.Context, []map[string]any, func(string, string) bool) ([]map[string]any, error)
@@ -1433,6 +1433,15 @@ func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardI
 			if err != nil {
 				return nil, err
 			}
+		}
+	}
+	if store, ok := opts.primitiveStore.(planStore); ok {
+		var visible func(string, string) bool
+		if len(visibility) > 0 {
+			visible = visibility[0]
+		}
+		if err = store.EnrichCardPlans(ctx, cards, visible, time.Now().UTC(), planStalledAfter()); err != nil {
+			return nil, err
 		}
 	}
 	threadIDs := collectBoardWorkspaceThreadIDs(backingThreadID, board, cards)
@@ -1458,8 +1467,12 @@ func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardI
 	}
 
 	boardSummary := buildBoardWorkspaceSummary(board, cards, states, documentsSection, now)
+	if cardsTruncated {
+		boardSummary["truncated"] = true
+	}
 	freshness := aggregateTopicProjectionFreshness(states, threadIDs)
 	return map[string]any{
+		"cards_truncated":         cardsTruncated,
 		"board_id":                boardID,
 		"board":                   board,
 		"primary_topic":           primaryTopic,

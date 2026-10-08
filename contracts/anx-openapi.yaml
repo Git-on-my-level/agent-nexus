@@ -1709,6 +1709,7 @@ paths:
       x-anx-agent-notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh
         acceptance is not a successful read.
       parameters:
+      - {name: summary, in: query, schema: {type: integer, enum: [1]}, description: Alias computed work_summary to summary; prose remains in summary_text.}
       - name: project_ref
         in: query
         required: false
@@ -1855,6 +1856,7 @@ paths:
       x-anx-agent-notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh
         acceptance is not a successful read.
       parameters:
+      - {name: summary, in: query, schema: {type: integer, enum: [1]}, description: Alias computed work_summary to summary; prose remains in summary_text.}
       - name: card_ref
         in: path
         required: true
@@ -4081,6 +4083,9 @@ paths:
       x-anx-concepts: [boards, cards]
       x-anx-stability: beta
       parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 50, default: 50}, description: Bound card hydration before summary computation.}
+        - {name: cursor, in: query, schema: {type: string}, description: Opaque card page continuation.}
+        - {name: summary, in: query, schema: {type: integer, enum: [1]}, description: Alias computed work_summary to summary; prose remains in summary_text.}
         - $ref: '#/components/parameters/BoardID'
       responses:
         '200':
@@ -4176,6 +4181,7 @@ paths:
       x-anx-concepts: [boards, cards]
       x-anx-stability: beta
       parameters:
+        - {name: summary, in: query, schema: {type: integer, enum: [1]}, description: Alias computed work_summary to summary; prose remains in summary_text.}
         - $ref: '#/components/parameters/BoardID'
         - $ref: '#/components/parameters/CardID'
       responses:
@@ -4206,6 +4212,9 @@ paths:
       x-anx-concepts: [cards]
       x-anx-stability: beta
       parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 50, default: 50}, description: Bound card hydration before summary computation.}
+        - {name: cursor, in: query, schema: {type: string}, description: Opaque card page continuation.}
+        - {name: summary, in: query, schema: {type: integer, enum: [1]}, description: Alias computed work_summary to summary; prose remains in summary_text.}
         - name: state
           in: query
           required: false
@@ -4373,6 +4382,7 @@ paths:
       x-anx-concepts: [cards]
       x-anx-stability: beta
       parameters:
+        - {name: summary, in: query, schema: {type: integer, enum: [1]}, description: Alias computed work_summary to summary; prose remains in summary_text.}
         - $ref: '#/components/parameters/CardID'
       responses:
         '200':
@@ -4875,6 +4885,7 @@ paths:
       x-anx-concepts: [home, documents, cards]
       x-anx-stability: beta
       parameters:
+        - {name: summary, in: query, schema: {type: integer, enum: [1]}, description: Alias computed work_summary to summary; prose remains in summary_text.}
         - name: work_view
           in: query
           required: false
@@ -9604,6 +9615,58 @@ components:
       items: { $ref: '#/components/schemas/SourceRef' }
       description: Generic source evidence stored in card-backed work annotations. Write via work.create or work.patch with if_version. Full list replacement; omission preserves and [] clears. Identities authority/connection_id/native_id must be unique.
 
+    WorkSummary:
+      type: object
+      description: Computed card presentation, independent of board role. Render work_summary instead of stored phase. Optional parts are omitted when absent. summary=1 aliases this object to summary on supported reads; default summary remains legacy prose and writes still accept prose.
+      required: [status]
+      properties:
+        status:
+          type: object
+          required: [state, label, reason]
+          properties:
+            state: {type: string}
+            label: {type: string}
+            reason: {type: string}
+            since: {type: string, nullable: true, format: date-time}
+        set_status:
+          type: object
+          description: Stored phase, present only when it disagrees with computed health.
+          required: [state, label]
+          properties:
+            state: {type: string}
+            label: {type: string}
+        progress:
+          type: object
+          required: [done, total, unit]
+          properties:
+            done: {type: integer, minimum: 0}
+            total: {type: integer, minimum: 0}
+            unit: {type: string, enum: [steps, cards]}
+            truncated: {type: boolean}
+        next:
+          type: object
+          required: [id, title, ref, more]
+          properties:
+            id: {type: string}
+            title: {type: string}
+            ref: {type: string}
+            more: {type: integer, minimum: 0, description: Additional readable ready steps.}
+        owner: {type: string, description: Assignee or lead agent reference.}
+        due: {type: string, format: date-time}
+        age: {type: integer, minimum: 0, description: Seconds since creation.}
+        last_movement_at: {type: string, format: date-time}
+        source: {$ref: '#/components/schemas/WorkSource'}
+        steps: {$ref: '#/components/schemas/PlanStepDigest'}
+        resolution_truncated: {type: boolean, description: Linked plan or child facts exceeded the bounded ref budget.}
+        attention:
+          type: object
+          required: [count, oldest_age]
+          properties:
+            count: {type: integer, minimum: 1, description: Visible open asks in the bounded oldest-first candidate window.}
+            oldest_age: {type: integer, minimum: 0, description: Seconds since the oldest visible sampled ask.}
+            truncated: {type: boolean, description: Count is a lower bound when the candidate window is full.}
+        attention_truncated: {type: boolean, description: Attention is sampled; scoped readers always receive this marker so private candidate counts cannot be inferred. Omitted asks may exist.}
+
     Work:
       type: object
       additionalProperties: true
@@ -9693,7 +9756,11 @@ components:
           type: string
         title:
           type: string
+        work_summary: {$ref: '#/components/schemas/WorkSummary'}
         summary:
+          description: Legacy prose by default; WorkSummary when summary=1 is requested.
+          oneOf: [{type: string}, {$ref: '#/components/schemas/WorkSummary'}]
+        summary_text:
           type: string
         labels: {type: array, maxItems: 16, items: {type: string, minLength: 1, maxLength: 128}}
         roles: {type: array, maxItems: 16, items: {type: string, maxLength: 128}}
@@ -9765,6 +9832,7 @@ components:
           additionalProperties: true
           properties: *id001
       required:
+      - work_summary
       - decision_revision
       - ref
       - title
@@ -10359,15 +10427,15 @@ components:
         critical_path: {type: array, items: {type: string}}
         next_steps: {type: array, items: {type: string}}
         shape: {type: string, enum: [chain, dag, lanes]}
-        health: {type: string, enum: [on_track, stalled, blocked, no_plan, stale, at_risk, done], description: Legacy projection; richer states are in plan_health.state.}
-        health_state: {type: string, enum: [no_plan, stale, blocked, at_risk, on_track, done]}
+        health: {type: string, enum: [on_track, stalled, blocked, no_plan, stale, at_risk, done, cancelled], description: Legacy projection; richer states are in plan_health.state.}
+        health_state: {type: string, enum: [no_plan, stale, blocked, at_risk, on_track, done, cancelled]}
         last_movement_at: {type: string, format: date-time}
     PlanHealth:
       type: object
       required: [state, reason, since]
       description: "Computed on read. Precedence is no_plan (recent absent or empty plan; stale once inactive for the threshold), done (all steps done), blocked (any unfinished blocked step), at_risk (card or unfinished step due within 24h or overdue), stale (no card/plan/step activity for 72h), on_track. ANX_PLAN_STALLED_AFTER overrides the workspace service threshold. since is the condition's reproducible anchor, not a stored transition timestamp: activity for done/blocked/on_track, due minus 24h for at_risk, last activity plus threshold for stale, creation for no_plan; null if unavailable."
       properties:
-        state: {type: string, enum: [no_plan, stale, blocked, at_risk, on_track, done]}
+        state: {type: string, enum: [no_plan, stale, blocked, at_risk, on_track, done, cancelled]}
         reason: {type: string}
         since: {type: string, format: date-time, nullable: true}
     PlanStepDigestList:
@@ -10424,6 +10492,7 @@ components:
     CardPlanResponse:
       type: object
       properties:
+        summary: {$ref: '#/components/schemas/WorkSummary'}
         card_ref: {type: string}
         plan: {type: object, nullable: true, allOf: [{ $ref: '#/components/schemas/InitiativePlan' }]}
         plan_state: {type: object, nullable: true, allOf: [{ $ref: '#/components/schemas/PlanState' }]}
@@ -10436,6 +10505,7 @@ components:
       type: object
       required: [ref, resolvable]
       properties:
+        summary: {$ref: '#/components/schemas/WorkSummary'}
         ref: {type: string}
         resolvable: {type: boolean}
         kind: {type: string}
@@ -10487,7 +10557,11 @@ components:
         head_revision_ref: { $ref: '#/components/schemas/TypedRef' }
         head_revision_number: { type: integer }
         title: { type: string }
-        summary: { type: string }
+        work_summary: {$ref: '#/components/schemas/WorkSummary'}
+        summary:
+          description: Legacy prose by default; WorkSummary when summary=1 is requested.
+          oneOf: [{type: string}, {$ref: '#/components/schemas/WorkSummary'}]
+        summary_text: {type: string}
         plan: { $ref: '#/components/schemas/InitiativePlan' }
         plan_state: { $ref: '#/components/schemas/PlanState' }
         plan_resolution_truncated: {type: boolean, description: True when the shared 4000 distinct plan-ref budget was exceeded; omitted refs remain unknown.}
@@ -10535,7 +10609,7 @@ components:
         trashed_by: { type: string }
         trash_reason: { type: string }
       required:
-        [ref, handle, board_ref, thread_id, head_revision_ref, head_revision_number, title, summary, column_key, rank, assignee_refs, risk, resolution_refs,
+        [work_summary, ref, handle, board_ref, thread_id, head_revision_ref, head_revision_number, title, summary, column_key, rank, assignee_refs, risk, resolution_refs,
          related_refs, created_at, created_by, updated_at, updated_by, provenance]
 
     CardRevision:
@@ -10559,6 +10633,7 @@ components:
     BoardSummary:
       type: object
       properties:
+        truncated: {type: boolean}
         card_count: { type: integer }
         cards_by_column:
           type: object
@@ -10617,6 +10692,8 @@ components:
       description: Open human attention requests remain actionable until response or withdrawal, independently of linked subject lifecycle. Thread privacy still applies.
       type: object
       properties:
+        related_cards: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/ResolvedRef'}}
+        related_cards_truncated: {type: boolean}
         id: { type: string }
         kind:
           type: string
@@ -11768,6 +11845,7 @@ components:
     BoardCardsResponse:
       type: object
       properties:
+        next_cursor: {type: string, description: Opaque UUID keyset cursor; empty when complete.}
         board_ref: { $ref: '#/components/schemas/ResourceRef' }
         board_handle: { $ref: '#/components/schemas/ResourceHandle' }
         board_id:
@@ -11782,6 +11860,7 @@ components:
     BoardWorkspaceResponse:
       type: object
       properties:
+        cards_truncated: {type: boolean}
         board: { $ref: '#/components/schemas/Board' }
         primary_topic: { $ref: '#/components/schemas/Topic' }
         backing_thread: { $ref: '#/components/schemas/Thread' }
@@ -11847,6 +11926,7 @@ components:
     CardsResponse:
       type: object
       properties:
+        next_cursor: {type: string, description: Opaque UUID keyset cursor; empty when complete.}
         cards:
           type: array
           items: { $ref: '#/components/schemas/Card' }
@@ -12151,7 +12231,7 @@ components:
               ref: { type: string }
               title: { type: string }
               href: { type: string }
-              state: { type: string, enum: [no_plan, stale, blocked, at_risk, on_track, done] }
+              state: { type: string, enum: [no_plan, stale, blocked, at_risk, on_track, done, cancelled] }
               reason: { type: string }
               phase: { type: string }
               next_step: { type: string }
@@ -12176,7 +12256,7 @@ components:
 
     OverviewInitiative:
       type: object
-      required: [ref, title, summary, progress, priority, needs, phase, board_ref, updated_at, plan_state, plan_step_digest, health, geometry]
+      required: [work_summary, ref, title, summary, progress, priority, needs, phase, board_ref, updated_at, plan_state, plan_step_digest, health, geometry]
       properties:
         plan_state: {type: object, nullable: true, allOf: [{ $ref: '#/components/schemas/PlanState' }]}
         plan_resolution_truncated: {type: boolean, description: True when the shared 4000 distinct plan-ref budget was exceeded; omitted refs remain unknown.}
@@ -12188,7 +12268,11 @@ components:
         geometry: {type: object, nullable: true, allOf: [{ $ref: '#/components/schemas/InitiativeGeometry' }]}
         ref: { type: string }
         title: { type: string }
-        summary: { type: string, description: First prose line outside fenced examples, using the shared report summary parser. }
+        work_summary: {$ref: '#/components/schemas/WorkSummary'}
+        summary:
+          description: Legacy prose by default; WorkSummary when summary=1 is requested.
+          oneOf: [{type: string}, {$ref: '#/components/schemas/WorkSummary'}]
+        summary_text: {type: string, description: First prose line outside fenced examples.}
         priority: { type: string }
         needs: { type: array, items: { type: string }, description: Human asks parsed outside fenced examples, preserving every matching line. }
         phase: { type: string }
@@ -12204,8 +12288,8 @@ components:
       type: object
       required: [status, reason]
       properties:
-        status: {type: string, enum: [on_track, stalled, blocked, no_plan, stale, at_risk, done], description: Legacy projection for older clients; use plan_health.state for detailed health.}
-        state: {type: string, enum: [no_plan, stale, blocked, at_risk, on_track, done]}
+        status: {type: string, enum: [on_track, stalled, blocked, no_plan, stale, at_risk, done, cancelled], description: Legacy projection for older clients; use plan_health.state for detailed health.}
+        state: {type: string, enum: [no_plan, stale, blocked, at_risk, on_track, done, cancelled]}
         reason: {type: string}
     InitiativeGeometry:
       type: object

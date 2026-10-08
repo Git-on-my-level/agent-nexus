@@ -56,15 +56,18 @@ func accessCTEs(scope AccessScope, query string) string {
 func accessCTEsWithSnapshot(scope AccessScope, query string, snapshot *denialSnapshot) string {
 	return accessSnapshotCTEs(scope, query, snapshot, false)
 }
-func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapshot, pinned bool) string {
+func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapshot, pinned bool, pointReads ...bool) string {
 	needed := map[string]bool{}
 	for _, token := range sqlIdentifiers.FindAllString(query, -1) {
 		needed[strings.ToLower(token)] = true
 	}
 	graph := ""
+	pointPredicates := map[string]string{}
 
 	denied := func(kind, id string) string {
-		return "NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind='" + kind + "' AND id=" + id + ")"
+		predicate := "NOT EXISTS (SELECT 1 FROM _anx_denied WHERE kind='" + kind + "' AND id=" + id + ")"
+		pointPredicates[predicate] = "anx_point_snapshot_denied((SELECT token FROM _anx_point_snapshot),'" + kind + "'," + id + ")=0"
+		return predicate
 	}
 	cleanJSON := func(column string) string {
 		// Keep equality and prose probes separate: an OR join scans every denied
@@ -166,6 +169,18 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 	// and atom CTEs still duplicate the closure during SQLite preparation.
 	needsRefs := query == "" || needed["_anx_resource_refs"] || needed["_anx_denied_refs"] || needed["_anx_denied_atoms"] || needed["_anx_denied_prose"] || strings.Contains(graph, "_anx_denied_refs") || strings.Contains(graph, "_anx_denied_atoms")
 	if !needsRefs {
+		if pinned && snapshot != nil && snapshot.pointToken > 0 && len(pointReads) > 0 && pointReads[0] {
+			pointGraph := graph
+			for predicate, lookup := range pointPredicates {
+				pointGraph = strings.ReplaceAll(pointGraph, predicate, lookup)
+			}
+			// Arbitrary text/ref projections retain their complete SQL policy;
+			// only exact identity membership shadows use the admitted map.
+			if !strings.Contains(pointGraph, "_anx_denied") && !strings.Contains(query, "_anx_denied") {
+				current := "COALESCE((SELECT version FROM main.resource_access_epoch WHERE singleton=1),-1)"
+				return "_anx_point_snapshot(token) AS MATERIALIZED (SELECT ? WHERE " + current + "=" + fmt.Sprint(snapshot.epoch) + ")" + pointGraph
+			}
+		}
 		return deniedGraph + graph
 	}
 	prose := ""
@@ -202,7 +217,8 @@ func scopeReadSnapshot(ctx context.Context, query string, snapshot *denialSnapsh
 		q = strings.ReplaceAll(q, " INDEXED BY "+index, "")
 	}
 	upper := strings.ToUpper(q)
-	graph := accessSnapshotCTEs(scope, q, snapshot, pinned)
+	pointReads, _ := ctx.Value(summaryPointReadKey{}).(bool)
+	graph := accessSnapshotCTEs(scope, q, snapshot, pinned, pointReads)
 	prefix := "WITH RECURSIVE " + graph
 	if fields := strings.Fields(upper); len(fields) > 0 {
 		switch fields[0] {

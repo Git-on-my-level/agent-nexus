@@ -647,11 +647,17 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 	for _, boardCardGroups := range cardsByBoard {
 		for _, boardCards := range boardCardGroups {
 			for _, card := range boardCards {
-				cards = append(cards, publicCardView(card))
+				cards = append(cards, card)
 			}
 		}
 	}
 
+	if store, ok := opts.primitiveStore.(planStore); ok {
+		if err := store.EnrichCardPlans(ctx, cards, opts.readVisibility, time.Now().UTC(), planStalledAfter()); err != nil {
+			return topicResourceBundle{}, err
+		}
+	}
+	cards = publicCardsView(cards)
 	inboxItems, err := opts.primitiveStore.ListDerivedInboxItems(ctx, primitives.DerivedInboxListFilter{ThreadID: primaryThreadID})
 	if err != nil {
 		return topicResourceBundle{}, err

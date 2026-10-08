@@ -158,9 +158,21 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	items := work["items"].([]map[string]any)
 	public := make([]map[string]any, 0, len(items))
 	for _, item := range items {
+		if r.URL.Query().Get("summary") == "1" {
+			item["summary_format"] = true
+		}
 		public = append(public, publicWork(item))
 	}
 	work["items"] = public
+	if r.URL.Query().Get("summary") == "1" {
+		if section, ok := payload["initiatives"].(map[string]any); ok {
+			if rows, ok := section["items"].([]map[string]any); ok {
+				for _, row := range rows {
+					row["summary"] = row["work_summary"]
+				}
+			}
+		}
+	}
 	needs := payload["needs_you"].(map[string]any)
 	needs["truncated"] = work["truncated"] == true
 	rows := needs["rows"].([]map[string]any)

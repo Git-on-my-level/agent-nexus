@@ -68,6 +68,11 @@ func enrichPlans(w http.ResponseWriter, r *http.Request, opts handlerOptions, ca
 		workStoreError(w, r, err)
 		return false
 	}
+	if r.URL.Query().Get("summary") == "1" {
+		for _, card := range cards {
+			card["summary_format"] = true
+		}
+	}
 	return true
 }
 
@@ -127,7 +132,7 @@ func handleCardPlan(w http.ResponseWriter, r *http.Request, opts handlerOptions,
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, 200, map[string]any{"card_ref": card["ref"], "if_updated_at": card["updated_at"], "plan": card["plan"], "plan_state": card["plan_state"], "plan_health": card["plan_health"], "next_step": card["next_step"], "status_mismatch": card["status_mismatch"]})
+	writeJSON(w, 200, map[string]any{"summary": card["work_summary"], "card_ref": card["ref"], "if_updated_at": card["updated_at"], "plan": card["plan"], "plan_state": card["plan_state"], "plan_health": card["plan_health"], "next_step": card["next_step"], "status_mismatch": card["status_mismatch"]})
 }
 
 func handleResolveRefs(w http.ResponseWriter, r *http.Request, opts handlerOptions) {

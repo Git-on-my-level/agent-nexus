@@ -3,8 +3,11 @@ package primitives
 import "time"
 
 type cardHealthInput struct {
-	Activity, Created time.Time
-	Due               string
+	Activity, Created    time.Time
+	Due                  string
+	Phase, Owner, Handle string
+	Source               map[string]any
+	Children             []string
 }
 
 // Explicit work due annotations, including null/empty clearing, take precedence.

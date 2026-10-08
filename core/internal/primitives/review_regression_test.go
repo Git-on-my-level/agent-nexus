@@ -80,9 +80,9 @@ func TestEffectiveHealthInputsAgreeAcrossSurfaces(t *testing.T) {
 				expected := "no_plan"
 				if withPlan {
 					expected = "on_track"
-					if !cleared {
-						expected = "at_risk"
-					}
+				}
+				if !cleared {
+					expected = "at_risk"
 				}
 				if !reflect.DeepEqual(a, b) || !reflect.DeepEqual(a, c) || a.State != expected {
 					t.Fatalf("plan=%v cleared=%v raw=%+v work=%+v preview=%+v expected=%s", withPlan, cleared, a, b, c, expected)

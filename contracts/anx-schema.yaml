@@ -1171,7 +1171,7 @@ overview_changes:
 
 initiative_plan_health:
   fields: [state, reason, since]
-  states: [no_plan, stale, blocked, at_risk, on_track, done]
+  states: [no_plan, stale, blocked, at_risk, on_track, done, cancelled]
   semantics:
     - Added on card reads, lists, refs resolve, reports and initiative overview alongside existing plan_state and progress.
     - Precedence is no_plan for recent absent/empty plans (stale after the inactivity threshold), done for all completed steps, blocked for any unfinished blocked step (including dependencies), at_risk for card/unfinished step due within 24 hours or overdue, stale after 72 hours without card/plan/step activity, then on_track.
@@ -1235,3 +1235,16 @@ visual_report_review:
     - report_review reminders are informational, with no reply, acknowledge or dismiss mutation; clients may open the dashboard. Revising or unpinning the dashboard hides obsolete reminders.
     - live-cards filters bounded card candidates by board_refs, label, role and status; closed phases are included only for this panel type.
     - live-timeline binds an existing state or numeric series through source; core never fetches external events.
+
+work_summary:
+  schema: WorkSummary
+  read_field: work_summary
+  migrated_alias: summary (opt-in via summary=1)
+  prose_read_field: summary_text
+  semantics:
+    - Every current card-bearing read has one computed work_summary.status with state, label and reason. Board roles select cards only.
+    - Card and work write inputs retain their string summary. Card revision content remains prose. Default response summary remains prose; summary=1 aliases work_summary and preserves prose in summary_text. Stored phase and legacy plan fields remain unchanged.
+    - Status uses shared plan health, including phase and due date for planless cards. set_status is included only when stored phase disagrees.
+    - Progress appears for a nonempty plan or explicit child relations; next and steps appear only for a plan. Owner, due, age, last_movement_at and external source appear only when known.
+    - Summary batches contain at most 50 card ids. Plan/child refs share bounded resolution and truncated refs remain unknown. Attention samples indexed oldest-first candidates before canonical visibility and recipient checks; a truncated count is a lower bound.
+    - Inbox related_cards is a bounded batch of readable card previews, never an authority grant. Work search uses the same summary as work lists; document-only search contains no cards.

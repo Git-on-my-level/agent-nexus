@@ -95,9 +95,9 @@ func TestOverviewDigestNetTransitionsVisibilityAndBounds(t *testing.T) {
 	}
 	queries := counter.Count()
 	// Closed IDs are bounded before hydration; the answer probe shares the
-	// visit read. This fixture uses eight reads; growing its corpus adds none.
-	if queries != 8 {
-		t.Fatalf("queries=%d want 8", queries)
+	// visit read. This fixture uses ten reads; growing its corpus adds none.
+	if queries != 12 {
+		t.Fatalf("queries=%d want 12", queries)
 	}
 	got := map[string]int{}
 	for _, item := range d.Items {
@@ -208,6 +208,10 @@ func TestRefPreviewRealWireFixtureAndBoardPrivacy(t *testing.T) {
 		t.Fatal(err)
 	}
 	health["since"] = "2026-10-04T12:00:00Z"
+	summary := item["summary"].(map[string]any)
+	summary["last_movement_at"] = "2026-10-04T12:00:00Z"
+	summary["age"] = float64(0)
+	summary["status"].(map[string]any)["since"] = "2026-10-04T12:00:00Z"
 	fixture, err := os.ReadFile("../../../contracts/fixtures/initiative-overview/refs.json")
 	if err != nil {
 		t.Fatal(err)

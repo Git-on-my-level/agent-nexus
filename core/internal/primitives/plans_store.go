@@ -31,6 +31,7 @@ type RefPreview struct {
 	ConnectionID            string          `json:"connection_id,omitempty"`
 	ObservedAt              string          `json:"observed_at,omitempty"`
 	Source                  string          `json:"source,omitempty"`
+	Summary                 *WorkSummary    `json:"summary,omitempty"`
 	PlanHealth              *plans.Health   `json:"plan_health,omitempty"`
 	PlanResolutionTruncated bool            `json:"plan_resolution_truncated,omitempty"`
 	StatusMismatch          bool            `json:"status_mismatch,omitempty"`
@@ -117,11 +118,11 @@ func (s *Store) readRefFacts(ctx context.Context, refs []string, visible func(st
  LEFT JOIN threads bt ON bt.id=b.thread_id
 			 ORDER BY c.id`
 		case "document":
-			query = `SELECT id,handle,COALESCE(title,''),CASE WHEN archived_at IS NULL THEN 'active' ELSE 'archived' END,'','',COALESCE(thread_id,''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=documents.thread_id),''),updated_at,'','','','','','',created_at,'','','','','' FROM documents WHERE trashed_at IS NULL AND (id IN (` + marks + `) OR handle IN (` + marks + `))`
+			query = `SELECT id,handle,COALESCE(title,''),CASE WHEN archived_at IS NULL THEN 'active' ELSE 'archived' END,'','',COALESCE(thread_id,''),COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=documents.thread_id),''),updated_at,'','','','','','',created_at,'','','','','' FROM documents WHERE trashed_at IS NULL AND (id IN (` + marks + `) OR (handle IS NOT NULL AND trim(handle) <> '' AND handle IN (` + marks + `)))`
 		case "topic":
-			query = `SELECT id,handle,title,CASE WHEN archived_at IS NULL THEN 'active' ELSE 'archived' END,COALESCE(json_extract(extensions_json,'$.owner_refs[0]'),''),'',thread_id,COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=topics.thread_id),''),updated_at,'','','','','',COALESCE((SELECT display_name FROM actors WHERE id=replace(json_extract(topics.extensions_json,'$.owner_refs[0]'),'actor:','')),''),created_at,'','','','','' FROM topics WHERE trashed_at IS NULL AND (id IN (` + marks + `) OR handle IN (` + marks + `))`
+			query = `SELECT id,handle,title,CASE WHEN archived_at IS NULL THEN 'active' ELSE 'archived' END,COALESCE(json_extract(extensions_json,'$.owner_refs[0]'),''),'',thread_id,COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=topics.thread_id),''),updated_at,'','','','','',COALESCE((SELECT display_name FROM actors WHERE id=replace(json_extract(topics.extensions_json,'$.owner_refs[0]'),'actor:','')),''),created_at,'','','','','' FROM topics WHERE trashed_at IS NULL AND (id IN (` + marks + `) OR (handle IS NOT NULL AND trim(handle) <> '' AND handle IN (` + marks + `)))`
 		case "board":
-			query = `SELECT id,handle,title,CASE WHEN archived_at IS NULL THEN 'active' ELSE 'archived' END,COALESCE(json_extract(owners_json,'$[0]'),''),'',thread_id,COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=boards.thread_id),''),updated_at,'','','','','',COALESCE((SELECT display_name FROM actors WHERE id=replace(json_extract(boards.owners_json,'$[0]'),'actor:','')),''),created_at,'','','','','' FROM boards WHERE trashed_at IS NULL AND (id IN (` + marks + `) OR handle IN (` + marks + `))`
+			query = `SELECT id,handle,title,CASE WHEN archived_at IS NULL THEN 'active' ELSE 'archived' END,COALESCE(json_extract(owners_json,'$[0]'),''),'',thread_id,COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=boards.thread_id),''),updated_at,'','','','','',COALESCE((SELECT display_name FROM actors WHERE id=replace(json_extract(boards.owners_json,'$[0]'),'actor:','')),''),created_at,'','','','','' FROM boards WHERE trashed_at IS NULL AND (id IN (` + marks + `) OR (handle IS NOT NULL AND trim(handle) <> '' AND handle IN (` + marks + `)))`
 		}
 		candidates := map[string][]RefPreview{}
 		wanted := map[string]bool{}
@@ -227,6 +228,30 @@ func (s *Store) readRefFacts(ctx context.Context, refs []string, visible func(st
 }
 
 func (s *Store) loadPlans(ctx context.Context, ids []string) (map[string]plans.Plan, map[string]cardHealthInput, map[string]any, error) {
+	ids = uniqueSortedStrings(ids)
+	ps, inputs, refs := map[string]plans.Plan{}, map[string]cardHealthInput{}, map[string]any{}
+	for start := 0; start < len(ids); start += summaryBatchSize {
+		end := start + summaryBatchSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+		batch, movement, sources, err := s.loadPlansBatch(ctx, ids[start:end])
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		for id, p := range batch {
+			ps[id] = p
+		}
+		for id, input := range movement {
+			inputs[id] = input
+		}
+		for id, source := range sources {
+			refs[id] = source
+		}
+	}
+	return ps, inputs, refs, nil
+}
+func (s *Store) loadPlansBatch(ctx context.Context, ids []string) (map[string]plans.Plan, map[string]cardHealthInput, map[string]any, error) {
 	sourceRefs := map[string]any{}
 	out, movement := map[string]plans.Plan{}, map[string]cardHealthInput{}
 	ids = uniqueSortedStrings(ids)
@@ -237,14 +262,14 @@ func (s *Store) loadPlans(ctx context.Context, ids []string) (map[string]plans.P
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(p.body_json,''),`+effectiveCardActivitySQL+`,COALESCE(p.updated_at,''),COALESCE((SELECT e.ts FROM events e WHERE e.thread_id=COALESCE(NULLIF(trim(c.thread_id),''),trim(c.parent_thread_id)) AND e.type='message_posted' AND e.trashed_at IS NULL AND e.archived_at IS NULL ORDER BY e.ts DESC LIMIT 1),''),COALESCE(json_extract(m.metadata_json,'$.source_refs'),'[]'),c.created_at,`+effectiveCardDueSQL+` FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN card_plans p ON p.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id WHERE c.id IN (SELECT value FROM json_each(?))`, string(encoded))
+	rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(p.body_json,''),`+effectiveCardActivitySQL+`,COALESCE(p.updated_at,''),COALESCE((SELECT e.ts FROM events e WHERE e.thread_id=COALESCE(NULLIF(trim(c.thread_id),''),trim(c.parent_thread_id)) AND e.type='message_posted' AND e.trashed_at IS NULL AND e.archived_at IS NULL ORDER BY e.ts DESC LIMIT 1),''),COALESCE(json_extract(m.metadata_json,'$.source_refs'),'[]'),c.created_at,`+effectiveCardDueSQL+`,COALESCE(c.handle,''),COALESCE(m.metadata_json,'{}'),COALESCE(o.body_json,'{}'),c.column_key,COALESCE(c.assignee,'') FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN card_plans p ON p.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id WHERE c.id IN (SELECT value FROM json_each(?))`, string(encoded))
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, raw, at, planAt, messageAt, refsRaw, created, due string
-		if err = rows.Scan(&id, &raw, &at, &planAt, &messageAt, &refsRaw, &created, &due); err != nil {
+		var id, raw, at, planAt, messageAt, refsRaw, created, due, handle, metadata, observation, phase, owner string
+		if err = rows.Scan(&id, &raw, &at, &planAt, &messageAt, &refsRaw, &created, &due, &handle, &metadata, &observation, &phase, &owner); err != nil {
 			return nil, nil, nil, err
 		}
 		var entries []any
@@ -259,7 +284,48 @@ func (s *Store) loadPlans(ctx context.Context, ids []string) (map[string]plans.P
 			}
 			out[id] = p
 		}
-		input := cardHealthInput{Due: due}
+		input := cardHealthInput{Due: due, Handle: handle, Phase: phase, Owner: owner}
+		var m, o map[string]any
+		if err = json.Unmarshal([]byte(metadata), &m); err != nil {
+			return nil, nil, nil, err
+		}
+		if err = json.Unmarshal([]byte(observation), &o); err != nil {
+			return nil, nil, nil, err
+		}
+		input.Source = workClone(workMap(m["source"]))
+		if authority := workString(input.Source["authority"]); authority != "" && authority != "nexus" {
+			input.Phase = workString(m["phase"])
+			input.Owner = workString(m["owner"])
+			if value, ok := workMap(o["facts"])["phase"]; ok {
+				input.Phase = workString(value)
+			}
+			if value, ok := workMap(o["facts"])["owner"]; ok {
+				input.Owner = workString(value)
+			}
+			if status, ok := workMap(o["facts"])["native_status"]; ok {
+				if value := workString(status); value != "" {
+					input.Source["native_status"] = value
+				} else {
+					delete(input.Source, "native_status")
+				}
+			}
+		} else if input.Owner != "" && !strings.Contains(input.Owner, ":") {
+			input.Owner = "actor:" + input.Owner
+		}
+		if input.Owner == "" {
+			for _, execution := range observationEvidenceItems(m["executions"]) {
+				if agent := workString(execution["agent"]); agent != "" {
+					input.Owner = agent
+					break
+				}
+			}
+		}
+		for _, relation := range observationEvidenceItems(m["relations"]) {
+			if workString(relation["kind"]) == "child" && strings.HasPrefix(workString(relation["ref"]), "card:") {
+				input.Children = append(input.Children, workString(relation["ref"]))
+			}
+		}
+		input.Children = uniqueSortedStrings(input.Children)
 		input.Created, _ = time.Parse(time.RFC3339Nano, created)
 		input.Activity = latestCardActivity(at, planAt, messageAt)
 		movement[id] = input
@@ -308,6 +374,14 @@ func (s *Store) ResolveRefs(ctx context.Context, refs []string, visible func(str
 	if refs == nil || len(refs) > 200 {
 		return nil, invalidBoardRequest("refs must be an array of at most 200 strings")
 	}
+	if len(refs) == 0 {
+		return []RefPreview{}, nil
+	}
+	ctx, closeRead, err := s.beginSummaryRead(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer closeRead()
 	out, err := s.readRefFacts(ctx, refs, visible)
 	if err != nil {
 		return nil, err
@@ -322,10 +396,11 @@ func (s *Store) ResolveRefs(ctx context.Context, refs []string, visible func(str
 	if err != nil {
 		return nil, err
 	}
-	facts, err := s.planFacts(ctx, ps, visible)
+	facts, err := s.planFacts(ctx, summaryFactPlans(ps, movement), visible)
 	if err != nil {
 		return nil, err
 	}
+	summaries := map[string]*WorkSummary{}
 	for i, row := range out {
 		if row.Kind != "card" || !row.Resolvable {
 			continue
@@ -346,15 +421,30 @@ func (s *Store) ResolveRefs(ctx context.Context, refs []string, visible func(str
 			out[i].NextStep = plans.ReadyStep(value, state, func(step plans.Step) bool { return step.Ref == "" || facts[step.Ref].Known })
 			out[i].StatusMismatch = row.Phase == "backlog" && state.Progress.Done > 0
 		}
-		health := plans.HealthFor(p, state, at, input.Created, now, threshold, input.Due)
+		health := plans.HealthFor(p, state, at, input.Created, now, threshold, input.Due, input.Phase)
 		out[i].PlanHealth = &health
+		if summaries[row.ID] == nil {
+			summaries[row.ID] = buildWorkSummary(input, p, state, facts, now, threshold)
+		}
+		out[i].Summary = summaries[row.ID]
 	}
 
+	if err = s.enrichSummaryAttention(ctx, movement, summaries, now); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
 // EnrichCardPlans batches both plans and referenced state for an entire read.
 func (s *Store) EnrichCardPlans(ctx context.Context, cards []map[string]any, visible func(string, string) bool, now time.Time, threshold time.Duration) error {
+	if len(cards) == 0 {
+		return nil
+	}
+	ctx, closeRead, err := s.beginSummaryRead(ctx)
+	if err != nil {
+		return err
+	}
+	defer closeRead()
 	allowed, err := s.FilterCardAccess(ctx, cards, visible)
 	if err != nil {
 		return err
@@ -370,10 +460,11 @@ func (s *Store) EnrichCardPlans(ctx context.Context, cards []map[string]any, vis
 	if err != nil {
 		return err
 	}
-	facts, err := s.planFacts(ctx, ps, visible)
+	facts, err := s.planFacts(ctx, summaryFactPlans(ps, movement), visible)
 	if err != nil {
 		return err
 	}
+	summaries := map[string]*WorkSummary{}
 	for _, card := range cards {
 		id := workString(card["id"])
 		card["source_refs"] = sourceRefs[id]
@@ -397,8 +488,10 @@ func (s *Store) EnrichCardPlans(ctx context.Context, cards []map[string]any, vis
 			card["plan_step_digest"] = plans.Digest(value, state, facts, now, plans.StepDigestWindow, plans.StepDigestLimit)
 			card["status_mismatch"] = firstNonEmptyString(workString(card["phase"]), workString(card["column_key"])) == "backlog" && state.Progress.Done > 0
 		}
-		health := plans.HealthFor(p, state, at, input.Created, now, threshold, input.Due)
+		health := plans.HealthFor(p, state, at, input.Created, now, threshold, input.Due, input.Phase)
 		card["plan_health"] = health
+		summaries[id] = buildWorkSummary(input, p, state, facts, now, threshold)
+		card["work_summary"] = summaries[id]
 		if p != nil {
 			state.HealthState = health.State
 			state.Health = plans.LegacyHealth(health.State)
@@ -406,7 +499,25 @@ func (s *Store) EnrichCardPlans(ctx context.Context, cards []map[string]any, vis
 		}
 	}
 
-	return nil
+	return s.enrichSummaryAttention(ctx, movement, summaries, now)
+}
+
+func summaryFactPlans(ps map[string]plans.Plan, inputs map[string]cardHealthInput) map[string]plans.Plan {
+	out := map[string]plans.Plan{}
+	for id, p := range ps {
+		out[id] = p
+	}
+	for id, input := range inputs {
+		if len(input.Children) == 0 {
+			continue
+		}
+		p := plans.Plan{}
+		for i, ref := range input.Children {
+			p.Steps = append(p.Steps, plans.Step{ID: fmt.Sprint(i), Ref: ref})
+		}
+		out["children:"+id] = p
+	}
+	return out
 }
 
 // SetCardPlan commits the graph and its event together. A stale editor cannot

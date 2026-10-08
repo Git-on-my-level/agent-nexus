@@ -548,6 +548,9 @@ func loadVisibleInboxItemsFiltered(r *http.Request, opts handlerOptions, notific
 			payloadItems = visible
 		}
 	}
+	if err := enrichInboxCardSummaries(r, opts, payloadItems); err != nil {
+		return nil, err
+	}
 	return payloadItems, nil
 }
 
@@ -599,6 +602,10 @@ func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 
 	enrichHumanAttentionNotificationStatus(r.Context(), opts, payload)
 	enrichAccessRequestInboxItem(r.Context(), opts, payload)
+	if err := enrichInboxCardSummaries(r, opts, []map[string]any{payload}); err != nil {
+		workStoreError(w, r, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"item":                 payload,
 		"generated_at":         now.Format(time.RFC3339Nano),
