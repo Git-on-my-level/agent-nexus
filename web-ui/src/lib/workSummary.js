@@ -33,7 +33,11 @@
  */
 
 import { formatAge, ageTitle } from "./ageBadge.js";
-import { freshnessKindForPhase, freshnessModel } from "./freshness.js";
+import {
+  expectationHoursFor,
+  freshnessKindForPhase,
+  freshnessModel,
+} from "./freshness.js";
 import { nextStepModel, planHealthModel } from "./planHealth.js";
 
 const asText = (value) => String(value ?? "").trim();
@@ -170,16 +174,27 @@ function progressPart(raw) {
   if (!Number.isFinite(total) || total <= 0) return null;
   const done = Math.max(0, Math.min(Number(raw?.done) || 0, total));
   const unit = asText(raw?.unit) || "steps";
+  const truncated = raw?.truncated === true;
+  /*
+   * `3+/7`, not `3/7+`, when linked work could not all be read. The marker
+   * belongs to the number that is a lower bound: the total is exact in both
+   * of core's branches — the plan's step count, or the number of explicit
+   * children — and only `done` can be undercounted. `3/7+` read as "more
+   * than seven".
+   */
+  const mark = truncated ? "+" : "";
   return {
     done,
     total,
     unit,
-    truncated: raw?.truncated === true,
+    truncated,
     percent: Math.round((done / total) * 100),
     /** `3/7`, the same text at every density. */
-    count: `${done}/${total}`,
+    count: `${done}${mark}/${total}`,
     /** `3/7 steps`, where there is room for the unit. */
-    label: `${done}/${total} ${unit}`,
+    label: `${done}${mark}/${total} ${unit}`,
+    /** The sentence a badge uses for its accessible name. */
+    sentence: `${truncated ? "at least " : ""}${done} of ${total} ${unit} done`,
   };
 }
 
@@ -311,6 +326,51 @@ export function planSegments(planState, geometry = null, limit = 24) {
   };
 }
 
+/**
+ * Just the computed state, for a caller that needs to sort or count rows
+ * rather than render them.
+ *
+ * The whole model resolves freshness, step digests and plan geometry; a
+ * count over two thousand rows does not need any of it. The vocabulary is
+ * the same one `workSummaryModel` uses, so a count and the rows it counts
+ * cannot disagree.
+ *
+ * @returns {string} the state, or "" when nothing at all is knowable
+ */
+export function statusStateOf(row) {
+  const raw = rawWorkSummary(row);
+  const computed = asText(raw?.status?.state);
+  if (computed) return computed;
+  const health = planHealthModel({
+    ...row,
+    health:
+      row?.health ??
+      (row?.plan_state?.health ? { status: row.plan_state.health } : undefined),
+  });
+  // Mirrors `fromLegacy` exactly, including its last resort: a row with no
+  // health and no phase is Unknown, not blank, so a count and a rendered row
+  // never disagree about what a bare row is.
+  return (
+    (health.known ? health.state : asText(row?.phase ?? row?.column_key)) ||
+    "unknown"
+  );
+}
+
+/**
+ * Does the computation say this work is over?
+ *
+ * Separate from the stored phase on purpose: a card somebody marked done
+ * whose plan is still blocked is not finished, and a list that folds it away
+ * on the phase alone hides the disagreement.
+ */
+export function isComputedClosed(row) {
+  return (
+    CLOSED_STATES.has(statusStateOf(row)) ||
+    freshnessKindForPhase("", asText(row?.state ?? row?.lifecycle_state)) ===
+      "closed"
+  );
+}
+
 /** The computed summary a row carries, in either of its two spellings. */
 export function rawWorkSummary(row) {
   if (!row || typeof row !== "object") return null;
@@ -355,6 +415,14 @@ function finish(model, row, { now }) {
     : model.hasPlan
       ? "initiative"
       : freshnessKindForPhase(model.phaseHint, model.lifecycleState);
+  /*
+   * The expectation the gate above resolved, carried so a badge a surface
+   * renders is judged against the same number. `freshnessModel` reads a
+   * projection-supplied `update_expectation_hours` off the row, and a badge
+   * re-rendered without the row would show a different expectation from the
+   * one that decided its colour.
+   */
+  const expectationHours = expectationHoursFor(freshnessKind, { row });
   const geometry = row?.geometry ?? null;
   const planState = row?.plan_state ?? null;
   const bars =
@@ -366,6 +434,7 @@ function finish(model, row, { now }) {
     ...model,
     closed,
     freshnessKind,
+    expectationHours,
     /**
      * Freshness against the cadence the card's state implies, or null when
      * unknowable — and null for anything finished, which nobody needs
@@ -374,7 +443,7 @@ function finish(model, row, { now }) {
     freshness: model.lastMovementAt
       ? freshnessModel(model.lastMovementAt, {
           kind: freshnessKind,
-          row,
+          expectationHours,
           verb: "moved",
           now,
         })
@@ -389,6 +458,7 @@ function baseModel(row) {
   return {
     phaseHint: "",
     hasPlan: false,
+    sourceStatus: "",
     lifecycleState: asText(row?.state ?? row?.lifecycle_state),
     setStatus: null,
     progress: null,
@@ -434,6 +504,15 @@ function fromComputed(raw, row, { now }) {
       age: Number.isFinite(age) && age >= 0 ? age : null,
       lastMovementAt: asText(raw.last_movement_at),
       source: raw.source && typeof raw.source === "object" ? raw.source : null,
+      /*
+       * The source's own word for where this stands — "In UAT", "awaiting
+       * triage". Core sends `source` only for a non-Nexus authority, exactly
+       * so a client can show it beside the computed status rather than
+       * instead of it: the two answer different questions, and a phase Nexus
+       * has no name for reads better in the source's words than mapped to the
+       * nearest one we do have.
+       */
+      sourceStatus: asText(raw.source?.native_status),
       attention: attentionPart(raw.attention),
       attentionTruncated: raw.attention_truncated === true,
       resolutionTruncated: raw.resolution_truncated === true,
@@ -511,6 +590,12 @@ function fromLegacy(row, { now }) {
       lastMovementAt:
         asText(row?.plan_state?.last_movement_at) || asText(row?.updated_at),
       source: row?.source && typeof row.source === "object" ? row.source : null,
+      // Core gates the computed part to non-Nexus authorities; match that, so
+      // a Nexus card does not grow a badge the computed path never gives it.
+      sourceStatus:
+        asText(row?.source?.authority).toLowerCase() === "nexus"
+          ? ""
+          : asText(row?.source?.native_status),
       resolutionTruncated: row?.plan_resolution_truncated === true,
     },
     row,

@@ -195,6 +195,12 @@
   let activeFilters = $derived(
     humanOnly || initiativesOnly || Object.values(filters).some(Boolean),
   );
+  /*
+   * "N marked blocked", not "N blocked". The link opens `?phase=blocked`,
+   * which core filters by the stored phase, so the count has to describe the
+   * same rows the filter will return — and the word says which of the two
+   * things a row's status line now distinguishes it is counting.
+   */
   let blockedCount = $derived(
     visible.filter((work) => work.phase === "blocked").length,
   );
@@ -684,10 +690,29 @@
     // the list follows the event stream instead of offering a Reload button.
     let lastHumanLiveRefresh = 0;
     let humanLiveTimer = 0;
+    /**
+     * Filters applied to rows after they arrive, so a re-read must page to
+     * the row cap for them to stay honest.
+     *
+     * Read from the URL rather than from `humanOnly`/`initiativesOnly`: this
+     * runs from a live-event callback and a timer, outside the component's
+     * reactive scope.
+     */
+    function localFiltersActive() {
+      const params = $page.url.searchParams;
+      return params.get("human") === "1" || params.get("initiatives") === "1";
+    }
     function refreshFromLiveEvent() {
       // A drag or an evidence prompt in progress keeps its rows still.
       if (!loaded || evidenceFor) return;
-      const scanAll = $page.url.searchParams.get("human") === "1";
+      /*
+       * A local filter narrows rows this page read rather than rows core
+       * selected, so a live re-read has to page as widely as the first read
+       * did. Without this the Initiatives filter re-read only the newest 200
+       * tasks on every workspace event and silently dropped every initiative
+       * further down the list.
+       */
+      const scanAll = localFiltersActive();
       if (!scanAll) {
         void load(false, filters, { live: true });
         return;
@@ -707,7 +732,7 @@
         humanLiveTimer = 0;
         lastHumanLiveRefresh = Date.now();
         if (!loaded || evidenceFor) return;
-        if ($page.url.searchParams.get("human") !== "1") return;
+        if (!localFiltersActive()) return;
         void load(false, filters, { live: true, scanAll: true });
       }, delay);
     }
@@ -771,7 +796,7 @@
         >{#if blockedCount}<span class="mx-1 text-fg-subtle">·</span><a
             class="ui-prose-link text-warn-text"
             href={queryHref({ phase: "blocked" })}
-            >{blockedCount}{nextCursor ? "+" : ""} blocked</a
+            >{blockedCount}{nextCursor ? "+" : ""} marked blocked</a
           >{/if}{#if neverCheckedCount}<span class="mx-1 text-fg-subtle">·</span
           ><a class="ui-prose-link" href={queryHref({ freshness: "unknown" })}
             >{neverCheckedCount}{nextCursor ? "+" : ""} never checked</a
@@ -1088,7 +1113,9 @@
 
   {#if (loading && !records.length) || initiativesPending}
     <p class="py-10 text-center text-meta text-fg-muted" role="status">
-      Loading tasks…
+      {initiativesPending && !loading
+        ? "Reading the initiatives board…"
+        : "Loading tasks…"}
     </p>
   {:else if !error && !visible.length}
     <section class="py-14 text-center">

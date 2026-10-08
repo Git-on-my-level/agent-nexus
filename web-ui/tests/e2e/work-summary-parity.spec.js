@@ -73,6 +73,30 @@ const sideCard = {
   },
 };
 
+/**
+ * A card from a core that computes no summary at all, carrying only the
+ * legacy fields — plus a source status Nexus has no phase for. Every surface
+ * has to keep saying something about it.
+ */
+const legacyCard = {
+  ref: "card:legacy",
+  handle: "legacy",
+  title: "Legacy card",
+  summary: "A card from a core before work_summary.",
+  phase: "in_progress",
+  column_key: "in_progress",
+  board_ref: "board:other",
+  updated_at: MOVED_AT,
+  source: {
+    authority: "jira",
+    connection_id: "jira-main",
+    native_id: "OPS-12",
+    native_status: "In UAT",
+  },
+  freshness: { status: "unknown" },
+  plan_health: { state: "blocked", reason: "A dependency is blocked." },
+};
+
 const boards = [
   {
     board: {
@@ -100,7 +124,7 @@ async function install(page) {
   await installWorkspaceApi(page, {
     actors: [{ id: "operator", display_name: "Alex", tags: ["human"] }],
     principals: [{ actor_id: "operator", principal_kind: "human" }],
-    work: [card, sideCard],
+    work: [card, sideCard, legacyCard],
   });
   await page.route("**/*", async (route) => {
     // Decoded: a card ref carries a colon, so the path arrives percent-encoded.
@@ -148,18 +172,23 @@ async function install(page) {
 async function readSummary(scope) {
   const summary = scope.locator("[data-work-summary]:visible").first();
   await expect(summary).toBeVisible({ timeout: 60_000 });
+  /*
+   * Optional parts read as "" rather than hanging: core omits a part it did
+   * not compute, so "absent" is one of the answers a surface can give and
+   * the surfaces still have to agree on it.
+   */
+  const optional = async (selector) => {
+    const part = summary.locator(selector).first();
+    return (await part.count()) ? (await part.innerText()).trim() : "";
+  };
   return {
     status: (await summary.locator("[data-health]").first().innerText()).trim(),
     state: await summary
       .locator("[data-health]")
       .first()
       .getAttribute("data-health"),
-    setStatus: (
-      await summary.locator("[data-summary-set-status]").first().innerText()
-    ).trim(),
-    progress: (
-      await summary.locator("[data-summary-progress]").first().innerText()
-    ).trim(),
+    setStatus: await optional("[data-summary-set-status]"),
+    progress: await optional("[data-summary-progress]"),
   };
 }
 
@@ -243,6 +272,47 @@ test("the task header agrees with the row it was opened from", async ({
   );
 });
 
+test("a card from a core with no computed summary still reads a state", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await install(page);
+  await page.setViewportSize({ width: 1440, height: 1100 });
+
+  await page.goto(`${TASKS}?view=table`);
+  const row = page.locator('[data-work-ref="card:legacy"]');
+  const legacy = await readSummary(row);
+  /*
+   * The back-compatibility reader: `plan_health` is the old spelling of the
+   * computed state, and the Status column keeps a value rather than going
+   * blank on a core that has not shipped `work_summary` yet.
+   */
+  expect(legacy.state).toBe("blocked");
+  expect(legacy.status).toContain("Blocked");
+  /*
+   * A legacy core computed a health but never said whether the stored phase
+   * agreed with it, so the client compares the two itself — which is the only
+   * place it decides anything about state, and only when core gave it a
+   * computed health to compare against.
+   */
+  expect(legacy.setStatus).toContain("marked in progress");
+  // And it has no plan, so there is no progress to state — an omitted part
+  // stays omitted rather than becoming an invented 0/0.
+  expect(legacy.progress).toBe("");
+  // And the tracker's own word for where it stands sits beside the computed
+  // state rather than being dropped.
+  await expect(row.locator("[data-summary-source-status]")).toHaveText(
+    "In UAT",
+  );
+
+  // Same card, same answer, on the board.
+  await page.goto(`${TASKS}?view=board`);
+  const board = await readSummary(
+    page.locator('[data-work-slot][data-work-ref="card:legacy"]'),
+  );
+  expect(board).toEqual(legacy);
+});
+
 test("the Initiatives filter reuses the board role Overview selects by", async ({
   page,
 }) => {
@@ -251,7 +321,7 @@ test("the Initiatives filter reuses the board role Overview selects by", async (
   await page.setViewportSize({ width: 1440, height: 1100 });
 
   await page.goto(`${TASKS}?view=table`);
-  await expect(page.locator("[data-work-ref]")).toHaveCount(2, {
+  await expect(page.locator("[data-work-ref]")).toHaveCount(3, {
     timeout: 60_000,
   });
 

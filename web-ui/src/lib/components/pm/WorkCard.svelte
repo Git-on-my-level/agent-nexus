@@ -1,5 +1,6 @@
 <script>
   import SignalBadge from "./SignalBadge.svelte";
+  import FreshnessBadge from "$lib/components/FreshnessBadge.svelte";
   import WorkSummary from "$lib/components/WorkSummary.svelte";
   import {
     isNexusOwned,
@@ -117,6 +118,22 @@
           <SignalBadge tone="warn">Requested</SignalBadge>
         {/if}
       {/if}
+    {/if}
+    {#if model?.freshness}
+      <!--
+        When it last moved, judged against the cadence the summary carries.
+        Row density leaves the age to the host because a table has a Last
+        checked column of its own; a board column has nowhere else to put it,
+        so the card places it here, at the end of the badge line.
+      -->
+      <FreshnessBadge
+        class="ml-auto"
+        at={model.lastMovementAt}
+        kind={model.freshnessKind}
+        expectationHours={model.expectationHours}
+        verb="moved"
+        {now}
+      />
     {/if}
   </div>
 </div>

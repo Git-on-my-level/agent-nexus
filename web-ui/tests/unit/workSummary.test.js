@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  isComputedClosed,
   planSegments,
   statusChip,
+  statusStateOf,
   stepListsModel,
   summaryFromStatus,
   workSummaryModel,
@@ -121,7 +123,15 @@ describe("the computed summary", () => {
     expect(
       model({ progress: { done: 1, total: 4, unit: "cards", truncated: true } })
         .progress,
-    ).toMatchObject({ unit: "cards", label: "1/4 cards", truncated: true });
+    ).toMatchObject({
+      unit: "cards",
+      // The marker goes on `done`: core's total is exact and only the count
+      // of finished children can be a lower bound.
+      count: "1+/4",
+      label: "1+/4 cards",
+      sentence: "at least 1 of 4 cards done",
+      truncated: true,
+    });
   });
 
   it("drops a zero-total progress rather than drawing an empty bar", () => {
@@ -193,6 +203,45 @@ describe("the computed summary", () => {
   });
 });
 
+describe("what a planless task reads as", () => {
+  /*
+   * Pinned deliberately, because it is the common case and it reads oddly.
+   *
+   * Core computes `no_plan` for any card with no plan steps that is not done,
+   * cancelled, blocked, overdue or quiet, and it sends `set_status` whenever
+   * the stored phase does not agree with the computed state — which `no_plan`
+   * never does. So an ordinary task in progress with no plan reads "No plan ·
+   * marked in progress" in the Tasks table, where before this change it read
+   * "In progress".
+   *
+   * The client renders what core computed rather than reordering it: the rule
+   * in the brief is that status shows computed health and `set_status` is
+   * shown when present. Whether `no_plan` should lead a status column for the
+   * majority of tasks is a question about the computation, not the renderer.
+   */
+  it("leads with no plan and carries the phase as the stored one", () => {
+    const model = workSummaryModel(
+      {
+        ref: "card:plain",
+        phase: "in_progress",
+        work_summary: {
+          status: {
+            state: "no_plan",
+            label: "No plan",
+            reason: "Card has no plan steps.",
+          },
+          set_status: { state: "in_progress", label: "In progress" },
+        },
+      },
+      { now: NOW },
+    );
+    expect(model.status.label).toBe("No plan");
+    expect(model.setStatus.label).toBe("In progress");
+    expect(model.progress).toBeNull();
+    expect(model.hasPlan).toBe(false);
+  });
+});
+
 describe("the legacy fallback", () => {
   const model = (overrides) =>
     workSummaryModel(legacy(overrides), { now: NOW });
@@ -218,6 +267,46 @@ describe("the legacy fallback", () => {
       state: "review",
       label: "In review",
     });
+  });
+
+  it("reads the board column when that is the only phase a row carries", () => {
+    // Board card reads (`/boards/{id}/cards`, and the agent page's recent
+    // cards) carry `column_key` rather than `phase`.
+    expect(
+      workSummaryModel({ ref: "card:x", column_key: "blocked" }, { now: NOW })
+        .status,
+    ).toMatchObject({ state: "blocked", label: "Blocked", tone: "danger" });
+    expect(statusStateOf({ ref: "card:x", column_key: "blocked" })).toBe(
+      "blocked",
+    );
+  });
+
+  it("keeps the source's own status word beside the computed one", () => {
+    const model = workSummaryModel(
+      {
+        ref: "card:x",
+        phase: "in_progress",
+        source: { authority: "jira", native_status: "In UAT" },
+      },
+      { now: NOW },
+    );
+    expect(model.status.label).toBe("In progress");
+    expect(model.sourceStatus).toBe("In UAT");
+  });
+
+  it("gives a card created here no source status to show", () => {
+    // Core sends the computed `source` part only for a non-Nexus authority,
+    // so the fallback must not invent one where the computed path has none.
+    expect(
+      workSummaryModel(
+        {
+          ref: "card:x",
+          phase: "in_progress",
+          source: { authority: "nexus", native_status: "in_progress" },
+        },
+        { now: NOW },
+      ).sourceStatus,
+    ).toBe("");
   });
 
   it("prints a source's own words for a phase Nexus has no name for", () => {
@@ -271,6 +360,43 @@ describe("the legacy fallback", () => {
       model({ plan_state: null, updated_at: ago(3 * 3_600_000) })
         .lastMovementAt,
     ).toBe(ago(3 * 3_600_000));
+  });
+});
+
+describe("counting and folding share the renderer's vocabulary", () => {
+  /*
+   * `statusStateOf` exists so a count over two thousand rows does not build
+   * two thousand full models. It has to agree with the model it is a
+   * shortcut for, or a chip and the rows it counts would disagree.
+   */
+  it("gives the same state the full model does", () => {
+    for (const input of [
+      computed(),
+      legacy({ health: { status: "stalled" } }),
+      legacy({ plan_health: { state: "at_risk" } }),
+      legacy({ plan_state: { health: "blocked" } }),
+      { ref: "card:x", phase: "review" },
+      { ref: "card:x", column_key: "backlog" },
+      { ref: "card:x" },
+    ]) {
+      expect(statusStateOf(input)).toBe(
+        workSummaryModel(input, { now: NOW }).status.state,
+      );
+    }
+  });
+
+  it("calls work closed only when the computation says it is over", () => {
+    const marked = (state) => ({
+      ref: "card:x",
+      phase: "done",
+      work_summary: { status: { state, label: state } },
+    });
+    expect(isComputedClosed(marked("done"))).toBe(true);
+    expect(isComputedClosed(marked("cancelled"))).toBe(true);
+    // Marked done, computed blocked: not over, however it is filed. A list
+    // that folded this away hid the disagreement the status line exists for.
+    expect(isComputedClosed(marked("blocked"))).toBe(false);
+    expect(isComputedClosed({ ref: "card:x", state: "archived" })).toBe(true);
   });
 });
 

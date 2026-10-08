@@ -14,6 +14,7 @@
    * top third says "nothing is waiting" in a big empty box has spent a third
    * of the screen on good news.
    */
+  import FreshnessBadge from "$lib/components/FreshnessBadge.svelte";
   import WorkSummary from "$lib/components/WorkSummary.svelte";
 
   let {
@@ -141,6 +142,15 @@
               title={card.title}
               {now}
             />
+            {#if card.summary?.freshness}
+              <FreshnessBadge
+                at={card.summary.lastMovementAt}
+                kind={card.summary.freshnessKind}
+                expectationHours={card.summary.expectationHours}
+                verb="moved"
+                {now}
+              />
+            {/if}
           </span>
         </li>
       {/each}

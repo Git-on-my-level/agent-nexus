@@ -30,11 +30,17 @@ const relative = (file) => file.slice(root.length - 3).replaceAll("\\", "/");
  * A comment naming a field is documentation, which is what these rules are
  * for in the first place; matching it would make explaining the rule a
  * violation of it.
+ *
+ * A block comment only counts when it opens a line. Stripping every opener
+ * anywhere was a hole: a string holding one (a glob, a regex) started a
+ * comment that ran to the next string holding a closer, and anything in
+ * between — a whole status renderer — went unchecked. Every comment in this
+ * repo opens its own line, and an anchored match can only strip less.
  */
 const read = (file) =>
   readFileSync(file, "utf8")
-    .replaceAll(/\/\*[\s\S]*?\*\//g, " ")
-    .replaceAll(/<!--[\s\S]*?-->/g, " ")
+    .replaceAll(/^[ \t]*\/\*[\s\S]*?\*\//gm, " ")
+    .replaceAll(/^[ \t]*<!--[\s\S]*?-->/gm, " ")
     .replaceAll(/^\s*\/\/.*$/gm, " ");
 
 const sources = globSync("**/*.{svelte,js}", { cwd: root, withFileTypes: true })
@@ -78,22 +84,50 @@ describe("card status is rendered in one component", () => {
    * something that put a state or a phase on screen before `WorkSummary`.
    */
   const RENDERS_STATUS = [
-    { what: "a phase label", re: /\b(phaseLabel|PHASE_LABELS)\b/ },
+    { what: "a phase label", re: /\b(phaseLabel|PHASE_LABELS)\b/i },
     {
       what: "a phase through label()",
       re: /\blabel\([^)]*\b(phase|column_key)\b/,
     },
-    { what: "a health badge attribute", re: /data-health=/ },
-    { what: "a raw phase", re: /\{[^}]*\.(phase|column_key)\b[^}]*\}/ },
+    /*
+     * Any health or status attribute, not just `data-health`: a second
+     * renderer reborn under `data-card-status` is the same thing wearing a
+     * different hook.
+     */
+    {
+      what: "a health or status data attribute",
+      re: /data-[\w-]*(health|status)[\w-]*=/,
+    },
+    /*
+     * A phase read off a row, however it is spelled: `work.phase`,
+     * `work?.column_key`, `work["phase"]`. Bracket access was a hole — the
+     * dotted form alone let a renamed presenter straight through.
+     */
+    {
+      what: "a raw phase",
+      re: /\{[^}]*(?:[.?]\s*(?:phase|column_key)\b|\[\s*["'](?:phase|column_key)["']\s*\])/,
+    },
     /*
      * The per-page formatters this change deleted, by name. The rules above
      * are the general net; this one makes a straight revert fail rather than
      * quietly reintroducing a second vocabulary under a local helper. A plan
-     * step's own status is a different thing and keeps its own name.
+     * step's own status is a different thing and keeps its own name. Matched by
+     * stem rather than by exact name: `workStatusText` is the same presenter
+     * under a prefix, and a word-boundary anchor let it through.
      */
     {
       what: "a local card-status formatter",
-      re: /\b(statusText|phaseText|healthLabel|badgeTone|dotClass)\s*\(/,
+      re: /[\w$]*(?:statusText|phaseText|healthLabel)\s*\(/i,
+    },
+    /*
+     * The two generic helper names the table and the board used, exactly:
+     * prefix-tolerant here would catch `eventTypeDotClass` and
+     * `receiptStageDotClass`, which colour an event type and a delivery
+     * stage — different vocabularies that are nobody's card status.
+     */
+    {
+      what: "a card status dot or tone helper",
+      re: /\b(badgeTone|dotClass)\s*\(/i,
     },
   ];
 
@@ -124,10 +158,32 @@ describe("card status is rendered in one component", () => {
       "src/routes/o/[organization]/w/[workspace]/overview/+page.svelte",
       "labels the columns of a counts-by-phase matrix, not any one card",
     ],
+    [
+      "src/lib/components/WorkSummaryCard.svelte",
+      "mirrors the summary's own state onto the card shell, for the grid's sort border",
+    ],
+    [
+      "src/lib/components/PlanView.svelte",
+      "marks a plan step's status (done/active/blocked/not_started), a different vocabulary",
+    ],
+    [
+      "src/lib/components/AnxRefChip.svelte",
+      "marks the source status a resolved ref published, not the card's computed state",
+    ],
   ]);
 
+  /**
+   * Where rendering lives: components and routes, in either language.
+   *
+   * `.js` as well as `.svelte`, because a presenter moved into a helper
+   * beside its component is still a presenter — and that was the other way
+   * this guard could be walked around.
+   */
+  const rendering = (name) =>
+    name.startsWith("src/lib/components/") || name.startsWith("src/routes/");
+
   const offenders = sources
-    .filter((file) => file.endsWith(".svelte"))
+    .filter((file) => rendering(relative(file)))
     .flatMap((file) => {
       const body = read(file);
       const name = relative(file);
@@ -154,8 +210,14 @@ describe("card status is rendered in one component", () => {
       '{#if work.phase === "blocked"}',
       // The task header printing the stored phase.
       ">{label(work.phase)}</SignalBadge",
-      // The Overview tile's health pill.
+      // The Overview tile's health pill, and the same thing renamed.
       "<span data-health={tile.health.state}></span>",
+      "<span data-card-status={tile.health.state}></span>",
+      // Bracket access, which the dotted rule alone let through.
+      '<span>{work["phase"]}</span>',
+      "<span>{work?.column_key}</span>",
+      // A presenter renamed and moved into a helper beside its component.
+      "const text = workStatusText(work);",
       // A report panel's own phase line.
       '{String(item.phase ?? "").replaceAll("_", " ")}',
       // The ⌘K result subtitle.

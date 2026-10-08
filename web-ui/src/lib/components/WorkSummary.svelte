@@ -13,7 +13,10 @@
    * source and the viewer's open asks — and `density` decides how many fit:
    *
    * - `row` — one line: status, the stored phase when it disagrees, progress
-   *   and asks. For a table cell, a board card and a search result.
+   *   and the viewer's asks. For a table cell, a board card and a search
+   *   result. No age: a row-density host is a list, and it either has a time
+   *   column of its own or no room for one, so where the age goes is its
+   *   call. A fourth badge here turned every Tasks row two lines tall.
    * - `card` — the Overview card: a status line with its age, a progress bar,
    *   the step lists or the next step, and a meta line.
    * - `header` — a page header, which has room for words: the status with its
@@ -29,6 +32,7 @@
    */
   import { tooltip } from "$lib/actions/tooltip.js";
   import FreshnessBadge from "$lib/components/FreshnessBadge.svelte";
+  import { formatAge } from "$lib/ageBadge.js";
   import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
 
   let {
@@ -61,19 +65,38 @@
     summary?.due ? formatAbsoluteDateTime(summary.due) : "",
   );
   let dueText = $derived(summary?.due ? formatTimestamp(summary.due) : "");
+  /*
+   * The sentence behind the count. `resolution_truncated` is a different
+   * fact from `progress.truncated` — linked plan or child work that could not
+   * be resolved at all, which the count cannot show — so it rides here rather
+   * than turning into a second marker on the number.
+   */
   let progressLabel = $derived(
     progress
-      ? `${title || "Checklist"}: ${progress.done} of ${progress.total} ${progress.unit} done`
+      ? [
+          `${title || "Checklist"}: ${progress.sentence}`,
+          summary?.resolutionTruncated && !progress.truncated
+            ? "some linked work could not be read"
+            : "",
+        ]
+          .filter(Boolean)
+          .join("; ")
       : "",
   );
   // Core samples the viewer's open asks; a capped window is a lower bound and
   // has to read as one rather than as an exact count.
   let attentionTitle = $derived.by(() => {
     if (!attention) return "";
+    /*
+     * The oldest ask's age in the same words every other age on the page
+     * uses. Core sends it as seconds at read time, so it becomes an instant
+     * to format: rounding straight to hours called an ask raised a minute
+     * ago "1h" and one from a month ago "720h".
+     */
     const oldest =
       attention.oldestAge == null
         ? ""
-        : `oldest ${Math.max(1, Math.round(attention.oldestAge / 3600))}h`;
+        : `oldest ${formatAge(new Date(now - attention.oldestAge * 1000), now)}`;
     const bound = attention.truncated || summary?.attentionTruncated;
     return [
       `${attention.count}${bound ? " or more" : ""} open ${attention.count === 1 ? "ask" : "asks"} for you`,
@@ -107,10 +130,24 @@
           >· marked {setStatus.label.toLocaleLowerCase()}</span
         >
       {/if}
-      {#if summary.freshness}
+      {#if summary.sourceStatus}
+        <!--
+          The source's own word for where this stands — "In UAT", "awaiting
+          triage". It sits beside the computed status rather than replacing
+          it: the two answer different questions, and a tracker's vocabulary
+          is the one its users speak. Core sends it only for a non-Nexus
+          authority, so a card created here never grows this badge.
+        -->
+        <span
+          class="ui-badge ui-badge--neutral summary__badge"
+          data-summary-source-status>{summary.sourceStatus}</span
+        >
+      {/if}
+      {#if density !== "row" && summary.freshness}
         <FreshnessBadge
           at={summary.lastMovementAt}
           kind={summary.freshnessKind}
+          expectationHours={summary.expectationHours}
           verb="moved"
           {now}
         />
@@ -158,7 +195,7 @@
             {#if progress.truncated || summary.resolutionTruncated}
               <span
                 class="summary__partial"
-                title="Some linked work could not be read, so this is a lower bound."
+                use:tooltip={"Some linked work could not be read, so this is a lower bound."}
                 >at least</span
               >
             {/if}
@@ -179,12 +216,8 @@
           data-summary-progress
           role="img"
           aria-label={progressLabel}
-          title={progressLabel}
-          >{density === "header"
-            ? progress.label
-            : progress.count}{progress.truncated || summary.resolutionTruncated
-            ? "+"
-            : ""}</span
+          use:tooltip={progressLabel}
+          >{density === "header" ? progress.label : progress.count}</span
         >
       {/if}
     {/if}
