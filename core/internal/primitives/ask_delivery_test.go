@@ -276,12 +276,23 @@ func TestAskExpiryPersistsDeliveries(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	before, err := s.AskOutcome(ctx, anyStringValue(ask["ref"]))
+	if err != nil || before["status"] != "open" {
+		t.Fatalf("terminal expiry exposed before durable delivery: %#v %v", before, err)
+	}
 	if err = s.MaintainAskLifecycleBatch(ctx); err != nil {
 		t.Fatal(err)
 	}
 	out, err := s.AskOutcome(ctx, anyStringValue(ask["ref"]))
 	if err != nil || out["status"] != "expired" || len(out["delivery"].([]map[string]any)) != 3 {
 		t.Fatalf("expiry %#v %v", out, err)
+	}
+	for _, delivery := range out["delivery"].([]map[string]any) {
+		if delivery["kind"] == "await" {
+			if err = s.RecordAskDelivery(ctx, "requester", anyStringValue(delivery["id"]), anyStringValue(ask["ref"]), "delivered", "", 1); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 }
 
@@ -315,5 +326,32 @@ func TestAskLegacyAliasLifecycleAndStaleness(t *testing.T) {
 	out, err = s.AskOutcome(ctx, anyStringValue(ask["ref"]))
 	if err != nil || out["status"] != "withdrawn" {
 		t.Fatalf("alias close %#v %v", out, err)
+	}
+}
+
+func TestAskLegacyNonCardExpiryPersistsBeforeDelivery(t *testing.T) {
+	s, _, card, _ := askDeliveryFixture(t)
+	ctx := context.Background()
+	ask, err := s.AppendEvent(ctx, "requester", map[string]any{"type": "human_attention_requested", "thread_id": card["thread_id"], "refs": []string{"thread:" + anyStringValue(card["thread_id"])}, "payload": map[string]any{"subject_ref": "thread:" + anyStringValue(card["thread_id"]), "requester_actor_id": "requester", "expires_at": time.Now().Add(-time.Hour).Format(time.RFC3339Nano)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub, err := s.CreateAskSubscription(ctx, "requester", anyStringValue(ask["ref"]), AskSubscriptionInput{Kind: "await", Label: "legacy waiter"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := s.AskOutcome(ctx, anyStringValue(ask["ref"]))
+	if err != nil || before["status"] != "open" {
+		t.Fatalf("premature terminal %#v %v", before, err)
+	}
+	if err = s.MaintainAskLifecycleBatch(ctx); err != nil {
+		t.Fatal(err)
+	}
+	after, err := s.AskOutcome(ctx, anyStringValue(ask["ref"]))
+	if err != nil || after["status"] != "expired" {
+		t.Fatalf("legacy expiry %#v %v", after, err)
+	}
+	if err = s.RecordAskDelivery(ctx, "requester", anyStringValue(sub["id"]), anyStringValue(ask["ref"]), "delivered", "", 1); err != nil {
+		t.Fatal(err)
 	}
 }

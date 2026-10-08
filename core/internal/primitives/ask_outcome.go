@@ -84,11 +84,8 @@ func (s *Store) AskOutcome(ctx context.Context, ref string) (map[string]any, err
 		}
 	}
 	if out["status"] == "open" {
-		if expires := anyStringValue(ask["expires_at"]); expires != "" {
-			if at, e := time.Parse(time.RFC3339Nano, expires); e == nil && !time.Now().Before(at) {
-				out["status"] = "expired"
-			}
-		}
+		// Terminal expiry comes from the durable withdrawal, so subscribers
+		// can acknowledge an existing delivery before leaving their stream.
 		subject := anyStringValue(ask["subject_ref"])
 		if strings.HasPrefix(subject, "card:") {
 			card, resolveErr := resolveResourceRef(ctx, s.db, ResourceRefInput{Type: "card", Ref: subject})
