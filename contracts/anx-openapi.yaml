@@ -7253,7 +7253,9 @@ paths:
       x-anx-concepts: [agents, runs, cards, inbox]
       x-anx-stability: beta
       x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-      parameters: [{name: agent_id, in: path, required: true, schema: {type: string}}]
+      parameters:
+        - {name: agent_id, in: path, required: true, schema: {type: string}}
+        - {name: summary, in: query, schema: {type: integer, enum: [1]}, description: Opt in to computed work_summary and summary aliases on at most 50 recent cards; prose remains in summary_text. cards_truncated marks a candidate-limited preview and is always true for scoped readers.}
       responses:
         '200': {description: Agent detail, content: {application/json: {schema: {$ref: '#/components/schemas/AgentDetailResponse'}}}}
         '401': {$ref: '#/components/responses/ErrorResponse'}
@@ -8586,6 +8588,7 @@ components:
       additionalProperties: false
       properties:
         agent: {$ref: '#/components/schemas/AgentSummary'}
+        cards_truncated: {type: boolean, description: Candidate-limited preview; always true for scoped summary=1 readers to avoid revealing hidden population counts.}
         recent_cards: {type: array, items: {$ref: '#/components/schemas/Card'}}
         recent_runs: {type: array, items: {$ref: '#/components/schemas/Run'}}
         open_asks: {type: array, items: {$ref: '#/components/schemas/AgentOpenAsk'}}
@@ -9690,7 +9693,7 @@ components:
 
     WorkSummary:
       type: object
-      description: Computed card presentation, independent of board role. Existing Card/Work collections expose this only with summary=1, aliased at summary with prose in summary_text. Default collection shapes remain unchanged; writes still accept prose. Card ref previews and the plan read expose computed summaries directly.
+      description: Computed card presentation, independent of board role. Planless cards use workflow phase with blocked, overdue (at_risk), or inactivity (stale) overrides; no_plan is a hint and never a status. Planned cards retain plan health. Existing Card/Work collections expose this only with summary=1, aliased at summary with prose in summary_text. Default collection shapes remain unchanged; writes still accept prose. Card ref previews and the plan read expose computed summaries directly.
       required: [status]
       properties:
         status:
@@ -9701,6 +9704,10 @@ components:
             label: {type: string}
             reason: {type: string}
             since: {type: string, nullable: true, format: date-time}
+        hints:
+          type: array
+          description: Secondary non-status facts. no_plan means there are no plan steps; the client decides whether to show it.
+          items: {type: string}
         set_status:
           type: object
           description: Stored phase, present only when it disagrees with computed health.
