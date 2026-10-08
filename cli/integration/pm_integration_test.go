@@ -16,6 +16,7 @@ func TestUnifiedPMDecisionDurabilityAndApprovalBoundary(t *testing.T) {
 	h := newPasskeyLiveCoreHarness(t)
 	h.enrollHost(t, "worker")
 	h.selectPMAgent(t, "worker")
+	connectPMForIntegration(t, h, "worker")
 	h.registerHumanPasskey(t, "maya", "Maya Chen", h.createHumanInviteToken(t))
 	board := h.runCLIExpectOK(t, "worker", map[string]any{"board": map[string]any{"title": "Synthetic PM approval test", "document_refs": []any{}, "pinned_refs": []any{}, "provenance": map[string]any{"sources": []any{"inferred"}}}}, "boards", "create")
 	work := h.runCLIExpectOK(t, "worker", map[string]any{"board_ref": mustStringPath(t, board.Payload, "result.board.ref"), "title": "Synthetic PM commitment"}, "work", "create", "--from-file", "-")
@@ -189,6 +190,7 @@ func readFileOrEmpty(path string) string {
 func TestUnifiedPMPaginationAcrossRestarts(t *testing.T) {
 	h := newLiveCoreHarness(t)
 	h.enrollHost(t, "reader")
+	connectPMForIntegration(t, h, "pm")
 	for i := 0; i < 3; i++ {
 		h.runCLIExpectOK(t, "reader", map[string]any{"request_key": fmt.Sprint("conversation-", i), "title": fmt.Sprint("Synthetic conversation ", i)}, "pm", "conversations", "create", "--from-file", "-")
 	}
@@ -231,4 +233,18 @@ func restartCoreForWorkTest(t *testing.T, h *liveCoreHarness, extraEnv ...string
 	}
 	h.server = cmd
 	waitForHealthy(t, h.baseURL, h.logPath)
+}
+
+// Domain scenarios onboard through the authenticated CLI/API boundary rather
+// than seeding presence rows or bypassing the server's first-connection gate.
+func connectPMForIntegration(t *testing.T, h *liveCoreHarness, agent string) {
+	t.Helper()
+	before := h.runCLIExpectOK(t, agent, nil, "pm", "presence")
+	if state := mustStringPath(t, before.Payload, "result.state"); state != "not_onboarded" {
+		t.Fatalf("initial PM state %q", state)
+	}
+	connected := h.runCLIExpectOK(t, agent, map[string]any{"runner": "integration", "host": "integration-computer"}, "pm", "connect", "--from-file", "-")
+	if state := mustStringPath(t, connected.Payload, "result.state"); state != "connected" {
+		t.Fatalf("PM did not connect: %s", connected.Stdout)
+	}
 }
