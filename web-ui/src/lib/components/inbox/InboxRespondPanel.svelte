@@ -7,6 +7,7 @@
     describeGrantAuthority,
     grantConfirmTitle,
   } from "$lib/accessGrant.js";
+  import { NEEDS_CONTEXT_OUTCOME } from "$lib/askDelivery.js";
   import {
     MAX_KEYED_PROPOSALS,
     PROPOSAL_FLASH_MS,
@@ -61,6 +62,13 @@
      * Defaults to `itemKey`.
      */
     sendContext = null,
+    /**
+     * Whether this item accepts "I need more context" — core's
+     * `allowed_response_outcomes` decides, and a structured access-grant
+     * request does not. Offering it there would leave the request pending
+     * behind a reader who believed they had answered it.
+     */
+    needsContext = false,
     draft = $bindable(""),
     chosen = "",
     busy = false,
@@ -216,6 +224,41 @@
     if (armed < 0 || pending) return false;
     armed = -1;
     return true;
+  }
+
+  /*
+   * "I need more context" is a third thing, next to answering and closing: the
+   * reader cannot answer yet and the agent has to come back with more. It is
+   * never one of the suggestions — the agent wrote those as answers — so it
+   * opens its own short note, which is the only part core keeps as the audit
+   * trail of what was missing.
+   */
+  let contextNoteOpen = $state(false);
+  let contextNote = $state("");
+  let contextNoteEl = $state(null);
+  /* Reset with the item: a note written about one ask is not about the next. */
+  let noteOpenedFor = null;
+  $effect(() => {
+    const key = itemKey;
+    if (key === noteOpenedFor) return;
+    noteOpenedFor = key;
+    contextNoteOpen = false;
+    contextNote = "";
+  });
+
+  async function openContextNote() {
+    if (busy || pending) return;
+    contextNoteOpen = true;
+    await tick();
+    contextNoteEl?.focus?.();
+  }
+
+  function sendContextRequest() {
+    const note = contextNote.trim();
+    if (!note) return;
+    send(note, NEEDS_CONTEXT_OUTCOME);
+    contextNoteOpen = false;
+    contextNote = "";
   }
 
   // The confirmation belongs to one request, not to the panel. This component
@@ -410,6 +453,52 @@
           </li>
         {/each}
       </ul>
+    </div>
+  {/if}
+
+  {#if needsContext && !isAccess}
+    <div data-inbox-needs-context>
+      {#if contextNoteOpen}
+        <div class="space-y-2">
+          <label class="ui-label" for={`${replyId}-context`}
+            >What is missing?</label
+          >
+          <textarea
+            id={`${replyId}-context`}
+            class="ui-input min-h-16"
+            bind:value={contextNote}
+            bind:this={contextNoteEl}
+            placeholder="Name what you need before you can answer…"
+            data-inbox-needs-context-note
+          ></textarea>
+          <div class="flex flex-wrap gap-2">
+            <button
+              class="ui-btn-secondary"
+              type="button"
+              disabled={busy || !contextNote.trim() || Boolean(pending)}
+              data-inbox-needs-context-send
+              onclick={sendContextRequest}>Send back for context</button
+            >
+            <button
+              class="text-micro text-fg-muted hover:text-fg"
+              type="button"
+              disabled={busy}
+              onclick={() => {
+                contextNoteOpen = false;
+                contextNote = "";
+              }}>Cancel</button
+            >
+          </div>
+        </div>
+      {:else}
+        <button
+          class="ui-btn-secondary"
+          type="button"
+          disabled={busy || Boolean(pending)}
+          data-inbox-needs-context-open
+          onclick={openContextNote}>I need more context</button
+        >
+      {/if}
     </div>
   {/if}
 

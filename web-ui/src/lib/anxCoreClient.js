@@ -3,6 +3,7 @@ import {
   commandRegistry,
 } from "../../../contracts/gen/ts/dist/client.js";
 
+import { isInboxResponseOutcome } from "./askDelivery.js";
 import { getExpectedCommandRegistryDigest } from "./commandRegistryDigest.js";
 import { EXPECTED_SCHEMA_VERSION, normalizeBaseUrl } from "./config.js";
 import { appPath } from "./workspacePaths.js";
@@ -848,6 +849,12 @@ const adapterCommandTable = [
     true,
   ],
   ["listInboxItems", "inbox.list", (filters) => ({ options: q(filters) })],
+  /*
+   * One ask's durable outcome: status, staleness, the task decision the answer
+   * recorded and its delivery rows. Indexed point lookups in core, bounded to
+   * 32 deliveries; the Inbox reads it for the selected item only.
+   */
+  ["getAsk", "asks.get", (askRef) => p(pathParams({ ask_id: askRef }))],
   [
     "createBoard",
     "boards.create",
@@ -1371,11 +1378,7 @@ export function createAnxCoreClient(options = {}) {
       if (!responseText) {
         throw new Error("respondInboxItem requires a non-empty response_text.");
       }
-      if (
-        !["answered", "approved", "rejected", "acknowledged"].includes(
-          payload?.outcome,
-        )
-      ) {
+      if (!isInboxResponseOutcome(payload?.outcome)) {
         throw new Error("respondInboxItem requires a valid outcome.");
       }
       return invokeCommand("inbox.respond", {

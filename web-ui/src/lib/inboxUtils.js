@@ -143,7 +143,11 @@ export function decisionGroundingRefForInboxItem(item) {
  */
 export function inboxSubjectNoun(prefix) {
   const key = String(prefix ?? "").trim();
-  return INBOX_SUBJECT_LABELS[key] ?? key;
+  // `Object.hasOwn`, not a bare lookup: a ref whose prefix is `constructor`
+  // otherwise renders the Object constructor as the noun.
+  return Object.hasOwn(INBOX_SUBJECT_LABELS, key)
+    ? INBOX_SUBJECT_LABELS[key]
+    : key;
 }
 
 export function getInboxUrgencyLabel(level) {

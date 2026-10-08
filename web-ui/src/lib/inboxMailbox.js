@@ -1,4 +1,5 @@
 import { accessRequestFromInboxItem } from "$lib/accessGrant.js";
+import { NEEDS_CONTEXT_OUTCOME } from "./askDelivery.js";
 import { isHumanNextActor } from "./humanActors.js";
 import { updateDigest } from "./inboxDigest.js";
 import {
@@ -273,6 +274,13 @@ export function inboxRowBadge(row, now = Date.now()) {
   // nothing about what changed.
   if (row.kind === "update") return null;
   if (row.kind === "inbox") {
+    /*
+     * An ask sent back for context is not answered, and Handled must not read
+     * as though it were: the agent owns it again, and the badge says which of
+     * the two things the reader did.
+     */
+    if (String(row.item?.outcome ?? "") === NEEDS_CONTEXT_OUTCOME)
+      return { label: "Sent back for context", tone: "neutral" };
     return (
       LOUD_SEVERITIES.get(String(row.severity ?? "").toLowerCase()) ?? null
     );
