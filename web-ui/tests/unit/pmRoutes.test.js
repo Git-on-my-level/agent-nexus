@@ -55,6 +55,7 @@ const client = vi.hoisted(() =>
       "reconcilePmAction",
       "createPmDecision",
       "moveBoardCard",
+      "archiveCard",
       "listInboxItems",
       "getHomeUnread",
       "respondInboxItem",
@@ -125,6 +126,10 @@ import {
   clearWorkspaceViews,
   readWorkspaceView,
 } from "../../src/lib/workspaceViewCache.js";
+import {
+  inboxNeedsYouCount,
+  startInboxCount,
+} from "../../src/lib/inboxCount.js";
 import { readerScopeKey } from "../../src/lib/readerScope.js";
 import WorkViews from "../../src/lib/components/pm/WorkViews.svelte";
 
@@ -924,6 +929,157 @@ describe("PM operator interactions", () => {
     expect(request).toMatchObject({ response_text: "Hub first" });
     expect(capturedScopes).toEqual([["org-a", "workspace-a"]]);
   });
+  it.each(["response", "decision", "archive"])(
+    "persists a confirmed %s in its original workspace after switching away",
+    async (kind) => {
+      state.route("/inbox");
+      currentOrganizationSlug.set("org-a");
+      currentWorkspaceSlug.set("workspace-a");
+      const scopeA = readerScopeKey();
+      const confirmed = deferred();
+      const ask = {
+        id: "inbox:ask-one",
+        kind: "ask",
+        title: "Choose a path",
+        status: "open",
+        response_proposals: ["Proceed"],
+        related_refs: ["thread:one"],
+        source_event_time: new Date().toISOString(),
+      };
+      const decision = {
+        id: "decision-one",
+        instruction: "Choose rollout",
+        status: "awaiting_answer",
+        revision: 1,
+      };
+      const task = {
+        ref: "card:stale",
+        title: "Blocked stale",
+        phase: "blocked",
+        source: { authority: "nexus" },
+        work_summary: {
+          status: { state: "blocked", label: "Blocked" },
+          age: 127 * 86400,
+          last_movement_at: new Date(Date.now() - 127 * 86400000).toISOString(),
+        },
+      };
+      client.listInboxItems.mockImplementation(async ({ status }) => ({
+        items: kind === "response" && status === "open" ? [ask] : [],
+      }));
+      client.listPmDecisions.mockResolvedValue({
+        items: kind === "decision" ? [decision] : [],
+      });
+      client.listWork.mockResolvedValue({
+        work: kind === "archive" ? [task] : [],
+      });
+      client.respondInboxItem.mockReturnValue(confirmed.promise);
+      client.answerPmDecision.mockReturnValue(confirmed.promise);
+      client.archiveCard.mockReturnValue(confirmed.promise);
+      const view = render(InboxPage);
+      await waitFor(() =>
+        expect(readWorkspaceView(`${scopeA}:inbox`)).toBeTruthy(),
+      );
+      let write;
+      if (kind === "response") {
+        await screen.findByRole("heading", { name: ask.title });
+        await fireEvent.click(
+          view.container.querySelector('[data-inbox-proposal="1"]'),
+        );
+        await new Promise((resolve) =>
+          setTimeout(resolve, PROPOSAL_FLASH_MS + 100),
+        );
+        write = flushInboxResponse();
+        await waitFor(() => expect(client.respondInboxItem).toHaveBeenCalled());
+      } else if (kind === "decision") {
+        await screen.findByRole("heading", { name: decision.instruction });
+        await fireEvent.input(
+          screen.getByLabelText("Your note (recorded with the decision)"),
+          {
+            target: { value: "Wait for evidence" },
+          },
+        );
+        await fireEvent.click(screen.getByRole("button", { name: "Decline" }));
+        await waitFor(() => expect(client.answerPmDecision).toHaveBeenCalled());
+      } else {
+        await fireEvent.click(
+          await screen.findByRole("button", { name: "Stale (1)", exact: true }),
+        );
+        await fireEvent.click(
+          screen.getByRole("button", {
+            name: "Archive Blocked stale",
+            exact: true,
+          }),
+        );
+        await waitFor(() => expect(client.archiveCard).toHaveBeenCalled());
+      }
+      view.unmount();
+      currentWorkspaceSlug.set("workspace-b");
+      const stopB = startInboxCount("workspace-b");
+      confirmed.resolve(
+        kind === "decision"
+          ? {
+              ...decision,
+              status: "declined",
+              answer: "Wait for evidence",
+              revision: 2,
+            }
+          : { event: { id: "confirmed" } },
+      );
+      if (write) await write;
+      await waitFor(() => {
+        const snapshot = readWorkspaceView(`${scopeA}:inbox`);
+        if (kind === "response") expect(snapshot[3].value.items).toEqual([]);
+        else if (kind === "decision")
+          expect(snapshot[0].value.items[0].status).toBe("declined");
+        else expect(snapshot[2].value.work).toEqual([]);
+      });
+      expect(getStore(inboxNeedsYouCount).workspace).toBe("workspace-b");
+      stopB();
+      for (const name of [
+        "listInboxItems",
+        "listPmDecisions",
+        "listPmActions",
+        "listWork",
+        "getHomeUnread",
+      ]) {
+        client[name].mockRejectedValue(new Error("Reads unavailable"));
+      }
+      const readCalls = client.getHomeUnread.mock.calls.length;
+      currentWorkspaceSlug.set("workspace-a");
+      state.route("/inbox", {
+        organization: "org-a",
+        workspace: "workspace-a",
+      });
+      const stopA = startInboxCount("workspace-a");
+      expect(getStore(inboxNeedsYouCount)).toMatchObject({
+        workspace: "workspace-a",
+        count: 0,
+      });
+      render(InboxPage);
+      await waitFor(() =>
+        expect(client.getHomeUnread.mock.calls.length).toBeGreaterThan(
+          readCalls,
+        ),
+      );
+      await waitFor(() =>
+        expect(screen.queryByRole("button", { name: /^1 Proceed/ })).toBeNull(),
+      );
+      expect(
+        screen.queryByRole("button", { name: "Decline", exact: true }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", {
+          name: "Archive Blocked stale",
+          exact: true,
+        }),
+      ).toBeNull();
+      expect(getStore(inboxNeedsYouCount)).toMatchObject({
+        workspace: "workspace-a",
+        count: 0,
+      });
+      stopA();
+    },
+  );
   it("loads older PM turns without losing the latest reply", async () => {
     state.route("/pm?conversation=conversation-one");
     client.getPmConversation

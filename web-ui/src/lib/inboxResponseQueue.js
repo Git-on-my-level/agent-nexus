@@ -322,6 +322,21 @@ async function commit(entry) {
   );
   try {
     const result = await entry.send(entry.itemId, entry.request);
+    const respondedAt = new Date().toISOString();
+    // Confirmation belongs to the captured reader, even after navigation.
+    // The active overlay is cleared on scope changes, so persist directly.
+    commitInboxView(entry.identity, {
+      answered: {
+        ...entry.item,
+        id: entry.itemId,
+        status: "completed",
+        response_text:
+          entry.item?.response_text ||
+          String(entry.request?.response_text ?? ""),
+        outcome: entry.item?.outcome || String(entry.request?.outcome ?? ""),
+        responded_at: entry.item?.responded_at || respondedAt,
+      },
+    });
     if (entry.scope !== responseScope()) return;
     forgetFailure(entry.itemId);
     setOverlay(entry.itemId, {
@@ -330,14 +345,9 @@ async function commit(entry) {
       status: "committed",
       response_text: String(entry.request?.response_text ?? ""),
       outcome: String(entry.request?.outcome ?? ""),
-      responded_at: new Date().toISOString(),
+      responded_at: respondedAt,
       until: Date.now() + COMMITTED_OVERLAY_MS,
     });
-    const answered = applyResponseOverlay(
-      [entry.item || { id: entry.itemId }],
-      get(inboxResponseOverlay),
-    )[0];
-    commitInboxView(entry.identity, { answered });
     let showing = false;
     inboxResponseToast.update((toast) => {
       showing = toast?.id === entry.id;

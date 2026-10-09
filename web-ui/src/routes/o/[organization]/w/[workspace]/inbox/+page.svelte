@@ -893,6 +893,7 @@
         approve: choice === "approve",
         text: answer.trim(),
       });
+      commitInboxView(scope, { decision: result });
       if (scope !== readerScopeKey()) return;
       requestId++;
       loadController?.abort();
@@ -908,7 +909,6 @@
       decisions = decisions.map((item) =>
         item.id === result.id ? result : item,
       );
-      commitInboxView(scope, { decision: result });
       answer = "";
       choice = "";
       notice = approved ? "Approved." : "Declined.";
@@ -1336,6 +1336,7 @@
           ? { if_version: row.item.version }
           : {}),
       });
+      commitInboxView(scope, { archivedRef: row.ref });
       if (scope !== readerScopeKey()) return;
       // Invalidate feed reads and prevent pending single-item reads from
       // restoring this task's decisions, without cancelling unrelated reads.
@@ -1344,7 +1345,6 @@
       loading = false;
       refreshPending = false;
       archivedWorkRefs.add(row.ref);
-      commitInboxView(scope, { archivedRef: row.ref });
       // Navigate while the old row still exists. Related decisions also leave
       // after archive, so select only a row that will survive the removal.
       if (selectedId === row.id || selected?.ref === row.ref) {
