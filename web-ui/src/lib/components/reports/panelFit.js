@@ -138,9 +138,9 @@ function narrowEnough(type, data, count) {
  *   (`withLiveObservation`); `panel.data` is still the authored query.
  * - A series-bound panel has its rows merged onto `panel.data`
  *   (`withSeriesObservation`) — but only for an `ok` read. Anything else
- *   blanks `panel.data` to `{}`, so measuring it would read a waiting panel
- *   as an empty one. A `stale` series still renders, from the observation,
- *   exactly as `SeriesReportPanel` does.
+ *   blanks `panel.data` to `{}` unless a fallback snapshot is kept there.
+ *   `SeriesReportPanel` draws that snapshot whenever `seriesFallback` is set;
+ *   only a stale `live-timeline` still renders from the observation.
  * - Everything else authored its own data.
  *
  * `null` means "do not reflow for this": a panel that has not answered keeps
@@ -151,7 +151,8 @@ function renderedData(panel) {
   if (live) return live.status === "ok" ? (live.data ?? {}) : null;
   if (panel?.source) {
     const observation = panel.seriesObservation;
-    if (observation?.status === "stale") return observation.data ?? {};
+    if (observation?.status === "stale" && panel.type === "live-timeline")
+      return observation.data ?? {};
     if (panel.seriesFallback || observation?.status === "ok")
       return panel.data ?? {};
     return null;

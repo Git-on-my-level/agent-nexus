@@ -142,7 +142,8 @@ describe("panel fit reads content, not just type", () => {
         }),
       ),
     ).toMatchObject({ sparse: false, wide: true });
-    // A fallback snapshot is on `panel.data`, and it is what the reader sees.
+    // A fallback snapshot is on `panel.data`, and it is what the reader sees —
+    // including when the live read is stale rather than unavailable.
     expect(
       panelFit(
         bound({
@@ -152,6 +153,31 @@ describe("panel fit reads content, not just type", () => {
         }),
       ),
     ).toMatchObject({ wide: true });
+    expect(
+      panelFit(
+        bound({
+          data: rows(9),
+          seriesFallback: true,
+          seriesObservation: {
+            status: "stale",
+            data: { columns: ["One"], rows: [] },
+          },
+        }),
+      ),
+    ).toMatchObject({ wide: true, sparse: false, tier: "wide" });
+    // Any other stale body is omitted, so an empty observation must not mark
+    // the panel sparse the way a visible empty table would.
+    expect(
+      panelFit(
+        bound({
+          data: {},
+          seriesObservation: {
+            status: "stale",
+            data: { columns: ["One"], rows: [] },
+          },
+        }),
+      ),
+    ).toMatchObject({ sparse: false, wide: true });
   });
 
   it("keeps a nearly empty panel out of the row's minimum", () => {
