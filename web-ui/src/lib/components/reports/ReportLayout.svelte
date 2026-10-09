@@ -293,12 +293,21 @@
      * shell's own `overflow: hidden` then cuts the right edge off every panel
      * with no scrollbar to say so. Clamped, the panel simply gets the width
      * there is.
+     *
+     * The tier and cap defaults are `var()` fallbacks rather than
+     * declarations here. As declarations they sit on
+     * `.report-layout-grid.layout-fit` — two classes — and silently beat the
+     * single-class `.layout-fit-tight` they are supposed to fall back to,
+     * which made the 260px tier dead and stacked two small panels that had
+     * room to sit side by side.
      */
-    --report-fit-min: 380px;
     grid-template-columns: repeat(
       auto-fit,
       minmax(
-        min(100%, max(var(--report-fit-min), var(--report-fit-floor))),
+        min(
+          100%,
+          max(var(--report-fit-min, 380px), var(--report-fit-floor, 50%))
+        ),
         1fr
       )
     );

@@ -150,16 +150,42 @@ export function gridPlacement(node, children, panelsById) {
     };
   });
   /*
-   * One panel left over takes the row too.
+   * A panel left alone on a row takes the row.
    *
-   * `auto-fit` collapses tracks nothing is placed in, so a grid of one narrow
-   * panel already fills its width. A full-row neighbour defeats that — the
-   * tracks are occupied — and the leftover panel would render at half width
-   * with the other half blank. "Initiatives, then the one thing that needs a
-   * decision" is the shape this happens to, which is to say the common one.
+   * `auto-fit` collapses tracks nothing is placed in, so narrow panels with
+   * the grid to themselves already fill its width. A full-row panel defeats
+   * that — the tracks stay occupied — and it also *splits* its neighbours:
+   * `prose, chart, prose` is not one group of two narrow panels, it is two
+   * groups of one, and each of those renders at half width with the other
+   * half blank. So leftovers are worked out per contiguous group, in reading
+   * order, never by reordering panels to fill a row.
+   *
+   * What a group leaves over depends on the column count, and only the
+   * renderer knows that one — it reads it off the width available. Two cases
+   * are decidable here:
+   *
+   * - A group of one is alone on its row at every column count.
+   * - At the default cap the grid resolves to exactly two columns or one, so
+   *   an odd-numbered group ends with a panel alone. Widening it is a no-op
+   *   in the one-column case, where it already has the full width.
+   *
+   * A cap of 3 or 4 can resolve to anything from 1 up to it, so beyond a
+   * group of one there is nothing to decide and the grid lays it out.
    */
-  if (!authored && cells.filter((cell) => !cell.full).length === 1)
-    for (const cell of cells) cell.full = true;
+  if (!authored) {
+    let group = [];
+    const settle = () => {
+      const alone =
+        group.length === 1 || (columns === 2 && group.length % 2 === 1);
+      if (alone) group[group.length - 1].full = true;
+      group = [];
+    };
+    for (const cell of cells) {
+      if (cell.full) settle();
+      else group.push(cell);
+    }
+    settle();
+  }
   const tier = cells
     .filter((cell) => !cell.full)
     .reduce((acc, cell) => widerTier(acc, cell.tier), PANEL_FIT_TIERS[0]);

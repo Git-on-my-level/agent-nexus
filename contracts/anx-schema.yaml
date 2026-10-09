@@ -1059,7 +1059,7 @@ visual_report_layout:
     - A named column count is a maximum at every width, so a grid that names more columns than its panels can read in renders fewer.
     - Wide content claims the full row: plan graphs, charts, series timelines and tables with real columns. Content decides, so an empty table or a planless initiative list is not wide.
     - A nearly empty panel never claims a wide row and never raises its row's minimum, so it cannot push other panels into fewer columns.
-    - A panel left alone on a row takes the whole row rather than half of one.
+    - A panel left alone on a row takes the whole row rather than half of one. Full-row content splits its neighbours into separate groups, and leftovers are decided per group in reading order; panels are never reordered to fill a row.
     - A live panel still reading keeps its type's placement; placement changes only when an observation arrives, never while waiting for one.
     - A span of 2 or more is the full-width override in a grid with no columns. A grid whose children declare spans keeps exact tracks and exact spans, and collapses to one column on narrow screens.
     - Child order in the layout tree is reading order on every width; the renderer never reorders panels to fill a row.

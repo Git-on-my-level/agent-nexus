@@ -219,6 +219,71 @@ describe("grid placement", () => {
     expect(stored).toMatchObject({ authored: false, columns: 4 });
   });
 
+  it("splits groups at a full-row panel rather than counting the whole grid", () => {
+    /*
+     * prose, chart, prose is two groups of one, not one group of two: the
+     * chart between them takes the row, so neither prose panel has anything
+     * to share a row with. Counting leftovers across the whole grid saw two
+     * narrow panels and left both at half width with a gap beside each.
+     */
+    const placement = gridPlacement(
+      { type: "grid" },
+      [
+        { type: "panel", panel_id: note.id },
+        { type: "panel", panel_id: wide.id },
+        { type: "panel", panel_id: other.id },
+      ],
+      panelsById,
+    );
+    expect(placement.cells.map((cell) => cell.full)).toEqual([
+      true,
+      true,
+      true,
+    ]);
+  });
+
+  it("widens the odd one out of a group, at the default two-column cap", () => {
+    const third = { ...panel("callout", { tone: "info", text: prose(400) }) };
+    third.id = "third";
+    const byId = new Map([...panelsById, [third.id, third]]);
+    const group = (ids) => ids.map((id) => ({ type: "panel", panel_id: id }));
+    // Three narrow panels at a cap of two: two share the first row, and the
+    // third would sit alone on the second with a gap beside it.
+    expect(
+      gridPlacement(
+        { type: "grid" },
+        group([note.id, other.id, third.id]),
+        byId,
+      ).cells.map((cell) => cell.full),
+    ).toEqual([false, false, true]);
+    // An even group fills both of its rows, so nothing is widened.
+    expect(
+      gridPlacement(
+        { type: "grid" },
+        group([note.id, other.id]),
+        byId,
+      ).cells.map((cell) => cell.full),
+    ).toEqual([false, false]);
+    /*
+     * A named cap of 3 or 4 can resolve to anything from one column up to it,
+     * so only a group of one is decidable here; the grid lays out the rest.
+     */
+    expect(
+      gridPlacement(
+        { type: "grid", columns: 4 },
+        group([note.id, other.id, third.id]),
+        byId,
+      ).cells.map((cell) => cell.full),
+    ).toEqual([false, false, false]);
+    expect(
+      gridPlacement(
+        { type: "grid", columns: 4 },
+        [{ type: "panel", panel_id: wide.id }, ...group([note.id])],
+        byId,
+      ).cells.map((cell) => cell.full),
+    ).toEqual([true, true]);
+  });
+
   it("gives the row to a panel that would otherwise be left alone on it", () => {
     // auto-fit collapses tracks nothing is placed in, so a lone panel already
     // fills its width — unless a full-row neighbour keeps the tracks alive.

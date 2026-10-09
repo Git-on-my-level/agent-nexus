@@ -291,6 +291,170 @@ for (const viewport of [
   });
 }
 
+/*
+ * Placement geometry, measured in a browser.
+ *
+ * Both of these are rules the unit tests can only check the *inputs* to: the
+ * column count is decided by CSS from the width available, so only a rendered
+ * grid can say whether two panels actually sat side by side or whether a row
+ * was left half empty.
+ */
+const geometryPanel = (id, type, title, data) => ({
+  id,
+  project_id: "placement",
+  type,
+  title,
+  author: "Reporting showcase",
+  provenance: "reported",
+  observed_at: OBSERVED_AT,
+  freshness: "current",
+  source_ids: [],
+  data,
+});
+
+const geometryReport = (panels) => ({
+  kind: "anx.visual-report",
+  schema_version: 1,
+  title: "Placement",
+  summary: "Panels placed from the width available and what they carry.",
+  generated_at: OBSERVED_AT,
+  projects: [
+    {
+      id: "placement",
+      title: "Placement",
+      summary: "Geometry only.",
+      outcome: "Nothing is left half empty",
+    },
+  ],
+  sources: [],
+  panels,
+});
+
+/** Every cell of the first content-driven grid, in reading order. */
+async function gridCells(page) {
+  const grid = page.locator('[data-report-layout="grid"]').first();
+  await expect(grid).toBeVisible();
+  return grid.evaluate((node) => {
+    const style = getComputedStyle(node);
+    const inner =
+      node.getBoundingClientRect().width -
+      parseFloat(style.paddingLeft || "0") -
+      parseFloat(style.paddingRight || "0");
+    return {
+      width: Math.round(inner),
+      tracks: style.gridTemplateColumns.split(" ").length,
+      cells: [...node.querySelectorAll(":scope > [data-report-cell]")].map(
+        (cell) => {
+          const rect = cell.getBoundingClientRect();
+          return {
+            id: cell.querySelector("[data-report-panel]")?.dataset.reportPanel,
+            kind: cell.dataset.reportCell,
+            top: Math.round(rect.top),
+            width: Math.round(rect.width),
+          };
+        },
+      ),
+    };
+  });
+}
+
+/** Rows, as the grid actually laid them out, keyed by their top edge. */
+const rowsOf = (geometry) => {
+  const rows = new Map();
+  for (const cell of geometry.cells) {
+    if (!rows.has(cell.top)) rows.set(cell.top, []);
+    rows.get(cell.top).push(cell);
+  }
+  return [...rows.values()];
+};
+
+test("two small panels share a row in a column neither could have alone", async ({
+  page,
+}) => {
+  /*
+   * The width band is the assertion. Below ~536px two 260px columns do not
+   * fit; above ~776px two 380px columns do, so the tier stops deciding
+   * anything. In between, the grid is two columns only if the small panels
+   * are measured at their own 260px minimum rather than at the prose tier —
+   * which is what a `--report-fit-min` default on a two-class selector,
+   * silently outranking the one-class tier it was meant to fall back to,
+   * took away.
+   */
+  await page.setViewportSize({ width: 700, height: 900 });
+  await installReportDocument(
+    page,
+    geometryReport([
+      geometryPanel("left", "metric", "Open asks", { value: 4 }),
+      geometryPanel("right", "metric", "Answered", { value: 11 }),
+    ]),
+  );
+  await page.goto(DOC_PATH);
+  const geometry = await gridCells(page);
+
+  expect(
+    geometry.width,
+    "two 260px columns and a 16px gap must fit",
+  ).toBeGreaterThan(536);
+  expect(
+    geometry.width,
+    "two 380px columns must NOT fit, or the tier decides nothing",
+  ).toBeLessThan(776);
+
+  expect(geometry.cells.map((cell) => cell.id)).toEqual(["left", "right"]);
+  expect(rowsOf(geometry)).toHaveLength(1);
+  for (const cell of geometry.cells)
+    expect(cell.width).toBeGreaterThanOrEqual(260);
+});
+
+test("a narrow panel split off by a wide one still fills its row", async ({
+  page,
+}) => {
+  /*
+   * prose, chart, prose. The chart takes the row and splits its neighbours
+   * into two groups of one, so neither prose panel has anything to share a
+   * row with. Counting leftovers across the whole grid saw two narrow panels
+   * and left each at half width with a gap beside it.
+   */
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await installReportDocument(
+    page,
+    geometryReport([
+      geometryPanel("intro", "explanation", "Where things stand", {
+        text: "Release B is in review. The qualification run finished overnight with nothing outstanding on the release checklist, so the only thing left is the cutover window.",
+      }),
+      geometryPanel("mix", "chart", "Throughput", {
+        option: {
+          xAxis: { type: "category", data: ["Mon", "Tue", "Wed"] },
+          yAxis: { type: "value" },
+          series: [{ type: "bar", name: "Resolved", data: [52, 58, 92] }],
+        },
+        caption: "Illustrative.",
+      }),
+      geometryPanel("outro", "explanation", "What happens next", {
+        text: "Cut over on Thursday morning, then measure adoption for a week before deciding whether the rollback wording still needs a decision from anyone.",
+      }),
+    ]),
+  );
+  await page.goto(DOC_PATH);
+  const geometry = await gridCells(page);
+
+  expect(geometry.cells.map((cell) => cell.id)).toEqual([
+    "intro",
+    "mix",
+    "outro",
+  ]);
+  // Reading order is never traded for a tighter pack.
+  expect(rowsOf(geometry)).toHaveLength(3);
+  // And no row is left half empty: every one of them is filled.
+  for (const row of rowsOf(geometry)) {
+    const used = row.reduce((total, cell) => total + cell.width, 0);
+    expect(
+      used + (row.length - 1) * 16,
+      `row of ${row.map((cell) => cell.id).join(", ")} is half empty`,
+    ).toBeGreaterThanOrEqual(geometry.width - 1);
+  }
+});
+
 test("stale, unknown and unavailable evidence stay explicit when filtering", async ({
   page,
 }) => {

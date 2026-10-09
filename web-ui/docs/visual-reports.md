@@ -553,8 +553,11 @@ carries.
 - Wide content takes the whole row on its own: plan graphs, charts, series
   timelines, and tables with real columns in them. Content decides, so a
   two-column table and an initiative list with no plans are not wide.
-- A panel left alone on a row — the only narrow panel beside a wide one — takes
-  the whole row rather than half of one.
+- A panel left alone on a row takes the whole row rather than half of one.
+  Wide content splits the panels around it into separate groups — `prose,
+chart, prose` is two groups of one, not one group of two — and each group's
+  leftover is worked out on its own, in reading order. Panels are never
+  reordered to pack a row more tightly.
 - A nearly empty panel never claims a wide row and never raises its row's
   minimum, so it cannot push its neighbours into fewer columns.
 - Child order is reading order at every width. The renderer never reorders
