@@ -375,7 +375,7 @@ function stepRows(key, source, limit, now) {
         title: asText(step?.title) || asText(step?.id),
         status: asText(step?.status) || "not_started",
         at,
-        /** `2d` for a completed step; empty where there is no instant. */
+        /** Friendly age of a completed step; empty where there is no instant. */
         age: at ? formatAge(at, now) : "",
         /*
          * "Moved", not "finished". The instant core sends is the linked

@@ -84,7 +84,7 @@ describe("delivery state mapping", () => {
       failed: true,
       attempts: 5,
       reason: "Gave up after the attempt limit",
-      ageLabel: "2h",
+      ageLabel: "2 h ago",
     });
     expect(
       deliveryRowModel({ state: "delivered" }, { now: NOW }),

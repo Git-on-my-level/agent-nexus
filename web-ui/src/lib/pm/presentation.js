@@ -728,7 +728,9 @@ export function humanizeInstants(text) {
       const when = formatTimestamp(instant);
       if (!when || when === instant) return match;
       // "at in 4m" is not English; a relative time carries its own preposition.
-      const relative = /^in \S|\bago$|^just now$|^in a moment$/.test(when);
+      const relative = /^(just now|yesterday|tomorrow)$|^in \d|\bago$/.test(
+        when,
+      );
       return relative || !at ? when : `${at}${when}`;
     },
   );

@@ -505,12 +505,12 @@ for (const viewport of [
      * tooltip carries the expectation, the verb and the exact instant.
      */
     const age = tiles.first().locator("[data-freshness]");
-    await expect(age).toHaveText("3h");
+    await expect(age).toHaveText("3 h ago");
     await expect(age).toHaveAttribute("data-freshness", "fresh");
     await expect(age).toHaveClass(/ui-badge--ok/);
     await expect(age).toHaveAttribute(
       "data-tooltip",
-      /^Moved .*\(3h\) — within the expected 3d$/,
+      /^Moved .*\(3 h ago\) — within the expected 3d$/,
     );
 
     /*
@@ -526,7 +526,7 @@ for (const viewport of [
      */
     const staleTile = tiles.nth(1);
     const staleAge = staleTile.locator("[data-freshness]");
-    await expect(staleAge).toHaveText("8d");
+    await expect(staleAge).toHaveText("Sep 26");
     await expect(staleAge).toHaveClass(/ui-badge--danger/);
     await expect(staleAge).toHaveAttribute(
       "data-tooltip",

@@ -1018,7 +1018,7 @@ for (const viewport of [
     ).toHaveAttribute("href", /tasks\/card%3Areview$/i);
     await expect(initiativePlan.getByText("View plan steps")).toBeVisible();
     await expect(report).toContainText("On it: actor:agent-reviewer");
-    await expect(report).toContainText("2h old");
+    await expect(report).toContainText("2 h ago");
     await expect(
       report.getByRole("link", { name: "Which launch theme?" }),
     ).toHaveAttribute(

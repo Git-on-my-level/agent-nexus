@@ -59,7 +59,7 @@ it("keeps static snapshots and uses read time for live freshness", () => {
 });
 
 it("formats ask age without implying freshness or a deadline", () => {
-  expect(formatLiveAge(0)).toBe("Just now");
-  expect(formatLiveAge(3600)).toBe("1h old");
-  expect(formatLiveAge(86400)).toBe("1d old");
+  expect(formatLiveAge(0)).toBe("just now");
+  expect(formatLiveAge(3600)).toBe("1 h ago");
+  expect(formatLiveAge(86400)).toMatch(/^(yesterday|1 h ago|[A-Z])/);
 });

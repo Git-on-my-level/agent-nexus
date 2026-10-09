@@ -7,8 +7,7 @@
     actorRegistry,
     principalRegistry,
   } from "$lib/actorSession";
-  import { formatAge } from "$lib/agentPresence.js";
-  import { formatAbsoluteDateTime } from "$lib/formatDate";
+  import Time from "$lib/time/Time.svelte";
   import {
     createParticipationReader,
     participationState,
@@ -215,13 +214,10 @@
                     </div>
                     <p class="mt-1 text-micro text-fg-muted">
                       {#if participant.lastSeenAt}
-                        Last reported <time
-                          datetime={participant.lastSeenAt}
-                          title={formatAbsoluteDateTime(participant.lastSeenAt)}
-                          >{formatAge(participant.lastSeenAt, now) === "<1m"
-                            ? "just now"
-                            : `${formatAge(participant.lastSeenAt, now)} ago`}</time
-                        >
+                        Last reported <Time
+                          value={participant.lastSeenAt}
+                          {now}
+                        />
                       {:else}Last report unknown{/if}
                       · Agent-reported activity
                     </p>

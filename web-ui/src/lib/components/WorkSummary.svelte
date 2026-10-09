@@ -34,7 +34,7 @@
   import { tooltip } from "$lib/actions/tooltip.js";
   import FreshnessBadge from "$lib/components/FreshnessBadge.svelte";
   import { formatAge } from "$lib/ageBadge.js";
-  import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
+  import Time from "$lib/time/Time.svelte";
 
   let {
     summary = null,
@@ -69,10 +69,6 @@
   let statusTitle = $derived(
     [status?.label, status?.reason].filter(Boolean).join(" — "),
   );
-  let dueTitle = $derived(
-    summary?.due ? formatAbsoluteDateTime(summary.due) : "",
-  );
-  let dueText = $derived(summary?.due ? formatTimestamp(summary.due) : "");
   /*
    * How old the card is — a different question from when it last moved.
    *
@@ -87,10 +83,6 @@
     if (summary?.age == null) return "";
     return new Date(now - summary.age * 1000).toISOString();
   });
-  let ageText = $derived(openedAt ? formatAge(openedAt, now) : "");
-  let ageTitle = $derived(
-    openedAt ? `Opened ${formatAbsoluteDateTime(openedAt)}` : "",
-  );
   /** The sentence behind the count. */
   let progressLabel = $derived(
     progress ? `${title || "Checklist"}: ${progress.sentence}` : "",
@@ -275,12 +267,8 @@
                     <span class="step-flag" data-tile-step-blocked>blocked</span
                     >
                   {/if}
-                  {#if step.age}
-                    <time
-                      class="step-age"
-                      datetime={step.at}
-                      title={step.ageTitle}>{step.age}</time
-                    >
+                  {#if step.at}
+                    <Time value={step.at} {now} verb="moved" class="step-age" />
                   {/if}
                 </span>
               {/each}
@@ -303,28 +291,22 @@
       {/if}
     {/if}
 
-    {#if ownerLabel || placeLabel || dueText || attention}
+    {#if ownerLabel || placeLabel || summary?.due || attention}
       <span class="summary__foot" data-summary-foot>
         {#if ownerLabel}<span class="summary__owner" data-summary-owner
             >{ownerLabel}</span
           >{/if}
         {#if placeLabel}<span data-summary-place>{placeLabel}</span>{/if}
-        {#if dueText}
-          <time
-            class="summary__due"
-            data-summary-due
-            datetime={summary.due}
-            use:tooltip={dueTitle}>Due {dueText}</time
+        {#if summary?.due}
+          <span class="summary__due" data-summary-due
+            >Due <Time value={summary.due} {now} /></span
           >
         {/if}
-        {#if density === "header" && ageText}
+        {#if density === "header" && openedAt}
           <!-- A page header has room to say how long this has been open,
                which the age badge beside the status does not answer. -->
-          <time
-            class="summary__due"
-            data-summary-age
-            datetime={summary.createdAt || undefined}
-            use:tooltip={ageTitle}>Opened {ageText}</time
+          <span class="summary__due" data-summary-age
+            >Opened <Time value={openedAt} {now} verb="opened" /></span
           >
         {/if}
         {#if attention}

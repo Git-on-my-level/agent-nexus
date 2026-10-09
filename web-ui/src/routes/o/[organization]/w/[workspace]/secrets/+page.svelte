@@ -10,7 +10,7 @@
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import InlineAlert from "$lib/components/InlineAlert.svelte";
   import { coreClient } from "$lib/coreClient";
-  import { formatTimestamp } from "$lib/formatDate";
+  import Time from "$lib/time/Time.svelte";
 
   let secrets = $state([]);
   let loading = $state(true);
@@ -257,7 +257,7 @@
                 </p>
               {/if}
               <p class="mt-0.5 text-micro text-fg-subtle sm:mt-1">
-                Updated {formatTimestamp(secret.updated_at)}
+                Updated <Time value={secret.updated_at} />
               </p>
             </div>
             <div

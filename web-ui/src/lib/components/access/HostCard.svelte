@@ -3,13 +3,12 @@
     KNOWN_ADAPTERS,
     agentPath,
     agentStateShortLabel,
-    formatAge,
   } from "$lib/agentPresence.js";
   import AgentBridgeIndicator from "$lib/components/agents/AgentBridgeIndicator.svelte";
   import AgentStateDot from "$lib/components/agents/AgentStateDot.svelte";
   import Button from "$lib/components/Button.svelte";
   import CopyableId from "$lib/components/CopyableId.svelte";
-  import { formatAbsoluteDateTime } from "$lib/formatDate";
+  import Time from "$lib/time/Time.svelte";
 
   /**
    * One enrolled machine and the agents derived on it. Exclusions and
@@ -134,15 +133,9 @@
         <span>{host.os_user}@{host.hostname}</span>
         <span class="text-fg-subtle" aria-hidden="true">·</span>
         {#if revoked}
-          <span title={formatAbsoluteDateTime(host.revoked_at)}
-            >revoked {formatAge(host.revoked_at, now)} ago</span
-          >
+          <span>revoked <Time value={host.revoked_at} {now} /></span>
         {:else}
-          <span title={formatAbsoluteDateTime(host.created_at)}
-            >enrolled {formatAge(host.created_at, now) === "<1m"
-              ? "just now"
-              : `${formatAge(host.created_at, now)} ago`}</span
-          >
+          <span>enrolled <Time value={host.created_at} {now} /></span>
         {/if}
         <span class="text-fg-subtle" aria-hidden="true">·</span>
         <span class="inline-flex items-center gap-1"

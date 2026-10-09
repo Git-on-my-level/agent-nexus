@@ -9,7 +9,6 @@
   } from "$lib/actorSession";
   import { refreshAgentRoster } from "$lib/agentRoster.js";
   import { liveAgentChanges } from "$lib/liveWorkspaceEvents.js";
-  import { formatAge } from "$lib/agentPresence.js";
   import { describeAuthAuditEvent } from "$lib/authAuditModel.js";
   import {
     authenticatedAgent,
@@ -18,7 +17,7 @@
   import { coreClient } from "$lib/coreClient";
   import { createDecisionEpoch } from "$lib/decisionEpoch.js";
   import { isAdministrationRefusal } from "$lib/coreAuthErrors.js";
-  import { formatAbsoluteDateTime } from "$lib/formatDate";
+  import Time from "$lib/time/Time.svelte";
   import {
     claimPendingAccessCount,
     countPendingAccessItems,
@@ -1115,18 +1114,16 @@
                   <p
                     class="flex items-center gap-1.5 text-micro text-fg-subtle"
                   >
-                    <span title={formatAbsoluteDateTime(principal.created_at)}
-                      >joined {formatAge(principal.created_at, now) === "<1m"
-                        ? "just now"
-                        : `${formatAge(principal.created_at, now)} ago`}</span
+                    <span
+                      >joined <Time value={principal.created_at} {now} /></span
                     >
                     {#if principal.last_seen_at}
                       <span aria-hidden="true">·</span>
                       <span
-                        title={formatAbsoluteDateTime(principal.last_seen_at)}
-                        >seen {formatAge(principal.last_seen_at, now) === "<1m"
-                          ? "just now"
-                          : `${formatAge(principal.last_seen_at, now)} ago`}</span
+                        >seen <Time
+                          value={principal.last_seen_at}
+                          {now}
+                        /></span
                       >
                     {/if}
                     <span aria-hidden="true">·</span>
@@ -1165,9 +1162,10 @@
                   data-invite={invite.id}
                 >
                   <span class="text-fg-muted"
-                    >Invite created {formatAge(invite.created_at, now) === "<1m"
-                      ? "just now"
-                      : `${formatAge(invite.created_at, now)} ago`}</span
+                    >Invite created <Time
+                      value={invite.created_at}
+                      {now}
+                    /></span
                   >
                   <CopyableId value={invite.id} label="Copy invite id" />
                   <button
@@ -1267,12 +1265,8 @@
                   >
                     {auditSentence(event)}
                   </p>
-                  <span
-                    class="shrink-0 text-micro text-fg-subtle"
-                    title={formatAbsoluteDateTime(event.occurred_at)}
-                    >{formatAge(event.occurred_at, now) === "<1m"
-                      ? "just now"
-                      : `${formatAge(event.occurred_at, now)} ago`}</span
+                  <span class="shrink-0 text-micro text-fg-subtle"
+                    ><Time value={event.occurred_at} {now} /></span
                   >
                   <span
                     class="shrink-0 opacity-0 transition-opacity group-hover/audit:opacity-100 focus-within:opacity-100"

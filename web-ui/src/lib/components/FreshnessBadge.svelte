@@ -13,6 +13,7 @@
    */
   import { tooltip } from "$lib/actions/tooltip.js";
   import { freshnessModel } from "$lib/freshness.js";
+  import { clockNow, retainClock } from "$lib/time/clock.svelte.js";
 
   let {
     /** ISO instant it last moved. */
@@ -25,13 +26,21 @@
     row = null,
     /** What happened then: "moved", "updated", "checked". */
     verb = "updated",
-    /** Reference time, injectable so the badge is testable. */
-    now = Date.now(),
+    /** Reference time. Omit it to follow the shared clock. */
+    now = undefined,
     class: extraClass = "",
   } = $props();
 
+  let live = $derived(now === undefined || now === null);
+  let current = $derived(live ? clockNow() : Number(now));
+
+  $effect(() => {
+    if (!live) return;
+    return retainClock();
+  });
+
   let model = $derived(
-    freshnessModel(at, { kind, expectationHours, row, verb, now }),
+    freshnessModel(at, { kind, expectationHours, row, verb, now: current }),
   );
 </script>
 
@@ -41,6 +50,7 @@
     datetime={model.at}
     data-freshness={model.state}
     data-freshness-kind={kind}
+    title={model.title}
     aria-label={model.title}
     use:tooltip={model.title}>{model.age}</time
   >

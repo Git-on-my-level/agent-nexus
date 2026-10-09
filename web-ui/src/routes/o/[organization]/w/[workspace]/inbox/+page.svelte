@@ -19,6 +19,7 @@
   import { restartSession } from "$lib/workspaceBootstrap";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
+  import Time from "$lib/time/Time.svelte";
   import {
     errorMessage,
     humanizeInstants,
@@ -1554,9 +1555,7 @@
                     data-inbox-wait>{wait.text}</span
                   >
                 {:else if row.time}
-                  <time class="shrink-0 tabular-nums" datetime={row.time}
-                    >{formatTimestamp(row.time)}</time
-                  >
+                  <Time value={row.time} class="shrink-0 tabular-nums" />
                 {/if}
               </div>
             </a>
@@ -1621,7 +1620,7 @@
                       class="text-micro text-fg-subtle"
                       data-inbox-empty-handled
                     >
-                      Last handled {formatTimestamp(lastHandledAt)}
+                      Last handled <Time value={lastHandledAt} />
                     </p>
                   {/if}
                 </div>
@@ -2033,10 +2032,9 @@
                         answered{:else if selected.responder}Answered by <InboxActorName
                           name={selected.responder.name}
                           id={selected.responder.id}
-                        />{:else}Answered{/if}{#if selected.item?.responded_at}{" "}<time
-                          datetime={selected.item.responded_at}
-                          >{formatTimestamp(selected.item.responded_at)}</time
-                        >{/if}
+                        />{:else}Answered{/if}{#if selected.item?.responded_at}{" "}<Time
+                          value={selected.item.responded_at}
+                        />{/if}
                     </p>
                     {#if selected.item?.response_text}
                       <MarkdownRenderer
@@ -2095,9 +2093,7 @@
                           {/if}
                           <span class="text-fg-subtle">
                             ·
-                            <time datetime={described.ts}
-                              >{formatTimestamp(described.ts)}</time
-                            ></span
+                            <Time value={described.ts} /></span
                           >
                         </p>
                         {#if described.excerpt}

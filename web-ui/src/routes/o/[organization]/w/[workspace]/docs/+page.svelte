@@ -3,7 +3,7 @@
   import { page } from "$app/stores";
   import { coreClient } from "$lib/coreClient";
   import { filterTopLevelDocuments } from "$lib/documentVisibility";
-  import { formatTimestamp } from "$lib/formatDate";
+  import Time from "$lib/time/Time.svelte";
   import { formatShortcut } from "$lib/keyboardHints.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
@@ -760,7 +760,7 @@
         </span>
         <span aria-hidden="true" class="shrink-0 text-fg-subtle">·</span>
         <span class="shrink-0 tabular-nums text-fg-muted">
-          {formatTimestamp(comment.created_at) || "—"}
+          <Time value={comment.created_at} fallback="—" />
         </span>
       </p>
     {/if}
@@ -819,12 +819,12 @@
                 {/snippet}
               </WorkspaceResourceListRow>
               <span
-                class="hidden w-14 shrink-0 self-start pt-0.5 text-right text-micro text-fg-muted sm:inline"
-                >{formatTimestamp(doc.updated_at) || "—"}</span
+                class="hidden shrink-0 self-start whitespace-nowrap pt-0.5 text-right text-micro text-fg-muted sm:inline"
+                ><Time value={doc.updated_at} fallback="—" /></span
               >
             </div>
             <p class="mt-0.5 text-micro text-fg-muted sm:hidden">
-              Updated {formatTimestamp(doc.updated_at) || "—"}
+              Updated <Time value={doc.updated_at} fallback="—" />
             </p>
             {@render docEnrichment(doc, false)}
             {@render docLastComment(doc)}
@@ -891,15 +891,16 @@
               </div>
             </div>
             <p class="mt-0.5 text-micro text-fg-muted sm:hidden">
-              Updated {formatTimestamp(doc.updated_at) || "—"}
+              Updated <Time value={doc.updated_at} fallback="—" />
             </p>
             {@render docEnrichment(doc, true)}
             {@render docLastComment(doc)}
           </div>
         {/snippet}
         {#snippet meta()}
-          <span class="hidden w-14 text-right text-fg-muted sm:inline"
-            >{formatTimestamp(doc.updated_at) || "—"}</span
+          <span
+            class="hidden whitespace-nowrap text-right text-fg-muted sm:inline"
+            ><Time value={doc.updated_at} fallback="—" /></span
           >
         {/snippet}
         {#snippet actions()}

@@ -6,11 +6,11 @@ import { installWorkspaceApi } from "../helpers/workspaceApiMock.js";
 const expect = baseExpect.configure({ timeout: 15_000 });
 
 /**
- * `formatTimestamp` returns a RELATIVE phrase under 7 days ("3h ago") and an
- * absolute date beyond it ("Mar 5, 2026"). The archived banner used to prefix
- * it with "on", which read as "was archived on 3h ago". These tests pin the
- * copy for both branches, and that the exact instant is still reachable from
- * the title.
+ * A recent archive reads "3 h ago". An older one reads as a short local date
+ * ("Aug 30", or with the year when it is not this year). The banner used to
+ * prefix that with "on", which read as "was archived on 3h ago". These tests
+ * pin both branches, and that the exact instant is still reachable from the
+ * title.
  */
 
 const ROOT = "/o/local/w/local";
@@ -76,7 +76,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
     }) => {
       await installWorkspaceApi(page, {
         principals: PRINCIPALS,
-        // 3h20m ago -> formatTimestamp's "3h ago" bucket.
+        // 3h20m ago -> "3 h ago".
         topic: archivedTopic(before(3 * HOUR + 20 * MIN)),
         timeline: TIMELINE,
       });
@@ -84,13 +84,13 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await page.goto(`${ROOT}/threads/${THREAD_ID}?tab=messages`);
 
       const text = await bannerText(page);
-      expect(text).toMatch(/was archived 3h ago/);
+      expect(text).toMatch(/was archived 3 h ago/);
       // The bug: "This thread was archived on 3h ago".
       expect(text).not.toMatch(/archived on /);
 
-      // The precise instant is still one hover away.
+      // The precise instant is still one hover away, on the timestamp.
       await expect(
-        page.locator("[title]").filter({ hasText: /was archived/ }),
+        page.getByText(/was archived/).locator("time"),
       ).toHaveAttribute("title", /\d{4}/);
 
       await expectCleanLayout(page, "archived banner, relative timestamp", {
@@ -113,7 +113,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       const text = await bannerText(page);
       // "was archived Mar 5, 2026" - the month/day is calendar-dependent, the
       // shape is not.
-      expect(text).toMatch(/was archived [A-Z][a-z]{2} \d{1,2}, \d{4}/);
+      expect(text).toMatch(/was archived [A-Z][a-z]{2} \d{1,2}(?:, \d{4})?/);
       expect(text).not.toMatch(/archived on /);
       expect(text).not.toMatch(/ago/);
 
@@ -145,8 +145,8 @@ for (const viewport of AUDIT_VIEWPORTS) {
         .first();
       await expect(trashedLine).toBeVisible();
       const text = (await trashedLine.innerText()).replace(/\s+/g, " ").trim();
-      expect(text).toMatch(/3h ago/);
-      expect(text).not.toMatch(/at 3h ago/);
+      expect(text).toMatch(/3 h ago/);
+      expect(text).not.toMatch(/at 3 h ago/);
 
       await expectCleanLayout(page, "trashed banner, relative timestamp", {
         scrollPositions: ["top", "bottom"],

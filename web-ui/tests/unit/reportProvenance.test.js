@@ -84,7 +84,7 @@ describe("live panels", () => {
   it("states the read age, with the instant on hover", () => {
     const model = panelProvenance(live(), "current", NOW);
     expect(model.state).toBe("live");
-    expect(model.label).toBe("Live · updated 2m ago");
+    expect(model.label).toBe("Live · updated 2 min ago");
     expect(model.title).toContain("Read");
     expect(model.datetime).toBe(ago(2 * 60_000));
     expect(model.dueForReview).toBe(false);
@@ -123,7 +123,7 @@ describe("live panels", () => {
     expect(model.state).toBe("live-stale");
     // Not "Live · updated 3d ago": that is word-for-word what a healthy
     // series says, leaving the amber as the only signal.
-    expect(model.label).toBe("May be stale · last read 3d ago");
+    expect(model.label).toBe("May be stale · last read Oct 3");
     expect(model.title).toContain("expected interval");
   });
 
@@ -138,7 +138,7 @@ describe("live panels", () => {
       NOW,
     );
     expect(model.state).toBe("due-for-review");
-    expect(model.label).toBe("May be stale · written 2d ago");
+    expect(model.label).toBe("May be stale · written Oct 4");
     expect(model.title).toContain("marked this panel stale");
   });
 
@@ -172,7 +172,7 @@ describe("live panels", () => {
       NOW,
     );
     expect(model.class).toBe("authored");
-    expect(model.label).toBe("May be stale · written 9d ago");
+    expect(model.label).toBe("May be stale · written Sep 27");
   });
 
   it("says a standing-in snapshot is stale however young it is", () => {
@@ -236,7 +236,7 @@ describe("authored panels", () => {
   it("names the principal and the age of the writing", () => {
     const model = panelProvenance(authored(), "stale", NOW);
     expect(model.state).toBe("authored");
-    expect(model.label).toBe("Written by claude · 3d ago");
+    expect(model.label).toBe("Written by claude · Oct 3");
     expect(model.class).toBe("authored");
   });
 
@@ -247,7 +247,7 @@ describe("authored panels", () => {
       NOW,
     );
     expect(model.state).toBe("due-for-review");
-    expect(model.label).toBe("May be stale · written 9d ago");
+    expect(model.label).toBe("May be stale · written Sep 27");
     expect(model.dueForReview).toBe(true);
   });
 
@@ -268,7 +268,7 @@ describe("authored panels", () => {
       NOW,
     );
     expect(overdue.state).toBe("due-for-review");
-    expect(overdue.label).toBe("May be stale · written 2d ago");
+    expect(overdue.label).toBe("May be stale · written Oct 4");
   });
 
   it("defaults a missing review date to a week after writing", () => {
@@ -329,7 +329,7 @@ describe("authored panels", () => {
     );
     expect(model.state).toBe("authored");
     expect(model.reviewBy).toBeNull();
-    expect(model.label).toBe("Written · 12w ago");
+    expect(model.label).toBe("Written · Jul 8");
   });
 });
 
@@ -464,12 +464,12 @@ describe("the line a renderer draws", () => {
     ).toMatch(/^May be stale/);
   });
 
-  it("keeps relative ages relative, however old", () => {
+  it("uses the shared phrases, then a short local date", () => {
     expect(relativeAge(ago(30_000), NOW)).toBe("just now");
-    expect(relativeAge(ago(9 * DAY), NOW)).toBe("9d ago");
-    expect(relativeAge(ago(400 * DAY), NOW)).toBe("1y ago");
-    expect(relativeAge(new Date(NOW + 2 * DAY).toISOString(), NOW)).toBe(
-      "in 2d",
+    expect(relativeAge(ago(9 * DAY), NOW)).toMatch(/^[A-Z][a-z]{2} \d{1,2}/);
+    expect(relativeAge(ago(400 * DAY), NOW)).toMatch(/\d{4}/);
+    expect(relativeAge(new Date(NOW + 2 * DAY).toISOString(), NOW)).toMatch(
+      /^[A-Z][a-z]{2} \d{1,2}/,
     );
     expect(relativeAge("", NOW)).toBe("");
     expect(relativeAge("not a date", NOW)).toBe("");
@@ -555,7 +555,7 @@ describe("the deadline the contract defines", () => {
       NOW,
     );
     expect(due.state).toBe("due-for-review");
-    expect(due.label).toBe("May be stale · written 1d ago");
+    expect(due.label).toBe("May be stale · written yesterday");
   });
 
   it("names the instant a dashboard should read itself again at", () => {

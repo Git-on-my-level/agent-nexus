@@ -10,7 +10,7 @@
     isQuietAgentState,
     taskPath,
   } from "$lib/agentPresence.js";
-  import { formatAbsoluteDateTime } from "$lib/formatDate";
+  import Time from "$lib/time/Time.svelte";
 
   /**
    * One agent in the roster: who and where, doing what, for how long. The
@@ -120,13 +120,7 @@
       {#if model.note}
         <p class="truncate text-micro text-fg-muted" data-agent-note>
           “{model.note.text}”{#if model.note.age}<span class="text-fg-subtle"
-              >{" · "}<time
-                datetime={model.note.at}
-                use:tooltip={formatAbsoluteDateTime(model.note.at)}
-                >{model.note.age === "<1m"
-                  ? "just now"
-                  : `${model.note.age} ago`}</time
-              ></span
+              >{" · "}<Time value={model.note.at} /></span
             >{/if}
         </p>
       {:else if model.task && model.state === "stale"}

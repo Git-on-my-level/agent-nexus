@@ -694,7 +694,8 @@ export function buildReportChartOption(data, appearance = {}) {
   });
   const option = {
     animation: false,
-    useUTC: true,
+    // Local zone, same as every other time on the page.
+    useUTC: false,
     backgroundColor: "transparent",
     color: colors,
     textStyle: { fontFamily: "Inter, sans-serif", color: theme.fg },
