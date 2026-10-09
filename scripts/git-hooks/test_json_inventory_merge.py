@@ -70,23 +70,22 @@ class MergeTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             json.loads(conflicted)
 
-    def test_a_clean_line_merge_of_a_refused_conflict_still_gets_markers(self):
-        # Both sides add the same table, in different places. The line merge
-        # succeeds on disjoint regions and yields duplicate keys: valid JSON
-        # that prettier calls unchanged and whose decoders keep only the last
-        # one, so `git add` would resolve the conflict by discarding a
-        # classification. Markers are the only thing standing in the way.
-        base = inventory({"mmm_middle": {"id": "identity"}})
-        ours = inventory({"actors": {"id": "scope"}, "mmm_middle": {"id": "identity"}})
-        theirs = inventory({"mmm_middle": {"id": "identity"},
-                            "actors": {"id": "internal:schema"}})
+    def assert_refusal_cannot_be_resolved_blindly(self, base, ours, theirs):
+        """A refused merge must leave something no `git add` can accept.
+
+        Both relocating an entry and both adding it land the two sides' edits in
+        disjoint line regions, so the fallback line merge succeeds and yields
+        duplicate keys: valid JSON that prettier calls unchanged and whose
+        decoders (Python's and Go's alike) keep only the last of the two. That
+        is a conflict resolved by silently dropping a classification, which is
+        why the driver has to mark both sides itself.
+        """
         files = [self.write(name, document) for name, document in
                  (("base", base), ("ours", ours), ("theirs", theirs))]
         line_merge = subprocess.run(["git", "merge-file", "-p", "--diff3",
                                      str(files[1]), str(files[0]), str(files[2])],
                                     capture_output=True)
-        if b"<<<<<<<" in line_merge.stdout:
-            self.skipTest("git conflicts on this shape; the hazard needs a clean line merge")
+        clean = b"<<<<<<<" not in line_merge.stdout
         self.assertEqual(driver.main([str(path) for path in files] + [INVENTORY]), 1)
         conflicted = files[1].read_text()
         self.assertIn("<<<<<<< ours", conflicted)
@@ -95,6 +94,29 @@ class MergeTest(unittest.TestCase):
             self.assertIn(classification, conflicted)
         with self.assertRaises(ValueError):
             json.loads(conflicted)
+        return clean
+
+    def test_relocating_an_entry_on_both_sides_cannot_be_resolved_blindly(self):
+        # The reviewed reproduction: both branches move `actors` somewhere else
+        # and classify `actors.id` differently.
+        def tables(order, classification):
+            rows = {"mmm_middle": {"id": "identity"}, "zz_last": {"id": "identity"},
+                    "actors": {"id": classification}}
+            return {name: rows[name] for name in order}
+
+        base = inventory(tables(("actors", "mmm_middle", "zz_last"), "identity"))
+        ours = inventory(tables(("mmm_middle", "zz_last", "actors"), "scope"))
+        theirs = inventory(tables(("mmm_middle", "actors", "zz_last"), "internal:schema"))
+        self.assertTrue(self.assert_refusal_cannot_be_resolved_blindly(base, ours, theirs),
+                        "fixture no longer reproduces a clean line merge")
+
+    def test_adding_an_entry_on_both_sides_cannot_be_resolved_blindly(self):
+        base = inventory({"mmm_middle": {"id": "identity"}})
+        ours = inventory({"actors": {"id": "scope"}, "mmm_middle": {"id": "identity"}})
+        theirs = inventory({"mmm_middle": {"id": "identity"},
+                            "actors": {"id": "internal:schema"}})
+        self.assertTrue(self.assert_refusal_cannot_be_resolved_blindly(base, ours, theirs),
+                        "fixture no longer reproduces a clean line merge")
 
     def test_markers_stay_on_their_own_line_without_a_trailing_newline(self):
         for name, body in (("base", "{}"), ("ours", "{}\n"), ("theirs", "{}")):
