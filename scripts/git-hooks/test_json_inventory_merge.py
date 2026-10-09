@@ -70,6 +70,40 @@ class MergeTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             json.loads(conflicted)
 
+    def test_a_clean_line_merge_of_a_refused_conflict_still_gets_markers(self):
+        # Both sides add the same table, in different places. The line merge
+        # succeeds on disjoint regions and yields duplicate keys: valid JSON
+        # that prettier calls unchanged and whose decoders keep only the last
+        # one, so `git add` would resolve the conflict by discarding a
+        # classification. Markers are the only thing standing in the way.
+        base = inventory({"mmm_middle": {"id": "identity"}})
+        ours = inventory({"actors": {"id": "scope"}, "mmm_middle": {"id": "identity"}})
+        theirs = inventory({"mmm_middle": {"id": "identity"},
+                            "actors": {"id": "internal:schema"}})
+        files = [self.write(name, document) for name, document in
+                 (("base", base), ("ours", ours), ("theirs", theirs))]
+        line_merge = subprocess.run(["git", "merge-file", "-p", "--diff3",
+                                     str(files[1]), str(files[0]), str(files[2])],
+                                    capture_output=True)
+        if b"<<<<<<<" in line_merge.stdout:
+            self.skipTest("git conflicts on this shape; the hazard needs a clean line merge")
+        self.assertEqual(driver.main([str(path) for path in files] + [INVENTORY]), 1)
+        conflicted = files[1].read_text()
+        self.assertIn("<<<<<<< ours", conflicted)
+        self.assertIn(">>>>>>> theirs", conflicted)
+        for classification in ("scope", "internal:schema"):
+            self.assertIn(classification, conflicted)
+        with self.assertRaises(ValueError):
+            json.loads(conflicted)
+
+    def test_markers_stay_on_their_own_line_without_a_trailing_newline(self):
+        for name, body in (("base", "{}"), ("ours", "{}\n"), ("theirs", "{}")):
+            (self.root / name).write_text(body)
+        marked = driver.marked(*(self.root / name for name in ("base", "ours", "theirs")))
+        self.assertEqual(marked.decode().splitlines(),
+                         ["<<<<<<< ours", "{}", "||||||| base", "{}",
+                          "=======", "{}", ">>>>>>> theirs"])
+
     def test_unparseable_input_hands_back_a_conflict(self):
         files = [self.write("base", inventory({})), self.write("ours", inventory({})),
                  self.write("theirs", inventory({}))]

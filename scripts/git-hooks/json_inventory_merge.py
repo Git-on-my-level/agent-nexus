@@ -82,6 +82,25 @@ def format_with_prettier(target):
         return False
 
 
+def marked(base_file, ours_file, theirs_file):
+    """Both sides, whole, between conflict markers.
+
+    A semantic conflict can still merge cleanly line by line — each side adding
+    the same table in a different place, say. That output parses, prettier calls
+    it unchanged, and Go's decoder keeps only the last of two identical keys, so
+    a blind `git add` resolves the conflict by throwing one side's
+    classifications away. Markers are what make it unresolvable.
+    """
+    def section(path):
+        body = path.read_bytes()
+        return body if body.endswith(b"\n") or not body else body + b"\n"
+
+    return (b"<<<<<<< ours\n" + section(ours_file)
+            + b"||||||| base\n" + section(base_file)
+            + b"=======\n" + section(theirs_file)
+            + b">>>>>>> theirs\n")
+
+
 def hand_back(base_file, ours_file, theirs_file, label, reason):
     """Leave the normal line merge, markers and all, for a human to resolve.
 
@@ -94,8 +113,11 @@ def hand_back(base_file, ours_file, theirs_file, label, reason):
                              "-L", "ours", "-L", "base", "-L", "theirs",
                              str(ours_file), str(base_file), str(theirs_file)],
                             capture_output=True)
-    if merged.stdout:
-        ours_file.write_bytes(merged.stdout)
+    # A clean line merge of a conflict this driver refused, or no git at all, is
+    # the dangerous case: mark both sides rather than leave something parseable.
+    body = merged.stdout if b"<<<<<<<" in merged.stdout else marked(
+        base_file, ours_file, theirs_file)
+    ours_file.write_bytes(body)
     print(f"{label}: {reason}; resolve the conflict markers by hand, or take one side and run "
           "make access-inventory.", file=sys.stderr)
     return 1
