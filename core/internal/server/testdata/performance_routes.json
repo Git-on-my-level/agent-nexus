@@ -193,10 +193,10 @@
     "method": "GET",
     "path": "/auth/hosts/enrollment-tokens/{token_id}",
     "max_queries": 100,
-    "max_rows": 1,
+    "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 403,
-    "reason": "One enrollment grant by primary key; bounded by the request, never by workspace size.",
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization. The token read itself is one row by primary key, pinned by TestPerformanceHostEnrollmentTokenLookup.",
     "latency_ms": 500,
     "max_vm_steps": 50000
   },
