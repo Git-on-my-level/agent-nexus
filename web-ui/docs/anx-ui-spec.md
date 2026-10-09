@@ -141,8 +141,11 @@ detail on hover, and nothing at zero — or for a reader without administration
 authority, who could not act on it.
 
 Overview (`/overview`) summarizes four existing reads and links into them. It
-does not answer an ask, move a task, or edit a document. **Needs you** is the
-Inbox count and its first rows. **Work at a glance** counts `GET /work` by
+does not answer an ask, move a task, or edit a document. Its own sections are
+**Initiatives**, **Recent changes** and the pinned **Dashboard**; everything
+else answers a different question and sits one fold down under **More detail**,
+with links to the surface that owns it. **Needs you** is the
+Inbox count and its first rows, and lives in the Inbox and its badge. **Work at a glance** counts `GET /work` by
 phase and source, plus blocked tasks, tasks whose next actor is a person, and
 freshness (stale, unknown, error); each count links to Tasks with the matching
 query (`source`, `phase`, `freshness`, and `human=1` for a person as next
@@ -580,9 +583,11 @@ Agent Nexus web UI v0 is complete when it can:
 
 ### Executive Overview
 
-Overview reads the core `/overview` projection shared with agents: Needs you,
-Dashboard, Initiatives, then collapsed Work detail (counts, freshness and agent
-presence). Initiatives use the same live-initiatives renderer and projection
+Overview reads the core `/overview` projection shared with agents: Initiatives,
+Recent changes and Dashboard, then a collapsed More detail fold (the morning
+brief, what is waiting on you, work counts, freshness and agent presence). The
+cross-workspace ask read behind that fold runs when the fold is opened, not on
+every visit. Initiatives use the same live-initiatives renderer and projection
 as document reports (`progress.done/total`, `needs[]`). Rows show the first summary line, Markdown checklist
 progress, priority and all human asks outside fenced examples. A report can be pinned as the persistent
 workspace dashboard or reset to newest-report selection. Inline reports show

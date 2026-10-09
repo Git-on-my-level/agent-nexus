@@ -84,6 +84,76 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ReportLayout rendering", () => {
+  it("places panels by content when no column count is authored", () => {
+    // A plan graph next to a nearly empty panel is the case that used to
+    // render as two half-width columns with the graph clipped.
+    const plan = {
+      ...panel("plan"),
+      type: "live-initiatives",
+      data: { limit: 5 },
+      live: {
+        status: "ok",
+        data: {
+          items: [
+            {
+              ref: "card:a",
+              plan: { steps: [{ id: "one" }, { id: "two" }] },
+            },
+          ],
+        },
+      },
+    };
+    const empty = {
+      ...panel("asks"),
+      type: "live-asks",
+      data: { limit: 5 },
+      live: { status: "ok", data: { items: [] } },
+    };
+    const { container } = render(
+      ReportLayout,
+      props(
+        {
+          type: "grid",
+          children: [ref("plan"), ref("asks"), ref("overview")],
+        },
+        {
+          panelsById: new Map([
+            ["plan", plan],
+            ["asks", empty],
+            ["overview", panels[0]],
+          ]),
+        },
+      ),
+    );
+    const grid = container.querySelector('[data-report-layout="grid"]');
+    expect(grid.dataset.reportPlacement).toBe("fit");
+    expect(grid.dataset.reportColumns).toBe("2");
+    // The row's minimum comes from the plan's neighbours, not from the plan:
+    // the wide panel has the row to itself, so it does not set the tier, and
+    // the empty one never raises it.
+    expect(grid.dataset.reportFit).toBe("tight");
+    expect(
+      [...grid.querySelectorAll(".report-layout-cell")].map(
+        (cell) => cell.dataset.reportCell,
+      ),
+    ).toEqual(["full", "column", "column"]);
+  });
+
+  it("keeps an authored column count as a cap and still fits content", () => {
+    const { container } = render(
+      ReportLayout,
+      props({
+        type: "grid",
+        columns: 3,
+        children: [ref("overview"), ref("detail")],
+      }),
+    );
+    const grid = container.querySelector('[data-report-layout="grid"]');
+    expect(grid.dataset.reportPlacement).toBe("fit");
+    expect(grid.dataset.reportColumns).toBe("3");
+    expect(grid.querySelector(".layout-span-1")).toBeNull();
+  });
+
   it("renders asymmetric spans in authored DOM order", () => {
     const { container } = render(
       ReportLayout,
@@ -113,6 +183,10 @@ describe("ReportLayout rendering", () => {
       container.querySelector(".layout-span-2 [data-report-panel]")?.dataset
         .reportPanel,
     ).toBe("overview");
+    expect(
+      container.querySelector('[data-report-layout="grid"]').dataset
+        .reportPlacement,
+    ).toBe("authored");
   });
 
   it("mounts only active tab content with connected accessible IDs", async () => {
@@ -227,6 +301,12 @@ describe("VisualReport composition compatibility", () => {
         (item) => item.dataset.reportPanel,
       ),
     ).toEqual(["overview", "detail", "extra"]);
+    // And places them through the same content-driven grid an authored
+    // layout uses, rather than a second hard-coded two-column path.
+    expect(
+      container.querySelector('[data-report-layout="grid"]').dataset
+        .reportPlacement,
+    ).toBe("fit");
   });
 
   it("compacts single-project compositions without changing the legacy overview", async () => {

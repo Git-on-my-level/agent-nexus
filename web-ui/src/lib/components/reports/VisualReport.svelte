@@ -12,7 +12,6 @@
   } from "$lib/reportProvenance.js";
   import { getPanelFreshness } from "$lib/visualReports.js";
   import Time from "$lib/time/Time.svelte";
-  import VisualReportPanel from "./VisualReportPanel.svelte";
   import AnxRefPreview from "$lib/components/AnxRefPreview.svelte";
   import {
     collectPageRefs,
@@ -23,7 +22,7 @@
   } from "$lib/refResolve.js";
   import { reportRefStrings } from "./reportRefs.js";
   import ReportLayout from "./ReportLayout.svelte";
-  import { layoutPanelIds } from "./reportLayout.js";
+  import { createAutoGrid, layoutPanelIds } from "./reportLayout.js";
 
   let {
     report,
@@ -166,6 +165,7 @@
       ? panels.filter((panel) => !referencedPanels.has(panel.id))
       : panels,
   );
+  const autoGrid = createAutoGrid();
   let tabSelections = $derived(
     new Map(
       [...$page.url.searchParams.entries()]
@@ -452,19 +452,26 @@
       />
     {/if}
     {#if remainingPanels.length}
-      <div class="report-grid" class:report-layout-remainder={report.layout}>
-        {#each remainingPanels as panel (panel.id)}
-          <VisualReportPanel
-            {compact}
-            {panel}
-            {now}
-            sources={report.sources}
-            freshness={getPanelFreshness(panel, now)}
-            evidenceOpen={evidence === panel.id}
-            oninspect={inspectPanel}
-            {...refProps()}
-          />
-        {/each}
+      <!--
+        Panels with no authored placement — every panel in a report that omits
+        `layout`, and the leftovers of one that names only part of it — go
+        through the same content-driven grid as an authored one. There is no
+        second placement path to keep in step with the first.
+      -->
+      <div class:report-layout-remainder={report.layout}>
+        <ReportLayout
+          {compact}
+          node={autoGrid(remainingPanels)}
+          {panelsById}
+          sources={report.sources}
+          {now}
+          {evidence}
+          {tabSelections}
+          oninspect={inspectPanel}
+          {...refProps()}
+          ontab={(id, value) => setFilter(`reportTab.${id}`, value)}
+          path="auto"
+        />
       </div>
     {/if}
   {:else}
@@ -547,7 +554,11 @@
   }
   .report-projects {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    /* Two project cards when both still read, one when they would not. */
+    grid-template-columns: repeat(
+      auto-fit,
+      minmax(max(280px, calc((100% - 12px) / 2)), 1fr)
+    );
     gap: 12px;
   }
   .report-project {
@@ -620,12 +631,6 @@
     border-radius: 4px;
     padding: 6px 24px 6px 8px;
   }
-  .report-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-    align-items: start;
-  }
   .report-layout-remainder {
     margin-top: 24px;
   }
@@ -653,15 +658,7 @@
     color: var(--accent-text);
     font-size: 12px;
   }
-  @media (max-width: 800px) {
-    .report-grid {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
   @media (max-width: 520px) {
-    .report-projects {
-      grid-template-columns: minmax(0, 1fr);
-    }
     .report-heading h2 {
       font-size: 22px;
     }

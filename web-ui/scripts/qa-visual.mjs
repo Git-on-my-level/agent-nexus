@@ -88,9 +88,8 @@ export const QA_SCENES = [
     path: "/o/local/w/local",
     workspaceMode: "home-first-run",
     waitFor: async (page) => {
-      // One urgent band, not a second Inbox: it counts what is waiting and
-      // links across, and an item's own title lives in the Inbox.
-      await page.locator("[data-urgent-ask-count]").waitFor();
+      // Initiatives are the page. What is waiting on you is in the Inbox and
+      // its badge, and one fold down here, so the scene is the folded state.
       await page.waitForSelector("text=No open initiatives.");
       await page.locator("[data-overview-detail]:not([open])").waitFor();
     },
@@ -118,13 +117,15 @@ export const QA_SCENES = [
     path: "/o/local/w/local",
     workspaceMode: "home-empty",
     waitFor: async (page) => {
-      await page.locator("[data-urgent-state='empty']").waitFor();
-      await page.waitForSelector("text=Nothing is waiting on you.");
       await page.waitForSelector("text=No open initiatives.");
       await page.waitForSelector(
         "text=Pin a visual report to show your workspace dashboard here.",
       );
       await page.locator("[data-overview-detail]:not([open])").waitFor();
+      // Still computed, still one click away: "Nothing is waiting on you."
+      await page
+        .locator("[data-urgent-state='empty']")
+        .waitFor({ state: "attached" });
     },
   },
   {

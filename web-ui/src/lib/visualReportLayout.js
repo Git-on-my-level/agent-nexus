@@ -60,8 +60,10 @@ export function validateReportLayout(layout, panelIds) {
         children(node.children, `${path}.children`, depth + 1);
         break;
       case "grid":
-        record(node, path, ["type", "columns", "children"], ["span"]);
-        if (![2, 3, 4].includes(node.columns))
+        // columns is an optional cap, not a requirement: a grid that names
+        // none flows its children by available width and content.
+        record(node, path, ["type", "children"], ["span", "columns"]);
+        if (node.columns !== undefined && ![2, 3, 4].includes(node.columns))
           add(path, "columns must be 2, 3, or 4");
         children(node.children, `${path}.children`, depth + 1);
         break;

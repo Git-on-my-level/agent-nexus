@@ -465,25 +465,42 @@ async function installOverview(
   });
 }
 
-test("the brief answers the five questions above the fold", async ({
+/**
+ * Open the Overview's detail fold.
+ *
+ * The brief lives one fold down (SCA-716): the Overview's own sections are the
+ * initiative cards and what changed, and the brief answers a different
+ * question. Everything it says is still computed and still here.
+ */
+async function openDetail(page) {
+  await page.getByText("More detail", { exact: true }).click();
+  await expect(page.locator("[data-overview-detail]")).toHaveAttribute("open");
+}
+
+test("the brief answers the five questions, one fold down", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 1200 });
   await installOverview(page);
   await page.goto(OVERVIEW);
 
-  const band = page.locator('[data-overview-section="brief"]');
-  await expect(band).toBeVisible();
-  // The brief is the first thing on the page: it answers "what should I look
-  // at", where everything below it answers "here is everything".
+  // Initiatives and what changed are the page; the brief is behind the fold.
+  // evaluateAll does not wait; the sections arrive with the snapshot fetch.
+  await expect(page.locator("[data-initiative-tile]").first()).toBeVisible();
   const sections = await page
     .locator("[data-overview-section]")
     .evaluateAll((nodes) => nodes.map((node) => node.dataset.overviewSection));
-  expect(sections[0]).toBe("brief");
+  expect(sections.slice(0, 2)).toEqual(["initiatives", "changes"]);
+  expect(sections.indexOf("brief")).toBeGreaterThan(
+    sections.indexOf("changes"),
+  );
+  await openDetail(page);
+  const band = page.locator('[data-overview-section="brief"]');
+  await expect(band).toBeVisible();
   for (const panel of ["decisions", "risk", "changes", "machine"]) {
     await expect(band.locator(`[data-brief-panel="${panel}"]`)).toBeVisible();
   }
-  // The initiatives row is not a panel any more: the cards below answer it.
+  // The initiatives row is not a panel any more: the cards above answer it.
   await expect(band.locator('[data-brief-panel="initiatives"]')).toHaveCount(0);
   // Decisions and At risk come first, because they change what to do next.
   const panels = await band
@@ -504,7 +521,15 @@ test("the brief answers the five questions above the fold", async ({
     "blocks 2 cards · 1d old",
   );
 
-  // Since you last looked: counts first, items on request.
+  /*
+   * What changed, twice over and on purpose: the page's own Recent changes
+   * section above the fold is the one a reader is meant to see, and the
+   * band's grouped version — counts first, items on request — is the deeper
+   * read for someone who has already opened the fold.
+   */
+  await expect(page.locator('[data-overview-section="changes"]')).toContainText(
+    "Recent changes",
+  );
   const changes = band.locator('[data-brief-panel="changes"]');
   await expect(changes.locator("[data-brief-change-total]")).toHaveText(
     "9 changes",
@@ -537,8 +562,8 @@ test("the brief answers the five questions above the fold", async ({
     "Hosted billing",
   );
 
-  // Initiatives: the cards themselves, open, directly under the band. Three
-  // with no plan is still a sentence, now beside the cards it counts.
+  // Initiatives: the cards themselves, open, at the top of the page. Three
+  // with no plan is still a sentence, beside the cards it counts.
   const initiatives = page.locator('[data-overview-section="initiatives"]');
   await expect(
     initiatives.locator('[data-overview-initiative-state="no_plan"]'),
@@ -589,6 +614,23 @@ test("an empty section says so in one line", async ({ page }) => {
     },
   });
   await page.goto(OVERVIEW);
+  /*
+   * The digest is the Overview's own section now, so the band does not carry
+   * a second copy of it. Quiet still reads as an answer rather than an
+   * absence, in one line.
+   */
+  const changesSection = page.locator('[data-overview-section="changes"]');
+  await expect(
+    changesSection.locator("[data-overview-changes-empty]"),
+  ).toHaveText("Nothing new.");
+  // When the baseline was is `<Time>`'s job, not a second clock in this copy.
+  await expect(changesSection.locator("header")).toContainText("last looked");
+  await expect(changesSection.locator("header time")).toHaveAttribute(
+    "datetime",
+    /^\d{4}-\d{2}-\d{2}T/,
+  );
+
+  await openDetail(page);
   const band = page.locator('[data-overview-section="brief"]');
   await expect(band.locator('[data-brief-empty="decisions"]')).toHaveText(
     "Nothing is waiting on your decision.",
@@ -608,6 +650,7 @@ test("an empty section says so in one line", async ({ page }) => {
     const height = await band
       .locator(`[data-brief-panel="${panel}"]`)
       .evaluate((node) => node.getBoundingClientRect().height);
+    expect(height, `${panel} panel height`).toBeGreaterThan(0);
     expect(height, `${panel} panel height`).toBeLessThan(64);
   }
 });
@@ -616,6 +659,7 @@ test("the brief reads on a phone", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await installOverview(page);
   await page.goto(OVERVIEW);
+  await openDetail(page);
   const band = page.locator('[data-overview-section="brief"]');
   await expect(band).toBeVisible();
   // One column, and nothing overflowing it sideways.
@@ -651,10 +695,11 @@ test("a core with no brief renders the page it used to", async ({ page }) => {
   // Backward compatible in the direction that matters: the band is absent
   // rather than empty, and the rest of the Overview is untouched.
   await expect(page.locator('[data-overview-section="brief"]')).toHaveCount(0);
-  await expect(page.locator('[data-overview-section="urgent"]')).toBeVisible();
   await expect(
     page.locator('[data-overview-section="initiatives"]'),
   ).toBeVisible();
+  await openDetail(page);
+  await expect(page.locator('[data-overview-section="urgent"]')).toBeVisible();
   await mkdir(".screenshots/review", { recursive: true });
   await page.screenshot({
     path: ".screenshots/review/morning-brief-before.png",
@@ -678,6 +723,7 @@ test("expanding a group whose rows share a ref renders both rows", async ({
   await page.setViewportSize({ width: 1440, height: 1200 });
   await installOverview(page);
   await page.goto(OVERVIEW);
+  await openDetail(page);
 
   const group = page.locator(
     '[data-overview-section="brief"] [data-brief-group="steps"]',
@@ -715,7 +761,7 @@ test("the brief replaces the lower sections that repeat it", async ({
   const sections = await page
     .locator("[data-overview-section]")
     .evaluateAll((nodes) => nodes.map((node) => node.dataset.overviewSection));
-  expect(sections.slice(0, 2)).toEqual(["brief", "initiatives"]);
+  expect(sections.slice(0, 2)).toEqual(["initiatives", "changes"]);
   await expect(page.locator("[data-initiative-tile]").first()).toBeVisible();
   await expect(page.locator("[data-overview-initiatives-toggle]")).toHaveCount(
     0,
@@ -736,10 +782,12 @@ test("without a brief the page keeps its original sections", async ({
   await page.setViewportSize({ width: 1440, height: 1200 });
   await installOverview(page, { withBrief: false });
   await page.goto(OVERVIEW);
-  // The band is the top of the page again, and the tiles are open.
+  // The tiles are open, and the band is one fold down, named "Needs you"
+  // because without a brief nothing else has answered this workspace.
+  await expect(page.locator("[data-initiative-tile]").first()).toBeVisible();
+  await openDetail(page);
   await expect(page.locator('[data-overview-section="urgent"]')).toBeVisible();
   await expect(page.getByRole("heading", { name: "Needs you" })).toBeVisible();
-  await expect(page.locator("[data-initiative-tile]").first()).toBeVisible();
   // No brief, no state counts; the cards still carry their own step lists.
   await expect(page.locator("[data-overview-initiative-state]")).toHaveCount(0);
   await expect(
@@ -751,6 +799,7 @@ test("a reason is never truncated at phone width", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await installOverview(page);
   await page.goto(OVERVIEW);
+  await openDetail(page);
   const reasons = page.locator(
     '[data-overview-section="brief"] [data-brief-reason]',
   );

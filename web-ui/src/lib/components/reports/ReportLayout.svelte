@@ -3,9 +3,9 @@
   import VisualReportPanel from "./VisualReportPanel.svelte";
   import ReportLayout from "./ReportLayout.svelte";
   import {
+    gridPlacement,
     layoutContainsPanel,
     layoutHasVisiblePanels,
-    layoutSpanClass,
     selectedLayoutTab,
     visibleLayoutTabs,
   } from "./reportLayout.js";
@@ -40,6 +40,12 @@
     selectedLayoutTab(tabs, tabSelections.get(node.id), evidence),
   );
   let panel = $derived(panelsById.get(node.panel_id));
+  // Placement for a grid, from content rather than from an authored column
+  // count. Derived alongside `children` so a filter that hides the wide panel
+  // in a row gives the rest of the row its columns back.
+  let placement = $derived(
+    node.type === "grid" ? gridPlacement(node, children, panelsById) : null,
+  );
   let disclosureChoice = $state(null);
   let disclosureOpen = $derived(
     disclosureChoice ??
@@ -139,15 +145,25 @@
   {:else if node.type === "grid"}
     <div
       class="report-layout-grid"
-      class:layout-columns-2={node.columns === 2}
-      class:layout-columns-3={node.columns === 3}
-      class:layout-columns-4={node.columns === 4}
+      class:layout-fit={!placement.authored}
+      class:layout-columns-2={placement.authored && placement.columns === 2}
+      class:layout-columns-3={placement.authored && placement.columns === 3}
+      class:layout-columns-4={placement.authored && placement.columns === 4}
+      class:layout-cap-2={!placement.authored && placement.columns === 2}
+      class:layout-cap-3={!placement.authored && placement.columns === 3}
+      class:layout-cap-4={!placement.authored && placement.columns === 4}
+      class:layout-fit-tight={!placement.authored && placement.tier === "tight"}
+      class:layout-fit-text={!placement.authored && placement.tier === "text"}
       data-report-layout="grid"
-      data-report-columns={node.columns}
+      data-report-columns={placement.columns}
+      data-report-placement={placement.authored ? "authored" : "fit"}
+      data-report-fit={placement.authored ? undefined : placement.tier}
     >
-      {#each children as child (child)}
+      {#each children as child, index (child)}
         <div
-          class="report-layout-cell {layoutSpanClass(child.span, node.columns)}"
+          class="report-layout-cell {placement.cells[index].spanClass}"
+          class:layout-full={placement.cells[index].full}
+          data-report-cell={placement.cells[index].full ? "full" : "column"}
         >
           {@render renderChild(
             child,
@@ -256,6 +272,65 @@
     gap: 16px;
     align-items: start;
   }
+  /*
+   * Content-driven columns, which is what a grid gets unless a child asked for
+   * an exact span.
+   *
+   * The track minimum is the widest minimum among the panels sharing the row
+   * (`--report-fit-min`, set by the tier class). The floor is the width one
+   * column would have at the grid's cap, so the grid never exceeds it.
+   * `auto-fit` then reads the column count off the width actually available:
+   * two columns when both panels clear their minimum, one when they do not.
+   * No breakpoint names a device, and a grid nested in a section or a tab is
+   * measured in the width it really has rather than the window's.
+   */
+  .report-layout-grid.layout-fit {
+    /*
+     * The `min(100%, ...)` is load-bearing. A minimum useful width is what a
+     * panel reads at, not a promise the container can keep: in a column
+     * narrower than the tier — the embedded dashboard on a phone — an
+     * unclamped minimum makes the single track wider than the grid, and the
+     * shell's own `overflow: hidden` then cuts the right edge off every panel
+     * with no scrollbar to say so. Clamped, the panel simply gets the width
+     * there is.
+     *
+     * The tier and cap defaults are `var()` fallbacks rather than
+     * declarations here. As declarations they sit on
+     * `.report-layout-grid.layout-fit` — two classes — and silently beat the
+     * single-class `.layout-fit-tight` they are supposed to fall back to,
+     * which made the 260px tier dead and stacked two small panels that had
+     * room to sit side by side.
+     */
+    grid-template-columns: repeat(
+      auto-fit,
+      minmax(
+        min(
+          100%,
+          max(var(--report-fit-min, 380px), var(--report-fit-floor, 50%))
+        ),
+        1fr
+      )
+    );
+  }
+  .layout-cap-2 {
+    --report-fit-floor: calc((100% - 16px) / 2);
+  }
+  .layout-cap-3 {
+    --report-fit-floor: calc((100% - 32px) / 3);
+  }
+  .layout-cap-4 {
+    --report-fit-floor: calc((100% - 48px) / 4);
+  }
+  .layout-fit-tight {
+    --report-fit-min: 260px;
+  }
+  .layout-fit-text {
+    --report-fit-min: 380px;
+  }
+  /* Wide content — a plan graph, a chart, a real table — takes the row. */
+  .report-layout-grid > .report-layout-cell.layout-full {
+    grid-column: 1 / -1;
+  }
   .layout-columns-2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -334,6 +409,11 @@
   .report-disclosure-content {
     padding: 4px 0 20px;
   }
+  /*
+   * Authored grids only: an exact span needs exact tracks, so these keep the
+   * collapse behaviour spans have always had. A content-driven grid resolves
+   * its own column count above and must not be overridden here.
+   */
   @container visual-report (max-width: 1000px) {
     .layout-columns-4 {
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -344,18 +424,18 @@
     }
   }
   @container visual-report (max-width: 760px) {
-    .report-layout-grid {
+    .report-layout-grid:not(.layout-fit) {
       grid-template-columns: minmax(0, 1fr);
     }
-    .report-layout-grid > .report-layout-cell {
+    .report-layout-grid:not(.layout-fit) > .report-layout-cell {
       grid-column: span 1;
     }
   }
   @media (max-width: 800px) {
-    .report-layout-grid {
+    .report-layout-grid:not(.layout-fit) {
       grid-template-columns: minmax(0, 1fr);
     }
-    .report-layout-grid > .report-layout-cell {
+    .report-layout-grid:not(.layout-fit) > .report-layout-cell {
       grid-column: span 1;
     }
     .report-layout-stack,

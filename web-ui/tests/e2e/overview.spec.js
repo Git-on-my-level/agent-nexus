@@ -326,14 +326,6 @@ test("seeded CEO Overview screenshot and section order", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1700 });
   await installOverview(page);
   await page.goto(OVERVIEW);
-  // One urgent band at the top: it counts what is waiting and links each row
-  // to the surface that owns it, rather than becoming a second Inbox.
-  const band = page.locator('[data-overview-section="urgent"]');
-  await expect(band).toHaveAttribute("data-urgent-state", "active");
-  await expect(band.locator("[data-urgent-ask-count]")).toHaveText("2 asks");
-  await expect(band.locator("[data-urgent-initiative-count]")).toContainText(
-    "3 initiatives need attention",
-  );
   await expect(
     page.getByRole("heading", { name: "Demo dashboard", exact: true }),
   ).toBeVisible();
@@ -383,8 +375,14 @@ test("seeded CEO Overview screenshot and section order", async ({ page }) => {
       .evaluateAll((nodes) =>
         nodes.map((node) => node.dataset.overviewSection),
       );
-    // Urgent first, then every initiative, then the pinned dashboard.
-    expect(sections.slice(0, 3)).toEqual(["urgent", "initiatives", "reports"]);
+    /*
+     * Initiatives, then the pinned dashboard. Everything that answers a
+     * different question — what is waiting on you, work totals, presence —
+     * is one fold down, so the two sections a reader opens this page for are
+     * the two at the top of it. This fixture has no digest baseline, so there
+     * is no "changes" section between them.
+     */
+    expect(sections.slice(0, 2)).toEqual(["initiatives", "reports"]);
     await expect(
       page.getByText("Archived backlog 1", { exact: true }),
     ).toHaveCount(0);
@@ -394,6 +392,16 @@ test("seeded CEO Overview screenshot and section order", async ({ page }) => {
     path: `.screenshots/review/${BEFORE ? "before" : "after"}.png`,
     fullPage: true,
   });
+  if (!BEFORE) {
+    // The band is still there, counting the same things, inside the fold.
+    await page.getByText("More detail", { exact: true }).click();
+    const band = page.locator('[data-overview-section="urgent"]');
+    await expect(band).toHaveAttribute("data-urgent-state", "active");
+    await expect(band.locator("[data-urgent-ask-count]")).toHaveText("2 asks");
+    await expect(band.locator("[data-urgent-initiative-count]")).toContainText(
+      "3 initiatives need attention",
+    );
+  }
 });
 
 test("work details stay collapsed until requested and exclude archived counts", async ({
@@ -403,7 +411,7 @@ test("work details stay collapsed until requested and exclude archived counts", 
   await installOverview(page);
   await page.goto(OVERVIEW);
   await expect(page.locator("[data-overview-work-total]")).not.toBeVisible();
-  await page.getByText("Work detail", { exact: true }).click();
+  await page.getByText("More detail", { exact: true }).click();
   await expect(page.locator("[data-overview-work-total]")).toContainText("7");
   await expect(page.locator("[data-overview-cell='nexus:backlog']")).toHaveText(
     "0",
