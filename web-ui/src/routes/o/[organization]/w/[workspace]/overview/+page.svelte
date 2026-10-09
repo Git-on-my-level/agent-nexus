@@ -3,10 +3,12 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
 
-  import { getAuthenticatedAgent } from "$lib/authSession";
+  import { readerScopeKey } from "$lib/readerScope.js";
+  import { reliableRead } from "$lib/reliableRead.js";
   import {
     readWorkspaceView,
     writeWorkspaceView,
+    onWorkspaceViewsDenied,
   } from "$lib/workspaceViewCache";
 
   import { coreClient, workspaceScopedCoreClient } from "$lib/coreClient";
@@ -35,14 +37,11 @@
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
 
-  // The shell keys this component by organization/workspace. Snapshots are
-  // memory-only, principal-scoped, at most 30 seconds old, and revalidated.
-  const cacheKey = JSON.stringify([
-    $page.params.organization,
-    $page.params.workspace,
-    getAuthenticatedAgent()?.agent_id,
-    "overview",
-  ]);
+  const scope = readerScopeKey();
+  const cacheKey = `${scope}:overview`;
+  let readController;
+  let reconnecting = $state(false);
+  let readError = $state("");
   let fetched = $state(readWorkspaceView(cacheKey));
   let model = $derived(fetched);
   let refreshing = $state(false);
@@ -267,10 +266,20 @@
 
   async function refresh() {
     const id = ++request;
+    readController?.abort();
+    readController = new AbortController();
     refreshing = true;
+    readError = "";
     try {
-      const next = await loadOverview(coreClient);
-      if (id === request) {
+      const next = await reliableRead(() => loadOverview(coreClient), {
+        signal: readController.signal,
+        cacheScope: scope,
+        onRetry: () => {
+          reconnecting = true;
+        },
+      });
+      if (id === request && scope === readerScopeKey()) {
+        reconnecting = false;
         fetched = next;
         reportChoicesLoaded = false;
         requestedReportLoad = "";
@@ -281,16 +290,14 @@
         error instanceof Error
           ? error.message
           : "Overview could not be loaded.";
-      const section = { status: "unavailable", message };
-      if (id !== request) return;
-      fetched = {
-        needsYou: section,
-        work: section,
-        agents: section,
-        reports: section,
-        initiatives: section,
-        brief: undefined,
-      };
+      if (
+        id !== request ||
+        scope !== readerScopeKey() ||
+        readController.signal.aborted
+      )
+        return;
+      reconnecting = false;
+      readError = message;
     } finally {
       if (id === request) refreshing = false;
     }
@@ -327,9 +334,13 @@
     const id = request;
     loadingMoreReports = true;
     try {
-      const more = await coreClient.getDashboardReports({
-        cursor: reportChoicesLoaded ? section.next_cursor : undefined,
-      });
+      const more = await reliableRead(
+        () =>
+          coreClient.getDashboardReports({
+            cursor: reportChoicesLoaded ? section.next_cursor : undefined,
+          }),
+        { cacheScope: scope, signal: readController?.signal },
+      );
       if (id !== request || !fetched?.reports) return;
       fetched = { ...fetched, reports: mergeDashboardReports(section, more) };
       reportChoicesLoaded = true;
@@ -346,11 +357,23 @@
   }
 
   onDestroy(() => {
+    readController?.abort();
     request += 1;
     fanOutRequest += 1;
   });
 
   onMount(() => {
+    const stopDenied = onWorkspaceViewsDenied(scope, (error) => {
+      if (scope !== readerScopeKey()) return;
+      request++;
+      readController?.abort();
+      fanOutRequest++;
+      fetched = null;
+      otherWorkspaceAsks = [];
+      refreshing = false;
+      reconnecting = false;
+      readError = error?.message || "Read permission denied";
+    });
     void refresh();
     void fanOutOpenAsks();
     // Freshness badges colour themselves against the clock, so the clock has
@@ -358,7 +381,10 @@
     const clock = setInterval(() => {
       now = Date.now();
     }, 60_000);
-    return () => clearInterval(clock);
+    return () => {
+      clearInterval(clock);
+      stopDenied();
+    };
   });
 </script>
 
@@ -371,6 +397,18 @@
     {/snippet}
   </WorkspacePageHeader>
 
+  {#if readError}
+    <StateError
+      title="Overview could not be loaded"
+      message={readError}
+      onretry={() => refresh()}
+      retrying={refreshing}
+    />
+  {:else if reconnecting || (refreshing && model)}
+    <p class="text-micro text-fg-muted" role="status">
+      {reconnecting ? "Reconnecting…" : "Refreshing…"}
+    </p>
+  {/if}
   {#if !model}
     <div role="status" aria-label="Loading overview">
       <Skeleton rows={6} />

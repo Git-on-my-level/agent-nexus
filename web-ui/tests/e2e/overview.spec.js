@@ -3,7 +3,88 @@ import { mkdir } from "node:fs/promises";
 import { deferred, installWorkspaceApi } from "../helpers/workspaceApiMock.js";
 
 const OVERVIEW = "/o/local/w/local/overview";
+
+for (const status of [401, 403]) {
+  test(`Overview purges cached data after ${status}`, async ({ page }) => {
+    await installOverview(page);
+    await page.goto(OVERVIEW);
+    await expect(
+      page.locator('[aria-label="Open initiatives"] > li'),
+    ).toHaveCount(6);
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          localStorage.getItem("anx.workspace-views.v1")?.includes("overview"),
+        ),
+      )
+      .toBe(true);
+    await page.route("**/overview?**", (route) =>
+      route.fulfill({
+        status,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { message: "Read permission denied" } }),
+      }),
+    );
+    await page.reload();
+    await expect(page.getByRole("alert").first()).toBeVisible();
+    await expect(
+      page.locator('[aria-label="Open initiatives"] > li'),
+    ).toHaveCount(0);
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          JSON.parse(
+            localStorage.getItem("anx.workspace-views.v1") || '{"entries":[]}',
+          ).entries.some(([key]) => key.endsWith(":overview")),
+        ),
+      )
+      .toBe(false);
+  });
+}
 const BEFORE = process.env.OVERVIEW_CAPTURE_BEFORE === "1";
+test("a sidebar denial clears Overview and rejects a pending snapshot", async ({
+  page,
+}) => {
+  await installOverview(page);
+  await page.goto(OVERVIEW);
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(6);
+  const gate = deferred();
+  let resumed = false;
+  await page.route("**/overview?**", async (route) => {
+    await gate.promise;
+    resumed = true;
+    await route.fallback();
+  });
+  await page.route("**/inbox?**", (route) =>
+    route.fulfill({
+      status: 403,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { message: "Read permission denied" } }),
+    }),
+  );
+  await page.reload();
+  await expect(page.getByRole("alert").first()).toBeVisible();
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(0);
+  gate.resolve();
+  await expect.poll(() => resumed).toBe(true);
+  await expect(page.getByRole("alert").first()).toBeVisible();
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        JSON.parse(
+          localStorage.getItem("anx.workspace-views.v1") || '{"entries":[]}',
+        ).entries.some(([key]) => key.endsWith(":overview")),
+      ),
+    )
+    .toBe(false);
+});
 const NOW = "2026-10-04T12:00:00.000Z";
 /** Two days before NOW: past core's 24h signal staleness. */
 const SILENT_SINCE = "2026-10-02T12:00:00.000Z";
@@ -422,15 +503,17 @@ test("Overview keeps its skeleton while the snapshot loads", async ({
 
 test("failed snapshot reports an error", async ({ page }) => {
   test.skip(BEFORE);
+  test.setTimeout(60_000);
   await installOverview(page, { failure: true });
   await page.goto(OVERVIEW);
-  // Each section says it could not load; the band says the same thing in one
-  // line rather than claiming nothing is waiting.
+  await expect(page.getByText("Reconnecting…", { exact: true })).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText(
+    "Overview could not be loaded",
+    { timeout: 45_000 },
+  );
   await expect(
-    page.getByRole("alert").filter({ hasText: "Initiatives are unavailable" }),
+    page.getByRole("button", { name: "Retry", exact: true }),
   ).toBeVisible();
-  const band = page.locator('[data-overview-section="urgent"]');
-  await expect(band).toContainText("could not be read");
 });
 
 test("compact dashboard ignores document filter state", async ({ page }) => {
@@ -464,6 +547,37 @@ test("bookmarked report follows cursors and retains earlier choices", async ({
   ).toBeVisible();
 });
 
+test("dashboard pagination denial revokes the cached Overview", async ({
+  page,
+}) => {
+  await installOverview(page, { paged: true });
+  await page.goto(OVERVIEW);
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(6);
+  await page.route("**/workspace/dashboard/reports**", (route) =>
+    route.fulfill({
+      status: 403,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { message: "Report permission denied" } }),
+    }),
+  );
+  await page.goto(`${OVERVIEW}?dashboard=older-dashboard`);
+  await expect(page.getByRole("alert").first()).toBeVisible();
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        JSON.parse(
+          localStorage.getItem("anx.workspace-views.v1") || '{"entries":[]}',
+        ).entries.some(([key]) => key.endsWith(":overview")),
+      ),
+    )
+    .toBe(false);
+});
+
 test("truncated idle agent sample visibly qualifies zero counts", async ({
   page,
 }) => {
@@ -474,4 +588,25 @@ test("truncated idle agent sample visibly qualifies zero counts", async ({
   await expect(page.locator("[data-overview-agents='working']")).toContainText(
     "0+",
   );
+});
+
+test("Overview restores its snapshot on reload while revalidation is held", async ({
+  page,
+}) => {
+  await installOverview(page);
+  await page.goto(OVERVIEW);
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(6);
+  await page.route("**/overview?**", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 8000));
+    await route.fallback();
+  });
+  const navigatedAt = Date.now();
+  await page.reload();
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(6, { timeout: 3000 });
+  console.log("Overview cached reload paint ms:", Date.now() - navigatedAt);
+  await expect(page.getByText("Refreshing…", { exact: true })).toBeVisible();
 });

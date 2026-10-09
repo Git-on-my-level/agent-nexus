@@ -65,7 +65,11 @@
     liveWorkspaceEvents,
     liveInboxChanges,
   } from "$lib/liveWorkspaceEvents.js";
-  import { claimInboxCount, publishInboxCount } from "$lib/inboxCount.js";
+  import {
+    inboxNeedsYouCount,
+    claimInboxCount,
+    publishInboxCount,
+  } from "$lib/inboxCount.js";
   import {
     applyResponseOverlay,
     captureInboxResponseBinding,
@@ -112,6 +116,24 @@
   import InboxRespondPanel from "$lib/components/inbox/InboxRespondPanel.svelte";
   import InboxUndoToast from "$lib/components/inbox/InboxUndoToast.svelte";
 
+  import { readerScope, readerScopeKey } from "$lib/readerScope.js";
+  import {
+    readWorkspaceView,
+    writeWorkspaceView,
+    workspaceViewRevision,
+    onWorkspaceViewsDenied,
+    onWorkspaceViewChanged,
+  } from "$lib/workspaceViewCache.js";
+  import {
+    reliableRead,
+    isTransientReadError,
+    handleReadAccessDenied,
+    isReadAccessDenied,
+  } from "$lib/reliableRead.js";
+  import { commitInboxView } from "$lib/inboxViewCache.js";
+
+  let reconnecting = $state(false);
+  let confirmed = $state(false);
   let decisions = $state([]);
   let actions = $state([]);
   let work = $state([]);
@@ -243,7 +265,14 @@
   });
   let handled = $derived(filterMailbox(scoped, "handled"));
   let counts = $derived({
-    "needs-you": filterMailbox(scoped, "needs-you").length,
+    "needs-you": Math.max(
+      filterMailbox(scoped, "needs-you").length,
+      !workRef &&
+        !confirmed &&
+        $inboxNeedsYouCount.workspace === $page.params.workspace
+        ? $inboxNeedsYouCount.count || 0
+        : 0,
+    ),
     watching: filterMailbox(scoped, "watching").length,
     handled: handled.length,
   });
@@ -554,6 +583,7 @@
   }
 
   async function loadSelected(id) {
+    const scope = readerScopeKey();
     const ticket = ++selectionRequest;
     selectedController?.abort();
     const controller = new AbortController();
@@ -566,7 +596,10 @@
     try {
       let item = decisions.find((entry) => entry.id === id);
       if (!item) {
-        item = await client.getPmDecision(id);
+        item = await reliableRead(() => client.getPmDecision(id), {
+          signal: controller.signal,
+          cacheScope: scope,
+        });
         if (ticket !== selectionRequest || archivedWorkRefs.has(item.work_ref))
           return;
         decisions = [...decisions.filter((entry) => entry.id !== id), item];
@@ -575,7 +608,13 @@
         item?.action_id &&
         !actions.some((entry) => entry.id === item.action_id)
       ) {
-        const receipt = await client.getPmAction(item.action_id);
+        const receipt = await reliableRead(
+          () => client.getPmAction(item.action_id),
+          {
+            signal: controller.signal,
+            cacheScope: scope,
+          },
+        );
         if (ticket !== selectionRequest || archivedWorkRefs.has(item.work_ref))
           return;
         actions = [
@@ -614,13 +653,22 @@
    * keeps the list on screen and never clears an error the reader has not
    * seen resolved.
    */
+  let refreshPending = $state(false);
   let loadErrorText = $state("");
   async function load({ quiet = false } = {}) {
+    if (quiet && loading) {
+      refreshPending = true;
+      return;
+    }
+    const scope = readerScopeKey();
+    const cacheKey = `${scope}:inbox`;
+    const cacheRevision = workspaceViewRevision();
     const ticket = ++requestId;
     loadController?.abort();
     loadController = new AbortController();
+    loading = true;
+    const deniedOptions = { cacheScope: scope };
     if (!quiet) {
-      loading = true;
       error = "";
       loadErrorText = "";
       actionError = "";
@@ -631,6 +679,11 @@
       // and every live reload. Each source request still authenticates in core;
       // session maintenance and recovery belong to the shell and proxy.
       const applySources = (results) => {
+        if (ticket !== requestId || scope !== readerScopeKey()) return;
+        const denial = results.find((result) =>
+          isReadAccessDenied(result.reason),
+        );
+        if (denial) handleReadAccessDenied(denial.reason, deniedOptions);
         if (ticket !== requestId) return;
         const failure = results.find((result) => result.reason);
         let nextError = failure ? errorMessage(failure.reason) : "";
@@ -717,31 +770,95 @@
         if (results[5].status === "fulfilled") {
           updates = mergeInboxSnapshot(
             updates,
-            results[5].value.groups || [],
+            results[5].value?.groups || [],
             results[5].complete,
             "group_ref",
           );
         }
-        if (nextError) {
+        const failures = results.filter((result) => result.reason);
+        if (
+          nextError &&
+          failures.some((result) => !isTransientReadError(result.reason))
+        ) {
           error = nextError;
           loadErrorText = nextError;
-        } else if (quiet && loadErrorText && error === loadErrorText) {
+        } else if (
+          quiet &&
+          loadErrorText &&
+          error === loadErrorText &&
+          results.every(
+            (result) => result.status === "fulfilled" && !result.reason,
+          )
+        ) {
           // The failure a live reload recovered from is no longer true.
           error = "";
           loadErrorText = "";
         }
-        ready = true;
+        confirmed = results
+          .slice(0, 5)
+          .every((result) => result.status === "fulfilled" && result.complete);
+        ready =
+          ready ||
+          confirmed ||
+          results
+            .slice(0, 5)
+            .every((result) => result.status === "fulfilled") ||
+          decisions.length > 0 ||
+          actions.length > 0 ||
+          inboxItems.length > 0 ||
+          work.length > 0;
       };
-      await loadInboxSources({
-        onProgress: applySources,
-        signal: loadController.signal,
-      });
+      if (!ready) {
+        const cached = readWorkspaceView(cacheKey);
+        if (cached) applySources(cached);
+      }
+      await reliableRead(
+        async (signal) => {
+          const results = await loadInboxSources({
+            onProgress: applySources,
+            signal,
+          });
+          if (ticket !== requestId || scope !== readerScopeKey()) return;
+          const failure =
+            results.find((result) => isReadAccessDenied(result.reason)) ||
+            results.find((result) => result.reason);
+          if (failure) throw failure.reason;
+          if (
+            cacheRevision === workspaceViewRevision() &&
+            results
+              .slice(0, 5)
+              .every(
+                (result) => result.status === "fulfilled" && result.complete,
+              )
+          )
+            writeWorkspaceView(cacheKey, results);
+          reconnecting = false;
+        },
+        {
+          ...deniedOptions,
+          signal: loadController.signal,
+          onRetry: () => {
+            reconnecting = true;
+          },
+        },
+      );
     } catch (err) {
-      if (ticket === requestId && !quiet) error = errorMessage(err);
+      if (
+        ticket === requestId &&
+        scope === readerScopeKey() &&
+        !loadController.signal.aborted
+      ) {
+        error = errorMessage(err);
+        loadErrorText = error;
+        reconnecting = false;
+      }
     } finally {
       if (ticket === requestId) {
         loading = false;
-        ready = true;
+        if (refreshPending) {
+          refreshPending = false;
+          scheduleLiveRefresh();
+        }
       }
     }
   }
@@ -769,6 +886,7 @@
     event.preventDefault();
     if (!selectedDecision || busy || !answer.trim() || !choice) return;
     busy = true;
+    const scope = readerScopeKey();
     error = "";
     try {
       const result = await coreClient.answerPmDecision(selectedDecision.id, {
@@ -776,6 +894,15 @@
         approve: choice === "approve",
         text: answer.trim(),
       });
+      commitInboxView(scope, { decision: result });
+      if (scope !== readerScopeKey()) return;
+      requestId++;
+      loadController?.abort();
+      selectionRequest++;
+      selectedController?.abort();
+      decisionResolvedFor = `decision:${result.id}`;
+      loading = false;
+      refreshPending = false;
       const approved = choice === "approve";
       const pinId = `decision:${result.id}`;
       const wasUnpinned = !urlItem;
@@ -1202,6 +1329,7 @@
     const { prefix, id } = splitTypedRef(row.ref);
     if (prefix !== "card" || !id) return;
     busy = true;
+    const scope = readerScopeKey();
     actionError = "";
     try {
       await coreClient.archiveCard(id, {
@@ -1209,10 +1337,14 @@
           ? { if_version: row.item.version }
           : {}),
       });
+      commitInboxView(scope, { archivedRef: row.ref });
+      if (scope !== readerScopeKey()) return;
       // Invalidate feed reads and prevent pending single-item reads from
       // restoring this task's decisions, without cancelling unrelated reads.
       requestId++;
       loadController?.abort();
+      loading = false;
+      refreshPending = false;
       archivedWorkRefs.add(row.ref);
       // Navigate while the old row still exists. Related decisions also leave
       // after archive, so select only a row that will survive the removal.
@@ -1298,6 +1430,9 @@
   $effect(() => {
     if (!ready) return;
     const count = rows.filter((row) => row.mailbox === "needs-you").length;
+    // An incomplete empty result cannot erase a known obligation. Nonempty
+    // partial snapshots and optimistic answers still update both counts.
+    if (!confirmed && truncated && count === 0) return;
     publishInboxCount(
       $page.params.workspace,
       count,
@@ -1306,6 +1441,73 @@
   });
 
   onMount(() => {
+    const scope = readerScopeKey();
+    const stopDenied = onWorkspaceViewsDenied(scope, (denial) => {
+      if (scope !== readerScopeKey()) return;
+      requestId++;
+      loadController?.abort();
+      selectionRequest++;
+      selectedController?.abort();
+      decisions = [];
+      actions = [];
+      work = [];
+      inboxItems = [];
+      openInboxItems = [];
+      completedInboxItems = [];
+      updates = [];
+      ready = false;
+      confirmed = false;
+      loading = false;
+      reconnecting = false;
+      refreshPending = false;
+      error = errorMessage(denial);
+      sessionExpired = isSessionExpired(denial);
+      publishInboxCount($page.params.workspace, null);
+    });
+    const stopScope = readerScope.subscribe((next) => {
+      if (next !== scope) {
+        requestId++;
+        loadController?.abort();
+        decisions = [];
+        actions = [];
+        work = [];
+        inboxItems = [];
+        openInboxItems = [];
+        completedInboxItems = [];
+        updates = [];
+        ready = false;
+        confirmed = false;
+      }
+    });
+    let mounted = true;
+    const stopCache = onWorkspaceViewChanged((key, snapshot) => {
+      if (key !== `${scope}:inbox` || !snapshot) return;
+      // Let the originating handler choose its next row before replacing data.
+      queueMicrotask(() => {
+        if (!mounted || scope !== readerScopeKey()) return;
+        // A denial or sign-out may have purged it since the notification.
+        const latest = readWorkspaceView(key);
+        if (!latest) return;
+        requestId++;
+        loadController?.abort();
+        selectionRequest++;
+        selectedController?.abort();
+        loading = false;
+        refreshPending = false;
+        decisions = latest[0].value?.items || [];
+        actions = latest[1].value?.items || [];
+        work = latest[2].value?.work || [];
+        openInboxItems = latest[3].value?.items || [];
+        completedInboxItems = latest[4].value?.items || [];
+        inboxItems = mergeInboxItems(openInboxItems, completedInboxItems);
+        updates = latest[5].value?.groups || [];
+        receiptsUnavailable = !latest[1].complete;
+        confirmed = latest.every(
+          (result) =>
+            result.status === "fulfilled" && result.complete !== false,
+        );
+      });
+    });
     void load();
     const releaseCount = claimInboxCount();
     const stopLive = liveWorkspaceEvents({
@@ -1342,6 +1544,8 @@
       // Invalidate reads begun before the commit so they cannot restore it.
       requestId++;
       loadController?.abort();
+      loading = false;
+      refreshPending = false;
       openInboxItems = openInboxItems.filter((item) => item.id !== itemId);
       inboxItems = mergeInboxItems(openInboxItems, completedInboxItems);
       scheduleLiveRefresh();
@@ -1355,6 +1559,10 @@
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
+      mounted = false;
+      stopCache();
+      stopDenied();
+      stopScope();
       requestId++;
       loadController?.abort();
       selectionRequest++;
@@ -1454,6 +1662,9 @@
         >Not everything is loaded; the counts are lower bounds.</span
       >
     {/if}
+    <span class="ml-auto text-micro text-fg-muted" role="status">
+      {reconnecting ? "Reconnecting…" : loading && ready ? "Refreshing…" : ""}
+    </span>
   </nav>
   {#if error}
     <StateError
@@ -1478,7 +1689,7 @@
       {notice}
     </p>
   {/if}
-  {#if loading && !ready}
+  {#if !ready}
     <div
       class="rounded-md border border-line p-4"
       data-inbox-loading
@@ -1487,7 +1698,17 @@
       <p class="mb-3 text-meta text-fg-muted" role="status">
         {explicitId ? "Loading requested item…" : "Loading inbox…"}
       </p>
-      <SkeletonInboxRow count={5} />
+      <SkeletonInboxRow
+        count={Math.min(
+          10,
+          Math.max(
+            1,
+            $inboxNeedsYouCount.workspace === $page.params.workspace
+              ? ($inboxNeedsYouCount.count ?? 5)
+              : 5,
+          ),
+        )}
+      />
     </div>
   {:else}
     {@const showDetail = Boolean(selectedId)}
@@ -1583,18 +1804,18 @@
               taller than it needs to be (the grid drops its minimum height
               when there is nothing to list).
             -->
-            {#if !staleRows.length && !lateRows.length}
+            {#if (!confirmed || streamPartial) && !staleRows.length && !lateRows.length}
+              <li class="p-4" aria-busy="true">
+                <SkeletonInboxRow count={1} />
+              </li>
+            {:else if !staleRows.length && !lateRows.length}
               <li class="px-5 py-8">
                 <div
                   class="mx-auto flex max-w-sm flex-col items-center gap-1 text-center"
                   data-inbox-empty={mailbox}
                 >
                   {#if mailbox === "needs-you"}
-                    <p class="text-meta font-medium text-fg">
-                      {truncated || streamPartial
-                        ? "No items loaded yet."
-                        : "You're clear."}
-                    </p>
+                    <p class="text-meta font-medium text-fg">You're clear.</p>
                     {#if counts.watching}
                       <a
                         class="text-micro text-accent-text hover:underline"

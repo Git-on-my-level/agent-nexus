@@ -1,4 +1,5 @@
 <script>
+  import { readerScope } from "$lib/readerScope.js";
   import { browser } from "$app/environment";
   import { goto, preloadData } from "$app/navigation";
   import { page } from "$app/stores";
@@ -1586,7 +1587,7 @@
                 <div class="mt-6 h-40 rounded bg-slate-200/10"></div>
               </div>
             {:else}
-              {#key `${activeOrganizationSlug}/${activeWorkspaceSlug}`}
+              {#key $readerScope}
                 {@render children?.()}
               {/key}
             {/if}
