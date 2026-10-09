@@ -726,6 +726,7 @@ func measureHiddenReceiptTicks(t *testing.T, count int, measure bool) hiddenRece
 		t.Fatal(err)
 	}
 	cursor = page.Cursor
+	publicIDs := map[string]bool{prime.WakeupID: true, next.WakeupID: true}
 	for i := 0; i < 10; i++ {
 		trash := "now"
 		if i%2 == 1 {
@@ -757,6 +758,38 @@ func measureHiddenReceiptTicks(t *testing.T, count int, measure bool) hiddenRece
 		}
 		result.replayBudget = budget
 		cursor = page.Cursor
+		if !measure {
+			// The first page prioritizes the new tail receipt. Drain the snapshot
+			// too: only historical replay can expose the private-trigger receipts.
+			publicIDs[probe.WakeupID] = true
+			if !page.AccessChanged || !cursor.Replay || !cursor.Snapshot || !page.HasMore {
+				t.Fatalf("epoch %d did not schedule historical replay: %+v", i, page)
+			}
+			seen := map[string]bool{}
+			maxPages := (count+12)/primitives.ReceiptStreamPageSize + 3
+			for pages := 0; page.HasMore; pages++ {
+				if pages >= maxPages {
+					t.Fatalf("epoch %d replay did not finish within %d pages", i, maxPages)
+				}
+				page, err = store.ListReceiptStreamPage(scope, publicID, cursor)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, wakeup := range page.Wakeups {
+					if !publicIDs[wakeup.WakeupID] {
+						t.Fatalf("epoch %d historical replay disclosed hidden receipt %q", i, wakeup.WakeupID)
+					}
+					seen[wakeup.WakeupID] = true
+				}
+				cursor = page.Cursor
+			}
+			if cursor.Snapshot || cursor.Replay || cursor.ReplayAgain {
+				t.Fatalf("epoch %d replay cursor remained active: %+v", i, cursor)
+			}
+			if !seen[prime.WakeupID] || !seen[next.WakeupID] {
+				t.Fatalf("epoch %d replay did not visit public historical receipts: %v", i, seen)
+			}
+		}
 	}
 	return result
 }
