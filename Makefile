@@ -32,8 +32,11 @@ DEV_SEED_SCENARIO ?= game-dev-studio
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-install-hooks: ## Point git at tracked path-agnostic hook wrappers (safe across worktrees/submodules)
+install-hooks: ## Point git at tracked path-agnostic hook wrappers and the inventory merge driver
 	git config core.hooksPath scripts/git-hooks
+	git config merge.anx-json-inventory.name "structural merge for generated JSON inventories"
+	git config merge.anx-json-inventory.driver \
+		"$(PYTHON) -B scripts/git-hooks/json_inventory_merge.py %O %A %B %P"
 
 setup: ## Install repo tooling plus dependencies for web-ui, core, and cli
 	$(PYTHON) -m venv .venv
@@ -50,12 +53,22 @@ web-ui-static-ci: ## Same steps as CI job web-ui-static-check (frozen lockfile +
 	$(MAKE) -C $(WEB_UI_DIR) check
 	pnpm -C $(WEB_UI_DIR) run build
 
-.PHONY: check-static test-fast
+.PHONY: check-static test-fast check-routes access-inventory
 check-static: ## Offline static checks of staged changes and generated-contract drift (STATIC_ARGS=--all for all files)
 	$(PYTHON) -B scripts/git-hooks/checks.py static $(STATIC_ARGS)
 
-test-fast: ## Changed-module Go -short and Vitest units; TEST_FAST_ARGS=--all checks all modules
+test-fast: ## Changed-package Go -short and related Vitest units; TEST_FAST_ARGS=--all checks all modules
 	$(PYTHON) -B scripts/git-hooks/checks.py fast $(TEST_FAST_ARGS)
+
+# Quiet recipe: the commit hook surfaces this target's output verbatim.
+check-routes: ## Report HTTP route additions/removals/reclassifications vs origin/main
+	@$(PYTHON) -B scripts/git-hooks/checks.py routes
+
+access-inventory: ## Regenerate the storage access inventory after a schema or writer change
+	cd $(CORE_DIR) && ANX_UPDATE_ACCESS_INVENTORY=1 go test ./internal/storage \
+		-run TestResourceAccessStorageInventory -count=1
+	pnpm -C $(WEB_UI_DIR) exec prettier --write \
+		../$(CORE_DIR)/internal/storage/testdata/resource_access_storage.json
 
 check: ## Run repo, core, cli, and web-ui checks
 	$(MAKE) oss-boundary-check

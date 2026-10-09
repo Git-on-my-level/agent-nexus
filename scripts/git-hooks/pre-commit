@@ -6,13 +6,22 @@ repo_root="$(git rev-parse --show-toplevel)"
 cd "${repo_root}"
 
 pre_commit="${repo_root}/.venv/bin/pre-commit"
-if [[ ! -x "${pre_commit}" ]]; then
-  echo "Missing ${pre_commit}; run: make setup" >&2
-  exit 1
+if [[ -x "${pre_commit}" ]]; then
+  exec "${pre_commit}" hook-impl \
+    --config="${repo_root}/.pre-commit-config.yaml" \
+    --hook-type=pre-commit \
+    --hook-dir "${HERE}" \
+    -- "$@"
 fi
 
-exec "${pre_commit}" hook-impl \
-  --config="${repo_root}/.pre-commit-config.yaml" \
-  --hook-type=pre-commit \
-  --hook-dir "${HERE}" \
-  -- "$@"
+# A missing virtualenv must not block a commit: run the same checks directly.
+# Without the framework, unstaged tracked edits are not stashed for you.
+python="${PYTHON:-python3}"
+if ! command -v "${python}" >/dev/null 2>&1; then
+  echo "Missing ${pre_commit} and ${python}; run: make setup" >&2
+  exit 1
+fi
+echo "No ${pre_commit}; running checks with ${python} (make setup installs the hook framework)." >&2
+# The static tier reports route drift itself; the framework needs a separate,
+# verbose hook for it only because it hides a passing hook's output.
+exec "${python}" -B scripts/git-hooks/checks.py static

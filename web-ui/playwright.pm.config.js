@@ -1,8 +1,10 @@
 import { defineConfig } from "@playwright/test";
 
+import { resolvePort } from "./playwright.ports.js";
+
 // Isolated, synthetic UI qualification. Never starts or mutates a real workspace.
-const port = Number(process.env.PM_UI_TEST_PORT || 4381);
-const corePort = Number(process.env.PM_CORE_TEST_PORT || 4382);
+const port = resolvePort("pmUi", "PM_UI_TEST_PORT");
+const corePort = resolvePort("pmCore", "PM_CORE_TEST_PORT");
 export default defineConfig({
   testDir: "tests/e2e",
   testMatch: "pm-work.spec.js",

@@ -1,12 +1,15 @@
 import { defineConfig } from "@playwright/test";
 
-const port = Number(process.env.PLAYWRIGHT_PORT ?? 4173);
+import { isCi, resolvePort, reuseExistingServer } from "./playwright.ports.js";
+
+// Core runs outside this config (ANX_CORE_BASE_URL), so only the UI port is ours.
+const port = resolvePort("webUi", "PLAYWRIGHT_PORT");
 
 export default defineConfig({
   testDir: "tests/e2e",
   testMatch: /integration-core-golden-path\.spec\.js/,
   fullyParallel: false,
-  retries: process.env.CI ? 1 : 0,
+  retries: isCi ? 1 : 0,
   workers: 1,
   reporter: "list",
   use: {
@@ -18,9 +21,11 @@ export default defineConfig({
   },
   outputDir: "test-results/e2e-with-core",
   webServer: {
-    command: `pnpm exec vite dev --host 127.0.0.1 --port ${port}`,
+    command: `pnpm exec vite dev --host 127.0.0.1 --port ${port} --strictPort`,
     port,
     timeout: 120000,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: reuseExistingServer(
+      "PLAYWRIGHT_REUSE_EXISTING_WEB_UI",
+    ),
   },
 });

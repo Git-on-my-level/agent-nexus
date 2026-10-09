@@ -1,6 +1,8 @@
 """Regression coverage for Git selection and non-mutating contract drift checks."""
 
 import importlib.util
+import io
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -117,13 +119,216 @@ class RepoTest(unittest.TestCase):
     def test_docs_only_do_not_run_suites(self):
         self.assertEqual(checks.selected_modules({"AGENTS.md", "docs/architecture/example.md"}), set())
 
+    def root_package_graph(self, module):
+        """Single package at the module root, matching this fixture's layout."""
+        path = module + "/root"
+        return {".": path}, {path: set()}, {path}
+
+    def fast_commands(self, changed, base=None):
+        with patch.object(checks, "run") as run, \
+                patch.object(checks, "go_package_graph", self.root_package_graph):
+            checks.fast_tests(changed, base)
+        return [call.args for call in run.call_args_list]
+
     def test_fast_commands_exclude_browsers_and_real_binary_integration(self):
-        with patch.object(checks, "run") as run:
-            checks.fast_tests({"core/a.go", "cli/a.go", "mcp/a.go", "web-ui/a.js"})
-        commands = [call.args for call in run.call_args_list]
-        self.assertEqual(commands.count(("go", "test", "-short", "./...")), 3)
+        commands = self.fast_commands({"core/a.go", "cli/a.go", "mcp/a.go", "web-ui/a.js"})
+        self.assertEqual(commands.count(("go", "test", "-short", "./.")), 3)
         self.assertIn(("pnpm", "-C", "web-ui", "run", "test:unit"), commands)
         self.assertFalse(any("playwright" in str(c) or "integration" in str(c) for c in commands))
+
+    def test_shared_and_unattributable_changes_still_run_whole_modules(self):
+        for path in ("core/go.mod", "core/scripts/dev", "Makefile"):
+            self.assertIn(("go", "test", "-short", "./..."), self.fast_commands({path}),
+                          f"{path} must widen to the whole module")
+        # Selected for a reason outside the module (VERSION feeds cli's build info).
+        self.assertIn(("go", "test", "-short", "./..."), self.fast_commands({"VERSION"}))
+
+    def test_module_docs_run_no_suite(self):
+        self.write_go_module()
+        with patch.object(checks, "run") as run:
+            checks.fast_tests({"core/AGENTS.md", "core/docs/runbook.md"})
+        self.assertEqual(run.call_args_list, [])
+
+    def test_ui_runs_related_tests_only_for_attributable_changes(self):
+        related = ("pnpm", "-C", "web-ui", "exec", "vitest", "run", "--changed", "abc123",
+                   "--passWithNoTests")
+        whole = ("pnpm", "-C", "web-ui", "run", "test:unit")
+        with patch.object(checks, "ui_source_scanning_tests", lambda: ["tests/unit/guard.test.js"]):
+            commands = self.fast_commands({"web-ui/src/lib/a.js"}, "abc123")
+        self.assertIn(related, commands)
+        # No module graph relates a disk-scanning guard to a change; run it anyway.
+        self.assertIn(("pnpm", "-C", "web-ui", "exec", "vitest", "run",
+                       "tests/unit/guard.test.js"), commands)
+        # No merge base, shared UI roots and repo-wide fan-out keep the full suite.
+        self.assertIn(whole, self.fast_commands({"web-ui/src/lib/a.js"}))
+        self.assertNotIn(related, self.fast_commands({"web-ui/src/lib/a.js"}))
+        self.assertIn(whole, self.fast_commands({"web-ui/vitest.config.js"}, "abc123"))
+        self.assertIn(whole, self.fast_commands({"web-ui/tests/mocks/app-stores.js"}, "abc123"))
+        self.assertIn(whole, self.fast_commands({"pnpm-lock.yaml"}, "abc123"))
+
+    def write_go_module(self):
+        # Like the real modules, the module root holds no package of its own.
+        self.git("rm", "-q", "core/a.go")
+        self.write("core/go.mod", "module fake\n\ngo 1.21\n")
+        self.write("core/internal/leaf/leaf.go", "package leaf\n\nfunc Leaf() int { return 1 }\n")
+        self.write("core/internal/leaf/leaf_test.go",
+                   "package leaf\n\nimport \"testing\"\n\nfunc TestLeaf(t *testing.T) { Leaf() }\n")
+        self.write("core/internal/mid/mid.go",
+                   "package mid\n\nimport \"fake/internal/leaf\"\n\nfunc Mid() int "
+                   "{ return leaf.Leaf() }\n")
+        self.write("core/internal/helper/helper.go", "package helper\n\nfunc Help() {}\n")
+        # Only a test consumes mid and helper: test imports must count as edges.
+        self.write("core/internal/top/top_test.go",
+                   "package top_test\n\nimport (\n\t\"testing\"\n\n\t\"fake/internal/helper\"\n"
+                   "\t\"fake/internal/mid\"\n)\n\nfunc TestTop(t *testing.T) "
+                   "{ helper.Help(); mid.Mid() }\n")
+        self.write("core/internal/unrelated/unrelated.go", "package unrelated\n")
+        self.write("core/internal/leaf/testdata/fixture.json", "{}\n")
+        self.write("core/internal/leaf/testdata/golden.txt", "golden\n")
+        self.write("core/internal/leaf/README.md", "embedded\n")
+        self.write("core/docs/runbook.md", "docs\n")
+        self.git("add", ".")
+        self.git("commit", "-qm", "go module")
+        self.git("update-ref", "refs/remotes/origin/main", "HEAD")
+
+    def test_dependents_follow_imports_and_test_imports(self):
+        self.write_go_module()
+        self.assertEqual(checks.go_affected("core", {"core/internal/leaf/leaf.go"}),
+                         (["./internal/leaf"], ["./internal/mid", "./internal/top"]))
+        # A fixture belongs to the package whose directory encloses it.
+        self.assertEqual(checks.go_affected("core", {"core/internal/leaf/testdata/fixture.json"}),
+                         (["./internal/leaf"], ["./internal/mid", "./internal/top"]))
+        # Test-only consumers are reached, and nothing unrelated is.
+        self.assertEqual(checks.go_affected("core", {"core/internal/helper/helper.go"}),
+                         (["./internal/helper"], ["./internal/top"]))
+        self.assertEqual(checks.go_affected("core", {"core/internal/unrelated/unrelated.go"}),
+                         (["./internal/unrelated"], []))
+        # Golden files and embedded docs are build inputs of the package that
+        # encloses them, whatever their suffix.
+        for owned in ("core/internal/leaf/testdata/golden.txt", "core/internal/leaf/README.md"):
+            self.assertEqual(checks.go_affected("core", {owned}),
+                             (["./internal/leaf"], ["./internal/mid", "./internal/top"]), owned)
+        # Documentation no package encloses runs nothing; anything else widens.
+        self.assertEqual(checks.go_affected("core", {"core/docs/runbook.md"}), ([], []))
+        self.assertIsNone(checks.go_affected("core", {"core/Dockerfile"}))
+        self.assertIsNone(checks.go_affected("core", {"core/go.sum"}))
+
+    def fake_dependents(self, returncode):
+        class Started:
+            pid = -12345
+
+            def __init__(self):
+                self.argv = None
+                self.returncode = returncode
+                self.output = io.BytesIO(b"ok  \tdependents\n")
+
+            def wait(self):
+                return self.returncode
+
+        started = Started()
+
+        def start(argv, **kwargs):
+            started.argv = tuple(argv)
+            return started
+
+        return started, start
+
+    def test_changed_packages_decide_the_result_before_dependents_are_reported(self):
+        self.write_go_module()
+        started, start = self.fake_dependents(0)
+        with patch.object(checks, "run") as run, patch.object(checks, "start", start), \
+                patch("sys.stdout", new_callable=io.StringIO) as out:
+            checks.go_fast_tests("core", {"core/internal/leaf/leaf.go"}, False)
+        self.assertEqual([call.args for call in run.call_args_list],
+                         [("go", "test", "-short", "./internal/leaf")])
+        self.assertEqual(started.argv, ("go", "test", "-short", "./internal/mid", "./internal/top"))
+        self.assertIn("ok  \tdependents", out.getvalue())
+
+    def test_a_pinned_package_parallelism_serializes_the_phases(self):
+        self.write_go_module()
+        started, start = self.fake_dependents(0)
+        # CI pins -p=1 for core until its fixtures are confirmed parallel-safe;
+        # two concurrent `go test` runs would double that cap.
+        with patch.dict(os.environ, {"GOFLAGS": "-p=1"}), patch.object(checks, "run") as run, \
+                patch.object(checks, "start", start), \
+                patch("sys.stdout", new_callable=io.StringIO):
+            checks.go_fast_tests("core", {"core/internal/leaf/leaf.go"}, False)
+        self.assertEqual([call.args for call in run.call_args_list],
+                         [("go", "test", "-short", "./internal/leaf"),
+                          ("go", "test", "-short", "./internal/mid", "./internal/top")])
+        self.assertIsNone(started.argv)
+        for flags, expected in (("-p=1", "1"), ("-p 4", "4"), ("-mod=readonly -p=2", "2"),
+                                ("-mod=readonly", None), ("", None)):
+            with patch.dict(os.environ, {"GOFLAGS": flags}):
+                self.assertEqual(checks.pinned_package_parallelism(), expected, flags)
+
+    def test_a_failing_dependent_still_fails_the_run(self):
+        self.write_go_module()
+        started, start = self.fake_dependents(1)
+        with patch.object(checks, "run"), patch.object(checks, "start", start), \
+                patch("sys.stdout", new_callable=io.StringIO):
+            with self.assertRaises(subprocess.CalledProcessError):
+                checks.go_fast_tests("core", {"core/internal/leaf/leaf.go"}, False)
+
+    def test_a_break_in_the_changed_package_terminates_the_dependents(self):
+        self.write_go_module()
+        started, start = self.fake_dependents(0)
+        failure = subprocess.CalledProcessError(1, ("go", "test"))
+        with patch.object(checks, "run", side_effect=failure), \
+                patch.object(checks, "start", start), \
+                patch.object(checks.os, "killpg") as killpg, \
+                patch("sys.stdout", new_callable=io.StringIO):
+            with self.assertRaises(subprocess.CalledProcessError):
+                checks.go_fast_tests("core", {"core/internal/leaf/leaf.go"}, False)
+        self.assertEqual(killpg.call_args.args[0], started.pid)
+
+    def test_an_interrupt_while_waiting_for_dependents_terminates_them(self):
+        self.write_go_module()
+        started, start = self.fake_dependents(0)
+        waits = []
+
+        def wait():
+            waits.append(1)
+            if len(waits) == 1:
+                raise KeyboardInterrupt
+            return started.returncode
+
+        started.wait = wait
+        with patch.object(checks, "run"), patch.object(checks, "start", start), \
+                patch.object(checks.os, "killpg") as killpg, \
+                patch("sys.stdout", new_callable=io.StringIO):
+            with self.assertRaises(KeyboardInterrupt):
+                checks.go_fast_tests("core", {"core/internal/leaf/leaf.go"}, False)
+        self.assertEqual(killpg.call_args.args[0], started.pid)
+
+    def write_routes(self, path, routes):
+        document = {"version": 1, "route_count": len(routes),
+                    "routes": [{"method": m, "path": p, "access_class": c} for m, p, c in routes]}
+        self.write(path, json.dumps(document) + "\n")
+
+    def test_route_comparison_reports_additions_removals_and_reclassification(self):
+        self.write_routes(checks.ROUTE_INVENTORY, [("GET", "/a", "public"), ("GET", "/b", "public")])
+        self.git("add", ".")
+        self.git("commit", "-qm", "routes")
+        self.git("update-ref", "refs/remotes/origin/main", "HEAD")
+        self.write_routes(checks.ROUTE_INVENTORY,
+                          [("GET", "/a", "private"), ("POST", "/c", "public")])
+        with patch("sys.stdout", new_callable=io.StringIO) as out:
+            checks.route_changes()
+        report = out.getvalue()
+        self.assertIn("new route POST /c", report)
+        self.assertIn("removed route GET /b", report)
+        self.assertIn("reclassified GET /a: public -> private", report)
+        # Advisory only: a route change must never block the commit.
+        self.git("checkout", "--", checks.ROUTE_INVENTORY)
+        with patch("sys.stdout", new_callable=io.StringIO) as out:
+            checks.route_changes()
+        self.assertIn("HTTP routes unchanged", out.getvalue())
+
+    def test_route_comparison_skips_a_missing_baseline(self):
+        with patch("sys.stdout", new_callable=io.StringIO) as out:
+            checks.route_changes()
+        self.assertIn("Could not compare", out.getvalue())
 
     def push(self, content):
         return subprocess.run([str(PUSH_HOOK), "origin", "local-test-remote"], cwd=self.root,
