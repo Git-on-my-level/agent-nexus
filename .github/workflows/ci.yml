@@ -13,13 +13,15 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   oss-boundary-check:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    needs: changes
+    if: needs.changes.outputs.release_only != 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
@@ -32,6 +34,7 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
+      release_only: ${{ steps.release.outputs.release_only }}
       automation: ${{ steps.filter.outputs.automation }}
       go_shared: ${{ steps.filter.outputs.go_shared }}
       node_shared: ${{ steps.filter.outputs.node_shared }}
@@ -45,19 +48,39 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Detect exact release bump on main
+        id: release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          base=$(python3 scripts/ci-release-base.py "$GITHUB_SHA")
+          if [ -n "$base" ] && [ "$base" = "${{ github.event.before }}" ]; then
+            echo "release_only=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Detect changes
+        if: steps.release.outputs.release_only != 'true'
         id: filter
         uses: dorny/paths-filter@v4.0.1
         with:
           filters: |
             automation:
               - '.github/**'
+              - 'scripts/ci-*.py'
+              - 'scripts/ci-*.mjs'
+              - 'scripts/release-patch.sh'
+              - 'scripts/*version*.sh'
+              - 'scripts/tests/**'
             go_shared:
               - '.github/actions/setup-go/**'
               - '.github/workflows/ci.yml'
               - 'scripts/check-performance-shards.py'
               - 'scripts/tests/test_performance_shards.py'
+              - 'scripts/ci-core.py'
+              - 'scripts/ci-release-base.py'
+              - 'scripts/tests/test_ci_velocity.py'
             node_shared:
               - '.github/actions/setup-node-pnpm/**'
               - '.github/workflows/ci.yml'
@@ -118,6 +141,8 @@ jobs:
         run: |
           node --test scripts/tests/ci-automation.test.mjs
           python3 -m unittest discover -s scripts/tests -p "test_performance_shards.py"
+          python3 -m unittest discover -s scripts/tests -p "test_ci_velocity.py"
+          python3 scripts/tests/test_release_preflight.py
 
       - name: Check GitHub automation formatting
         run: pnpm -C web-ui exec prettier --check "../.github/**/*.{yml,yaml}"
@@ -143,9 +168,37 @@ jobs:
       - name: Verify generated contracts
         run: ./scripts/contract-check --committed
 
-  core-checks:
+  core-server-checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 30
+    needs: changes
+    if: needs.changes.outputs.core == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.go_shared == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+
+      - name: Run core partition
+        working-directory: core
+        # Retain fixture concurrency until the core owner confirms parallel safety.
+        env:
+          GOMAXPROCS: "2"
+          GOFLAGS: "-p=1"
+        run: |
+          python3 ../scripts/ci-core.py server --shard ${{ matrix.shard }}
+
+  core-primitives-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: changes
     if: needs.changes.outputs.core == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.go_shared == 'true'
     steps:
@@ -158,16 +211,40 @@ jobs:
           go-version-file: core/go.mod
           cache-dependency-path: core/go.sum
 
-      - name: Run core check
-        # Match local validation's CPU/package concurrency for SQL-backed
-        # fixtures. Leave setup and inventory room beyond the package budget.
+      - name: Run core partition
+        working-directory: core
+        # Retain fixture concurrency until the core owner confirms parallel safety.
         env:
           GOMAXPROCS: "2"
           GOFLAGS: "-p=1"
-        run: make -C core check-ci GO_TEST_TIMEOUT=25m
+        run: |
+          python3 ../scripts/ci-core.py primitives
 
-      - name: Verify route inventory matches the router
-        run: make route-inventory-check
+  core-other-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: changes
+    if: needs.changes.outputs.core == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.go_shared == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+
+      - name: Run core partition
+        working-directory: core
+        # Retain fixture concurrency until the core owner confirms parallel safety.
+        env:
+          GOMAXPROCS: "2"
+          GOFLAGS: "-p=1"
+        run: |
+          make fmt-check vet check-offline check-linux-observation
+          python3 ../scripts/ci-core.py other
+          make -C .. route-inventory-check
 
   mcp-checks:
     runs-on: ubuntu-latest
@@ -242,7 +319,18 @@ jobs:
   # from visual QA so a selected-spec command cannot silently drop route coverage.
   web-ui-e2e-check:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+      options: --ipc=host
+    defaults:
+      run:
+        shell: bash
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      # The official image runs as root. Only the trusted fixture renderer
+      # explicitly opts out; its default/fallback sandbox contract stays intact.
+      ANX_TEST_REPORT_CHROMIUM_SANDBOX: "false"
     needs: changes
     if: needs.changes.outputs.web_ui == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.node_shared == 'true' || needs.changes.outputs.go_shared == 'true'
     strategy:
@@ -264,9 +352,6 @@ jobs:
 
       - name: Setup Playwright Chromium
         uses: ./.github/actions/setup-playwright
-
-      - name: Allow sandboxed Chromium on Ubuntu runners
-        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
       - name: Run full browser suite (balanced shard ${{ matrix.shard }}/5)
         env:
@@ -294,7 +379,18 @@ jobs:
   # Browser-based visual QA against committed baselines (after static checks).
   web-ui-visual-check:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+      options: --ipc=host
+    defaults:
+      run:
+        shell: bash
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      # The official image runs as root. Only the trusted fixture renderer
+      # explicitly opts out; its default/fallback sandbox contract stays intact.
+      ANX_TEST_REPORT_CHROMIUM_SANDBOX: "false"
     needs:
       - changes
       - web-ui-static-check
@@ -437,7 +533,9 @@ jobs:
       - changes
       - workflow-checks
       - contracts-check
-      - core-checks
+      - core-server-checks
+      - core-primitives-checks
+      - core-other-checks
       - mcp-checks
       - cli-checks
       - web-ui-static-check

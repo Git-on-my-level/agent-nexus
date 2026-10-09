@@ -1,56 +1,19 @@
-name: Setup Playwright Chromium
-description: Cache Chromium for the installed Playwright version; always install Linux system libraries.
+name: Verify Playwright container
+description: Verify the installed Playwright matches the official CI browser image.
 
 runs:
   using: composite
   steps:
-    - name: Read Playwright version
-      id: version
-      shell: bash
-      working-directory: web-ui
-      run: echo "value=$(node -p 'require("@playwright/test/package.json").version')" >> "$GITHUB_OUTPUT"
-
-    - name: Restore Playwright browsers
-      id: browsers
-      uses: actions/cache@v5.0.3
-      with:
-        path: ~/.cache/ms-playwright
-        key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.value }}-chromium
-
-    - name: Install Chromium on cache miss
-      if: steps.browsers.outputs.cache-hit != 'true'
-      shell: bash
-      run: pnpm -C web-ui exec playwright install chromium
-
-    # Browser archives do not contain the runner's apt-installed libraries.
-    - name: Install Chromium system dependencies
+    - name: Verify Playwright version and bundled Chromium
       shell: bash
       run: |
-        printf '%s\n' \
-          'Acquire::http::Timeout "30";' \
-          'Acquire::https::Timeout "30";' \
-          'Acquire::Retries "3";' \
-          'DPkg::Lock::Timeout "60";' \
-          | sudo tee /etc/apt/apt.conf.d/99timeouts >/dev/null
-
-        for attempt in 1 2 3; do
-          if [[ "$attempt" -gt 1 ]]; then
-            echo "Cleaning up apt/dpkg state before retry ${attempt}..."
-            sudo pkill -f 'apt-get|dpkg' || true
-            sudo dpkg --configure -a || true
-          fi
-
-          echo "Installing Chromium system dependencies (attempt ${attempt}/3)..."
-          if timeout 240 pnpm -C web-ui exec playwright install-deps chromium; then
-            exit 0
-          else
-            status=$?
-          fi
-
-          if [[ "$attempt" -eq 3 ]]; then
-            echo "::error::Failed to install Chromium system dependencies after 3 attempts."
-            exit "$status"
-          fi
-
-          echo "::warning::Chromium system dependency installation failed (exit ${status}); retrying."
-        done
+        node --input-type=module - <<'JS'
+        import { createRequire } from "node:module";
+        import { existsSync } from "node:fs";
+        const require = createRequire(`${process.cwd()}/web-ui/package.json`);
+        const version = require("@playwright/test/package.json").version;
+        if (version !== "1.58.2") throw new Error(`Update the CI Playwright image for ${version}`);
+        if (!existsSync(require("@playwright/test").chromium.executablePath())) {
+          throw new Error("CI must run in the matching official Playwright image");
+        }
+        JS

@@ -19,6 +19,55 @@ const needs = [...gate.matchAll(/^      - ([\w-]+)$/gm)].map(
   (match) => match[1],
 );
 
+test("concurrency cancels repeated PRs while preserving every non-PR run", () => {
+  const groupsAcrossWorkflows = [];
+  for (const file of ["ci.yml", "system-smokes.yml", "performance.yml"]) {
+    const workflow = readFileSync(
+      join(root, ".github/workflows", file),
+      "utf8",
+    );
+    const block = workflow.match(/^concurrency:\n((?:  .+\n)+)/m)[1];
+    const group = block.match(/^  group: (.+)$/m)[1];
+    const cancel = block.match(/^  cancel-in-progress: (.+)$/m)[1];
+    // These checked-in expressions use the JS-compatible subset of GitHub's
+    // expression syntax. Evaluate the real group, rather than a copied policy.
+    const evaluate = (template, github) =>
+      template.replace(/\$\{\{(.*?)\}\}/g, (_, expression) =>
+        String(new Function("github", `return (${expression});`)(github)),
+      );
+    const context = (event, run, pr = 7) => ({
+      workflow: file,
+      event_name: event,
+      run_id: run,
+      ref: "refs/heads/main",
+      event: event === "pull_request" ? { pull_request: { number: pr } } : {},
+    });
+    assert.equal(
+      evaluate(group, context("pull_request", 100)),
+      evaluate(group, context("pull_request", 101)),
+    );
+    assert.notEqual(
+      evaluate(group, context("pull_request", 100)),
+      evaluate(group, context("pull_request", 101, 8)),
+    );
+    assert.equal(evaluate(cancel, context("pull_request", 100)), "true");
+    for (const event of [
+      "push",
+      "merge_group",
+      "workflow_dispatch",
+      "schedule",
+    ]) {
+      const runGroups = [100, 101, 102].map((run) =>
+        evaluate(group, context(event, run)),
+      );
+      assert.equal(new Set(runGroups).size, 3, `${file}: ${event} A/B/C`);
+      assert.equal(evaluate(cancel, context(event, 100)), "false");
+    }
+    groupsAcrossWorkflows.push(evaluate(group, context("push", 100)));
+  }
+  assert.equal(new Set(groupsAcrossWorkflows).size, 3);
+});
+
 test("ci-ok depends on every other job and runs even after failures", () => {
   assert.deepEqual(
     [...needs].sort(),

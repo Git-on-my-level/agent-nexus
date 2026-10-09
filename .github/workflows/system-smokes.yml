@@ -6,15 +6,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - ".github/actions/setup-go/**"
-      - ".github/workflows/system-smokes.yml"
-      - "Makefile"
-      - "core/**"
-      - "contracts/**"
-      - "deploy/**"
-      - "scripts/hosted/**"
-      - "scripts/hosted-smoke"
   schedule:
     - cron: "23 4 * * *"
   workflow_dispatch:
@@ -29,8 +20,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: system-smokes-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:

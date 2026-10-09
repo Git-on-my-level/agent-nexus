@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
 import { expect, test } from "@playwright/test";
+import { runReportRenderer } from "./helpers/report-renderer.js";
 
 const execFileAsync = promisify(execFile);
 const renderer = new URL(
@@ -116,7 +117,7 @@ test("headless report preview writes a PNG from injected live observations", asy
     ),
   ]);
 
-  await execFileAsync(
+  await runReportRenderer(
     process.execPath,
     [
       renderer.pathname,
@@ -130,6 +131,7 @@ test("headless report preview writes a PNG from injected live observations", asy
       "Release checklist moved forward",
     ],
     { cwd: webRoot, timeout: 100_000 },
+    outputPath,
   );
 
   const png = await readFile(outputPath);
