@@ -580,8 +580,8 @@ func TestPerformanceReceiptStreamHiddenHistoryTickTiming(t *testing.T) {
 	if testing.Short() {
 		t.Skip("times idle and append ticks across 100k hidden receipts")
 	}
-	small := measureHiddenReceiptTicks(t, 1000)
-	large := measureHiddenReceiptTicks(t, 100000)
+	small := measureHiddenReceiptTicks(t, 1000, true)
+	large := measureHiddenReceiptTicks(t, 100000, true)
 	t.Logf("hidden 1k idle=%s append=%s; 100k idle=%s append=%s", small.idle, small.append, large.idle, large.append)
 	t.Logf("during ten unrelated private changes: 1k max=%s budget=%+v; 100k max=%s budget=%+v", small.replay, small.replayBudget, large.replay, large.replayBudget)
 	if small.replayBudget != large.replayBudget || large.replayBudget.statements > 10 || large.replayBudget.rows > 10 {
@@ -607,7 +607,12 @@ type hiddenReceiptTicks struct {
 	replayBudget         receiptReadBudget
 }
 
-func measureHiddenReceiptTicks(t *testing.T, count int) hiddenReceiptTicks {
+func TestReceiptStreamPrivateEpochReplayExcludesHiddenHistory(t *testing.T) {
+	t.Parallel()
+	measureHiddenReceiptTicks(t, 32, false)
+}
+
+func measureHiddenReceiptTicks(t *testing.T, count int, measure bool) hiddenReceiptTicks {
 	t.Helper()
 	ctx := context.Background()
 	ws, err := initializeTestWorkspace(ctx, t.TempDir())
@@ -747,7 +752,7 @@ func measureHiddenReceiptTicks(t *testing.T, count int) hiddenReceiptTicks {
 			t.Fatalf("private epoch change starved append %d: %+v", i, page.Wakeups)
 		}
 		budget := receiptReadBudget{statements: int(counter.Count()), rows: counter.ReturnedRows()}
-		if i > 0 && budget != result.replayBudget {
+		if measure && i > 0 && budget != result.replayBudget {
 			t.Fatalf("replay work grew across epochs: prior=%+v current=%+v", result.replayBudget, budget)
 		}
 		result.replayBudget = budget

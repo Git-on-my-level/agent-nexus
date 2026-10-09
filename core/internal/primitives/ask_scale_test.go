@@ -17,6 +17,16 @@ func TestPerformanceAskDeliveryReadBudgets(t *testing.T) {
 		t.Skip("advisory performance tier: make -C core test-perf")
 	}
 	// Serial: performance samples must not compete with parallel fixtures.
+	testAskDeliveryReads(t, []int{0, 4096}, true)
+}
+
+func TestAskDeliveryReadSemantics(t *testing.T) {
+	t.Parallel()
+	testAskDeliveryReads(t, []int{0}, false)
+}
+
+func testAskDeliveryReads(t *testing.T, sizes []int, measure bool) {
+	t.Helper()
 	ctx := context.Background()
 	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
@@ -52,7 +62,7 @@ func TestPerformanceAskDeliveryReadBudgets(t *testing.T) {
 	defer pool.Close()
 	measured := p.NewStore(pool, blob.NewFilesystemBackend(ws.Layout().ArtifactContentDir), ws.Layout().ArtifactContentDir, p.WithAskWebhookEncryption(enc))
 	scope := p.WithAccessScope(ctx, p.AccessScope{ActorID: "requester"})
-	for _, size := range []int{0, 4096} {
+	for _, size := range sizes {
 		if size > 0 {
 			for _, q := range []string{
 				`WITH RECURSIVE n(i) AS(VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<4096) INSERT INTO events(id,handle,type,ts,actor_id,refs_json,payload_json) SELECT 'scale-unrelated-'||i,'scale-unrelated-'||i,'message_posted','2026-01-01T00:00:00Z','other','[]','{}' FROM n`,
@@ -90,6 +100,12 @@ func TestPerformanceAskDeliveryReadBudgets(t *testing.T) {
 		}
 		for name, run := range cases {
 			t.Run(fmt.Sprintf("%d/%s", size, name), func(t *testing.T) {
+				if !measure {
+					if err := run(); err != nil {
+						t.Fatal(err)
+					}
+					return
+				}
 				capture.Start()
 				if e := run(); e != nil {
 					t.Fatal(e)
