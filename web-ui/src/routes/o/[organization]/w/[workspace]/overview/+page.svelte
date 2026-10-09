@@ -8,6 +8,7 @@
   import {
     readWorkspaceView,
     writeWorkspaceView,
+    onWorkspaceViewsDenied,
   } from "$lib/workspaceViewCache";
 
   import { coreClient, workspaceScopedCoreClient } from "$lib/coreClient";
@@ -272,6 +273,7 @@
     try {
       const next = await reliableRead(() => loadOverview(coreClient), {
         signal: readController.signal,
+        cacheScope: scope,
         onRetry: () => {
           reconnecting = true;
         },
@@ -332,9 +334,13 @@
     const id = request;
     loadingMoreReports = true;
     try {
-      const more = await coreClient.getDashboardReports({
-        cursor: reportChoicesLoaded ? section.next_cursor : undefined,
-      });
+      const more = await reliableRead(
+        () =>
+          coreClient.getDashboardReports({
+            cursor: reportChoicesLoaded ? section.next_cursor : undefined,
+          }),
+        { cacheScope: scope, signal: readController?.signal },
+      );
       if (id !== request || !fetched?.reports) return;
       fetched = { ...fetched, reports: mergeDashboardReports(section, more) };
       reportChoicesLoaded = true;
@@ -357,6 +363,17 @@
   });
 
   onMount(() => {
+    const stopDenied = onWorkspaceViewsDenied(scope, (error) => {
+      if (scope !== readerScopeKey()) return;
+      request++;
+      readController?.abort();
+      fanOutRequest++;
+      fetched = null;
+      otherWorkspaceAsks = [];
+      refreshing = false;
+      reconnecting = false;
+      readError = error?.message || "Read permission denied";
+    });
     void refresh();
     void fanOutOpenAsks();
     // Freshness badges colour themselves against the clock, so the clock has
@@ -364,7 +381,10 @@
     const clock = setInterval(() => {
       now = Date.now();
     }, 60_000);
-    return () => clearInterval(clock);
+    return () => {
+      clearInterval(clock);
+      stopDenied();
+    };
   });
 </script>
 

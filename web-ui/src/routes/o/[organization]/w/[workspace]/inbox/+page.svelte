@@ -120,8 +120,16 @@
   import {
     readWorkspaceView,
     writeWorkspaceView,
+    workspaceViewRevision,
+    onWorkspaceViewsDenied,
   } from "$lib/workspaceViewCache.js";
-  import { reliableRead, isTransientReadError } from "$lib/reliableRead.js";
+  import {
+    reliableRead,
+    isTransientReadError,
+    handleReadAccessDenied,
+    isReadAccessDenied,
+  } from "$lib/reliableRead.js";
+  import { commitInboxView } from "$lib/inboxViewCache.js";
 
   let reconnecting = $state(false);
   let confirmed = $state(false);
@@ -574,6 +582,7 @@
   }
 
   async function loadSelected(id) {
+    const scope = readerScopeKey();
     const ticket = ++selectionRequest;
     selectedController?.abort();
     const controller = new AbortController();
@@ -586,7 +595,10 @@
     try {
       let item = decisions.find((entry) => entry.id === id);
       if (!item) {
-        item = await client.getPmDecision(id);
+        item = await reliableRead(() => client.getPmDecision(id), {
+          signal: controller.signal,
+          cacheScope: scope,
+        });
         if (ticket !== selectionRequest || archivedWorkRefs.has(item.work_ref))
           return;
         decisions = [...decisions.filter((entry) => entry.id !== id), item];
@@ -595,7 +607,13 @@
         item?.action_id &&
         !actions.some((entry) => entry.id === item.action_id)
       ) {
-        const receipt = await client.getPmAction(item.action_id);
+        const receipt = await reliableRead(
+          () => client.getPmAction(item.action_id),
+          {
+            signal: controller.signal,
+            cacheScope: scope,
+          },
+        );
         if (ticket !== selectionRequest || archivedWorkRefs.has(item.work_ref))
           return;
         actions = [
@@ -643,10 +661,12 @@
     }
     const scope = readerScopeKey();
     const cacheKey = `${scope}:inbox`;
+    const cacheRevision = workspaceViewRevision();
     const ticket = ++requestId;
     loadController?.abort();
     loadController = new AbortController();
     loading = true;
+    const deniedOptions = { cacheScope: scope };
     if (!quiet) {
       error = "";
       loadErrorText = "";
@@ -659,6 +679,11 @@
       // session maintenance and recovery belong to the shell and proxy.
       const applySources = (results) => {
         if (ticket !== requestId || scope !== readerScopeKey()) return;
+        const denial = results.find((result) =>
+          isReadAccessDenied(result.reason),
+        );
+        if (denial) handleReadAccessDenied(denial.reason, deniedOptions);
+        if (ticket !== requestId) return;
         const failure = results.find((result) => result.reason);
         let nextError = failure ? errorMessage(failure.reason) : "";
         // A refused session will refuse the retry too; offer sign-in instead.
@@ -793,9 +818,12 @@
             signal,
           });
           if (ticket !== requestId || scope !== readerScopeKey()) return;
-          const failure = results.find((result) => result.reason);
+          const failure =
+            results.find((result) => isReadAccessDenied(result.reason)) ||
+            results.find((result) => result.reason);
           if (failure) throw failure.reason;
           if (
+            cacheRevision === workspaceViewRevision() &&
             results
               .slice(0, 5)
               .every(
@@ -806,6 +834,7 @@
           reconnecting = false;
         },
         {
+          ...deniedOptions,
           signal: loadController.signal,
           onRetry: () => {
             reconnecting = true;
@@ -856,6 +885,7 @@
     event.preventDefault();
     if (!selectedDecision || busy || !answer.trim() || !choice) return;
     busy = true;
+    const scope = readerScopeKey();
     error = "";
     try {
       const result = await coreClient.answerPmDecision(selectedDecision.id, {
@@ -863,6 +893,14 @@
         approve: choice === "approve",
         text: answer.trim(),
       });
+      if (scope !== readerScopeKey()) return;
+      requestId++;
+      loadController?.abort();
+      selectionRequest++;
+      selectedController?.abort();
+      decisionResolvedFor = `decision:${result.id}`;
+      loading = false;
+      refreshPending = false;
       const approved = choice === "approve";
       const pinId = `decision:${result.id}`;
       const wasUnpinned = !urlItem;
@@ -870,6 +908,7 @@
       decisions = decisions.map((item) =>
         item.id === result.id ? result : item,
       );
+      commitInboxView(scope, { decision: result });
       answer = "";
       choice = "";
       notice = approved ? "Approved." : "Declined.";
@@ -1289,6 +1328,7 @@
     const { prefix, id } = splitTypedRef(row.ref);
     if (prefix !== "card" || !id) return;
     busy = true;
+    const scope = readerScopeKey();
     actionError = "";
     try {
       await coreClient.archiveCard(id, {
@@ -1296,6 +1336,7 @@
           ? { if_version: row.item.version }
           : {}),
       });
+      if (scope !== readerScopeKey()) return;
       // Invalidate feed reads and prevent pending single-item reads from
       // restoring this task's decisions, without cancelling unrelated reads.
       requestId++;
@@ -1303,6 +1344,7 @@
       loading = false;
       refreshPending = false;
       archivedWorkRefs.add(row.ref);
+      commitInboxView(scope, { archivedRef: row.ref });
       // Navigate while the old row still exists. Related decisions also leave
       // after archive, so select only a row that will survive the removal.
       if (selectedId === row.id || selected?.ref === row.ref) {
@@ -1399,6 +1441,28 @@
 
   onMount(() => {
     const scope = readerScopeKey();
+    const stopDenied = onWorkspaceViewsDenied(scope, (denial) => {
+      if (scope !== readerScopeKey()) return;
+      requestId++;
+      loadController?.abort();
+      selectionRequest++;
+      selectedController?.abort();
+      decisions = [];
+      actions = [];
+      work = [];
+      inboxItems = [];
+      openInboxItems = [];
+      completedInboxItems = [];
+      updates = [];
+      ready = false;
+      confirmed = false;
+      loading = false;
+      reconnecting = false;
+      refreshPending = false;
+      error = errorMessage(denial);
+      sessionExpired = isSessionExpired(denial);
+      publishInboxCount($page.params.workspace, null);
+    });
     const stopScope = readerScope.subscribe((next) => {
       if (next !== scope) {
         requestId++;
@@ -1465,6 +1529,7 @@
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
+      stopDenied();
       stopScope();
       requestId++;
       loadController?.abort();

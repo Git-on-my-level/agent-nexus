@@ -5,6 +5,7 @@ import {
   writeWorkspaceView,
 } from "../../src/lib/workspaceViewCache.js";
 import { readerScopeKey } from "../../src/lib/readerScope.js";
+import { commitInboxView } from "../../src/lib/inboxViewCache.js";
 import { get } from "svelte/store";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -156,6 +157,31 @@ const OPEN_ASK = {
   status: "open",
   responded_at: undefined,
 };
+
+it("a confirmed answer updates the badge and cannot be overwritten by an earlier sidebar read", async () => {
+  const key = `${readerScopeKey()}:inbox`;
+  const known = emptySources();
+  known[3].value.items = [OPEN_ASK];
+  writeWorkspaceView(key, known);
+  let resolve;
+  loadSources.mockReturnValue(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
+  const stop = startInboxCount("local");
+  expect(get(inboxNeedsYouCount).count).toBe(1);
+  await vi.advanceTimersByTimeAsync(REFRESH_DELAY_MS);
+  commitInboxView(readerScopeKey(), {
+    answered: { ...OPEN_ASK, status: "completed", responded_at: at(0) },
+  });
+  expect(get(inboxNeedsYouCount).count).toBe(0);
+  resolve(known);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(get(inboxNeedsYouCount).count).toBe(0);
+  expect(readWorkspaceView(key)[3].value.items).toEqual([]);
+  stop();
+});
 
 /**
  * @param {{ open?: object[], completed?: object[], work?: object[],

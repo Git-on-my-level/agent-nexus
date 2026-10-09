@@ -1,5 +1,6 @@
 import { createInboxSourceClient } from "$lib/coreClient";
 import { isPmNotOnboardedRefusal } from "$lib/pm/onboardingState.js";
+import { isReadAccessDenied } from "$lib/reliableRead.js";
 
 /**
  * The attention surface must not hide an obligation on page two. Follow
@@ -88,6 +89,11 @@ export async function loadInboxSources({
     if (stopped) return;
     results[index] = result;
     firstPages.add(index);
+    if (isReadAccessDenied(result.reason)) {
+      controller.abort(result.reason);
+      publish();
+      return;
+    }
     if (published || firstPages.size === results.length) publish();
   };
   // Wrapping each outstanding page also terminates pagination when a client

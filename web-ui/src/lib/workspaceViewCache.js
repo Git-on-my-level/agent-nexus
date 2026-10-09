@@ -6,6 +6,61 @@ const TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_ENTRIES = 12;
 const MAX_BYTES = 2_000_000;
 let hydrated = false;
+let revision = 0;
+const listeners = new Set();
+const deniedListeners = new Map();
+
+export function onWorkspaceViewsDenied(scope, listener) {
+  const scoped = deniedListeners.get(scope) || new Set();
+  deniedListeners.set(scope, scoped);
+  scoped.add(listener);
+  return () => {
+    scoped.delete(listener);
+    if (!scoped.size) deniedListeners.delete(scope);
+  };
+}
+
+export const workspaceViewRevision = () => revision;
+
+export function onWorkspaceViewChanged(listener) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+/** Confirmed mutations invalidate reads started before the confirmation. */
+export function reviseWorkspaceView(key, transform) {
+  const previous = readWorkspaceView(key);
+  revision++;
+  const next = transform(previous);
+  if (next) writeWorkspaceView(key, next);
+  else {
+    entries.delete(key);
+    persist();
+  }
+  for (const listener of listeners) {
+    try {
+      listener(key, next);
+    } catch {
+      /* A display subscriber cannot undo confirmation. */
+    }
+  }
+}
+
+/** A denial revokes all display snapshots for this workspace and principal. */
+export function purgeWorkspaceViews(scope, error) {
+  hydrate();
+  revision++;
+  for (const key of new Set([...entries.keys(), `${scope}:inbox`])) {
+    if (key.startsWith(`${scope}:`)) reviseWorkspaceView(key, () => null);
+  }
+  for (const listener of deniedListeners.get(scope) || []) {
+    try {
+      listener(error);
+    } catch {
+      /* Continue revoking other mounted views. */
+    }
+  }
+}
 
 function hydrate() {
   if (hydrated || typeof window === "undefined") return;
@@ -59,6 +114,7 @@ export function writeWorkspaceView(key, value, now = Date.now()) {
 }
 
 export function clearWorkspaceViews() {
+  revision++;
   entries.clear();
   hydrated = true;
   try {

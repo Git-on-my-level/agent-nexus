@@ -1051,18 +1051,122 @@ test("a never-resolving requested decision leaves loading with an incomplete-res
   ).toHaveCount(0);
 });
 
-test("an expired session on a later work page retains rows and offers sign-in recovery", async ({
+test("an expired session on a later work page removes rows and offers sign-in recovery", async ({
   page,
 }) => {
   await installScaleCore(page, { latency: 0, expireWorkAfterFirst: true });
   await page.goto(`${ROOT}/inbox`);
-  await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Sign in again", exact: true }),
   ).toBeVisible();
+  await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toHaveCount(0);
+});
+
+for (const status of [401, 403]) {
+  test(`Inbox purges cached rows after ${status}`, async ({ page }) => {
+    await installScaleCore(page, { latency: 0, workRecords: [] });
+    await page.goto(`${ROOT}/inbox`);
+    await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          localStorage.getItem("anx.workspace-views.v1")?.includes("scale-ask"),
+        ),
+      )
+      .toBe(true);
+    await page.route("**/inbox?**", (route) =>
+      route.fulfill({
+        status,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { message: "Read permission denied" } }),
+      }),
+    );
+    await page.reload();
+    await expect(page.getByRole("alert").first()).toBeVisible();
+    await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toHaveCount(0);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            localStorage
+              .getItem("anx.workspace-views.v1")
+              ?.includes("scale-ask") || false,
+        ),
+      )
+      .toBe(false);
+  });
+}
+
+test("a confirmed answer stays gone after reload with failing reads", async ({
+  page,
+}) => {
+  const calls = await installScaleCore(page, {
+    latency: 0,
+    failOpenAfterAnswer: true,
+    workRecords: [SCALE_WORK[0]],
+  });
+  await page.goto(`${ROOT}/inbox`);
+  await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        localStorage.getItem("anx.workspace-views.v1")?.includes("scale-ask"),
+      ),
+    )
+    .toBe(true);
+  await page.getByRole("button", { name: /^1 Proceed/ }).click();
+  await expect
+    .poll(() => calls.state.responded, { timeout: 15_000 })
+    .toBe(true);
+  await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toHaveCount(0);
+  // A real reload loses the response overlay and hydrates persisted sources.
+  await page.reload();
   await expect(
-    page.getByText("Not everything is loaded; the counts are lower bounds."),
+    page.getByText("History temporarily unavailable").first(),
   ).toBeVisible();
+  await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toHaveCount(0);
+  await expect(
+    page.locator('[data-inbox-row="task:card:scale-0"]'),
+  ).toHaveCount(0);
+  await expect(page.locator("[data-inbox-nav-count]")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^1 Proceed/ })).toHaveCount(0);
+});
+
+test("a selected decision denial revokes cached Inbox rows", async ({
+  page,
+}) => {
+  await installScaleCore(page, { latency: 0, workRecords: [] });
+  await page.goto(`${ROOT}/inbox`);
+  await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        localStorage.getItem("anx.workspace-views.v1")?.includes("scale-ask"),
+      ),
+    )
+    .toBe(true);
+  await page.route("**/pm/decisions/private-decision", (route) =>
+    route.fulfill({
+      status: 403,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: { message: "Decision permission denied" },
+      }),
+    }),
+  );
+  await page.goto(`${ROOT}/inbox?item=decision:private-decision`);
+  await expect(page.getByRole("alert").first()).toBeVisible();
+  await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          localStorage
+            .getItem("anx.workspace-views.v1")
+            ?.includes("scale-ask") || false,
+      ),
+    )
+    .toBe(false);
 });
 
 test("a persisted visit paints immediately while Inbox is slow", async ({

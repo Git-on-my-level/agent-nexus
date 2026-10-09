@@ -4,8 +4,39 @@ import {
   readWorkspaceView,
   writeWorkspaceView,
   clearWorkspaceViews,
+  workspaceViewRevision,
+  onWorkspaceViewsDenied,
 } from "../../src/lib/workspaceViewCache.js";
+import { reliableRead } from "../../src/lib/reliableRead.js";
 afterEach(clearWorkspaceViews);
+it.each([401, 403])(
+  "a %s read purges every scoped view and notifies mounted consumers without retrying",
+  async (status) => {
+    for (const view of ["inbox", "overview", "tasks:a", "tasks:b"])
+      writeWorkspaceView(`reader:${view}`, { restricted: true });
+    writeWorkspaceView("other:tasks:a", { restricted: false });
+    const revoked = vi.fn();
+    const stop = onWorkspaceViewsDenied("reader", revoked);
+    const revision = workspaceViewRevision();
+    const error = Object.assign(new Error("denied"), {
+      coreHttpStatus: status,
+    });
+    const read = vi.fn().mockRejectedValue(error);
+    await expect(reliableRead(read, { cacheScope: "reader" })).rejects.toBe(
+      error,
+    );
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(revoked).toHaveBeenCalledWith(error);
+    expect(workspaceViewRevision()).toBeGreaterThan(revision);
+    for (const view of ["inbox", "overview", "tasks:a", "tasks:b"])
+      expect(readWorkspaceView(`reader:${view}`)).toBeNull();
+    expect(readWorkspaceView("other:tasks:a")).toEqual({ restricted: false });
+    expect(localStorage.getItem("anx.workspace-views.v1")).not.toContain(
+      "reader:",
+    );
+    stop();
+  },
+);
 it("isolates snapshots by workspace and principal and retains them through a transient and expires after a day", () => {
   writeWorkspaceView("org/personal/human", { count: 1 }, 100);
   writeWorkspaceView("org/demo/human", { count: 2 }, 100);

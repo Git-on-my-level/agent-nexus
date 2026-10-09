@@ -1,8 +1,15 @@
 import { readerScope, readerScopeKey } from "$lib/readerScope.js";
+import { currentWorkspaceSlug } from "$lib/workspaceContext.js";
 import {
   readWorkspaceView,
   writeWorkspaceView,
+  workspaceViewRevision,
+  onWorkspaceViewChanged,
 } from "$lib/workspaceViewCache.js";
+import {
+  handleReadAccessDenied,
+  isReadAccessDenied,
+} from "$lib/reliableRead.js";
 import { humanActorIdSet } from "$lib/humanActors.js";
 import { get, writable } from "svelte/store";
 import {
@@ -78,8 +85,28 @@ export function publishInboxCount(workspace, count, truncated = false) {
 
 async function fetchSources() {
   const scope = readerScopeKey();
-  const results = await loadInboxSources({ withHistory: false });
+  const cacheKey = `${scope}:inbox`;
+  const revision = workspaceViewRevision();
+  const deny = (results) => {
+    if (scope !== readerScopeKey()) return;
+    const denied = results.find((result) => isReadAccessDenied(result.reason));
+    if (denied)
+      handleReadAccessDenied(denied.reason, {
+        cacheScope: scope,
+        onAccessDenied: () =>
+          publishInboxCount(get(currentWorkspaceSlug), null),
+      });
+  };
+  const results = await loadInboxSources({
+    withHistory: false,
+    onProgress: deny,
+  });
   if (scope !== readerScopeKey()) return null;
+  deny(results);
+  if (revision !== workspaceViewRevision()) {
+    const cached = readWorkspaceView(cacheKey);
+    return cached ? sourcesFromResults(cached) : null;
+  }
   /*
    * A count built on a failed source would claim "clear" when it is not; keep
    * the last number rather than show a wrong one.
@@ -183,6 +210,17 @@ export function startInboxCount(workspace) {
         sources.truncated || streamPartial,
       );
     };
+    const unsubscribeCache = onWorkspaceViewChanged((changedKey, snapshot) => {
+      if (
+        changedKey !== `${scope}:inbox` ||
+        stopped ||
+        scope !== readerScopeKey()
+      )
+        return;
+      sources = snapshot ? sourcesFromResults(snapshot) : null;
+      if (sources) publish();
+      else publishInboxCount(key, null);
+    });
     const run = async () => {
       if (stopped || pageClaims) return;
       if (inflight) {
@@ -236,6 +274,7 @@ export function startInboxCount(workspace) {
         unsubscribeLive();
         unsubscribeInbox();
         unsubscribeOverlay();
+        unsubscribeCache();
       },
     };
     const current = get(inboxNeedsYouCount);

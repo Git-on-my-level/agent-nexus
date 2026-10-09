@@ -491,6 +491,11 @@ entries and two million UTF-16 code units; oversized entries are evicted. Entrie
 expire after one day, revalidate on navigation, and clear on sign-out or a change
 of authenticated principal. Storage denial and quota errors fall back to memory.
 These snapshots are display data, never authorization or mutation inputs.
+An authorization denial (401/403) revokes the reader's workspace snapshots and
+clears mounted views, including when the denial comes from the sidebar or an
+incremental read. Pending reads cannot restore revoked data. Confirmed Inbox
+responses, decision answers and archives update persisted snapshots immediately;
+reads started before those confirmations cannot overwrite them.
 
 An initial read allows 45 seconds so an idle backend can wake without the client
 aborting after five seconds. Network failures and HTTP 502/503/504 retry after

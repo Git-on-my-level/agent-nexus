@@ -906,3 +906,80 @@ test("Tasks restores its list on reload while revalidation is held", async ({
   );
   await expect(page.getByText("Refreshing…", { exact: true })).toBeVisible();
 });
+
+for (const status of [401, 403]) {
+  test(`Tasks purges cached data after ${status}`, async ({ page }) => {
+    await installTasksApi(page);
+    await page.goto(TASKS);
+    await expect(
+      page.getByText(LONG_TITLE, { exact: true }).first(),
+    ).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          JSON.parse(
+            localStorage.getItem("anx.workspace-views.v1") || '{"entries":[]}',
+          ).entries.some(([key]) => key.includes(":tasks:")),
+        ),
+      )
+      .toBe(true);
+    await page.route("**/work?**", (route) =>
+      route.fulfill({
+        status,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { message: "Read permission denied" } }),
+      }),
+    );
+    await page.reload();
+    await expect(page.getByRole("alert").first()).toBeVisible();
+    await expect(page.getByText(LONG_TITLE, { exact: true })).toHaveCount(0);
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          JSON.parse(
+            localStorage.getItem("anx.workspace-views.v1") || '{"entries":[]}',
+          ).entries.some(([key]) => key.includes(":tasks:")),
+        ),
+      )
+      .toBe(false);
+  });
+}
+
+test("a sidebar denial clears Tasks and rejects a pending snapshot", async ({
+  page,
+}) => {
+  await installTasksApi(page);
+  await page.goto(TASKS);
+  await expect(
+    page.getByText(LONG_TITLE, { exact: true }).first(),
+  ).toBeVisible();
+  const gate = deferred();
+  let resumed = false;
+  await page.route("**/work?**", async (route) => {
+    await gate.promise;
+    resumed = true;
+    await route.fallback();
+  });
+  await page.route("**/inbox?**", (route) =>
+    route.fulfill({
+      status: 403,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { message: "Read permission denied" } }),
+    }),
+  );
+  await page.reload();
+  await expect(page.getByRole("alert").first()).toBeVisible();
+  await expect(page.getByText(LONG_TITLE, { exact: true })).toHaveCount(0);
+  gate.resolve();
+  await expect.poll(() => resumed).toBe(true);
+  await expect(page.getByText(LONG_TITLE, { exact: true })).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        JSON.parse(
+          localStorage.getItem("anx.workspace-views.v1") || '{"entries":[]}',
+        ).entries.some(([key]) => key.includes(":tasks:")),
+      ),
+    )
+    .toBe(false);
+});

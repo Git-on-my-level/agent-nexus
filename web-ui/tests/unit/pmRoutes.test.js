@@ -121,7 +121,11 @@ import {
   flushInboxResponse,
   resetInboxResponseQueue,
 } from "../../src/lib/inboxResponseQueue.js";
-import { clearWorkspaceViews } from "../../src/lib/workspaceViewCache.js";
+import {
+  clearWorkspaceViews,
+  readWorkspaceView,
+} from "../../src/lib/workspaceViewCache.js";
+import { readerScopeKey } from "../../src/lib/readerScope.js";
 import WorkViews from "../../src/lib/components/pm/WorkViews.svelte";
 
 const work = (ref, title) => ({
@@ -693,6 +697,73 @@ describe("PM operator interactions", () => {
     ).toBeGreaterThan(0);
     expect(screen.getByText("Within the stated scope")).toBeTruthy();
     expect(screen.queryByText("Outcome verified")).toBeNull();
+  });
+  it("confirmation cancels a selected getter before it can restore an unanswered decision", async () => {
+    state.route("/inbox?item=decision:pending-getter");
+    const decision = {
+      id: "pending-getter",
+      instruction: "Choose rollout",
+      work_ref: "card:one",
+      status: "awaiting_answer",
+      revision: 1,
+    };
+    const getter = deferred();
+    let emit;
+    client.streamEvents.mockImplementation(
+      ({ onEvent, signal }) =>
+        new Promise((resolve) => {
+          emit = onEvent;
+          signal?.addEventListener("abort", resolve);
+        }),
+    );
+    client.getPmDecision.mockReturnValue(getter.promise);
+    client.listPmDecisions
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValue({ items: [decision] });
+    client.answerPmDecision.mockResolvedValue({
+      ...decision,
+      status: "answered",
+      revision: 2,
+      answer: "Wait for evidence",
+    });
+    render(InboxPage);
+    await waitFor(() => expect(client.getPmDecision).toHaveBeenCalled());
+    emit({
+      id: "decision-listed",
+      event: "event",
+      data: {
+        event: {
+          id: "decision-listed",
+          type: "card_moved",
+          refs: ["card:one"],
+          ts: new Date().toISOString(),
+        },
+      },
+    });
+    await waitFor(
+      () => expect(client.listPmDecisions).toHaveBeenCalledTimes(2),
+      { timeout: 3000 },
+    );
+    await screen.findByRole("heading", { name: "Choose rollout" });
+    await fireEvent.input(
+      screen.getByLabelText("Your note (recorded with the decision)"),
+      { target: { value: "Wait for evidence" } },
+    );
+    await fireEvent.click(screen.getByRole("button", { name: "Decline" }));
+    await waitFor(() =>
+      expect(
+        readWorkspaceView(`${readerScopeKey()}:inbox`)[0].value.items[0].status,
+      ).toBe("answered"),
+    );
+    getter.resolve(decision);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Approve", exact: true }),
+      ).toBeNull(),
+    );
+    expect(
+      readWorkspaceView(`${readerScopeKey()}:inbox`)[0].value.items[0].status,
+    ).toBe("answered");
   });
   it("loads a directly linked decision and receipt beyond the partial list", async () => {
     state.route("/inbox?item=decision:older-decision");

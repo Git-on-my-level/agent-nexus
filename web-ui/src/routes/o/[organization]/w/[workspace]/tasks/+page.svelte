@@ -64,6 +64,7 @@
   import {
     readWorkspaceView,
     writeWorkspaceView,
+    onWorkspaceViewsDenied,
   } from "$lib/workspaceViewCache.js";
   import { reliableRead } from "$lib/reliableRead.js";
   let listController;
@@ -367,6 +368,7 @@
     const read = (params) =>
       reliableRead(() => coreClient.listWork({ ...params, summary: 1 }), {
         signal,
+        cacheScope: scope,
         onRetry: () => {
           reconnecting = true;
         },
@@ -793,6 +795,19 @@
     }
   }
   onMount(() => {
+    const scope = readerScopeKey();
+    const stopDenied = onWorkspaceViewsDenied(scope, (denial) => {
+      if (scope !== readerScopeKey()) return;
+      requestId++;
+      listController?.abort();
+      records = [];
+      nextCursor = "";
+      pendingLiveRead = null;
+      loading = false;
+      reconnecting = false;
+      error = errorMessage(denial);
+      sessionExpired = isSessionExpired(denial);
+    });
     let disposed = false;
     initializeAuthSession({
       fetchFn: globalThis.fetch.bind(globalThis),
@@ -867,6 +882,7 @@
     });
     return () => {
       disposed = true;
+      stopDenied();
       listController?.abort();
       requestId++;
       clearInterval(timer);

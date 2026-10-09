@@ -1,3 +1,20 @@
+import { purgeWorkspaceViews } from "$lib/workspaceViewCache.js";
+
+export function isReadAccessDenied(error) {
+  return [401, 403].includes(error?.status ?? error?.coreHttpStatus);
+}
+
+/** Also used by incremental readers before publishing a partial snapshot. */
+export function handleReadAccessDenied(
+  error,
+  { cacheScope, onAccessDenied } = {},
+) {
+  if (!isReadAccessDenied(error)) return false;
+  if (cacheScope) purgeWorkspaceViews(cacheScope, error);
+  onAccessDenied?.();
+  return true;
+}
+
 /** Retry only reads: authentication and mutation failures must never be replayed. */
 export function isTransientReadError(error) {
   const status = error?.status ?? error?.coreHttpStatus;
@@ -30,7 +47,14 @@ function pause(ms, signal) {
 // rather than starting a fresh thirty-second grace period on every attempt.
 export async function reliableRead(
   read,
-  { signal, onRetry, failureWindowMs = 30_000, attemptMs = 45_000 } = {},
+  {
+    signal,
+    onRetry,
+    cacheScope,
+    onAccessDenied,
+    failureWindowMs = 30_000,
+    attemptMs = 45_000,
+  } = {},
 ) {
   const started = Date.now();
   let attempt = 0;
@@ -59,6 +83,8 @@ export async function reliableRead(
           .finally(() => combined.removeEventListener("abort", abort));
       });
     } catch (error) {
+      if (!signal?.aborted)
+        handleReadAccessDenied(error, { cacheScope, onAccessDenied });
       if (
         signal?.aborted ||
         !isTransientReadError(error) ||

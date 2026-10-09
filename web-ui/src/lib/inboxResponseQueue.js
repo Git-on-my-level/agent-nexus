@@ -4,6 +4,7 @@ import { captureInboxResponseSender } from "$lib/coreClient";
 import { errorMessage } from "$lib/pm/presentation.js";
 import { authenticatedAgent } from "$lib/authSession.js";
 import { selectedActorId } from "$lib/actorSession.js";
+import { commitInboxView } from "$lib/inboxViewCache.js";
 import {
   currentOrganizationSlug,
   currentWorkspaceSlug,
@@ -332,6 +333,11 @@ async function commit(entry) {
       responded_at: new Date().toISOString(),
       until: Date.now() + COMMITTED_OVERLAY_MS,
     });
+    const answered = applyResponseOverlay(
+      [entry.item || { id: entry.itemId }],
+      get(inboxResponseOverlay),
+    )[0];
+    commitInboxView(entry.identity, { answered });
     let showing = false;
     inboxResponseToast.update((toast) => {
       showing = toast?.id === entry.id;
