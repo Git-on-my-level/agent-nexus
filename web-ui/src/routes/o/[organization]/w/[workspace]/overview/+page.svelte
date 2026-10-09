@@ -18,7 +18,7 @@
     mergeDashboardReports,
     loadOverview,
   } from "$lib/overview.js";
-  import SinceYouLastLooked from "$lib/components/SinceYouLastLooked.svelte";
+  import RecentChanges from "$lib/components/overview/RecentChanges.svelte";
   import { workSummaryCards } from "$lib/workSummaryCards.js";
   import {
     asksFromSnapshot,
@@ -94,6 +94,16 @@
   let otherWorkspaceAsks = $state([]);
   let fanningOut = $state(false);
   let fanOutRequest = 0;
+  /**
+   * Whether the detail fold is open.
+   *
+   * The fan-out is the only read on this page that grows with the number of
+   * workspaces the reader can reach, and the band it feeds is now inside the
+   * fold. Reading every workspace to fill a panel nobody opened is work the
+   * request did not ask for, so it waits for the fold.
+   */
+  let detailOpen = $state(false);
+  let fannedOut = false;
 
   let currentWorkspace = $derived({
     organizationSlug: $page.params.organization,
@@ -363,6 +373,12 @@
     fanOutRequest += 1;
   });
 
+  $effect(() => {
+    if (!detailOpen || fannedOut) return;
+    fannedOut = true;
+    void fanOutOpenAsks();
+  });
+
   onMount(() => {
     const stopDenied = onWorkspaceViewsDenied(scope, (error) => {
       if (scope !== readerScopeKey()) return;
@@ -376,7 +392,6 @@
       readError = error?.message || "Read permission denied";
     });
     void refresh();
-    void fanOutOpenAsks();
     // Freshness badges colour themselves against the clock, so the clock has
     // to move: a tile left open overnight must not still read "2h, green".
     const clock = setInterval(() => {
@@ -394,7 +409,7 @@
 <WorkspacePageShell>
   <WorkspacePageHeader title="Overview">
     {#snippet subtitle()}
-      What needs you, then every initiative worst first, then your dashboard.
+      Every initiative worst first, what changed, then your dashboard.
     {/snippet}
     {#snippet actions()}
       <!--
@@ -427,28 +442,6 @@
       <Skeleton rows={6} />
     </div>
   {:else}
-    <!--
-      The morning brief: the five questions a reader opens this page to answer,
-      computed, above everything else. It is first because it is the only part
-      of the page that answers "what should I look at" rather than "here is
-      everything". `MorningBrief.svelte` has the reasoning for each section.
-    -->
-    <MorningBrief {brief} {now} />
-    <!--
-      One urgent band, not a second Inbox. Without a brief it is the top of the
-      page and covers every workspace this reader can reach. With one, the
-      brief has already answered this workspace, so the band narrows to the
-      others — see `briefOwnsThisWorkspace` above.
-    -->
-    {#if showUrgentBand}
-      <UrgentBand
-        band={urgentBand}
-        title={briefOwnsThisWorkspace ? "Waiting elsewhere" : "Needs you"}
-        hrefFor={urgentHref}
-        loading={fanningOut && !otherWorkspaceAsks.length}
-        {now}
-      />
-    {/if}
     <!--
       Initiatives, worst first: blocked, at risk, stale, on track, done. The
       sort lives in `planHealth.js` so this section and the band above it
@@ -513,7 +506,11 @@
         </div>
       {/if}
     </section>
-    <SinceYouLastLooked digest={model.sinceYouLastLooked} />
+    <!--
+      The second of the two sections this page is for. It was a one-line strip
+      under the brief; with the brief folded away it is a section of its own.
+    -->
+    <RecentChanges digest={model.sinceYouLastLooked} />
     <section
       class="rounded-md border border-line bg-panel"
       aria-labelledby="overview-reports"
@@ -624,14 +621,63 @@
       {/if}
     </section>
 
+    <!--
+      Everything else, one fold deep.
+      `/overview` grew a section per question until it answered seven at once,
+      and the two a reader actually opens it for were the third and fourth of
+      them. What needs you lives in the Inbox and its badge; work totals live
+      on Tasks; presence lives on Agents. They are still here, and still one
+      click away, but they no longer push the initiatives down the page.
+
+      Closed, this fold also costs nothing: the cross-workspace ask read below
+      runs when it is opened rather than on every visit to the Overview.
+    -->
     <details
       class="rounded-md border border-line bg-panel"
       data-overview-detail
+      ontoggle={(event) => (detailOpen = event.currentTarget.open)}
     >
       <summary class="cursor-pointer px-3 py-2 text-meta text-fg-muted"
-        >Work detail</summary
+        >More detail</summary
       >
       <div class="space-y-4 p-3">
+        <p class="text-meta text-fg-muted">
+          <a
+            class="text-accent-text hover:underline"
+            href={workspaceHref("/inbox")}>Inbox</a
+          >
+          ·
+          <a
+            class="text-accent-text hover:underline"
+            href={workspaceHref("/tasks")}>Tasks</a
+          >
+          ·
+          <a
+            class="text-accent-text hover:underline"
+            href={workspaceHref("/agents")}>Agents</a
+          >
+        </p>
+        <!--
+          The morning brief: the five questions, computed. It answers "what
+          should I look at" rather than "here is everything", which is exactly
+          what the two sections above now answer on their own.
+        -->
+        <MorningBrief {brief} {now} />
+        <!--
+          One urgent band, not a second Inbox. Without a brief it covers every
+          workspace this reader can reach. With one, the brief has already
+          answered this workspace, so the band narrows to the others — see
+          `briefOwnsThisWorkspace` above.
+        -->
+        {#if showUrgentBand}
+          <UrgentBand
+            band={urgentBand}
+            title={briefOwnsThisWorkspace ? "Waiting elsewhere" : "Needs you"}
+            hrefFor={urgentHref}
+            loading={fanningOut && !otherWorkspaceAsks.length}
+            {now}
+          />
+        {/if}
         <section
           class="rounded-md border border-line bg-panel"
           aria-labelledby="overview-work"

@@ -571,13 +571,13 @@ for (const viewport of [
     await expect(tiles.first().locator(".summary__bar .seg")).toHaveCount(4);
 
     // What changed since this viewer last looked, from the server digest.
-    const strip = page.locator("[data-since-you-last-looked]");
-    await expect(strip).toBeVisible();
-    await expect(strip).toContainText("Since you last looked");
-    await expect(strip).toContainText(
+    const changes = page.locator('[data-overview-section="changes"]');
+    await expect(changes).toBeVisible();
+    await expect(changes).toContainText("Recent changes");
+    await expect(changes).toContainText(
       "1 step done · 1 blocked · 1 ask answered",
     );
-    await expect(strip.locator("[data-since-kind]").first()).toHaveAttribute(
+    await expect(changes.locator("[data-since-kind]").first()).toHaveAttribute(
       "data-since-kind",
       "initiative_blocked",
     );
@@ -588,22 +588,24 @@ for (const viewport of [
       new RegExp("/tasks/card%3Arelease-b$"),
     );
 
+    // The initiatives come first, then what changed, then the dashboard.
+    const order = await page
+      .locator("[data-overview-section]")
+      .evaluateAll((nodes) =>
+        nodes.map((node) => node.dataset.overviewSection),
+      );
+    expect(order.slice(0, 3)).toEqual(["initiatives", "changes", "reports"]);
+
     // One urgent band, not a restatement of the Inbox: it counts what is
-    // waiting, and names the initiative that has stopped moving.
+    // waiting, and names the initiative that has stopped moving. It answers a
+    // different question from the two sections above, so it is one fold down.
+    await page.getByText("More detail", { exact: true }).click();
     const band = page.locator('[data-overview-section="urgent"]');
     await expect(band).toHaveAttribute("data-urgent-state", "active");
     await expect(band.locator("[data-urgent-ask-count]")).toHaveText("2 asks");
     await expect(
       band.locator("[data-urgent-initiative='card:release-b']"),
     ).toContainText("Release B");
-
-    // And it is above the initiatives, which are above the dashboard.
-    const order = await page
-      .locator("[data-overview-section]")
-      .evaluateAll((nodes) =>
-        nodes.map((node) => node.dataset.overviewSection),
-      );
-    expect(order.slice(0, 3)).toEqual(["urgent", "initiatives", "reports"]);
 
     const section = page.locator('[data-overview-section="initiatives"]');
     await section.screenshot({

@@ -113,6 +113,18 @@ func reportSchema() map[string]any {
 			"chart_min_nonzero_magnitude": 1e-100, "layout_nodes": 100, "layout_depth": 6,
 			"layout_children": 32, "layout_tabs": 8, "errors": 20,
 		},
+		// Layout is optional on purpose. The renderer places panels from the
+		// width it has and what each panel carries, so the default advice is
+		// to publish panels and let it compose them.
+		"layout": map[string]any{
+			"required": false,
+			"advice":   "Omit layout. Panels flow into a responsive grid: one column when there is not room for more, wide content (plan graphs, charts, tables) on its own row.",
+			"nodes":    []any{"panel", "stack", "grid", "section", "tabs", "disclosure"},
+			"overrides": map[string]any{
+				"grid.columns": "Optional maximum of 2, 3 or 4 columns. Never a requirement; fewer are used when panels would be too narrow.",
+				"span":         "Optional 1-4. In a grid with no columns, 2 or more means the full row.",
+			},
+		},
 		"example": map[string]any{
 			"kind": visualreport.Kind, "schema_version": visualreport.Version, "title": "Project evidence report",
 			"summary": "A report with an explicit evidence boundary.", "generated_at": "2026-10-03T06:38:37Z",

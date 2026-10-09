@@ -93,6 +93,14 @@ const WIDE_PLAN_STATE = {
   last_movement_at: "2026-10-06T01:00:00Z",
 };
 
+/** A panel that came back with nothing: present, named, and nearly empty. */
+const LIVE_DECISIONS = {
+  type: "live-asks",
+  status: "ok",
+  observed_at: NOW,
+  data: { items: [] },
+};
+
 /** The live panel body, as `report.render` materializes it. */
 const LIVE_INITIATIVES = {
   // `type` matters: `VisualReport` replaces a rendered panel whose type does
@@ -151,6 +159,18 @@ const REPORT = {
       data: {
         text: "**v0.12.12** is live on all workspaces. Release B is in review.",
       },
+    },
+    {
+      id: "decisions",
+      project_id: "anx",
+      type: "live-asks",
+      title: "Needs a decision",
+      author: "claude",
+      provenance: "reported",
+      observed_at: NOW,
+      freshness: "current",
+      source_ids: [],
+      data: { limit: 5 },
     },
     {
       id: "initiatives",
@@ -236,7 +256,10 @@ async function installEmbeddedReport(page) {
         document_ref: DOCUMENT.ref,
         revision_ref: DOCUMENT.revision_ref,
         observed_at: NOW,
-        panels: [{ id: "initiatives", ...LIVE_INITIATIVES }],
+        panels: [
+          { id: "initiatives", ...LIVE_INITIATIVES },
+          { id: "decisions", ...LIVE_DECISIONS },
+        ],
       });
     }
     if (path === "/refs/resolve" && request.method() === "POST") {
@@ -285,6 +308,72 @@ for (const viewport of AUDIT_VIEWPORTS) {
     await expectCleanLayout(page, `embedded report @ ${viewport.name}`, {
       scrollPositions: ["current", "bottom"],
     });
+  });
+}
+
+/**
+ * Placement comes from the width available and what each panel carries.
+ *
+ * The widths are the ones a laptop and a desktop actually give an embedded
+ * report: 1280 and 1100 leave the dashboard column far narrower than the
+ * window, which is exactly where a hard two-column grid put a plan graph and
+ * a nearly empty panel side by side and clipped the graph.
+ */
+for (const width of [1280, 1100, 390]) {
+  test(`wide content takes its own row @ ${width}`, async ({ page }) => {
+    test.setTimeout(120_000);
+    await openOverview(page, width, 1400);
+
+    const cell = (id) =>
+      page.locator(`[data-report-cell]:has([data-report-panel="${id}"])`);
+    // The plan graph claims the row; the empty panel never does.
+    await expect(cell("initiatives")).toHaveAttribute(
+      "data-report-cell",
+      "full",
+    );
+    await expect(cell("decisions")).toHaveAttribute(
+      "data-report-cell",
+      "column",
+    );
+
+    const grid = page.locator('[data-report-layout="grid"]').first();
+    const boxes = await grid.evaluate((node) => {
+      const inner =
+        node.getBoundingClientRect().width -
+        parseFloat(getComputedStyle(node).paddingLeft || "0") -
+        parseFloat(getComputedStyle(node).paddingRight || "0");
+      const cells = [...node.querySelectorAll(":scope > [data-report-cell]")];
+      return {
+        inner,
+        cells: cells.map((item) => {
+          const rect = item.getBoundingClientRect();
+          const panel = item.querySelector("[data-report-panel]");
+          return {
+            id: panel?.dataset.reportPanel ?? "",
+            kind: item.dataset.reportCell,
+            top: Math.round(rect.top),
+            width: Math.round(rect.width),
+          };
+        }),
+      };
+    });
+    const plan = boxes.cells.find((item) => item.id === "initiatives");
+    // Full means full: the graph gets every pixel the grid has.
+    expect(plan.width).toBeGreaterThanOrEqual(Math.floor(boxes.inner) - 1);
+    // And nothing shares its row.
+    expect(boxes.cells.filter((item) => item.top === plan.top)).toHaveLength(1);
+
+    const rows = new Set(boxes.cells.map((item) => item.top));
+    if (width === 390) {
+      // One column: a row per panel, in reading order.
+      expect(rows.size).toBe(boxes.cells.length);
+    } else {
+      // Wider, the two narrow panels pair up — both still clear their own
+      // minimum useful width, which is the only reason a second column exists.
+      expect(rows.size).toBeLessThan(boxes.cells.length);
+      for (const item of boxes.cells.filter((entry) => entry.top !== plan.top))
+        expect(item.width).toBeGreaterThanOrEqual(260);
+    }
   });
 }
 
@@ -369,6 +458,8 @@ const CAPTURE_OUT = ".screenshots/review";
 
 for (const { label, width, height } of [
   { label: "desktop", width: 1440, height: 1600 },
+  { label: "1280", width: 1280, height: 1600 },
+  { label: "laptop-1100", width: 1100, height: 1600 },
   { label: "390", width: 390, height: 1800 },
 ]) {
   test(`capture embedded report @ ${label}`, async ({ page }, testInfo) => {

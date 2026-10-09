@@ -195,7 +195,6 @@ A minimal mixed dashboard:
   ],
   "layout": {
     "type": "grid",
-    "columns": 2,
     "children": [
       { "type": "panel", "panel_id": "initiatives" },
       { "type": "panel", "panel_id": "focus" }
@@ -203,6 +202,9 @@ A minimal mixed dashboard:
   }
 }
 ```
+
+`layout` is optional, and so is every placement field in it. Omitting it is the
+recommended default: the renderer composes the panels instead.
 
 For all four live types in one layout, export the checked-in example:
 
@@ -535,23 +537,57 @@ exercises the existing document-read rendering path, evidence/source inspection,
 filters, malformed content, and narrow layouts. Full module verification remains
 `make -C web-ui check` from the repository root.
 
+## Responsive by default
+
+**Do not specify layout.** Placement is the renderer's job, and the default is
+right far more often than an authored guess: panels flow into a grid whose
+column count comes from the width actually available and from what each panel
+carries.
+
+- One column when a second one would leave every panel too narrow to read.
+- More columns only when **every** panel sharing the row clears its own minimum
+  useful width (260px for a number, 380px for prose, 640px for wide content).
+- Wide content takes the whole row on its own: plan graphs, charts, timelines,
+  and tables with real columns in them. Content decides, so a two-column table
+  and an initiative list with no plans are not wide.
+- A nearly empty panel never claims a wide row and never raises its row's
+  minimum, so it cannot push its neighbours into fewer columns.
+- Child order is reading order at every width. The renderer never reorders
+  panels to fill a row.
+- A live panel still reading keeps its type's placement, so the grid does not
+  reflow under the reader when the observation lands.
+
+This holds wherever a report renders, including embedded in the Overview's
+pinned dashboard, where the column is narrower than a document page.
+
 ## Expressive composition
 
-Agents can choose a layout independently from the evidence-bearing panels. Omit
-`layout` for the original two-column report. A layout is a bounded tree with these
-nodes (every node accepts optional `span: 1..4` for direct grid children):
+Agents can choose a layout independently from the evidence-bearing panels. It
+is an override, not a requirement — reach for it for _structure_ (sections,
+tabs, disclosures), not to assign columns. A layout is a bounded tree with
+these nodes:
 
 - `panel`: `{ "type": "panel", "panel_id": "existing-panel-id" }`
 - `stack`: `{ "type": "stack", "children": [...] }`
-- `grid`: `{ "type": "grid", "columns": 2, "children": [...] }`; 2, 3 or 4 columns
+- `grid`: `{ "type": "grid", "children": [...] }`
 - `section`: `{ "type": "section", "title": "Heading", "description": "Optional context", "children": [...] }`
 - `tabs`: `{ "type": "tabs", "id": "views", "items": [{ "id": "overview", "label": "Overview", "children": [...] }] }`
 - `disclosure`: `{ "type": "disclosure", "title": "Details", "open": false, "children": [...] }`
 
+Two optional placement overrides exist, and both are exceptions:
+
+- `grid.columns`: 2, 3 or 4, meaning _at most_ that many columns. The renderer
+  still uses fewer when the panels would not read in them.
+- `span`: 1–4 on a direct grid child. In a grid with no `columns`, 2 or more
+  means "give this the full row". In a grid that names `columns`, a span of 2
+  or more asks for exact tracks: that grid keeps the authored column count and
+  exact spans, and collapses to one column on narrow screens. Existing reports
+  therefore render as they always have.
+
 At most 100 nodes, 6 nesting levels, 32 children per container and 8 tabs per group
 are accepted. Panel references and tab-group IDs are unique. Referenced panels
-must exist; unreferenced panels are appended so layout cannot silently omit
-stored evidence. Grids collapse to reading order on narrow screens. Empty nodes
+must exist; unreferenced panels are appended — through the same responsive grid —
+so layout cannot silently omit stored evidence. Empty nodes
 and tabs are removed by project/freshness filters. Tab selection is recorded in
 `reportTab.<group-id>` so reload and Back/Forward work. Evidence deep links can
 select the relevant tab and open its disclosure. No styles, component names,

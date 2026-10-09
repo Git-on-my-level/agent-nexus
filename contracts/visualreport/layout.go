@@ -62,13 +62,17 @@ func (v *validator) layout(raw any, panelIDs map[string]bool) {
 				children(m["children"], path+".children", depth+1)
 			}
 		case "grid":
-			m, ok := object(node, path, []string{"type", "columns", "children"}, []string{"span"}, v.add)
+			// columns is an optional cap, not a requirement: a grid that names
+			// none flows its children by available width and content.
+			m, ok := object(node, path, []string{"type", "children"}, []string{"span", "columns"}, v.add)
 			if !ok {
 				return
 			}
-			n, ok := numeric(m["columns"])
-			if !ok || n != float64(int(n)) || n != 2 && n != 3 && n != 4 {
-				v.add(path, "columns must be 2, 3, or 4")
+			if raw, exists := m["columns"]; exists {
+				n, ok := numeric(raw)
+				if !ok || n != float64(int(n)) || n != 2 && n != 3 && n != 4 {
+					v.add(path, "columns must be 2, 3, or 4")
+				}
 			}
 			children(m["children"], path+".children", depth+1)
 		case "section", "disclosure":

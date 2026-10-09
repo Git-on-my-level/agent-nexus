@@ -51,12 +51,18 @@ export const liveDashboardExample = {
       text: "Ship the launch, then measure adoption. This note is an authored snapshot.",
     }),
   ],
+  /*
+   * No column counts anywhere: a grid without `columns` flows its children by
+   * the width available and what each panel carries, which is the placement
+   * advice `anx report schema` gives. The initiatives panel takes its own row
+   * whenever it is carrying plan graphs, and the four narrower panels pair up
+   * only while both still read.
+   */
   layout: {
     type: "stack",
     children: [
       {
         type: "grid",
-        columns: 2,
         children: [
           { type: "panel", panel_id: "initiatives" },
           { type: "panel", panel_id: "asks" },
@@ -64,7 +70,6 @@ export const liveDashboardExample = {
       },
       {
         type: "grid",
-        columns: 2,
         children: [
           { type: "panel", panel_id: "mix" },
           { type: "panel", panel_id: "activity" },
