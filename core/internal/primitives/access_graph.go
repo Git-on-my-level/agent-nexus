@@ -22,7 +22,18 @@ func ownershipClosure(name, roots string, owner bool) string {
 		if _, ok := children[parent]; !ok {
 			parents = append(parents, parent)
 		}
-		children[parent] = append(children[parent], "SELECT '"+child+"' child_kind,r."+childCol+" child_id FROM main."+table+" r WHERE r."+parentCol+"=d.id AND COALESCE(r."+childCol+",'')<>''")
+		index := ""
+		// These optional parent columns are mostly NULL. ANALYZE can therefore
+		// estimate an equality probe as matching most rows and choose a table
+		// scan for every denied vertex. The actual nonempty parent is a point
+		// selector: retain its existing index even with that skewed distribution.
+		if table == "cards" && parentCol == "parent_thread_id" {
+			index = " INDEXED BY idx_cards_parent_thread_id"
+		}
+		if table == "agent_wakeups" && parentCol == "trigger_event_id" {
+			index = " INDEXED BY idx_wakeups_access_trigger_event"
+		}
+		children[parent] = append(children[parent], "SELECT '"+child+"' child_kind,r."+childCol+" child_id FROM main."+table+" r"+index+" WHERE r."+parentCol+"=d.id AND COALESCE(r."+childCol+",'')<>''")
 	}
 	for _, e := range [][5]string{
 		{"thread", "board", "boards", "thread_id", "id"}, {"board", "thread", "boards", "id", "thread_id"},
@@ -96,7 +107,9 @@ func ownershipClosure(name, roots string, owner bool) string {
 		{"resource_access_exact_edges", " AND e.source_kind NOT IN ('work_metadata','work_observation','work_evidence_record','work_evidence_alias')"},
 		{"resource_access_external_edges", ""},
 	} {
-		terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.work_metadata m ON d.kind='card' AND m.card_id=d.id JOIN main."+e.table+" e ON e.target_key="+resourceaccess.AtomKeySQL("json_extract(m.metadata_json,'$.source.url')")+" WHERE m.authority<>'nexus'"+e.where)
+		// Keep the recursive vertex outside the metadata lookup. Reordering this
+		// join starts with every source-owned card for each recursion step.
+		terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d CROSS JOIN main.work_metadata m ON d.kind='card' AND m.card_id=d.id JOIN main."+e.table+" e ON e.target_key="+resourceaccess.AtomKeySQL("json_extract(m.metadata_json,'$.source.url')")+" WHERE m.authority<>'nexus'"+e.where)
 		terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_tombstones r ON r.kind=d.kind AND r.id=d.id JOIN main."+e.table+" e ON e.target_key="+resourceaccess.AtomKeySQL("r.ref")+" WHERE (r.ref LIKE 'http://%' OR r.ref LIKE 'https://%')"+e.where)
 	}
 	// The atomically maintained identity index already contains live handles,

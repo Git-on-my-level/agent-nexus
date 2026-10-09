@@ -345,6 +345,64 @@ never enables either diagnostic option.
 
 ## Startup and migration readiness
 
+### First authenticated reads after restart
+
+SCA-720 isolates `/inbox` and `/overview` with the analyzed 4,096-record
+fixture, a fresh SQLite pool and a complete native handler for each route and
+principal. The first request constructs the epoch-validated authorization
+closure; the second reuses it. No other route warms that pool. Fixture creation
+and migrations are outside the request CPU profile:
+
+```sh
+cd core
+ANX_PERFORMANCE_TEST=1 ANX_COLD_START_PROFILE="$PWD/cold-start.pprof" \
+  go test ./internal/server -run '^TestPerformanceColdStartReads$' -count=1 -v
+go tool pprof -top -cum -focus=withRequestAccessEpoch cold-start.pprof
+ANX_PERFORMANCE_TEST=1 ANX_PERFORMANCE_DIAGNOSTIC=1 \
+  ANX_PERFORMANCE_DIAGNOSTIC_ROUTE='GET /inbox' \
+  ANX_PERFORMANCE_REPORT="$PWD/inbox-diagnostic.json" \
+  go test ./internal/server -run '^TestPerformanceRoutes$' -count=1 -v
+```
+
+Repeat the diagnostic with `GET /overview`. Diagnostic mode intentionally
+fails and still reports existing budget and exact-plan findings; it does not
+replace acceptance tests or refresh source-pinned exceptions.
+
+On a local Apple Silicon host, before/after diagnostic samples were:
+
+| Route / reader           | First before | Second before | First after | Second after |
+| ------------------------ | -----------: | ------------: | ----------: | -----------: |
+| Inbox / owner            |        68 ms |         49 ms |       56 ms |        50 ms |
+| Inbox / denied reader    |       651 ms |         77 ms |      207 ms |        77 ms |
+| Overview / owner         |       123 ms |        105 ms |      107 ms |       104 ms |
+| Overview / denied reader |       843 ms |        270 ms |      399 ms |       271 ms |
+
+The first denial closure dominated the additional cold work. SQLite's analyzed
+statistics for mostly NULL `cards.parent_thread_id` and
+`agent_wakeups.trigger_event_id` chose a table scan for each denied vertex.
+Source-URL traversal also reordered the join to scan source-owned metadata
+before the recursive vertex. Retaining the existing parent indexes and fencing
+the metadata lookup behind that vertex removed those scans without changing
+the closure or its invalidation policy. Inbox's cold-minus-second full-scan
+steps fell from 1,189,826 to 3,192 for the denied reader; VM overhead fell from
+5,982,614 to 1,243,478. The regression checks actual closure plans and cold work,
+separately from existing collection and overview-visit baselines.
+
+No new cache, migration, startup warm-up or health behavior is required for
+this query-plan repair. Each changed recursive probe costs an index lookup
+plus its matching descendants: `idx_cards_parent_thread_id`,
+`idx_wakeups_access_trigger_event`, and the `work_metadata.card_id` primary key,
+followed by the existing exact/external target-key indexes. It no longer scans
+unrelated cards, wakeups or source-owned metadata per vertex. The existing
+denied closure still scales with denied roots and reachable identities; this
+does not retire all SCA-663 authorization or collection exceptions.
+
+These fresh-pool samples keep the OS file cache warm and do not establish a
+physical cold-disk or hosted-network bound. They do not reproduce the reported
+hosted 6–8 seconds. A deployment warm-up should only be proposed after measuring
+the remaining delay in that environment; synthetic timings cannot identify an
+OS page-cache miss or a specific maintenance writer there.
+
 The startup gate builds an actual schema-58 workspace, measures upgrading through
 all current migrations with a 90-second budget, then measures a warm open with
 a five-second budget. It includes production store construction and a database
