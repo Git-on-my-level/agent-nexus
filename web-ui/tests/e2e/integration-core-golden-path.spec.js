@@ -1,10 +1,52 @@
 /** Real-core golden path; the default Playwright config starts an isolated core. */
+import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
+
 import { expect, test } from "@playwright/test";
 
 function normalizeBaseUrl(value) {
   return String(value ?? "")
     .trim()
     .replace(/\/+$/, "");
+}
+
+function releaseCoreLock(path) {
+  try {
+    unlinkSync(path);
+  } catch {
+    // Another repeat already cleared a stale lock.
+  }
+}
+
+/**
+ * Repeats of this file run in parallel when the suite is fully parallel.
+ * They share one core, and eight full golden paths blow the 15s action
+ * budget on that process. CI runs the suite with one worker. Hold the core
+ * so a repeat waits its turn instead of timing out a write.
+ */
+async function acquireCoreLock() {
+  const path = `/tmp/anx-e2e-golden-lock-${process.env.PLAYWRIGHT_CORE_PORT ?? 8000}`;
+  const deadline = Date.now() + 20 * 60_000;
+  while (Date.now() < deadline) {
+    try {
+      writeFileSync(path, String(process.pid), { flag: "wx" });
+      return () => releaseCoreLock(path);
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+      try {
+        const owner = Number(readFileSync(path, "utf8"));
+        try {
+          process.kill(owner, 0);
+        } catch {
+          releaseCoreLock(path);
+          continue;
+        }
+      } catch {
+        // The owner removed the lock between the exist check and the read.
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+  throw new Error("timed out waiting for the shared core");
 }
 
 async function postCoreJson(request, baseUrl, path, payload) {
@@ -27,6 +69,44 @@ async function postCoreJson(request, baseUrl, path, payload) {
   } catch {
     return {};
   }
+}
+
+async function humanSession(request, coreBaseUrl, displayName) {
+  const token =
+    process.env.ANX_BOOTSTRAP_TOKEN ?? "playwright-local-bootstrap-token";
+  const register = await request.post(
+    `${coreBaseUrl}/auth/passkey/dev/register`,
+    {
+      data: { bootstrap_token: token, display_name: displayName },
+    },
+  );
+  if (register.ok()) return register.json();
+
+  const text = await register.text();
+  expect(
+    register.status(),
+    `POST /auth/passkey/dev/register failed (${register.status()}): ${text}`,
+  ).toBe(401);
+
+  // The bootstrap token is single-use on this core. A repeat, or a sibling
+  // worker, logs in as the human the first registration created. The ask,
+  // topic, and card below are still unique to this run.
+  let loggedIn;
+  await expect
+    .poll(
+      async () => {
+        const login = await request.post(
+          `${coreBaseUrl}/auth/passkey/dev/login`,
+          { data: {} },
+        );
+        if (!login.ok()) return "";
+        loggedIn = await login.json();
+        return loggedIn?.agent?.actor_id ?? "";
+      },
+      { timeout: 15_000 },
+    )
+    .not.toBe("");
+  return loggedIn;
 }
 
 async function getUiJson(request, path) {
@@ -85,7 +165,15 @@ test("golden path integration runs against a real anx-core", async ({
   request,
 }) => {
   test.setTimeout(180000);
+  const release = await acquireCoreLock();
+  try {
+    await runGoldenPath(page, request);
+  } finally {
+    release();
+  }
+});
 
+async function runGoldenPath(page, request) {
   const coreBaseUrl = normalizeBaseUrl(
     process.env.ANX_CORE_BASE_URL ??
       process.env.PUBLIC_ANX_CORE_BASE_URL ??
@@ -183,15 +271,10 @@ test("golden path integration runs against a real anx-core", async ({
 
   // Inbox responses require a human session even in dev actor mode. Register
   // the test human on the isolated core and let the UI BFF refresh its session.
-  const registeredHuman = await postCoreJson(
+  const registeredHuman = await humanSession(
     request,
     coreBaseUrl,
-    "/auth/passkey/dev/register",
-    {
-      bootstrap_token:
-        process.env.ANX_BOOTSTRAP_TOKEN ?? "playwright-local-bootstrap-token",
-      display_name: actorDisplayName,
-    },
+    actorDisplayName,
   );
   actorId = registeredHuman.agent.actor_id;
   await page.context().addCookies([
@@ -205,7 +288,9 @@ test("golden path integration runs against a real anx-core", async ({
     },
   ]);
   await page.goto("/o/local/w/local");
-  await expect(page).toHaveURL(/\/o\/local\/w\/local\/overview$/);
+  await expect(page).toHaveURL(/\/o\/local\/w\/local\/overview$/, {
+    timeout: 30_000,
+  });
   const session = await getUiJson(page.request, "/auth/session");
   expect(session.authenticated).toBe(true);
   expect(session.agent.actor_id).toBe(actorId);
@@ -460,13 +545,22 @@ test("golden path integration runs against a real anx-core", async ({
   await page.waitForURL("**/o/local/w/local/inbox", { timeout: 30_000 });
   await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
 
-  // Open the ask we created rather than acknowledging another test's data.
-  const inboxResponse = await request.get(`${coreBaseUrl}/inbox`);
-  expect(inboxResponse.ok()).toBeTruthy();
-  const inboxItem = (await inboxResponse.json()).items.find(
-    (item) => item.title === `Review handoff ${runSuffix}`,
-  );
-  expect(inboxItem).toBeTruthy();
+  // The rebuild can return before the inbox projection shows the new ask.
+  // Poll the list instead of reading it once.
+  let inboxItem;
+  await expect
+    .poll(
+      async () => {
+        const inboxResponse = await request.get(`${coreBaseUrl}/inbox`);
+        if (!inboxResponse.ok()) return "";
+        inboxItem = ((await inboxResponse.json()).items ?? []).find(
+          (item) => item.title === `Review handoff ${runSuffix}`,
+        );
+        return inboxItem?.id ?? "";
+      },
+      { timeout: 30_000 },
+    )
+    .not.toBe("");
   await page.goto(`/o/local/w/local/inbox/${encodeURIComponent(inboxItem.id)}`);
   await expect(
     page.getByRole("heading", {
@@ -481,11 +575,19 @@ test("golden path integration runs against a real anx-core", async ({
   );
   await page.getByRole("button", { name: "Acknowledge", exact: true }).click();
   expect((await acknowledgeResponsePromise).ok()).toBeTruthy();
-  const remainingInbox = await request.get(`${coreBaseUrl}/inbox`);
-  expect(remainingInbox.ok()).toBeTruthy();
-  expect((await remainingInbox.json()).items).not.toEqual(
-    expect.arrayContaining([expect.objectContaining({ id: inboxItem.id })]),
-  );
+  await expect
+    .poll(
+      async () => {
+        const remainingInbox = await request.get(`${coreBaseUrl}/inbox`);
+        if (!remainingInbox.ok()) return "pending";
+        const stillThere = ((await remainingInbox.json()).items ?? []).some(
+          (item) => item.id === inboxItem.id,
+        );
+        return stillThere ? "present" : "gone";
+      },
+      { timeout: 15_000 },
+    )
+    .toBe("gone");
 
   await openThreadDetail(page, threadId, thread.title);
   const timelineTab = page.getByRole("tab", { name: "Timeline" });
@@ -522,4 +624,4 @@ test("golden path integration runs against a real anx-core", async ({
   await expect(
     page.locator(`[id="message-${initialMessageId}"]`),
   ).toBeVisible();
-});
+}

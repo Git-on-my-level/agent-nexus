@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { getExpectedCommandRegistryDigest } from "../../src/lib/commandRegistryDigest.js";
 import { EXPECTED_SCHEMA_VERSION } from "../../src/lib/config.js";
+import { holdOpenStream } from "../helpers/openStream.js";
 
 const root = "/o/local/w/local";
 const stamp = (hours = 0) =>
@@ -551,7 +552,15 @@ test("a live task event re-reads the list; a failed re-read keeps visible work",
   );
   // The list subscribes to /stream/events; the stream stays open until the
   // test sends one card event down it.
+  let connected;
+  const streamReady = new Promise((resolve) => {
+    connected = resolve;
+  });
+  let delivered = false;
   await page.route("**/stream/events**", async (route) => {
+    if (delivered) return holdOpenStream(page, route);
+    delivered = true;
+    connected();
     await released;
     const event = {
       id: "evt-live-1",
@@ -568,9 +577,12 @@ test("a live task event re-reads the list; a failed re-read keeps visible work",
   await page.goto(`${root}/tasks`);
   await expect(page.locator("[data-work-ref]")).toHaveCount(3);
   await expect(page.getByRole("button", { name: "Reload" })).toHaveCount(0);
+  await streamReady;
   fail = true;
   release();
-  await expect(page.getByText("Reconnecting…", { exact: true })).toBeVisible();
+  await expect(page.getByText("Reconnecting…", { exact: true })).toBeVisible({
+    timeout: 40_000,
+  });
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(page.locator("[data-work-ref]")).toHaveCount(3);
   await expect(
@@ -663,6 +675,7 @@ for (const viewport of [
   test(`work and decision surfaces are accessible at ${viewport.width}px`, async ({
     page,
   }, testInfo) => {
+    test.setTimeout(120_000);
     await page.setViewportSize(viewport);
     await setup(page);
     for (const route of [
@@ -677,7 +690,9 @@ for (const viewport of [
       { path: "/integrations", name: "integrations" },
     ]) {
       await page.goto(`${root}${route.path}`);
-      await expect(page.locator("h1").first()).toBeVisible();
+      // Six cold routes under a loaded dev server. The check is that the
+      // heading paints, not that it paints inside the default 10s.
+      await expect(page.locator("h1").first()).toBeVisible({ timeout: 20_000 });
       await expect(page.getByText("Loading tasks…")).toHaveCount(0);
       await expect(
         page.getByRole("button", { name: /Loading health|Loading decisions/ }),

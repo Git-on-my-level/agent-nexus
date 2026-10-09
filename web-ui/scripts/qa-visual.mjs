@@ -1721,11 +1721,13 @@ async function captureScene(browser, baseUrl, scene, outDir) {
       timeout: 30_000,
     });
     await scene.waitFor(page);
-    await page.waitForTimeout(150);
     await page.evaluate(async () => {
       if (document.fonts?.ready) {
         await document.fonts.ready;
       }
+      await new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+      });
     });
 
     const outputPath = path.join(outDir, `${scene.name}.png`);

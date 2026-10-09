@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { AUDIT_VIEWPORTS, expectCleanLayout } from "../helpers/layoutAudit.js";
+import { holdOpenStream } from "../helpers/openStream.js";
 
 /**
  * Walks the workspace shell (sidebar, account menu, command palette, first-run
@@ -369,6 +370,13 @@ async function installWorkspaceApi(page, overrides = {}) {
         : { authenticated: false },
     );
   });
+
+  // Unmocked streams hit the shared dev core and reconnect when the mock
+  // closes them. Hold them open so they do not stall the shell under load.
+  await page.route(
+    (url) => corePathOf(url).startsWith("/stream/"),
+    (route) => holdOpenStream(page, route),
+  );
 
   await page.route(core(/^\/meta\/handshake$/), (route) =>
     json(route, 200, {
@@ -1122,15 +1130,28 @@ for (const viewport of AUDIT_VIEWPORTS) {
     test("workspace home redirect and session ended overlay", async ({
       page,
     }) => {
-      const api = await installWorkspaceApi(page);
-      api.hold.inboxOpen = deferred();
+      await installWorkspaceApi(page);
+      // The home page redirects in onMount. Hold Overview's data load so the
+      // redirecting state stays on screen for the audit, then let it commit.
+      // Holding the inbox list does not gate this navigation, and releasing
+      // it raced the URL assertion under load.
+      const overviewData = deferred();
+      await page.route("**/*", async (route) => {
+        const url = route.request().url();
+        if (url.includes("/overview") && url.includes("__data.json"))
+          await overviewData.promise;
+        await route.fallback();
+      });
       await page.goto(WS);
+      await expect(page.getByText("Opening Overview…")).toBeVisible(
+        FIRST_PAINT,
+      );
       await expectCleanLayout(page, "workspace home redirecting");
-      api.hold.inboxOpen.resolve();
-      api.hold = {};
-      await expect(page).toHaveURL(/\/overview$/);
+      overviewData.resolve();
+      await expect(page).toHaveURL(/\/overview$/, FIRST_PAINT);
 
       // A terminal account-status revocation paints a full-screen overlay.
+      const api = await installWorkspaceApi(page);
       api.sessionStatus = 401;
       await page.goto(INBOX_PATH);
       await expect(

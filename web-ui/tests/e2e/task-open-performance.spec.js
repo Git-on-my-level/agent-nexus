@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 
 import { getExpectedCommandRegistryDigest } from "../../src/lib/commandRegistryDigest.js";
 import { EXPECTED_SCHEMA_VERSION } from "../../src/lib/config.js";
+import { expectPerf } from "../helpers/e2ePerf.js";
+import { holdOpenStream } from "../helpers/openStream.js";
 
 /**
  * How long it takes to open a task card, and how many round trips it costs.
@@ -101,6 +103,11 @@ async function installSlowCore(page) {
     },
   ]);
 
+  const sentAt = new WeakMap();
+  page.on("request", (request) => {
+    sentAt.set(request, Date.now());
+  });
+
   await page.route("**/*", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -121,13 +128,7 @@ async function installSlowCore(page) {
     }
 
     // The event streams must not be delayed or counted: they stay open.
-    if (path.startsWith("/stream/")) {
-      return route.fulfill({
-        status: 200,
-        contentType: "text/event-stream",
-        body: ": keepalive\n\n",
-      });
-    }
+    if (path.startsWith("/stream/")) return holdOpenStream(page, route);
 
     const body = (() => {
       if (path === "/meta/handshake" || path === "/version") {
@@ -180,8 +181,14 @@ async function installSlowCore(page) {
       return null;
     })();
 
-    calls.push({ path, at: Date.now() - started });
+    const call = {
+      path,
+      at: (sentAt.get(request) ?? Date.now()) - started,
+      sentAt: sentAt.get(request) ?? Date.now(),
+    };
+    calls.push(call);
     await new Promise((resolve) => setTimeout(resolve, LATENCY_MS));
+    call.respondedAt = Date.now();
     if (!body) {
       return route.fulfill({
         status: 404,
@@ -200,21 +207,27 @@ async function installSlowCore(page) {
 }
 
 /**
- * Requests grouped into waves: a wave is a set issued without waiting for the
- * previous one. The count of waves is the depth of the waterfall, which is
- * what a reader actually waits through.
+ * Requests grouped into waves by when the browser sent them.
+ *
+ * A new wave starts when the gap since the previous send is at least the
+ * mock latency. A shorter gap splits one burst while the main thread is
+ * busy. A real extra hop waits out that latency before it can send.
  */
 function waves(calls) {
-  const out = [];
-  for (const call of calls) {
-    const last = out.at(-1);
-    if (last && call.at - last.at < LATENCY_MS * 0.6) {
-      last.paths.push(call.path);
-      continue;
+  const ordered = [...calls].sort((a, b) => a.sentAt - b.sentAt);
+  const groups = [];
+  let current = [];
+  let lastSent = -Infinity;
+  for (const call of ordered) {
+    if (current.length && call.sentAt - lastSent >= LATENCY_MS) {
+      groups.push(current);
+      current = [];
     }
-    out.push({ at: call.at, paths: [call.path] });
+    current.push(call.path);
+    lastSent = call.sentAt;
   }
-  return out;
+  if (current.length) groups.push(current);
+  return groups;
 }
 
 test("opening a task card costs one round trip, not four", async ({
@@ -236,8 +249,7 @@ test("opening a task card costs one round trip, not four", async ({
   await page.goto(TASKS);
   const row = page.locator('[data-work-ref="card:tune-combat"] a').first();
   await expect(row.first()).toBeVisible({ timeout: 60_000 });
-  // Let the list settle so the measurement covers the click, not the list.
-  await page.waitForTimeout(LATENCY_MS * 6);
+  await expect(page.getByText("Loading tasks…")).toHaveCount(0);
 
   const before = calls.length;
   const clickedAt = Date.now();
@@ -278,10 +290,13 @@ test("opening a task card costs one round trip, not four", async ({
 
   /*
    * And the title is on screen inside that one wave, because it is painted
-   * from the row the list already had rather than waited for.
+   * from the row the list already had rather than waited for. The millisecond
+   * caps include Playwright scheduling, so only the advisory job enforces them.
    */
-  expect(titleMs).toBeLessThan(LATENCY_MS * 2);
-  expect(readMs).toBeLessThan(LATENCY_MS * 3);
+  expectPerf(() => {
+    expect(titleMs).toBeLessThan(LATENCY_MS * 2);
+    expect(readMs).toBeLessThan(LATENCY_MS * 3);
+  });
 
   // Client-side navigation: no document request for the card page.
   expect(afterClick.filter((call) => call.path.startsWith("/o/"))).toHaveLength(
@@ -296,7 +311,7 @@ test("pointing at a row reads the card before the click", async ({ page }) => {
   await page.goto(TASKS);
   const row = page.locator('[data-work-ref="card:tune-combat"] a').first();
   await expect(row).toBeVisible({ timeout: 60_000 });
-  await page.waitForTimeout(LATENCY_MS * 6);
+  await expect(page.getByText("Loading tasks…")).toHaveCount(0);
 
   const before = calls.length;
   await row.hover();
@@ -315,13 +330,14 @@ test("pointing at a row reads the card before the click", async ({ page }) => {
   // A second hover adds nothing: the card is cached, not re-read.
   await page.goBack();
   await expect(row).toBeVisible({ timeout: 30_000 });
-  const beforeSecond = calls.length;
+  const secondFetch = page
+    .waitForRequest(
+      (request) => /^\/work\/[^/]+$/.test(new URL(request.url()).pathname),
+      { timeout: 1_000 },
+    )
+    .then(() => true)
+    .catch(() => false);
   await row.hover();
-  await page.waitForTimeout(LATENCY_MS * 2);
-  expect(
-    calls
-      .slice(beforeSecond)
-      .filter((call) => /^\/work\/[^/]+$/.test(call.path)),
-  ).toHaveLength(0);
+  expect(await secondFetch).toBe(false);
   expect(prefetched).toBeGreaterThan(before);
 });

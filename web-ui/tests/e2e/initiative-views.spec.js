@@ -3,6 +3,7 @@ import { mkdir } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
+import { nextPaint } from "../helpers/pageReady.js";
 import { installWorkspaceApi } from "../helpers/workspaceApiMock.js";
 
 /**
@@ -690,6 +691,8 @@ test("the preview is reachable by Tab and Escape does not reopen it", async ({
   // dialog the reader just dismissed.
   await expect(card).toBeHidden();
   await expect(chip).toBeFocused();
-  await page.waitForTimeout(250);
+  // Focus returns to the chip synchronously. One paint is enough to see a
+  // reopen; the preview's own guard is what keeps that focus from opening it.
+  await nextPaint(page);
   await expect(card).toBeHidden();
 });

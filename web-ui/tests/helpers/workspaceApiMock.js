@@ -15,6 +15,7 @@ import { expect } from "@playwright/test";
 
 import { EXPECTED_SCHEMA_VERSION } from "../../src/lib/config.js";
 import { getExpectedCommandRegistryDigest } from "../../src/lib/commandRegistryDigest.js";
+import { holdOpenStream } from "./openStream.js";
 
 /**
  * Text painted outside the viewport that the reader cannot get to.
@@ -300,13 +301,7 @@ export async function installWorkspaceApi(page, overrides = {}) {
     if (path === "/hosts") return reply({ hosts: api.hosts ?? [] });
     if (path === "/boards") return reply({ boards: [] });
     if (path === "/topics") return reply({ topics: [] });
-    if (path.startsWith("/stream/")) {
-      return route.fulfill({
-        status: 200,
-        contentType: "text/event-stream",
-        body: ": keepalive\n\n",
-      });
-    }
+    if (path.startsWith("/stream/")) return holdOpenStream(page, route);
 
     // ---- Ask PM ------------------------------------------------------------
     if (path === "/pm/conversations" && method === "GET") {

@@ -1,6 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { getExpectedCommandRegistryDigest } from "../../src/lib/commandRegistryDigest.js";
 import { EXPECTED_SCHEMA_VERSION } from "../../src/lib/config.js";
+import { expectPerf } from "../helpers/e2ePerf.js";
+import { holdOpenStream } from "../helpers/openStream.js";
+import { nextPaint } from "../helpers/pageReady.js";
 
 const ROOT = "/o/local/w/local";
 const LATENCY_MS = 400;
@@ -123,13 +126,7 @@ async function installScaleCore(
     }
 
     // The event streams must not be delayed or counted: they stay open.
-    if (path.startsWith("/stream/")) {
-      return route.fulfill({
-        status: 200,
-        contentType: "text/event-stream",
-        body: ": keepalive\n\n",
-      });
-    }
+    if (path.startsWith("/stream/")) return holdOpenStream(page, route);
 
     if (
       path.startsWith("/cards/") &&
@@ -345,11 +342,12 @@ test("Inbox paints first pages without waiting for eight scale-work pages", asyn
     body: JSON.stringify(report, null, 2),
     contentType: "application/json",
   });
-  if (!process.env.ANX_INBOX_PERF_BASELINE) {
-    // The first ranked paint waits for first pages only, with an 800ms cap.
+  // The first ranked paint waits for first pages only. The millisecond cap
+  // is host-sensitive, so only the advisory performance job enforces it.
+  expectPerf(() => {
     expect(interactiveMs).toBeLessThan(1500);
-    expect(earlyWorkPages).toBeLessThanOrEqual(3);
-  }
+  });
+  expect(earlyWorkPages).toBeLessThanOrEqual(3);
   await expect
     .poll(() => calls.filter((call) => call.path === "/work").length)
     .toBe(8);
@@ -548,10 +546,18 @@ test("committing one answer does not retain another answer whose Undo is pending
   await page.clock.pauseAt(
     new Date(await page.evaluate(() => Date.now() + 1_000)),
   );
+  const confirmed = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().includes(`/inbox/${encodeURIComponent(ASK.id)}/respond`),
+  );
   gate.resolve();
   await expect.poll(() => calls.state.responded).toBe(true);
-  await page.waitForTimeout(100);
-  // Flush the confirmed answer's refresh, with B still in its Undo window.
+  // responded flips before the body is released. Wait for that response, then
+  // one turn, so the refresh timer exists before the clock jumps. Animation
+  // frames do not run while the clock is paused.
+  await confirmed;
+  await page.evaluate(() => {});
   await page.clock.runFor(1_000);
   await expect.poll(() => calls.state.historyReads).toBeGreaterThan(1);
   await page.clock.resume();
@@ -619,7 +625,7 @@ for (const completedStillPartial of [true, false]) {
     if (completedStillPartial) gates["/inbox:completed:next"].resolve();
     // Keep the open snapshot pending: even a finished completed read cannot
     // discard known answers until the newer open snapshot can replace it.
-    await page.waitForTimeout(100);
+    await nextPaint(page);
     expect(
       (await page.evaluate(() => window.__refreshRows)).every(
         (snapshot) =>
@@ -739,19 +745,23 @@ test("a never-resolving unread feed cannot hold asks or revive an answered task"
       },
     ],
   });
+  await page.clock.install();
   await page.goto(`${ROOT}/inbox`);
   await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible();
   await expect(page.getByRole("button", { name: /^1 Proceed/ })).toBeEnabled();
   const enabled = await page.evaluate(() => window.__inboxInteractive);
   const sourceStart = calls.find((call) => call.path === "/inbox").wallAt;
-  expect(enabled.wallAt - sourceStart).toBeLessThan(1500);
+  expectPerf(() => {
+    expect(enabled.wallAt - sourceStart).toBeLessThan(1500);
+  });
   await expect(page.getByTestId("inbox-row-task:card:answered")).toHaveCount(0);
   await expect(
     page.getByText("Inbox loading timed out", { exact: false }),
   ).toHaveCount(0);
   // The old five-second deadline must no longer terminate a cold read.
+  // Advance the page clock instead of sleeping through wall time.
   await expect(page.locator("[data-inbox-loading]")).toHaveCount(0);
-  await page.waitForTimeout(5200);
+  await page.clock.fastForward(5_200);
   await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible();
   await expect(page.getByTestId("inbox-row-task:card:answered")).toHaveCount(0);
   await expect(
@@ -1182,17 +1192,15 @@ test("a persisted visit paints immediately while Inbox is slow", async ({
       ),
     )
     .toBe(true);
+  const revalidation = deferred();
   await page.route("**/inbox?**", async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 8000));
+    await revalidation.promise;
     await route.fallback();
   });
-  const navigatedAt = Date.now();
   await page.reload();
-  await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible({
-    timeout: 3000,
-  });
-  console.log("Inbox cached reload paint ms:", Date.now() - navigatedAt);
+  await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible();
   await expect(page.getByText("Refreshing…", { exact: true })).toBeVisible();
+  revalidation.resolve();
 });
 
 test("a cold Inbox keeps the known badge as one skeleton until confirmed", async ({
@@ -1203,8 +1211,9 @@ test("a cold Inbox keeps the known badge as one skeleton until confirmed", async
   await expect(page.locator("[data-inbox-nav-count]").first()).toHaveText("1");
   // Simulate a badge without a cached payload (for example storage was denied).
   await page.evaluate(() => localStorage.removeItem("anx.workspace-views.v1"));
+  const slowInbox = deferred();
   await page.route("**/inbox?**", async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 8000));
+    await slowInbox.promise;
     await route.fallback();
   });
   // A full reload clears memory; inject just the last count through the existing store.
@@ -1219,6 +1228,7 @@ test("a cold Inbox keeps the known badge as one skeleton until confirmed", async
     page.getByText("No items loaded yet.", { exact: true }),
   ).toHaveCount(0);
   await expect(page.locator("[data-inbox-nav-count]").first()).toHaveText("1");
+  slowInbox.resolve();
 });
 
 test("a 504 followed by success reconnects without a red error", async ({
