@@ -9,6 +9,7 @@ import shlex
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 
 
@@ -28,6 +29,9 @@ UI_WIDE = {"web-ui/package.json", "web-ui/vite.config.js", "web-ui/vitest.config
            "web-ui/svelte.config.js", "web-ui/postcss.config.cjs", "web-ui/tailwind.config.cjs"}
 UI_WIDE_PREFIXES = ("web-ui/tests/mocks/", "web-ui/src/lib/generated/")
 ROUTE_INVENTORY = "contracts/gen/meta/routes.json"
+# The release-managed version files, and the detector CI uses to confirm a bump.
+VERSION_MANAGED_LIST = "scripts/version-managed-files.sh"
+RELEASE_BASE_DETECTOR = "scripts/ci-release-base.py"
 
 
 def git(*args):
@@ -62,6 +66,52 @@ def changed_paths(tier, all_files=False, base=None):
             | paths(git("diff", "--cached", "--name-only", "-z", "--no-renames"))
             | paths(git("diff", "--name-only", "-z", "--no-renames"))
             | paths(git("ls-files", "--others", "--exclude-standard", "-z")))
+
+
+def version_managed_files():
+    """The release-managed version files, read from the list the CI gate shares."""
+    listing = subprocess.check_output(["bash", str(ROOT / VERSION_MANAGED_LIST)],
+                                     cwd=ROOT, stderr=subprocess.PIPE)
+    return {name for name in listing.decode().splitlines() if name}
+
+
+def release_bump_only(changed, base):
+    """True when everything between `base` and HEAD is an exact generated version bump.
+
+    A release bump rewrites `core/internal/buildinfo/version_generated.go`, which
+    nearly every core package imports, so normal selection runs most of the repo
+    for a commit the release flow already gated on the source commit's green CI.
+
+    Filenames cannot decide this on their own: `web-ui/package.json` and the Go
+    version files can carry executable changes too. So the file list only rules
+    the question out cheaply, and a candidate is then confirmed the way the CI
+    short-circuit confirms it -- `scripts/ci-release-base.py` regenerates each
+    commit from its parent's tooling and compares -- walking back to `base`.
+    Anything unverifiable falls through to normal selection.
+    """
+    if base is None or not changed:
+        return False
+    try:
+        # A fast path, not a guard: the walk below already implies this.
+        if changed - version_managed_files():
+            return False
+        # The walk says nothing about uncommitted edits to the files it clears.
+        if git("status", "--porcelain", "--untracked-files=all"):
+            return False
+        head = git("rev-parse", "HEAD").decode().strip()
+        if head == base:
+            # Nothing committed to verify, so nothing the walk below could clear.
+            return False
+        while head != base:
+            parent = subprocess.check_output(
+                [sys.executable, "-B", str(ROOT / RELEASE_BASE_DETECTOR), head],
+                cwd=ROOT, stderr=subprocess.PIPE).decode().strip()
+            if not parent:
+                return False
+            head = parent
+    except (subprocess.CalledProcessError, OSError, UnicodeError):
+        return False
+    return True
 
 
 def fans_out(changed):
@@ -421,6 +471,9 @@ def ui_fast_tests(changed, whole_module, base):
 
 
 def fast_tests(changed, base=None):
+    if release_bump_only(changed, base):
+        print("release version bump only; source commit verified by CI", flush=True)
+        return
     modules = selected_modules(changed)
     whole_module = fans_out(changed)
     print("Fast modules: " + (", ".join(m for m in MODULES if m in modules) or "none"), flush=True)
