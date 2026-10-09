@@ -9,6 +9,7 @@ import hashlib
 import json
 import re
 import subprocess
+import sys
 
 
 # Explicit measured fixtures only. New tests default to the correctness gate,
@@ -41,8 +42,20 @@ def shard_names(names, index, count):
 
 
 def discover(package):
-    result = subprocess.run(['go', 'test', '-list', '.', package], check=True,
-                            capture_output=True, text=True)
+    command = ['go', 'test', '-list', '.', package]
+    for attempt in range(2):
+        try:
+            result = subprocess.run(command, check=True, capture_output=True, text=True)
+            break
+        except subprocess.CalledProcessError as error:
+            print(f'Test discovery for {package} failed (attempt {attempt + 1}/2, '
+                  f'exit {error.returncode}).', file=sys.stderr, flush=True)
+            for name, output in [('stdout', error.stdout), ('stderr', error.stderr)]:
+                if output:
+                    print(f'{name}:\n{output}', file=sys.stderr, flush=True)
+            if attempt == 1:
+                raise
+            print('Retrying test discovery once.', file=sys.stderr, flush=True)
     return sorted(set(line for line in result.stdout.splitlines()
                       if re.fullmatch(r'(Test|Example|Fuzz)\w*', line)))
 
