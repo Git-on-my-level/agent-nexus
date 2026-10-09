@@ -527,8 +527,6 @@ test("a live task event re-reads the list; a failed re-read keeps visible work",
 }) => {
   test.setTimeout(60_000);
   let fail = false;
-  let release;
-  const released = new Promise((resolve) => (release = resolve));
   await setup(page, {
     handle: async ({ path, method, reply }) => {
       if (fail && path === "/work" && method === "GET") {
@@ -549,28 +547,75 @@ test("a live task event re-reads the list; a failed re-read keeps visible work",
       body: JSON.stringify({ events: [] }),
     }),
   );
-  // The list subscribes to /stream/events; the stream stays open until the
-  // test sends one card event down it.
+  // One waiter per live connection. Claiming the first stream bound the
+  // event to a request Playwright often aborts during navigation, so later
+  // connections never saw card_moved. Aborted connections leave the queue.
+  const deferred = () => {
+    let resolve;
+    let reject;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const liveWaiters = [];
+  let queuedLive = 0;
+  const release = () => {
+    const waiter = liveWaiters.shift();
+    if (waiter) waiter.resolve();
+    else queuedLive += 1;
+  };
+  let connected;
+  const streamReady = new Promise((resolve) => {
+    connected = resolve;
+  });
   await page.route("**/stream/events**", async (route) => {
-    await released;
+    const request = route.request();
+    const waiter = deferred();
+    if (queuedLive > 0) {
+      queuedLive -= 1;
+      waiter.resolve();
+    } else liveWaiters.push(waiter);
+    connected();
+    const onFailed = (failed) => {
+      if (failed !== request) return;
+      page.off("requestfailed", onFailed);
+      const index = liveWaiters.indexOf(waiter);
+      if (index >= 0) liveWaiters.splice(index, 1);
+      waiter.reject(new Error("stream aborted"));
+    };
+    page.on("requestfailed", onFailed);
+    try {
+      await waiter.promise;
+    } catch {
+      await route.abort().catch(() => {});
+      return;
+    }
+    page.off("requestfailed", onFailed);
     const event = {
       id: "evt-live-1",
       type: "card_moved",
       ts: new Date().toISOString(),
       refs: ["card:docs"],
     };
-    await route.fulfill({
-      status: 200,
-      contentType: "text/event-stream",
-      body: `id: evt-live-1\nevent: event\ndata: ${JSON.stringify({ event })}\n\n`,
-    });
+    await route
+      .fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: `id: evt-live-1\nevent: event\ndata: ${JSON.stringify({ event })}\n\n`,
+      })
+      .catch(() => {});
   });
   await page.goto(`${root}/tasks`);
   await expect(page.locator("[data-work-ref]")).toHaveCount(3);
   await expect(page.getByRole("button", { name: "Reload" })).toHaveCount(0);
+  await streamReady;
   fail = true;
   release();
-  await expect(page.getByText("Reconnecting…", { exact: true })).toBeVisible();
+  await expect(page.getByText("Reconnecting…", { exact: true })).toBeVisible({
+    timeout: 40_000,
+  });
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(page.locator("[data-work-ref]")).toHaveCount(3);
   await expect(
@@ -663,6 +708,7 @@ for (const viewport of [
   test(`work and decision surfaces are accessible at ${viewport.width}px`, async ({
     page,
   }, testInfo) => {
+    test.setTimeout(120_000);
     await page.setViewportSize(viewport);
     await setup(page);
     for (const route of [
@@ -677,7 +723,9 @@ for (const viewport of [
       { path: "/integrations", name: "integrations" },
     ]) {
       await page.goto(`${root}${route.path}`);
-      await expect(page.locator("h1").first()).toBeVisible();
+      // Six cold routes under a loaded dev server. The check is that the
+      // heading paints, not that it paints inside the default 10s.
+      await expect(page.locator("h1").first()).toBeVisible({ timeout: 20_000 });
       await expect(page.getByText("Loading tasks…")).toHaveCount(0);
       await expect(
         page.getByRole("button", { name: /Loading health|Loading decisions/ }),

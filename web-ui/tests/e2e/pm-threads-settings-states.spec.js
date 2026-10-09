@@ -6,6 +6,7 @@ import {
   installWorkspaceApi,
 } from "../helpers/workspaceApiMock.js";
 import { AUDIT_VIEWPORTS, expectCleanLayout } from "../helpers/layoutAudit.js";
+import { nextPaint } from "../helpers/pageReady.js";
 
 // The dev server compiles routes on demand; first paint of a route can take
 // several seconds under parallel runs.
@@ -215,7 +216,7 @@ async function scrollThread(page, position) {
     thread.scrollTop = where === "top" ? 0 : thread.scrollHeight;
     thread.dispatchEvent(new Event("scroll"));
   }, position);
-  await page.waitForTimeout(80);
+  await nextPaint(page);
 }
 
 for (const viewport of AUDIT_VIEWPORTS) {

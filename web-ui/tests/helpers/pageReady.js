@@ -18,3 +18,18 @@ export async function waitForAppReady(page) {
     () => new Promise((resolve) => requestAnimationFrame(() => resolve())),
   );
 }
+
+/**
+ * Two frames, so a paint scheduled by the previous call has landed.
+ * Use this instead of a fixed sleep after scroll, hover, or focus.
+ *
+ * @param {import("@playwright/test").Page} page
+ */
+export function nextPaint(page) {
+  return page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  );
+}

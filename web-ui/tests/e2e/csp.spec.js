@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { waitForAppReady } from "../helpers/pageReady.js";
+import { nextPaint, waitForAppReady } from "../helpers/pageReady.js";
 
 test("CSP header is present on document navigation requests", async ({
   page,
@@ -41,8 +41,7 @@ test("CSP header blocks inline script execution", async ({ page }) => {
   });
 
   await page.goto("/");
-
-  await page.waitForTimeout(1000);
+  await waitForAppReady(page);
 
   const cspViolations = consoleMessages.filter(
     (msg) =>
@@ -75,13 +74,18 @@ test("CSP blocks arbitrary remote image loads", async ({ page }) => {
   });
 
   await page.goto("/");
-  await page.evaluate(() => {
-    const image = document.createElement("img");
-    image.alt = "x";
-    image.src = "https://attacker.example/pixel?id=csp-test";
-    document.body.appendChild(image);
-  });
-  await page.waitForTimeout(250);
+  await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        const image = document.createElement("img");
+        image.alt = "x";
+        image.src = "https://attacker.example/pixel?id=csp-test";
+        image.addEventListener("error", () => resolve(), { once: true });
+        image.addEventListener("load", () => resolve(), { once: true });
+        document.body.appendChild(image);
+      }),
+  );
+  await nextPaint(page);
 
   expect(remoteImageFetches).toBe(0);
   expect(failedRemoteImages).toEqual([

@@ -624,15 +624,18 @@ test("Overview restores its snapshot on reload while revalidation is held", asyn
   await expect(
     page.locator('[aria-label="Open initiatives"] > li'),
   ).toHaveCount(6);
+  // Hold revalidation open. Initiatives that are on screen before this
+  // request returns were painted from the snapshot. A 3s wall-clock budget
+  // measured Playwright scheduling lag under load, not the paint.
+  const revalidation = deferred();
   await page.route("**/overview?**", async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 8000));
+    await revalidation.promise;
     await route.fallback();
   });
-  const navigatedAt = Date.now();
   await page.reload();
   await expect(
     page.locator('[aria-label="Open initiatives"] > li'),
-  ).toHaveCount(6, { timeout: 3000 });
-  console.log("Overview cached reload paint ms:", Date.now() - navigatedAt);
+  ).toHaveCount(6);
   await expect(page.getByText("Refreshing…", { exact: true })).toBeVisible();
+  revalidation.resolve();
 });

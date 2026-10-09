@@ -153,3 +153,31 @@ jobs:
         # The core owner's test-perf target is not available yet. Discover by
         # name until it lands; the route fixture keeps its four-shard lane.
         run: python3 ../scripts/ci-core.py advisory
+
+  # Wall-clock budgets the gating browser suite skips. Advisory only.
+  web-ui-e2e-perf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+
+      - name: Setup Node And pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Setup Playwright Chromium
+        uses: ./.github/actions/setup-playwright
+
+      - name: Allow sandboxed Chromium on Ubuntu runners
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Run browser timing budgets
+        env:
+          ANX_E2E_PERF: "1"
+        run: pnpm -C web-ui exec playwright test tests/e2e/task-open-performance.spec.js tests/e2e/inbox-load-performance.spec.js tests/e2e/markdown-and-badges.spec.js --project=default --workers=1 --retries=0

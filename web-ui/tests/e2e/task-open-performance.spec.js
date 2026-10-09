@@ -2,6 +2,9 @@ import { expect, test } from "@playwright/test";
 
 import { getExpectedCommandRegistryDigest } from "../../src/lib/commandRegistryDigest.js";
 import { EXPECTED_SCHEMA_VERSION } from "../../src/lib/config.js";
+import { expectPerf } from "../helpers/e2ePerf.js";
+import { holdOpenStream } from "../helpers/openStream.js";
+import { nextPaint } from "../helpers/pageReady.js";
 
 /**
  * How long it takes to open a task card, and how many round trips it costs.
@@ -91,6 +94,72 @@ async function installSlowCore(page) {
     localStorage.setItem("workspaceTourSeen.local", "1");
     localStorage.setItem("workspaceTourSeen.local:local", "1");
   });
+  // Gate inside fetch, before a socket opens. Holding the network response
+  // instead fills the per-host connection pool, and the rest of the same
+  // wave then cannot be sent until something finishes — which looks like a
+  // second hop.
+  await page.addInitScript(() => {
+    const original = window.fetch.bind(window);
+    const sent = [];
+    let held = false;
+    /** @type {Array<() => void>} */
+    const waiters = [];
+
+    /**
+     * @param {RequestInfo | URL} input
+     */
+    function pathname(input) {
+      const raw =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input?.url;
+      if (!raw) return "";
+      try {
+        return decodeURIComponent(new URL(raw, location.origin).pathname);
+      } catch {
+        return "";
+      }
+    }
+
+    /**
+     * @param {string} path
+     */
+    function isApi(path) {
+      if (!path.startsWith("/")) return false;
+      if (path.startsWith("/o/")) return false;
+      if (path.startsWith("/@")) return false;
+      if (path.startsWith("/src/")) return false;
+      if (path.startsWith("/node_modules/")) return false;
+      if (path.startsWith("/.svelte-kit/")) return false;
+      if (path.startsWith("/_app/")) return false;
+      if (path.startsWith("/stream/")) return false;
+      if (path.includes("__data.json")) return false;
+      if (/\.(js|css|svg|png|json|ico|woff2?)$/.test(path)) return false;
+      return true;
+    }
+
+    window.__taskOpenGate = {
+      sent,
+      hold() {
+        held = true;
+      },
+      release() {
+        held = false;
+        for (const resolve of waiters.splice(0)) resolve();
+      },
+    };
+
+    window.fetch = async (input, init) => {
+      const path = pathname(input);
+      if (isApi(path)) {
+        sent.push(path);
+        if (held) await new Promise((resolve) => waiters.push(resolve));
+      }
+      return original(input, init);
+    };
+  });
   await page.context().addCookies([
     {
       name: "anx_ui_session_local",
@@ -106,8 +175,12 @@ async function installSlowCore(page) {
     const url = new URL(request.url());
     const path = decodeURIComponent(url.pathname);
 
+    if (request.isNavigationRequest()) {
+      calls.push({ path, at: Date.now() - started });
+      return route.continue();
+    }
+
     if (
-      request.isNavigationRequest() ||
       path.startsWith("/o/") ||
       path.startsWith("/@") ||
       path.startsWith("/src/") ||
@@ -121,13 +194,7 @@ async function installSlowCore(page) {
     }
 
     // The event streams must not be delayed or counted: they stay open.
-    if (path.startsWith("/stream/")) {
-      return route.fulfill({
-        status: 200,
-        contentType: "text/event-stream",
-        body: ": keepalive\n\n",
-      });
-    }
+    if (path.startsWith("/stream/")) return holdOpenStream(page, route);
 
     const body = (() => {
       if (path === "/meta/handshake" || path === "/version") {
@@ -180,41 +247,51 @@ async function installSlowCore(page) {
       return null;
     })();
 
-    calls.push({ path, at: Date.now() - started });
+    const call = { path, at: Date.now() - started, done: false };
+    calls.push(call);
     await new Promise((resolve) => setTimeout(resolve, LATENCY_MS));
     if (!body) {
-      return route.fulfill({
+      await route.fulfill({
         status: 404,
         contentType: "application/json",
         body: JSON.stringify({ error: { message: `Unmocked ${path}` } }),
       });
+    } else {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(body),
+      });
     }
-    return route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(body),
-    });
+    call.done = true;
   });
 
   return calls;
 }
 
 /**
- * Requests grouped into waves: a wave is a set issued without waiting for the
- * previous one. The count of waves is the depth of the waterfall, which is
- * what a reader actually waits through.
+ * Yield until fetches issued while the gate is closed stop arriving.
+ * A hop that needs a response cannot call fetch until the gate opens.
+ * @param {import("@playwright/test").Page} page
  */
-function waves(calls) {
-  const out = [];
-  for (const call of calls) {
-    const last = out.at(-1);
-    if (last && call.at - last.at < LATENCY_MS * 0.6) {
-      last.paths.push(call.path);
+async function settleHeldFetches(page) {
+  let quiet = 0;
+  for (let turn = 0; turn < 20; turn += 1) {
+    const seen = await page.evaluate(() => window.__taskOpenGate.sent.length);
+    await page.evaluate(
+      () =>
+        new Promise((resolve) => {
+          requestAnimationFrame(() => setTimeout(resolve, 0));
+        }),
+    );
+    const now = await page.evaluate(() => window.__taskOpenGate.sent.length);
+    if (now !== seen) {
+      quiet = 0;
       continue;
     }
-    out.push({ at: call.at, paths: [call.path] });
+    quiet += 1;
+    if (quiet >= 2) return;
   }
-  return out;
 }
 
 test("opening a task card costs one round trip, not four", async ({
@@ -236,57 +313,122 @@ test("opening a task card costs one round trip, not four", async ({
   await page.goto(TASKS);
   const row = page.locator('[data-work-ref="card:tune-combat"] a').first();
   await expect(row.first()).toBeVisible({ timeout: 60_000 });
-  // Let the list settle so the measurement covers the click, not the list.
-  await page.waitForTimeout(LATENCY_MS * 6);
+  await expect(page.getByText("Loading tasks…")).toHaveCount(0);
 
-  const before = calls.length;
+  const navBefore = calls.length;
+  const callMark = calls.length;
   const clickedAt = Date.now();
+  const fetchBefore = await page.evaluate(() => {
+    window.__taskOpenGate.hold();
+    return window.__taskOpenGate.sent.length;
+  });
   await row.click();
 
   // The reader's own definition of "open": the card's title is on screen.
   const heading = page.getByRole("heading", { name: CARD.title });
   await expect(heading).toBeVisible({ timeout: 30_000 });
   const titleMs = Date.now() - clickedAt;
+  /*
+   * These reads used to wait on each other: session, then the card, then the
+   * plan and the PM lists. Each one has to be issued while every response is
+   * still held. A read that needs another response cannot show up here, so
+   * the poll times out instead of calling that chain one wave.
+   */
+  await expect
+    .poll(
+      async () => {
+        const sent = await page.evaluate(
+          (start) => window.__taskOpenGate.sent.slice(start),
+          fetchBefore,
+        );
+        return {
+          card: sent.some((path) => /^\/work\/[^/]+$/.test(path)),
+          plan: sent.some((path) => /^\/cards\/[^/]+\/plan$/.test(path)),
+          observations: sent.some((path) => /\/observations$/.test(path)),
+          participants: sent.some((path) => /\/participants$/.test(path)),
+          decisions: sent.includes("/pm/decisions"),
+          actions: sent.includes("/pm/actions"),
+        };
+      },
+      { timeout: 15_000 },
+    )
+    .toEqual({
+      card: true,
+      plan: true,
+      observations: true,
+      participants: true,
+      decisions: true,
+      actions: true,
+    });
+  const concurrent = await page.evaluate(
+    (start) => window.__taskOpenGate.sent.slice(start),
+    fetchBefore,
+  );
 
   // And "loaded": the page has stopped saying it is still reading.
+  await page.evaluate(() => window.__taskOpenGate.release());
   await expect(page.getByText("Reading the card…")).toHaveCount(0, {
     timeout: 30_000,
   });
   const readMs = Date.now() - clickedAt;
-
-  const afterClick = calls.slice(before);
-  const depth = waves(afterClick).length;
+  // Chip resolution waits on the plan response. Snapshot only after that
+  // response is delivered, or a follow-up /refs/resolve is still pending
+  // and the check below never sees it.
+  await expect
+    .poll(() =>
+      calls
+        .slice(callMark)
+        .some((call) => /^\/cards\/[^/]+\/plan$/.test(call.path) && call.done),
+    )
+    .toBe(true);
+  await settleHeldFetches(page);
+  const afterPlan = await page.evaluate(
+    (start) => window.__taskOpenGate.sent.slice(start),
+    fetchBefore + concurrent.length,
+  );
+  const cardReadAfterResponse = afterPlan.filter(
+    (path) =>
+      /^\/work\/[^/]+$/.test(path) ||
+      /^\/cards\/[^/]+\/plan$/.test(path) ||
+      /\/observations$/.test(path) ||
+      /\/participants$/.test(path) ||
+      path === "/refs/resolve",
+  );
 
   const report = [
     `simulated latency per request: ${LATENCY_MS}ms`,
     `click → title visible:        ${titleMs}ms`,
     `click → card read:            ${readMs}ms`,
-    `requests after click:         ${afterClick.length}`,
-    `waterfall depth (waves):      ${depth}`,
-    `paths: ${afterClick.map((call) => call.path).join(", ")}`,
+    `concurrent requests:          ${concurrent.length}`,
+    `card reads that waited:       ${cardReadAfterResponse.length}`,
+    `paths: ${concurrent.join(", ")}`,
+    `next: ${afterPlan.join(", ")}`,
   ].join("\n");
   testInfo.annotations.push({ type: "task-open-profile", description: report });
   console.log(`\n--- task open profile ---\n${report}\n`);
 
   /*
-   * The structural claim, and the one that does not depend on this machine:
-   * after the click the reader waits through **one** wave of requests. Before
-   * this change it was four — `/auth/session`, then the card, then the plan
-   * and the PM lists, then the refs — with a blank page throughout.
+   * A shell refresh can still be scheduled after the gate opens. That is not
+   * the card waterfall. A card read that waited for a response lands here,
+   * and the poll above has already required the first copy while the gate
+   * was closed.
    */
-  expect(depth).toBeLessThanOrEqual(1);
+  expect(cardReadAfterResponse).toEqual([]);
 
   /*
    * And the title is on screen inside that one wave, because it is painted
-   * from the row the list already had rather than waited for.
+   * from the row the list already had rather than waited for. The millisecond
+   * caps include Playwright scheduling, so only the advisory job enforces them.
    */
-  expect(titleMs).toBeLessThan(LATENCY_MS * 2);
-  expect(readMs).toBeLessThan(LATENCY_MS * 3);
+  expectPerf(() => {
+    expect(titleMs).toBeLessThan(LATENCY_MS * 2);
+    expect(readMs).toBeLessThan(LATENCY_MS * 3);
+  });
 
   // Client-side navigation: no document request for the card page.
-  expect(afterClick.filter((call) => call.path.startsWith("/o/"))).toHaveLength(
-    0,
-  );
+  expect(
+    calls.slice(navBefore).filter((call) => call.path.startsWith("/o/")),
+  ).toHaveLength(0);
 });
 
 test("pointing at a row reads the card before the click", async ({ page }) => {
@@ -296,7 +438,7 @@ test("pointing at a row reads the card before the click", async ({ page }) => {
   await page.goto(TASKS);
   const row = page.locator('[data-work-ref="card:tune-combat"] a').first();
   await expect(row).toBeVisible({ timeout: 60_000 });
-  await page.waitForTimeout(LATENCY_MS * 6);
+  await expect(page.getByText("Loading tasks…")).toHaveCount(0);
 
   const before = calls.length;
   await row.hover();
@@ -313,15 +455,21 @@ test("pointing at a row reads the card before the click", async ({ page }) => {
   });
 
   // A second hover adds nothing: the card is cached, not re-read.
+  // The watcher stays up through hover and the turns that follow it. A
+  // one-second timeout started beforehand expires while hover is still
+  // waiting to be actionable, and a real prefetch then goes unseen.
   await page.goBack();
   await expect(row).toBeVisible({ timeout: 30_000 });
-  const beforeSecond = calls.length;
+  let cardReads = 0;
+  const onRequest = (request) => {
+    const path = decodeURIComponent(new URL(request.url()).pathname);
+    if (/^\/work\/[^/]+$/.test(path)) cardReads += 1;
+  };
+  page.on("request", onRequest);
   await row.hover();
-  await page.waitForTimeout(LATENCY_MS * 2);
-  expect(
-    calls
-      .slice(beforeSecond)
-      .filter((call) => /^\/work\/[^/]+$/.test(call.path)),
-  ).toHaveLength(0);
+  await nextPaint(page);
+  await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 0)));
+  page.off("request", onRequest);
+  expect(cardReads).toBe(0);
   expect(prefetched).toBeGreaterThan(before);
 });

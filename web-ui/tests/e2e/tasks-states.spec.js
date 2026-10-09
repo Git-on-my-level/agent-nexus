@@ -36,10 +36,12 @@ const stamp = (hours = 0) =>
 
 function deferred() {
   let resolve;
-  const promise = new Promise((r) => {
-    resolve = r;
+  let reject;
+  const promise = new Promise((res, rej) => {
+    resolve = res;
+    reject = rej;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 function freshness(status, extra = {}) {
@@ -308,15 +310,18 @@ async function installTasksApi(page, overrides = {}) {
     hold: {},
     fail: {},
     calls: [],
-    liveGate: null,
     liveCount: 0,
     ...overrides,
   };
-  // The list follows /stream/events. Each stream connection waits until the
-  // test sends one card event down it; `emitLive` releases the next one.
+  // One waiter per live connection. A shared gate let a connection that had
+  // already ended clear the next connection's gate, so emitLive either
+  // delivered twice or to nobody. Aborted connections leave the queue.
+  const liveWaiters = [];
+  let queuedLive = 0;
   api.emitLive = () => {
-    api.liveGate ??= deferred();
-    api.liveGate.resolve();
+    const waiter = liveWaiters.shift();
+    if (waiter) waiter.resolve();
+    else queuedLive += 1;
   };
 
   await page.addInitScript(() => {
@@ -406,9 +411,26 @@ async function installTasksApi(page, overrides = {}) {
     if (path === "/inbox") return json(200, { items: [], total: 0 });
     if (path === "/events") return json(200, { events: [] });
     if (path === "/stream/events") {
-      api.liveGate ??= deferred();
-      await api.liveGate.promise;
-      api.liveGate = null;
+      const waiter = deferred();
+      if (queuedLive > 0) {
+        queuedLive -= 1;
+        waiter.resolve();
+      } else liveWaiters.push(waiter);
+      const onFailed = (failed) => {
+        if (failed !== request) return;
+        page.off("requestfailed", onFailed);
+        const index = liveWaiters.indexOf(waiter);
+        if (index >= 0) liveWaiters.splice(index, 1);
+        waiter.reject(new Error("stream aborted"));
+      };
+      page.on("requestfailed", onFailed);
+      try {
+        await waiter.promise;
+      } catch {
+        await route.abort().catch(() => {});
+        return;
+      }
+      page.off("requestfailed", onFailed);
       api.liveCount += 1;
       const event = {
         id: `evt-live-${api.liveCount}`,
@@ -416,11 +438,13 @@ async function installTasksApi(page, overrides = {}) {
         ts: new Date().toISOString(),
         refs: ["card:release"],
       };
-      return route.fulfill({
-        status: 200,
-        contentType: "text/event-stream",
-        body: `id: ${event.id}\nevent: event\ndata: ${JSON.stringify({ event })}\n\n`,
-      });
+      return route
+        .fulfill({
+          status: 200,
+          contentType: "text/event-stream",
+          body: `id: ${event.id}\nevent: event\ndata: ${JSON.stringify({ event })}\n\n`,
+        })
+        .catch(() => {});
     }
     if (path === "/docs" || path === "/docs/search")
       return json(200, { documents: [] });
@@ -923,15 +947,20 @@ test("Tasks restores its list on reload while revalidation is held", async ({
   await expect(
     page.getByText(LONG_TITLE, { exact: true }).first(),
   ).toBeVisible();
+  // Hold the re-read instead of budgeting 3s of wall clock. Cached rows
+  // that are visible while this request is still outstanding were painted
+  // from the snapshot, which is what the old timeout was trying to prove.
+  const revalidation = deferred();
   await page.route("**/work?**", async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 8000));
+    await revalidation.promise;
     await route.fallback();
   });
   await page.reload();
-  await expect(page.getByText(LONG_TITLE, { exact: true }).first()).toBeVisible(
-    { timeout: 3000 },
-  );
+  await expect(
+    page.getByText(LONG_TITLE, { exact: true }).first(),
+  ).toBeVisible();
   await expect(page.getByText("Refreshing…", { exact: true })).toBeVisible();
+  revalidation.resolve();
 });
 
 for (const status of [401, 403]) {

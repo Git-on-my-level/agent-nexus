@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+import { expectPerf } from "../helpers/e2ePerf.js";
 import { installWorkspaceApi } from "../helpers/workspaceApiMock.js";
 
 /**
@@ -329,7 +330,14 @@ test("badges stay compact and show their full text at once on hover", async ({
   await expect(age).toHaveCSS("cursor", "auto");
   await age.hover();
   const tip = page.locator("[data-anx-tooltip]");
-  await expect(tip).toBeVisible({ timeout: 300 });
+  const hoveredAt = Date.now();
+  // The delay constant is asserted in the tooltip unit test. This checks the
+  // tip actually paints. The 300ms budget includes host scheduling, so only
+  // the advisory job enforces it.
+  await expect(tip).toBeVisible();
+  expectPerf(() => {
+    expect(Date.now() - hoveredAt).toBeLessThan(300);
+  });
   await expect(tip).toContainText("within the expected 3d");
   // And it goes away again when the pointer leaves.
   await page.mouse.move(0, 0);
