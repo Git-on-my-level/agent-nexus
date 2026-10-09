@@ -21,6 +21,12 @@ import { writable } from "svelte/store";
 /** Small enough to read as instant, large enough not to strobe on a sweep. */
 export const TOOLTIP_DELAY_MS = 60;
 
+/**
+ * How long a finger must stay down before the tip pins. A shorter tap pins
+ * it too: touch has no hover, and a native `title` does not appear on mobile.
+ */
+export const TOOLTIP_HOLD_MS = 450;
+
 export const activeTooltip = writable(
   /** @type {null | { text: string, rect: DOMRect }} */ (null),
 );
@@ -28,6 +34,8 @@ export const activeTooltip = writable(
 let timer = null;
 /** The node the pointer is on, so a stale timer cannot open the wrong tip. */
 let armed = null;
+/** A touch tip stays up after the finger lifts, until the next tap or scroll. */
+let pinned = null;
 
 function cancel() {
   if (timer) clearTimeout(timer);
@@ -35,16 +43,30 @@ function cancel() {
   armed = null;
 }
 
-function hide(node) {
-  if (armed && armed !== node) return;
+function hide(node, force = false) {
+  if (!force && pinned === node) return;
+  if (node && armed && armed !== node) return;
+  if (!force && pinned && pinned !== node) return;
+  pinned = null;
   cancel();
   activeTooltip.set(null);
+}
+
+function pin(node, text) {
+  const body = String(text ?? "").trim();
+  if (!body) return;
+  if (timer) clearTimeout(timer);
+  timer = null;
+  armed = node;
+  pinned = node;
+  activeTooltip.set({ text: body, rect: node.getBoundingClientRect() });
 }
 
 function show(node, text, delay) {
   const body = String(text ?? "").trim();
   if (!body) return;
   cancel();
+  pinned = null;
   armed = node;
   const open = () => {
     timer = null;
@@ -77,18 +99,80 @@ export function tooltip(node, text) {
   };
   apply();
 
-  const onEnter = () => show(node, current, TOOLTIP_DELAY_MS);
+  let hold = null;
+  let pressed = false;
+  const clearHold = () => {
+    if (hold) clearTimeout(hold);
+    hold = null;
+  };
+  const onEnter = (event) => {
+    // A touch sends pointerenter before pointerdown. Showing here would
+    // clear a pin before the second tap can dismiss it.
+    if (event.pointerType === "touch" || event.pointerType === "pen") return;
+    show(node, current, TOOLTIP_DELAY_MS);
+  };
   const onFocus = () => show(node, current, 0);
-  const onLeave = () => hide(node);
+  const onLeave = () => {
+    // Touch can emit pointerleave before pointerup. Cancelling there would
+    // swallow the tap that is supposed to reveal the exact time.
+    if (pressed) return;
+    clearHold();
+    hide(node);
+  };
+  const onCancel = () => {
+    pressed = false;
+    clearHold();
+    if (pinned !== node) hide(node);
+  };
   const onKey = (event) => {
-    if (event.key === "Escape") hide(node);
+    if (event.key === "Escape") hide(node, true);
+  };
+  const onDown = (event) => {
+    clearHold();
+    const touch = event.pointerType === "touch" || event.pointerType === "pen";
+    if (!touch || !current) {
+      pressed = false;
+      if (!touch) hide(node, true);
+      return;
+    }
+    // A tip on a link or button must still activate that control. A tip
+    // inside one, such as a timestamp in a conversation row, must not.
+    if (node.closest("a, button") !== node) event.preventDefault();
+    event.stopPropagation();
+    // A second tap dismisses the sentence the first tap pinned.
+    if (pinned === node) {
+      pressed = false;
+      hide(node, true);
+      return;
+    }
+    if (pinned) hide(pinned, true);
+    pressed = true;
+    hold = setTimeout(() => {
+      hold = null;
+      pressed = false;
+      pin(node, current);
+    }, TOOLTIP_HOLD_MS);
+  };
+  const onUp = (event) => {
+    const touch = event.pointerType === "touch" || event.pointerType === "pen";
+    if (!touch) return;
+    // A tap that reveals the exact time must not also activate a parent link.
+    if (pressed || hold || pinned === node) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    if (!pressed) return;
+    pressed = false;
+    if (!hold || pinned === node) return;
+    clearHold();
+    pin(node, current);
   };
 
   node.addEventListener("pointerenter", onEnter);
   node.addEventListener("pointerleave", onLeave);
-  // A tap should not leave a tooltip stranded over what it was pointing at.
-  node.addEventListener("pointercancel", onLeave);
-  node.addEventListener("pointerdown", onLeave);
+  node.addEventListener("pointercancel", onCancel);
+  node.addEventListener("pointerdown", onDown);
+  node.addEventListener("pointerup", onUp);
   node.addEventListener("focusin", onFocus);
   node.addEventListener("focusout", onLeave);
   node.addEventListener("keydown", onKey);
@@ -107,11 +191,13 @@ export function tooltip(node, text) {
       );
     },
     destroy() {
-      hide(node);
+      clearHold();
+      hide(node, true);
       node.removeEventListener("pointerenter", onEnter);
       node.removeEventListener("pointerleave", onLeave);
-      node.removeEventListener("pointercancel", onLeave);
-      node.removeEventListener("pointerdown", onLeave);
+      node.removeEventListener("pointercancel", onCancel);
+      node.removeEventListener("pointerdown", onDown);
+      node.removeEventListener("pointerup", onUp);
       node.removeEventListener("focusin", onFocus);
       node.removeEventListener("focusout", onLeave);
       node.removeEventListener("keydown", onKey);
@@ -121,6 +207,7 @@ export function tooltip(node, text) {
 
 /** Close whatever is open (a navigation, a scroll, a dialog opening). */
 export function hideTooltip() {
+  pinned = null;
   cancel();
   activeTooltip.set(null);
 }

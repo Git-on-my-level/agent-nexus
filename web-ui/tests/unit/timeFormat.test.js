@@ -61,10 +61,13 @@ describe("formatTime", () => {
     expect(exact).toContain(zone);
   });
 
-  it("returns the raw text for an unparseable relative value", () => {
+  it("returns empty for an unparseable value", () => {
     expect(formatTime("")).toBe("");
     expect(formatTime(null)).toBe("");
-    expect(formatTime("not-a-date")).toBe("not-a-date");
+    expect(formatTime("not-a-date")).toBe("");
+    expect(formatTime(Number.NaN)).toBe("");
+    expect(formatTime(new Date(Number.NaN))).toBe("");
+    expect(formatTime("not-a-date", { style: "exact" })).toBe("");
     expect(instantIso(null)).toBe("");
     expect(instantIso("")).toBe("");
   });

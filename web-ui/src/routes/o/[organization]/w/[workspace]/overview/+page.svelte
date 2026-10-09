@@ -618,8 +618,9 @@
           {:else}
             {#if model.work.truncated}
               <p class="px-3 pt-2 text-micro text-fg-muted">
-                Counts cover the {WORK_ROW_CAP.toLocaleString("en-US")} most recently
-                updated tasks.
+                Counts cover the {new Intl.NumberFormat("en-US").format(
+                  WORK_ROW_CAP,
+                )} most recently updated tasks.
               </p>
             {/if}
             {#if model.work.matrix.rows.length === 0}

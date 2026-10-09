@@ -6,7 +6,7 @@
   import { initializeAuthSession } from "$lib/authSession";
   import { restartSession } from "$lib/workspaceBootstrap";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
-  import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
+  import Time from "$lib/time/Time.svelte";
   import { resolveRefLink } from "$lib/refLinkModel.js";
   import {
     decisionTitle,
@@ -705,12 +705,13 @@
                             .get(ref)
                             .status.replaceAll("_", " ")}{/if}
                         {#if resolvedRefs.get(ref)?.lastMovedAt}
-                          · {formatTimestamp(
-                            resolvedRefs.get(ref).lastMovedAt,
-                          )}{/if}
+                          · <Time
+                            value={resolvedRefs.get(ref).lastMovedAt}
+                            {now}
+                          />{/if}
                       </span>
                     {/each}
-                    {formatTimestamp(item.created_at)}</span
+                    <Time value={item.created_at} {now} /></span
                   >
                 </a>
               {:else}
@@ -774,7 +775,7 @@
               >{/if}
             {#if resolvedRefs.get(ref)?.lastMovedAt}<span
                 class="text-micro text-fg-subtle"
-                >{formatTimestamp(resolvedRefs.get(ref).lastMovedAt)}</span
+                ><Time value={resolvedRefs.get(ref).lastMovedAt} {now} /></span
               >{/if}
           </div>
         {/each}
@@ -827,20 +828,16 @@
           {@const grouped = startsTimeGroup(turn, turns[index - 1]) && clock}
           <li class="pm-pair">
             {#if grouped}
-              <p
-                class="pm-group-head"
-                title={formatAbsoluteDateTime(turn.created_at)}
-              >
-                {clock}
+              <p class="pm-group-head">
+                <Time value={turn.created_at} style="clock" {now} />
               </p>
             {/if}
             <div class="pm-you">
               <p class="pm-bubble">{turn.text}</p>
               {#if clock}
-                <span
-                  class="pm-bubble-time"
-                  title={formatAbsoluteDateTime(turn.created_at)}>{clock}</span
-                >
+                <span class="pm-bubble-time">
+                  <Time value={turn.created_at} style="clock" {now} />
+                </span>
               {/if}
             </div>
             <div class="pm-answer">

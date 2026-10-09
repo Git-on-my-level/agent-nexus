@@ -135,8 +135,9 @@ export function formatTime(value, options = {}) {
   const { now = Date.now(), locale, style = "relative" } = options;
   if (value == null || value === "") return "";
   const then = instantMs(value);
-  if (then == null)
-    return style === "relative" || style === "exact" ? String(value) : "";
+  // Unparseable input is empty, including NaN and an Invalid Date. The
+  // component then shows its fallback instead of the words "NaN".
+  if (then == null) return "";
   const date = new Date(then);
   if (style === "exact") return formatExact(date, locale);
   if (style === "clock") return formatClock(date, locale);

@@ -3,8 +3,7 @@
 
   import { describeGrantAuthority } from "$lib/accessGrant.js";
   import Button from "$lib/components/Button.svelte";
-  import { formatAbsoluteDateTime } from "$lib/formatDate";
-  import { formatWait } from "$lib/inboxMailbox.js";
+  import Time from "$lib/time/Time.svelte";
 
   /**
    * One agent asking for a grant, with the reason it gave.
@@ -36,10 +35,11 @@
   let handle = $derived(
     request?.username && request.username !== who ? request.username : "",
   );
-  let askedAgo = $derived.by(() => {
-    const at = Date.parse(request?.created_at ?? "");
-    return Number.isFinite(at) ? formatWait(Math.max(0, now - at)) : "";
-  });
+  let askedAt = $derived(
+    Number.isFinite(Date.parse(request?.created_at ?? ""))
+      ? request.created_at
+      : "",
+  );
 
   async function startConfirm() {
     confirming = true;
@@ -79,13 +79,10 @@
         <dt class="text-fg-subtle">Host</dt>
         <dd class="truncate text-fg-muted">{hostSlug}</dd>
       {/if}
-      {#if askedAgo}
+      {#if askedAt}
         <dt class="text-fg-subtle">Asked</dt>
-        <dd
-          class="text-fg-muted"
-          title={formatAbsoluteDateTime(request.created_at)}
-        >
-          {askedAgo === "<1m" ? "just now" : `${askedAgo} ago`}
+        <dd class="text-fg-muted">
+          <Time value={askedAt} {now} />
         </dd>
       {/if}
     </dl>

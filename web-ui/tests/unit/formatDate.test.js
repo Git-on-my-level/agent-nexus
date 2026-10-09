@@ -44,7 +44,7 @@ describe("formatDate", () => {
   it("handles missing and invalid inputs", () => {
     expect(formatTimestamp("")).toBe("");
     expect(formatTimestamp(null)).toBe("");
-    expect(formatTimestamp("not-a-date")).toBe("not-a-date");
+    expect(formatTimestamp("not-a-date")).toBe("");
     expect(isoToDatetimeLocal("")).toBe("");
     expect(isoToDatetimeLocal("not-a-date")).toBe("");
     expect(datetimeLocalToIso("")).toBe("");

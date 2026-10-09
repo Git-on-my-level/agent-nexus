@@ -7,10 +7,12 @@ import { describe, expect, it } from "vitest";
 /**
  * One formatter for a timestamp, enforced.
  *
- * Display text goes through `src/lib/time`. A second `toLocaleDateString`,
- * a sliced ISO string, or a hand-built "UTC" clock is how the dashboard
- * ended up showing `2026-10-05 05:56 UTC`. Wire timestamps (`toISOString`
- * sent to the API) are not display and are not flagged.
+ * Display text goes through `src/lib/time`. Any `toLocaleString`,
+ * `toLocaleDateString`, `toLocaleTimeString`, `Intl.DateTimeFormat`,
+ * `Intl.RelativeTimeFormat`, or a hand-built "ago" / "min ago" phrase
+ * outside that module is how the dashboard ended up showing
+ * `2026-10-05 05:56 UTC`. Wire timestamps (`toISOString` sent to the API)
+ * and `Intl.NumberFormat` counts are not display and are not flagged.
  *
  * A file that formats a date for a reason other than showing an instant
  * starts with `time-guard: not-display: <reason>`.
@@ -19,20 +21,29 @@ import { describe, expect, it } from "vitest";
 const root = fileURLToPath(new URL("../../src", import.meta.url));
 
 const DISPLAY = [
-  /toLocaleDateString\s*\(/,
-  /toLocaleTimeString\s*\(/,
-  /toLocaleString\s*\(\s*\)/,
-  /toLocaleString\s*\(\s*(?:undefined|locale)\b/,
+  /toLocale(?:Date|Time)?String\s*\(/,
+  /Intl\.DateTimeFormat/,
+  /Intl\.RelativeTimeFormat/,
+  /\$\{[^}\n]*\}\s*(?:[A-Za-z]+\s+)?ago\b/,
+  /\{[^{}#/\n][^}\n]*\}\s*ago\b/,
+  /`[^`\n]*\bmin ago\b/,
+  /["'][^"'\n]*\bmin ago\b/,
+  /\+\s*["'`][^"'`\n]*\bago\b/,
   /hour\s*:\s*["'](?:numeric|2-digit)/,
   /\.getHours\s*\(/,
-  /new\s+Intl\.DateTimeFormat/,
-  /Intl\.RelativeTimeFormat/,
   /toISOString\(\)\s*\.(?:slice|replace|split|substring)/,
   /(?:"|'|`) UTC/,
   /\+\s*(?:"|'|`) UTC/,
   /timeZoneName\s*:/,
   /hour12\s*:/,
 ];
+
+function codeOnly(source) {
+  return source
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^[ \t]*\/\/[^\n]*/gm, "");
+}
 
 function sourceFiles(dir = root, prefix = "src") {
   const out = [];
@@ -69,7 +80,8 @@ function exemption(file, source) {
 }
 
 function hits(source) {
-  return DISPLAY.filter((pattern) => pattern.test(source)).map(
+  const code = codeOnly(source);
+  return DISPLAY.filter((pattern) => pattern.test(code)).map(
     (pattern) => pattern.source,
   );
 }
@@ -87,6 +99,29 @@ describe("timestamps are formatted in one module", () => {
       if (found.length) offenders.push(`${file}: ${found.join(", ")}`);
     }
     expect(offenders).toEqual([]);
+  });
+
+  it("catches each way to format a timestamp by hand", () => {
+    const samples = [
+      'new Date(v).toLocaleString("en-US")',
+      "new Date(v).toLocaleDateString()",
+      "new Date(v).toLocaleTimeString()",
+      'new Intl.DateTimeFormat("en-US").format(d)',
+      'Intl.RelativeTimeFormat("en").format(-1, "day")',
+      "`${minutes} min ago`",
+      "`${hours} h ago`",
+      "{askedAgo} ago",
+      '"15 min ago"',
+      'minutes + " min ago"',
+    ];
+    for (const sample of samples) {
+      expect(hits(sample), sample).not.toEqual([]);
+    }
+    expect(hits("value.toISOString()")).toEqual([]);
+    expect(hits('new Intl.NumberFormat("en-US").format(n)')).toEqual([]);
+    expect(
+      hits("/* ${minutes} min ago */\nconst wire = value.toISOString();"),
+    ).toEqual([]);
   });
 
   it("requires a reason on an exemption", () => {

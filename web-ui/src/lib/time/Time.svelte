@@ -3,9 +3,10 @@
    * One timestamp, everywhere.
    *
    * The words come from `formatTime`. The machine-readable instant is
-   * `datetime`. Hover uses the shared tooltip; the title attribute is the
-   * same sentence for a long-press. The accessible name is the full local
-   * date and time with the timezone abbreviation.
+   * `datetime`. Hover uses the shared tooltip. A tap or a long-press on
+   * touch pins that same sentence, because a native `title` does not show
+   * on mobile. The accessible name is the full local date and time with
+   * the timezone abbreviation.
    *
    * Omit `now` and the label follows the shared clock. Pass `now` from a
    * test or a fixture that has already frozen the clock.
