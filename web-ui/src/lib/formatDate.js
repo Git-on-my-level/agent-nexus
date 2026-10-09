@@ -1,99 +1,35 @@
 /**
- * Format an ISO 8601 instant as a local calendar date and time (for triage surfaces).
- * Returns "" for null/undefined inputs; returns the raw value if not parseable.
+ * Display wrappers around `time/format.js`.
+ *
+ * New code should render `<Time>` or call `formatTime` directly. These names
+ * stay so a sentence built in a module — a provenance line, a core message
+ * with an ISO instant in it — does not grow a second formatter.
+ *
+ * The relative form is "just now", "15 min ago", "3 h ago", "yesterday",
+ * then a short local date ("Oct 5", or "Oct 5, 2025" in another year).
+ * Future times read "in 10 min" or "tomorrow". Do not prefix the result
+ * with "on" or "at": that reads as "archived on 3 h ago". Word the sentence
+ * so both forms work, and let `<Time>` carry the exact local instant.
  */
+
+export {
+  datetimeLocalToIso,
+  formatElapsed,
+  formatTime,
+  instantIso,
+  isoToDatetimeLocal,
+} from "$lib/time/format.js";
+
+import { formatTime } from "$lib/time/format.js";
+
 export function formatAbsoluteDateTime(isoString) {
-  if (!isoString) return "";
-  const date = new Date(isoString);
-  if (isNaN(date.getTime())) return String(isoString);
-
-  return date.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatTime(isoString, { style: "exact" });
 }
 
-/**
- * Format an ISO 8601 instant as a local calendar date, with no time of day.
- * Returns "" for null/undefined or unparseable inputs.
- *
- * For dates where the hour carries no meaning (when someone joined, when a
- * grant was made), so the reading line is not padded with "4:00 PM".
- */
 export function formatAbsoluteDate(isoString) {
-  if (!isoString) return "";
-  const date = new Date(isoString);
-  if (isNaN(date.getTime())) return "";
-
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatTime(isoString, { style: "date" });
 }
 
-/**
- * Format an ISO 8601 timestamp as a human-readable relative or absolute date.
- * Returns "" for null/undefined inputs; returns the raw value if not parseable.
- *
- * The return value switches form: relative under 7 days ("just now", "3h ago"),
- * absolute beyond it ("Mar 5, 2026"). Callers must NOT prefix it with "on" or
- * "at" — that reads as "archived on 3h ago". Word the sentence so both forms
- * work ("archived 3h ago" / "archived Mar 5, 2026"), and pair it with
- * `formatAbsoluteDateTime` in a `title` when the exact instant matters.
- */
-export function formatTimestamp(isoString) {
-  if (!isoString) return "";
-  const date = new Date(isoString);
-  if (isNaN(date.getTime())) return String(isoString);
-
-  const now = new Date();
-  const diffMs = now - date;
-  const absDiffMs = Math.abs(diffMs);
-  const absDiffSec = Math.floor(absDiffMs / 1000);
-  const absDiffMin = Math.floor(absDiffSec / 60);
-  const absDiffHour = Math.floor(absDiffMin / 60);
-  const absDiffDay = Math.floor(absDiffHour / 24);
-
-  const isFuture = diffMs < 0;
-
-  if (absDiffSec < 60) return isFuture ? "in a moment" : "just now";
-  if (absDiffMin < 60)
-    return isFuture ? `in ${absDiffMin}m` : `${absDiffMin}m ago`;
-  if (absDiffHour < 24)
-    return isFuture ? `in ${absDiffHour}h` : `${absDiffHour}h ago`;
-  if (absDiffDay < 7)
-    return isFuture ? `in ${absDiffDay}d` : `${absDiffDay}d ago`;
-
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-/**
- * Convert an ISO 8601 string to the value expected by <input type="datetime-local">.
- * Outputs in the user's local timezone.
- */
-export function isoToDatetimeLocal(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "";
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-/**
- * Convert a datetime-local input value (YYYY-MM-DDTHH:MM) back to ISO 8601.
- * Returns "" for empty/invalid values.
- */
-export function datetimeLocalToIso(local) {
-  if (!local) return "";
-  const d = new Date(local);
-  if (isNaN(d.getTime())) return "";
-  return d.toISOString();
+export function formatTimestamp(isoString, now = Date.now()) {
+  return formatTime(isoString, { now, style: "relative" });
 }

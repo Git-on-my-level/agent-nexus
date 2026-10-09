@@ -482,3 +482,33 @@ The browser spec covers concurrent, stale, closed, inaccessible, recovered, and
 agent-scoped views at desktop, tablet, and mobile widths using synthetic API
 responses. Run it with the existing Playwright configuration and a supported
 browser before qualifying a release.
+
+## Reliable list loading
+
+Inbox, Overview and Tasks retain successful display snapshots per organization,
+workspace and reader. The browser stores a versioned cache with at most twelve
+entries and two million UTF-16 code units; oversized entries are evicted. Entries
+expire after one day, revalidate on navigation, and clear on sign-out or a change
+of authenticated principal. Storage denial and quota errors fall back to memory.
+These snapshots are display data, never authorization or mutation inputs.
+An authorization denial (401/403) revokes the reader's workspace snapshots and
+clears mounted views, including when the denial comes from the sidebar or an
+incremental read. Pending reads cannot restore revoked data. Confirmed Inbox
+responses, decision answers and archives update persisted snapshots immediately;
+reads started before those confirmations cannot overwrite them.
+
+An initial read allows 45 seconds so an idle backend can wake without the client
+aborting after five seconds. Network failures and HTTP 502/503/504 retry after
+1, 2, 4 and then at most 8 seconds. Retries share a 30-second failure window,
+including outstanding attempts; subsequent attempts cannot extend it. A stalled
+initial read therefore surfaces an error at 45 seconds, while repeated fast
+failures surface after about 30 seconds. Other HTTP failures surface immediately.
+Cached rows or count-sized skeletons stay visible through failures. Reads cancel
+on navigation, and events arriving during a read coalesce into one follow-up.
+Only reads use this policy; writes and authentication exchanges never auto-replay.
+
+Keep upstream readiness/wake budgets below the initial client allowance. Inspect
+backend readiness and response timing before adding warm-up requests: startup
+storage initialization already finishes before HTTP listens, and extra Inbox
+reads compete with the first real read. This client policy does not replace a
+deployment warm-up or establish a cause for production cold-read latency.

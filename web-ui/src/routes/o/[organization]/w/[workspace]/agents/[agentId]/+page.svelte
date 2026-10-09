@@ -9,7 +9,6 @@
     agentPresentationState,
     agentStateLabel,
     askKindLabel,
-    formatAge,
     formatDurationSeconds,
     inboxAskPath,
     isRunActive,
@@ -22,7 +21,8 @@
   import { agentRoster, startAgentRoster } from "$lib/agentRoster.js";
   import { authenticatedAgent } from "$lib/authSession";
   import { coreClient } from "$lib/coreClient";
-  import { formatAbsoluteDateTime } from "$lib/formatDate";
+  import { formatTime } from "$lib/time/format.js";
+  import Time from "$lib/time/Time.svelte";
   import WorkSummary from "$lib/components/WorkSummary.svelte";
   import { workSummaryModel } from "$lib/workSummary.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
@@ -99,7 +99,7 @@
       ask,
       href: inboxAskPath(ask),
       since: ask.created_at,
-      wait: formatAge(ask.created_at, now),
+      wait: formatTime(ask.created_at, { now, style: "relative" }),
     })),
   );
   let runs = $derived(detail?.recent_runs ?? []);
@@ -488,13 +488,7 @@
                 “{agent.last_progress_note}”
                 {#if agent.last_progress_at}
                   <span class="text-fg-subtle"
-                    >· <time
-                      datetime={agent.last_progress_at}
-                      title={formatAbsoluteDateTime(agent.last_progress_at)}
-                      >{formatAge(agent.last_progress_at, now) === "<1m"
-                        ? "just now"
-                        : `${formatAge(agent.last_progress_at, now)} ago`}</time
-                    ></span
+                    >· <Time value={agent.last_progress_at} {now} /></span
                   >
                 {/if}
               </p>
@@ -519,13 +513,7 @@
             {/if}
             <p class="text-micro text-fg-subtle">
               {#if agent.last_signal_at}
-                Last signal <time
-                  datetime={agent.last_signal_at}
-                  title={formatAbsoluteDateTime(agent.last_signal_at)}
-                  >{formatAge(agent.last_signal_at, now) === "<1m"
-                    ? "just now"
-                    : `${formatAge(agent.last_signal_at, now)} ago`}</time
-                >
+                Last signal <Time value={agent.last_signal_at} {now} />
               {:else}
                 No signal yet: no run, note, write, or bridge check-in.
               {/if}
@@ -567,9 +555,7 @@
                     >
                       <td class="px-4 py-2">
                         <span class="inline-flex items-center gap-0.5">
-                          <span
-                            class="font-mono text-micro text-fg"
-                            title={`Started ${formatAbsoluteDateTime(run.started_at)}`}
+                          <span class="font-mono text-micro text-fg"
                             >{runLabel(run)}</span
                           >
                           <CopyButton
@@ -580,7 +566,11 @@
                         </span>
                         {#if run.started_at}
                           <p class="text-micro text-fg-subtle">
-                            started {formatAge(run.started_at, now)} ago
+                            started <Time
+                              value={run.started_at}
+                              {now}
+                              verb="started"
+                            />
                           </p>
                         {/if}
                       </td>
@@ -669,13 +659,7 @@
                       >
                     {/if}
                     <span aria-hidden="true">·</span>
-                    <time
-                      datetime={entry.at}
-                      title={formatAbsoluteDateTime(entry.at)}
-                      >{formatAge(entry.at, now) === "<1m"
-                        ? "just now"
-                        : `${formatAge(entry.at, now)} ago`}</time
-                    >
+                    <Time value={entry.at} {now} />
                     <RunAttribution attribution={entry.runAttribution} />
                   </p>
                   <p
@@ -746,8 +730,7 @@
                   </span>
                   <span
                     class="col-start-2 row-start-1 w-16 text-right text-micro tabular-nums text-fg-subtle sm:col-start-3"
-                    title={formatAbsoluteDateTime(card.updated_at)}
-                    >{formatAge(card.updated_at, now)}</span
+                    ><Time value={card.updated_at} {now} /></span
                   >
                 </li>
               {/each}
@@ -820,11 +803,8 @@
             {#if principal?.created_at}
               <div class="flex items-baseline justify-between gap-3">
                 <dt class="text-fg-subtle">Created</dt>
-                <dd
-                  class="text-fg-muted"
-                  title={formatAbsoluteDateTime(principal.created_at)}
-                >
-                  {formatAge(principal.created_at, now)} ago
+                <dd class="text-fg-muted">
+                  <Time value={principal.created_at} {now} />
                 </dd>
               </div>
             {/if}

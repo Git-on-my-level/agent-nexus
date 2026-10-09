@@ -146,19 +146,11 @@ function reviewDeadline(reviewBy, authoredAt, defaulted) {
 }
 
 /**
- * `3d ago`, `in 2d`, `just now` — the badge vocabulary as a phrase.
- *
- * `formatAge` already decides the units, and reusing it keeps "2m" on a card
- * and "2m ago" in a panel header the same reading. Unlike `formatTimestamp`
- * this never switches to a calendar date: a header says "written 9d ago"
- * because the elapsed time is the point, and the absolute instant is one hover
- * away.
+ * The same friendly instant every other surface shows: "2 min ago",
+ * "yesterday", then a short local date. The exact instant stays on the hover.
  */
 export function relativeAge(value, now = Date.now()) {
-  const age = formatAge(value, now);
-  if (!age) return "";
-  if (age === "now") return "just now";
-  return age.startsWith("in ") ? age : `${age} ago`;
+  return formatAge(value, now);
 }
 
 /**

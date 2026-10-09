@@ -47,13 +47,14 @@ function pointValue(value) {
  */
 export function formatChartValue(value) {
   if (!isNumber(value)) return "No value";
-  if (Number.isInteger(value)) return value.toLocaleString("en-US");
+  if (Number.isInteger(value))
+    return new Intl.NumberFormat("en-US").format(value);
   const magnitude = Math.abs(value);
   const digits = magnitude >= 100 ? 0 : magnitude >= 1 ? 1 : 2;
-  return value.toLocaleString("en-US", {
+  return new Intl.NumberFormat("en-US", {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
-  });
+  }).format(value);
 }
 
 /** Signed change with its direction, for the previous-period line. */

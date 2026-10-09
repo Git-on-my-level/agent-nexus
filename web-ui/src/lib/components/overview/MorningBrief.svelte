@@ -22,6 +22,7 @@
    * every row is a link to the surface that owns it. The band never answers
    * anything itself.
    */
+  import Time from "$lib/time/Time.svelte";
   import WorkSummary from "$lib/components/WorkSummary.svelte";
 
   let {
@@ -57,10 +58,7 @@
       <h2 id="overview-brief" class="brief__title">This morning</h2>
       {#if brief.generatedAt}
         <span class="brief__stamp"
-          >As of {new Date(brief.generatedAt).toLocaleTimeString(undefined, {
-            hour: "numeric",
-            minute: "2-digit",
-          })}</span
+          >As of <Time value={brief.generatedAt} style="clock" {now} /></span
         >
       {/if}
     </header>

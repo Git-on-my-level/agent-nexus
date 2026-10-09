@@ -2,7 +2,7 @@
   import { agentRegistry, findAgentSummary } from "$lib/actorSession";
   import AgentPresenceLine from "$lib/components/agents/AgentPresenceLine.svelte";
   import WorkSummary from "$lib/components/WorkSummary.svelte";
-  import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
+  import Time from "$lib/time/Time.svelte";
 
   /**
    * What the item is blocking and the latest progress note around it, so the
@@ -71,11 +71,10 @@
     {#if note}
       <p class="line-clamp-2 [overflow-wrap:anywhere]" data-inbox-last-note>
         <span class="text-fg">{noteAuthor || "Someone"}</span>
-        <span class="text-fg-subtle">{" · "}</span><time
-          datetime={note.ts}
-          title={formatAbsoluteDateTime(note.ts)}
-          >{formatTimestamp(note.ts)}</time
-        >: “{note.text}”
+        <span class="text-fg-subtle">{" · "}</span><Time
+          value={note.ts}
+          {now}
+        />: “{note.text}”
       </p>
     {:else if loading}
       <p class="text-fg-subtle">Reading the latest note…</p>

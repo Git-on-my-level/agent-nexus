@@ -256,6 +256,10 @@ export function completeAuthSession(
   state.generation += 1;
   state.initInflight = null;
   state.accessToken = "";
+  if (state.authenticatedAgent && !sameAgent(state.authenticatedAgent, agent)) {
+    clearWorkspaceViews();
+    clearWorkCache();
+  }
   state.authenticatedAgent = agent ?? null;
   state.ready = true;
   syncCurrentAuthStores(workspaceSlug, organizationSlug);
@@ -383,7 +387,7 @@ async function runInitializeAuthSession({
       if (generation !== state.generation) return null;
       const nextAgent = result.agent ?? null;
       const agentChanged = !sameAgent(previousAgent, nextAgent);
-      if (!nextAgent && previousAgent) {
+      if (agentChanged && previousAgent) {
         clearWorkspaceViews();
         clearWorkCache();
       }
@@ -413,7 +417,7 @@ async function runInitializeAuthSession({
         ? previousAgent
         : null;
       const agentChanged = !sameAgent(previousAgent, nextAgent);
-      if (!nextAgent && previousAgent) {
+      if (agentChanged && previousAgent) {
         clearWorkspaceViews();
         clearWorkCache();
       }

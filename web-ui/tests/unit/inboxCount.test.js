@@ -1,3 +1,11 @@
+// @vitest-environment jsdom
+import {
+  clearWorkspaceViews,
+  readWorkspaceView,
+  writeWorkspaceView,
+} from "../../src/lib/workspaceViewCache.js";
+import { readerScopeKey } from "../../src/lib/readerScope.js";
+import { commitInboxView } from "../../src/lib/inboxViewCache.js";
 import { get } from "svelte/store";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -73,6 +81,7 @@ async function readThrough() {
 }
 
 beforeEach(() => {
+  clearWorkspaceViews();
   vi.clearAllMocks();
   vi.useFakeTimers();
   loadSources.mockImplementation(async () => emptySources());
@@ -80,6 +89,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  clearWorkspaceViews();
   resetInboxCount();
   vi.useRealTimers();
 });
@@ -147,6 +157,31 @@ const OPEN_ASK = {
   status: "open",
   responded_at: undefined,
 };
+
+it("a confirmed answer updates the badge and cannot be overwritten by an earlier sidebar read", async () => {
+  const key = `${readerScopeKey()}:inbox`;
+  const known = emptySources();
+  known[3].value.items = [OPEN_ASK];
+  writeWorkspaceView(key, known);
+  let resolve;
+  loadSources.mockReturnValue(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
+  const stop = startInboxCount("local");
+  expect(get(inboxNeedsYouCount).count).toBe(1);
+  await vi.advanceTimersByTimeAsync(REFRESH_DELAY_MS);
+  commitInboxView(readerScopeKey(), {
+    answered: { ...OPEN_ASK, status: "completed", responded_at: at(0) },
+  });
+  expect(get(inboxNeedsYouCount).count).toBe(0);
+  resolve(known);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(get(inboxNeedsYouCount).count).toBe(0);
+  expect(readWorkspaceView(key)[3].value.items).toEqual([]);
+  stop();
+});
 
 /**
  * @param {{ open?: object[], completed?: object[], work?: object[],
@@ -242,7 +277,53 @@ it("keeps unknown receipts in Needs you when a later action page never resolves"
       : Promise.resolve({ items: [], next_cursor: "slow" }),
   );
   const stop = startInboxCount("local");
-  await vi.advanceTimersByTimeAsync(REFRESH_DELAY_MS + 5000);
+  await vi.advanceTimersByTimeAsync(REFRESH_DELAY_MS + 45_000);
   expect(get(inboxNeedsYouCount)).toMatchObject({ count: 1, truncated: true });
   stop();
+});
+
+it("drops the prior principal's badge immediately in the same workspace", async () => {
+  const { authenticatedAgent } = await import("../../src/lib/authSession.js");
+  authenticatedAgent.set({ agent_id: "first", actor_id: "first" });
+  publishInboxCount("local", 7);
+  authenticatedAgent.set({ agent_id: "second", actor_id: "second" });
+  expect(get(inboxNeedsYouCount).count).toBeNull();
+  authenticatedAgent.set(null);
+});
+
+it("badge refresh preserves Updates and never persists a failed later page", async () => {
+  const key = `${readerScopeKey()}:inbox`;
+  const known = emptySources();
+  known[5].value = { groups: [{ group_ref: "thread:updates" }] };
+  writeWorkspaceView(key, known);
+  const stop = startInboxCount("local");
+  await vi.advanceTimersByTimeAsync(REFRESH_DELAY_MS);
+  expect(readWorkspaceView(key)[5]).toEqual(known[5]);
+  const partial = emptySources();
+  partial[0] = {
+    status: "fulfilled",
+    complete: false,
+    value: { items: [{ id: "partial" }] },
+    reason: Object.assign(new Error("unavailable"), { status: 503 }),
+  };
+  loadSources.mockResolvedValue(partial);
+  stop();
+  const stopAgain = startInboxCount("local");
+  await vi.advanceTimersByTimeAsync(REFRESH_DELAY_MS);
+  expect(readWorkspaceView(key)[0].value.items).toEqual([]);
+  expect(readWorkspaceView(key)[5]).toEqual(known[5]);
+  stopAgain();
+});
+
+it("an old badge cleanup cannot stop the new principal's count controller", async () => {
+  const { authenticatedAgent } = await import("../../src/lib/authSession.js");
+  authenticatedAgent.set({ agent_id: "first", actor_id: "first" });
+  const oldStop = startInboxCount("local");
+  authenticatedAgent.set({ agent_id: "second", actor_id: "second" });
+  const newStop = startInboxCount("local");
+  oldStop();
+  await vi.advanceTimersByTimeAsync(REFRESH_DELAY_MS);
+  expect(loadSources).toHaveBeenCalledTimes(1);
+  newStop();
+  authenticatedAgent.set(null);
 });

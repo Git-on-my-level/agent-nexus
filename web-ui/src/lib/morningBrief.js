@@ -13,6 +13,7 @@
  * list row cannot disagree about what `no_plan` is called or how urgent it is.
  */
 
+import { formatTime } from "$lib/time/format.js";
 import { statusChip, summaryFromStatus } from "$lib/workSummary.js";
 
 const asText = (value) => String(value ?? "").trim();
@@ -45,12 +46,7 @@ export const BRIEF_SECTIONS = Object.freeze([
  * "nothing new since 08:12", so it wants a time of day, not a date.
  */
 export function briefClock(iso, locale = undefined) {
-  const at = Date.parse(asText(iso));
-  if (!Number.isFinite(at)) return "";
-  return new Date(at).toLocaleTimeString(locale, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatTime(iso, { style: "clock", locale });
 }
 
 /**

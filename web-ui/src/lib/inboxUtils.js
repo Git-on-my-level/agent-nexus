@@ -1,4 +1,5 @@
 import { parseTimestampMs } from "./dateUtils.js";
+import { formatTime } from "./time/format.js";
 
 export const INBOX_CATEGORY_ORDER = ["escalate", "ask", "review"];
 
@@ -182,20 +183,9 @@ function readNowTimestamp(options = {}) {
   return Number.isFinite(parsedNow) ? parsedNow : Date.now();
 }
 
-function formatAgeLabel(ageHours) {
-  if (!Number.isFinite(ageHours)) {
-    return "";
-  }
-
-  if (ageHours < 1) {
-    return "<1h old";
-  }
-
-  if (ageHours < 24) {
-    return `${Math.floor(ageHours)}h old`;
-  }
-
-  return `${Math.floor(ageHours / 24)}d old`;
+function formatAgeLabel(ageHours, now) {
+  if (!Number.isFinite(ageHours)) return "";
+  return formatTime(now - ageHours * 3_600_000, { now, style: "relative" });
 }
 
 export function deriveInboxUrgency(item, options = {}) {
@@ -233,7 +223,7 @@ export function deriveInboxUrgency(item, options = {}) {
     label: getInboxUrgencyLabel(level),
     score,
     ageHours,
-    ageLabel: formatAgeLabel(ageHours),
+    ageLabel: formatAgeLabel(ageHours, nowTs),
     hasSourceEventTime,
     sourceEventTime,
     inferredFrom: "kind + source event age",

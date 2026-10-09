@@ -23,7 +23,7 @@ func independentPrivacyRoute(p privacyRoutePolicy) bool {
 		return true
 	}
 	switch p.Method + " " + p.Path {
-	case "POST /pm/connect", "GET /pm/presence", "GET /health", "GET /livez", "GET /readyz", "GET /version", "GET /work/capabilities", "POST /pm/bindings", "POST /pm/ingress/discord", "POST /pm/ingress/telegram", "POST /hosts/{host_id}/bridge/check-in":
+	case "POST /pm/disconnect", "POST /pm/connect", "GET /pm/presence", "GET /health", "GET /livez", "GET /readyz", "GET /version", "GET /work/capabilities", "POST /pm/bindings", "POST /pm/ingress/discord", "POST /pm/ingress/telegram", "POST /hosts/{host_id}/bridge/check-in":
 		return true
 	}
 	return false

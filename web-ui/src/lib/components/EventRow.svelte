@@ -5,7 +5,7 @@
     principalRegistry,
   } from "$lib/actorSession";
   import ActorLabel from "$lib/components/ActorLabel.svelte";
-  import { formatTimestamp } from "$lib/formatDate";
+  import Time from "$lib/time/Time.svelte";
 
   let { row } = $props();
 
@@ -31,9 +31,11 @@
         nameClass="truncate text-meta font-medium text-fg group-hover/row:text-accent-text transition-colors"
       />
       <span class="text-micro text-fg-muted">·</span>
-      <span class="text-micro font-medium text-fg-muted">
-        {formatTimestamp(row?.ts) || "—"}
-      </span>
+      <Time
+        value={row?.ts}
+        fallback="—"
+        class="text-micro font-medium text-fg-muted"
+      />
       <span class="text-micro text-fg-muted">·</span>
       <span class="text-micro font-medium text-fg">{row?.label}</span>
     </div>

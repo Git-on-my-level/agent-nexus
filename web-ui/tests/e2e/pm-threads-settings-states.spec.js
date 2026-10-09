@@ -731,7 +731,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await page.goto(`${ROOT}/threads/${THREAD_ID}?tab=messages`);
       // No "on": formatTimestamp is relative under 7 days, so the old copy
       // read "was archived on 3h ago". See archived-copy-states.spec.js.
-      await expect(page.getByText(/was archived 3h ago/)).toBeVisible();
+      await expect(page.getByText(/was archived 3 h ago/)).toBeVisible();
       // Lifecycle is not editable from this diagnostic surface: the controls
       // were gated on a flag no route could set, so they never rendered.
       await expect(page.getByRole("button", { name: "Unarchive" })).toHaveCount(

@@ -17,6 +17,7 @@
     principalRegistry,
   } from "$lib/actorSession";
   import { formatTimestamp } from "$lib/formatDate";
+  import Time from "$lib/time/Time.svelte";
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
@@ -529,14 +530,18 @@
                   title={timelineMetaFull(event)}
                 >
                   {#if compact}
-                    <span class="tabular-nums"
-                      >{formatTimestamp(event.ts) || "—"}</span
-                    ><span class="text-fg-muted"
+                    <Time
+                      value={event.ts}
+                      fallback="—"
+                      class="tabular-nums"
+                    /><span class="text-fg-muted"
                       >{" "}· {actorName(event.actor_id)}</span
                     >
                   {:else}
-                    {actorName(event.actor_id)} · {formatTimestamp(event.ts) ||
-                      "—"}
+                    {actorName(event.actor_id)} · <Time
+                      value={event.ts}
+                      fallback="—"
+                    />
                   {/if}
                 </span>
                 {#if !timelineSelectMode}

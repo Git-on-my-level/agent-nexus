@@ -376,7 +376,7 @@ for (const [surface, path] of [
 
     // Hand-written and inside its review window: quiet, and dated.
     await expect(chip(report, "standing")).toHaveText(
-      /^Written by claude · 3d ago$/,
+      /^Written by claude · Oct 3$/,
     );
     await expect(
       report.locator('[data-report-panel="standing"]'),
@@ -384,7 +384,7 @@ for (const [surface, path] of [
 
     // Past the review deadline: distrust it at a glance, in words.
     await expect(chip(report, "milestones")).toHaveText(
-      /^May be stale · written 9d ago$/,
+      /^May be stale · written Sep 27$/,
     );
     await expect(
       report.locator('[data-report-panel="milestones"]'),

@@ -9,8 +9,7 @@
   import PmSetupPanel from "$lib/components/pm/PmSetupPanel.svelte";
   import { initializeAuthSession } from "$lib/authSession";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
-  import { formatAbsoluteDateTime } from "$lib/formatDate";
-  import { formatWait } from "$lib/inboxMailbox.js";
+  import Time from "$lib/time/Time.svelte";
   import {
     pmConnected,
     pmLastSeenLabel,
@@ -72,7 +71,7 @@
     !showSetup && (pmConnected(presence) || pmOffline(presence)),
   );
   let now = $state(Date.now());
-  let lastSeen = $derived(pmLastSeenLabel(presence, now, formatWait));
+  let lastSeen = $derived(pmLastSeenLabel(presence, now));
   let runsAs = $derived(
     [presence?.runner, presence?.host].filter(Boolean).join(" · "),
   );
@@ -171,16 +170,11 @@
         </div>
         <div class="min-w-0">
           <dt class="text-micro text-fg-subtle">Last seen</dt>
-          <dd
-            class="truncate text-fg"
-            title={presence?.lastSeen
-              ? formatAbsoluteDateTime(presence.lastSeen)
-              : undefined}
-          >
+          <dd class="truncate text-fg">
             {#if connected}
               Now
             {:else if lastSeen}
-              {lastSeen} ago
+              <Time value={presence.lastSeen} {now} />
             {:else}
               Not recorded
             {/if}

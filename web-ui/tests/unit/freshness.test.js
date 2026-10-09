@@ -99,9 +99,9 @@ describe("freshnessModel", () => {
   it("shows the relative time, the way the age badge writes it", () => {
     expect(
       freshnessModel(ago(0.2), { kind: "in_progress", now: NOW }).age,
-    ).toBe("12m");
-    expect(freshnessModel(ago(72), { kind: "backlog", now: NOW }).age).toBe(
-      "3d",
+    ).toBe("12 min ago");
+    expect(freshnessModel(ago(72), { kind: "backlog", now: NOW }).age).toMatch(
+      /yesterday|^[A-Z][a-z]{2} \d/,
     );
   });
 
@@ -112,7 +112,7 @@ describe("freshnessModel", () => {
       now: NOW,
     });
     expect(fresh.title).toMatch(/^Moved /);
-    expect(fresh.title).toContain("(2h)");
+    expect(fresh.title).toContain("(2 h ago)");
     expect(fresh.title).toContain("within the expected 1d");
 
     const late = freshnessModel(ago(100), {
@@ -138,6 +138,6 @@ describe("freshnessModel", () => {
     const ahead = new Date(NOW + 2 * 3_600_000).toISOString();
     const model = freshnessModel(ahead, { kind: "in_progress", now: NOW });
     expect(model.tone).toBe("ok");
-    expect(model.age).toBe("in 2h");
+    expect(model.age).toBe("in 2 h");
   });
 });

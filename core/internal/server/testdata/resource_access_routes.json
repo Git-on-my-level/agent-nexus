@@ -1200,5 +1200,11 @@
     "path": "/pm/connect",
     "policy": "independent",
     "reason": "Authenticated selected PM or verified host-derived reserved pm agent connects with bounded display labels only; no resource data."
+  },
+  {
+    "method": "POST",
+    "path": "/pm/disconnect",
+    "policy": "independent",
+    "reason": "Selected authenticated PM alone can reset onboarding and terminate unfinished PM turns. Returns connection state only; unrelated principals cannot reset or observe turn data."
   }
 ]

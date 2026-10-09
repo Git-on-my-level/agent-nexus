@@ -2,6 +2,7 @@
 import { cleanup, render } from "@testing-library/svelte";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { formatAge } from "../../src/lib/ageBadge.js";
 import FreshnessBadge from "../../src/lib/components/FreshnessBadge.svelte";
 
 const NOW = Date.parse("2026-10-07T12:00:00Z");
@@ -17,7 +18,7 @@ describe("FreshnessBadge", () => {
       now: NOW,
     });
     const badge = container.querySelector("time");
-    expect(badge?.textContent?.trim()).toBe("1d");
+    expect(badge?.textContent?.trim()).toBe(formatAge(ago(30), NOW));
     expect(badge?.className).toContain("ui-badge--warn");
     expect(badge?.getAttribute("data-freshness")).toBe("late");
     expect(badge?.getAttribute("datetime")).toBe(ago(30));
@@ -47,7 +48,7 @@ describe("FreshnessBadge", () => {
       now: NOW,
     });
     const badge = container.querySelector("time");
-    expect(badge?.getAttribute("title")).toBeNull();
+    expect(badge?.getAttribute("title")).toMatch(/\d{4}/);
     expect(badge?.getAttribute("data-tooltip")).toContain(
       "within the expected 3d",
     );

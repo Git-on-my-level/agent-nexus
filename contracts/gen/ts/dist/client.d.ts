@@ -220,6 +220,7 @@ export declare class AnxClient {
     pmDecisionsDispatch(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     pmDecisionsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     pmDecisionsList(options?: RequestOptions): Promise<InvokeResult>;
+    pmDisconnect(options?: RequestOptions): Promise<InvokeResult>;
     pmPresence(options?: RequestOptions): Promise<InvokeResult>;
     pmTurnsClaim(options?: RequestOptions): Promise<InvokeResult>;
     pmTurnsComplete(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

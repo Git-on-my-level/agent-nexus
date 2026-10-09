@@ -18,7 +18,7 @@
   import { inlineEditEscape } from "$lib/actions/inlineEditEscape.js";
   import { extractDocumentOutline } from "$lib/markdown.js";
   import { coreClient } from "$lib/coreClient";
-  import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
+  import Time from "$lib/time/Time.svelte";
   import { splitTypedRef } from "$lib/inboxUtils";
   import { bindWorkspaceHref, workspacePath } from "$lib/workspacePaths";
   import {
@@ -1203,10 +1203,8 @@
             />
           {/if}
           {#if document.trashed_at}
-            <!-- No "at": formatTimestamp is relative under 7 days ("3h ago"). -->
-            <span title={formatAbsoluteDateTime(document.trashed_at)}
-              >{formatTimestamp(document.trashed_at)}</span
-            >
+            <!-- No "at": a recent instant reads "3 h ago". -->
+            <Time value={document.trashed_at} />
           {/if}
         </p>
       </div>
@@ -1225,16 +1223,12 @@
       class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warn bg-warn-soft px-3 py-2 text-meta text-warn-text"
     >
       <p class="flex min-w-0 flex-1 flex-wrap items-center gap-x-1">
-        <!-- No "on" before formatTimestamp: it returns a relative string ("3h
-             ago") under 7 days and an absolute date beyond, so "archived on 3h
-             ago" read wrong. Without "on" both forms read correctly, and the
-             exact instant is available from the title. -->
-        <span
-          class="text-warn-text"
-          title={formatAbsoluteDateTime(document.archived_at)}
-        >
-          This document was archived {formatTimestamp(document.archived_at) ||
-            "—"}
+        <!-- No "on": a recent instant reads "3 h ago". -->
+        <span class="text-warn-text">
+          This document was archived <Time
+            value={document.archived_at}
+            fallback="—"
+          />
         </span>
         {#if document.archived_by}
           <ActorLabel
@@ -1292,7 +1286,7 @@
               <p
                 class="flex flex-wrap items-center gap-x-1 text-micro text-fg-muted"
               >
-                <span>{formatTimestamp(rev.created_at)}</span>
+                <Time value={rev.created_at} />
                 <span aria-hidden="true">·</span>
                 <ActorLabel
                   label={actorName(rev.created_by)}
@@ -1670,9 +1664,7 @@
                 >v{displayedRevision?.revision_number ?? "—"}</span
               >
               <span aria-hidden="true">·</span>
-              <span
-                >{formatTimestamp(displayedRevision?.created_at) || "—"}</span
-              >
+              <Time value={displayedRevision?.created_at} fallback="—" />
               <span aria-hidden="true">·</span>
               <ActorLabel
                 label={actorName(displayedRevision?.created_by)}
@@ -1703,9 +1695,9 @@
               class="mt-3 flex items-center gap-2 rounded-md bg-warn-soft px-3 py-2 text-micro text-warn-text"
             >
               <span
-                >Viewing revision {selectedRevision.revision_number} from {formatTimestamp(
-                  selectedRevision.created_at,
-                )}</span
+                >Viewing revision {selectedRevision.revision_number} from <Time
+                  value={selectedRevision.created_at}
+                /></span
               >
               <button
                 class="cursor-pointer ml-auto font-medium underline"

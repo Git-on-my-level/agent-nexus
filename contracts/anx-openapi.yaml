@@ -540,6 +540,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PMPresence'
+  /pm/disconnect:
+    post:
+      operationId: pmDisconnect
+      summary: Reset workspace PM onboarding after explicit uninstall
+      tags: [pm]
+      x-anx-surface: canonical
+      x-anx-command-id: pm.disconnect
+      x-anx-cli-path: pm disconnect
+      x-anx-why: Stop expecting the selected PM to return after explicit uninstall.
+      x-anx-agent-notes: Idempotent. Only the selected PM principal may reset onboarding. Existing decisions remain readable and answerable. Unfinished turns fail with failure_kind pm_not_onboarded. A later explicit pm connect re-enables onboarding; idle claims and heartbeats cannot undo the reset.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `PMPresence` with state not_onboarded.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, unavailable]
+      x-anx-concepts: [agents]
+      x-anx-stability: beta
+      description: Authenticated selected PM principal only, including when already disconnected. Ordinary silence remains offline. Reset is durable across restarts and preserves historical conversations, decisions and approvals.
+      responses:
+        '200':
+          description: Workspace PM is not set up
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMPresence'
   /pm/presence:
     get:
       operationId: pmPresence
@@ -8980,7 +9004,7 @@ components:
         failure_kind:
           type: string
           readOnly: true
-          description: Machine-readable failure reason; expired means the turn deadline elapsed. Absent for failures without a classified reason. Also returned in error.details for turn_closed 409 responses; expiry messages say expired at followed by the RFC3339 deadline.
+          description: Machine-readable failure reason; pm_not_onboarded means explicit uninstall terminated unfinished PM work; expired means the turn deadline elapsed. Absent for failures without a classified reason. Also returned in error.details for turn_closed 409 responses; expiry messages say expired at followed by the RFC3339 deadline.
         claimed:
           type: boolean
           readOnly: true
@@ -9582,7 +9606,7 @@ components:
         last_seen: {type: string, format: date-time, nullable: true}
         runner: {type: string, nullable: true, maxLength: 80}
         host: {type: string, nullable: true, maxLength: 80}
-      description: Registered workspace PM with at least one accepted local connection is onboarded. Connected expires after 90 seconds; offline remains onboarded. An unconnected registered PM is not_onboarded.
+      description: Registered workspace PM with at least one accepted local connection is onboarded. Connected expires after 90 seconds; offline remains onboarded until explicit disconnect. An unconnected or explicitly disconnected registered PM is not_onboarded.
     PMConnectRequest:
       type: object
       additionalProperties: false

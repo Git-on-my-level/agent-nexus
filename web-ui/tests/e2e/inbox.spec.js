@@ -903,7 +903,7 @@ test("an empty Needs you reads as one compact line", async ({ page }) => {
     "2 things being watched",
   );
   await expect(empty.locator("[data-inbox-empty-handled]")).toHaveText(
-    "Last handled 3h ago",
+    "Last handled 3 h ago",
   );
   await empty.locator("[data-inbox-empty-watching]").click();
   await expect(page).toHaveURL(/mailbox=watching/);

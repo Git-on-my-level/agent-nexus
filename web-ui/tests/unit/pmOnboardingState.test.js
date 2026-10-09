@@ -379,7 +379,7 @@ describe("PM status copy", () => {
         NOW,
         formatWait,
       ),
-    ).toBe("PM offline, last seen 5m ago, on studio");
+    ).toBe("PM offline, last seen 5 min ago, on studio");
   });
 
   it("never renders a bare separator for a runner or host core did not report", () => {

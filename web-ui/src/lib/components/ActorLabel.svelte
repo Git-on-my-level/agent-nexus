@@ -1,7 +1,7 @@
 <script>
   import ActorAvatar from "$lib/components/ActorAvatar.svelte";
   import { truncateActorDisplayName } from "$lib/avatarModel.js";
-  import { formatTimestamp } from "$lib/formatDate";
+  import Time from "$lib/time/Time.svelte";
 
   /** @type {{
    *   label?: string,
@@ -31,7 +31,6 @@
       ? truncateActorDisplayName(label)
       : String(label ?? "").trim() || "—",
   );
-  let tsLine = $derived(timestamp ? formatTimestamp(timestamp) || "—" : "");
 </script>
 
 <span class="inline-flex min-w-0 items-center gap-2 {extraClass}">
@@ -42,10 +41,12 @@
     {/if}
     <span class="min-w-0 truncate {nameClass}" title={label}>{displayLine}</span
     >
-    {#if tsLine}
-      <span class="shrink-0 text-micro leading-tight text-fg-muted"
-        >{tsLine}</span
-      >
+    {#if timestamp}
+      <Time
+        value={timestamp}
+        fallback="—"
+        class="shrink-0 text-micro leading-tight text-fg-muted"
+      />
     {/if}
   </span>
 </span>

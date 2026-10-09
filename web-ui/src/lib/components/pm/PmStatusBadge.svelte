@@ -1,6 +1,5 @@
 <!-- worksummary-guard: not-a-card-state: Reports whether a PM agent is running on the reader's own computer, which is a connection state and has nothing to do with any card. -->
 <script>
-  import { formatWait } from "$lib/inboxMailbox.js";
   import { pmConnected, pmStatusSummary } from "$lib/pm/onboardingState.js";
 
   /**
@@ -16,7 +15,7 @@
   } = $props();
 
   let connected = $derived(pmConnected(presence));
-  let summary = $derived(pmStatusSummary(presence, now, formatWait));
+  let summary = $derived(pmStatusSummary(presence, now));
 </script>
 
 {#if summary}

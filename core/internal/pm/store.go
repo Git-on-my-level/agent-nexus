@@ -258,6 +258,13 @@ func (s *Store) insertTurn(ctx context.Context, t Turn, maxQueued int) (bool, er
 	if _, err = tx.ExecContext(ctx, "UPDATE pm_records SET revision=revision WHERE kind='turn' AND id=?", t.ID); err != nil {
 		return false, err
 	}
+	var disconnected bool
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM pm_presence WHERE workspace_id=? AND actor_id=? AND signal='disconnect')`, t.WorkspaceID, t.AgentActorID).Scan(&disconnected); err != nil {
+		return false, err
+	}
+	if disconnected {
+		return false, ErrNotOnboarded
+	}
 	var existing string
 	err = tx.QueryRowContext(ctx, "SELECT id FROM pm_records WHERE kind='turn' AND id=?", t.ID).Scan(&existing)
 	if err == nil {

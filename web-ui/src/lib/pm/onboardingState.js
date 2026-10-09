@@ -12,6 +12,8 @@ import { anxCommand } from "$lib/setup/setupPrompt.js";
  * state; this module decides what it means on screen.
  */
 
+import { formatTime } from "$lib/time/format.js";
+
 /** Computed PM state, as core reports it. */
 export const PM_STATES = Object.freeze({
   /** No PM agent has ever connected to this workspace. */
@@ -238,16 +240,15 @@ export function pmUninstallCommand({ cliBaseUrl = "" } = {}) {
  *
  * @param {{ state?: string, lastSeen?: string, runner?: string, host?: string } | null} presence
  * @param {number} now
- * @param {(ms: number) => string} formatElapsed
  */
-export function pmStatusSummary(presence, now = Date.now(), formatElapsed) {
+export function pmStatusSummary(presence, now = Date.now()) {
   const state = text(presence?.state);
   if (state === PM_STATES.CONNECTED) {
     return `PM connected${pmWhereSuffix(presence)}`;
   }
   if (state === PM_STATES.OFFLINE) {
-    const since = pmLastSeenLabel(presence, now, formatElapsed);
-    return `PM offline${since ? `, last seen ${since} ago` : ""}${pmWhereSuffix(presence)}`;
+    const since = pmLastSeenLabel(presence, now);
+    return `PM offline${since ? `, last seen ${since}` : ""}${pmWhereSuffix(presence)}`;
   }
   return "";
 }
@@ -263,17 +264,14 @@ function pmWhereSuffix(presence) {
 }
 
 /**
- * How long ago the PM was last seen (`4m`, `2d 3h`), or "" when the timestamp
- * is missing, unparseable or in the future.
+ * How long ago the PM was last seen, in the same words as every other
+ * instant, or "" when the timestamp is missing, unparseable or in the future.
  *
  * @param {{ lastSeen?: string } | null} presence
  * @param {number} now
- * @param {(ms: number) => string} formatElapsed
  */
-export function pmLastSeenLabel(presence, now = Date.now(), formatElapsed) {
+export function pmLastSeenLabel(presence, now = Date.now()) {
   const at = Date.parse(text(presence?.lastSeen));
-  if (!Number.isFinite(at)) return "";
-  const elapsed = now - at;
-  if (elapsed < 0) return "";
-  return typeof formatElapsed === "function" ? formatElapsed(elapsed) : "";
+  if (!Number.isFinite(at) || at > now) return "";
+  return formatTime(at, { now, style: "relative" });
 }

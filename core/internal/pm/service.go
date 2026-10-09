@@ -91,7 +91,7 @@ func (s *Service) authorize(ctx context.Context, p Principal, permission, ref st
 		}
 		return ErrForbidden
 	}
-	if permission != "pm.access" && permission != "pm.presence" && (permission != "pm.respond" || ctx.Value(bootstrapConnectionKey{}) != true) && permission != "pm.connect" && permission != "pm.read" && permission != "pm.approve" && !strings.HasPrefix(permission, "pm.action.") {
+	if permission != "pm.access" && permission != "pm.presence" && (permission != "pm.respond" || ctx.Value(bootstrapConnectionKey{}) != true) && permission != "pm.connect" && permission != "pm.disconnect" && permission != "pm.read" && permission != "pm.approve" && !strings.HasPrefix(permission, "pm.action.") {
 		if err := s.RequireOnboarded(ctx); err != nil {
 			return err
 		}

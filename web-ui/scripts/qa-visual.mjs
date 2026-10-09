@@ -1705,6 +1705,10 @@ async function captureScene(browser, baseUrl, scene, outDir) {
     deviceScaleFactor: 2,
     colorScheme: "dark",
     reducedMotion: "reduce",
+    // CI runs in UTC. Pin the zone and locale so a baseline captured on a
+    // laptop does not drift by seven hours from the one CI compares.
+    timezoneId: "UTC",
+    locale: "en-US",
   });
 
   try {

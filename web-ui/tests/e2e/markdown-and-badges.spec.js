@@ -312,11 +312,11 @@ test("badges stay compact and show their full text at once on hover", async ({
    * instant and the expectation are in the tooltip.
    */
   const age = summary.locator("[data-freshness]").first();
-  await expect(age).toHaveText("8h");
+  await expect(age).toHaveText("8 h ago");
   await expect(age).toHaveClass(/ui-badge--ok/);
   await expect(age).toHaveAttribute(
     "data-tooltip",
-    /^Moved .*\(8h\) — within the expected 3d$/,
+    /^Moved .*\(8 h ago\) — within the expected 3d$/,
   );
   await expect(age).toHaveAttribute("datetime", planState.last_movement_at);
 

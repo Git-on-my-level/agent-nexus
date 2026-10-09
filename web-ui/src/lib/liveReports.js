@@ -1,4 +1,5 @@
 import { withSeriesObservation } from "./seriesReports.js";
+import { formatAgeSeconds } from "./time/format.js";
 
 export const LIVE_REPORT_TYPES = Object.freeze([
   "live-initiatives",
@@ -164,10 +165,6 @@ export function withLiveObservation(panel, observation) {
   };
 }
 
-export function formatLiveAge(seconds) {
-  if (!Number.isFinite(seconds)) return "Age unknown";
-  if (seconds < 60) return "Just now";
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m old`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h old`;
-  return `${Math.floor(seconds / 86400)}d old`;
+export function formatLiveAge(seconds, now = Date.now()) {
+  return formatAgeSeconds(seconds, now);
 }

@@ -1,5 +1,6 @@
 import { createInboxSourceClient } from "$lib/coreClient";
 import { isPmNotOnboardedRefusal } from "$lib/pm/onboardingState.js";
+import { isReadAccessDenied } from "$lib/reliableRead.js";
 
 /**
  * The attention surface must not hide an obligation on page two. Follow
@@ -38,7 +39,7 @@ export async function listAllPages(fetchPage, key, maxPages = 8, onPage) {
 /**
  * Publish after each feed's first page, or 800 ms, whichever comes first.
  * Continue bounded pagination with incremental snapshots, but stop waiting
- * after five seconds. A partial history never admits work-derived rows.
+ * after forty-five seconds. A partial history never admits work-derived rows.
  * `complete` means pagination finished without a cap/cycle/partial marker.
  *
  * The PM feeds are always read, whatever the workspace's PM state says. A PM
@@ -54,7 +55,7 @@ export async function loadInboxSources({
   client,
   onProgress,
   firstPaintMs = 800,
-  deadlineMs = 5_000,
+  deadlineMs = 45_000,
   signal,
 } = {}) {
   const controller = new AbortController();
@@ -88,6 +89,11 @@ export async function loadInboxSources({
     if (stopped) return;
     results[index] = result;
     firstPages.add(index);
+    if (isReadAccessDenied(result.reason)) {
+      controller.abort(result.reason);
+      publish();
+      return;
+    }
     if (published || firstPages.size === results.length) publish();
   };
   // Wrapping each outstanding page also terminates pagination when a client

@@ -129,7 +129,7 @@ describe("bounded ECharts report vocabulary", () => {
       [Date.parse("2026-10-04T12:00:00Z"), null],
     ];
     expect(validateReportChart(data)).toEqual([]);
-    expect(buildReportChartOption(data).useUTC).toBe(true);
+    expect(buildReportChartOption(data).useUTC).toBe(false);
     data.option.series[0].data[0][0] = 8.64e15 + 1;
     expectInvalid(data);
   });

@@ -354,7 +354,7 @@ describe("a planless card under the hint contract", () => {
     // Two days against the daily expectation a card in progress carries —
     // late, not yet three times late. An initiative's three-day cadence
     // would have called the same age fine.
-    expect(model.freshness).toMatchObject({ age: "2d", tone: "warn" });
+    expect(model.freshness).toMatchObject({ age: "Oct 2", tone: "warn" });
   });
 
   it("still folds into the planless block of a card grid", () => {
@@ -785,7 +785,7 @@ describe("freshness", () => {
     );
     expect(planned.hasPlan).toBe(true);
     expect(planned.freshnessKind).toBe("initiative");
-    expect(planned.freshness).toMatchObject({ age: "2d", tone: "ok" });
+    expect(planned.freshness).toMatchObject({ age: "Oct 2", tone: "ok" });
   });
 
   it("judges unplanned work against the cadence its stored phase implies", () => {
@@ -803,7 +803,7 @@ describe("freshness", () => {
         { now: NOW },
       );
     expect(summary(ago(2 * 3_600_000), "in_progress").freshness).toMatchObject({
-      age: "2h",
+      age: "2 h ago",
       tone: "ok",
     });
     expect(summary(ago(3 * 86_400_000), "in_progress").freshness).toMatchObject(
@@ -957,7 +957,7 @@ describe("stepListsModel", () => {
     expect(model.windowHours).toBe(168);
     expect(model.completed.items[0]).toMatchObject({
       title: "Write the spec",
-      age: "1d",
+      age: expect.stringMatching(/^(yesterday|[A-Z][a-z]{2} \d{1,2})$/),
     });
     // Only a completed row has an instant to show.
     expect(model.current.items[0].age).toBe("");

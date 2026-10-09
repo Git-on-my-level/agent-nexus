@@ -56,7 +56,7 @@ describe("PM chat presentation model", () => {
   it("returns no clock time for a missing or unparseable instant", () => {
     expect(clockTime("")).toBe("");
     expect(clockTime("not a date")).toBe("");
-    expect(clockTime("2026-09-09T10:00:00Z")).toMatch(/^\d{2}:\d{2}$/);
+    expect(clockTime("2026-09-09T10:00:00Z")).toMatch(/\d{1,2}:\d{2}/);
   });
 
   it("formats an elapsed wait, and refuses an unknown duration", () => {

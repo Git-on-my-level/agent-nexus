@@ -5,7 +5,8 @@
   import { workProse, workSummaryModel } from "$lib/workSummary.js";
   import { inboxItemMailboxId } from "$lib/inboxUtils.js";
   import { LIVE_REPORT_TYPES, formatLiveAge } from "$lib/liveReports.js";
-  import { formatAge } from "$lib/ageBadge.js";
+  import Time from "$lib/time/Time.svelte";
+  import { formatElapsed, instantIso, instantMs } from "$lib/time/format.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   let {
     panel,
@@ -30,16 +31,6 @@
   let fleetEnrollments = $derived(live?.data?.enrollments ?? []);
   let fleetSeries = $derived(live?.data?.series ?? []);
   let maxCount = $derived(Math.max(1, ...buckets.map((item) => item.count)));
-  /** An instant, or `""` so the caller can render the dash. */
-  const date = (value) => {
-    // `new Date(null)` is the epoch, which is finite: without this guard a row
-    // with no instant renders "1970-01-01 00:00 UTC" as if it were a reading.
-    if (value === null || value === undefined || value === "") return "";
-    const at = new Date(value);
-    return Number.isFinite(at.getTime())
-      ? at.toISOString().slice(0, 16).replace("T", " ") + " UTC"
-      : "";
-  };
   /**
    * A fleet reading. `null` when the host has not reported one, so the row
    * shows a dash with the reason rather than a sentence where a value goes.
@@ -48,6 +39,15 @@
     if (latest?.state !== undefined) return latest.state;
     if (latest?.value !== undefined) return String(latest.value);
     return null;
+  };
+  /**
+   * Remaining length of an enrollment, not a relative instant: "expires in 41m"
+   * while it is still open, "expired" once the deadline has passed.
+   */
+  const enrollmentExpiry = (expiresAt) => {
+    const at = instantMs(expiresAt);
+    if (at == null) return "";
+    return at <= now ? "expired" : `expires in ${formatElapsed(at - now)}`;
   };
 </script>
 
@@ -81,6 +81,7 @@
             <p class="muted">
               {item.status === "answered" ? "Answered" : "Needs an answer"} · {formatLiveAge(
                 item.age_seconds,
+                now,
               )}
             </p>
             {#if item.response_text}<p>{item.response_text}</p>{/if}
@@ -111,12 +112,8 @@
                 {now}
               />
               {#if item.priority}<span>{item.priority.toUpperCase()}</span>{/if}
-              <!-- `date(null)` is the epoch, which is finite; the age is the
-                   honest test, and it is empty for a row with no instant. -->
-              {#if formatAge(item.updated_at, now)}<span
-                  >· updated <time datetime={item.updated_at}
-                    >{formatAge(item.updated_at, now)}</time
-                  ></span
+              {#if instantIso(item.updated_at)}<span
+                  >· updated <Time value={item.updated_at} {now} /></span
                 >{/if}
             </p>
             {#if workProse(item)}<p>{workProse(item)}</p>{/if}
@@ -150,8 +147,10 @@
           <li>
             <p>{item.summary}</p>
             <p class="muted">
-              {#if date(item.ts)}<time datetime={item.ts}>{date(item.ts)}</time
-                >{:else}<UnavailableValue
+              {#if instantIso(item.ts)}<Time
+                  value={item.ts}
+                  {now}
+                />{:else}<UnavailableValue
                   reason="This activity row carries no timestamp."
                 />{/if}
             </p>
@@ -189,12 +188,11 @@
       {#if fleetEnrollments.length}
         <ul class="rows">
           {#each fleetEnrollments as enrollment}
+            {@const expiry = enrollmentExpiry(enrollment.expires_at)}
             <li>
               <strong>{enrollment.requested_slug}</strong>
               <p class="muted">
-                {enrollment.status} · expires {#if date(enrollment.expires_at)}{date(
-                    enrollment.expires_at,
-                  )}{:else}<UnavailableValue
+                {enrollment.status} · {#if expiry}{expiry}{:else}<UnavailableValue
                     reason="No expiry recorded for this request."
                   />{/if}
               </p>
@@ -212,16 +210,16 @@
           <li>
             <strong>{metric.name}</strong>
             <p class="muted">
-              {metric.status} · {metric.adapter} on {metric.host} · last push {#if date(metric.last_push)}{date(
-                  metric.last_push,
-                )}{:else}<UnavailableValue
+              {metric.status} · {metric.adapter} on {metric.host} · last push {#if instantIso(metric.last_push)}<Time
+                  value={metric.last_push}
+                  {now}
+                />{:else}<UnavailableValue
                   reason="This series has never been pushed."
                 />{/if}
             </p>
             {#each metric.streams ?? [] as stream}
-              {@const observedAt = date(
-                stream.latest?.observed_at || stream.last_observed_at,
-              )}
+              {@const observedAt =
+                stream.latest?.observed_at || stream.last_observed_at || ""}
               <p>
                 {Object.entries(stream.labels ?? {})
                   .map(([key, value]) => key + "=" + value)
@@ -232,7 +230,9 @@
                   {metric.unit}{:else}<UnavailableValue
                     reason="No recent reading from this host."
                   />{/if}
-                {#if observedAt}<span class="muted">· {observedAt}</span>{/if}
+                {#if instantIso(observedAt)}<span class="muted"
+                    >· <Time value={observedAt} {now} /></span
+                  >{/if}
               </p>
             {/each}
             {#if metric.message}<p class="muted">{metric.message}</p>{/if}
@@ -261,8 +261,8 @@
             {#if title}<strong class="row-title">{title}</strong>{/if}
             {#if workProse(item)}<p>{workProse(item)}</p>{/if}
             {#if item.detail}<p>{item.detail}</p>{/if}
-            {#if date(at)}<p class="muted">
-                <time datetime={at}>{date(at)}</time>
+            {#if instantIso(at)}<p class="muted">
+                <Time value={at} {now} />
               </p>{/if}
           </li>
         {/each}

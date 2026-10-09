@@ -7,6 +7,8 @@
   import ReportChart from "./ReportChart.svelte";
   import ReportDetails from "./ReportDetails.svelte";
   import RefText from "$lib/components/RefText.svelte";
+  import Time from "$lib/time/Time.svelte";
+  import { instantIso } from "$lib/time/format.js";
   import UnavailableValue from "$lib/components/UnavailableValue.svelte";
   import { metricValue } from "$lib/unavailableValue.js";
   import { safeReportUrl } from "$lib/visualReports.js";
@@ -103,19 +105,6 @@
         .map((item) => item.label);
     return [];
   }
-  /**
-   * An instant, or `""` when there is none. The caller renders the dash, so a
-   * missing timestamp is one glyph rather than the word "Unknown" wrapping
-   * through a provenance line.
-   */
-  const date = (value) => {
-    const at = value ? new Date(value) : null;
-    if (!at || Number.isNaN(at.getTime())) return "";
-    return at
-      .toISOString()
-      .replace("T", " ")
-      .replace(/\.\d{3}Z$/, " UTC");
-  };
 </script>
 
 <section
@@ -355,10 +344,10 @@
         >
         <p class="text-micro text-fg-muted">
           {freshness === "current" ? "Current · " : ""}Observed
-          {#if date(panel.observed_at)}<time
-              datetime={panel.observed_at ?? undefined}
-              >{date(panel.observed_at)}</time
-            >{:else}<UnavailableValue
+          {#if instantIso(panel.observed_at)}<Time
+              value={panel.observed_at}
+              {now}
+            />{:else}<UnavailableValue
               reason="This panel carries no observation time."
             />{/if}
         </p>
@@ -392,9 +381,10 @@
                 rel="noopener noreferrer">{source.label} ↗</a
               >
               <p class="mt-1 text-micro text-fg-muted">
-                {source.kind} · Observed {#if date(source.observed_at)}{date(
-                    source.observed_at,
-                  )}{:else}<UnavailableValue
+                {source.kind} · Observed {#if instantIso(source.observed_at)}<Time
+                    value={source.observed_at}
+                    {now}
+                  />{:else}<UnavailableValue
                     reason="This source carries no observation time."
                   />{/if}
               </p>

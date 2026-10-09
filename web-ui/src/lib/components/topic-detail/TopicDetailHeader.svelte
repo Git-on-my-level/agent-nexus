@@ -9,7 +9,7 @@
   import ActorLabel from "$lib/components/ActorLabel.svelte";
   import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
   import WorkspaceResourceTopRow from "$lib/components/WorkspaceResourceTopRow.svelte";
-  import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
+  import Time from "$lib/time/Time.svelte";
   import { topicDetailStore } from "$lib/topicDetailStore";
   import {
     resourceCopyValue,
@@ -92,10 +92,8 @@
           />
         {/if}
         {#if topic.trashed_at}
-          <!-- No "at": formatTimestamp is relative under 7 days ("3h ago"). -->
-          <span title={formatAbsoluteDateTime(topic.trashed_at)}
-            >{formatTimestamp(topic.trashed_at)}</span
-          >
+          <!-- No "at": a recent instant reads "3 h ago", which already has its preposition. -->
+          <Time value={topic.trashed_at} />
         {/if}
       </p>
     </div>
@@ -109,15 +107,10 @@
     class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warn bg-warn-soft px-3 py-2 text-meta text-warn-text"
   >
     <p class="flex min-w-0 flex-1 flex-wrap items-center gap-x-1">
-      <!-- No "on" before formatTimestamp: it returns a relative string ("3h
-           ago") under 7 days and an absolute date beyond, so "archived on 3h
-           ago" read wrong. Without "on" both forms read correctly, and the
-           exact instant is available from the title. -->
-      <span
-        class="text-warn-text"
-        title={formatAbsoluteDateTime(topic.archived_at)}
-      >
-        This thread was archived {formatTimestamp(topic.archived_at) || "—"}
+      <!-- No "on": a recent instant reads "3 h ago". The exact local time
+           stays on the timestamp's own title. -->
+      <span class="text-warn-text">
+        This thread was archived <Time value={topic.archived_at} fallback="—" />
       </span>
       {#if topic.archived_by}
         <ActorLabel
