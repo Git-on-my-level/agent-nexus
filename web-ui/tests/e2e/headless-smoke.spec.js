@@ -47,6 +47,18 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
     });
   });
 
+  // The synthetic actor exists only in this fixture. Keep every Inbox source
+  // mocked; falling through to the real core correctly denies that actor.
+  await page.route(
+    /\/(?:pm\/(?:decisions|actions)|work|home\/unread)(\?.*)?$/,
+    (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ items: [], work: [], groups: [] }),
+      }),
+  );
+
   await page.route(/\/inbox\?/, async (route) => {
     await route.fulfill({
       status: 200,
