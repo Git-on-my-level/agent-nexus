@@ -496,6 +496,28 @@
     void refreshPrincipals(workspaceSlug, seedPrincipal);
   });
 
+  /*
+   * Whether this workspace has a PM decides which surfaces exist at all, so
+   * read it as soon as there is a session to read with — and again whenever
+   * the identity changes.
+   *
+   * Keyed on the identity rather than read once after hydration: core needs a
+   * session for `pm.presence`, and in the actor gate the reader creates their
+   * identity *after* first paint. A single read then answered 401 and the
+   * state stayed unknown for the rest of the session, which now means no PM
+   * surface at all. This re-reads when the identity arrives, so a read that
+   * raced the session repairs itself instead of stranding the PM.
+   */
+  $effect(() => {
+    if (!browser) return;
+    const workspaceSlug = activeWorkspaceSlug;
+    if (!workspaceSlug || !$authSessionReady) return;
+    // Tracked so the read runs again for a different principal.
+    void $authenticatedAgent?.agent_id;
+    void $selectedActorId;
+    void refreshPmPresence(workspaceSlug, { force: true });
+  });
+
   $effect(() => {
     if (
       !browser ||
@@ -615,9 +637,6 @@
       ) {
         hydratedWorkspaceSlug = key;
         activationError = "";
-        // Whether this workspace has a PM decides which surfaces exist at
-        // all, so read it as soon as the session can read anything.
-        void refreshPmPresence(activeWorkspaceSlug, { force: true });
       }
     } catch {
       if (

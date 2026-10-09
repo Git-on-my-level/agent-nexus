@@ -7,6 +7,32 @@ async function unlockShellWithActor(page, name) {
   await page.getByRole("button", { name: "Create and continue" }).click();
 }
 
+/**
+ * Report a connected PM.
+ *
+ * The shell shows a PM surface only on a state core confirmed, and the PM
+ * routes need an authenticated principal that the dev actor gate does not
+ * establish — so against the e2e core `/pm/presence` answers 401 and the slot
+ * stays a blank placeholder. A nav test should be about the nav, so it says
+ * which state it is testing instead of inheriting the environment's.
+ */
+async function withConnectedPm(page) {
+  await page.route("**/pm/presence", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        state: "connected",
+        last_seen: new Date().toISOString(),
+        runner: "Hermes",
+        host: "studio",
+        configured: true,
+        connected: true,
+      }),
+    }),
+  );
+}
+
 test("blocks shell with actor gate when no actor is selected", async ({
   page,
 }) => {
@@ -74,6 +100,7 @@ test("mobile bottom navigation switches workspace routes", async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("workspaceTourSeen.local", "1");
   });
+  await withConnectedPm(page);
 
   await page.goto(`${WS_HOME}/inbox`);
   await unlockShellWithActor(page, `Mobile User ${Date.now()}`);
@@ -89,8 +116,10 @@ test("mobile bottom navigation switches workspace routes", async ({ page }) => {
   ).toBeVisible();
 
   // Search left the bottom bar: the bar carries Overview, the product
-  // surfaces, Ask PM and More. Workspace search is ⌘K plus a button in
-  // each list header.
+  // surfaces, the PM slot and More. Workspace search is ⌘K plus a button in
+  // each list header. The PM slot reads "Ask PM" because this test says a PM
+  // is connected; with none onboarded it reads "Set up PM", and until core
+  // answers it holds its space with no link at all.
   await expect(
     bottomNav.getByRole("button", { name: "Search workspace" }),
   ).toHaveCount(0);
