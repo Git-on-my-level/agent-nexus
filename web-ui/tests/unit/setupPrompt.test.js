@@ -187,7 +187,7 @@ describe("PM prompt", () => {
   it("leaves the token unspent when the machine is already enrolled", () => {
     expect(prompt).toContain("host_enrollment");
     expect(prompt).toContain("already");
-    expect(prompt).toContain("leave the token unspent");
+    expect(prompt).toContain("the token unspent");
   });
 
   it("bakes the chosen runner in so no wizard is reached", () => {

@@ -18,6 +18,8 @@
     text = "",
     /** Button weight, for the surfaces where copying is the main action. */
     variant = "ghost",
+    /** Called after a successful write, for callers that track hand-off. */
+    oncopied = undefined,
   } = $props();
 
   let copied = $state(false);
@@ -26,6 +28,7 @@
   async function onCopy() {
     if (await copyText(value)) {
       copied = true;
+      oncopied?.(value);
       clearTimeout(timer);
       timer = setTimeout(() => (copied = false), 1400);
     }

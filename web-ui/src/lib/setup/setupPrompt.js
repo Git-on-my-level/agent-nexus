@@ -93,12 +93,12 @@ export function isLoopbackBaseUrl(baseUrl) {
   // The whole of 127.0.0.0/8 is this machine, not just .0.1. `URL` has already
   // normalized shorthand forms (`127.1`, `2130706433`, `0x7f.1`) to dotted quads.
   if (/^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true;
-  if (hostname === "0.0.0.0" || hostname === "0") return true;
-  // IPv6 loopback and unspecified, including the IPv4-mapped spellings `URL`
-  // compresses to `::ffff:7f00:1`.
+  if (hostname === "0.0.0.0") return true;
+  // IPv6 loopback and unspecified. `URL` serializes IPv4-mapped addresses in
+  // hex, so `[::ffff:127.0.0.1]` arrives as `::ffff:7f00:1` and the dotted
+  // spelling never reaches here; `::ffff:0:` is the same address again.
   if (hostname === "::1" || hostname === "::") return true;
-  if (/^::ffff:7f[0-9a-f]{2}:[0-9a-f]{1,4}$/.test(hostname)) return true;
-  if (/^::ffff:127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true;
+  if (/^::ffff:(0:)?7f[0-9a-f]{2}:[0-9a-f]{1,4}$/.test(hostname)) return true;
   return false;
 }
 
@@ -159,21 +159,71 @@ function installStep(index, installCommand) {
     `     anx --version || ${installCommand}`,
     "",
     "   The installer puts anx in ~/.local/bin, which is not on PATH by default on",
-    "   macOS. If `anx --version` still fails after installing, add it for this",
-    "   session and try again:",
+    "   macOS. An export will not help if each of your commands runs in its own",
+    "   shell, so if `anx --version` fails after installing, prefix every anx",
+    "   command below instead of relying on shell state:",
     "",
-    '     export PATH="$HOME/.local/bin:$PATH"',
+    '     PATH="$HOME/.local/bin:$PATH" anx --version',
     "",
     "   Stop and tell me if it still fails.",
   ];
 }
 
-function skillStep(index) {
+/**
+ * Join this computer to the workspace, if it is not in it already.
+ *
+ * Both prompts carry this: the PM one because it has to be a single paste, and
+ * the machine one because "Connect another machine" and the Agents roster are
+ * both reachable from a machine that is already enrolled, where an
+ * unconditional enroll just fails.
+ */
+function enrollStep(index, { base, token, expiry }) {
+  return [
+    `${index}. Join this computer to the workspace, but only if it is not in it already.`,
+    "   Check first:",
+    "",
+    `     ${anxCommand(base, "--json doctor")}`,
+    "",
+    "   `doctor` exits 0 whether or not its checks pass, so read the checks, not",
+    "   the exit status. Find the one named `host_enrollment`. If it is ok, this",
+    "   computer is already in the workspace: skip the rest of this step and leave",
+    "   the token unspent.",
+    "",
+    "   The other red checks in that output are expected. `identity_resolution`",
+    "   and `agentctl_presence` describe the shell you are in, not the workspace;",
+    "   ignore them here and do not report them as failures.",
+    "",
+    "   Only if `host_enrollment` is not ok, run this. The token below is",
+    `   single-use${expiry ? ` and expires at ${expiry}` : ""}.`,
+    "   Do not write it to a file, a dotfile, your notes or your memory.",
+    "",
+    `     printf %s ${shellQuote(token)} \\`,
+    `       | ${anxCommand(base, "host enroll --token-stdin")} \\`,
+    `           --name "$(hostname -s | tr A-Z a-z)"`,
+    "",
+    "   That command prints the host name this computer was given. Keep it.",
+  ];
+}
+
+function verifyStep(index, { base }) {
+  return [
+    `${index}. Confirm the result:`,
+    "",
+    `     ${anxCommand(base, "--json doctor")}`,
+    "",
+    "   `host_enrollment` must now be ok. It reads the host identity this machine",
+    "   only has because core accepted the enrollment, so the enroll output and",
+    "   this check together are the proof. Again: exit status says nothing, and",
+    "   the other red checks are expected.",
+  ];
+}
+
+function skillStep(index, { pm = false } = {}) {
   return [
     `${index}. Optional, recommended: install the ANX skill into the harnesses on this`,
     "   machine, so you know how to use anx later. It only writes copies it owns:",
     "",
-    "     anx skills sync",
+    `     anx skills sync${pm ? " --pm" : ""}`,
   ];
 }
 
@@ -203,35 +253,22 @@ export function buildMachinePrompt({
     "",
     ...installStep(1, install),
     "",
-    `2. Enroll this computer. The token below is single-use${expiry ? ` and expires at ${expiry}` : ""}.`,
-    "   Do not write it to a file, a dotfile, your notes or your memory, and do not",
-    "   run this twice:",
+    ...enrollStep(2, { base, token, expiry }),
     "",
-    `     printf %s ${shellQuote(token)} \\`,
-    `       | ${anxCommand(base, "host enroll --token-stdin")} \\`,
-    `           --name "$(hostname -s | tr A-Z a-z)"`,
-    "",
-    "3. Prove it worked with a real call, not by re-reading the output above:",
-    "",
-    `     ${anxCommand(base, "--json doctor")}`,
-    "",
-    "   Read the `host_enrollment` check in that output: ok means this computer is",
-    "   in the workspace. Do not use `auth whoami` or `host list` here — they need",
-    "   an agent identity this shell may not have, and would report a working",
-    "   enrollment as a failure.",
+    ...verifyStep(3, { base }),
     "",
     ...skillStep(4),
     "",
-    "5. Report back: the host slug that was created, the agent harnesses anx",
-    "   discovered on this machine, and anything that failed.",
+    "5. Report back: the host name from step 2, the agent harnesses anx",
+    "   discovered on this machine, and anything that actually failed.",
     "",
     ...HUMAN_ONLY,
   ].join("\n");
 }
 
 /**
- * Run a PM on this computer — including enrolling the machine if it is not
- * enrolled yet, so one paste is the whole job.
+ * Run a PM on this computer — including joining the machine to the workspace
+ * if it is not in it yet, so one paste is the whole job.
  *
  * The enrollment step is conditional rather than omitted: the web app knows
  * whether *a* machine is enrolled in this workspace, never whether *this* one
@@ -242,8 +279,9 @@ export function buildMachinePrompt({
  * `doctor` rather than a shell test on `auth whoami`: whoami fails with
  * `identity_unresolved` on a perfectly enrolled machine whose shell carries no
  * harness marker, so a gate built on it would re-enrol a machine that is
- * already in the workspace. `doctor` needs no agent identity and reports
- * enrollment as its own check.
+ * already in the workspace. `doctor`'s `host_enrollment` check is the same
+ * local predicate `host enroll` itself refuses on, so the gate and the command
+ * cannot disagree.
  *
  * @param {{ workspaceLabel?: string, cliBaseUrl?: string, installCommand?: string, token?: string, expiresAt?: string, runnerKey?: string }} options
  */
@@ -264,19 +302,7 @@ export function buildPmPrompt({
     "",
     ...installStep(1, install),
     "",
-    "2. Join this computer to the workspace, but only if it is not in it already.",
-    "   Check first:",
-    "",
-    `     ${anxCommand(base, "--json doctor")}`,
-    "",
-    "   Read the `host_enrollment` check. If it is ok, this computer is already",
-    "   enrolled: skip the rest of this step and leave the token unspent. Only if",
-    `   it is not ok, run this. The token is single-use${expiry ? ` and expires at ${expiry}` : ""}; do not`,
-    "   write it to a file, a dotfile, your notes or your memory:",
-    "",
-    `     printf %s ${shellQuote(token)} \\`,
-    `       | ${anxCommand(base, "host enroll --token-stdin")} \\`,
-    `           --name "$(hostname -s | tr A-Z a-z)"`,
+    ...enrollStep(2, { base, token, expiry }),
     "",
     "3. Install the PM service. `anx pm install` with no --runner opens an",
     "   interactive wizard you cannot answer, so pass the runner explicitly.",
@@ -284,7 +310,10 @@ export function buildPmPrompt({
     "",
     `     ${anxCommand(base, `pm install --runner ${shellQuote(runner.argv)} --wait`)}`,
     "",
-    "   --wait blocks until the PM's first connection is accepted (90s by default).",
+    "   --wait blocks until the PM's first connection is accepted (90s by",
+    "   default). If it times out, say so: this machine's access to the",
+    "   workspace may have been revoked since it was enrolled, which the",
+    "   `host_enrollment` check above cannot see.",
     "",
     "4. Verify:",
     "",
@@ -292,11 +321,11 @@ export function buildPmPrompt({
     "",
     "   `pm status` reads the local service and needs no agent identity.",
     "",
-    ...skillStep(5),
+    ...skillStep(5, { pm: true }),
     "",
-    "6. Report back: the host slug, the PM service id, the log directory, and",
-    "   whether the first connection was accepted. If it was not, send me the last",
-    "   20 lines of stderr.log from that log directory.",
+    "6. Report back: the host name, the PM service id, the log directory, and",
+    "   whether the first connection was accepted. If it was not, send me the",
+    "   last 20 lines of stderr.log from that log directory.",
     "",
     "The PM runs as you, on this computer. It holds no workspace secret of its own:",
     "it authenticates through this machine's host identity.",

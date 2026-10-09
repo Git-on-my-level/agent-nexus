@@ -83,6 +83,14 @@
   const issued = { key: "" };
   /** Set once this panel is gone, so a late response strands nothing. */
   let destroyed = false;
+  /**
+   * The reader has the current token somewhere this page cannot see.
+   *
+   * A token's whole purpose is to leave the browser — copied here, pasted into
+   * an agent over there — so once it has been handed over this panel must not
+   * take it back. Only a token nobody ever received is retired on the way out.
+   */
+  let handedOver = false;
 
   let installCommand = $derived(resolveCliInstallCommand(cliInstallCommand));
   let blockedReason = $derived(setupPromptBlockedReason({ cliBaseUrl }));
@@ -164,7 +172,12 @@
       });
       const secret = String(result?.token ?? "");
       const record = result?.enrollment_token ?? {};
-      if (!secret) throw new Error("Core returned no token.");
+      if (!secret) {
+        // Core made a token and did not hand back its secret: unusable here,
+        // and live until it expires unless it goes back now.
+        retire(String(record.id ?? ""));
+        throw new Error("Core returned no token.");
+      }
       const issuedToken = {
         secret,
         id: String(record.id ?? ""),
@@ -180,6 +193,7 @@
         return;
       }
       token = issuedToken;
+      handedOver = false;
       now = Date.now();
       if (retiring) {
         retire(retiring);
@@ -222,7 +236,17 @@
    */
   onDestroy(() => {
     destroyed = true;
-    retire(token?.id ?? "");
+    /*
+     * Not retired once it has been copied: the panel unmounts on an ordinary
+     * navigation, and on a failed read that hides this section for one poll
+     * tick, and taking the token back there would kill the paste the reader is
+     * in the middle of. An uncopied token is the one nobody is waiting on.
+     *
+     * This is best effort either way — `onDestroy` does not run on a tab
+     * close — which is why the 30-minute lifetime, not this, is the bound that
+     * matters.
+     */
+    if (!handedOver) retire(token?.id ?? "");
     token = null;
   });
 </script>
@@ -310,6 +334,7 @@
             variant="primary"
             size="md"
             title="Copies the whole prompt, including a single-use token"
+            oncopied={() => (handedOver = true)}
           />
         {:else}
           <Button variant="primary" size="default" disabled busy={issuing}>

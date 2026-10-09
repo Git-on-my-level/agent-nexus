@@ -79,7 +79,12 @@ describe("every generated snippet parses", () => {
     ["pm", buildPmPrompt({ ...BASE, runnerKey: "claude" })],
   ])("%s prompt", (_kind, prompt) => {
     const parts = snippets(prompt);
-    expect(parts.length).toBeGreaterThan(3);
+    /*
+     * An exact count, not a floor: a command that drifts out of the indented
+     * block stops being covered by everything below, and a floor would keep
+     * passing while it did.
+     */
+    expect(parts).toHaveLength(_kind === "pm" ? 7 : 6);
     for (const part of parts) {
       // `sh -n` parses without running: a broken line continuation or an
       // unbalanced quote fails here.
@@ -161,11 +166,13 @@ describe("verification does not need an agent identity", () => {
   ])("%s prompt verifies with doctor or pm status", (_kind, prompt) => {
     expect(prompt).toContain("--json doctor");
     expect(prompt).toContain("host_enrollment");
-    // Named in the prose as a warning; never as a command to run.
-    for (const part of snippets(prompt)) {
-      expect(part).not.toContain("auth whoami");
-      expect(part).not.toContain("host list");
-    }
+    /*
+     * Over the whole body, not just the snippet set: scoping this to indented
+     * lines would stop covering a command that drifts out of them, while still
+     * passing.
+     */
+    expect(prompt).not.toContain("auth whoami");
+    expect(prompt).not.toContain("host list");
   });
 
   it("tells the PM prompt to skip enrollment when doctor says it is enrolled", () => {
@@ -173,7 +180,35 @@ describe("verification does not need an agent identity", () => {
     expect(prompt.indexOf("--json doctor")).toBeLessThan(
       prompt.indexOf("host enroll"),
     );
-    expect(prompt).toContain("leave the token unspent");
+    expect(prompt).toContain("leave");
+    expect(prompt).toContain("the token unspent");
+  });
+});
+
+describe("the doctor check is described as it behaves", () => {
+  /*
+   * `anx doctor` exits 0 whether or not its checks pass, and reports checks
+   * that are red on a correctly set up machine. An agent reading the exit
+   * status would call a failed enrollment proven; one reading every red check
+   * would report a working machine as broken.
+   */
+  it.each([
+    ["machine", buildMachinePrompt(BASE)],
+    ["pm", buildPmPrompt(BASE)],
+  ])("%s prompt", (_kind, prompt) => {
+    expect(prompt).toContain("exits 0 whether or not");
+    expect(prompt).toContain("identity_resolution");
+    expect(prompt).toContain("agentctl_presence");
+  });
+
+  it("really does exit 0 with the enrollment check failing", () => {
+    // Guards the sentence above against the CLI changing under it.
+    const stub = stubAnx();
+    expect(() =>
+      execFileSync("sh", ["-c", "anx --json doctor"], {
+        env: { PATH: `${stub.dir}:/usr/bin:/bin`, HOME: stub.dir },
+      }),
+    ).not.toThrow();
   });
 });
 
@@ -185,6 +220,12 @@ describe("the install step leaves anx reachable", () => {
     // The installer writes ~/.local/bin, which is not on PATH by default on
     // macOS; without this the one-paste flow dead-ends on a fresh machine.
     expect(prompt).toContain("~/.local/bin");
-    expect(prompt).toContain('export PATH="$HOME/.local/bin:$PATH"');
+    /*
+     * A prefix, not an export: harnesses that run each command in its own
+     * shell — Claude Code, the default PM runner — drop exported env between
+     * calls, so an export would leave the next command failing the same way.
+     */
+    expect(prompt).toContain('PATH="$HOME/.local/bin:$PATH" anx');
+    expect(prompt).not.toContain("export PATH=");
   });
 });

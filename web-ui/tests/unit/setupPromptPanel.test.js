@@ -187,7 +187,7 @@ describe("a deployment agents can reach", () => {
     await waitFor(() => expect(clipboard.text).toContain("htok_late"));
   });
 
-  it("hands the token back when the panel goes away", async () => {
+  it("hands back a token nobody ever received", async () => {
     const view = render(SetupPrompt, {
       props: { kind: "machine", cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
     });
@@ -197,6 +197,44 @@ describe("a deployment agents can reach", () => {
     await waitFor(() =>
       expect(coreClientMock.revokeHostEnrollmentToken).toHaveBeenCalledWith(
         "htok_htok_first",
+      ),
+    );
+  });
+
+  it("keeps a token the reader has already copied", async () => {
+    /*
+     * The token's whole purpose is to leave the browser. This panel unmounts
+     * on an ordinary navigation — and on one failed hosts read, which hides
+     * the section for a poll tick — so revoking here would kill the paste the
+     * reader is in the middle of.
+     */
+    const view = render(SetupPrompt, {
+      props: { kind: "machine", cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
+    });
+    await tokenReady();
+    await fireEvent.click(
+      screen.getByRole("button", { name: "Copy setup prompt" }),
+    );
+    await waitFor(() => expect(clipboard.text).toContain("htok_first"));
+
+    view.unmount();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(coreClientMock.revokeHostEnrollmentToken).not.toHaveBeenCalled();
+  });
+
+  it("hands back a token core made but would not show", async () => {
+    coreClientMock.createHostEnrollmentToken.mockResolvedValue({
+      enrollment_token: {
+        id: "htok_orphan",
+        expires_at: "2026-01-01T00:00:00Z",
+      },
+    });
+    render(SetupPrompt, {
+      props: { kind: "machine", cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
+    });
+    await waitFor(() =>
+      expect(coreClientMock.revokeHostEnrollmentToken).toHaveBeenCalledWith(
+        "htok_orphan",
       ),
     );
   });
@@ -255,9 +293,11 @@ describe("a deployment agents can reach", () => {
     );
     await waitFor(() => expect(clipboard.text).toContain("pm install"));
     expect(clipboard.text).toContain("hermes chat --query-file");
+    // The machine about to run a PM needs the PM skill, not just participant.
+    expect(clipboard.text).toContain("anx skills sync --pm");
     // One-shot: it joins the machine to the workspace when it has to.
     expect(clipboard.text).toContain("host enroll --token-stdin");
-    expect(clipboard.text).toContain("leave the token unspent");
+    expect(clipboard.text).toContain("the token unspent");
   });
 
   it("switches the runner with the picker", async () => {

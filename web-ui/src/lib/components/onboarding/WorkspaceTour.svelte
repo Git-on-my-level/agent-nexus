@@ -1,4 +1,6 @@
 <script>
+  import { onDestroy } from "svelte";
+
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
@@ -65,6 +67,18 @@
    * to the plain "Enroll a machine →" link, which still works.
    */
   let setupPrompt = $state("");
+  /**
+   * Whether the CTA may promise a copy.
+   *
+   * Reactive, and retired on a timer rather than recomputed from the clock:
+   * the label and the click have to agree, and a card the reader has been
+   * sitting on for half an hour must stop offering a copy that would hand over
+   * a dead token — which is the failure the panel's countdown exists to avoid
+   * and the tour has no room for.
+   */
+  let promptReady = $state(false);
+  /** Timer handle, in a holder: it is bookkeeping, not rendered state. */
+  const promptReadyTimer = { id: null };
   let preparingPrompt = false;
   /**
    * What the cached prompt is good for: which workspace, and until when.
@@ -74,7 +88,33 @@
    * copy a dead token, or one minted for a different workspace, and say
    * nothing about it.
    */
-  const promptValidity = { key: "", expiresAtMs: 0 };
+  const promptValidity = {
+    key: "",
+    expiresAtMs: 0,
+    tokenId: "",
+    copied: false,
+  };
+
+  /**
+   * Hand a token back when the tour will not use it.
+   *
+   * The tour mints on reaching the last step and can reach it again, so
+   * without this a reader who replays the walkthrough leaves one live
+   * workspace-joining credential behind per replay. Best effort: an unused
+   * token expires on its own, and nothing here is worth an error.
+   *
+   * @param {string} id
+   */
+  function retireTourToken(id) {
+    if (!id) return;
+    void coreClient.revokeHostEnrollmentToken(id).catch(() => {});
+  }
+
+  function clearPromptReady() {
+    if (promptReadyTimer.id) clearTimeout(promptReadyTimer.id);
+    promptReadyTimer.id = null;
+    promptReady = false;
+  }
 
   function promptStillGood() {
     if (!setupPrompt) return false;
@@ -87,6 +127,11 @@
 
   async function prepareSetupPrompt() {
     if (preparingPrompt || promptStillGood()) return;
+    // Replacing a prompt the reader never copied: the old token goes back.
+    if (!promptValidity.copied) retireTourToken(promptValidity.tokenId);
+    promptValidity.tokenId = "";
+    promptValidity.copied = false;
+    clearPromptReady();
     setupPrompt = "";
     if (setupPromptBlockedReason({ cliBaseUrl })) return;
     preparingPrompt = true;
@@ -96,9 +141,18 @@
         expires_in_seconds: SETUP_TOKEN_LIFETIME_SECONDS,
       });
       const secret = String(result?.token ?? "");
-      const expiresAt = String(result?.enrollment_token?.expires_at ?? "");
+      const record = result?.enrollment_token ?? {};
+      const expiresAt = String(record.expires_at ?? "");
       const expiresAtMs = Date.parse(expiresAt);
-      if (!secret || !Number.isFinite(expiresAtMs)) return;
+      /*
+       * The tour has no countdown and no "New token", so it only offers a
+       * prompt it can say an expiry for. A token it cannot use goes straight
+       * back rather than living out its half hour unreachable.
+       */
+      if (!secret || !Number.isFinite(expiresAtMs)) {
+        retireTourToken(String(record.id ?? ""));
+        return;
+      }
       setupPrompt = buildMachinePrompt({
         workspaceLabel: workspaceLabel || workspaceSlug,
         cliBaseUrl,
@@ -108,6 +162,14 @@
       });
       promptValidity.key = `${workspaceSlug}|${cliBaseUrl}`;
       promptValidity.expiresAtMs = expiresAtMs;
+      promptValidity.tokenId = String(record.id ?? "");
+      promptValidity.copied = false;
+      promptReady = true;
+      // Same minute of headroom `promptStillGood` keeps, so the two agree.
+      promptReadyTimer.id = setTimeout(
+        () => clearPromptReady(),
+        Math.max(0, expiresAtMs - Date.now() - 60_000),
+      );
     } catch {
       // No prompt; the CTA stays a plain link to Access.
     } finally {
@@ -122,7 +184,11 @@
 
   function copySetupPrompt() {
     // Re-checked at the click: the card may have been on screen for a while.
-    if (!promptStillGood()) return;
+    if (!promptStillGood()) {
+      clearPromptReady();
+      return;
+    }
+    promptValidity.copied = true;
     void copyText(setupPrompt);
   }
 
@@ -223,14 +289,14 @@
             selector: '[data-tour="access"]',
             eyebrow: "7 of 7 · Access",
             title: "Last step: connect a machine",
-            body: setupPrompt
+            body: promptReady
               ? "Agents work here through the computer they run on. Copy one prompt, paste it into the agent you already use on that machine, and it installs anx, joins the machine to this workspace and reports back. Access also holds people and invites."
               : "Agents work here through the computer they run on. Set one up in Access → Hosts; every agent on that machine can then work in this workspace. Access also holds people and invites.",
-            ctaLabel: setupPrompt
+            ctaLabel: promptReady
               ? "Copy the setup prompt →"
               : "Connect a machine →",
             ctaHref: ctaAccessHref,
-            ctaAction: setupPrompt ? copySetupPrompt : undefined,
+            ctaAction: promptReady ? copySetupPrompt : undefined,
           },
         ],
   );
@@ -343,6 +409,12 @@
     if (pathWhenOpened && path !== pathWhenOpened) {
       finishTour();
     }
+  });
+
+  onDestroy(() => {
+    // An unused token outlives the tour otherwise.
+    if (!promptValidity.copied) retireTourToken(promptValidity.tokenId);
+    if (promptReadyTimer.id) clearTimeout(promptReadyTimer.id);
   });
 
   // Replay-on-demand: the Home page exposes a "Take the tour" button that
