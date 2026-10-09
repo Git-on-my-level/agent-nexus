@@ -1,3 +1,6 @@
+// time-guard: not-display: the token expiry goes into a prompt an agent runs on
+// another machine, so it is written as absolute UTC rather than in this
+// reader's local time; it is payload, not an instant shown on screen.
 /**
  * The text the reader hands to an agent to set this workspace up on a machine.
  *
