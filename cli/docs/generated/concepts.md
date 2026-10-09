@@ -61,7 +61,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `auth`
 
-- Commands: `36`
+- Commands: `37`
 - Command IDs:
   - `actors.create`
   - `actors.list`
@@ -97,6 +97,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `hosts.enroll.start`
   - `hosts.revoke`
   - `hosts.tokens.create`
+  - `hosts.tokens.get`
   - `hosts.tokens.list`
   - `hosts.tokens.revoke`
 
@@ -333,7 +334,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `hosts`
 
-- Commands: `15`
+- Commands: `16`
 - Command IDs:
   - `hosts.bridge.check_in`
   - `hosts.enroll.approve`
@@ -348,6 +349,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `hosts.patch`
   - `hosts.revoke`
   - `hosts.tokens.create`
+  - `hosts.tokens.get`
   - `hosts.tokens.list`
   - `hosts.tokens.revoke`
 

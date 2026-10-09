@@ -6627,6 +6627,7 @@ export const commandRegistry: CommandSpec[] = [
       "hosts.patch",
       "hosts.revoke",
       "hosts.tokens.create",
+      "hosts.tokens.get",
       "hosts.tokens.list",
       "hosts.tokens.revoke"
     ],
@@ -6680,6 +6681,7 @@ export const commandRegistry: CommandSpec[] = [
       "hosts.patch",
       "hosts.revoke",
       "hosts.tokens.create",
+      "hosts.tokens.get",
       "hosts.tokens.list",
       "hosts.tokens.revoke"
     ],
@@ -6747,6 +6749,7 @@ export const commandRegistry: CommandSpec[] = [
       "hosts.patch",
       "hosts.revoke",
       "hosts.tokens.create",
+      "hosts.tokens.get",
       "hosts.tokens.list",
       "hosts.tokens.revoke"
     ],
@@ -6799,6 +6802,7 @@ export const commandRegistry: CommandSpec[] = [
       "hosts.patch",
       "hosts.revoke",
       "hosts.tokens.create",
+      "hosts.tokens.get",
       "hosts.tokens.list",
       "hosts.tokens.revoke"
     ],
@@ -6887,6 +6891,7 @@ export const commandRegistry: CommandSpec[] = [
       "hosts.patch",
       "hosts.revoke",
       "hosts.tokens.create",
+      "hosts.tokens.get",
       "hosts.tokens.list",
       "hosts.tokens.revoke"
     ],
@@ -6933,6 +6938,7 @@ export const commandRegistry: CommandSpec[] = [
       "hosts.patch",
       "hosts.revoke",
       "hosts.tokens.create",
+      "hosts.tokens.get",
       "hosts.tokens.list",
       "hosts.tokens.revoke"
     ],
@@ -6983,6 +6989,7 @@ export const commandRegistry: CommandSpec[] = [
       "hosts.patch",
       "hosts.revoke",
       "hosts.tokens.create",
+      "hosts.tokens.get",
       "hosts.tokens.list",
       "hosts.tokens.revoke"
     ],
@@ -7064,6 +7071,7 @@ export const commandRegistry: CommandSpec[] = [
       "hosts.patch",
       "hosts.revoke",
       "hosts.tokens.create",
+      "hosts.tokens.get",
       "hosts.tokens.list",
       "hosts.tokens.revoke"
     ],
@@ -7113,6 +7121,7 @@ export const commandRegistry: CommandSpec[] = [
       "hosts.patch",
       "hosts.revoke",
       "hosts.tokens.create",
+      "hosts.tokens.get",
       "hosts.tokens.list",
       "hosts.tokens.revoke"
     ],
@@ -7158,6 +7167,7 @@ export const commandRegistry: CommandSpec[] = [
       "hosts.patch",
       "hosts.revoke",
       "hosts.tokens.create",
+      "hosts.tokens.get",
       "hosts.tokens.list",
       "hosts.tokens.revoke"
     ],
@@ -7223,6 +7233,7 @@ export const commandRegistry: CommandSpec[] = [
       "hosts.list",
       "hosts.revoke",
       "hosts.tokens.create",
+      "hosts.tokens.get",
       "hosts.tokens.list",
       "hosts.tokens.revoke"
     ],
@@ -7274,6 +7285,7 @@ export const commandRegistry: CommandSpec[] = [
       "hosts.list",
       "hosts.patch",
       "hosts.tokens.create",
+      "hosts.tokens.get",
       "hosts.tokens.list",
       "hosts.tokens.revoke"
     ],
@@ -7339,11 +7351,63 @@ export const commandRegistry: CommandSpec[] = [
       "hosts.list",
       "hosts.patch",
       "hosts.revoke",
+      "hosts.tokens.get",
       "hosts.tokens.list",
       "hosts.tokens.revoke"
     ],
     "go_method": "HostsTokensCreate",
     "ts_method": "hostsTokensCreate"
+  },
+  {
+    "command_id": "hosts.tokens.get",
+    "cli_path": "host tokens get",
+    "group": "host",
+    "method": "GET",
+    "path": "/auth/hosts/enrollment-tokens/{token_id}",
+    "operation_id": "getHostEnrollmentToken",
+    "summary": "Get one headless enrollment token",
+    "description": "Human or explicitly granted auth-admin agent. One indexed row, for watching whether a specific grant has been redeemed without reading the whole history. The secret is never returned.",
+    "why": "Check whether one enrollment grant has been used.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ enrollment_token }` without the secret.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "auth_admin_required",
+      "host_not_found"
+    ],
+    "concepts": [
+      "auth",
+      "hosts"
+    ],
+    "stability": "beta",
+    "surface": "utility",
+    "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
+    "path_params": [
+      "token_id"
+    ],
+    "adjacent_commands": [
+      "hosts.bridge.check_in",
+      "hosts.enroll.complete",
+      "hosts.enroll.headless",
+      "hosts.enroll.poll",
+      "hosts.enroll.start",
+      "hosts.enroll.approve",
+      "hosts.enroll.deny",
+      "hosts.enroll.pending",
+      "hosts.get",
+      "hosts.list",
+      "hosts.patch",
+      "hosts.revoke",
+      "hosts.tokens.create",
+      "hosts.tokens.list",
+      "hosts.tokens.revoke"
+    ],
+    "go_method": "HostsTokensGet",
+    "ts_method": "hostsTokensGet"
   },
   {
     "command_id": "hosts.tokens.list",
@@ -7386,6 +7450,7 @@ export const commandRegistry: CommandSpec[] = [
       "hosts.patch",
       "hosts.revoke",
       "hosts.tokens.create",
+      "hosts.tokens.get",
       "hosts.tokens.revoke"
     ],
     "go_method": "HostsTokensList",
@@ -7436,6 +7501,7 @@ export const commandRegistry: CommandSpec[] = [
       "hosts.patch",
       "hosts.revoke",
       "hosts.tokens.create",
+      "hosts.tokens.get",
       "hosts.tokens.list"
     ],
     "go_method": "HostsTokensRevoke",
@@ -13554,6 +13620,10 @@ export class AnxClient {
 
   hostsTokensCreate(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("hosts.tokens.create", {}, options);
+  }
+
+  hostsTokensGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("hosts.tokens.get", pathParams, options);
   }
 
   hostsTokensList(options: RequestOptions = {}): Promise<InvokeResult> {

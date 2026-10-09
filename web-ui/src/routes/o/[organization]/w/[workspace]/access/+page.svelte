@@ -105,7 +105,14 @@
    * answered, and so it keeps saying it after a later read returns several.
    */
   let arrivedHost = $state(null);
-  /** Hosts were read at least once and there were none. */
+  /**
+   * Hosts were read at least once and there were none.
+   *
+   * Decides whether the next roster read is the first machine arriving, not
+   * whether to poll: the setup panel watches its own token for redemption,
+   * which is one indexed row, and the roster is read once when that says a
+   * machine used it.
+   */
   let watchingForFirstHost = $state(false);
   /** Busy action per enrollment id, so one decision cannot re-enable another. */
   let enrollmentBusy = $state({});
@@ -707,13 +714,6 @@
       now = Date.now();
       if (document.hidden) return;
       void loadPending();
-      /*
-       * Two extra bounded reads per tick (hosts and enrollment tokens), and
-       * only while the workspace has no machine at all: a token enrollment
-       * files no request, so `loadPending` would never see it. Stops on the
-       * tick after the first host arrives.
-       */
-      if (watchingForFirstHost) void loadHosts();
     }, PENDING_POLL_MS);
     return () => {
       // First: a throw in either teardown below must not strand the claim and
@@ -987,6 +987,7 @@
                 ? "Connect another machine"
                 : "Connect your first machine"}
               lede="Agents reach this workspace through the computer they run on. Set one up once — every agent on that computer is in from then on, with no per-agent setup. Agents already set up there keep their history."
+              onredeemed={() => void loadHosts()}
             >
               {#snippet status()}
                 {#if !activeHosts.length}

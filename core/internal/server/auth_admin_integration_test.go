@@ -184,4 +184,32 @@ func TestAgentAuthAdminFleetLifecycle(t *testing.T) {
 	if strings.Contains(string(raw), secret) || p["token"] != nil {
 		t.Fatal("secret appeared in token list")
 	}
+
+	// One token by id: what a surface watching its own grant reads, instead of
+	// the workspace's whole token history on every tick.
+	fresh, freshID := createToken(human)
+	status, p = hostHTTP(t, "GET", base+"/auth/hosts/enrollment-tokens/"+freshID, human, nil)
+	hostStatus(t, status, 200, p)
+	one, ok := p["enrollment_token"].(map[string]any)
+	if !ok || one["id"] != freshID || one["consumed_at"] != nil {
+		t.Fatal("unredeemed token did not read back", p)
+	}
+	raw, _ = json.Marshal(p)
+	if strings.Contains(string(raw), fresh) || p["token"] != nil {
+		t.Fatal("secret appeared in single-token read")
+	}
+	// Redemption is what the watcher is waiting for.
+	enroll(fresh, "watched-host")
+	status, p = hostHTTP(t, "GET", base+"/auth/hosts/enrollment-tokens/"+freshID, human, nil)
+	hostStatus(t, status, 200, p)
+	if p["enrollment_token"].(map[string]any)["consumed_at"] == nil {
+		t.Fatal("redeemed token still reads as unused", p)
+	}
+	// Admin-only, and a stranger id is not found rather than described.
+	status, p = hostHTTP(t, "GET", base+"/auth/hosts/enrollment-tokens/"+freshID, "", nil)
+	if status != 401 && status != 403 {
+		t.Fatal("single-token read must require administration", status, p)
+	}
+	status, p = hostHTTP(t, "GET", base+"/auth/hosts/enrollment-tokens/htok_missing", human, nil)
+	hostStatus(t, status, 404, p)
 }

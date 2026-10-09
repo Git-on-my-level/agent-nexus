@@ -440,6 +440,9 @@ commands:
   "hosts.tokens.create":
     classification: gated_sensitive
     reason: "headless enrollment tokens are one-time secrets"
+  "hosts.tokens.get":
+    classification: gated_admin
+    reason: "enrollment grant state is auth administration"
   "hosts.tokens.list":
     classification: gated_admin
     reason: "enrollment token inventory is auth administration"

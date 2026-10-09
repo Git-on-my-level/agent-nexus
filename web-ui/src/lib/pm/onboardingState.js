@@ -1,3 +1,5 @@
+import { anxCommand } from "$lib/setup/setupPrompt.js";
+
 /**
  * Whether this workspace has a PM agent, and what the UI may therefore show.
  *
@@ -211,25 +213,23 @@ export function pmOffline(presence) {
 /**
  * The command that installs a PM for this workspace. `--base-url` is included
  * only when the deployment knows its own API origin, matching the host
- * enrollment commands.
+ * enrollment commands, and is quoted: it is deployment configuration, and a
+ * copyable command built by concatenation runs whatever a `$(…)` in it says.
  *
  * @param {{ cliBaseUrl?: string }} [options]
  */
 export function pmInstallCommand({ cliBaseUrl = "" } = {}) {
-  const base = text(cliBaseUrl);
-  return `anx ${base ? `--base-url ${base} ` : ""}pm install`;
+  return anxCommand(cliBaseUrl, "pm install");
 }
 
 /** The command that reports a PM's local service state. */
 export function pmStatusCommand({ cliBaseUrl = "" } = {}) {
-  const base = text(cliBaseUrl);
-  return `anx ${base ? `--base-url ${base} ` : ""}pm status`;
+  return anxCommand(cliBaseUrl, "pm status");
 }
 
 /** The command that removes a PM's local service. */
 export function pmUninstallCommand({ cliBaseUrl = "" } = {}) {
-  const base = text(cliBaseUrl);
-  return `anx ${base ? `--base-url ${base} ` : ""}pm uninstall`;
+  return anxCommand(cliBaseUrl, "pm uninstall");
 }
 
 /**

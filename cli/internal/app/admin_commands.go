@@ -14,7 +14,7 @@ import (
 
 var authAdminsSubcommandSpec = subcommandSpec{command: "auth admins", valid: []string{"list", "grant", "revoke"}, examples: []string{"anx auth admins list", "anx auth admins grant codex.host-a", "anx auth admins revoke codex.host-a"}}
 var hostEnrollmentsSubcommandSpec = subcommandSpec{command: "host enrollments", valid: []string{"list", "approve", "deny"}, examples: []string{"anx host enrollments list", "anx host enrollments approve ABCD-EFGH", "anx host enrollments deny ABCD-EFGH"}}
-var hostTokensSubcommandSpec = subcommandSpec{command: "host tokens", valid: []string{"create", "list", "revoke"}, examples: []string{"anx host tokens create --label fleet --expires-in 1h", "anx host tokens list", "anx host tokens revoke <token-id>"}}
+var hostTokensSubcommandSpec = subcommandSpec{command: "host tokens", valid: []string{"create", "get", "list", "revoke"}, examples: []string{"anx host tokens create --label fleet --expires-in 1h", "anx host tokens get <token-id>", "anx host tokens list", "anx host tokens revoke <token-id>"}}
 
 func init() {
 	localHelperTopics = append(localHelperTopics, localHelperTopic{Path: "host enroll", Summary: "Enroll this machine with interactive approval or a one-time fleet token.", Flags: []localHelperFlag{
@@ -137,6 +137,15 @@ func (a *App) runHostTokens(ctx context.Context, args []string, cfg config.Resol
 			return nil, name, errnorm.Usage("invalid_args", "list takes no arguments")
 		}
 		r, e := a.invokeRawJSON(ctx, cfg, name, "GET", path, nil)
+		return r, name, e
+	case "get":
+		// One token by id, for watching whether a specific grant was redeemed
+		// without reading the workspace's whole token history.
+		id, e := adminTarget(args[1:])
+		if e != nil {
+			return nil, name, e
+		}
+		r, e := a.invokeRawJSON(ctx, cfg, name, "GET", path+"/"+url.PathEscape(id), nil)
 		return r, name, e
 	case "revoke":
 		id, e := adminTarget(args[1:])

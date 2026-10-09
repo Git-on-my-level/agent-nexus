@@ -40,6 +40,10 @@
     "milliseconds": 4270
   },
   {
+    "key": "GET /asks/{ask_id}",
+    "milliseconds": 1000
+  },
+  {
     "key": "GET /auth/access-requests",
     "milliseconds": 229
   },
@@ -61,6 +65,10 @@
   },
   {
     "key": "GET /auth/hosts/enrollment-tokens",
+    "milliseconds": 222
+  },
+  {
+    "key": "GET /auth/hosts/enrollment-tokens/{token_id}",
     "milliseconds": 222
   },
   {
@@ -244,10 +252,6 @@
     "milliseconds": 3998
   },
   {
-    "key": "GET /pm/presence",
-    "milliseconds": 100
-  },
-  {
     "key": "GET /pm/context",
     "milliseconds": 4667
   },
@@ -266,6 +270,10 @@
   {
     "key": "GET /pm/decisions/{decision_id}",
     "milliseconds": 4305
+  },
+  {
+    "key": "GET /pm/presence",
+    "milliseconds": 100
   },
   {
     "key": "GET /pm/turns/{turn_id}",
@@ -316,12 +324,20 @@
     "milliseconds": 66026
   },
   {
+    "key": "GET /stream/agent-wakeups",
+    "milliseconds": 1000
+  },
+  {
     "key": "GET /stream/agents",
     "milliseconds": 7
   },
   {
     "key": "GET /stream/agents [agents-resumed-header]",
     "milliseconds": 7
+  },
+  {
+    "key": "GET /stream/asks/{ask_id}",
+    "milliseconds": 1000
   },
   {
     "key": "GET /stream/events",
@@ -446,17 +462,5 @@
   {
     "key": "POST /secrets/{secret_id}/reveal",
     "milliseconds": 25359
-  },
-  {
-    "key": "GET /asks/{ask_id}",
-    "milliseconds": 1000
-  },
-  {
-    "key": "GET /stream/asks/{ask_id}",
-    "milliseconds": 1000
-  },
-  {
-    "key": "GET /stream/agent-wakeups",
-    "milliseconds": 1000
   }
 ]

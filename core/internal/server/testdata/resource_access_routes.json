@@ -239,6 +239,12 @@
     "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
   },
   {
+    "method": "GET",
+    "path": "/auth/hosts/enrollment-tokens/{token_id}",
+    "policy": "independent",
+    "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."
+  },
+  {
     "method": "POST",
     "path": "/auth/hosts/enrollment-tokens/{token_id}/revoke",
     "policy": "independent",
@@ -798,10 +804,10 @@
     "reason": "Channel-to-actor binding contains no canonical resource refs; PM tests enforce actor and channel authorization."
   },
   {
-    "method": "GET",
-    "path": "/pm/presence",
+    "method": "POST",
+    "path": "/pm/connect",
     "policy": "independent",
-    "reason": "Workspace-scoped connection timestamps contain no resource data; PM permission and actor binding are checked before the exact-key read."
+    "reason": "Authenticated selected PM or verified host-derived reserved pm agent connects with bounded display labels only; no resource data."
   },
   {
     "method": "GET",
@@ -864,6 +870,12 @@
     "path": "/pm/ingress/telegram",
     "policy": "independent",
     "reason": "Externally signed channel ingress; signature/transport authorization precedes any workspace operation (PM ingress tests)."
+  },
+  {
+    "method": "GET",
+    "path": "/pm/presence",
+    "policy": "independent",
+    "reason": "Workspace-scoped connection timestamps contain no resource data; PM permission and actor binding are checked before the exact-key read."
   },
   {
     "method": "POST",
@@ -1194,11 +1206,5 @@
     "method": "GET",
     "path": "/workspace/dashboard/reports",
     "policy": "collection"
-  },
-  {
-    "method": "POST",
-    "path": "/pm/connect",
-    "policy": "independent",
-    "reason": "Authenticated selected PM or verified host-derived reserved pm agent connects with bounded display labels only; no resource data."
   }
 ]

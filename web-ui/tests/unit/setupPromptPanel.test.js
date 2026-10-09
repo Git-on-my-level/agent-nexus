@@ -20,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const coreClientMock = vi.hoisted(() => ({
   createHostEnrollmentToken: vi.fn(),
   revokeHostEnrollmentToken: vi.fn(),
+  getHostEnrollmentToken: vi.fn(),
 }));
 
 /**
@@ -64,6 +65,10 @@ beforeEach(() => {
     tokenResponse("htok_first"),
   );
   coreClientMock.revokeHostEnrollmentToken.mockResolvedValue({});
+  coreClientMock.getHostEnrollmentToken.mockReset();
+  coreClientMock.getHostEnrollmentToken.mockResolvedValue({
+    enrollment_token: { id: "htok_htok_first", consumed_at: null },
+  });
 });
 
 afterEach(() => cleanup());
@@ -103,8 +108,9 @@ describe("a deployment agents can reach", () => {
 
     await waitFor(() => expect(clipboard.text).toContain("htok_first"));
     expect(clipboard.text).toContain("host enroll --token-stdin");
-    expect(clipboard.text).toContain(`--base-url ${REMOTE}`);
-    expect(clipboard.text).toContain('"Ops"');
+    expect(clipboard.text).toContain(`--base-url '${REMOTE}'`);
+    // The label is a delimited data field, never instruction prose.
+    expect(clipboard.text).toContain("«Ops»");
   });
 
   it("retires the old token when a new one is asked for", async () => {
@@ -143,7 +149,7 @@ describe("a deployment agents can reach", () => {
     await waitFor(() => {
       const command = document.querySelector("[data-host-enroll-command]");
       expect(command?.textContent).toContain(
-        `--base-url ${REMOTE} host enroll`,
+        `--base-url '${REMOTE}' host enroll`,
       );
     });
     await fireEvent.click(
@@ -316,6 +322,101 @@ describe("a deployment agents can reach", () => {
   });
 });
 
+describe("watching for the machine", () => {
+  /*
+   * The confirmation read has to be bounded by the request, not by workspace
+   * size: a workspace with a thousand hosts and years of token history pays
+   * the same as an empty one, because this reads one indexed row.
+   */
+  it("reads one token by id, not the host or token lists", async () => {
+    vi.useFakeTimers();
+    try {
+      render(SetupPrompt, {
+        props: { kind: "machine", cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
+      });
+      await vi.waitFor(() =>
+        expect(coreClientMock.createHostEnrollmentToken).toHaveBeenCalled(),
+      );
+      await vi.advanceTimersByTimeAsync(11_000);
+      expect(coreClientMock.getHostEnrollmentToken).toHaveBeenCalledWith(
+        "htok_htok_first",
+      );
+      // The panel has no other read: no listHosts, no listHostEnrollmentTokens.
+      expect(Object.keys(coreClientMock).sort()).toEqual([
+        "createHostEnrollmentToken",
+        "getHostEnrollmentToken",
+        "revokeHostEnrollmentToken",
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("tells the page once when the token is redeemed, then stops", async () => {
+    vi.useFakeTimers();
+    try {
+      const onredeemed = vi.fn();
+      render(SetupPrompt, {
+        props: {
+          kind: "machine",
+          cliBaseUrl: REMOTE,
+          workspaceLabel: "Ops",
+          onredeemed,
+        },
+      });
+      await vi.waitFor(() =>
+        expect(coreClientMock.createHostEnrollmentToken).toHaveBeenCalled(),
+      );
+      coreClientMock.getHostEnrollmentToken.mockResolvedValue({
+        enrollment_token: {
+          id: "htok_htok_first",
+          consumed_at: new Date().toISOString(),
+        },
+      });
+      await vi.advanceTimersByTimeAsync(6_000);
+      expect(onredeemed).toHaveBeenCalledTimes(1);
+
+      // The roster is read on the event, not on every tick after it.
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(onredeemed).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops watching when the token expires, and takes the secret with it", async () => {
+    vi.useFakeTimers();
+    try {
+      coreClientMock.createHostEnrollmentToken.mockResolvedValue(
+        tokenResponse("htok_short", 1),
+      );
+      render(SetupPrompt, {
+        props: { kind: "machine", cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
+      });
+      await vi.waitFor(() =>
+        expect(coreClientMock.createHostEnrollmentToken).toHaveBeenCalled(),
+      );
+
+      await vi.advanceTimersByTimeAsync(70_000);
+      const reads = coreClientMock.getHostEnrollmentToken.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(coreClientMock.getHostEnrollmentToken.mock.calls.length).toBe(
+        reads,
+      );
+
+      // Expired means gone: no Copy, no secret in the DOM, and a way back.
+      expect(
+        screen.queryByRole("button", { name: "Copy setup prompt" }),
+      ).toBeNull();
+      expect(document.body.textContent).not.toContain("htok_short");
+      expect(document.body.textContent).toContain("no longer on this page");
+      expect(screen.getByRole("button", { name: "New token" })).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("a deployment agents cannot reach", () => {
   it("withholds the prompt, issues no token, and keeps the commands", async () => {
     render(SetupPrompt, {
@@ -329,7 +430,7 @@ describe("a deployment agents cannot reach", () => {
     // The reader lands on the path that still works.
     await expect(
       screen.findByText(
-        /anx --base-url http:\/\/127\.0\.0\.1:8000 host enroll/,
+        /anx --base-url 'http:\/\/127\.0\.0\.1:8000' host enroll/,
       ),
     ).resolves.toBeTruthy();
     expect(

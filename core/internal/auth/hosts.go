@@ -533,6 +533,30 @@ func (s *Store) ListHostEnrollmentTokens(ctx context.Context) ([]HostEnrollmentT
 	}
 	return out, rows.Err()
 }
+// GetHostEnrollmentToken reads one token by id.
+//
+// A single indexed row, so a surface watching whether its own grant has been
+// redeemed does not read the workspace's whole token history on every tick.
+// The secret is never stored in readable form and is never returned.
+func (s *Store) GetHostEnrollmentToken(ctx context.Context, id string) (HostEnrollmentToken, error) {
+	row := resourceaccess.NewDB(s.db).QueryRowContext(ctx, `SELECT id,label,created_at,expires_at,consumed_at,revoked_at FROM host_enrollment_tokens WHERE id=?`, id)
+	var t HostEnrollmentToken
+	var c, r sql.NullString
+	switch err := row.Scan(&t.ID, &t.Label, &t.CreatedAt, &t.ExpiresAt, &c, &r); {
+	case errors.Is(err, sql.ErrNoRows):
+		return HostEnrollmentToken{}, ErrHostNotFound
+	case err != nil:
+		return HostEnrollmentToken{}, err
+	}
+	if c.Valid {
+		t.ConsumedAt = &c.String
+	}
+	if r.Valid {
+		t.RevokedAt = &r.String
+	}
+	return t, nil
+}
+
 func (s *Store) RevokeHostEnrollmentToken(ctx context.Context, id string, admin Principal) (HostEnrollmentToken, error) {
 	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
@@ -556,16 +580,7 @@ func (s *Store) RevokeHostEnrollmentToken(ctx context.Context, id string, admin 
 	if err = tx.Commit(); err != nil {
 		return HostEnrollmentToken{}, err
 	}
-	items, err := s.ListHostEnrollmentTokens(ctx)
-	if err != nil {
-		return HostEnrollmentToken{}, err
-	}
-	for _, t := range items {
-		if t.ID == id {
-			return t, err
-		}
-	}
-	return HostEnrollmentToken{}, ErrHostNotFound
+	return s.GetHostEnrollmentToken(ctx, id)
 }
 func (s *Store) CompleteHostEnrollment(ctx context.Context, id, poll, signature string) (Host, error) {
 	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)

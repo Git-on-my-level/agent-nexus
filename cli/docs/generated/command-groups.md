@@ -201,7 +201,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `host`
 
-- Commands: `15`
+- Commands: `16`
 - Command IDs:
   - `hosts.bridge.check_in` (`host bridge check-in`)
   - `hosts.enroll.approve` (`host enrollments approve`)
@@ -216,6 +216,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `hosts.patch` (`host patch`)
   - `hosts.revoke` (`host revoke`)
   - `hosts.tokens.create` (`host tokens create`)
+  - `hosts.tokens.get` (`host tokens get`)
   - `hosts.tokens.list` (`host tokens list`)
   - `hosts.tokens.revoke` (`host tokens revoke`)
 

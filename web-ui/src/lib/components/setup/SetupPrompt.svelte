@@ -4,6 +4,7 @@
   import Button from "$lib/components/Button.svelte";
   import CopyButton from "$lib/components/CopyButton.svelte";
   import { isAdministrationRefusal } from "$lib/coreAuthErrors.js";
+  import { pmInstallCommand } from "$lib/pm/onboardingState.js";
   import { coreClient } from "$lib/coreClient";
   import {
     PM_RUNNERS,
@@ -47,6 +48,13 @@
     lede = "",
     /** Rendered under the prompt: the page's live "has it arrived yet" line. */
     status,
+    /**
+     * Called once the token this panel issued has been redeemed by a machine.
+     *
+     * The panel owns the token, so it is the only thing that can watch for
+     * that cheaply; the page owns what to show, so it is the one told.
+     */
+    onredeemed = undefined,
   } = $props();
 
   /**
@@ -54,6 +62,9 @@
    * this deployment cannot produce a prompt worth copying — landing a reader
    * on an explanation of what is missing would hide the path that still works.
    */
+  /** Matches the Access page's pending-enrollment tick. */
+  const REDEMPTION_POLL_MS = 5_000;
+
   let tab = $state("");
   let activeTab = $derived(
     tab || (blockedReason || refused ? "manual" : "agent"),
@@ -81,6 +92,10 @@
    * reactive would re-run the effect that writes it.
    */
   const issued = { key: "" };
+  /** A token this panel issued ran out while the reader watched. */
+  let tokenExpired = $state(false);
+  /** The token whose redemption has already been reported, once. */
+  const redeemed = { id: "" };
   /** Set once this panel is gone, so a late response strands nothing. */
   let destroyed = false;
   /**
@@ -95,6 +110,7 @@
   let installCommand = $derived(resolveCliInstallCommand(cliInstallCommand));
   let blockedReason = $derived(setupPromptBlockedReason({ cliBaseUrl }));
   let manualEnrollCommand = $derived(hostEnrollCommand({ cliBaseUrl }));
+  let manualPmInstallCommand = $derived(pmInstallCommand({ cliBaseUrl }));
   let runner = $derived(pmRunnerFor(runnerKey));
 
   /** Core's expiry, or NaN when it did not report one (an older core). */
@@ -194,6 +210,7 @@
       }
       token = issuedToken;
       handedOver = false;
+      tokenExpired = false;
       now = Date.now();
       if (retiring) {
         retire(retiring);
@@ -226,6 +243,53 @@
     if (!token || expired) return;
     const timer = setInterval(() => (now = Date.now()), 1000);
     return () => clearInterval(timer);
+  });
+
+  /*
+   * Watch this one token for redemption, bounded three ways: one indexed row
+   * per tick (`GET /auth/hosts/enrollment-tokens/{id}`, not the workspace's
+   * token history and not every host), only while a live token exists, and
+   * only until it expires. A machine that enrols with a token files no
+   * approval request, so this is the only signal the page can see.
+   */
+  $effect(() => {
+    const id = token?.id;
+    if (!id || expired || redeemed.id === id) return;
+    const timer = setInterval(async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      try {
+        const result = await coreClient.getHostEnrollmentToken(id);
+        if (destroyed || !result?.enrollment_token?.consumed_at) return;
+        /*
+         * Once only, and then stop. The page reads the roster from here; the
+         * guard is re-checked inside the tick because it is deliberately not
+         * reactive — a reactive flag would restart this effect, and the
+         * clearInterval below is what actually ends the watch.
+         */
+        if (redeemed.id === id) return;
+        redeemed.id = id;
+        clearInterval(timer);
+        onredeemed?.();
+      } catch {
+        // A refused or failed read is not "no machine yet"; the next tick,
+        // or the reader's own reload, settles it.
+      }
+    }, REDEMPTION_POLL_MS);
+    return () => clearInterval(timer);
+  });
+
+  /*
+   * An expired token leaves component state, and with it the prompt and the
+   * DOM node holding the secret. Keeping it would leave Copy live over a dead
+   * token — the reader pastes, the agent reports "expired or already used",
+   * and the screen said nothing — and would leave a secret in the page for as
+   * long as the tab is open, for no remaining purpose.
+   */
+  $effect(() => {
+    if (!expired) return;
+    tokenExpired = true;
+    token = null;
+    handedOver = false;
   });
 
   /*
@@ -374,9 +438,10 @@
         >
           {issueError}
         </p>
-      {:else if expired}
+      {:else if tokenExpired}
         <p class="text-micro text-fg-muted" data-setup-token-expired>
-          That token has expired. Choose New token for a fresh one.
+          That token has expired and is no longer on this page. Choose New token
+          for a fresh one.
         </p>
       {/if}
 
@@ -434,13 +499,9 @@
           <div class="flex items-center gap-1 rounded bg-bg-soft px-2 py-1.5">
             <code
               class="min-w-0 flex-1 break-all font-mono text-micro text-fg"
-              data-pm-install-command
-              >{`anx ${cliBaseUrl ? `--base-url ${cliBaseUrl} ` : ""}pm install`}</code
+              data-pm-install-command>{manualPmInstallCommand}</code
             >
-            <CopyButton
-              value={`anx ${cliBaseUrl ? `--base-url ${cliBaseUrl} ` : ""}pm install`}
-              label="Copy command"
-            />
+            <CopyButton value={manualPmInstallCommand} label="Copy command" />
           </div>
           <p class="text-micro text-fg-subtle">
             Run that one in a terminal you can type into: with no --runner it
