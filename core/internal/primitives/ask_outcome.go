@@ -97,13 +97,7 @@ func (s *Store) AskOutcome(ctx context.Context, ref string) (map[string]any, err
 			if err != nil && !errors.Is(err, sql.ErrNoRows) {
 				return nil, err
 			}
-			staleAfter := s.askStaleAfter
-			if staleAfter <= 0 {
-				staleAfter = 7 * 24 * time.Hour
-			}
-			if changed, e := time.Parse(time.RFC3339Nano, at); e == nil {
-				out["is_stale"] = time.Since(changed) > staleAfter
-			}
+			s.applyAskStaleness(out, at, time.Now().UTC())
 		}
 	}
 	deliveries, err := s.askDeliveries(ctx, id)

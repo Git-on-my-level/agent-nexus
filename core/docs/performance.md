@@ -11,7 +11,11 @@ Inbox, event and notification-receipt streams observe SQLite `data_version` on
 one dedicated connection shared by the handler. The connection performs only
 the version PRAGMA, holds no transaction and is released when the last stream
 disconnects. An unchanged tick performs O(1) metadata work and a keepalive,
-without authorization graph, projection or summary recomputation. Poll intervals
+without authorization graph, projection or summary recomputation. Open asks also
+track the earliest subject inactivity deadline while admitting each page; a clock
+comparison on idle ticks starts a normal bounded sweep when that deadline passes.
+This emits the stale transition once without SQL or a record scan on earlier idle
+ticks. Poll intervals
 have a 100 ms floor; the default remains one second.
 
 Every committed database write invalidates this conservative cursor, including
@@ -481,3 +485,17 @@ as mitigation for new work. Existing main exceptions must remain exact, finite
 and linked to the P1 repair; do not broaden them for a changed hot path. Review startup/backfill cost and advancing progress separately
 from readiness. Check fixture coverage, successful point selectors, second SSE
 ticks, and narrowly justified SQL exceptions before trusting a green result.
+
+Inbox ask staleness enrichment uses only authorized response-page subject refs,
+in batches of at most 200. Card IDs, `idx_cards_handle_unique` (with its partial
+predicate), and the unique identity `(origin,origin_id,kind,resource_id,ref)` index resolve alias routing keys
+before timestamp hydration. The new projection performs O(page) indexed probes
+in one SQL batch per 200 distinct subjects, independently of workspace size.
+`TestPerformanceInboxAskStalenessBudgetAndPlans` measures scoped projection cost
+on the scale fixture; `TestInboxAskStalenessPageBoundAndQueryPlan` checks fixed
+page queries as the corpus grows and certifies all three lookup indexes.
+The exact scoped SQL/plan exception covers the conservative custom-function
+heuristic: page-value normalization and O(1) pinned denial membership occur only
+on indexed candidate lookups. It permits no scans or budget increases; the
+200-subject owner/stranger probes measured one SQL execution and at most 8,685 VM
+instructions.

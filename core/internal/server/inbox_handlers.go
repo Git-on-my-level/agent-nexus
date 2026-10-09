@@ -965,6 +965,10 @@ func handleGetInboxSummary(w http.ResponseWriter, r *http.Request, opts handlerO
 	for _, item := range projected {
 		asks = append(asks, payloadFromDerivedInboxItem(item))
 	}
+	if err := enrichInboxAskStaleness(r, opts, asks); err != nil {
+		writeError(w, 500, "internal_error", "failed to enrich inbox projections")
+		return
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, 200, map[string]any{"open_ask_count": count, "asks": asks, "generated_at": time.Now().UTC().Format(time.RFC3339Nano)})
 }

@@ -27,8 +27,12 @@ export function createInboxOrder() {
     }
     const byId = new Map(rows.map((row) => [row.id, row]));
     const ordered = state.ids.map((id) => byId.get(id)).filter(Boolean);
-    const lateRows = ordered.filter((row) => state.late.has(row.id));
-    const grouped = ordered.filter((row) => !state.late.has(row.id));
+    const lateRows = ordered.filter(
+      (row) => state.late.has(row.id) && !row.stale,
+    );
+    const grouped = ordered.filter(
+      (row) => !state.late.has(row.id) || row.stale,
+    );
     const staleRows = grouped.filter((row) => row.stale);
     if (staleExpanded && staleRows.length) state.shownStale = true;
     return {

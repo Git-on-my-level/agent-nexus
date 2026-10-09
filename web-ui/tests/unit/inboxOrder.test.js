@@ -29,7 +29,7 @@ describe("Inbox arrival order", () => {
     ]);
   });
 
-  it("appends below an expanded stale selection, and does not move arrivals when folded", () => {
+  it("keeps fresh arrivals below an expanded stale selection and folds stale arrivals", () => {
     const order = createInboxOrder();
     const stale = row("stale", true);
     order("needs-you", [row("ask"), stale], true);
@@ -38,15 +38,19 @@ describe("Inbox arrival order", () => {
       [row("decision"), row("ask"), stale, row("late-stale", true)],
       true,
     );
-    expect(visible(next)).toEqual(["ask", "stale", "decision", "late-stale"]);
-    expect(next.staleRows.map((item) => item.id)).toEqual(["stale"]);
+    expect(visible(next)).toEqual(["ask", "stale", "late-stale", "decision"]);
+    expect(next.staleRows.map((item) => item.id)).toEqual([
+      "stale",
+      "late-stale",
+    ]);
     const folded = order(
       "needs-you",
       [row("decision"), row("ask"), stale, row("late-stale", true)],
       false,
     );
-    expect(folded.lateRows.map((item) => item.id)).toEqual([
-      "decision",
+    expect(folded.lateRows.map((item) => item.id)).toEqual(["decision"]);
+    expect(folded.staleRows.map((item) => item.id)).toEqual([
+      "stale",
       "late-stale",
     ]);
   });

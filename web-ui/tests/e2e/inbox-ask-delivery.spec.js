@@ -79,6 +79,9 @@ const EVIDENCE_ASK = {
 };
 
 const STALE_ASK = {
+  is_stale: true,
+  stale_reason: "subject_inactive",
+  stale_since: new Date(Date.now() - 232 * 3_600_000).toISOString(),
   id: "inbox-stale",
   kind: "ask",
   title: "Old question nobody closed",
@@ -595,28 +598,43 @@ test("a deep link into an ask loads its evidence", async ({ page }) => {
   ).toContainText("Rollout change");
 });
 
-test("a stale ask says so on the ask, and is not folded out of the list", async ({
-  page,
-}) => {
-  // Staleness is a per-ask fact: core returns `is_stale` from `GET /asks/{id}`
-  // and does not put it on an inbox row, so the ask that has it says so and the
-  // list leaves every open ask where it is.
-  await setupInbox(page, { open: [STALE_ASK, EVIDENCE_ASK] });
+test("stale asks are counted and folded until answered", async ({ page }) => {
+  const state = await setupInbox(page, { open: [STALE_ASK, EVIDENCE_ASK] });
   await page.goto("/o/local/w/local/inbox");
-
+  const fold = page.locator("[data-inbox-stale]");
+  const toggle = fold.getByRole("button", { name: "Stale (1)" });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
   const row = page.getByTestId(`inbox-row-${STALE_ASK.id}`);
+  await expect(row).toHaveCount(0);
+  await expect(page.getByTestId(`inbox-row-${EVIDENCE_ASK.id}`)).toBeVisible();
+  await toggle.click();
   await expect(row).toBeVisible();
-  await expect(page.locator("[data-inbox-stale]")).toHaveCount(0);
-
   await row.click();
   await expect(page.locator("[data-inbox-ask-stale]")).toContainText(
     "has not changed in a while",
   );
+  await page.locator("[data-inbox-needs-context-open]").click();
+  await page
+    .locator("[data-inbox-needs-context-note]")
+    .fill("Please refresh the evidence.");
+  await page.locator("[data-inbox-needs-context-send]").click();
+  await expect
+    .poll(() => state.respondBodies.length, { timeout: 15_000 })
+    .toBe(1);
+  await expect(row).toHaveCount(0);
+  await expect(fold).toHaveCount(0);
+});
 
-  // An ask whose task has changed says nothing about staleness.
-  await page.getByTestId(`inbox-row-${EVIDENCE_ASK.id}`).click();
-  await expect(page.locator("[data-inbox-evidence]")).toBeVisible();
-  await expect(page.locator("[data-inbox-ask-stale]")).toHaveCount(0);
+test("a withdrawn stale ask leaves the fold after refresh", async ({
+  page,
+}) => {
+  const state = await setupInbox(page, { open: [STALE_ASK, EVIDENCE_ASK] });
+  await page.goto("/o/local/w/local/inbox");
+  await expect(page.locator("[data-inbox-stale]")).toContainText("Stale (1)");
+  state.openItems = [EVIDENCE_ASK];
+  await page.reload();
+  await expect(page.getByTestId(`inbox-row-${EVIDENCE_ASK.id}`)).toBeVisible();
+  await expect(page.locator("[data-inbox-stale]")).toHaveCount(0);
 });
 
 test("evidence reads as a sheet at phone width", async ({ page }) => {

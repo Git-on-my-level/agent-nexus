@@ -11070,6 +11070,10 @@ components:
         kind:
           type: string
           description: Open classifier; v1 known values are ask, review, escalate and report_review. report_review is a nonactionable author-only deadline reminder.
+        is_stale: {type: boolean, description: Computed for open attention requests from linked card updated_at using the ask delivery stale threshold (default seven days). False for non-card or unavailable subjects. Staleness does not close the ask; durable response or withdrawal does.}
+        stale_at: {type: string, format: date-time, description: Subject inactivity deadline; present for an available linked card even before it becomes stale.}
+        stale_reason: {type: string, enum: [subject_inactive], description: Present only when is_stale is true.}
+        stale_since: {type: string, format: date-time, description: Linked card updated_at plus the configured ask delivery stale threshold; present only when is_stale is true.}
         response_proposals:
           type: array
           description: >
@@ -11768,6 +11772,9 @@ components:
         status: {type: string, enum: [open, answered, needs_context, withdrawn, expired]}
         subject_ref: {type: string}
         is_stale: {type: boolean}
+        stale_at: {type: string, format: date-time, description: Subject inactivity deadline; present for an available linked card even before it becomes stale.}
+        stale_reason: {type: string, enum: [subject_inactive]}
+        stale_since: {type: string, format: date-time}
         response: {type: object, additionalProperties: true, nullable: true}
         task_outcome:
           type: object

@@ -99,6 +99,9 @@ func TestScopeInboxHTTPAccessRequestAndRevokedTargetEnrichment(t *testing.T) {
 				t.Fatal(err)
 			}
 			applyAccessRequestInboxMetadata(payload, requests[request.RequestEventRef])
+			if err := store.EnrichInboxAskStaleness(ctx, []map[string]any{payload}, time.Now().UTC()); err != nil {
+				t.Fatal(err)
+			}
 			body := scopeInboxHTTP(t, env, owner.AccessToken, "/inbox?limit=100")
 			items := body["items"].([]any)
 			if len(items) != 1 || !reflect.DeepEqual(items[0], payload) || payload["access_request_id"] != request.ID || payload["requested_grant"] != "auth-admin" {

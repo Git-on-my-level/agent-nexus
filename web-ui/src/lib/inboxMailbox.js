@@ -629,6 +629,7 @@ export function buildInboxRows({
       waitingSince:
         item.source_event_time || item.trigger_at || item.created_at || "",
       status: item.status || (item.responded_at ? "completed" : "open"),
+      stale: item.is_stale === true && inboxItemNeedsResponse(item),
       category: String(item.kind ?? item.category ?? "").trim(),
       severity: item.severity || "",
       requester: { name: requesterName, id: requesterId },
