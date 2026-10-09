@@ -12,7 +12,7 @@
   } from "$lib/setup/pmRunners.js";
   import {
     SETUP_TOKEN_LABEL,
-    SETUP_TOKEN_LIFETIME_MS,
+    SETUP_TOKEN_LIFETIME_SECONDS,
     buildMachinePrompt,
     buildPmPrompt,
     formatCountdown,
@@ -47,8 +47,6 @@
     lede = "",
     /** Rendered under the prompt: the page's live "has it arrived yet" line. */
     status,
-    /** Issue a token as soon as this is true (the panel is on screen). */
-    active = true,
   } = $props();
 
   /**
@@ -83,17 +81,25 @@
    * reactive would re-run the effect that writes it.
    */
   const issued = { key: "" };
+  /** Set once this panel is gone, so a late response strands nothing. */
+  let destroyed = false;
 
   let installCommand = $derived(resolveCliInstallCommand(cliInstallCommand));
   let blockedReason = $derived(setupPromptBlockedReason({ cliBaseUrl }));
   let manualEnrollCommand = $derived(hostEnrollCommand({ cliBaseUrl }));
   let runner = $derived(pmRunnerFor(runnerKey));
 
-  let remainingMs = $derived(
-    token?.expiresAt ? Date.parse(token.expiresAt) - now : 0,
-  );
+  /** Core's expiry, or NaN when it did not report one (an older core). */
+  let expiresAtMs = $derived(Date.parse(token?.expiresAt ?? ""));
+  let expiryKnown = $derived(Number.isFinite(expiresAtMs));
+  let remainingMs = $derived(expiryKnown ? expiresAtMs - now : 0);
   let countdown = $derived(formatCountdown(remainingMs));
-  let expired = $derived(Boolean(token) && remainingMs <= 0);
+  /*
+   * Only a known expiry can be in the past. A core that reports no expiry is
+   * not reporting an expired token, and calling it one would tell the reader
+   * to replace a token that works.
+   */
+  let expired = $derived(expiryKnown && remainingMs <= 0);
 
   let prompt = $derived(
     !token
@@ -115,6 +121,20 @@
             expiresAt: token.expiresAt,
           }),
   );
+
+  /**
+   * Hand a token back when it will not be used.
+   *
+   * Best effort by design: the reader has already moved on, and an unused
+   * token expires on its own. Failing here must not surface as a failure of
+   * whatever they did next.
+   *
+   * @param {string} id
+   */
+  function retire(id) {
+    if (!id) return;
+    void coreClient.revokeHostEnrollmentToken(id).catch(() => {});
+  }
 
   function describe(error, fallback) {
     return (
@@ -140,23 +160,29 @@
     try {
       const result = await coreClient.createHostEnrollmentToken({
         label: SETUP_TOKEN_LABEL,
-        expires_at: new Date(
-          Date.now() + SETUP_TOKEN_LIFETIME_MS,
-        ).toISOString(),
+        expires_in_seconds: SETUP_TOKEN_LIFETIME_SECONDS,
       });
       const secret = String(result?.token ?? "");
       const record = result?.enrollment_token ?? {};
       if (!secret) throw new Error("Core returned no token.");
-      token = {
+      const issuedToken = {
         secret,
         id: String(record.id ?? ""),
         expiresAt: String(record.expires_at ?? ""),
       };
+      /*
+       * The panel was torn down while this was in flight. Keeping the secret
+       * would strand a live workspace-joining credential nothing can reach,
+       * so retire it instead of assigning it to state no one is reading.
+       */
+      if (destroyed) {
+        retire(issuedToken.id);
+        return;
+      }
+      token = issuedToken;
       now = Date.now();
       if (retiring) {
-        // Best effort: the replacement is already on screen, and the retired
-        // token expires on its own. Failing here must not look like failure.
-        void coreClient.revokeHostEnrollmentToken(retiring).catch(() => {});
+        retire(retiring);
       }
     } catch (error) {
       if (isAdministrationRefusal(error)) {
@@ -174,7 +200,7 @@
    * so switching workspaces re-issues and a re-render does not.
    */
   $effect(() => {
-    if (!active || blockedReason) return;
+    if (blockedReason) return;
     const key = `${kind}|${cliBaseUrl}`;
     if (issued.key === key) return;
     issued.key = key;
@@ -188,7 +214,15 @@
     return () => clearInterval(timer);
   });
 
+  /*
+   * Hand the token back on the way out. This panel issues one on open, and
+   * the onboarding path crosses three surfaces plus the walkthrough: without
+   * this, one pass through it would leave four live credentials behind, each
+   * good for joining any machine to the workspace for half an hour.
+   */
   onDestroy(() => {
+    destroyed = true;
+    retire(token?.id ?? "");
     token = null;
   });
 </script>
@@ -262,14 +296,26 @@
       {/if}
 
       <div class="flex flex-wrap items-center gap-2">
-        <CopyButton
-          value={prompt}
-          label="Copy setup prompt"
-          text="Copy setup prompt"
-          variant="primary"
-          size="md"
-          title="Copies the whole prompt, including a single-use token"
-        />
+        <!--
+          Offered only once there is something to copy. A copy control that
+          hands over an empty string and then says "copied" is worse than one
+          that is not there yet: the reader pastes nothing into their agent and
+          has no reason to suspect it.
+        -->
+        {#if prompt}
+          <CopyButton
+            value={prompt}
+            label="Copy setup prompt"
+            text="Copy setup prompt"
+            variant="primary"
+            size="md"
+            title="Copies the whole prompt, including a single-use token"
+          />
+        {:else}
+          <Button variant="primary" size="default" disabled busy={issuing}>
+            {issuing ? "Preparing the prompt…" : "No prompt yet"}
+          </Button>
+        {/if}
         {#if token && !expired && countdown}
           <span
             class="rounded-full border border-warn px-2 py-0.5 text-micro text-warn-text"

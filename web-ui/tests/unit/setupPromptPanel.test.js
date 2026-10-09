@@ -79,10 +79,14 @@ describe("a deployment agents can reach", () => {
     );
     const payload = coreClientMock.createHostEnrollmentToken.mock.calls[0][0];
     expect(payload.label).toBe("Setup prompt");
-    const lifetimeMs = Date.parse(payload.expires_at) - Date.now();
-    // 30 minutes, with room for the time this test takes to get here.
-    expect(lifetimeMs).toBeGreaterThan(29 * 60_000);
-    expect(lifetimeMs).toBeLessThanOrEqual(30 * 60_000 + 5_000);
+    /*
+     * The lifetime is measured by core, not by this browser: a clock a few
+     * minutes slow makes core reject an absolute `expires_at` outright, and a
+     * clock a day fast would buy a 23-hour credential behind a countdown that
+     * claimed half an hour.
+     */
+    expect(payload.expires_in_seconds).toBe(1800);
+    expect(payload.expires_at).toBeUndefined();
 
     await expect(screen.findByText(/token expires in/i)).resolves.toBeTruthy();
   });
@@ -153,6 +157,72 @@ describe("a deployment agents can reach", () => {
     ).toBeNull();
   });
 
+  it("offers nothing to copy until there is something to copy", async () => {
+    /** @type {(value: unknown) => void} */
+    let release = () => {};
+    coreClientMock.createHostEnrollmentToken.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    render(SetupPrompt, {
+      props: { kind: "machine", cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
+    });
+
+    // A copy control that hands over "" and then says "copied" is worse than
+    // one that is not there yet.
+    await expect(
+      screen.findByRole("button", { name: /Preparing the prompt/i }),
+    ).resolves.toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Copy setup prompt" }),
+    ).toBeNull();
+
+    release(tokenResponse("htok_late"));
+    await tokenReady();
+    await fireEvent.click(
+      screen.getByRole("button", { name: "Copy setup prompt" }),
+    );
+    await waitFor(() => expect(clipboard.text).toContain("htok_late"));
+  });
+
+  it("hands the token back when the panel goes away", async () => {
+    const view = render(SetupPrompt, {
+      props: { kind: "machine", cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
+    });
+    await tokenReady();
+
+    view.unmount();
+    await waitFor(() =>
+      expect(coreClientMock.revokeHostEnrollmentToken).toHaveBeenCalledWith(
+        "htok_htok_first",
+      ),
+    );
+  });
+
+  it("does not call a token expired when core reported no expiry", async () => {
+    coreClientMock.createHostEnrollmentToken.mockResolvedValue({
+      token: "htok_no_expiry",
+      enrollment_token: { id: "htok_x" },
+    });
+    render(SetupPrompt, {
+      props: { kind: "machine", cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Copy setup prompt" }),
+      ).toBeTruthy(),
+    );
+    // An older core that reports no expiry is not reporting an expired token.
+    expect(screen.queryByText(/That token has expired/i)).toBeNull();
+    await fireEvent.click(
+      screen.getByRole("button", { name: "Copy setup prompt" }),
+    );
+    await waitFor(() => expect(clipboard.text).toContain("htok_no_expiry"));
+  });
+
   it("says so when core refuses to issue a token", async () => {
     coreClientMock.createHostEnrollmentToken.mockRejectedValue(
       Object.assign(new Error("nope"), { details: "Not an administrator." }),
@@ -163,6 +233,10 @@ describe("a deployment agents can reach", () => {
     await expect(
       screen.findByText("Not an administrator."),
     ).resolves.toBeTruthy();
+    // And no control that would copy an empty string while saying "copied".
+    expect(
+      screen.queryByRole("button", { name: "Copy setup prompt" }),
+    ).toBeNull();
   });
 
   it("bakes the chosen PM runner into the prompt", async () => {
@@ -183,7 +257,7 @@ describe("a deployment agents can reach", () => {
     expect(clipboard.text).toContain("hermes chat --query-file");
     // One-shot: it joins the machine to the workspace when it has to.
     expect(clipboard.text).toContain("host enroll --token-stdin");
-    expect(clipboard.text).toContain("already enrolled");
+    expect(clipboard.text).toContain("leave the token unspent");
   });
 
   it("switches the runner with the picker", async () => {

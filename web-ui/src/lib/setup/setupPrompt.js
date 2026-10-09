@@ -27,6 +27,16 @@ export const DEFAULT_CLI_INSTALL_COMMAND =
 /** Lifetime of the enrollment token a setup prompt carries. */
 export const SETUP_TOKEN_LIFETIME_MS = 30 * 60_000;
 
+/**
+ * The same lifetime as core measures it.
+ *
+ * Sent instead of `expires_at` so the window is the server's 30 minutes and
+ * not the browser's: a clock a few minutes slow makes core reject the absolute
+ * form outright, and a clock a day fast would buy a 23-hour credential while
+ * the countdown on screen claimed half an hour.
+ */
+export const SETUP_TOKEN_LIFETIME_SECONDS = SETUP_TOKEN_LIFETIME_MS / 1000;
+
 /** Label recorded on tokens issued for a copyable prompt. */
 export const SETUP_TOKEN_LABEL = "Setup prompt";
 
@@ -75,13 +85,21 @@ export function isLoopbackBaseUrl(baseUrl) {
   if (hostname.startsWith("[") && hostname.endsWith("]")) {
     hostname = hostname.slice(1, -1);
   }
-  return (
-    hostname === "localhost" ||
-    hostname.endsWith(".localhost") ||
-    hostname === "127.0.0.1" ||
-    hostname === "0.0.0.0" ||
-    hostname === "::1"
-  );
+  // `localhost.` is the same name with an explicit root label.
+  if (hostname.endsWith(".") && hostname.length > 1) {
+    hostname = hostname.slice(0, -1);
+  }
+  if (hostname === "localhost" || hostname.endsWith(".localhost")) return true;
+  // The whole of 127.0.0.0/8 is this machine, not just .0.1. `URL` has already
+  // normalized shorthand forms (`127.1`, `2130706433`, `0x7f.1`) to dotted quads.
+  if (/^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true;
+  if (hostname === "0.0.0.0" || hostname === "0") return true;
+  // IPv6 loopback and unspecified, including the IPv4-mapped spellings `URL`
+  // compresses to `::ffff:7f00:1`.
+  if (hostname === "::1" || hostname === "::") return true;
+  if (/^::ffff:7f[0-9a-f]{2}:[0-9a-f]{1,4}$/.test(hostname)) return true;
+  if (/^::ffff:127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true;
+  return false;
 }
 
 /**
@@ -140,16 +158,22 @@ function installStep(index, installCommand) {
     "",
     `     anx --version || ${installCommand}`,
     "",
-    "   Re-run `anx --version` afterwards. If it still fails, stop and tell me.",
+    "   The installer puts anx in ~/.local/bin, which is not on PATH by default on",
+    "   macOS. If `anx --version` still fails after installing, add it for this",
+    "   session and try again:",
+    "",
+    '     export PATH="$HOME/.local/bin:$PATH"',
+    "",
+    "   Stop and tell me if it still fails.",
   ];
 }
 
 function skillStep(index) {
   return [
-    `${index}. Optional, recommended: install the bundled ANX agent skill where your`,
-    "   harness keeps skills, so you know how to use anx later:",
+    `${index}. Optional, recommended: install the ANX skill into the harnesses on this`,
+    "   machine, so you know how to use anx later. It only writes copies it owns:",
     "",
-    "     anx install skill --path <your skills dir>/anx/SKILL.md",
+    "     anx skills sync",
   ];
 }
 
@@ -187,10 +211,14 @@ export function buildMachinePrompt({
     `       | ${anxCommand(base, "host enroll --token-stdin")} \\`,
     `           --name "$(hostname -s | tr A-Z a-z)"`,
     "",
-    "3. Prove it worked with real calls, not by re-reading the output above:",
+    "3. Prove it worked with a real call, not by re-reading the output above:",
     "",
-    `     ${anxCommand(base, "--json auth whoami")}`,
-    `     ${anxCommand(base, "--json host list")}`,
+    `     ${anxCommand(base, "--json doctor")}`,
+    "",
+    "   Read the `host_enrollment` check in that output: ok means this computer is",
+    "   in the workspace. Do not use `auth whoami` or `host list` here — they need",
+    "   an agent identity this shell may not have, and would report a working",
+    "   enrollment as a failure.",
     "",
     ...skillStep(4),
     "",
@@ -208,8 +236,14 @@ export function buildMachinePrompt({
  * The enrollment step is conditional rather than omitted: the web app knows
  * whether *a* machine is enrolled in this workspace, never whether *this* one
  * is, and a prompt that assumes wrongly either burns a token re-enrolling an
- * enrolled machine or stops to ask for one. The shell decides instead, and the
- * token is spent only when it is needed.
+ * enrolled machine or stops to ask for one. The agent decides on the spot from
+ * `anx doctor`, and the token is spent only when it is needed.
+ *
+ * `doctor` rather than a shell test on `auth whoami`: whoami fails with
+ * `identity_unresolved` on a perfectly enrolled machine whose shell carries no
+ * harness marker, so a gate built on it would re-enrol a machine that is
+ * already in the workspace. `doctor` needs no agent identity and reports
+ * enrollment as its own check.
  *
  * @param {{ workspaceLabel?: string, cliBaseUrl?: string, installCommand?: string, token?: string, expiresAt?: string, runnerKey?: string }} options
  */
@@ -230,18 +264,19 @@ export function buildPmPrompt({
     "",
     ...installStep(1, install),
     "",
-    "2. Enroll this computer, but only if it is not enrolled already. The token",
-    `   below is single-use${expiry ? ` and expires at ${expiry}` : ""}; the check leaves it unspent when this`,
-    "   machine is already in the workspace. Do not write it to a file, a dotfile,",
-    "   your notes or your memory:",
+    "2. Join this computer to the workspace, but only if it is not in it already.",
+    "   Check first:",
     "",
-    `     if ${anxCommand(base, "--json auth whoami")} >/dev/null 2>&1; then`,
-    '       echo "already enrolled"',
-    "     else",
-    `       printf %s ${shellQuote(token)} \\`,
-    `         | ${anxCommand(base, "host enroll --token-stdin")} \\`,
-    `             --name "$(hostname -s | tr A-Z a-z)"`,
-    "     fi",
+    `     ${anxCommand(base, "--json doctor")}`,
+    "",
+    "   Read the `host_enrollment` check. If it is ok, this computer is already",
+    "   enrolled: skip the rest of this step and leave the token unspent. Only if",
+    `   it is not ok, run this. The token is single-use${expiry ? ` and expires at ${expiry}` : ""}; do not`,
+    "   write it to a file, a dotfile, your notes or your memory:",
+    "",
+    `     printf %s ${shellQuote(token)} \\`,
+    `       | ${anxCommand(base, "host enroll --token-stdin")} \\`,
+    `           --name "$(hostname -s | tr A-Z a-z)"`,
     "",
     "3. Install the PM service. `anx pm install` with no --runner opens an",
     "   interactive wizard you cannot answer, so pass the runner explicitly.",
@@ -254,6 +289,8 @@ export function buildPmPrompt({
     "4. Verify:",
     "",
     `     ${anxCommand(base, "--json pm status")}`,
+    "",
+    "   `pm status` reads the local service and needs no agent identity.",
     "",
     ...skillStep(5),
     "",

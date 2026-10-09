@@ -16,7 +16,7 @@
   import { pmPresence } from "$lib/pm/presence.js";
   import {
     SETUP_TOKEN_LABEL,
-    SETUP_TOKEN_LIFETIME_MS,
+    SETUP_TOKEN_LIFETIME_SECONDS,
     buildMachinePrompt,
     setupPromptBlockedReason,
   } from "$lib/setup/setupPrompt.js";
@@ -66,27 +66,48 @@
    */
   let setupPrompt = $state("");
   let preparingPrompt = false;
+  /**
+   * What the cached prompt is good for: which workspace, and until when.
+   *
+   * The tour can be replayed hours later from Overview, and it has no
+   * countdown and no "New token" of its own. Without this, a replay would
+   * copy a dead token, or one minted for a different workspace, and say
+   * nothing about it.
+   */
+  const promptValidity = { key: "", expiresAtMs: 0 };
+
+  function promptStillGood() {
+    if (!setupPrompt) return false;
+    if (promptValidity.key !== `${workspaceSlug}|${cliBaseUrl}`) return false;
+    // A token core gave no expiry for is not assumed to live forever.
+    if (!promptValidity.expiresAtMs) return false;
+    // A minute of headroom: a prompt pasted on the edge is a wasted paste.
+    return promptValidity.expiresAtMs - Date.now() > 60_000;
+  }
 
   async function prepareSetupPrompt() {
-    if (setupPrompt || preparingPrompt) return;
+    if (preparingPrompt || promptStillGood()) return;
+    setupPrompt = "";
     if (setupPromptBlockedReason({ cliBaseUrl })) return;
     preparingPrompt = true;
     try {
       const result = await coreClient.createHostEnrollmentToken({
         label: SETUP_TOKEN_LABEL,
-        expires_at: new Date(
-          Date.now() + SETUP_TOKEN_LIFETIME_MS,
-        ).toISOString(),
+        expires_in_seconds: SETUP_TOKEN_LIFETIME_SECONDS,
       });
       const secret = String(result?.token ?? "");
-      if (!secret) return;
+      const expiresAt = String(result?.enrollment_token?.expires_at ?? "");
+      const expiresAtMs = Date.parse(expiresAt);
+      if (!secret || !Number.isFinite(expiresAtMs)) return;
       setupPrompt = buildMachinePrompt({
         workspaceLabel: workspaceLabel || workspaceSlug,
         cliBaseUrl,
         installCommand: cliInstallCommand,
         token: secret,
-        expiresAt: String(result?.enrollment_token?.expires_at ?? ""),
+        expiresAt,
       });
+      promptValidity.key = `${workspaceSlug}|${cliBaseUrl}`;
+      promptValidity.expiresAtMs = expiresAtMs;
     } catch {
       // No prompt; the CTA stays a plain link to Access.
     } finally {
@@ -100,7 +121,8 @@
   }
 
   function copySetupPrompt() {
-    if (!setupPrompt) return;
+    // Re-checked at the click: the card may have been on screen for a while.
+    if (!promptStillGood()) return;
     void copyText(setupPrompt);
   }
 

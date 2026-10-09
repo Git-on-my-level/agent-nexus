@@ -46,18 +46,37 @@ describe("loopback base URLs", () => {
     "https://anx.localhost",
     "http://0.0.0.0:8000",
     "http://[::1]:8000",
+    // The whole of 127/8 is this machine, not just .0.1.
+    "http://127.0.0.2:8000",
+    "http://127.1.2.3",
+    // Shorthand and integer forms, which `URL` normalizes to dotted quads.
+    "http://127.1:8000",
+    "http://2130706433:8000",
+    // An explicit root label is the same name.
+    "http://localhost.:5173",
+    // IPv4-mapped IPv6, which `URL` compresses.
+    "http://[::ffff:127.0.0.1]:8000",
+    // The unspecified address, which also means "here".
+    "http://[::]:8000",
+    // Credentials must not smuggle a loopback host past the check.
+    "http://user:pw@127.0.0.1:8000",
+    "HTTP://LOCALHOST:5173",
   ])("rejects %s", (url) => {
     expect(isLoopbackBaseUrl(url)).toBe(true);
     expect(setupPromptBlockedReason({ cliBaseUrl: url })).not.toBe("");
   });
 
-  it.each(["https://anx.example.test", "https://anx.example.test/o/a/w/b"])(
-    "accepts %s",
-    (url) => {
-      expect(isLoopbackBaseUrl(url)).toBe(false);
-      expect(setupPromptBlockedReason({ cliBaseUrl: url })).toBe("");
-    },
-  );
+  it.each([
+    "https://anx.example.test",
+    "https://anx.example.test/o/a/w/b",
+    // Neither of these is loopback, and refusing them would be a false alarm.
+    "https://127.example.test",
+    "https://10.0.0.4:8000",
+    "https://notlocalhost.example",
+  ])("accepts %s", (url) => {
+    expect(isLoopbackBaseUrl(url)).toBe(false);
+    expect(setupPromptBlockedReason({ cliBaseUrl: url })).toBe("");
+  });
 
   it("blocks when the deployment never said where its API is", () => {
     expect(setupPromptBlockedReason({ cliBaseUrl: "" })).not.toBe("");
@@ -129,9 +148,9 @@ describe("machine prompt", () => {
     expect(prompt).toContain("2026-10-09 09:41 UTC");
   });
 
-  it("verifies with a real call", () => {
-    expect(prompt).toContain("--json auth whoami");
-    expect(prompt).toContain("--json host list");
+  it("verifies with a call that needs no agent identity", () => {
+    expect(prompt).toContain("--json doctor");
+    expect(prompt).toContain("host_enrollment");
   });
 
   it("keeps human-only actions human", () => {
@@ -143,8 +162,8 @@ describe("machine prompt", () => {
     expect(prompt).toContain('"Acme Ops"');
   });
 
-  it("offers the bundled agent skill", () => {
-    expect(prompt).toContain("anx install skill");
+  it("offers the managed agent skill", () => {
+    expect(prompt).toContain("anx skills sync");
   });
 });
 
@@ -152,10 +171,8 @@ describe("PM prompt", () => {
   const prompt = buildPmPrompt({ ...BASE, runnerKey: "claude" });
 
   it("is one-shot: it enrols the machine when it is not enrolled", () => {
-    expect(prompt).toContain("--json auth whoami");
+    expect(prompt).toContain("--json doctor");
     expect(prompt).toContain("host enroll --token-stdin");
-    expect(prompt).toContain("else");
-    expect(prompt).toContain("fi");
     // The enrol step comes before the install step, not instead of it.
     expect(prompt.indexOf("host enroll")).toBeLessThan(
       prompt.indexOf("pm install"),
@@ -168,8 +185,9 @@ describe("PM prompt", () => {
   });
 
   it("leaves the token unspent when the machine is already enrolled", () => {
-    expect(prompt).toContain("already enrolled");
-    expect(prompt).toContain("leaves it unspent");
+    expect(prompt).toContain("host_enrollment");
+    expect(prompt).toContain("already");
+    expect(prompt).toContain("leave the token unspent");
   });
 
   it("bakes the chosen runner in so no wizard is reached", () => {

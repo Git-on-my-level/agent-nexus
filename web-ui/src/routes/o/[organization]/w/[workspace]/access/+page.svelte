@@ -303,6 +303,11 @@
       if (watchingForFirstHost && !arrivedHost && live.length) {
         arrivedHost = live[0];
       }
+      // A confirmation outlives its machine otherwise: revoke the host it
+      // names and the green card keeps saying the workspace has it.
+      if (arrivedHost && !live.some((host) => host.id === arrivedHost.id)) {
+        arrivedHost = null;
+      }
       watchingForFirstHost = live.length === 0;
       hosts = next;
     });
@@ -703,9 +708,10 @@
       if (document.hidden) return;
       void loadPending();
       /*
-       * One extra bounded read per tick, and only while the workspace has no
-       * machine at all: a token enrollment files no request, so `loadPending`
-       * would never see it. Stops as soon as one arrives.
+       * Two extra bounded reads per tick (hosts and enrollment tokens), and
+       * only while the workspace has no machine at all: a token enrollment
+       * files no request, so `loadPending` would never see it. Stops on the
+       * tick after the first host arrives.
        */
       if (watchingForFirstHost) void loadHosts();
     }, PENDING_POLL_MS);
