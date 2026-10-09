@@ -608,5 +608,10 @@
     "method": "POST",
     "path": "/pm/connect",
     "reason": "Authenticated local PM registration and connection timestamp write; indexed workspace CAS and point lookup, bounded labels, no historical scan."
+  },
+  {
+    "method": "POST",
+    "path": "/pm/disconnect",
+    "reason": "Explicit selected-PM reset: primary-key presence/migration-marker writes and status-indexed unfinished-turn mutation. No historical read or materialization; mutation cost proportional to unfinished turns."
   }
 ]

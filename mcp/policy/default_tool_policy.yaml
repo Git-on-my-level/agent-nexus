@@ -617,6 +617,9 @@ commands:
   "pm.connect":
     classification: unsupported_bootstrap_auth
     reason: Local runner bootstrap is owned by anx pm serve; model tools must not claim workspace PM ownership.
+  "pm.disconnect":
+    classification: unsupported_bootstrap_auth
+    reason: Explicit local PM uninstall resets workspace onboarding; model tools must not remove PM registration.
   "pm.presence":
     classification: exposed_read
     reason: "Read computed workspace PM connection state, bounded display labels and timestamps without turn data or commands."

@@ -36,8 +36,8 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet && len(path) == 1 && path[0] == "presence" {
 		permission = "pm.presence"
 	}
-	if r.Method == http.MethodPost && len(path) == 1 && path[0] == "connect" {
-		permission = "pm.connect"
+	if r.Method == http.MethodPost && len(path) == 1 && (path[0] == "connect" || path[0] == "disconnect") {
+		permission = "pm." + path[0]
 	}
 	if err = h.Service.authorize(r.Context(), p, permission, ""); err != nil {
 		writeError(w, err)
@@ -58,6 +58,8 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	status := http.StatusOK
 	decode := func(v any) error { return decodeBody(w, r, v) }
 	switch {
+	case len(path) == 1 && path[0] == "disconnect" && r.Method == http.MethodPost:
+		out, err = s.Disconnect(ctx, p)
 	case len(path) == 1 && path[0] == "connect" && r.Method == http.MethodPost:
 		var in ConnectionInput
 		if err = decode(&in); err == nil {

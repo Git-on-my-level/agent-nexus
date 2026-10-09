@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 222
+- Command count: 223
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -29,7 +29,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | ops | 3 |
 | overview | 2 |
 | plan | 2 |
-| pm | 26 |
+| pm | 27 |
 | ref-edges | 1 |
 | refs | 1 |
 | report | 2 |
@@ -51,7 +51,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | exposed_write | 67 |
 | gated_admin | 28 |
 | gated_sensitive | 13 |
-| unsupported_bootstrap_auth | 10 |
+| unsupported_bootstrap_auth | 11 |
 | unsupported_interactive | 9 |
 | unsupported_other | 6 |
 | unsupported_shell_shaped | 2 |
@@ -65,7 +65,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | hosted default | 66 | explicit read-only private-app allowlist |
 | gated | 41 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
-| unsupported | 33 | not represented as direct MCP tools in v1 |
+| unsupported | 34 | not represented as direct MCP tools in v1 |
 
 ## Command Inventory
 
@@ -236,6 +236,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | pm.decisions.dispatch | pm | POST | /pm/decisions/{decision_id}/dispatch | gated_sensitive | Human approval or consequential source handoff; explicit exposure never bypasses core authorization. |
 | pm.decisions.get | pm | GET | /pm/decisions/{decision_id} | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | pm.decisions.list | pm | GET | /pm/decisions | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
+| pm.disconnect | pm | POST | /pm/disconnect | unsupported_bootstrap_auth | Explicit local PM uninstall resets workspace onboarding; model tools must not remove PM registration. |
 | pm.presence | pm | GET | /pm/presence | exposed_read | Read computed workspace PM connection state, bounded display labels and timestamps without turn data or commands. |
 | pm.turns.claim | pm | POST | /pm/turns/claim | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | pm.turns.complete | pm | POST | /pm/turns/{turn_id}/complete | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |

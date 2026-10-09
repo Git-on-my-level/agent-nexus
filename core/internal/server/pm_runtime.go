@@ -140,7 +140,7 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		// already verified revocation and bound this principal to the request;
 		// loading its resource-bearing host summary would construct a workspace
 		// denial graph for this metadata-only point lookup.
-		if (permission == "pm.presence" || permission == "pm.connect") && ref == "" {
+		if (permission == "pm.presence" || permission == "pm.connect" || permission == "pm.disconnect") && ref == "" {
 			actual, ok := ctx.Value(principalContextKey{}).(*auth.Principal)
 			if ok && actual != nil && actual.ActorID == p.ActorID {
 				if permission == "pm.presence" {

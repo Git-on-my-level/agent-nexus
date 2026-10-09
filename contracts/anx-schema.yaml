@@ -928,7 +928,7 @@ conversational_pm:
   undeliverable_pending_acknowledgement: preserves_approval_and_detail_requires_fresh_proposal_to_deliver
   action_acknowledgement_fields: [acknowledged_by, acknowledged_at, closed_without_delivery]
   turn_lease_error_codes: [lease_required, lease_mismatch]
-  turn_failure_kind: [expired]
+  turn_failure_kind: [expired, pm_not_onboarded]
   decision_provenance: [proposed_by, origin_kind, turn_id]
   decision_origin_kind: [human, pm_turn, channel]
   phase_action_target: payload.phase

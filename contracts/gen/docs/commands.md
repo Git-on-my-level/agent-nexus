@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `222`
+- Commands: `223`
 
 ## `actors.create`
 
@@ -2088,6 +2088,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMDecisionListResponse`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+
+## `pm.disconnect`
+
+- CLI path: `pm disconnect`
+- HTTP: `POST /pm/disconnect`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Stop expecting the selected PM to return after explicit uninstall.
+- Concepts: `agents`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `unavailable`
+- Output: Returns `PMPresence` with state not_onboarded.
+- Agent notes: Idempotent. Only the selected PM principal may reset onboarding. Existing decisions remain readable and answerable. Unfinished turns fail with failure_kind pm_not_onboarded. A later explicit pm connect re-enables onboarding; idle claims and heartbeats cannot undo the reset.
 
 ## `pm.presence`
 
