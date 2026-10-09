@@ -929,9 +929,13 @@ describe("PM operator interactions", () => {
     expect(request).toMatchObject({ response_text: "Hub first" });
     expect(capturedScopes).toEqual([["org-a", "workspace-a"]]);
   });
-  it.each(["response", "decision", "archive"])(
-    "persists a confirmed %s in its original workspace after switching away",
-    async (kind) => {
+  it.each(
+    ["response", "decision", "archive"].flatMap((kind) =>
+      ["after", "before"].map((returnTiming) => ({ kind, returnTiming })),
+    ),
+  )(
+    "persists a confirmed $kind when returning $returnTiming confirmation",
+    async ({ kind, returnTiming }) => {
       state.route("/inbox");
       currentOrganizationSlug.set("org-a");
       currentWorkspaceSlug.set("workspace-a");
@@ -1015,6 +1019,39 @@ describe("PM operator interactions", () => {
       view.unmount();
       currentWorkspaceSlug.set("workspace-b");
       const stopB = startInboxCount("workspace-b");
+      let stopA;
+      const returnToA = async () => {
+        for (const name of [
+          "listInboxItems",
+          "listPmDecisions",
+          "listPmActions",
+          "listWork",
+          "getHomeUnread",
+        ]) {
+          client[name].mockRejectedValue(new Error("Reads unavailable"));
+        }
+        const readCalls = client.getHomeUnread.mock.calls.length;
+        currentWorkspaceSlug.set("workspace-a");
+        state.route("/inbox", {
+          organization: "org-a",
+          workspace: "workspace-a",
+        });
+        stopA = startInboxCount("workspace-a");
+        expect(getStore(inboxNeedsYouCount)).toMatchObject({
+          workspace: "workspace-a",
+          count: returnTiming === "before" ? 1 : 0,
+        });
+        render(InboxPage);
+        await waitFor(() =>
+          expect(client.getHomeUnread.mock.calls.length).toBeGreaterThan(
+            readCalls,
+          ),
+        );
+      };
+      if (returnTiming === "before") {
+        stopB();
+        await returnToA();
+      }
       confirmed.resolve(
         kind === "decision"
           ? {
@@ -1033,49 +1070,26 @@ describe("PM operator interactions", () => {
           expect(snapshot[0].value.items[0].status).toBe("declined");
         else expect(snapshot[2].value.work).toEqual([]);
       });
-      expect(getStore(inboxNeedsYouCount).workspace).toBe("workspace-b");
-      stopB();
-      for (const name of [
-        "listInboxItems",
-        "listPmDecisions",
-        "listPmActions",
-        "listWork",
-        "getHomeUnread",
-      ]) {
-        client[name].mockRejectedValue(new Error("Reads unavailable"));
+      if (returnTiming === "after") {
+        expect(getStore(inboxNeedsYouCount).workspace).toBe("workspace-b");
+        stopB();
+        await returnToA();
       }
-      const readCalls = client.getHomeUnread.mock.calls.length;
-      currentWorkspaceSlug.set("workspace-a");
-      state.route("/inbox", {
-        organization: "org-a",
-        workspace: "workspace-a",
-      });
-      const stopA = startInboxCount("workspace-a");
-      expect(getStore(inboxNeedsYouCount)).toMatchObject({
-        workspace: "workspace-a",
-        count: 0,
-      });
-      render(InboxPage);
-      await waitFor(() =>
-        expect(client.getHomeUnread.mock.calls.length).toBeGreaterThan(
-          readCalls,
-        ),
-      );
-      await waitFor(() =>
-        expect(screen.queryByRole("button", { name: /^1 Proceed/ })).toBeNull(),
-      );
-      expect(
-        screen.queryByRole("button", { name: "Decline", exact: true }),
-      ).toBeNull();
-      expect(
-        screen.queryByRole("button", {
-          name: "Archive Blocked stale",
-          exact: true,
-        }),
-      ).toBeNull();
-      expect(getStore(inboxNeedsYouCount)).toMatchObject({
-        workspace: "workspace-a",
-        count: 0,
+      await waitFor(() => {
+        expect(screen.queryByRole("button", { name: /^1 Proceed/ })).toBeNull();
+        expect(
+          screen.queryByRole("button", { name: "Decline", exact: true }),
+        ).toBeNull();
+        expect(
+          screen.queryByRole("button", {
+            name: "Archive Blocked stale",
+            exact: true,
+          }),
+        ).toBeNull();
+        expect(getStore(inboxNeedsYouCount)).toMatchObject({
+          workspace: "workspace-a",
+          count: 0,
+        });
       });
       stopA();
     },

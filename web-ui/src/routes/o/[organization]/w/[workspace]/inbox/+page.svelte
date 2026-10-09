@@ -122,6 +122,7 @@
     writeWorkspaceView,
     workspaceViewRevision,
     onWorkspaceViewsDenied,
+    onWorkspaceViewChanged,
   } from "$lib/workspaceViewCache.js";
   import {
     reliableRead,
@@ -1478,6 +1479,35 @@
         confirmed = false;
       }
     });
+    let mounted = true;
+    const stopCache = onWorkspaceViewChanged((key, snapshot) => {
+      if (key !== `${scope}:inbox` || !snapshot) return;
+      // Let the originating handler choose its next row before replacing data.
+      queueMicrotask(() => {
+        if (!mounted || scope !== readerScopeKey()) return;
+        // A denial or sign-out may have purged it since the notification.
+        const latest = readWorkspaceView(key);
+        if (!latest) return;
+        requestId++;
+        loadController?.abort();
+        selectionRequest++;
+        selectedController?.abort();
+        loading = false;
+        refreshPending = false;
+        decisions = latest[0].value?.items || [];
+        actions = latest[1].value?.items || [];
+        work = latest[2].value?.work || [];
+        openInboxItems = latest[3].value?.items || [];
+        completedInboxItems = latest[4].value?.items || [];
+        inboxItems = mergeInboxItems(openInboxItems, completedInboxItems);
+        updates = latest[5].value?.groups || [];
+        receiptsUnavailable = !latest[1].complete;
+        confirmed = latest.every(
+          (result) =>
+            result.status === "fulfilled" && result.complete !== false,
+        );
+      });
+    });
     void load();
     const releaseCount = claimInboxCount();
     const stopLive = liveWorkspaceEvents({
@@ -1529,6 +1559,8 @@
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
+      mounted = false;
+      stopCache();
       stopDenied();
       stopScope();
       requestId++;
