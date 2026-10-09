@@ -590,6 +590,24 @@ test("truncated idle agent sample visibly qualifies zero counts", async ({
   );
 });
 
+test("the walkthrough can be replayed from Overview", async ({ page }) => {
+  test.skip(BEFORE);
+  await installOverview(page);
+  // The mock marks the tour seen, which is exactly the state this recovers
+  // from: without a way back, "Maybe later" removed the only guided route to
+  // connecting a machine.
+  await page.goto(OVERVIEW);
+  const tour = page.getByTestId("workspace-spotlight-tour");
+  await expect(tour).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Take the tour" }).click();
+  await expect(tour).toBeVisible();
+  await expect(tour.getByText("60-second tour")).toBeVisible();
+
+  await page.getByRole("button", { name: "Close tour" }).click();
+  await expect(tour).toHaveCount(0);
+});
+
 test("Overview restores its snapshot on reload while revalidation is held", async ({
   page,
 }) => {

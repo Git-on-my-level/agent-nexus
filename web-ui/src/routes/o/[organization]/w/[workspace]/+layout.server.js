@@ -16,6 +16,7 @@ import {
 } from "$lib/server/hostedWorkspaceCore.js";
 import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
 import { resolveCliBaseUrl } from "$lib/server/cliBaseUrl.js";
+import { resolveCliInstallCommand } from "$lib/setup/setupPrompt.js";
 import {
   LAST_WORKSPACE_COOKIE,
   lastWorkspaceCookieValue,
@@ -302,6 +303,15 @@ export async function load(event) {
       // Copyable `anx` commands (PM setup, host enrollment) need the API
       // origin, and they are offered from the shell, not from one route.
       cliBaseUrl: resolveCliBaseUrl(event, resolved),
+      /*
+       * How this deployment installs the CLI, for the setup prompts. The OSS
+       * default is the public installer; a deployment that ships its own build
+       * sets `ANX_UI_CLI_INSTALL_COMMAND`. Non-secret, and the reader is about
+       * to run it, so it travels to the page rather than staying server-side.
+       */
+      cliInstallCommand: resolveCliInstallCommand(
+        privateEnv.ANX_UI_CLI_INSTALL_COMMAND,
+      ),
     },
     ...(coreSchemaCheckWarning ? { coreSchemaCheckWarning } : {}),
   };

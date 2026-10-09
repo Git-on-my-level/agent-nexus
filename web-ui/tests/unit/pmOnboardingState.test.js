@@ -254,16 +254,21 @@ describe("what each PM state may show", () => {
 });
 
 describe("PM commands", () => {
+  /*
+   * The base URL is quoted. It is deployment configuration — `ANX_WORKSPACES`,
+   * a hosted `core_origin`, the request origin — and a copyable command built
+   * by concatenation runs whatever a `$(…)` in one of them says.
+   */
   it("names the workspace when the deployment knows its API origin", () => {
     const options = { cliBaseUrl: "https://anx.example.test/o/local/w/ops" };
     expect(pmInstallCommand(options)).toBe(
-      "anx --base-url https://anx.example.test/o/local/w/ops pm install",
+      "anx --base-url 'https://anx.example.test/o/local/w/ops' pm install",
     );
     expect(pmStatusCommand(options)).toBe(
-      "anx --base-url https://anx.example.test/o/local/w/ops pm status",
+      "anx --base-url 'https://anx.example.test/o/local/w/ops' pm status",
     );
     expect(pmUninstallCommand(options)).toBe(
-      "anx --base-url https://anx.example.test/o/local/w/ops pm uninstall",
+      "anx --base-url 'https://anx.example.test/o/local/w/ops' pm uninstall",
     );
   });
 
@@ -335,7 +340,7 @@ describe("the setup command reaches the install wizard", () => {
       cliBaseUrl: "https://anx.example.test/o/local/w/ops",
     });
     expect(command).toBe(
-      "anx --base-url https://anx.example.test/o/local/w/ops pm install",
+      "anx --base-url 'https://anx.example.test/o/local/w/ops' pm install",
     );
     // `pm install` is last, so a parser that reads the verb from the tail
     // and one that skips global options both land on the wizard.

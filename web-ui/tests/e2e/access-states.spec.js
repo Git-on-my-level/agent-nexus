@@ -510,8 +510,18 @@ for (const viewport of AUDIT_VIEWPORTS) {
       api.tokens = [];
       api.agents = [];
       await page.reload();
-      await expect(page.getByText("No machines enrolled yet")).toBeVisible();
+      await expect(page.getByText("Connect your first machine")).toBeVisible();
+      await expect(page.locator("[data-host-waiting]")).toBeVisible();
       await expectCleanLayout(page, "empty workspace", bothEnds);
+
+      /*
+       * The flip to "Enrolled" is driven by the setup panel watching its own
+       * token, and this suite runs against a loopback core where that panel
+       * withholds its prompt and issues no token. The behaviour is covered in
+       * `tests/unit/accessPage.test.js`, which can choose the base URL; what
+       * belongs here is that the empty state reads correctly at every width.
+       */
+      await expectCleanLayout(page, "first machine panel", bothEnds);
     });
 
     test("approve and deny host enrollment", async ({ page }) => {
@@ -750,7 +760,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       });
       await page.goto(`${ACCESS_PATH}?from=tour#hosts`);
       await expect(
-        page.getByText("Last step: enroll the machine your agents run on"),
+        page.getByText("Last step: connect the machine your agents run on"),
       ).toBeVisible();
       await expectCleanLayout(page, "tour banner", bothEnds);
     });

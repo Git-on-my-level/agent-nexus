@@ -32,6 +32,12 @@
   );
   let workspaceSlug = $derived($page.data?.workspace?.slug ?? "");
   let cliBaseUrl = $derived($page.data?.workspace?.cliBaseUrl ?? "");
+  let cliInstallCommand = $derived(
+    $page.data?.workspace?.cliInstallCommand ?? "",
+  );
+  let workspaceLabel = $derived(
+    $page.data?.workspace?.label || $page.params.workspace || "",
+  );
   let presence = $derived(
     $pmPresence.workspace === workspaceSlug ? $pmPresence : null,
   );
@@ -188,7 +194,7 @@
       </dl>
 
       {#if !connected}
-        <p class="max-w-prose text-meta text-fg-muted">
+        <p class="text-meta text-fg-muted">
           Nothing is running the PM right now. Start the machine it is installed
           on, or check the service with the command below — and if you have
           never installed it on this computer, <code
@@ -222,6 +228,8 @@
     <PmSetupPanel
       {presence}
       {cliBaseUrl}
+      {cliInstallCommand}
+      {workspaceLabel}
       {gaveUpWaiting}
       pmHref={workspaceHref("/pm")}
     />
@@ -231,7 +239,7 @@
       "no PM" would be a guess, and offering setup for a PM that may already
       be running is worse than saying what is actually known.
     -->
-    <p class="max-w-prose text-meta text-fg-muted" data-pm-state-unavailable>
+    <p class="text-meta text-fg-muted" data-pm-state-unavailable>
       This workspace does not report PM state yet. Run
       <code class="font-mono text-micro text-fg">{statusCommand}</code>
       on your computer to see whether a PM is installed.

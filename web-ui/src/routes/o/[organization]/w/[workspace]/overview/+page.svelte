@@ -36,6 +36,7 @@
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
+  import { replayWorkspaceTour } from "$lib/tourState";
 
   const scope = readerScopeKey();
   const cacheKey = `${scope}:overview`;
@@ -394,6 +395,18 @@
   <WorkspacePageHeader title="Overview">
     {#snippet subtitle()}
       What needs you, then every initiative worst first, then your dashboard.
+    {/snippet}
+    {#snippet actions()}
+      <!--
+        The walkthrough was one-shot: "Maybe later" removed the only guided
+        route to connecting a machine for good. This is the way back.
+      -->
+      <button
+        class="text-micro text-fg-muted hover:text-fg"
+        type="button"
+        data-tour-replay
+        onclick={() => replayWorkspaceTour()}>Take the tour</button
+      >
     {/snippet}
   </WorkspacePageHeader>
 

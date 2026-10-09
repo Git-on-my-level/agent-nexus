@@ -40,6 +40,7 @@
   import AccessRequestRow from "$lib/components/access/AccessRequestRow.svelte";
   import HostEnrollmentRequest from "$lib/components/access/HostEnrollmentRequest.svelte";
   import HostEnrollmentTokens from "$lib/components/access/HostEnrollmentTokens.svelte";
+  import SetupPrompt from "$lib/components/setup/SetupPrompt.svelte";
 
   let { data } = $props();
 
@@ -58,8 +59,11 @@
       $page.data?.shellCapabilities?.mode === "hosted",
   );
   let cliBaseUrl = $derived(data?.cliBaseUrl ?? "");
-  let enrollCommand = $derived(
-    `anx ${cliBaseUrl ? `--base-url ${cliBaseUrl} ` : ""}host enroll`,
+  let cliInstallCommand = $derived(
+    $page.data?.workspace?.cliInstallCommand ?? "",
+  );
+  let workspaceLabel = $derived(
+    $page.data?.workspace?.label || $page.params.workspace || "",
   );
 
   let now = $state(Date.now());
@@ -93,6 +97,22 @@
 
   let enrollOpen = $state(false);
   let showRevokedHosts = $state(false);
+  /**
+   * The first host to arrive while this page was watching an empty workspace.
+   *
+   * Held separately from `activeHosts` so the confirmation says which machine
+   * answered, and so it keeps saying it after a later read returns several.
+   */
+  let arrivedHost = $state(null);
+  /**
+   * Hosts were read at least once and there were none.
+   *
+   * Decides whether the next roster read is the first machine arriving, not
+   * whether to poll: the setup panel watches its own token for redemption,
+   * which is one indexed row, and the roster is read once when that says a
+   * machine used it.
+   */
+  let watchingForFirstHost = $state(false);
   /** Busy action per enrollment id, so one decision cannot re-enable another. */
   let enrollmentBusy = $state({});
   let enrollmentErrors = $state({});
@@ -278,7 +298,24 @@
     if (!results) return;
     const [hostsResult, tokensResult] = results;
     settle("hosts", hostsResult, (value) => {
-      hosts = value?.hosts ?? [];
+      const next = value?.hosts ?? [];
+      /*
+       * A machine that enrolls with a token never files a request, so nothing
+       * else on this page would notice it. Watch the roster while there are
+       * none and name the first one that answers, so the reader sees the setup
+       * they just started finish without reloading.
+       */
+      const live = next.filter((host) => !host.revoked_at);
+      if (watchingForFirstHost && !arrivedHost && live.length) {
+        arrivedHost = live[0];
+      }
+      // A confirmation outlives its machine otherwise: revoke the host it
+      // names and the green card keeps saying the workspace has it.
+      if (arrivedHost && !live.some((host) => host.id === arrivedHost.id)) {
+        arrivedHost = null;
+      }
+      watchingForFirstHost = live.length === 0;
+      hosts = next;
     });
     settle("tokens", tokensResult, (value) => {
       tokens = value?.enrollment_tokens ?? [];
@@ -323,6 +360,8 @@
   function forgetReaderState() {
     decisions.invalidate();
     hosts = [];
+    arrivedHost = null;
+    watchingForFirstHost = false;
     pending = [];
     accessRequests = [];
     tokens = [];
@@ -664,7 +703,13 @@
     // shell badge reads that instead of polling a second time.
     const releaseCount = claimPendingAccessCount();
     void loadAll();
-    // Host cards show agent states; core's roster stream says when they move.
+    /*
+     * Host cards show agent states; core's roster stream says when they move.
+     * It is also what says a machine arrived: core publishes on this hub when
+     * a headless enrollment completes, so the first machine shows up here with
+     * no poll of its own and no reload — which is why there is no watcher on
+     * the setup panel's token.
+     */
     const stopAgentChanges = liveAgentChanges({
       client: coreClient,
       debounceMs: 600,
@@ -672,7 +717,8 @@
     });
     const poll = setInterval(() => {
       now = Date.now();
-      if (!document.hidden) void loadPending();
+      if (document.hidden) return;
+      void loadPending();
     }, PENDING_POLL_MS);
     return () => {
       // First: a throw in either teardown below must not strand the claim and
@@ -750,12 +796,12 @@
         <aside class="tour-arrival-banner" role="status" aria-live="polite">
           <div class="tour-arrival-banner__body">
             <p class="tour-arrival-banner__title">
-              Last step: enroll the machine your agents run on
+              Last step: connect the machine your agents run on
             </p>
             <p class="tour-arrival-banner__text">
-              Run <code>{enrollCommand}</code> there, then approve the request that
-              appears below. Every agent on that machine can use the workspace from
-              then on, with no per-agent setup.
+              Copy the setup prompt below into the agent you already use on that
+              machine. Every agent on it can use the workspace from then on,
+              with no per-agent setup.
             </p>
           </div>
         </aside>
@@ -891,30 +937,78 @@
           {/if}
         </div>
 
-        {#if enrollOpen || (sections.hosts.status === "ready" && !sections.hosts.forbidden && !activeHosts.length)}
+        {#if arrivedHost}
+          <!--
+            The machine the reader just set up answered. Say which one, and
+            hand over the single next step rather than leaving them on a page
+            whose work is done.
+          -->
+          <div
+            class="mb-3 space-y-2 rounded-md border border-ok bg-ok-soft px-4 py-3"
+            role="status"
+            aria-live="polite"
+            data-host-enrolled
+          >
+            <p
+              class="flex items-center gap-2 text-meta font-medium text-ok-text"
+            >
+              <span class="h-1.5 w-1.5 rounded-full bg-ok" aria-hidden="true"
+              ></span>
+              Enrolled — {arrivedHost.slug}
+            </p>
+            <p class="text-micro text-fg-muted">
+              Every agent on {arrivedHost.slug} can work in this workspace now. They
+              appear under Agents as soon as each one uses <code>anx</code>.
+            </p>
+            <div class="flex flex-wrap items-center gap-2 pt-1">
+              <Button
+                variant="primary"
+                size="compact"
+                href={workspaceHref("/pm/setup")}>Set up your PM</Button
+              >
+              <button
+                class="text-micro text-fg-muted hover:text-fg"
+                type="button"
+                onclick={() => {
+                  arrivedHost = null;
+                  enrollOpen = true;
+                }}>Connect another machine</button
+              >
+            </div>
+          </div>
+        {/if}
+
+        {#if enrollOpen || (sections.hosts.status === "ready" && !sections.hosts.forbidden && !activeHosts.length && !arrivedHost)}
           <div
             class="mb-3 space-y-4 rounded-md border border-line bg-bg-soft px-4 py-3"
             data-host-enroll-help
           >
-            <div class="space-y-1.5">
-              <p class="text-meta text-fg">
-                {activeHosts.length
-                  ? "Enroll another machine"
-                  : "No machines enrolled yet"}
-              </p>
-              <p class="text-micro text-fg-muted">
-                Run this on the machine your agents use. It prints a code; the
-                request appears above, and you approve it when the codes match.
-                Agents already set up on that machine keep their history.
-              </p>
-              <div class="flex items-center gap-1 rounded bg-bg px-2 py-1.5">
-                <code
-                  class="min-w-0 flex-1 break-all font-mono text-micro text-fg"
-                  data-host-enroll-command>{enrollCommand}</code
-                >
-                <CopyButton value={enrollCommand} label="Copy command" />
-              </div>
-            </div>
+            <SetupPrompt
+              kind="machine"
+              {cliBaseUrl}
+              {cliInstallCommand}
+              {workspaceLabel}
+              heading={activeHosts.length
+                ? "Connect another machine"
+                : "Connect your first machine"}
+              lede="Agents reach this workspace through the computer they run on. Set one up once — every agent on that computer is in from then on, with no per-agent setup. Agents already set up there keep their history."
+            >
+              {#snippet status()}
+                {#if !activeHosts.length}
+                  <p
+                    class="flex items-center gap-2 border-t border-line-subtle pt-3 text-micro text-fg-muted"
+                    data-host-waiting
+                  >
+                    <span
+                      class="h-1.5 w-1.5 shrink-0 rounded-full bg-fg-subtle"
+                      aria-hidden="true"
+                    ></span>
+                    No machine has checked in yet. This page notices the first one
+                    on its own.
+                  </p>
+                {/if}
+              {/snippet}
+            </SetupPrompt>
             <div class="space-y-2 border-t border-line-subtle pt-3">
               <p class="text-micro text-fg-muted">
                 For CI or cloud machines that cannot wait for approval, create a
@@ -1385,10 +1479,5 @@
     font-size: 0.85rem;
     line-height: 1.5;
     color: var(--fg-muted);
-  }
-  .tour-arrival-banner__text code {
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
-    color: var(--fg);
   }
 </style>

@@ -26,10 +26,18 @@
   import KeyboardShortcutsDialog from "$lib/components/KeyboardShortcutsDialog.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
+  import SetupPrompt from "$lib/components/setup/SetupPrompt.svelte";
   import SkeletonInboxRow from "$lib/components/state/SkeletonInboxRow.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
 
   let workspaceSlug = $derived($page.params.workspace);
+  let cliBaseUrl = $derived($page.data?.workspace?.cliBaseUrl ?? "");
+  let cliInstallCommand = $derived(
+    $page.data?.workspace?.cliInstallCommand ?? "",
+  );
+  let workspaceLabel = $derived(
+    $page.data?.workspace?.label || $page.params.workspace || "",
+  );
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
@@ -211,22 +219,40 @@
       {retrying}
     />
   {:else if !agents.length}
+    <!--
+      A dead end that links away is a dead end. The work this page is waiting
+      for happens here, with the same panel Access → Hosts offers.
+    -->
     <div
-      class="rounded-md border border-line bg-bg-soft px-6 py-10 text-center"
+      class="rounded-md border border-line bg-bg-soft px-4 py-4"
       data-agents-empty
     >
-      <h2 class="text-subtitle text-fg">No agents yet</h2>
-      <p class="mx-auto mt-1.5 max-w-md text-meta text-fg-subtle">
-        Enroll the machine your agents run on: run
-        <code class="rounded bg-line px-1 py-px text-fg">anx host enroll</code>
-        there, then approve it in Access. Every agent on that machine appears here
-        as soon as it uses
-        <code class="rounded bg-line px-1 py-px text-fg">anx</code>.
-      </p>
-      <a
-        class="mt-4 inline-block text-meta font-medium text-accent-text hover:underline"
-        href={workspaceHref("/access#hosts")}>Go to Access → Hosts</a
+      <SetupPrompt
+        kind="machine"
+        {cliBaseUrl}
+        {cliInstallCommand}
+        {workspaceLabel}
+        heading="No agents yet — connect a machine"
+        lede="Agents reach this workspace through the computer they run on. Set one up once; every agent on it appears here as soon as it uses anx."
       >
+        {#snippet status()}
+          <p
+            class="flex items-center gap-2 border-t border-line-subtle pt-3 text-micro text-fg-muted"
+          >
+            <span
+              class="h-1.5 w-1.5 shrink-0 rounded-full bg-fg-subtle"
+              aria-hidden="true"
+            ></span>
+            Nothing has checked in yet. This page notices the first agent on its own.
+          </p>
+          <p class="mt-2 text-micro">
+            <a
+              class="text-accent-text hover:underline"
+              href={workspaceHref("/access#hosts")}>Manage machines in Access</a
+            >
+          </p>
+        {/snippet}
+      </SetupPrompt>
     </div>
   {:else}
     <div class="space-y-5" data-agents-roster>

@@ -62,6 +62,8 @@ const coreClientMock = vi.hoisted(() => ({
   listHosts: vi.fn(),
   listPendingHostEnrollments: vi.fn(),
   listHostEnrollmentTokens: vi.fn(),
+  createHostEnrollmentToken: vi.fn(),
+  revokeHostEnrollmentToken: vi.fn(),
   approveHostEnrollment: vi.fn(),
   denyHostEnrollment: vi.fn(),
   listAccessRequests: vi.fn(),
@@ -74,6 +76,21 @@ vi.mock("$app/stores", () => ({
   page: {
     subscribe: pageStore.subscribe,
   },
+}));
+
+/**
+ * The page learns that a machine arrived from core's roster stream, so the
+ * test needs to be able to fire it.
+ */
+const agentChangeListeners = vi.hoisted(() => new Set());
+
+vi.mock("$lib/liveWorkspaceEvents.js", () => ({
+  liveAgentChanges: ({ onChange }) => {
+    agentChangeListeners.add(onChange);
+    return () => agentChangeListeners.delete(onChange);
+  },
+  liveWorkspaceEvents: () => () => {},
+  liveInboxChanges: () => () => {},
 }));
 
 vi.mock("$lib/coreClient", () => ({
@@ -137,6 +154,14 @@ describe("access page", () => {
     coreClientMock.listPendingHostEnrollments.mockResolvedValue({
       enrollments: [PENDING],
     });
+    coreClientMock.createHostEnrollmentToken.mockResolvedValue({
+      token: "htok_secret",
+      enrollment_token: {
+        id: "htok_watch",
+        expires_at: new Date(Date.now() + 30 * 60_000).toISOString(),
+      },
+    });
+    coreClientMock.revokeHostEnrollmentToken.mockResolvedValue({});
     coreClientMock.listHostEnrollmentTokens.mockResolvedValue({
       enrollment_tokens: [],
     });
@@ -306,7 +331,7 @@ describe("access page", () => {
     expect(await screen.findByText("J6FA-N4XI")).toBeTruthy();
     expect(screen.getByText("203.0.113.17")).toBeTruthy();
     expect(
-      screen.getByText("anx --base-url http://127.0.0.1:8081 host enroll"),
+      screen.getByText("anx --base-url 'http://127.0.0.1:8081' host enroll"),
     ).toBeTruthy();
 
     await fireEvent.click(screen.getByRole("button", { name: "Approve…" }));
@@ -400,6 +425,51 @@ describe("access page", () => {
     await screen.findByText("fleet.host-a");
     const row = document.querySelector('[data-auth-admin="agent-fleet"]');
     expect(row.textContent).not.toContain("since");
+  });
+
+  it("flips to Enrolled on the roster signal, with no poll of its own", async () => {
+    /*
+     * A machine that enrols with a token files no approval request, so the
+     * page cannot learn about it from the pending list. Core publishes on the
+     * agent-change hub when a headless enrollment completes, and this page
+     * already holds that stream open for host cards — so the first machine
+     * arrives on a signal, not on a timer, and nothing here reads the host or
+     * token lists on a schedule.
+     */
+    coreClientMock.listHosts.mockResolvedValue({ hosts: [] });
+    render(AccessPage, {
+      props: {
+        data: {
+          outOfWorkspaceMode: "local",
+          cliBaseUrl: "https://anx.example.test/o/acme/w/ops",
+        },
+      },
+    });
+    await screen.findByText("Connect your first machine");
+    const rosterReads = coreClientMock.listHosts.mock.calls.length;
+
+    coreClientMock.listHosts.mockResolvedValue({
+      hosts: [
+        {
+          id: "host_new",
+          slug: "studio-m4",
+          handle: "studio-m4",
+          display_name: "studio-m4",
+          agents: [],
+          created_at: new Date().toISOString(),
+          revoked_at: null,
+        },
+      ],
+    });
+    // The stream fires; the page reads the roster once, on the event.
+    agentChangeListeners.forEach((fn) => fn());
+    await waitFor(() =>
+      expect(document.querySelector("[data-host-enrolled]")).toBeTruthy(),
+    );
+    expect(
+      document.querySelector("[data-host-enrolled]").textContent,
+    ).toContain("studio-m4");
+    expect(coreClientMock.listHosts.mock.calls.length).toBe(rosterReads + 1);
   });
 
   it("says access is not yours to manage, once, when every read is refused", async () => {
