@@ -213,9 +213,9 @@ jobs:
 
       - name: Run core partition
         working-directory: core
-        # Use the 4-vCPU runner; keep fixtures at -parallel=2 and execute every run.
+        # Two fixture tests run together; two CPUs measured faster for this package.
         env:
-          GOMAXPROCS: "4"
+          GOMAXPROCS: "2"
           GOFLAGS: "-p=4 -count=1"
         run: |
           python3 ../scripts/ci-core.py primitives
