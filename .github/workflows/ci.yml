@@ -189,10 +189,10 @@ jobs:
 
       - name: Run core partition
         working-directory: core
-        # Retain fixture concurrency until the core owner confirms parallel safety.
+        # Use the 4-vCPU runner; keep fixtures at -parallel=2 and execute every run.
         env:
-          GOMAXPROCS: "2"
-          GOFLAGS: "-p=1"
+          GOMAXPROCS: "4"
+          GOFLAGS: "-p=4 -count=1"
         run: |
           python3 ../scripts/ci-core.py server --shard ${{ matrix.shard }}
 
@@ -213,10 +213,10 @@ jobs:
 
       - name: Run core partition
         working-directory: core
-        # Retain fixture concurrency until the core owner confirms parallel safety.
+        # Keep this fixture package at two CPUs; four CPUs did not improve it.
         env:
           GOMAXPROCS: "2"
-          GOFLAGS: "-p=1"
+          GOFLAGS: "-p=4 -count=1"
         run: |
           python3 ../scripts/ci-core.py primitives
 
@@ -237,10 +237,10 @@ jobs:
 
       - name: Run core partition
         working-directory: core
-        # Retain fixture concurrency until the core owner confirms parallel safety.
+        # Use the 4-vCPU runner; keep fixtures at -parallel=2 and execute every run.
         env:
-          GOMAXPROCS: "2"
-          GOFLAGS: "-p=1"
+          GOMAXPROCS: "4"
+          GOFLAGS: "-p=4 -count=1"
         run: |
           make fmt-check vet check-offline check-linux-observation
           python3 ../scripts/ci-core.py other

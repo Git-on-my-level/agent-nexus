@@ -1,5 +1,7 @@
 """Coverage and adversarial content checks for CI partition/release shortcuts."""
+import contextlib
 import importlib.util
+import io
 import os
 from pathlib import Path
 import re
@@ -7,6 +9,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -22,6 +25,44 @@ core = load('ci_core', ROOT / 'scripts/ci-core.py')
 
 
 class CorePartitionTest(unittest.TestCase):
+    def test_discovery_success_needs_no_retry_and_filters_output(self):
+        command = ['go', 'test', '-list', '.', './internal/server']
+        result = subprocess.CompletedProcess(command, 0,
+                                             'TestZulu\nTestAlpha\nTestAlpha\nExampleStore\nFuzzParser\nok package\n')
+        with mock.patch.object(core.subprocess, 'run', return_value=result) as run:
+            self.assertEqual(core.discover('./internal/server'),
+                             ['ExampleStore', 'FuzzParser', 'TestAlpha', 'TestZulu'])
+        run.assert_called_once_with(command, check=True, capture_output=True, text=True)
+
+    def test_discovery_prints_failed_output_and_retries_once(self):
+        command = ['go', 'test', '-list', '.', './internal/server']
+        failure = subprocess.CalledProcessError(1, command, output='TestPartial\n',
+                                               stderr='temporary build failure\n')
+        result = subprocess.CompletedProcess(command, 0, 'TestRecovered\n')
+        diagnostics = io.StringIO()
+        with mock.patch.object(core.subprocess, 'run', side_effect=[failure, result]) as run:
+            with contextlib.redirect_stderr(diagnostics):
+                self.assertEqual(core.discover('./internal/server'), ['TestRecovered'])
+        self.assertEqual(run.call_args_list,
+                         [mock.call(command, check=True, capture_output=True, text=True)] * 2)
+        self.assertIn('TestPartial', diagnostics.getvalue())
+        self.assertIn('temporary build failure', diagnostics.getvalue())
+        self.assertIn('Retrying test discovery once.', diagnostics.getvalue())
+
+    def test_discovery_second_failure_remains_fatal_and_prints_both_attempts(self):
+        command = ['go', 'test', '-list', '.', './internal/server']
+        first = subprocess.CalledProcessError(1, command, output='first stdout', stderr='first stderr')
+        second = subprocess.CalledProcessError(2, command, output='second stdout', stderr='second stderr')
+        diagnostics = io.StringIO()
+        with mock.patch.object(core.subprocess, 'run', side_effect=[first, second]) as run:
+            with contextlib.redirect_stderr(diagnostics):
+                with self.assertRaises(subprocess.CalledProcessError) as raised:
+                    core.discover('./internal/server')
+        self.assertIs(raised.exception, second)
+        self.assertEqual(run.call_count, 2)
+        for output in ['first stdout', 'first stderr', 'second stdout', 'second stderr', 'exit 2']:
+            self.assertIn(output, diagnostics.getvalue())
+
     def test_disjoint_exhaustive_and_stable_with_examples_fuzz_and_prefixes(self):
         names = ['TestOne', 'TestOneMore', 'Example', 'ExampleStore', 'FuzzParser']
         names += [f'TestCase{i}' for i in range(300)]
