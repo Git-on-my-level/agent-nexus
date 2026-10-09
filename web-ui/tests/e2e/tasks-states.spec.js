@@ -531,7 +531,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       viewport: { width: viewport.width, height: viewport.height },
     });
 
-    test("table: loading, populated, live re-read failure and empty", async ({
+    test("table: loading, populated and live re-read failure", async ({
       page,
     }) => {
       const api = await installTasksApi(page);
@@ -554,9 +554,15 @@ for (const viewport of AUDIT_VIEWPORTS) {
       api.hold.work = deferred();
       api.emitLive();
       await expect.poll(reads, { timeout: 15000 }).toBeGreaterThan(before);
+      const refreshing = page.getByText("Refreshing…", { exact: true });
+      await expect(refreshing).toBeVisible();
       await expectCleanLayout(page, "reloading over populated table");
       api.hold.work.resolve();
       api.hold = {};
+      // The mock reads failure settings when it responds. Finish this
+      // successful refresh before configuring the next event's failure;
+      // otherwise its warning can satisfy the assertion below too early.
+      await expect(refreshing).toHaveCount(0);
 
       // A failed live re-read keeps the last good rows plus a warning.
       api.fail.work = { message: LONG_ERROR };
@@ -566,19 +572,40 @@ for (const viewport of AUDIT_VIEWPORTS) {
           exact: false,
         }),
       ).toBeVisible({ timeout: 15000 });
+      await expect(page.getByRole("link", { name: LONG_TITLE })).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Retry", exact: true }),
+      ).toBeEnabled();
       await expectCleanLayout(page, "reload failed over stale rows", bothEnds);
+    });
 
-      // And with nothing loaded at all.
-      await page.reload();
+    test("table: cold load failure, retry and empty", async ({ page }) => {
+      // Reload restores cached rows and can consume an outstanding stream
+      // event. A fresh context gives this no-snapshot state its own lifecycle.
+      const api = await installTasksApi(page, {
+        fail: { work: { status: 500, message: LONG_ERROR } },
+      });
+      await page.goto(TASKS);
       await expect(page.getByText("Tasks could not be refreshed")).toBeVisible(
         firstPaint,
       );
+      await expect(page.getByRole("link", { name: LONG_TITLE })).toHaveCount(0);
+      await expect(
+        page.getByText("Showing the previously loaded records.", {
+          exact: false,
+        }),
+      ).toHaveCount(0);
+      const retry = page.getByRole("button", { name: "Retry", exact: true });
+      await expect(retry).toBeEnabled();
       await expectCleanLayout(page, "load failed with no rows", bothEnds);
 
       api.fail = {};
       api.work = [];
-      await page.getByRole("button", { name: "Retry" }).click();
+      await retry.click();
       await expect(page.getByText("Nothing tracked yet")).toBeVisible();
+      await expect(page.getByText("Tasks could not be refreshed")).toHaveCount(
+        0,
+      );
       await expectCleanLayout(page, "empty workspace", bothEnds);
     });
 
