@@ -117,6 +117,9 @@ func (s *Service) presence(ctx context.Context) (Presence, error) {
 	if err != nil {
 		return Presence{}, err
 	}
+	if out.Signal == "disconnect" {
+		return Presence{State: "not_onboarded", Configured: out.Configured}, nil
+	}
 	last, err := time.Parse(time.RFC3339Nano, out.LastSeenAt)
 	if err != nil {
 		return Presence{}, err
@@ -141,6 +144,49 @@ func (s *Service) notePresence(ctx context.Context, p Principal, signal string) 
 	// This separate projection does not invalidate resource authorization epochs.
 	// Throttle idle polls to one write per 15 seconds; heartbeats remain fresh.
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err := s.store.database().ExecContext(ctx, `INSERT INTO pm_presence(workspace_id,actor_id,last_seen_at,signal,first_seen_at) VALUES(?,?,?,?,?) ON CONFLICT(workspace_id,actor_id) DO UPDATE SET first_seen_at=CASE WHEN pm_presence.first_seen_at='' THEN pm_presence.last_seen_at ELSE pm_presence.first_seen_at END,last_seen_at=excluded.last_seen_at,signal=excluded.signal WHERE julianday(excluded.last_seen_at)-julianday(pm_presence.last_seen_at)>=15.0/86400.0`, p.WorkspaceID, p.ActorID, now, signal, now)
+	_, err := s.store.database().ExecContext(ctx, `INSERT INTO pm_presence(workspace_id,actor_id,last_seen_at,signal,first_seen_at) VALUES(?,?,?,?,?) ON CONFLICT(workspace_id,actor_id) DO UPDATE SET first_seen_at=CASE WHEN pm_presence.signal='disconnect' THEN excluded.first_seen_at WHEN pm_presence.first_seen_at='' THEN pm_presence.last_seen_at ELSE pm_presence.first_seen_at END,last_seen_at=excluded.last_seen_at,signal=excluded.signal WHERE (pm_presence.signal!='disconnect' OR excluded.signal='connect') AND (excluded.signal='connect' OR julianday(excluded.last_seen_at)-julianday(pm_presence.last_seen_at)>=15.0/86400.0)`, p.WorkspaceID, p.ActorID, now, signal, now)
 	return err
+}
+
+// Disconnect resets the selected PM's expectation of returning, not its actor
+// identity or historical decisions. Only a new explicit Connect can re-enable it.
+func (s *Service) Disconnect(ctx context.Context, p Principal) (Presence, error) {
+	if p.Human || p.ActorID == "" || p.ActorID != s.AgentActorID() {
+		return Presence{}, ErrForbidden
+	}
+	if err := s.authorize(ctx, p, "pm.disconnect", ""); err != nil {
+		return Presence{}, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, err := s.store.database().BeginTx(ctx, nil)
+	if err != nil {
+		return Presence{}, err
+	}
+	defer tx.Rollback()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err = tx.ExecContext(ctx, `INSERT INTO pm_presence(workspace_id,actor_id,last_seen_at,signal,first_seen_at) VALUES(?,?,?,'disconnect','') ON CONFLICT(workspace_id,actor_id) DO UPDATE SET last_seen_at=excluded.last_seen_at,signal='disconnect',first_seen_at='' WHERE pm_presence.signal!='disconnect'`, p.WorkspaceID, p.ActorID, now)
+	if err != nil {
+		return Presence{}, err
+	}
+	// Reset historical selections too: changing the configured actor must not
+	// resurrect a connection from before the workspace uninstall.
+	_, err = tx.ExecContext(ctx, `UPDATE pm_presence SET last_seen_at=?,signal='disconnect',first_seen_at='' WHERE workspace_id=? AND signal!='disconnect'`, now, p.WorkspaceID)
+	if err != nil {
+		return Presence{}, err
+	}
+	// Keep the migration marker, so restarting cannot infer onboarding from history.
+	_, err = tx.ExecContext(ctx, `UPDATE pm_onboarding_backfill SET first_seen_at=NULL,last_seen_at=NULL WHERE workspace_id=?`, p.WorkspaceID)
+	if err != nil {
+		return Presence{}, err
+	}
+	// Status index bounds this write to unfinished turns, never all PM history.
+	_, err = tx.ExecContext(ctx, `UPDATE pm_records SET revision=revision+1,body=json_set(body,'$.revision',revision+1,'$.status','failed','$.failure_kind','pm_not_onboarded','$.failure','The PM was explicitly uninstalled. Set up your PM before asking again.','$.lease_token','','$.lease_owner','','$.lease_expires_at','0001-01-01T00:00:00Z') WHERE kind='turn' AND workspace_id=? AND json_extract(body,'$.status') IN ('pending_delivery','sending','unknown')`, p.WorkspaceID)
+	if err != nil {
+		return Presence{}, err
+	}
+	if err = tx.Commit(); err != nil {
+		return Presence{}, err
+	}
+	return s.presence(ctx)
 }

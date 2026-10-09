@@ -589,7 +589,8 @@ anx pm install --runner "sh -c 'exec claude -p < \"\$1\"' sh {prompt_file}"
 anx pm install --runner 'hermes chat --query-file {prompt_file} -Q'
 anx pm status
 anx pm install --json           # idempotent repair using saved runner config
-anx pm uninstall               # stop and remove this workspace/profile service
+anx pm uninstall               # remove locally and reset workspace PM setup
+anx pm uninstall --keep-registration # move machines; preserve expected PM return
 ```
 
 The default service profile is `pm`; `--as <name>` chooses another profile.
@@ -611,10 +612,16 @@ Prompt files are mode 0600 and removed after execution. `{prompt_file}` substitu
 only the path; legacy `{prompt}` also means a path. Without a placeholder, agentctl
 receives `--prompt-file`. Do not use command substitution to put prompt text in argv.
 `status --json` reports installed/running, workspace, profile, logs and last claim.
-Uninstall removes only the selected service and its local state; workspace credentials
-and the durable workspace onboarding fact stay. A stopped or uninstalled PM becomes
-offline after 90 seconds; it does not hide existing PM history or disrupt another
-computer. Revoking host credentials prevents reconnecting; selecting a different
+Uninstall removes the selected local service/state and calls authenticated
+`POST /pm/disconnect` as the selected PM principal. The workspace returns to
+`not_onboarded`; unfinished queued/running turns fail with `pm_not_onboarded`,
+while historical conversations and existing decisions remain readable and answerable.
+Workspace credentials are retained. If reset fails, local removal still completes,
+and a warning prints an exact `anx ... pm disconnect` retry command.
+Use `--keep-registration` when moving the PM to another computer: it skips the
+server reset, so ordinary silence becomes offline after 90 seconds. Only a new
+explicit `pm connect` (performed by `pm serve`) re-enables a disconnected PM;
+stale claims or heartbeats cannot revive it. Revoking host credentials prevents reconnecting; selecting a different
 workspace PM requires that actor to connect before its features become available.
 
 PM features require onboarding: a registered PM has connected through `anx pm serve`

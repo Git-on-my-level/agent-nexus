@@ -95,6 +95,14 @@ func TestPMOnboardingHTTPGateBootstrapAndIdentitySelection(t *testing.T) {
 	call("GET", "/overview", human.AccessToken, "", 200)
 	call("POST", "/pm/connect", human.AccessToken, `{"runner":"custom","host":"computer"}`, 403)
 	call("POST", "/pm/connect", machine.AccessToken, `{"runner":"custom","host":"computer"}`, 200)
+	call("POST", "/pm/disconnect", "", "", 401)
+	call("POST", "/pm/disconnect", human.AccessToken, "", 403)
+	call("POST", "/pm/disconnect", machine.AccessToken, "", 200)
+	call("POST", "/pm/disconnect", machine.AccessToken, "", 200)
+	if got := call("GET", "/pm/presence", human.AccessToken, "", 200); got["state"] != "not_onboarded" {
+		t.Fatal(got)
+	}
+	call("POST", "/pm/connect", machine.AccessToken, `{"runner":"custom","host":"computer"}`, 200)
 	if rt.AgentActorID() != machine.ActorID {
 		t.Fatal("runtime identity not updated")
 	}

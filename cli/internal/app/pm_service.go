@@ -17,6 +17,7 @@ import (
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/output"
 )
 
 var pmServiceOS = runtime.GOOS
@@ -45,9 +46,12 @@ type pmServiceStatus struct {
 
 func init() {
 	for _, verb := range []string{"install", "status", "uninstall"} {
-		topic := localHelperTopic{Path: "pm " + verb, Summary: map[string]string{"install": "Install or update the PM service on this computer.", "status": "Read the local PM service and last accepted claim.", "uninstall": "Stop and remove the local PM service."}[verb], JSONShape: "installed, running, workspace, agent, service, logs, last_claim_at", Composition: "Per-user launchd on macOS or systemd --user on Linux. Uses the selected workspace and profile; stores no credentials in the service definition.", Examples: []string{"anx pm " + verb}}
+		topic := localHelperTopic{Path: "pm " + verb, Summary: map[string]string{"install": "Install or update the PM service on this computer.", "status": "Read the local PM service and last accepted claim.", "uninstall": "Remove the local PM service and reset workspace onboarding."}[verb], JSONShape: "installed, running, workspace, agent, service, logs, last_claim_at", Composition: "Per-user launchd on macOS or systemd --user on Linux. Uses the selected workspace and profile; stores no credentials in the service definition.", Examples: []string{"anx pm " + verb}}
 		if verb == "install" {
 			topic.Flags = []localHelperFlag{{Name: "--wait", Description: "Wait for an accepted connection after install."}, {Name: "--wait-timeout <duration>", Description: "Bound the connection wait (default 90s, maximum 5m)."}, {Name: "--runner <argv>", Description: "Runner command; saved locally for subsequent installs. Use {prompt_file} for a private prompt file, or omit a placeholder to use agentctl's file transport."}}
+		}
+		if verb == "uninstall" {
+			topic.Flags = []localHelperFlag{{Name: "--keep-registration", Description: "Keep workspace onboarding when moving the PM to another computer."}}
 		}
 		localHelperTopics = append(localHelperTopics, topic)
 	}
@@ -57,11 +61,16 @@ func (a *App) runPMService(ctx context.Context, verb string, args []string, cfg 
 	fs := newSilentFlagSet("pm " + verb)
 	var runner trackedString
 	var wait bool
+	var keepRegistration bool
+	var warnings []output.Warning
 	var waitTimeout = 90 * time.Second
 	if verb == "install" {
 		fs.Var(&runner, "runner", "Runner command")
 		fs.BoolVar(&wait, "wait", false, "Wait for the first accepted PM connection")
 		fs.DurationVar(&waitTimeout, "wait-timeout", 90*time.Second, "Connection wait budget")
+	}
+	if verb == "uninstall" {
+		fs.BoolVar(&keepRegistration, "keep-registration", false, "Keep workspace PM onboarding")
 	}
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
@@ -233,6 +242,19 @@ func (a *App) runPMService(ctx context.Context, verb string, args []string, cfg 
 			return nil, e
 		}
 		status.Installed = false
+		if !keepRegistration {
+			// Local removal is complete before any authentication or network work.
+			resetCfg := cfg
+			resetCfg.As = agent
+			resetCfg, resetErr := pmServiceResolveAuth(a, ctx, resetCfg)
+			if resetErr == nil {
+				_, resetErr = a.invokeRawJSON(ctx, resetCfg, "pm disconnect", "POST", "/pm/disconnect", nil)
+			}
+			if resetErr != nil {
+				retry := []string{"anx", "--base-url", cfg.BaseURL, "--config-dir", dir, "--as", agent, "pm", "disconnect"}
+				warnings = append(warnings, output.Warning{Code: "pm_disconnect_failed", Message: "Local PM service removed, but workspace onboarding could not be reset. PM features may remain visible and asks may still queue. Retry: " + pmRetryCommand(retry), Details: map[string]any{"retry_argv": retry}})
+			}
+		}
 	}
 	if status.Installed {
 		if pmServiceOS == "linux" {
@@ -252,7 +274,7 @@ func (a *App) runPMService(ctx context.Context, verb string, args []string, cfg 
 		}
 		return &commandResult{Data: status, Text: "PM connected\nWorkspace: " + cfg.BaseURL + "\nLogs: " + state}, nil
 	}
-	return &commandResult{Data: status, Text: fmt.Sprintf("PM %s: installed=%t running=%t\nWorkspace: %s\nProfile: %s\nLast accepted claim: %s\nLogs: %s", verb, status.Installed, status.Running, status.Workspace, status.Agent, firstNonEmpty(status.LastClaimAt, "none"), state)}, nil
+	return &commandResult{Data: status, Warnings: warnings, Text: fmt.Sprintf("PM %s: installed=%t running=%t\nWorkspace: %s\nProfile: %s\nLast accepted claim: %s\nLogs: %s", verb, status.Installed, status.Running, status.Workspace, status.Agent, firstNonEmpty(status.LastClaimAt, "none"), state)}, nil
 }
 
 func writePMPrivateFile(path string, data []byte) error {
@@ -290,4 +312,12 @@ func pmServiceDefinition(platform, id string, args []string, state, home, path s
 		quoted = append(quoted, quote(strings.ReplaceAll(arg, "$", "$$")))
 	}
 	return fmt.Sprintf("[Unit]\nDescription=Agent Nexus local PM\n[Service]\nExecStart=%s\nWorkingDirectory=%s\nEnvironment=%s\nEnvironment=%s\nRestart=always\nRestartSec=5\nStandardOutput=append:%s\nStandardError=append:%s\n[Install]\nWantedBy=default.target\n", strings.Join(quoted, " "), strings.ReplaceAll(state, "%", "%%"), quote("HOME="+home), quote("PATH="+path), strings.ReplaceAll(filepath.Join(state, "stdout.log"), "%", "%%"), strings.ReplaceAll(filepath.Join(state, "stderr.log"), "%", "%%"))
+}
+
+func pmRetryCommand(argv []string) string {
+	quoted := make([]string, len(argv))
+	for i, value := range argv {
+		quoted[i] = shellSingleQuote(value)
+	}
+	return strings.Join(quoted, " ")
 }

@@ -351,3 +351,30 @@ test.describe("a core with no presence route at all", () => {
     await expect(page.getByRole("link", { name: "New task" })).toBeVisible();
   });
 });
+
+test("explicit uninstall changes sidebar to setup on tab return without reload @states", async ({
+  page,
+}) => {
+  const api = await installWorkspaceApi(page, { pm: CONNECTED });
+  await page.goto(`${ROOT}/tasks`);
+  await waitForAppReady(page);
+  await expect(pmSlot(page)).toHaveAttribute("data-pm-nav", "ask");
+  await page.evaluate(() => {
+    window.__uninstallProbe = "same-document";
+  });
+  // CLI/core reset happens outside this document. Returning to the tab uses
+  // the existing bounded visibility refresh (one-minute floor).
+  api.pm = NOT_ONBOARDED;
+  await page.clock.setSystemTime(new Date(Date.now() + 61_000));
+  await page.evaluate(() =>
+    document.dispatchEvent(new Event("visibilitychange")),
+  );
+  await expect(pmSlot(page)).toHaveAttribute("data-pm-nav", "setup");
+  await expect(
+    page.getByRole("link", { name: "Set up your PM" }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Ask PM" })).toHaveCount(0);
+  expect(await page.evaluate(() => window.__uninstallProbe)).toBe(
+    "same-document",
+  );
+});

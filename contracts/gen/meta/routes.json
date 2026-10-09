@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 228,
+  "route_count": 229,
   "routes": [
     {
       "method": "GET",
@@ -810,6 +810,11 @@
     {
       "method": "POST",
       "path": "/pm/decisions/{decision_id}/dispatch",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/pm/disconnect",
       "access_class": "workspace_business_surface"
     },
     {
