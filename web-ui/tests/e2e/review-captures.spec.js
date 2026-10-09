@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises";
 
 import { expect, test } from "@playwright/test";
 
+import { nextPaint, waitForAppReady } from "../helpers/pageReady.js";
 import { installWorkspaceApi } from "../helpers/workspaceApiMock.js";
 
 /**
@@ -470,8 +471,9 @@ for (const { label, width, height } of WIDTHS) {
     await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible({
       timeout: 60_000,
     });
-    // Let the tiles and the band settle before the shutter.
-    await page.waitForLoadState("networkidle").catch(() => {});
+    // The live stream stays open, so the network never goes idle.
+    await waitForAppReady(page);
+    await nextPaint(page);
     await page.evaluate(() => document.fonts?.ready);
     await mkdir(OUT, { recursive: true });
     const file = `${OUT}/${LABEL}-overview-${label}.png`;
@@ -495,7 +497,8 @@ for (const { label, width, height } of WIDTHS) {
     await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({
       timeout: 60_000,
     });
-    await page.waitForLoadState("networkidle").catch(() => {});
+    await waitForAppReady(page);
+    await nextPaint(page);
     await page.evaluate(() => document.fonts?.ready);
     await mkdir(OUT, { recursive: true });
     const file = `${OUT}/${LABEL}-agents-${label}.png`;
@@ -519,7 +522,8 @@ for (const { label, width, height } of WIDTHS) {
     await expect(page.getByRole("heading", { name: "Release B" })).toBeVisible({
       timeout: 60_000,
     });
-    await page.waitForLoadState("networkidle").catch(() => {});
+    await waitForAppReady(page);
+    await nextPaint(page);
     await page.evaluate(() => document.fonts?.ready);
     await mkdir(OUT, { recursive: true });
     const file = `${OUT}/${LABEL}-initiative-${label}.png`;
