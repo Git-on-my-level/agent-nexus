@@ -1338,7 +1338,12 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(page.getByRole("alert").first()).toBeVisible();
       await expectCleanLayout(page, "delivery failed", bothEnds);
 
-      // Receipts could not be read: the row says the delivery state is unknown.
+      // With no last-known snapshot, unreadable receipts make delivery unknown.
+      // Earlier visits now persist known receipts across full navigation;
+      // exercise the cold state rather than discarding that known delivery.
+      await page.evaluate(() =>
+        localStorage.removeItem("anx.workspace-views.v1"),
+      );
       // The badge lives on the list row, which the pane replaces below lg.
       api.fail = { actions: { message: `receipts unavailable ${LONG_HASH}` } };
       await page.goto(INBOX_PATH);

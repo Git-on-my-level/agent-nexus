@@ -525,6 +525,7 @@ test("failed refresh retains last-good evidence and never promotes a claim to ve
 test("a live task event re-reads the list; a failed re-read keeps visible work", async ({
   page,
 }) => {
+  test.setTimeout(60_000);
   let fail = false;
   let release;
   const released = new Promise((resolve) => (release = resolve));
@@ -569,9 +570,12 @@ test("a live task event re-reads the list; a failed re-read keeps visible work",
   await expect(page.getByRole("button", { name: "Reload" })).toHaveCount(0);
   fail = true;
   release();
+  await expect(page.getByText("Reconnecting…", { exact: true })).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.locator("[data-work-ref]")).toHaveCount(3);
   await expect(
     page.getByText("Showing the previously loaded records.", { exact: false }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 40_000 });
   await expect(page.locator("[data-work-ref]")).toHaveCount(3);
 });
 

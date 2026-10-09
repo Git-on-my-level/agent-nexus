@@ -1565,6 +1565,9 @@
         >Not everything is loaded; the counts are lower bounds.</span
       >
     {/if}
+    <span class="ml-auto text-micro text-fg-muted" role="status">
+      {reconnecting ? "Reconnecting…" : loading && ready ? "Refreshing…" : ""}
+    </span>
   </nav>
   {#if error}
     <StateError
@@ -1589,9 +1592,6 @@
       {notice}
     </p>
   {/if}
-  <p class="min-h-4 text-micro text-fg-muted" role="status">
-    {reconnecting ? "Reconnecting…" : loading && ready ? "Refreshing…" : ""}
-  </p>
   {#if !ready}
     <div
       class="rounded-md border border-line p-4"
