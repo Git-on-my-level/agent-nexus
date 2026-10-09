@@ -8613,5 +8613,13 @@
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2",
     "reason": "Measured merged main ac77fae8 (schema66), captured by GET /artifacts (authorized). Source: core/internal/primitives/access_graph.go:12; core/internal/primitives/access_scope.go:56. The final business SELECT and every non-policy business CTE match previously reviewed CI capture 1d1fab6b73b342d6a0f234b3baca555f51333e75cda50cb81fa444f45230c2c9/125602ff766e30a7c2fdcb1bc8dace47fbbdc186d4f2bf035b8d546c2394f5ed. Main275 adds evidence/external-key inheritance, changes denied refs/atoms and prunes unused reference CTEs; the exact compiler and ordered plan fingerprint therefore changed.    The SQL shape is unchanged from the previously reviewed main baseline; schema66 indexes change the full ordered plan with no added finding strings for this SQL. The snapshot epoch guard avoids the canonical denial closure only while the consuming epoch matches; an epoch mismatch activates the canonical fallback; an initial cache miss also computes closure during snapshot acquisition. Cached denied/ref membership and automatic lookup indexes remain active. Only this exact SQL/full ordered-plan pair and findings are permitted under SCA-663; route counts, successful/denied status, positive controls, privacy and two SSE ticks remain mandatory. Sparse external-evidence aliases and shallow histories do not certify dense fanout."
+  },
+  {
+    "sql_sha256": "90f67d56316ea989eb28adc060c51bf9131efb90832533173b62dc2876ff4491",
+    "plan_sha256": "5e6da723cc002186c453d1dd96ccf32f511a1b03174b4e377486719edb801dab",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "issue": "SCA-719",
+    "issue_url": "mention://issue/01a121ba-d47f-7300-b245-6236a45afec5",
+    "reason": "Page-bounded inbox ask staleness projection: json_each admits at most 200 response-page subject refs. The full plan searches cards by primary key and the partial unique handle index, plus alias routing by the unique resource_access_identities origin/origin_id/kind prefix. No canonical relation scan, history/text load or denied-set rebuild occurs. The conservative custom-function heuristic flags normalization of the admitted page value and anx_point_snapshot_denied; the latter is O(1) membership in an epoch-validated immutable snapshot and executes only on indexed candidate cards. Scoped owner/stranger measurements at 1/100/200 subjects use one SQL execution, at most 200 returned rows and 8,685 VM instructions; ordinary 50,000 VM/500 ms/100 SQL/1,024 row ceilings remain unchanged. Only this exact SQL/ordered plan pair is allowed."
   }
 ]

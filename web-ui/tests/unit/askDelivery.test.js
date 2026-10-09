@@ -494,18 +494,13 @@ describe("a handled context request in the Inbox list", () => {
     ).toBeNull();
   });
 
-  it("does not fold an ask out of the list on its own say-so", () => {
-    /*
-     * Staleness is a per-ask fact the list does not have (core returns
-     * `is_stale` only from `GET /asks/{ask_id}`), so an ask row is never folded
-     * into the Stale group. The detail panel is where staleness is shown. The
-     * fold returns with core projecting `is_stale` onto the row.
-     */
+  it("folds an open ask only when core projects is_stale", () => {
+    // Only the projected signal folds the row; ask age alone does not.
     const rows = buildInboxRows({
       inboxItems: [openAsk({ is_stale: true }), openAsk({ id: "inbox-2" })],
       now: NOW,
     });
-    expect(rows.every((row) => !row.stale)).toBe(true);
+    expect(rows.map((row) => row.stale)).toEqual([false, true]);
   });
 });
 

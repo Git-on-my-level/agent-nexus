@@ -794,6 +794,10 @@ derived:
     fields:
       id: { type: string, required: true }
       kind: { type: string, required: true, description: "Open classifier; v1 known values are ask, review, escalate and report_review. report_review is an author-only deadline reminder." }
+      is_stale: {type: boolean, required: false, description: Open card attention request whose subject updated_at is older than the ask delivery threshold (default seven days); false for unavailable or non-card subjects. Does not close the ask.}
+      stale_at: {type: datetime, required: false, description: Subject inactivity deadline; present for available card subjects even before they become stale.}
+      stale_reason: {type: string, required: false, description: subject_inactive when is_stale is true.}
+      stale_since: {type: datetime, required: false, description: Subject updated_at plus the ask delivery threshold; present only when stale.}
       response_proposals:
         type: "list<string>"
         required: true
