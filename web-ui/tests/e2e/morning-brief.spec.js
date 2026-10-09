@@ -500,7 +500,7 @@ test("the brief answers the five questions, one fold down", async ({
   for (const panel of ["decisions", "risk", "changes", "machine"]) {
     await expect(band.locator(`[data-brief-panel="${panel}"]`)).toBeVisible();
   }
-  // The initiatives row is not a panel any more: the cards below answer it.
+  // The initiatives row is not a panel any more: the cards above answer it.
   await expect(band.locator('[data-brief-panel="initiatives"]')).toHaveCount(0);
   // Decisions and At risk come first, because they change what to do next.
   const panels = await band
@@ -521,7 +521,15 @@ test("the brief answers the five questions, one fold down", async ({
     "blocks 2 cards · 1d old",
   );
 
-  // Since you last looked: counts first, items on request.
+  /*
+   * What changed, twice over and on purpose: the page's own Recent changes
+   * section above the fold is the one a reader is meant to see, and the
+   * band's grouped version — counts first, items on request — is the deeper
+   * read for someone who has already opened the fold.
+   */
+  await expect(page.locator('[data-overview-section="changes"]')).toContainText(
+    "Recent changes",
+  );
   const changes = band.locator('[data-brief-panel="changes"]');
   await expect(changes.locator("[data-brief-change-total]")).toHaveText(
     "9 changes",
@@ -606,6 +614,18 @@ test("an empty section says so in one line", async ({ page }) => {
     },
   });
   await page.goto(OVERVIEW);
+  /*
+   * The digest is the Overview's own section now, so the band does not carry
+   * a second copy of it. Quiet still reads as an answer rather than an
+   * absence, in one line.
+   */
+  await expect(
+    page.locator(
+      '[data-overview-section="changes"] [data-overview-changes-empty]',
+    ),
+  ).toContainText("Nothing new since");
+
+  await openDetail(page);
   const band = page.locator('[data-overview-section="brief"]');
   await expect(band.locator('[data-brief-empty="decisions"]')).toHaveText(
     "Nothing is waiting on your decision.",
@@ -625,6 +645,7 @@ test("an empty section says so in one line", async ({ page }) => {
     const height = await band
       .locator(`[data-brief-panel="${panel}"]`)
       .evaluate((node) => node.getBoundingClientRect().height);
+    expect(height, `${panel} panel height`).toBeGreaterThan(0);
     expect(height, `${panel} panel height`).toBeLessThan(64);
   }
 });

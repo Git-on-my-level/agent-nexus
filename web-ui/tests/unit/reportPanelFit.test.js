@@ -97,6 +97,63 @@ describe("panel fit reads content, not just type", () => {
     expect(panelFit(answered)).toMatchObject({ sparse: true, wide: false });
   });
 
+  it("reads a series-bound panel the way its renderer does", () => {
+    const rows = (count) => ({
+      columns: ["One", "Two", "Three", "Four"],
+      rows: Array.from({ length: count }, () => ({
+        cells: ["a", "b", "c", "d"],
+        source_ids: [],
+      })),
+    });
+    const bound = (extra) => ({
+      ...panel("table", {}),
+      source: { series: "builds", range: "30d" },
+      ...extra,
+    });
+    /*
+     * `withSeriesObservation` blanks `panel.data` for any status but `ok`,
+     * so measuring it while the read is in flight would call a full table
+     * empty and then reflow the row when the rows arrive.
+     */
+    expect(
+      panelFit(bound({ data: {}, seriesObservation: { status: "loading" } })),
+    ).toMatchObject({ sparse: false, wide: true });
+    expect(
+      panelFit(bound({ data: {}, seriesObservation: { status: "error" } })),
+    ).toMatchObject({ sparse: false, wide: true });
+    expect(
+      panelFit(bound({ data: rows(9), seriesObservation: { status: "ok" } })),
+    ).toMatchObject({ wide: true, tier: "wide" });
+    expect(
+      panelFit(bound({ data: rows(0), seriesObservation: { status: "ok" } })),
+    ).toMatchObject({ sparse: true, tier: "tight" });
+    // A stale series still renders, from the observation, so it is measured
+    // there too: an irregular stream is stale between events by definition.
+    expect(
+      panelFit(
+        bound({
+          ...panel("live-timeline", {}),
+          source: { series: "releases", range: "30d" },
+          data: {},
+          seriesObservation: {
+            status: "stale",
+            data: { items: [{ at: "2026-10-01T00:00:00Z", value: 1 }] },
+          },
+        }),
+      ),
+    ).toMatchObject({ sparse: false, wide: true });
+    // A fallback snapshot is on `panel.data`, and it is what the reader sees.
+    expect(
+      panelFit(
+        bound({
+          data: rows(9),
+          seriesFallback: true,
+          seriesObservation: { status: "unavailable" },
+        }),
+      ),
+    ).toMatchObject({ wide: true });
+  });
+
   it("keeps a nearly empty panel out of the row's minimum", () => {
     const asks = live("live-asks", "ok", { items: [] });
     const notes = panel("explanation", { text: prose(400) });
@@ -121,29 +178,62 @@ describe("grid placement", () => {
     items: [{ ref: "card:a", plan: { steps: [{ id: "one" }, { id: "two" }] } }],
   });
   const note = panel("callout", { tone: "info", text: prose(400) });
+  const other = { ...panel("explanation", { text: prose(400) }), id: "notes" };
   const panelsById = new Map([
     [wide.id, wide],
     [note.id, note],
+    [other.id, other],
   ]);
   const children = [
     { type: "panel", panel_id: wide.id },
     { type: "panel", panel_id: note.id },
   ];
+  const threeChildren = [...children, { type: "panel", panel_id: other.id }];
 
   it("defaults to a content-driven grid capped at two columns", () => {
-    const placement = gridPlacement({ type: "grid" }, children, panelsById);
+    const placement = gridPlacement(
+      { type: "grid" },
+      threeChildren,
+      panelsById,
+    );
     expect(placement).toMatchObject({ authored: false, columns: 2 });
-    expect(placement.cells.map((cell) => cell.full)).toEqual([true, false]);
-    expect(placement.cells.map((cell) => cell.spanClass)).toEqual(["", ""]);
+    expect(placement.cells.map((cell) => cell.full)).toEqual([
+      true,
+      false,
+      false,
+    ]);
+    expect(placement.cells.map((cell) => cell.spanClass)).toEqual(["", "", ""]);
   });
 
   it("honours a column cap without making it a requirement", () => {
     expect(gridColumns(undefined)).toBe(2);
     expect(gridColumns(3)).toBe(3);
     expect(gridColumns(5)).toBe(2);
-    expect(
-      gridPlacement({ type: "grid", columns: 4 }, children, panelsById).columns,
-    ).toBe(4);
+    // A stored grid that names columns but no spans is content-driven: its
+    // count is the maximum, and narrower widths use fewer.
+    const stored = gridPlacement(
+      { type: "grid", columns: 4 },
+      threeChildren,
+      panelsById,
+    );
+    expect(stored).toMatchObject({ authored: false, columns: 4 });
+  });
+
+  it("gives the row to a panel that would otherwise be left alone on it", () => {
+    // auto-fit collapses tracks nothing is placed in, so a lone panel already
+    // fills its width — unless a full-row neighbour keeps the tracks alive.
+    const placement = gridPlacement({ type: "grid" }, children, panelsById);
+    expect(placement.cells.map((cell) => cell.full)).toEqual([true, true]);
+    const withTwoNarrow = gridPlacement(
+      { type: "grid" },
+      threeChildren,
+      panelsById,
+    );
+    expect(withTwoNarrow.cells.map((cell) => cell.full)).toEqual([
+      true,
+      false,
+      false,
+    ]);
   });
 
   it("reads a span of two or more as full width when no columns are named", () => {

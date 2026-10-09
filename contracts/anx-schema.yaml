@@ -1050,13 +1050,16 @@ visual_report_layout:
   nodes: [panel, stack, grid, section, tabs, disclosure]
   limits: {nodes: 100, depth: 6, children_per_container: 32, tabs_per_group: 8}
   grid: {columns: {values: [2, 3, 4], required: false, meaning: Maximum columns; omitted means the responsive default.}}
-  panel_minimum_widths_px: {tight: 260, text: 380, wide: 640}
+  row_minimum_widths_px: {tight: 260, text: 380}
+  claims_full_row_above_px: 640
   rules:
     - Layout is optional and placement fields are overrides. A report that omits layout, and any panel a layout does not reference, flows through the same responsive grid.
     - Grid columns are a maximum, never a requirement. A grid adds a column only when every panel sharing the row still clears its own minimum useful width, and drops to one column below that.
-    - Panel minimum width comes from panel type and the content the panel actually carries, not from the window size or an authored hint.
-    - Wide content claims the full row: plan graphs, charts, timelines and tables with real columns. Content decides, so an empty table or a planless initiative list is not wide.
+    - Panel minimum width comes from panel type and the content the panel actually carries, not from the window size or an authored hint. A minimum is what a panel reads at; a column narrower than every minimum still gets the width there is rather than overflowing.
+    - A named column count is a maximum at every width, so a grid that names more columns than its panels can read in renders fewer.
+    - Wide content claims the full row: plan graphs, charts, series timelines and tables with real columns. Content decides, so an empty table or a planless initiative list is not wide.
     - A nearly empty panel never claims a wide row and never raises its row's minimum, so it cannot push other panels into fewer columns.
+    - A panel left alone on a row takes the whole row rather than half of one.
     - A live panel still reading keeps its type's placement; placement changes only when an observation arrives, never while waiting for one.
     - A span of 2 or more is the full-width override in a grid with no columns. A grid whose children declare spans keeps exact tracks and exact spans, and collapses to one column on narrow screens.
     - Child order in the layout tree is reading order on every width; the renderer never reorders panels to fill a row.

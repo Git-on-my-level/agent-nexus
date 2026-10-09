@@ -128,6 +128,38 @@ function narrowEnough(type, data, count) {
 }
 
 /**
+ * What a panel is actually rendering, or `null` when there is nothing to
+ * measure yet.
+ *
+ * Three different places hold it, and reading the wrong one is the difference
+ * between "nearly empty" and "a full table":
+ *
+ * - A query-backed live panel keeps its rows on `panel.live.data`
+ *   (`withLiveObservation`); `panel.data` is still the authored query.
+ * - A series-bound panel has its rows merged onto `panel.data`
+ *   (`withSeriesObservation`) — but only for an `ok` read. Anything else
+ *   blanks `panel.data` to `{}`, so measuring it would read a waiting panel
+ *   as an empty one. A `stale` series still renders, from the observation,
+ *   exactly as `SeriesReportPanel` does.
+ * - Everything else authored its own data.
+ *
+ * `null` means "do not reflow for this": a panel that has not answered keeps
+ * its type's placement rather than jumping when the rows land.
+ */
+function renderedData(panel) {
+  const live = panel?.live ?? null;
+  if (live) return live.status === "ok" ? (live.data ?? {}) : null;
+  if (panel?.source) {
+    const observation = panel.seriesObservation;
+    if (observation?.status === "stale") return observation.data ?? {};
+    if (panel.seriesFallback || observation?.status === "ok")
+      return panel.data ?? {};
+    return null;
+  }
+  return panel?.data ?? {};
+}
+
+/**
  * A panel's placement needs.
  *
  * @param {object|null|undefined} panel an observed report panel
@@ -135,15 +167,11 @@ function narrowEnough(type, data, count) {
  */
 export function panelFit(panel) {
   const type = text(panel?.type);
-  const live = panel?.live ?? null;
-  const data = (live ? live.data : panel?.data) ?? {};
-  // A live panel that has not answered yet, or answered with a failure, has no
-  // content to measure. Keep its type's placement rather than treating the
-  // wait as emptiness and reflowing the row when the rows arrive.
-  const measurable = !live || live.status === "ok";
+  const rendered = renderedData(panel);
+  const data = rendered ?? {};
   const count =
-    measurable && data && typeof data === "object"
-      ? contentCount(type, data)
+    rendered && typeof rendered === "object" && !Array.isArray(rendered)
+      ? contentCount(type, rendered)
       : null;
   const shortText =
     (type === "explanation" ||
@@ -152,9 +180,9 @@ export function panelFit(panel) {
     count !== null &&
     count < SHORT_TEXT;
   const sparse = count === 0 || shortText;
-  // Nothing countable (a chart, or a live read that has not answered) keeps
-  // the type's placement; `narrowEnough` only has an opinion about content it
-  // can actually see.
+  // Nothing countable (a chart, or a read that has not answered) keeps the
+  // type's placement; `narrowEnough` only has an opinion about content it can
+  // actually see.
   const wide =
     WIDE_TYPES.has(type) &&
     !sparse &&

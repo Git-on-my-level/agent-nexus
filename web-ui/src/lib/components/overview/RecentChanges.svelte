@@ -14,6 +14,7 @@
    */
   import { sinceYouLastLookedStrip } from "$lib/sinceYouLastLooked.js";
   import { briefClock } from "$lib/morningBrief.js";
+  import { formatAbsoluteDate } from "$lib/formatDate.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { page } from "$app/stores";
 
@@ -22,7 +23,19 @@
   let strip = $derived(sinceYouLastLookedStrip(digest, { limit }));
   /** A baseline exists, so "nothing new" is an answer rather than a guess. */
   let baseline = $derived(String(digest?.since ?? "").trim());
-  let clock = $derived(briefClock(baseline));
+  /**
+   * The baseline is the previous *visit*, which can be months ago. A time of
+   * day alone reads as this morning: "nothing new since 9:14 AM" on a Friday
+   * is a different and much more reassuring claim than the truth, which is
+   * that nothing has moved since Monday.
+   */
+  let clock = $derived.by(() => {
+    const at = Date.parse(baseline);
+    if (!Number.isFinite(at)) return "";
+    const time = briefClock(baseline);
+    const today = new Date().toDateString() === new Date(at).toDateString();
+    return today ? time : `${formatAbsoluteDate(baseline)}, ${time}`;
+  });
   let workspaceHref = $derived(
     bindWorkspaceHref($page?.params?.organization, $page?.params?.workspace),
   );
@@ -73,7 +86,7 @@
           {/if}
         </ul>
       {:else}
-        <p class="text-meta text-fg-muted" data-overview-empty>
+        <p class="text-meta text-fg-muted" data-overview-changes-empty>
           {clock ? `Nothing new since ${clock}.` : "Nothing new."}
         </p>
       {/if}

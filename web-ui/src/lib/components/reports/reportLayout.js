@@ -84,6 +84,12 @@ export function gridColumns(columns) {
  * the panels inside it, and whether any of them is wide enough to want the row
  * to itself. A section or a stack placed in a grid cell is as wide as the
  * widest thing in it.
+ *
+ * Deliberately blind to what is currently *shown*: a chart inside a closed
+ * disclosure or an unselected tab still counts. Measuring only the visible
+ * branch would move the panel beside it every time a reader opened a fold,
+ * which is a worse answer than a collapsed summary line sitting on a row of
+ * its own.
  */
 export function layoutFit(node, panelsById) {
   if (!node || typeof node !== "object") return { tier: "tight", full: false };
@@ -143,6 +149,17 @@ export function gridPlacement(node, children, panelsById) {
       tier: fit.tier,
     };
   });
+  /*
+   * One panel left over takes the row too.
+   *
+   * `auto-fit` collapses tracks nothing is placed in, so a grid of one narrow
+   * panel already fills its width. A full-row neighbour defeats that — the
+   * tracks are occupied — and the leftover panel would render at half width
+   * with the other half blank. "Initiatives, then the one thing that needs a
+   * decision" is the shape this happens to, which is to say the common one.
+   */
+  if (!authored && cells.filter((cell) => !cell.full).length === 1)
+    for (const cell of cells) cell.full = true;
   const tier = cells
     .filter((cell) => !cell.full)
     .reduce((acc, cell) => widerTier(acc, cell.tier), PANEL_FIT_TIERS[0]);

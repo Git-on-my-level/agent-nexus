@@ -546,10 +546,15 @@ carries.
 
 - One column when a second one would leave every panel too narrow to read.
 - More columns only when **every** panel sharing the row clears its own minimum
-  useful width (260px for a number, 380px for prose, 640px for wide content).
-- Wide content takes the whole row on its own: plan graphs, charts, timelines,
-  and tables with real columns in them. Content decides, so a two-column table
-  and an initiative list with no plans are not wide.
+  useful width: 260px for a number or a nearly empty panel, 380px for prose.
+  Content that needs more than 640px does not share a row at all.
+- A minimum is what a panel reads at, not a promise: in a column narrower than
+  that, the panel gets the width there is rather than overflowing it.
+- Wide content takes the whole row on its own: plan graphs, charts, series
+  timelines, and tables with real columns in them. Content decides, so a
+  two-column table and an initiative list with no plans are not wide.
+- A panel left alone on a row — the only narrow panel beside a wide one — takes
+  the whole row rather than half of one.
 - A nearly empty panel never claims a wide row and never raises its row's
   minimum, so it cannot push its neighbours into fewer columns.
 - Child order is reading order at every width. The renderer never reorders
@@ -581,8 +586,10 @@ Two optional placement overrides exist, and both are exceptions:
 - `span`: 1–4 on a direct grid child. In a grid with no `columns`, 2 or more
   means "give this the full row". In a grid that names `columns`, a span of 2
   or more asks for exact tracks: that grid keeps the authored column count and
-  exact spans, and collapses to one column on narrow screens. Existing reports
-  therefore render as they always have.
+  exact spans, and collapses to one column on narrow screens, as it always
+  has. A `columns` grid with no spans is content-driven, so it uses its count
+  as a maximum and may render fewer columns than an older build did — which is
+  the point of the change, and the only way an existing report moves.
 
 At most 100 nodes, 6 nesting levels, 32 children per container and 8 tabs per group
 are accepted. Panel references and tab-group IDs are unique. Referenced panels

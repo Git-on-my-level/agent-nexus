@@ -157,7 +157,12 @@ const REPORT = {
       freshness: "current",
       source_ids: [],
       data: {
-        text: "**v0.12.12** is live on all workspaces. Release B is in review.",
+        /*
+         * Long enough to be prose rather than a label, which puts the row in
+         * the 380px tier: wider than the dashboard column on a phone, so this
+         * is also what pins the minimum being a minimum and not an overflow.
+         */
+        text: "**v0.12.12** is live on all workspaces. Release B is in review, and the qualification run finished overnight with nothing outstanding on the release checklist.",
       },
     },
     {
@@ -362,6 +367,18 @@ for (const width of [1280, 1100, 390]) {
     expect(plan.width).toBeGreaterThanOrEqual(Math.floor(boxes.inner) - 1);
     // And nothing shares its row.
     expect(boxes.cells.filter((item) => item.top === plan.top)).toHaveLength(1);
+
+    /*
+     * A minimum useful width is what a panel reads at, not a width the
+     * container has to find. In a column narrower than the tier the grid
+     * takes the width there is: the shell clips its own main column, so an
+     * unclamped track would cut the right edge off every panel with no
+     * scrollbar anywhere to say so.
+     */
+    const overflow = await grid.evaluate(
+      (node) => node.scrollWidth - node.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(1);
 
     const rows = new Set(boxes.cells.map((item) => item.top));
     if (width === 390) {

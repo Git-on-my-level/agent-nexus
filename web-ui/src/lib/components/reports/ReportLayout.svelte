@@ -154,7 +154,6 @@
       class:layout-cap-4={!placement.authored && placement.columns === 4}
       class:layout-fit-tight={!placement.authored && placement.tier === "tight"}
       class:layout-fit-text={!placement.authored && placement.tier === "text"}
-      class:layout-fit-wide={!placement.authored && placement.tier === "wide"}
       data-report-layout="grid"
       data-report-columns={placement.columns}
       data-report-placement={placement.authored ? "authored" : "fit"}
@@ -286,9 +285,22 @@
    * measured in the width it really has rather than the window's.
    */
   .report-layout-grid.layout-fit {
+    /*
+     * The `min(100%, ...)` is load-bearing. A minimum useful width is what a
+     * panel reads at, not a promise the container can keep: in a column
+     * narrower than the tier — the embedded dashboard on a phone — an
+     * unclamped minimum makes the single track wider than the grid, and the
+     * shell's own `overflow: hidden` then cuts the right edge off every panel
+     * with no scrollbar to say so. Clamped, the panel simply gets the width
+     * there is.
+     */
+    --report-fit-min: 380px;
     grid-template-columns: repeat(
       auto-fit,
-      minmax(max(var(--report-fit-min), var(--report-fit-floor)), 1fr)
+      minmax(
+        min(100%, max(var(--report-fit-min), var(--report-fit-floor))),
+        1fr
+      )
     );
   }
   .layout-cap-2 {
@@ -305,9 +317,6 @@
   }
   .layout-fit-text {
     --report-fit-min: 380px;
-  }
-  .layout-fit-wide {
-    --report-fit-min: 640px;
   }
   /* Wide content — a plan graph, a chart, a real table — takes the row. */
   .report-layout-grid > .report-layout-cell.layout-full {

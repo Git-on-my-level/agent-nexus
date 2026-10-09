@@ -114,12 +114,13 @@ describe("ReportLayout rendering", () => {
       props(
         {
           type: "grid",
-          children: [ref("plan"), ref("asks")],
+          children: [ref("plan"), ref("asks"), ref("overview")],
         },
         {
           panelsById: new Map([
             ["plan", plan],
             ["asks", empty],
+            ["overview", panels[0]],
           ]),
         },
       ),
@@ -127,14 +128,15 @@ describe("ReportLayout rendering", () => {
     const grid = container.querySelector('[data-report-layout="grid"]');
     expect(grid.dataset.reportPlacement).toBe("fit");
     expect(grid.dataset.reportColumns).toBe("2");
-    // The row's minimum comes from the plan's neighbour, not from the plan:
-    // the wide panel has the row to itself, so it does not set the tier.
+    // The row's minimum comes from the plan's neighbours, not from the plan:
+    // the wide panel has the row to itself, so it does not set the tier, and
+    // the empty one never raises it.
     expect(grid.dataset.reportFit).toBe("tight");
     expect(
       [...grid.querySelectorAll(".report-layout-cell")].map(
         (cell) => cell.dataset.reportCell,
       ),
-    ).toEqual(["full", "column"]);
+    ).toEqual(["full", "column", "column"]);
   });
 
   it("keeps an authored column count as a cap and still fits content", () => {
