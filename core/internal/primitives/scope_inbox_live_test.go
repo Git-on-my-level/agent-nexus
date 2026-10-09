@@ -1,7 +1,6 @@
 package primitives
 
 import (
-	"agent-nexus-core/internal/storage"
 	"context"
 	"fmt"
 	"reflect"
@@ -11,8 +10,9 @@ import (
 )
 
 func TestScopedInboxParityFallbackAndRevocation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,6 +126,7 @@ func TestScopedInboxParityFallbackAndRevocation(t *testing.T) {
 	}
 }
 func TestScopedInboxShadowQueueAndShutdown(t *testing.T) {
+	t.Parallel()
 	s := &Store{}
 	WithScopedInboxReader(true)(s)
 	ctx := WithAccessScope(context.Background(), AccessScope{ActorID: "reader"})
@@ -148,8 +149,9 @@ func TestScopedInboxShadowQueueAndShutdown(t *testing.T) {
 }
 
 func TestScopedInboxBudgetFallsBackWithCompleteCounts(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,8 +201,9 @@ func TestScopedInboxBudgetFallsBackWithCompleteCounts(t *testing.T) {
 }
 
 func TestScopedInboxHydrationUsesPrimaryKeyProbes(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

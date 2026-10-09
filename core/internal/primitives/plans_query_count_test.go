@@ -4,19 +4,23 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"reflect"
 	"testing"
 	"time"
 
 	"agent-nexus-core/internal/plans"
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/storage"
 	"agent-nexus-core/internal/testsql"
 )
 
-func TestPlanAndReportReadsHaveBoundedQueryCounts(t *testing.T) {
+func TestPerformancePlanAndReportReadsHaveBoundedQueryCounts(t *testing.T) {
+	if testing.Short() || os.Getenv("ANX_PERFORMANCE_TEST") != "1" {
+		t.Skip("advisory performance tier: make -C core test-perf")
+	}
+	// Serial: performance samples must not compete with parallel fixtures.
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,6 +124,7 @@ func TestPlanAndReportReadsHaveBoundedQueryCounts(t *testing.T) {
 }
 
 func TestReportBatchProjectionMatchesCanonicalWork(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s, board := newWorkTestStore(t)
 	native, err := s.CreateWork(ctx, "actor-1", board, map[string]any{"title": "Native", "priority": "p1", "phase": "review", "summary": "Evidence"})

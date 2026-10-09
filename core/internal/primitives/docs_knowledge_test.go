@@ -8,13 +8,12 @@ import (
 
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/storage"
 )
 
 func TestDocumentKnowledgeSearchCommentsAndPut(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -240,7 +239,7 @@ func TestDocumentKnowledgeSearchCommentsAndPut(t *testing.T) {
 func TestUpdateDocumentNoopWhenContentAndMetadataMatch(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}

@@ -12,6 +12,7 @@ import (
 )
 
 func TestEvidenceIndexMigrationBackfillsAndObservationUpdates(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	root := t.TempDir()
 	ws, err := storage.InitializeWorkspace(ctx, root)
@@ -60,6 +61,7 @@ func TestEvidenceIndexMigrationBackfillsAndObservationUpdates(t *testing.T) {
 // Main can contain legacy extension arrays beyond the new write caps. Migration
 // 65 bounds their projection while preserving canonical evidence bytes.
 func TestEvidenceIndex65BoundsLegacyAliasBackfill(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	root := t.TempDir()
 	ws, err := storage.InitializeWorkspace(ctx, root)

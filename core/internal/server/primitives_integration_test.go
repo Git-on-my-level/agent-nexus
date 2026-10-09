@@ -1106,7 +1106,7 @@ func TestPrimitivesCRUDRoundTripWithObjectBackend(t *testing.T) {
 	requireIntegrationTest(t)
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -2401,7 +2401,7 @@ func newPrimitivesTestServer(t *testing.T) primitivesTestHarness {
 	requireIntegrationTest(t)
 	t.Helper()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -2444,7 +2444,7 @@ func newPrimitivesTestServerWithHumanPrincipal(t *testing.T) primitivesTestHarne
 	requireIntegrationTest(t)
 	t.Helper()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}

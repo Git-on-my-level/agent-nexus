@@ -15,6 +15,7 @@ import (
 )
 
 func TestSeriesHistoricalDefaultStepForHTTPAndReportPanels(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	seedSeriesIdentities(t, env)
@@ -42,6 +43,7 @@ func TestSeriesHistoricalDefaultStepForHTTPAndReportPanels(t *testing.T) {
 }
 
 func TestFleetHealthReportUsesDeclaredFleetSeriesAndHostInventory(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	seedSeriesIdentities(t, env)
@@ -116,6 +118,7 @@ func declareSeriesHTTP(t *testing.T, env authIntegrationEnv) string {
 	return out["tokens"].(map[string]any)["access_token"].(string)
 }
 func TestSeriesTokenOnlyPushesDeclaredPointsAndReportMaterialization(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	seedSeriesIdentities(t, env)
@@ -176,6 +179,7 @@ func (b *blockedPointBody) Read(p []byte) (int, error) {
 }
 func (b *blockedPointBody) Close() error { return nil }
 func TestSeriesRevocationWhileAdmittedPushReadsBody(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	for _, target := range []string{"adapter", "host", "agent"} {
 		t.Run(target, func(t *testing.T) {
@@ -235,6 +239,7 @@ func (unreadableSeriesBody) Read([]byte) (int, error) { panic("denied request bo
 func (unreadableSeriesBody) Close() error             { return nil }
 
 func TestSeriesCapabilityDeniesUndeclaredResourceBeforeBodyRead(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	seedSeriesIdentities(t, env)
@@ -251,6 +256,7 @@ func TestSeriesCapabilityDeniesUndeclaredResourceBeforeBodyRead(t *testing.T) {
 }
 
 func TestSeriesConcurrentPushAdmissionLeavesHumanReadsAvailable(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	seedSeriesIdentities(t, env)
@@ -314,6 +320,7 @@ func TestSeriesConcurrentPushAdmissionLeavesHumanReadsAvailable(t *testing.T) {
 }
 
 func TestSeriesRetryStormRejectedWithoutDatabaseOrBodyRead(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	seedSeriesIdentities(t, env)

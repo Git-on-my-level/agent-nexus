@@ -4,27 +4,29 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/storage"
 	"agent-nexus-core/internal/testsql"
 )
 
 func TestReceiptStreamResumeAndUpdateReplay(t *testing.T) {
+	t.Parallel()
 	testReceiptStreamResumeAndUpdateReplay(t, false)
 }
 
 func TestReceiptStreamHistoricalResumeWithoutBackfill(t *testing.T) {
+	t.Parallel()
 	testReceiptStreamResumeAndUpdateReplay(t, true)
 }
 
 func testReceiptStreamResumeAndUpdateReplay(t *testing.T, historical bool) {
 	t.Helper()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +155,11 @@ func testReceiptStreamResumeAndUpdateReplay(t *testing.T, historical bool) {
 	}
 }
 
-func TestReceiptStreamTickBudgetIndependentOfHistory(t *testing.T) {
+func TestPerformanceReceiptStreamTickBudgetIndependentOfHistory(t *testing.T) {
+	if testing.Short() || os.Getenv("ANX_PERFORMANCE_TEST") != "1" {
+		t.Skip("advisory performance tier: make -C core test-perf")
+	}
+	// Serial: performance samples must not compete with parallel fixtures.
 	if testing.Short() {
 		t.Skip("counts statements across 100k receipt rows")
 	}
@@ -186,7 +192,7 @@ type receiptTickBudget struct {
 func measureReceiptTickBudget(t *testing.T, count int) receiptTickBudget {
 	t.Helper()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,8 +312,9 @@ func assertReceiptPlans(t *testing.T, db *sql.DB, counter *testsql.Counter) {
 }
 
 func TestReceiptStreamStaleDigestResumesAtReceipt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -343,8 +350,9 @@ func TestReceiptStreamStaleDigestResumesAtReceipt(t *testing.T) {
 }
 
 func TestReceiptStreamVisibilityChangeReplaysHiddenReceipt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -424,8 +432,9 @@ func TestReceiptStreamVisibilityChangeReplaysHiddenReceipt(t *testing.T) {
 }
 
 func TestReceiptStreamNewPrivateRefStaysHidden(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -473,8 +482,9 @@ func TestReceiptStreamNewPrivateRefStaysHidden(t *testing.T) {
 }
 
 func TestReceiptPayloadPlanSeeksWakeupID(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -562,7 +572,11 @@ func TestReceiptPayloadPlanSeeksWakeupID(t *testing.T) {
 	}
 }
 
-func TestReceiptStreamHiddenHistoryTickTiming(t *testing.T) {
+func TestPerformanceReceiptStreamHiddenHistoryTickTiming(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
+	if testing.Short() || os.Getenv("ANX_PERFORMANCE_TEST") != "1" {
+		t.Skip("advisory performance tier: make -C core test-perf")
+	}
 	if testing.Short() {
 		t.Skip("times idle and append ticks across 100k hidden receipts")
 	}
@@ -596,7 +610,7 @@ type hiddenReceiptTicks struct {
 func measureHiddenReceiptTicks(t *testing.T, count int) hiddenReceiptTicks {
 	t.Helper()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -20,13 +20,17 @@ import (
 
 // Measure a small workspace through the full authenticated handler, rather
 // than extrapolating from a CLI process or an unscoped projection.
-func TestOverviewSmallWorkspaceLatency(t *testing.T) {
+func TestPerformanceOverviewSmallWorkspaceLatency(t *testing.T) {
+	requirePerformanceTest(t)
+	// Serial: performance samples must not compete with parallel fixtures.
 	testOverviewWorkspaceLatency(t, 10, 1)
 }
 
 // Cardinalities observed through a read-only Overview of the personal
 // workspace; all fixture names, content and credentials remain synthetic.
-func TestOverviewPersonalSizedWorkspaceLatency(t *testing.T) {
+func TestPerformanceOverviewPersonalSizedWorkspaceLatency(t *testing.T) {
+	requirePerformanceTest(t)
+	// Serial: performance samples must not compete with parallel fixtures.
 	testOverviewWorkspaceLatency(t, 49, 23)
 }
 

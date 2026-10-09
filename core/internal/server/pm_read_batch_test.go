@@ -16,6 +16,7 @@ import (
 )
 
 func TestPMReadBatchKeepsFreshAuthorityAndEpochPrivacy(t *testing.T) {
+	t.Parallel()
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	reader := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "batch-reader", "batch-actor", "batch-reader", "batch-token")

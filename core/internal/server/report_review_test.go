@@ -12,13 +12,13 @@ import (
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/storage"
 	reports "agent-nexus-visualreport"
 )
 
 func TestReportReviewAuthorPrivacyDedupeAndRetirement(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,6 +185,7 @@ func TestReportReviewAuthorPrivacyDedupeAndRetirement(t *testing.T) {
 }
 
 func TestReportMaterializationIncludesAuthoredReviewMetadata(t *testing.T) {
+	t.Parallel()
 	panels := []reports.Panel{{ID: "note", Type: "explanation", Author: "author", AuthoredAt: "2026-01-01T00:00:00Z", ReviewBy: "2026-01-08T00:00:00Z", ReviewByDefaulted: true, StaticData: map[string]any{"text": "Narrative"}}}
 	_, results := materializeReportPanels(httptest.NewRequest("GET", "/", nil), handlerOptions{}, panels)
 	if len(results) != 1 || results[0]["provenance_class"] != "authored" || results[0]["review_due"] != true || results[0]["review_by_defaulted"] != true || results[0]["authored_at"] != panels[0].AuthoredAt {
@@ -193,8 +194,9 @@ func TestReportMaterializationIncludesAuthoredReviewMetadata(t *testing.T) {
 }
 
 func TestLiveCardsFiltersStoredLabelsRolesAndStatus(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

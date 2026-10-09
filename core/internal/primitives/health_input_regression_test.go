@@ -10,6 +10,7 @@ import (
 )
 
 func TestHealthInputsAgreeAcrossWorkCardAndRefReads(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s, board := newWorkTestStore(t)
 	now := time.Now().UTC()

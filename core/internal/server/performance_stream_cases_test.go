@@ -493,6 +493,7 @@ func performanceValidateAgentChanges(t *testing.T, first, second string) {
 }
 
 func TestPerformanceStreamScenarioInventory(t *testing.T) {
+	t.Parallel()
 	budgets := performanceBudgets(t)
 	want := map[string]string{
 		"events-default": "events-default", "events-large-thread": "events-large-thread", "events-resumed": "events-resumed", "events-idle": "events-idle",
@@ -517,6 +518,7 @@ func TestPerformanceStreamScenarioInventory(t *testing.T) {
 }
 
 func TestPerformanceHistoryStreamControls(t *testing.T) {
+	t.Parallel()
 	frame := func(id string) string { return "id: " + id + "\nevent: event\ndata: {}\n\n" }
 	for _, authorized := range []bool{true, false} {
 		first, second := "", ""
@@ -547,6 +549,7 @@ func TestPerformanceHistoryStreamControls(t *testing.T) {
 // Exercise the controls against real authentication and canonical privacy on a
 // small workspace; the acceptance run supplies the full unrelated corpus.
 func TestStreamScaleControlsPrivacy(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	base := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	db := base.workspace.DB()
@@ -619,6 +622,7 @@ func TestStreamScaleControlsPrivacy(t *testing.T) {
 }
 
 func TestPerformanceResumeMarkersCannotExposeHiddenCursor(t *testing.T) {
+	t.Parallel()
 	visible := "id: public\nevent: event\ndata: {\"event\":{\"id\":\"public\"}}\n\n"
 	valid := visible + "id: public\nevent: resume\ndata: {}\n\n"
 	if err := performanceValidateEventFrames(valid); err != nil {
@@ -632,6 +636,7 @@ func TestPerformanceResumeMarkersCannotExposeHiddenCursor(t *testing.T) {
 }
 
 func TestPerformanceLiveStreamRejectsHistoryReplay(t *testing.T) {
+	t.Parallel()
 	frame := func(id string) string { return "id: " + id + "\nevent: event\ndata: {}\n\n" }
 	for _, authorized := range []bool{true, false} {
 		body := frame("fresh-public")

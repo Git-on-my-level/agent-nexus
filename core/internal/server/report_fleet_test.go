@@ -10,6 +10,7 @@ import (
 )
 
 func TestFleetInventoryStorageReadsAreBoundedAndTotalsAreSeparate(t *testing.T) {
+	t.Parallel()
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	seedSeriesIdentities(t, env)
 	db := env.workspace.DB()

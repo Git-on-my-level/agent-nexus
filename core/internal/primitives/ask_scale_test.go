@@ -4,17 +4,21 @@ import (
 	"agent-nexus-core/internal/blob"
 	p "agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/secrets"
-	"agent-nexus-core/internal/storage"
 	"agent-nexus-core/internal/testutil/perfguard"
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 )
 
-func TestAskDeliveryReadBudgets(t *testing.T) {
+func TestPerformanceAskDeliveryReadBudgets(t *testing.T) {
+	if testing.Short() || os.Getenv("ANX_PERFORMANCE_TEST") != "1" {
+		t.Skip("advisory performance tier: make -C core test-perf")
+	}
+	// Serial: performance samples must not compete with parallel fixtures.
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,9 +123,13 @@ func TestAskDeliveryReadBudgets(t *testing.T) {
 
 // Measure the actual board lookup SQL emitted by legacy publication, isolated
 // from unrelated card/blob writes and the shared authorization engine.
-func TestAskCompatibilityBoardLookupBudget(t *testing.T) {
+func TestPerformanceAskCompatibilityBoardLookupBudget(t *testing.T) {
+	if testing.Short() || os.Getenv("ANX_PERFORMANCE_TEST") != "1" {
+		t.Skip("advisory performance tier: make -C core test-perf")
+	}
+	// Serial: performance samples must not compete with parallel fixtures.
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

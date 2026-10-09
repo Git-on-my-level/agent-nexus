@@ -7,14 +7,14 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/plans"
-	"agent-nexus-core/internal/storage"
 )
 
 func TestPublishedEvidenceKeysInheritOwnershipBeforeSelection(t *testing.T) {
+	t.Parallel()
 	for _, key := range []string{"opaque-release-key", "https://source.test/confidential/42", "github:team/repo#42"} {
 		t.Run(key, func(t *testing.T) {
 			ctx := context.Background()
-			ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+			ws, err := initializeTestWorkspace(ctx, t.TempDir())
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -24,7 +24,9 @@ import (
 
 // Reproduce payload-derived edge density, not just live-card cardinality.
 // All canonical imports pass through the production SQLite write triggers.
-func TestOverviewDenseAccessWorkspaceLatency(t *testing.T) {
+func TestPerformanceOverviewDenseAccessWorkspaceLatency(t *testing.T) {
+	requirePerformanceTest(t)
+	// Serial: performance samples must not compete with parallel fixtures.
 	if testing.Short() {
 		t.Skip("dense full-stack fixture")
 	}

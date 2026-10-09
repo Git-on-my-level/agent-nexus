@@ -43,6 +43,7 @@ func (b *unavailableScopeBlobs) OpenReadStream(ctx context.Context, hash string)
 // Exercise real workspace initialization, the production constructor and HTTP
 // readiness. Slow, unavailable historical blobs must never be read or retried.
 func TestScopeColdReadinessZeroHistoricalBlobReads(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	if testing.Short() {
 		t.Skip("real HTTP cold startup gate")
 	}

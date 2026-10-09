@@ -31,6 +31,7 @@ func (s *blockingPrincipalStore) GetPrincipalSummary(ctx context.Context, _ stri
 }
 
 func TestPMPrincipalSlowReadDoesNotBlockOtherRequests(t *testing.T) {
+	t.Parallel()
 	for _, warm := range []bool{false, true} {
 		t.Run(map[bool]string{false: "cold", true: "warm"}[warm], func(t *testing.T) {
 			st := &blockingPrincipalStore{entered: make(chan struct{}), release: make(chan struct{})}

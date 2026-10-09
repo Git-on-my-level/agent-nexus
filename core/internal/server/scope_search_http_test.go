@@ -48,6 +48,7 @@ func scopeCSearchPage(t *testing.T, base, query, cursor string, limit int) scope
 }
 
 func TestScopeSearchHTTPOversizedRepetitiveProgressAndCoverage(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	c := newScopeCRepository(t)
 	c.grant(t, "public", "reader", "active")
 	c.grant(t, "private", "owner", "active")
@@ -84,6 +85,7 @@ func TestScopeSearchHTTPOversizedRepetitiveProgressAndCoverage(t *testing.T) {
 }
 
 func TestScopeSearchHTTPDoesNotSkipSaturatedScopeFrontier(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	c := newScopeCRepository(t)
 	c.grant(t, "a", "reader", "active")
 	c.grant(t, "b", "reader", "active")
@@ -111,6 +113,7 @@ func TestScopeSearchHTTPDoesNotSkipSaturatedScopeFrontier(t *testing.T) {
 }
 
 func TestScopeSearchHTTPGenerationQueryAndSelectionBinding(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	c := newScopeCRepository(t)
 	c.grant(t, "a", "reader", "active")
 	c.grant(t, "b", "reader", "active")
@@ -151,6 +154,7 @@ func TestScopeSearchHTTPGenerationQueryAndSelectionBinding(t *testing.T) {
 }
 
 func TestScopeSearchRejectedBodiesChargeVerificationBudget(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	c := newScopeCRepository(t)
 	c.grant(t, "a", "reader", "active")
 	c.searchWrite(t, "a", "document", "large", strings.Repeat("anchor x ", 10000)+"needle", 3)
@@ -177,6 +181,7 @@ func TestScopeSearchRejectedBodiesChargeVerificationBudget(t *testing.T) {
 }
 
 func TestScopeSearchIncrementalCommentWriteIgnoresHistoryAndRollsBack(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	c := newScopeCRepository(t)
 	c.grant(t, "s", "reader", "active")
 	c.searchWrite(t, "s", "document", "head", "head current", 1)
@@ -224,6 +229,7 @@ func TestScopeSearchIncrementalCommentWriteIgnoresHistoryAndRollsBack(t *testing
 }
 
 func TestScopeSearchHTTPDisabledByDefault(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	r := httptest.NewRequest(http.MethodGet, "/scope-search?q=needle", nil)
 	w := httptest.NewRecorder()
 	scopesearch.Handler(scopesearch.HTTPOptions{}).ServeHTTP(w, r)
@@ -233,6 +239,7 @@ func TestScopeSearchHTTPDisabledByDefault(t *testing.T) {
 }
 
 func TestScopeSearchHTTPUnchangedQueryResumesEscapedIdentity(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	for _, character := range []string{"<", ">", "&", "\x01"} {
 		t.Run(character, func(t *testing.T) {
 			c := newScopeCRepository(t)

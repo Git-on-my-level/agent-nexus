@@ -13,6 +13,7 @@ import (
 )
 
 func TestRound5NativeFailures(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"invalid_resolution", "missing_board", "invalid_annotation"} {
 		t.Run(kind, func(t *testing.T) {
 			env := newPMStoreTestEnv(t)
@@ -102,6 +103,7 @@ func (s round5MutationStore) GetWork(context.Context, string) (map[string]any, e
 }
 
 func TestRound5NativeErrorBoundary(t *testing.T) {
+	t.Parallel()
 	for _, started := range []bool{false, true} {
 		cause := errors.New("simulated store error")
 		var err error = cause
@@ -121,6 +123,7 @@ func TestRound5NativeErrorBoundary(t *testing.T) {
 }
 
 func TestRound5ContextCursorMessages(t *testing.T) {
+	t.Parallel()
 	env := newPMStoreTestEnv(t)
 	ctx := context.Background()
 	human := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "cursor-human", "cursor-actor", "cursor-human", "cursor-token")
@@ -177,6 +180,7 @@ func (s round5PostWriteStore) PatchWork(ctx context.Context, actor, id string, v
 	return nil, &primitives.MutationOutcomeUnknown{Cause: errors.New("post-write fixture error")}
 }
 func TestRound5PostWriteCanonicalRecovery(t *testing.T) {
+	t.Parallel()
 	for _, scope := range []string{"work.phase", "work.annotate"} {
 		for _, commit := range []bool{false, true} {
 			t.Run(scope+map[bool]string{false: "/not_committed", true: "/committed"}[commit], func(t *testing.T) {
@@ -256,6 +260,7 @@ func TestRound5PostWriteCanonicalRecovery(t *testing.T) {
 }
 
 func TestRound5StorePostCommitMarkers(t *testing.T) {
+	t.Parallel()
 	for _, scope := range []string{"phase", "annotation"} {
 		t.Run(scope, func(t *testing.T) {
 			env := newPMStoreTestEnv(t)
@@ -306,6 +311,7 @@ func TestRound5StorePostCommitMarkers(t *testing.T) {
 }
 
 func TestRound5NativeReadbackMismatchIsFailed(t *testing.T) {
+	t.Parallel()
 	store := round5MutationStore{}
 	a := pm.Action{WorkRef: "work:one", Payload: &pm.ActionPayload{Phase: "ready"}, Instruction: `{"next_action":"review"}`}
 	for _, read := range []func() (pm.Receipt, error){

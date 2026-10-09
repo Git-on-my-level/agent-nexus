@@ -13,6 +13,7 @@ import (
 )
 
 func TestRound11DecisionExecutorRegistry(t *testing.T) {
+	t.Parallel()
 	env := newPMStoreTestEnv(t)
 	ctx := context.Background()
 	human := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "r11-human", "r11-actor", "r11-human", "r11-token")

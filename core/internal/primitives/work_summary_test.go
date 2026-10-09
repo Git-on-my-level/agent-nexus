@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/plans"
-	"agent-nexus-core/internal/storage"
 	"agent-nexus-core/internal/testsql"
 )
 
 func TestWorkSummaryPlanlessWorkflowAndRiskFixture(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 	counts := map[string]int{}
 	for _, tc := range []struct {
@@ -61,6 +61,7 @@ func TestWorkSummaryPlanlessWorkflowAndRiskFixture(t *testing.T) {
 }
 
 func TestWorkSummaryPartsAndMismatch(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 	input := cardHealthInput{Phase: "in_progress", Owner: "actor:lead", Due: "2026-10-09T12:00:00Z", Created: now.Add(-48 * time.Hour), Activity: now}
 	p := plans.Plan{Steps: []plans.Step{{ID: "finished", Title: "Finished", Status: "done"}, {ID: "blocked", Title: "Blocked", Status: "blocked"}, {ID: "next", Title: "Next"}, {ID: "other", Title: "Other"}}}
@@ -97,6 +98,7 @@ func TestWorkSummaryPartsAndMismatch(t *testing.T) {
 }
 
 func TestWorkSummaryDigestDoesNotCountUnreadableSteps(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	p := plans.Plan{Steps: []plans.Step{{ID: "a", Title: "Private", Ref: "card:private"}, {ID: "b", Title: "Private", Ref: "card:private"}, {ID: "c", Title: "Private", Ref: "card:private"}, {ID: "d", Title: "Public"}}}
 	state := plans.Compute(p, nil, now, now, 0)
@@ -107,8 +109,9 @@ func TestWorkSummaryDigestDoesNotCountUnreadableSteps(t *testing.T) {
 }
 
 func TestWorkSummaryUsesPrimaryPhaseAcrossBoardMemberships(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,8 +162,9 @@ func TestWorkSummaryUsesPrimaryPhaseAcrossBoardMemberships(t *testing.T) {
 }
 
 func TestWorkSummaryAttentionAudienceBoundsAndPrivacy(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,8 +233,9 @@ func TestWorkSummaryAttentionAudienceBoundsAndPrivacy(t *testing.T) {
 }
 
 func TestWorkSummaryAliasesShareAttentionAndSourceClearing(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

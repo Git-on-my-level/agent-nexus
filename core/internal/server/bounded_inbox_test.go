@@ -17,6 +17,7 @@ import (
 )
 
 func TestInboxStreamDeliversAllAuthorizedItemsAcrossPages(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	for _, hiddenPage := range []bool{false, true} {
 		t.Run(fmt.Sprintf("hidden_first_page_%t", hiddenPage), func(t *testing.T) {
@@ -105,6 +106,7 @@ func TestInboxStreamDeliversAllAuthorizedItemsAcrossPages(t *testing.T) {
 }
 
 func TestInboxStreamGoesIdleAfterMultiPageDelivery(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	h := newMetaStreamTestHarness(t, WithStreamPollInterval(20*time.Millisecond))
 	store := h.primitiveStore.(*primitives.Store)
@@ -164,6 +166,7 @@ func TestInboxStreamGoesIdleAfterMultiPageDelivery(t *testing.T) {
 }
 
 func TestOpenInboxPagesKeepRankOrderAndPrincipalScope(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("full HTTP/storage fixture")
 	}
@@ -243,6 +246,7 @@ func TestOpenInboxPagesKeepRankOrderAndPrincipalScope(t *testing.T) {
 }
 
 func TestInboxStreamContinuationSeeksIndex(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	s := env.primitiveStore.(*primitives.Store)
@@ -295,6 +299,7 @@ func TestInboxStreamContinuationSeeksIndex(t *testing.T) {
 }
 
 func TestInboxStreamPartialResumeAndFreshRevocation(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()

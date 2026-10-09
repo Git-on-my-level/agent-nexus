@@ -12,7 +12,9 @@ import (
 	"agent-nexus-core/internal/testsql"
 )
 
-func TestInboxStreamTickHiddenVolumeBudget(t *testing.T) {
+func TestPerformanceInboxStreamTickHiddenVolumeBudget(t *testing.T) {
+	requirePerformanceTest(t)
+	// Serial: performance samples must not compete with parallel fixtures.
 	requireIntegrationTest(t)
 	for _, fixture := range []struct {
 		name                     string

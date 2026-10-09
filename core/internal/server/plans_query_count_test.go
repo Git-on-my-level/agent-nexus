@@ -16,6 +16,7 @@ import (
 )
 
 func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
+	t.Parallel()
 	h := newPrimitivesTestServer(t)
 	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"One","created_at":"2026-03-04T10:00:00Z"}}`, 201)
 	ctx := context.Background()
@@ -135,7 +136,9 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 
 // Each checkpoint has full-size plans with distinct missing refs across cards.
 // Small plans would miss a per-plan chunking regression at the 200-step limit.
-func TestPlanReadsStayBoundedAtMaximumFanOut(t *testing.T) {
+func TestPerformancePlanReadsStayBoundedAtMaximumFanOut(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
+	requirePerformanceTest(t)
 	for _, mixed := range []bool{false, true} {
 		name := "unknown-card-refs"
 		if mixed {

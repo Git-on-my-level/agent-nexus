@@ -13,6 +13,7 @@ import (
 )
 
 func TestRound14DecisionWorkLifecycle(t *testing.T) {
+	t.Parallel()
 	for _, lifecycle := range []string{"trashed", "archived", "purged"} {
 		for _, authority := range []string{"nexus", "github"} {
 			t.Run(lifecycle+"/"+authority, func(t *testing.T) {

@@ -12,12 +12,11 @@ import (
 	"agent-nexus-core/internal/pm"
 	p "agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/resourceaccess"
-	"agent-nexus-core/internal/storage"
 )
 
 func ledgerFixture(t *testing.T) (*sql.DB, *p.Store) {
 	t.Helper()
-	ws, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	ws, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,6 +49,7 @@ func ledgerEpoch(t *testing.T, db *sql.DB) int64 {
 }
 
 func TestScopeInboxMutationLedgerCoverageAndDetachedTemplates(t *testing.T) {
+	t.Parallel()
 	ledger := p.ScopeInboxMutationLedger()
 	tables := map[string]bool{}
 	for _, source := range ledger {
@@ -92,6 +92,7 @@ func TestScopeInboxMutationLedgerCoverageAndDetachedTemplates(t *testing.T) {
 // This does not project or certify these sources; A's trusted verifier remains
 // required before a generation is admitted.
 func TestScopeInboxCanonicalWritesInvalidateBeforeCommit(t *testing.T) {
+	t.Parallel()
 	db, store := ledgerFixture(t)
 	installLedgerFixture(t, db)
 	ctx := context.Background()
@@ -195,6 +196,7 @@ func TestScopeInboxCanonicalWritesInvalidateBeforeCommit(t *testing.T) {
 }
 
 func TestScopeInboxInvalidationFailureAndStickyTransactionGate(t *testing.T) {
+	t.Parallel()
 	for _, fault := range []string{"missing", "overflow", "statement failure"} {
 		t.Run(fault, func(t *testing.T) {
 			db, store := ledgerFixture(t)
@@ -260,6 +262,7 @@ func TestScopeInboxInvalidationFailureAndStickyTransactionGate(t *testing.T) {
 }
 
 func TestScopeInboxPasskeyPrincipalFallbackInvalidatesNotificationTarget(t *testing.T) {
+	t.Parallel()
 	db, _ := ledgerFixture(t)
 	ctx := context.Background()
 	if _, err := db.Exec(`INSERT INTO actors(id,display_name,tags_json,created_at,metadata_json) VALUES('legacy-actor','Legacy','[]','now','{}')`); err != nil {

@@ -13,6 +13,7 @@ import (
 )
 
 func TestWorkReadsHidePrivateCardAndBoardEvidence(t *testing.T) {
+	t.Parallel()
 	h := newPrimitivesTestServerWithHumanPrincipal(t)
 	s := h.primitiveStore.(*primitives.Store)
 	ctx := context.Background()

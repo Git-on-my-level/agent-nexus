@@ -21,6 +21,7 @@ func (s *indexedPMPrincipalStore) PrincipalForActor(ctx context.Context, _ strin
 }
 
 func TestPMIndexedIdentityExpiryRetainsFreshAuthority(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	st := &indexedPMPrincipalStore{round15PrincipalStore: round15PrincipalStore{round4PrincipalStore: round4PrincipalStore{principal: auth.AuthPrincipalSummary{ActorID: "actor", AgentID: "agent", PrincipalKind: "human"}}}}
 	l := newPMPrincipalLookup(st)

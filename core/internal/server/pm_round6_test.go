@@ -15,6 +15,7 @@ import (
 )
 
 func TestRound6ResolutionEvidence(t *testing.T) {
+	t.Parallel()
 	env := newPMStoreTestEnv(t)
 	ctx := context.Background()
 	db := env.workspace.DB()
@@ -189,6 +190,7 @@ func TestRound6ResolutionEvidence(t *testing.T) {
 }
 
 func TestRound6RuntimeAuthentication(t *testing.T) {
+	t.Parallel()
 	env := newPMStoreTestEnv(t)
 	ctx := context.Background()
 	db := env.workspace.DB()

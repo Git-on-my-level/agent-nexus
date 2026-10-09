@@ -13,6 +13,7 @@ import (
 )
 
 func TestAnswerWakeMaintainerDebouncesAnswersIntoOneWake(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	workspace, store := newAnswerWakeTestStore(t, ctx)
 	defer workspace.Close()
@@ -60,6 +61,7 @@ func TestAnswerWakeMaintainerDebouncesAnswersIntoOneWake(t *testing.T) {
 }
 
 func TestAnswerWakeMaintainerSplitsQuietWindowsAndTargetsEachAgent(t *testing.T) {
+	t.Parallel()
 	t.Run("split quiet windows produce two wakes", func(t *testing.T) {
 		ctx := context.Background()
 		workspace, store := newAnswerWakeTestStore(t, ctx)
@@ -113,6 +115,7 @@ func TestAnswerWakeMaintainerSplitsQuietWindowsAndTargetsEachAgent(t *testing.T)
 }
 
 func TestAnswerWakeMaintainerFlushesWhenNoAsksRemain(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	workspace, store := newAnswerWakeTestStore(t, ctx)
 	defer workspace.Close()
@@ -132,6 +135,7 @@ func TestAnswerWakeMaintainerFlushesWhenNoAsksRemain(t *testing.T) {
 }
 
 func TestAnswerWakeMaintainerRejectsStaleSnapshotWhenAnswerArrivesBeforeAtomicClaim(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	workspace, store := newAnswerWakeTestStore(t, ctx)
 	defer workspace.Close()
@@ -168,6 +172,7 @@ func TestAnswerWakeMaintainerRejectsStaleSnapshotWhenAnswerArrivesBeforeAtomicCl
 }
 
 func TestAnswerWakeDeadlineSurvivesRestartAndDuplicateDeliveryKeepsReadState(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	root := t.TempDir()
 	workspace, err := storage.InitializeWorkspace(ctx, root)
@@ -235,6 +240,7 @@ func TestAnswerWakeDeadlineSurvivesRestartAndDuplicateDeliveryKeepsReadState(t *
 }
 
 func TestAnswerWakeMaintainerDropsPendingBatchForRevokedRecipient(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	workspace, store := newAnswerWakeTestStore(t, ctx)
 	defer workspace.Close()
@@ -257,7 +263,7 @@ func TestAnswerWakeMaintainerDropsPendingBatchForRevokedRecipient(t *testing.T) 
 
 func newAnswerWakeTestStore(t *testing.T, ctx context.Context) (*storage.Workspace, *primitives.Store) {
 	t.Helper()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}

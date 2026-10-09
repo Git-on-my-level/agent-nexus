@@ -35,6 +35,7 @@ func accessTestEnv(t *testing.T) (authIntegrationEnv, string) {
 }
 
 func TestAccessRequestHumanDecisionAndReplay(t *testing.T) {
+	t.Parallel()
 	env, human := accessTestEnv(t)
 	agent := seedAccessTestAgent(t, env, "access.requester")
 	base := env.server.URL
@@ -145,6 +146,7 @@ func TestAccessRequestHumanDecisionAndReplay(t *testing.T) {
 }
 
 func TestAccessRequestInboxDecisionsAndForgedMetadata(t *testing.T) {
+	t.Parallel()
 	env, human := accessTestEnv(t)
 	requester := seedAccessTestAgent(t, env, "access.inbox")
 	other := seedAccessTestAgent(t, env, "access.other")
@@ -212,6 +214,7 @@ func TestAccessRequestInboxDecisionsAndForgedMetadata(t *testing.T) {
 }
 
 func TestAccessRequestCompetingDecisions(t *testing.T) {
+	t.Parallel()
 	env, human := accessTestEnv(t)
 	agent := seedAccessTestAgent(t, env, "access.race")
 	status, p := hostHTTP(t, "POST", env.server.URL+"/auth/access-requests", agent.AccessToken, map[string]any{"grant": "auth-admin", "reason": "Race request"})
@@ -266,6 +269,7 @@ func TestAccessRequestCompetingDecisions(t *testing.T) {
 }
 
 func TestAccessRequestRevokedRequesterAndPendingEnrollments(t *testing.T) {
+	t.Parallel()
 	env, human := accessTestEnv(t)
 	agent := seedAccessTestAgent(t, env, "access.revoked")
 	status, p := hostHTTP(t, "POST", env.server.URL+"/auth/access-requests", agent.AccessToken, map[string]any{"grant": "auth-admin", "reason": "Needs permission"})
@@ -296,6 +300,7 @@ func TestAccessRequestRevokedRequesterAndPendingEnrollments(t *testing.T) {
 }
 
 func TestAccessRequestCreationIsSelfScopedAndConcurrentIdempotent(t *testing.T) {
+	t.Parallel()
 	env, human := accessTestEnv(t)
 	agent := seedAccessTestAgent(t, env, "access.self")
 	for _, body := range []map[string]any{{"grant": "auth-admin", "reason": " "}, {"grant": "unknown", "reason": "Grant this"}, {"grant": "auth-admin", "reason": "Grant this", "principal_id": "someone-else"}} {
@@ -344,6 +349,7 @@ func TestAccessRequestCreationIsSelfScopedAndConcurrentIdempotent(t *testing.T) 
 }
 
 func TestInboxSummaryRanksProjectedAskSeverity(t *testing.T) {
+	t.Parallel()
 	env, human := accessTestEnv(t)
 	agent := seedAccessTestAgent(t, env, "summary.severity")
 	status, p := hostHTTP(t, "POST", env.server.URL+"/auth/access-requests", agent.AccessToken, map[string]any{"grant": "auth-admin", "reason": "Create shared attention context"})

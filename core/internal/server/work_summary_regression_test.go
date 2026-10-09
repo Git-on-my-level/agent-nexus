@@ -43,6 +43,7 @@ func (s *countedSummaryStore) EnrichCardPlans(ctx context.Context, cards []map[s
 }
 
 func TestSummaryBundlesBoundCandidatesAndLegacyArchiveIsComplete(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	s := h.primitiveStore.(*primitives.Store)
@@ -133,6 +134,7 @@ func TestSummaryBundlesBoundCandidatesAndLegacyArchiveIsComplete(t *testing.T) {
 }
 
 func TestInboxSummaryStreamIdleAcrossElapsedAgesAndHealthThreshold(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	requireIntegrationTest(t)
 	t.Setenv("ANX_PLAN_STALLED_AFTER", "1s")
 	h := newMetaStreamTestHarness(t, WithStreamPollInterval(50*time.Millisecond))
@@ -186,6 +188,7 @@ func TestInboxSummaryStreamIdleAcrossElapsedAgesAndHealthThreshold(t *testing.T)
 }
 
 func TestInboxChangeDigestRetainsPayloadAndAttentionAnchors(t *testing.T) {
+	t.Parallel()
 	age := int64(10)
 	summary := &primitives.WorkSummary{Age: &age, CreatedAt: "2026-10-08T09:00:00Z", Attention: &primitives.SummaryAttention{Count: 1, OldestAge: 10, OldestAt: "2026-10-08T09:00:00Z"}}
 	item := map[string]any{"id": "item", "age": uint64(9007199254740992), "related_cards": []primitives.RefPreview{{Ref: "card:visible", Summary: summary}}}
@@ -208,6 +211,7 @@ func TestInboxChangeDigestRetainsPayloadAndAttentionAnchors(t *testing.T) {
 }
 
 func TestDefaultWorkAndOverviewRetainLegacyPlanlessHealth(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	s := h.primitiveStore.(*primitives.Store)

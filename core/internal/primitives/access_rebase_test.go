@@ -6,15 +6,14 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"agent-nexus-core/internal/storage"
 )
 
 func TestEvidenceStructuralWritesInvalidateRequestSnapshot(t *testing.T) {
+	t.Parallel()
 	for _, table := range []string{"work_evidence_records", "work_evidence_index"} {
 		t.Run(table, func(t *testing.T) {
 			ctx := context.Background()
-			ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+			ws, err := initializeTestWorkspace(ctx, t.TempDir())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -58,10 +57,11 @@ func TestEvidenceStructuralWritesInvalidateRequestSnapshot(t *testing.T) {
 }
 
 func TestSharedSourceURLPublicationSurvivesPrivatePublisherAndPurge(t *testing.T) {
+	t.Parallel()
 	for _, size := range []int{32, 2100} {
 		t.Run(fmt.Sprint(size), func(t *testing.T) {
 			ctx := context.Background()
-			ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+			ws, err := initializeTestWorkspace(ctx, t.TempDir())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -112,8 +112,9 @@ func TestSharedSourceURLPublicationSurvivesPrivatePublisherAndPurge(t *testing.T
 }
 
 func TestRevisionLifecycleUsesIndexedIdentityCandidates(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

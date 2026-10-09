@@ -19,6 +19,7 @@ import (
 // old selection evidence. This does not install startup hooks or mint a serving
 // receipt, and agent-inbox remains a separate legacy event-backed reader.
 func TestScopeInboxHTTPCanonicalAskLifecycleInvalidation(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()

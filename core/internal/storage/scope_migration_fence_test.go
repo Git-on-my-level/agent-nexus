@@ -32,6 +32,7 @@ func scopeFixture(t *testing.T) *Workspace {
 }
 
 func TestScopeFenceOldLoaderRefusesAndCompatibleReopens(t *testing.T) {
+	t.Parallel()
 	w := scopeFixture(t)
 	ctx := context.Background()
 	root := w.Layout().RootDir
@@ -72,6 +73,7 @@ func TestScopeFenceOldLoaderRefusesAndCompatibleReopens(t *testing.T) {
 // The unchanged-loader regression above always runs; this full executable
 // check additionally proves refusal through bootstrap, before listen.
 func TestScopeHistoricalBinaryRefusesFence(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("historical executable release gate")
 	}
@@ -100,6 +102,7 @@ func TestScopeHistoricalBinaryRefusesFence(t *testing.T) {
 }
 
 func TestScopeCompatibleReopenChild(t *testing.T) {
+	t.Parallel()
 	root := os.Getenv("ANX_SCOPE_REOPEN_ROOT")
 	if root == "" {
 		t.Skip("subprocess only")
@@ -120,6 +123,7 @@ func TestScopeCompatibleReopenChild(t *testing.T) {
 }
 
 func TestScopeFenceRollbackAndLedgerTampering(t *testing.T) {
+	t.Parallel()
 	w := scopeFixture(t)
 	ctx := context.Background()
 	_, err := w.DB().Exec(`CREATE TRIGGER fail_scope_fence BEFORE INSERT ON scope_format_state BEGIN SELECT RAISE(ABORT,'injected fence failure'); END`)
@@ -146,6 +150,7 @@ func TestScopeFenceRollbackAndLedgerTampering(t *testing.T) {
 }
 
 func TestScopeUnsupportedReaderAndMalformedFenceRefuse(t *testing.T) {
+	t.Parallel()
 	for _, statement := range []string{
 		`DROP VIEW schema_migrations;DROP TABLE scope_schema_migrations;CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY,applied_at TEXT NOT NULL)`,
 		`DROP VIEW schema_migrations;CREATE VIEW schema_migrations AS SELECT * FROM scope_schema_migrations`,
@@ -169,6 +174,7 @@ func TestScopeUnsupportedReaderAndMalformedFenceRefuse(t *testing.T) {
 }
 
 func TestScopeServingLockAndCrashRelease(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("process crash integration")
 	}
@@ -193,6 +199,7 @@ func TestScopeServingLockAndCrashRelease(t *testing.T) {
 	defer w2.Close()
 }
 func TestScopeServingCrashChild(t *testing.T) {
+	t.Parallel()
 	root := os.Getenv("ANX_SCOPE_LOCK_ROOT")
 	if root == "" {
 		t.Skip("subprocess only")
@@ -203,6 +210,7 @@ func TestScopeServingCrashChild(t *testing.T) {
 }
 
 func TestScopeServingLeaseRetainedByOutstandingConnections(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"transaction", "connection"} {
 		t.Run(kind, func(t *testing.T) {
 			w := scopeFixture(t)

@@ -3,7 +3,6 @@ package primitives_test
 import (
 	"agent-nexus-core/internal/plans"
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/storage"
 	"agent-nexus-core/internal/testsql"
 	"context"
 	"encoding/json"
@@ -15,8 +14,9 @@ import (
 )
 
 func TestEffectiveHealthInputsAgreeAcrossSurfaces(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,8 +93,9 @@ func TestEffectiveHealthInputsAgreeAcrossSurfaces(t *testing.T) {
 }
 
 func TestGenericAliasesAndIndexedLookupIgnoreUnrelatedEvidence(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,6 +184,7 @@ func TestGenericAliasesAndIndexedLookupIgnoreUnrelatedEvidence(t *testing.T) {
 // to the "stalled" spelling older clients know, and only a state this core
 // does not recognise falls back to "on_track".
 func TestLegacyHealthAndDigestVocabulary(t *testing.T) {
+	t.Parallel()
 	for state, want := range map[string]string{
 		"no_plan":  "no_plan",
 		"stale":    "stalled",
@@ -216,8 +218,9 @@ func TestLegacyHealthAndDigestVocabulary(t *testing.T) {
 }
 
 func TestObservationEvidenceInheritsItsObservationTimestamp(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,8 +250,9 @@ func TestObservationEvidenceInheritsItsObservationTimestamp(t *testing.T) {
 }
 
 func TestReferencedSourcePlanEditsCountAsActivity(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,8 +297,9 @@ func TestReferencedSourcePlanEditsCountAsActivity(t *testing.T) {
 }
 
 func TestNativeCardAndSourceURLLookupUsesIndexes(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

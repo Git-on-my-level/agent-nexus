@@ -10,14 +10,13 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/storage"
 )
 
 func TestBoardStoreCreateUpdateAndListSummaries(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -147,7 +146,7 @@ func TestBoardStoreCreateRejectsBoardIDsWithPathSeparators(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -173,7 +172,7 @@ func TestBoardStoreCardOrderingAndMutations(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -321,7 +320,7 @@ func TestBoardStoreMoveCardResolutionTransitions(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -476,7 +475,7 @@ func TestBoardStoreArchiveBoardCardByGlobalID(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -540,7 +539,7 @@ func TestBoardStoreRejectsArchivedCardMutations(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -599,7 +598,7 @@ func TestBoardStoreCardTrashVsArchiveLists(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -709,7 +708,7 @@ func TestDocumentResourceRefsAndProvenancePersist(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -751,7 +750,7 @@ func TestBoardStoreRejectsMixedPlacementAnchorTypes(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -814,7 +813,7 @@ func TestBoardStorePlacementAnchorsResolvePublicIdentity(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -931,7 +930,7 @@ func TestBoardStoreMembershipValidationAndLookup(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -1021,7 +1020,7 @@ func TestBoardCardRiskPersistAndUpdate(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -1092,7 +1091,7 @@ func TestBoardCardRefsCorruptionReturnsError(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}

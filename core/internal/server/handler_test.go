@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/auth"
-	"agent-nexus-core/internal/storage"
 )
 
 type rejectingWorkspaceGrantVerifier struct{}
@@ -264,7 +263,7 @@ func TestMethodNotAllowed(t *testing.T) {
 func TestRequestBodyTooLargeReturnsRequestTooLarge(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -347,6 +346,7 @@ func TestAuthRouteRateLimitingReturnsRateLimited(t *testing.T) {
 }
 
 func TestEnrollmentStartHasDedicatedLowRateLimit(t *testing.T) {
+	t.Parallel()
 	limiter := newRouteRateLimiter(RouteRateLimits{})
 	now := time.Now().UTC()
 	if bucket := routeRateLimitBucketForPath("/auth/hosts/enrollments", routeAccessRequirement{}); bucket != "enrollment" {
@@ -401,7 +401,7 @@ func TestAuthRouteRateLimitingScopesByForwardedClientAddrWhenProxyIsLoopback(t *
 func TestWorkspaceHumanGrantRateLimitingReturnsRetryAfter(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}

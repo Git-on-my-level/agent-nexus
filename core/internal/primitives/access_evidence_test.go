@@ -6,13 +6,12 @@ import (
 	"strconv"
 	"testing"
 	"time"
-
-	"agent-nexus-core/internal/storage"
 )
 
 func TestEvidenceProjectionIDsDoNotBecomeExternalResourceIdentities(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,8 +54,9 @@ func TestEvidenceProjectionIDsDoNotBecomeExternalResourceIdentities(t *testing.T
 }
 
 func TestSourceRefsAndEvidenceProjectionsUseCentralOwnership(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

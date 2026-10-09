@@ -14,6 +14,7 @@ import (
 )
 
 func TestPerformanceReceiptCacheInvalidation(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	requirePerformanceTest(t)
 	env := newPerformanceEnv(t)
 	var seq int
@@ -82,6 +83,7 @@ func TestPerformanceReceiptCacheInvalidation(t *testing.T) {
 
 // Exercise the actual cache boundary, rather than trusting a report's label.
 func TestPerformanceColdStateIsolation(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	requirePerformanceTest(t)
 	env := newPerformanceEnv(t)
 	h, capture, _, closePool := env.fresh(t)

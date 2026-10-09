@@ -21,6 +21,7 @@ import (
 )
 
 func TestMigrationProgressSignalsBeforeAndDuringWork(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var messages []string
@@ -53,6 +54,7 @@ type migrationLogWriter func([]byte) (int, error)
 func (w migrationLogWriter) Write(p []byte) (int, error) { return w(p) }
 
 func TestFencedMigrationSignalsProgressBeforeReadiness(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	w := scopeFixture(t)
 	root := w.Layout().RootDir
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -171,9 +173,13 @@ func performanceUpgradeBudget(t *testing.T) time.Duration {
 	return time.Duration(e.UpgradeMS) * time.Millisecond
 }
 
-func TestPerformanceStartupBudgetInventory(t *testing.T) { performanceUpgradeBudget(t) }
+func TestPerformanceStartupBudgetInventory(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
+	performanceUpgradeBudget(t)
+}
 
 func TestPerformanceStartupAndMigrations(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	if testing.Short() || os.Getenv("ANX_PERFORMANCE_TEST") != "1" {
 		t.Skip("performance CI tier")
 	}

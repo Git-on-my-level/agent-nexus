@@ -14,6 +14,7 @@ import (
 )
 
 func TestResourceAccessSeriesFreshnessAndReportProvenance(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	seedSeriesIdentities(t, env)

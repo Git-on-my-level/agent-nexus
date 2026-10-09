@@ -15,6 +15,7 @@ import (
 )
 
 func TestScopeInboxCaptureHydration(t *testing.T) {
+	t.Parallel()
 	i := scopes.ResourceIdentity{ScopeID: "private", Kind: "inbox", ResourceID: "opaque", RID: 17, CanonicalID: "old-id", CanonicalVersion: 2}
 	item := DerivedInboxItem{ID: "old-id", ThreadID: "thread", Category: "ask", TriggerAt: "2026-10-07T00:00:00Z", SourceEventID: "event", SourceCardID: "card", DueAt: "later", HasDueAt: true, GeneratedAt: "now", SourceHash: "hash", Data: map[string]any{"id": "stale", "thread_id": "stale", "title": "Question", "related_refs": []any{"card:card"}, "future": map[string]any{"flag": true}}}
 	before, _ := json.Marshal(item)
@@ -100,6 +101,7 @@ func TestScopeInboxCaptureHydration(t *testing.T) {
 }
 
 func TestScopeInboxSortKeyMatchesSQLiteAndIndexedContinuation(t *testing.T) {
+	t.Parallel()
 	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "order.db"))
 	if err != nil {
 		t.Fatal(err)

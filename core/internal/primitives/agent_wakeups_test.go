@@ -7,14 +7,13 @@ import (
 	"testing"
 
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/storage"
 )
 
 func TestAgentWakeupRefsCorruptionReturnsError(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}

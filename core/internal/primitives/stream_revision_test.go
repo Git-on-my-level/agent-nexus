@@ -4,13 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"testing"
-
-	"agent-nexus-core/internal/storage"
 )
 
 func TestStreamRevisionTracksSeparateWriterAndReleasesConnection(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	w, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	w, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

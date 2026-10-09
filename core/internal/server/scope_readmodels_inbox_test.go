@@ -23,6 +23,7 @@ import (
 // repository side by side. Synthetic certificates are only fixture setup; the
 // test does not install a new HTTP reader or establish uniform-scope proof.
 func TestScopeInboxHTTPShadowHydrationPrivacyAndOrderingGate(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
@@ -293,6 +294,7 @@ func (a inboxProjectionTx) Exec(ctx context.Context, q string, args ...any) (int
 }
 
 func TestScopeInboxCanonicalPointCaptureRollsBackSourceAndCounters(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	for _, fail := range []bool{false, true} {
 		t.Run(fmt.Sprint(fail), func(t *testing.T) {
@@ -449,6 +451,7 @@ func TestScopeInboxCanonicalPointCaptureRollsBackSourceAndCounters(t *testing.T)
 }
 
 func TestScopeInboxPointCapturePreservesNullableHashAndStoredShape(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()

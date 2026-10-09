@@ -14,10 +14,10 @@ import (
 	"agent-nexus-core/internal/observation"
 	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/storage"
 )
 
 func TestPMRuntimeNativeDecisionAuthorizationAndReadback(t *testing.T) {
+	t.Parallel()
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	principal := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "pm-human", "pm-human-actor", "pm-human", "pm-human-token")
@@ -85,6 +85,7 @@ func TestPMRuntimeNativeDecisionAuthorizationAndReadback(t *testing.T) {
 	}
 }
 func TestPMRuntimeDoesNotTrustBodyIdentityOrConfigureProvider(t *testing.T) {
+	t.Parallel()
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	seed := seedHumanPrincipalForLockoutTest(t, context.Background(), env.workspace.DB(), "pm-second", "pm-second-actor", "pm-second", "pm-second-token")
 	handler, err := NewPMRuntime(env.workspace.DB(), env.primitiveStore.(*primitives.Store), env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
@@ -111,6 +112,7 @@ func TestPMRuntimeDoesNotTrustBodyIdentityOrConfigureProvider(t *testing.T) {
 }
 
 func TestPMRuntimeBridgeFailsClosedWithoutRuntimeEnvelope(t *testing.T) {
+	t.Parallel()
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	_, err := newOnboardedPMRuntime(t, env.workspace.DB(), env.primitiveStore.(*primitives.Store), env.authStore, PMRuntimeConfig{
 		PM:            pm.Config{WorkspaceID: "ws_main", AgentActorID: "pm-agent", AgentHandle: "pm"},
@@ -122,6 +124,7 @@ func TestPMRuntimeBridgeFailsClosedWithoutRuntimeEnvelope(t *testing.T) {
 }
 
 func TestPMRuntimeSourceWriteStaysUnavailable(t *testing.T) {
+	t.Parallel()
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	principal := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "pm-source", "pm-source-actor", "pm-source", "pm-source-token")
@@ -163,6 +166,7 @@ func TestPMRuntimeSourceWriteStaysUnavailable(t *testing.T) {
 }
 
 func TestPMChannelIngressUnavailableUntilConfigured(t *testing.T) {
+	t.Parallel()
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	resp := postJSONExpectStatusWithAuth(t, env.server.URL+"/pm/ingress/telegram", map[string]any{"update_id": 1}, "", http.StatusServiceUnavailable)
 	defer resp.Body.Close()
@@ -171,6 +175,7 @@ func TestPMChannelIngressUnavailableUntilConfigured(t *testing.T) {
 }
 
 func TestPMRuntimeReplyUsesConversationAuthorization(t *testing.T) {
+	t.Parallel()
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	seed := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "reply-fixture", "reply-fixture-actor", "reply-fixture", "reply-fixture-token")
@@ -198,6 +203,7 @@ func (matchingRevisionReader) Read(_ context.Context, target observation.Target)
 }
 
 func TestPMRuntimeSourceReconcileDoesNotVerifyUnsentWrite(t *testing.T) {
+	t.Parallel()
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	principal := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "pm-unsent", "pm-unsent-actor", "pm-unsent", "pm-unsent-token")
@@ -261,7 +267,7 @@ func TestPMRuntimeSourceReconcileDoesNotVerifyUnsentWrite(t *testing.T) {
 
 func newPMStoreTestEnv(t *testing.T) authIntegrationEnv {
 	t.Helper()
-	ws, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	ws, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,6 +279,7 @@ func newPMStoreTestEnv(t *testing.T) authIntegrationEnv {
 	return authIntegrationEnv{workspace: ws, registry: registry, authStore: auth.NewStore(ws.DB()), primitiveStore: primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)}
 }
 func TestPMPhaseCanonicalMutationAndSourceRequest(t *testing.T) {
+	t.Parallel()
 	env := newPMStoreTestEnv(t)
 	ctx := context.Background()
 	human := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "phase-human", "phase-human-actor", "phase-human", "phase-token")
@@ -378,6 +385,7 @@ func TestPMPhaseCanonicalMutationAndSourceRequest(t *testing.T) {
 }
 
 func TestPMRuntimeRespondRequiresConfiguredUnrevokedActor(t *testing.T) {
+	t.Parallel()
 	env := newPMStoreTestEnv(t)
 	ctx := context.Background()
 	selected := seedMachinePrincipalForLockoutTest(t, ctx, env.workspace.DB(), "selected-pm", "selected-pm-actor", "selected-pm", "selected-token")
@@ -403,6 +411,7 @@ func TestPMRuntimeRespondRequiresConfiguredUnrevokedActor(t *testing.T) {
 }
 
 func TestPMMaintenanceTickExpiresWithoutRunnerReadOrSender(t *testing.T) {
+	t.Parallel()
 	env := newPMStoreTestEnv(t)
 	ctx := context.Background()
 	rt, err := newOnboardedPMRuntime(t, env.workspace.DB(), env.primitiveStore.(*primitives.Store), env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
@@ -433,6 +442,7 @@ func TestPMMaintenanceTickExpiresWithoutRunnerReadOrSender(t *testing.T) {
 }
 
 func TestPMRuntimeAgentOnlyProposesForRequestingHuman(t *testing.T) {
+	t.Parallel()
 	env := newPMStoreTestEnv(t)
 	ctx := context.Background()
 	human := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "turn-human", "turn-human-actor", "turn-human", "turn-human-token")

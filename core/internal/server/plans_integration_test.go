@@ -39,6 +39,7 @@ func planRequest(t *testing.T, method, endpoint string, body any, status int) ma
 }
 
 func TestPlanWriteRollsBackWhenEventCannotBeStored(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"One","created_at":"2026-03-04T10:00:00Z"}}`, 201)
@@ -58,6 +59,7 @@ func TestPlanWriteRollsBackWhenEventCannotBeStored(t *testing.T) {
 }
 
 func TestPlanAndBatchRefsRespectPrivateThreads(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	ctx := context.Background()
@@ -113,6 +115,7 @@ func TestPlanAndBatchRefsRespectPrivateThreads(t *testing.T) {
 }
 
 func TestPlanAPIProjectsCardsWorkReportsAndTimeline(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"One","created_at":"2026-03-04T10:00:00Z"}}`, 201)
@@ -173,6 +176,7 @@ func TestPlanAPIProjectsCardsWorkReportsAndTimeline(t *testing.T) {
 }
 
 func TestPlanThresholdAndRefLimits(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	requireIntegrationTest(t)
 	t.Setenv("ANX_PLAN_STALLED_AFTER", "24h")
 	if planStalledAfter().Hours() != 24 {

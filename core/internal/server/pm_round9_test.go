@@ -26,6 +26,7 @@ func (s *round9ReadbackStore) GetWork(ctx context.Context, ref string) (map[stri
 }
 
 func TestRound9NativeDispatchCanonicalVerification(t *testing.T) {
+	t.Parallel()
 	for _, scope := range []string{"work.phase", "work.annotate"} {
 		for _, failRead := range []bool{false, true} {
 			name := scope + "/verified"

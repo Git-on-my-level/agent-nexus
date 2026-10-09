@@ -16,6 +16,7 @@ import (
 )
 
 func TestFiveIdleInboxStreamsSharePageAndObserveNonEventWrites(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	thread := seedStreamPrivacyThread(t, env.primitiveStore.(*primitives.Store), "owner", false)
@@ -100,6 +101,7 @@ func (s *cancelingInboxStore) ListDerivedInboxItems(ctx context.Context, f primi
 }
 
 func TestSharedInboxCanceledLeaderDoesNotClosePeer(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	for _, deadline := range []bool{false, true} {
 		t.Run(fmt.Sprint("deadline=", deadline), func(t *testing.T) {
@@ -184,6 +186,7 @@ func awaitStreamText(t *testing.T, frames <-chan string, want string) {
 }
 
 func TestSharedInboxPageScopeIsolationAndPermissionCommit(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	store := env.primitiveStore.(*primitives.Store)
@@ -229,6 +232,7 @@ func TestSharedInboxPageScopeIsolationAndPermissionCommit(t *testing.T) {
 }
 
 func TestStreamPollIntervalMinimum(t *testing.T) {
+	t.Parallel()
 	for _, input := range []time.Duration{0, -1, time.Nanosecond, 10 * time.Millisecond} {
 		if got := streamPollInterval(handlerOptions{streamPollInterval: input}); got != minimumStreamPollInterval {
 			t.Fatal(fmt.Sprint(input, " => ", got))
@@ -240,6 +244,7 @@ func TestStreamPollIntervalMinimum(t *testing.T) {
 }
 
 func TestSharedInboxLateSubscriberGetsCurrentAges(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	store := env.primitiveStore.(*primitives.Store)
@@ -287,6 +292,7 @@ func TestSharedInboxLateSubscriberGetsCurrentAges(t *testing.T) {
 }
 
 func TestInboxCommitDuringSweepRevisitsEarlierPage(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	base := env.primitiveStore.(*primitives.Store)
