@@ -1722,6 +1722,9 @@
       workspaceSlug={activeWorkspaceSlug}
       devActorModeReady={$devActorModeReady}
       userLabel={shellIdentity.primaryLabel}
+      cliBaseUrl={$page.data?.workspace?.cliBaseUrl ?? ""}
+      cliInstallCommand={$page.data?.workspace?.cliInstallCommand ?? ""}
+      workspaceLabel={$page.data?.workspace?.label ?? ""}
     />
   {/if}
 

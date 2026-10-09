@@ -4,6 +4,7 @@
   import { page } from "$app/stores";
 
   import SpotlightTour from "$lib/components/onboarding/SpotlightTour.svelte";
+  import { copyText } from "$lib/clipboard.js";
   import { coreClient } from "$lib/coreClient";
   import {
     isWorkspaceTourSeen,
@@ -13,6 +14,12 @@
   import { stripWorkspacePath, workspacePath } from "$lib/workspacePaths";
   import { pmSetupOffered, pmStateKnown } from "$lib/pm/onboardingState.js";
   import { pmPresence } from "$lib/pm/presence.js";
+  import {
+    SETUP_TOKEN_LABEL,
+    SETUP_TOKEN_LIFETIME_MS,
+    buildMachinePrompt,
+    setupPromptBlockedReason,
+  } from "$lib/setup/setupPrompt.js";
 
   let {
     organizationSlug = "",
@@ -20,6 +27,12 @@
     devActorModeReady = false,
     /** Optional first-name / display label used to personalize the welcome */
     userLabel = "",
+    /** anx-core API origin, for the setup prompt the last step hands over. */
+    cliBaseUrl = "",
+    /** How this deployment installs the CLI. */
+    cliInstallCommand = "",
+    /** Workspace display name, named in the prompt so a paste is unambiguous. */
+    workspaceLabel = "",
   } = $props();
 
   let tourOpen = $state(false);
@@ -38,6 +51,58 @@
       ? `${workspacePath(organizationSlug, workspaceSlug, "/access")}?from=tour#hosts`
       : "/access?from=tour#hosts",
   );
+
+  /*
+   * The last step hands the reader the thing they actually need: a prompt to
+   * paste into the agent on the machine they want to connect. The token it
+   * carries is fetched when that step appears, so the click itself only writes
+   * to the clipboard and navigates — a write behind an await is dropped by
+   * Safari, and a CTA that silently copies nothing is worse than one that
+   * only navigates.
+   *
+   * Everything here is best effort. When no prompt could be prepared (no
+   * reachable API address, a refused token, an older core) the step falls back
+   * to the plain "Enroll a machine →" link, which still works.
+   */
+  let setupPrompt = $state("");
+  let preparingPrompt = false;
+
+  async function prepareSetupPrompt() {
+    if (setupPrompt || preparingPrompt) return;
+    if (setupPromptBlockedReason({ cliBaseUrl })) return;
+    preparingPrompt = true;
+    try {
+      const result = await coreClient.createHostEnrollmentToken({
+        label: SETUP_TOKEN_LABEL,
+        expires_at: new Date(
+          Date.now() + SETUP_TOKEN_LIFETIME_MS,
+        ).toISOString(),
+      });
+      const secret = String(result?.token ?? "");
+      if (!secret) return;
+      setupPrompt = buildMachinePrompt({
+        workspaceLabel: workspaceLabel || workspaceSlug,
+        cliBaseUrl,
+        installCommand: cliInstallCommand,
+        token: secret,
+        expiresAt: String(result?.enrollment_token?.expires_at ?? ""),
+      });
+    } catch {
+      // No prompt; the CTA stays a plain link to Access.
+    } finally {
+      preparingPrompt = false;
+    }
+  }
+
+  /** @param {number} index */
+  function onTourStep(index) {
+    if (index === tourSteps.length - 1) void prepareSetupPrompt();
+  }
+
+  function copySetupPrompt() {
+    if (!setupPrompt) return;
+    void copyText(setupPrompt);
+  }
 
   /*
    * The PM step describes whatever the slot it points at actually is. Three
@@ -135,10 +200,15 @@
           {
             selector: '[data-tour="access"]',
             eyebrow: "7 of 7 · Access",
-            title: "Enroll the machine your agents run on",
-            body: "Run anx host enroll on it once and approve it here; every agent on that machine can then work in this workspace. Access also holds people and invites.",
-            ctaLabel: "Enroll a machine →",
+            title: "Last step: connect a machine",
+            body: setupPrompt
+              ? "Agents work here through the computer they run on. Copy one prompt, paste it into the agent you already use on that machine, and it installs anx, joins the machine to this workspace and reports back. Access also holds people and invites."
+              : "Agents work here through the computer they run on. Set one up in Access → Hosts; every agent on that machine can then work in this workspace. Access also holds people and invites.",
+            ctaLabel: setupPrompt
+              ? "Copy the setup prompt →"
+              : "Connect a machine →",
             ctaHref: ctaAccessHref,
+            ctaAction: setupPrompt ? copySetupPrompt : undefined,
           },
         ],
   );
@@ -292,6 +362,7 @@
   <SpotlightTour
     bind:open={tourOpen}
     onClose={onSpotlightClose}
+    onStep={onTourStep}
     steps={tourSteps}
   />
 {/if}

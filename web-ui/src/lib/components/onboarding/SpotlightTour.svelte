@@ -13,13 +13,21 @@
    *   body: string,
    *   ctaLabel?: string,
    *   ctaHref?: string,
+   *   ctaAction?: () => void,
    *   primaryLabel?: string,
    *   skipLabel?: string,
    * }} TourStep
    */
 
-  /** @type {{ steps: TourStep[], onClose: (reason?: string) => void, open: boolean }} */
-  let { steps, onClose, open = $bindable(true) } = $props();
+  /**
+   * @type {{
+   *   steps: TourStep[],
+   *   onClose: (reason?: string) => void,
+   *   open: boolean,
+   *   onStep?: (index: number) => void,
+   * }}
+   */
+  let { steps, onClose, open = $bindable(true), onStep } = $props();
 
   let index = $state(0);
   let hole = $state(
@@ -43,7 +51,21 @@
   );
   let isLast = $derived(index >= steps.length - 1);
   let isFirst = $derived(index === 0);
-  let showCta = $derived(isLast && Boolean(step?.ctaLabel && step?.ctaHref));
+  let showCta = $derived(
+    isLast && Boolean(step?.ctaLabel && (step?.ctaHref || step?.ctaAction)),
+  );
+
+  /*
+   * Tell the owner which step is on screen. A step whose action needs
+   * something fetched (the setup prompt's single-use token) has to start that
+   * work when the step appears: doing it inside the click would put an await
+   * before the clipboard write, and Safari drops a write that is no longer
+   * inside the gesture.
+   */
+  $effect(() => {
+    if (!open) return;
+    onStep?.(index);
+  });
 
   function focusPanel() {
     if (!browser) return;
@@ -198,6 +220,8 @@
 
   function handleCta() {
     const href = step?.ctaHref;
+    // Synchronously, before anything awaits: this call is still the gesture.
+    step?.ctaAction?.();
     close("cta");
     if (href) {
       void goto(href);

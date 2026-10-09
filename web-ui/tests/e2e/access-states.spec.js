@@ -510,8 +510,27 @@ for (const viewport of AUDIT_VIEWPORTS) {
       api.tokens = [];
       api.agents = [];
       await page.reload();
-      await expect(page.getByText("No machines enrolled yet")).toBeVisible();
+      await expect(page.getByText("Connect your first machine")).toBeVisible();
+      await expect(page.locator("[data-host-waiting]")).toBeVisible();
       await expectCleanLayout(page, "empty workspace", bothEnds);
+
+      /*
+       * A machine that enrolled with a token files no request, so nothing on
+       * this page would otherwise notice it. The roster read on the next tick
+       * is what flips the panel, with no reload.
+       */
+      api.hosts = [host({ slug: "studio-m4", agents: [] })];
+      await expect(page.locator("[data-host-enrolled]")).toContainText(
+        "Enrolled — studio-m4",
+      );
+      await expect(page.locator("[data-host-enroll-help]")).toHaveCount(0);
+      // `Button` with an href renders an anchor that keeps role="button".
+      await expect(
+        page.locator("[data-host-enrolled]").getByRole("button", {
+          name: "Set up your PM",
+        }),
+      ).toBeVisible();
+      await expectCleanLayout(page, "first machine enrolled", bothEnds);
     });
 
     test("approve and deny host enrollment", async ({ page }) => {
@@ -750,7 +769,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       });
       await page.goto(`${ACCESS_PATH}?from=tour#hosts`);
       await expect(
-        page.getByText("Last step: enroll the machine your agents run on"),
+        page.getByText("Last step: connect the machine your agents run on"),
       ).toBeVisible();
       await expectCleanLayout(page, "tour banner", bothEnds);
     });

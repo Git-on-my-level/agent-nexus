@@ -38,6 +38,15 @@ This package contains the SvelteKit web UI for Agent Nexus.
     passkey login flow). Otherwise it redirects to the hosted chooser (`/hosted/start`).
     If `ANX_WORKSPACES` is empty, there is no default workspace and `/` still uses
     `/hosted/start`.
+- Optional: `ANX_UI_CLI_INSTALL_COMMAND`
+  - The command the setup prompts tell an agent to run when `anx --version`
+    fails. Defaults to the public OSS installer
+    (`curl -sSfL .../scripts/install-anx.sh | sh`). Set it when a deployment
+    ships its own CLI build.
+  - The prompts also need a `coreBaseUrl` (or `publicOrigin`) other machines can
+    reach. When the resolved CLI base URL is a loopback address the copyable
+    prompt is withheld, because an agent would run it against its own computer.
+
 - Optional external mount prefix: `ANX_UI_BASE_PATH=/anx`
   - External routes become `/anx/o/:organization/w/:workspace/...`
   - Build/dev the UI with the same base path you plan to serve

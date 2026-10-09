@@ -11,6 +11,13 @@
     icon = "copy",
     /** Overrides the idle tooltip when it should explain more than the label. */
     title = "",
+    /**
+     * Visible text, when "Copy" is not enough. A primary action has to name
+     * what it copies; a toolbar icon beside a command does not.
+     */
+    text = "",
+    /** Button weight, for the surfaces where copying is the main action. */
+    variant = "ghost",
   } = $props();
 
   let copied = $state(false);
@@ -32,7 +39,7 @@
 
 <Button
   class="shrink-0 {iconBtnClass}"
-  variant="ghost"
+  {variant}
   size={btnSize}
   onclick={onCopy}
   title={copied ? "Copied" : title || label}
@@ -50,7 +57,7 @@
       <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
     </svg>
     {#if !iconOnly}
-      Copied
+      {text ? `${text} — copied` : "Copied"}
     {/if}
   {:else if icon === "link"}
     <svg
@@ -68,7 +75,7 @@
       />
     </svg>
     {#if !iconOnly}
-      Copy
+      {text || "Copy"}
     {/if}
   {:else}
     <svg
@@ -86,7 +93,7 @@
       />
     </svg>
     {#if !iconOnly}
-      Copy
+      {text || "Copy"}
     {/if}
   {/if}
 </Button>
