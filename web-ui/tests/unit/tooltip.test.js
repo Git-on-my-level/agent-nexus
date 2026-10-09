@@ -153,6 +153,104 @@ describe("tooltip action", () => {
     expect(linkDown.defaultPrevented).toBe(false);
   });
 
+  it("swallows only the click that follows a reveal tap inside a link", () => {
+    const parent = document.createElement("a");
+    const element = node();
+    const title = document.createElement("span");
+    title.textContent = "Title";
+    parent.append(element, title);
+    document.body.append(parent);
+    let clicks = 0;
+    parent.addEventListener("click", () => {
+      clicks += 1;
+    });
+    tooltip(element, "Oct 5, 2026, 1:56 PM GMT+7");
+    const touch = (target, type) =>
+      target.dispatchEvent(
+        new PointerEvent(type, {
+          pointerType: "touch",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    touch(element, "pointerdown");
+    touch(element, "pointerup");
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+    element.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
+    expect(clicks).toBe(0);
+    expect(get(activeTooltip)?.text).toContain("Oct 5");
+
+    title.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true }),
+    );
+    expect(clicks).toBe(1);
+
+    touch(element, "pointerdown");
+    touch(element, "pointerup");
+    hideTooltip();
+    const late = new MouseEvent("click", { bubbles: true, cancelable: true });
+    element.dispatchEvent(late);
+    expect(late.defaultPrevented).toBe(true);
+    expect(clicks).toBe(1);
+  });
+
+  it("dismisses a pinned tip on an outside tap and on Escape", () => {
+    const element = node();
+    tooltip(element, "Oct 5, 2026, 1:56 PM GMT+7");
+    element.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        pointerType: "touch",
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    element.dispatchEvent(
+      new PointerEvent("pointerup", {
+        pointerType: "touch",
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    expect(get(activeTooltip)?.text).toContain("Oct 5");
+
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+    expect(get(activeTooltip)).toBeNull();
+
+    element.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        pointerType: "touch",
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    element.dispatchEvent(
+      new PointerEvent("pointerup", {
+        pointerType: "touch",
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    const other = document.createElement("button");
+    document.body.append(other);
+    const outside = new PointerEvent("pointerdown", {
+      pointerType: "touch",
+      bubbles: true,
+      cancelable: true,
+    });
+    other.dispatchEvent(outside);
+    expect(outside.defaultPrevented).toBe(false);
+    expect(get(activeTooltip)).toBeNull();
+    const outsideClick = new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+    });
+    other.dispatchEvent(outsideClick);
+    expect(outsideClick.defaultPrevented).toBe(false);
+  });
+
   it("still dismisses a mouse press immediately", () => {
     const element = node();
     tooltip(element, "Oct 5, 2026, 1:56 PM GMT+7");

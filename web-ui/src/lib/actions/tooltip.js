@@ -36,6 +36,10 @@ let timer = null;
 let armed = null;
 /** A touch tip stays up after the finger lifts, until the next tap or scroll. */
 let pinned = null;
+/** Document listeners that exist only while a tip is pinned. */
+let releasePinnedWatch = null;
+/** Removes the one-shot listener that swallows the click after a reveal tap. */
+let releaseClickSwallow = null;
 
 function cancel() {
   if (timer) clearTimeout(timer);
@@ -43,13 +47,71 @@ function cancel() {
   armed = null;
 }
 
+function clearPinnedWatch() {
+  releasePinnedWatch?.();
+  releasePinnedWatch = null;
+}
+
 function hide(node, force = false) {
   if (!force && pinned === node) return;
   if (node && armed && armed !== node) return;
   if (!force && pinned && pinned !== node) return;
   pinned = null;
+  clearPinnedWatch();
   cancel();
   activeTooltip.set(null);
+}
+
+/**
+ * While a touch tip is pinned, an outside tap or Escape dismisses it.
+ * The listeners exist only for that pin and do not cancel the outside tap,
+ * so the button the reader actually hit still runs.
+ */
+function watchPinned(node) {
+  clearPinnedWatch();
+  const onOutside = (event) => {
+    if (pinned !== node) return;
+    const target = event.target;
+    if (target instanceof Node && node.contains(target)) return;
+    hide(node, true);
+  };
+  const onEscape = (event) => {
+    if (event.key !== "Escape" || pinned !== node) return;
+    hide(node, true);
+  };
+  document.addEventListener("pointerdown", onOutside, true);
+  document.addEventListener("keydown", onEscape, true);
+  releasePinnedWatch = () => {
+    document.removeEventListener("pointerdown", onOutside, true);
+    document.removeEventListener("keydown", onEscape, true);
+  };
+}
+
+/**
+ * Chromium still synthesizes a click after a touch whose pointerdown was
+ * cancelled. Swallow that one click, and only that one, so a timestamp
+ * inside a link does not navigate and the rest of the link still does.
+ */
+function swallowFollowingClick() {
+  releaseClickSwallow?.();
+  const stop = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    release();
+  };
+  const release = () => {
+    document.removeEventListener("click", stop, true);
+    document.removeEventListener("pointerdown", release, true);
+    if (releaseClickSwallow === release) releaseClickSwallow = null;
+  };
+  document.addEventListener("click", stop, true);
+  document.addEventListener("pointerdown", release, true);
+  releaseClickSwallow = release;
+}
+
+function insideForeignControl(node) {
+  const control = node.closest("a, button");
+  return Boolean(control) && control !== node;
 }
 
 function pin(node, text) {
@@ -60,6 +122,7 @@ function pin(node, text) {
   armed = node;
   pinned = node;
   activeTooltip.set({ text: body, rect: node.getBoundingClientRect() });
+  watchPinned(node);
 }
 
 function show(node, text, delay) {
@@ -67,6 +130,7 @@ function show(node, text, delay) {
   if (!body) return;
   cancel();
   pinned = null;
+  clearPinnedWatch();
   armed = node;
   const open = () => {
     timer = null;
@@ -101,6 +165,7 @@ export function tooltip(node, text) {
 
   let hold = null;
   let pressed = false;
+  let revealTouch = false;
   const clearHold = () => {
     if (hold) clearTimeout(hold);
     hold = null;
@@ -121,6 +186,7 @@ export function tooltip(node, text) {
   };
   const onCancel = () => {
     pressed = false;
+    revealTouch = false;
     clearHold();
     if (pinned !== node) hide(node);
   };
@@ -132,21 +198,26 @@ export function tooltip(node, text) {
     const touch = event.pointerType === "touch" || event.pointerType === "pen";
     if (!touch || !current) {
       pressed = false;
+      revealTouch = false;
       if (!touch) hide(node, true);
       return;
     }
     // A tip on a link or button must still activate that control. A tip
     // inside one, such as a timestamp in a conversation row, must not.
-    if (node.closest("a, button") !== node) event.preventDefault();
+    if (insideForeignControl(node)) event.preventDefault();
     event.stopPropagation();
     // A second tap dismisses the sentence the first tap pinned.
     if (pinned === node) {
       pressed = false;
+      revealTouch = false;
       hide(node, true);
+      // Closing the tip is not a request to follow the link around it.
+      if (insideForeignControl(node)) swallowFollowingClick();
       return;
     }
     if (pinned) hide(pinned, true);
     pressed = true;
+    revealTouch = true;
     hold = setTimeout(() => {
       hold = null;
       pressed = false;
@@ -156,7 +227,8 @@ export function tooltip(node, text) {
   const onUp = (event) => {
     const touch = event.pointerType === "touch" || event.pointerType === "pen";
     if (!touch) return;
-    // A tap that reveals the exact time must not also activate a parent link.
+    if (revealTouch && insideForeignControl(node)) swallowFollowingClick();
+    revealTouch = false;
     if (pressed || hold || pinned === node) {
       event.preventDefault();
       event.stopPropagation();
@@ -208,6 +280,11 @@ export function tooltip(node, text) {
 /** Close whatever is open (a navigation, a scroll, a dialog opening). */
 export function hideTooltip() {
   pinned = null;
+  clearPinnedWatch();
+  // Leave the one-shot click swallow in place. Scroll calls this between
+  // pointerup and the click Chromium still emits, and releasing here would
+  // let that click follow the link. The swallow removes itself on that
+  // click, or on the next pointerdown if the click never comes.
   cancel();
   activeTooltip.set(null);
 }
