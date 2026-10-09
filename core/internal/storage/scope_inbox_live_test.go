@@ -74,7 +74,7 @@ func TestScopeInboxMetadataMigrationResumes(t *testing.T) {
 }
 
 func TestScopeInboxMaintenanceYieldsOnWriterContention(t *testing.T) {
-	t.Parallel()
+	// Keep the wall-clock contention assertion isolated from other storage tests.
 	ctx := context.Background()
 	ws, err := InitializeWorkspace(ctx, t.TempDir())
 	if err != nil {
