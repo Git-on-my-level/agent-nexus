@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import signal
 import subprocess
@@ -321,13 +322,29 @@ def static_checks(changed, all_files=False):
     route_notice()
 
 
+def pinned_package_parallelism():
+    """An explicit `go test -p` cap from GOFLAGS, if the caller set one.
+
+    CI pins `-p=1` for core while its fixture concurrency is unconfirmed. Two
+    concurrent `go test` processes would quietly double whatever cap the caller
+    asked for, so a pinned `-p` makes the phases run one after the other.
+    """
+    flags = shlex.split(os.environ.get("GOFLAGS", ""))
+    for index, flag in enumerate(flags):
+        if flag.startswith("-p="):
+            return flag[len("-p="):]
+        if flag == "-p" and index + 1 < len(flags):
+            return flags[index + 1]
+    return None
+
+
 def go_fast_tests(module, changed, whole_module):
     """Report the changed packages first, then their dependents.
 
     The dependents run alongside the changed packages but their output is held
     back, so a break in what you edited is reported (and aborts the rest) at the
     cost of the changed packages alone, while a green run still finishes in the
-    wall clock of one parallel `go test`.
+    wall clock of one parallel `go test`. A pinned `-p` serializes them instead.
     """
     affected = None if whole_module else go_affected(module, changed)
     if affected is None:
@@ -345,6 +362,13 @@ def go_fast_tests(module, changed, whole_module):
         return
     if not dependents:
         run("go", "test", "-short", *selected, cwd=ROOT / module)
+        return
+    pinned = pinned_package_parallelism()
+    if pinned is not None:
+        print(f"{module}: GOFLAGS pins -p={pinned}; running the dependents after the changed "
+              "packages rather than beside them.", flush=True)
+        run("go", "test", "-short", *selected, cwd=ROOT / module)
+        run("go", "test", "-short", *dependents, cwd=ROOT / module)
         return
     argv = ("go", "test", "-short", *dependents)
     print("+ " + " ".join(argv) + "  (dependents, reported after the changed packages)", flush=True)

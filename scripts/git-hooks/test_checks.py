@@ -244,6 +244,24 @@ class RepoTest(unittest.TestCase):
         self.assertEqual(started.argv, ("go", "test", "-short", "./internal/mid", "./internal/top"))
         self.assertIn("ok  \tdependents", out.getvalue())
 
+    def test_a_pinned_package_parallelism_serializes_the_phases(self):
+        self.write_go_module()
+        started, start = self.fake_dependents(0)
+        # CI pins -p=1 for core until its fixtures are confirmed parallel-safe;
+        # two concurrent `go test` runs would double that cap.
+        with patch.dict(os.environ, {"GOFLAGS": "-p=1"}), patch.object(checks, "run") as run, \
+                patch.object(checks, "start", start), \
+                patch("sys.stdout", new_callable=io.StringIO):
+            checks.go_fast_tests("core", {"core/internal/leaf/leaf.go"}, False)
+        self.assertEqual([call.args for call in run.call_args_list],
+                         [("go", "test", "-short", "./internal/leaf"),
+                          ("go", "test", "-short", "./internal/mid", "./internal/top")])
+        self.assertIsNone(started.argv)
+        for flags, expected in (("-p=1", "1"), ("-p 4", "4"), ("-mod=readonly -p=2", "2"),
+                                ("-mod=readonly", None), ("", None)):
+            with patch.dict(os.environ, {"GOFLAGS": flags}):
+                self.assertEqual(checks.pinned_package_parallelism(), expected, flags)
+
     def test_a_failing_dependent_still_fails_the_run(self):
         self.write_go_module()
         started, start = self.fake_dependents(1)
