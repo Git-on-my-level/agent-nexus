@@ -309,15 +309,23 @@ function enrollStep(index, { base, token, expiry }) {
  * need `--as` because this shell may carry no harness marker at all — which is
  * also why they are not used for branching: a refusal has to be read as "the
  * server said no", and `--as` is what makes that unambiguous.
+ *
+ * `--as` must be a real lowercase agent name, never a `<placeholder>`: these
+ * lines sit in the command block the prompt says to run unread, and angle
+ * brackets are shell redirections.
+ *
+ * @param {string} base
+ * @param {string} asName
  */
-function serverCheckLines(base) {
+function serverCheckLines(base, asName) {
+  const asFlag = `--as ${shellQuote(asName)}`;
   return [
     "   `host_enrollment` must be ok. That check reads this machine's local host",
     "   identity, so it cannot tell you the server still accepts it — finish with",
     "   two authenticated calls, naming the harness you are:",
     "",
-    `     ${anxCommand(base, "--as <your harness, lowercase: claude, codex, cursor, hermes> --json auth whoami")}`,
-    `     ${anxCommand(base, "--as <the same name> --json host list")}`,
+    `     ${anxCommand(base, `${asFlag} --json auth whoami`)}`,
+    `     ${anxCommand(base, `${asFlag} --json host list`)}`,
     "",
     "   `--as` names the agent identity you register on this machine, which is",
     "   what your first use of anx here would create anyway. If either call is",
@@ -326,13 +334,13 @@ function serverCheckLines(base) {
   ];
 }
 
-function verifyStep(index, { base }) {
+function verifyStep(index, { base, asName }) {
   return [
     `${index}. Confirm the result with the server, not just locally:`,
     "",
     `     ${anxCommand(base, "--json doctor")}`,
     "",
-    ...serverCheckLines(base),
+    ...serverCheckLines(base, asName),
   ];
 }
 
@@ -375,7 +383,8 @@ export function buildMachinePrompt({
     "",
     ...enrollStep(2, { base, token, expiry }),
     "",
-    ...verifyStep(3, { base }),
+    // A real `--as`, never a <placeholder>: this block is run unread.
+    ...verifyStep(3, { base, asName: "claude" }),
     "",
     ...skillStep(4),
     "",
@@ -443,7 +452,7 @@ export function buildPmPrompt({
     `     ${anxCommand(base, "--json doctor")}`,
     "",
     "   `pm status` reads the local service and needs no agent identity.",
-    ...serverCheckLines(base),
+    ...serverCheckLines(base, runner.key),
     "",
     ...skillStep(5, { pm: true }),
     "",

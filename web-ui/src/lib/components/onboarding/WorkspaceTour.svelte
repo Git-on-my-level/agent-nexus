@@ -153,6 +153,10 @@
         retireTourToken(String(record.id ?? ""));
         return;
       }
+      if (!tourOpen) {
+        retireTourToken(String(record.id ?? ""));
+        return;
+      }
       setupPrompt = buildMachinePrompt({
         workspaceLabel: workspaceLabel || workspaceSlug,
         cliBaseUrl,
@@ -305,11 +309,30 @@
     return path === "/overview" || path === "/inbox";
   }
 
+  /**
+   * Hand back a token the walkthrough will not use.
+   *
+   * WorkspaceTour stays mounted on the shell for the whole session, so
+   * closing or finishing cannot wait for `onDestroy`. An unused token
+   * expires on its own; this is best effort, like the mint itself.
+   */
+  function retireUnusedPromptToken() {
+    if (promptValidity.copied) return;
+    const id = promptValidity.tokenId;
+    promptValidity.tokenId = "";
+    promptValidity.expiresAtMs = 0;
+    promptValidity.key = "";
+    setupPrompt = "";
+    clearPromptReady();
+    retireTourToken(id);
+  }
+
   function finishTour() {
     if (workspaceSlug) {
       markWorkspaceTourSeen(workspaceSlug);
     }
     tourOpen = false;
+    retireUnusedPromptToken();
   }
 
   function onSpotlightClose() {
@@ -412,8 +435,7 @@
   });
 
   onDestroy(() => {
-    // An unused token outlives the tour otherwise.
-    if (!promptValidity.copied) retireTourToken(promptValidity.tokenId);
+    retireUnusedPromptToken();
     if (promptReadyTimer.id) clearTimeout(promptReadyTimer.id);
   });
 
