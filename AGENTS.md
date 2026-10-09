@@ -104,12 +104,24 @@ read-time text/JSON scans. New or changed hot paths cannot be deferred as a perf
 main hazards may use exact, finite checked-in baselines linked to their P1 repair,
 as documented in `core/docs/performance.md`; remove those entries when repaired.
 
+## Fast loop
+
+Match the command to the change; anything wider belongs to CI.
+
+- Any change, before pushing: `make test-fast`. It picks the affected Go packages and the related Vitest units itself.
+- One Go test while iterating: `go test ./internal/<pkg> -run TestName` inside the module (add `-short` to match the fast tier).
+- A whole Go module, rarely: `make -C core test` (it sets the package timeout; plain `go test ./...` in `core` has none and will not finish).
+- Never run bare `go test ./...` in `core`, and never the full browser suite locally: run only the Playwright specs you changed, `pnpm -C web-ui exec playwright test <spec>`.
+- E2E ports are derived per worktree, so parallel checkouts do not share servers. Server reuse is opt-in (`PLAYWRIGHT_REUSE_EXISTING_WEB_UI=1`, `PLAYWRIGHT_REUSE_EXISTING_CORE=1`).
+- Do not watch CI. Push, then read `ci-ok` on the PR when it reports; no `gh pr checks --watch`, no polling.
+- A commit prints the HTTP routes that changed against `origin/main` (`make check-routes`): copy them into the PR description.
+
 ## Local check tiers
 
-Run `make setup` once to install dependencies and `make install-hooks` after moving a worktree. Hooks never download dependencies; missing tooling is a setup error.
+Run `make setup` once to install dependencies and `make install-hooks` after moving a worktree. `make install-hooks` also registers the per-entry merge driver for generated JSON inventories. Hooks never download dependencies; missing tooling is a setup error. Without `.venv`, the hooks run the same checks directly with `python3` instead of failing.
 
-- **Pre-commit:** `make check-static` checks staged files: formatting, Go vet/type checks, UI lint, shell/Python syntax, version metadata, OSS boundary guards when present, and actionlint for workflow edits. It regenerates contracts into scratch space, type-checks their TypeScript client, and compares generated files and mirrors to the index without rewriting your files or running tests. Untracked build inputs must be staged or moved so they cannot mask errors in the committed tree. The standalone staged check rejects unstaged tracked edits; `.venv/bin/pre-commit run --hook-stage pre-commit` safely stashes them as a commit would. Warm-cache budget: 30 seconds. Use `make check-static STATIC_ARGS=--all` for all tracked files.
-- **Pre-push:** `make test-fast` selects modules relative to the merge base with `origin/main`, including committed, staged, unstaged and untracked changes. It runs Go `-short` for core/cli/mcp and UI Vitest units, with contract validation when contracts or their generators change. Shared build/hook/contract changes fan out to every module. No merge base means every module, without fetching. Use `TEST_FAST_BASE=<ref> make test-fast` to choose a base or `make test-fast TEST_FAST_ARGS=--all` to check every module. Idle-machine budget: 3 minutes.
+- **Pre-commit:** `make check-static` checks staged files: formatting, Go vet/type checks, UI lint, shell/Python syntax, version metadata, OSS boundary guards when present, and actionlint for workflow edits. It regenerates contracts into scratch space, type-checks their TypeScript client, and compares generated files and mirrors to the index without rewriting your files or running tests. Untracked build inputs must be staged or moved so they cannot mask errors in the committed tree. The standalone staged check rejects unstaged tracked edits; `.venv/bin/pre-commit run --hook-stage pre-commit` safely stashes them as a commit would. `make check-routes` then reports route additions, removals and reclassifications; it is advisory and never blocks the commit. Warm-cache budget: 30 seconds. Use `make check-static STATIC_ARGS=--all` for all tracked files.
+- **Pre-push:** `make test-fast` selects work relative to the merge base with `origin/main`, including committed, staged, unstaged and untracked changes. Inside a Go module it runs the changed packages first and then every package that imports them (test imports included), so failures land early; web-ui runs the Vitest units related to the changed files. Module metadata, scripts, shared build/hook/contract roots and anything it cannot attribute to a package widen to the whole module. No merge base means every module, without fetching. Use `TEST_FAST_BASE=<ref> make test-fast` to choose a base or `make test-fast TEST_FAST_ARGS=--all` to check every module. Idle-machine budget: 3 minutes.
 - **CI:** the existing full integration, five-shard browser, visual, build and smoke jobs remain behind `ci-ok`. Local budgets do not remove CI coverage.
 
 The fast runner uses the CI single-fork Vitest configuration and sets `ANX_TEST_FAST=1` to exclude the Vitest real-binary CLI conformance integration; CI runs it normally.

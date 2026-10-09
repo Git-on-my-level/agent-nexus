@@ -186,10 +186,13 @@ authorization or bypass scoped handles for these projections.
 column (including PM/investigation schemas, generated columns and views) and
 fingerprints persistence writers plus transitive helper callers in internal/cmd.
 New fields and changed writers require an explicit storage privacy review.
-`ANX_UPDATE_ACCESS_INVENTORY=1 go test ./internal/storage -run
-TestResourceAccessStorageInventory` refreshes fingerprints and marks new fields
-UNCLASSIFIED; classify them deliberately and retain executable ownership/filter
-bindings. The field-driven regression must cover every indexed source/column.
+`make access-inventory` (from the repo root) refreshes fingerprints, marks new
+fields UNCLASSIFIED and reformats the file; classify them deliberately and
+retain executable ownership/filter bindings. The field-driven regression must
+cover every indexed source/column. The inventory merges per entry rather than
+per line (`.gitattributes` plus `make install-hooks`), so two branches that
+classify different columns rebase without a conflict; a rebase that lands new
+schema still needs `make access-inventory` to refresh writer fingerprints.
 
 Keep authorization separate from lifecycle filtering. Missing records may retain
 legacy semantics, but a known inaccessible record must never be treated as

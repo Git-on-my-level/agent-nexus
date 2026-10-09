@@ -20,13 +20,19 @@ done <<< "${push_data}"
 [[ "${has_update}" == false ]] && exit 0
 
 pre_commit="${repo_root}/.venv/bin/pre-commit"
-if [[ ! -x "${pre_commit}" ]]; then
-  echo "Missing ${pre_commit}; run: make setup" >&2
-  exit 1
+if [[ -x "${pre_commit}" ]]; then
+  exec "${pre_commit}" hook-impl \
+    --config="${repo_root}/.pre-commit-config.yaml" \
+    --hook-type=pre-push \
+    --hook-dir "${HERE}" \
+    -- "$@" <<< "${push_data}"
 fi
 
-exec "${pre_commit}" hook-impl \
-  --config="${repo_root}/.pre-commit-config.yaml" \
-  --hook-type=pre-push \
-  --hook-dir "${HERE}" \
-  -- "$@" <<< "${push_data}"
+# A missing virtualenv must not block a push: run the same tests directly.
+python="${PYTHON:-python3}"
+if ! command -v "${python}" >/dev/null 2>&1; then
+  echo "Missing ${pre_commit} and ${python}; run: make setup" >&2
+  exit 1
+fi
+echo "No ${pre_commit}; running checks with ${python} (make setup installs the hook framework)." >&2
+exec "${python}" -B scripts/git-hooks/checks.py fast

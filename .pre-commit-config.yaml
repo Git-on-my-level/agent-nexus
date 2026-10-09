@@ -10,6 +10,16 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [pre-commit]
+      # Verbose so the advisory route list reaches the committer: pre-commit
+      # prints a passing hook's output only when the hook asks for it.
+      - id: route-drift
+        name: HTTP route changes vs origin/main
+        entry: make check-routes
+        language: system
+        pass_filenames: false
+        always_run: true
+        verbose: true
+        stages: [pre-commit]
       - id: test-fast
         name: Changed-module unit tests
         entry: make test-fast

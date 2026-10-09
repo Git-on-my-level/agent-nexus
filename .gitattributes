@@ -1,0 +1,5 @@
+# Generated, name-keyed inventories merge per entry instead of per line, so two
+# branches that classify different columns or writers rebase without conflicts.
+# The driver is registered by `make install-hooks`; without it Git falls back to
+# the normal line merge, which only costs a manual resolve.
+core/internal/storage/testdata/resource_access_storage.json merge=anx-json-inventory

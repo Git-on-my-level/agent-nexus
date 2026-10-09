@@ -14,7 +14,9 @@ format, validation, CLI commands, public dogfood example, and evidence boundarie
 
 ### Browser checks and core-backed Playwright
 
-Run `pnpm -C web-ui run test:e2e` for the full browser suite. The default Playwright config starts an isolated real `anx-core` and UI servers for both the normal mount and `/anx`. `tests/e2e/integration-core-golden-path.spec.js` runs against that core, including actor registration, messages and replies, receipt/review evidence, and Inbox acknowledgement. Set `PLAYWRIGHT_CORE_PORT`, `PLAYWRIGHT_PORT`, and `PLAYWRIGHT_BASE_PATH_PORT` to avoid port conflicts locally.
+Run `pnpm -C web-ui run test:e2e` for the full browser suite. The default Playwright config starts an isolated real `anx-core` and UI servers for both the normal mount and `/anx`. `tests/e2e/integration-core-golden-path.spec.js` runs against that core, including actor registration, messages and replies, receipt/review evidence, and Inbox acknowledgement.
+
+Ports come from `playwright.ports.js`: each worktree hashes to its own contiguous block below the OS ephemeral ranges, so parallel checkouts never share a server or a core workspace, while CI keeps its historical ports (4173, 4176, 8000). `PLAYWRIGHT_PORT`, `PLAYWRIGHT_BASE_PATH_PORT`, `PLAYWRIGHT_CORE_PORT`, `PM_UI_TEST_PORT` and `PM_CORE_TEST_PORT` still override individually, and the resolved value is exported so specs read the same port the config starts. Reusing an already-running server is opt-in — `PLAYWRIGHT_REUSE_EXISTING_WEB_UI=1` or `PLAYWRIGHT_REUSE_EXISTING_CORE=1` — because reuse can serve stale SSR or another checkout's build. Local runs cap workers at a quarter of the cores so the dev servers keep up.
 
 CI's `web-ui-e2e-check` runs every spec in both projects across four shards on web UI, core, contract, or shared tooling changes. It disables retries so a failing browser test fails its shard and retains failure traces. The separate `web-ui-visual-check` keeps screenshot baseline comparison and visual-report examples.
 
