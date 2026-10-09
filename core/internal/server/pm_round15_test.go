@@ -90,7 +90,7 @@ func TestRound15TurnProposalOwnerReason(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			rt, err := NewPMRuntime(db, store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: responder.ActorID}})
+			rt, err := newOnboardedPMRuntime(t, db, store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: responder.ActorID}})
 			if err != nil {
 				t.Fatal(err)
 			}

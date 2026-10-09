@@ -1,4 +1,5 @@
 import { createInboxSourceClient } from "$lib/coreClient";
+import { isPmNotOnboardedRefusal } from "$lib/pm/onboardingState.js";
 
 /**
  * The attention surface must not hide an obligation on page two. Follow
@@ -39,6 +40,14 @@ export async function listAllPages(fetchPage, key, maxPages = 8, onPage) {
  * Continue bounded pagination with incremental snapshots, but stop waiting
  * after five seconds. A partial history never admits work-derived rows.
  * `complete` means pagination finished without a cap/cycle/partial marker.
+ *
+ * The PM feeds are always read, whatever the workspace's PM state says. A PM
+ * agent runs on the reader's own computer, so one can be absent while
+ * proposals it filed earlier still wait for a yes — and core still lists them
+ * and still accepts an answer. Hiding an obligation the Inbox is the only
+ * place to answer is worse than two bounded reads, so only the PM
+ * *affordances* are gated (see `pm/onboardingState.js`). A refusal is
+ * tolerated below.
  */
 export async function loadInboxSources({
   withHistory = true,
@@ -126,18 +135,35 @@ export async function loadInboxSources({
     () => controller.abort(new Error("Inbox loading timed out")),
     deadlineMs,
   );
+  const emptyFeed = () => ({ items: [], has_more: false, archived_refs: [] });
+  /*
+   * A workspace with no PM onboarded refuses these routes outright. That is
+   * an answer — there is nothing there — not a fault the reader can act on,
+   * and reporting it as an error would make the Inbox look broken for a
+   * feature the workspace simply does not have. Any other failure, including
+   * a PM bridge that is merely down, keeps its error.
+   */
+  const withoutPm = (load) =>
+    load().catch((reason) => {
+      if (isPmNotOnboardedRefusal(reason)) return emptyFeed();
+      throw reason;
+    });
   const feeds = [
     () =>
-      pages(
-        0,
-        (cursor) => client.listPmDecisions({ limit: 50, cursor }),
-        "items",
+      withoutPm(() =>
+        pages(
+          0,
+          (cursor) => client.listPmDecisions({ limit: 50, cursor }),
+          "items",
+        ),
       ),
     () =>
-      pages(
-        1,
-        (cursor) => client.listPmActions({ limit: 50, cursor }),
-        "items",
+      withoutPm(() =>
+        pages(
+          1,
+          (cursor) => client.listPmActions({ limit: 50, cursor }),
+          "items",
+        ),
       ),
     () =>
       pages(

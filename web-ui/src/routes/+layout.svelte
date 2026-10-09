@@ -94,6 +94,17 @@
     shouldRedirectToLoginForBootstrapState,
     WORKSPACE_BOOTSTRAP_STATES,
   } from "$lib/workspaceBootstrap.js";
+  import {
+    pmFeaturesVisible,
+    pmSetupOffered,
+    pmStateKnown,
+  } from "$lib/pm/onboardingState.js";
+  import {
+    SHELL_REFRESH_MIN_MS,
+    clearPmPresence,
+    pmPresence,
+    refreshPmPresence,
+  } from "$lib/pm/presence.js";
 
   let { children, data } = $props();
 
@@ -313,9 +324,30 @@
   const shellNavForTitle = [
     ...navigationItems,
     // PM is an action, not a nav item; it still names its page's title.
+    { label: "PM setup", href: "/pm/setup" },
     { label: "PM", href: "/pm" },
     ...settingsNavItems,
   ];
+
+  /*
+   * A PM agent runs on the reader's own computer, so a workspace can have
+   * none. Until one is onboarded the shell offers setup instead of Ask PM,
+   * and every other PM surface is absent (see `pm/onboardingState.js`). State
+   * the shell has not read yet shows neither: naming the product's
+   * primary verb on a guess is worse than showing nothing for a moment.
+   */
+  let pmState = $derived(
+    $pmPresence.workspace === activeWorkspaceSlug ? $pmPresence : null,
+  );
+  let pmVisible = $derived(pmFeaturesVisible(pmState));
+  let pmNeedsSetup = $derived(pmSetupOffered(pmState));
+  /*
+   * Until core answers, the slot holds its space but says nothing: either
+   * label would be a guess, and guessing makes it flash in and out on every
+   * load. A read that never succeeds leaves it empty rather than offering a
+   * conversation that cannot happen.
+   */
+  let pmSlotKnown = $derived(pmStateKnown(pmState));
 
   let pageTitle = $derived(() => {
     const navItem = shellNavForTitle.find(
@@ -427,6 +459,29 @@
     void activateCurrentWorkspace();
   });
 
+  /*
+   * A PM can be installed or stopped while this tab sits in the background,
+   * so re-read the state when the reader comes back — at most once a minute,
+   * and never while the tab is hidden. The PM setup page runs its own faster
+   * poll while it waits for a first heartbeat.
+   */
+  $effect(() => {
+    if (!browser) return;
+    const workspaceSlug = activeWorkspaceSlug;
+    if (!workspaceSlug) {
+      clearPmPresence();
+      return;
+    }
+    const onVisibility = () => {
+      if (document.hidden) return;
+      void refreshPmPresence(workspaceSlug, {
+        minIntervalMs: SHELL_REFRESH_MIN_MS,
+      });
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  });
+
   $effect(() => {
     if (!browser) {
       return;
@@ -439,6 +494,28 @@
 
     const seedPrincipal = $authenticatedAgent ? [$authenticatedAgent] : [];
     void refreshPrincipals(workspaceSlug, seedPrincipal);
+  });
+
+  /*
+   * Whether this workspace has a PM decides which surfaces exist at all, so
+   * read it as soon as there is a session to read with — and again whenever
+   * the identity changes.
+   *
+   * Keyed on the identity rather than read once after hydration: core needs a
+   * session for `pm.presence`, and in the actor gate the reader creates their
+   * identity *after* first paint. A single read then answered 401 and the
+   * state stayed unknown for the rest of the session, which now means no PM
+   * surface at all. This re-reads when the identity arrives, so a read that
+   * raced the session repairs itself instead of stranding the PM.
+   */
+  $effect(() => {
+    if (!browser) return;
+    const workspaceSlug = activeWorkspaceSlug;
+    if (!workspaceSlug || !$authSessionReady) return;
+    // Tracked so the read runs again for a different principal.
+    void $authenticatedAgent?.agent_id;
+    void $selectedActorId;
+    void refreshPmPresence(workspaceSlug, { force: true });
   });
 
   $effect(() => {
@@ -714,6 +791,21 @@
     bindWorkspaceHref(activeOrganizationSlug, activeWorkspaceSlug),
   );
 
+  let pmActionHref = $derived(
+    workspaceHref(pmNeedsSetup ? "/pm/setup" : "/pm"),
+  );
+  let pmActionLabel = $derived(pmNeedsSetup ? "Set up your PM" : "Ask PM");
+  /*
+   * `isActive` prefix-matches, so Ask PM would read as the current page while
+   * the reader is on PM setup (reached from "Manage"). Each state marks only
+   * the page its own link goes to.
+   */
+  let pmActionActive = $derived(
+    pmNeedsSetup
+      ? isActive("/pm/setup")
+      : isActive("/pm") && !isActive("/pm/setup"),
+  );
+
   function switchDestination(workspace) {
     // Resource IDs belong to one workspace. Switch to the corresponding list.
     const section = currentAppPath.split("/")[1] || "overview";
@@ -802,7 +894,9 @@
       return;
     }
     // Ask PM is the product's primary verb; it gets a global shortcut, but
-    // never while the reader is typing or the palette is open.
+    // never while the reader is typing or the palette is open. With no PM
+    // onboarded there is nothing to ask, so the key does nothing rather than
+    // opening a surface that cannot answer.
     if (
       event.key === "j" &&
       (event.metaKey || event.ctrlKey) &&
@@ -811,8 +905,10 @@
       !commandPaletteOpen &&
       !isTextEntryElement(event.target)
     ) {
+      // Claim the key either way: letting the browser's own ⌘J through
+      // (downloads, in some browsers) is not "nothing happens".
       event.preventDefault();
-      if (activeWorkspaceSlug) {
+      if (pmVisible && activeWorkspaceSlug) {
         void goto(workspaceHref("/pm"));
       }
       return;
@@ -1029,29 +1125,52 @@
             <span class="shell-nav-copy">Search</span>
             <kbd class="shell-search-kbd">⌘K</kbd>
           </button>
-          <a
-            class="shell-ask-pm"
-            href={workspaceHref("/pm")}
-            data-tour="pm"
-            aria-label="Ask PM"
-            title={navCollapsed ? "Ask PM" : undefined}
-            aria-current={isActive("/pm") ? "page" : undefined}
-          >
-            <svg
-              class="shell-ask-pm-icon"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
+          <!--
+            One slot for the PM, whatever state it is in: the product's
+            primary verb once a PM is onboarded, and the single calm way in
+            before that. Never two entry points, and never a dead one — and
+            nothing at all until core says which it is, so the row cannot
+            flash the wrong label on the way in.
+          -->
+          {#if !pmSlotKnown}
+            <!--
+              Holds the row's space so the sidebar does not jump, and keeps
+              the tour's spotlight target so its PM step still has something
+              to point at.
+            -->
+            <div
+              class="shell-ask-pm shell-ask-pm--pending"
+              data-tour="pm"
               aria-hidden="true"
+            ></div>
+          {:else}
+            <a
+              class="shell-ask-pm {pmNeedsSetup ? 'shell-ask-pm--setup' : ''}"
+              href={pmActionHref}
+              data-tour="pm"
+              data-pm-nav={pmNeedsSetup ? "setup" : "ask"}
+              aria-label={pmActionLabel}
+              title={navCollapsed ? pmActionLabel : undefined}
+              aria-current={pmActionActive ? "page" : undefined}
             >
-              <path d={navIconPath("askPm")} />
-            </svg>
-            <span class="shell-nav-copy">Ask PM</span>
-            <kbd class="shell-search-kbd">⌘J</kbd>
-          </a>
+              <svg
+                class="shell-ask-pm-icon"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d={navIconPath("askPm")} />
+              </svg>
+              <span class="shell-nav-copy">{pmActionLabel}</span>
+              {#if !pmNeedsSetup}
+                <kbd class="shell-search-kbd">⌘J</kbd>
+              {/if}
+            </a>
+          {/if}
         </div>
 
         <div class="shell-sidebar-main">
@@ -1520,25 +1639,52 @@
           {/if}
         </a>
       {/each}
-      <a
-        class="shell-bottom-nav-item shell-bottom-nav-item--accent"
-        href={workspaceHref("/pm")}
-        aria-current={isActive("/pm") ? "page" : undefined}
-      >
-        <span class="shell-bottom-nav-accent-glyph" aria-hidden="true">
-          <svg
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d={navIconPath("askPm")} />
-          </svg>
+      <!-- Same rule as the sidebar slot: hold the tab, say nothing yet. -->
+      {#if !pmSlotKnown}
+        <span class="shell-bottom-nav-item" aria-hidden="true">
+          <!-- The glyph wrapper sets the tab's height; match it exactly. -->
+          <span class="shell-bottom-nav-accent-glyph"></span>
+          <span>&nbsp;</span>
         </span>
-        <span>Ask PM</span>
-      </a>
+      {:else}
+        <a
+          class="shell-bottom-nav-item {pmNeedsSetup
+            ? ''
+            : 'shell-bottom-nav-item--accent'}"
+          href={pmActionHref}
+          data-pm-nav={pmNeedsSetup ? "setup" : "ask"}
+          aria-current={pmActionActive ? "page" : undefined}
+        >
+          {#if pmNeedsSetup}
+            <svg
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d={navIconPath("askPm")} />
+            </svg>
+          {:else}
+            <span class="shell-bottom-nav-accent-glyph" aria-hidden="true">
+              <svg
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d={navIconPath("askPm")} />
+              </svg>
+            </span>
+          {/if}
+          <!-- "Set up your PM" does not fit a phone tab; the page says the rest. -->
+          <span>{pmNeedsSetup ? "Set up PM" : "Ask PM"}</span>
+        </a>
+      {/if}
       <a
         class="shell-bottom-nav-item {moreBottomNavActive
           ? 'shell-bottom-nav-item--active'

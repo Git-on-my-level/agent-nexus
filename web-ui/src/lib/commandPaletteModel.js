@@ -118,7 +118,23 @@ export const GO_TO_SHORTCUTS = {
   d: "/docs",
 };
 
-export function goToCommands({ settingsGroups = [], go, mod = "⌘" }) {
+/**
+ * @param {{
+ *   settingsGroups?: object[],
+ *   go: (href: string) => void,
+ *   mod?: string,
+ *   pmVisible?: boolean,
+ *   pmNeedsSetup?: boolean,
+ * }} options `pmVisible` false means no PM agent is onboarded: the palette
+ * offers setup instead of a conversation nothing can answer.
+ */
+export function goToCommands({
+  settingsGroups = [],
+  go,
+  mod = "⌘",
+  pmVisible = true,
+  pmNeedsSetup = false,
+}) {
   const commands = [
     {
       id: "go:overview",
@@ -165,7 +181,9 @@ export function goToCommands({ settingsGroups = [], go, mod = "⌘" }) {
       icon: "docs",
       run: () => go("/docs"),
     },
-    {
+  ];
+  if (pmVisible) {
+    commands.push({
       id: "go:pm",
       group: "Go to",
       label: "Ask PM",
@@ -173,8 +191,17 @@ export function goToCommands({ settingsGroups = [], go, mod = "⌘" }) {
       shortcut: [mod, "J"],
       icon: "askPm",
       run: () => go("/pm"),
-    },
-  ];
+    });
+  } else if (pmNeedsSetup) {
+    commands.push({
+      id: "go:pm-setup",
+      group: "Go to",
+      label: "Set up your PM",
+      keywords: ["pm", "install", "connect"],
+      icon: "askPm",
+      run: () => go("/pm/setup"),
+    });
+  }
   for (const group of settingsGroups) {
     for (const item of group.items ?? []) {
       commands.push({

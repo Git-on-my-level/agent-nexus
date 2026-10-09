@@ -687,6 +687,18 @@
   },
   {
     "method": "GET",
+    "path": "/pm/presence",
+    "max_queries": 20,
+    "max_rows": 32,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Authenticated workspace connection timestamps expose no resource data. Exact composite primary-key lookup; no history scan. Includes authentication.",
+    "latency_ms": 100,
+    "max_vm_steps": 3000,
+    "must_contain": "\"connected\":false"
+  },
+  {
+    "method": "GET",
     "path": "/pm/context",
     "max_queries": 100,
     "max_rows": 1024,

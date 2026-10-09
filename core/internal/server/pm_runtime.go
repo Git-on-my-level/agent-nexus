@@ -63,6 +63,9 @@ func (rt *PMRuntime) AgentActorID() string {
 	if rt == nil {
 		return ""
 	}
+	if rt.Service != nil {
+		return rt.Service.AgentActorID()
+	}
 	return rt.cfg.PM.AgentActorID
 }
 
@@ -120,10 +123,46 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 	if err != nil {
 		return nil, err
 	}
+	var service *pm.Service
+	selectedActor := func() string {
+		if service != nil {
+			return service.AgentActorID()
+		}
+		return cfg.PM.AgentActorID
+	}
 	principalLookup := newPMPrincipalLookup(authStore)
 	findPrincipal := principalLookup.find
 	authorize := func(ctx context.Context, p pm.Principal, permission, ref string) error {
 		if p.WorkspaceID != cfg.PM.WorkspaceID {
+			return pm.ErrForbidden
+		}
+		// Presence contains only workspace connection timestamps. HTTP auth has
+		// already verified revocation and bound this principal to the request;
+		// loading its resource-bearing host summary would construct a workspace
+		// denial graph for this metadata-only point lookup.
+		if (permission == "pm.presence" || permission == "pm.connect") && ref == "" {
+			actual, ok := ctx.Value(principalContextKey{}).(*auth.Principal)
+			if ok && actual != nil && actual.ActorID == p.ActorID {
+				if permission == "pm.presence" {
+					return nil
+				}
+				if actual.PrincipalKind != string(auth.PrincipalKindAgent) {
+					return pm.ErrForbidden
+				}
+				if cfg.PM.AgentActorID != "" {
+					if p.ActorID == cfg.PM.AgentActorID {
+						return nil
+					}
+					return pm.ErrForbidden
+				}
+				candidate, err := authStore.IsLocalPMCandidate(ctx, actual.AgentID)
+				if err != nil {
+					return err
+				}
+				if candidate {
+					return nil
+				}
+			}
 			return pm.ErrForbidden
 		}
 		if ref != "" {
@@ -150,10 +189,10 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		case "pm.access", "pm.read", "pm.delivery.reconcile":
 			return nil
 		case "pm.respond":
-			if strings.TrimSpace(cfg.PM.AgentActorID) == "" {
+			if strings.TrimSpace(selectedActor()) == "" {
 				return pm.ErrPMIdentity
 			}
-			if p.ActorID == cfg.PM.AgentActorID {
+			if p.ActorID == selectedActor() {
 				return nil
 			}
 		case "pm.bind.target":
@@ -198,7 +237,7 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 			if !cfg.RuntimeEnvelopeEnforced {
 				return pm.ErrUnavailable
 			}
-			if actorID != cfg.PM.AgentActorID || workspaceID != cfg.PM.WorkspaceID {
+			if actorID != selectedActor() || workspaceID != cfg.PM.WorkspaceID {
 				return pm.ErrForbidden
 			}
 			principal, err := findPrincipal(ctx, actorID)
@@ -255,7 +294,7 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		deps.Dispatch = bridge.Dispatch
 	}
 	deps.ReadContextPage = func(ctx context.Context, p pm.Principal, ref, query, cursor string, limit int) (pm.ContextPage, error) {
-		ctx = primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: p.ActorID, PMActorID: cfg.PM.AgentActorID})
+		ctx = primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: p.ActorID, PMActorID: selectedActor()})
 		if ref != "" {
 			if cursor != "" {
 				return pm.ContextPage{}, pm.ErrContextWorkCursor
@@ -381,10 +420,10 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		// Decision summaries inherit the requesting actor's resource
 		// visibility. Decisions are workspace-readable while the conversations
 		// behind their evidence may not be; see pm_decision_visibility.go.
-		resolved.TitleOrSummary = redactedDecisionSummary(ctx, store, cfg.PM.AgentActorID, resolved)
+		resolved.TitleOrSummary = redactedDecisionSummary(ctx, store, selectedActor(), resolved)
 		return pm.ResolutionRef{Ref: resolved.Ref, Kind: resolved.Kind, TitleOrSummary: resolved.TitleOrSummary, Exists: resolved.Exists}, err
 	}
-	service, err := pm.NewService(ps, cfg.PM, deps)
+	service, err = pm.NewService(ps, cfg.PM, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -400,7 +439,7 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		if _, ok := authenticatePrincipalFromHeader(w, r, handlerOptions{authStore: authStore}, true); !ok {
 			return
 		}
-		attachResourceAccessScope(r, handlerOptions{primitiveStore: store, pmRuntime: &PMRuntime{cfg: cfg}})
+		attachResourceAccessScope(r, handlerOptions{primitiveStore: store, pmRuntime: &PMRuntime{cfg: cfg, Service: service}})
 		if !authorizeResourceSelectors(w, r) {
 			return
 		}

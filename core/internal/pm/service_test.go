@@ -50,6 +50,9 @@ func fixture(t *testing.T) (*Service, *Store, Principal, *int) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err = s.notePresence(context.Background(), Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, "connect"); err != nil {
+		t.Fatal(err)
+	}
 	return s, st, Principal{WorkspaceID: "ws", ActorID: "human", Human: true}, &count
 }
 

@@ -27,7 +27,7 @@ func TestRound5NativeFailures(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			rt, err := NewPMRuntime(env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+			rt, err := newOnboardedPMRuntime(t, env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -133,7 +133,7 @@ func TestRound5ContextCursorMessages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewPMRuntime(env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	rt, err := newOnboardedPMRuntime(t, env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +197,7 @@ func TestRound5PostWriteCanonicalRecovery(t *testing.T) {
 					t.Fatal(err)
 				}
 				injected := round5PostWriteStore{nativeMutationStore: store, commit: commit}
-				service, err := pm.NewService(ps, pm.Config{WorkspaceID: "ws_main"}, pm.Dependencies{
+				service, err := newOnboardedPMService(t, env.workspace.DB(), ps, pm.Config{WorkspaceID: "ws_main"}, pm.Dependencies{
 					Authorize: func(context.Context, pm.Principal, string, string) error { return nil },
 					DecisionWork: func(ctx context.Context, _ pm.Principal, ref string) (pm.DecisionWork, error) {
 						w, err := store.GetWork(ctx, ref)

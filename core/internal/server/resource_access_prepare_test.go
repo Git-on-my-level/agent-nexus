@@ -29,7 +29,7 @@ func TestResourceAccessLargeDenialPrepareAndPMRoutes(t *testing.T) {
 	if _, err := db.Exec(`INSERT INTO hosts(id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at) VALUES('prepare-host','prepare-host','Public host','user','machine','[]','now'); INSERT INTO host_keys VALUES('prepare-key','prepare-host','public','now',NULL); INSERT INTO host_agents VALUES('prepare-host','reader',?,'adopted')`, reader.AgentID); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewPMRuntime(db, store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	rt, err := newOnboardedPMRuntime(t, db, store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}

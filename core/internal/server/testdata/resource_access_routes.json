@@ -799,6 +799,12 @@
   },
   {
     "method": "GET",
+    "path": "/pm/presence",
+    "policy": "independent",
+    "reason": "Workspace-scoped connection timestamps contain no resource data; PM permission and actor binding are checked before the exact-key read."
+  },
+  {
+    "method": "GET",
     "path": "/pm/context",
     "policy": "collection"
   },
@@ -1188,5 +1194,11 @@
     "method": "GET",
     "path": "/workspace/dashboard/reports",
     "policy": "collection"
+  },
+  {
+    "method": "POST",
+    "path": "/pm/connect",
+    "policy": "independent",
+    "reason": "Authenticated selected PM or verified host-derived reserved pm agent connects with bounded display labels only; no resource data."
   }
 ]

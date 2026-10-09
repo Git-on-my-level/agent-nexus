@@ -31,17 +31,40 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeAuthenticationError(w, r)
 		return
 	}
-	if err = h.Service.authorize(r.Context(), p, "pm.access", ""); err != nil {
+	path := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/pm"), "/"), "/")
+	permission := "pm.access"
+	if r.Method == http.MethodGet && len(path) == 1 && path[0] == "presence" {
+		permission = "pm.presence"
+	}
+	if r.Method == http.MethodPost && len(path) == 1 && path[0] == "connect" {
+		permission = "pm.connect"
+	}
+	if err = h.Service.authorize(r.Context(), p, permission, ""); err != nil {
 		writeError(w, err)
 		return
 	}
-	path := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/pm"), "/"), "/")
 	ctx := r.Context()
+	bootstrap := len(path) == 2 && path[0] == "turns" && path[1] == "claim" && r.Method == http.MethodPost || len(path) == 3 && path[0] == "turns" && path[2] == "heartbeat" && r.Method == http.MethodPost
+	existingRead := r.Method == http.MethodGet && len(path) > 0 && (path[0] == "conversations" || path[0] == "decisions" || path[0] == "actions" || path[0] == "turns")
+	existingAnswer := r.Method == http.MethodPost && len(path) == 3 && (path[0] == "decisions" && (path[2] == "answer" || path[2] == "dispatch") || path[0] == "actions" && (path[2] == "reconcile" || path[2] == "acknowledge"))
+	if permission == "pm.access" && !bootstrap && !existingRead && !existingAnswer {
+		if err = h.Service.RequireOnboarded(ctx); err != nil {
+			writeError(w, err)
+			return
+		}
+	}
 	s := h.Service
 	var out any
 	status := http.StatusOK
 	decode := func(v any) error { return decodeBody(w, r, v) }
 	switch {
+	case len(path) == 1 && path[0] == "connect" && r.Method == http.MethodPost:
+		var in ConnectionInput
+		if err = decode(&in); err == nil {
+			out, err = s.Connect(ctx, p, in)
+		}
+	case len(path) == 1 && path[0] == "presence" && r.Method == http.MethodGet:
+		out, err = s.Presence(ctx, p)
 	case len(path) == 1 && path[0] == "conversations" && r.Method == http.MethodGet:
 		var limit int
 		var cursor string
@@ -272,7 +295,7 @@ func writeError(w http.ResponseWriter, err error) {
 		err    error
 		status int
 		code   string
-	}{{ErrInvalid, 400, "invalid_request"}, {ErrForbidden, 403, "forbidden"}, {ErrNotFound, 404, "not_found"}, {ErrLeaseRequired, 409, "lease_required"}, {ErrLeaseMismatch, 409, "lease_mismatch"}, {ErrTurnNotClaimed, 409, "turn_not_claimed"}, {ErrConflict, 409, "conflict"}, {ErrTurnClosed, 409, "turn_closed"}, {ErrStale, 409, "source_revision_changed"}, {ErrBusy, 429, "busy"}, {ErrPMIdentity, 503, "unavailable"}, {ErrUnavailable, 503, "unavailable"}} {
+	}{{ErrNotOnboarded, 409, "pm_not_onboarded"}, {ErrInvalid, 400, "invalid_request"}, {ErrForbidden, 403, "forbidden"}, {ErrNotFound, 404, "not_found"}, {ErrLeaseRequired, 409, "lease_required"}, {ErrLeaseMismatch, 409, "lease_mismatch"}, {ErrTurnNotClaimed, 409, "turn_not_claimed"}, {ErrConflict, 409, "conflict"}, {ErrTurnClosed, 409, "turn_closed"}, {ErrStale, 409, "source_revision_changed"}, {ErrBusy, 429, "busy"}, {ErrPMIdentity, 503, "unavailable"}, {ErrUnavailable, 503, "unavailable"}} {
 		if errors.Is(err, e.err) {
 			status = e.status
 			code = e.code

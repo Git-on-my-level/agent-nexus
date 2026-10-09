@@ -68,7 +68,7 @@ func TestPMDecisionRefSummariesRespectRequesterVisibility(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rt, err := NewPMRuntime(db, store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: agent.ActorID}})
+	rt, err := newOnboardedPMRuntime(t, db, store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: agent.ActorID}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -603,5 +603,10 @@
     "method": "POST",
     "path": "/agent-inbox/subscriptions",
     "reason": "Bounded subscription creation or acknowledgement; records no host command."
+  },
+  {
+    "method": "POST",
+    "path": "/pm/connect",
+    "reason": "Authenticated local PM registration and connection timestamp write; indexed workspace CAS and point lookup, bounded labels, no historical scan."
   }
 ]

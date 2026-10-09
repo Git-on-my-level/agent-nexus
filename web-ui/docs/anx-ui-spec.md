@@ -118,7 +118,8 @@ bottom bar. Overview is first because it is the workspace home. Inbox
 shows its Needs you count; Agents shows how many agents are working (nothing at
 zero). Agents is presence: who is working, waiting on a human, idle or stale.
 It never answers an ask; a waiting agent's row links into the Inbox. Ask PM is
-an action in the shell, not a nav category. The account menu in the sidebar
+an action in the shell, not a nav category; see 3.9 for what that slot shows
+when no PM agent is onboarded. The account menu in the sidebar
 footer and the `/more` hub group the secondary destinations under two labels:
 **Settings** (Archive, Access, Secrets, Integrations) and **Diagnostics**
 (Audit, Threads). Sign out is the last item of the account menu.
@@ -328,7 +329,7 @@ Docs are a first-class operator surface. Boards are the backing store Tasks writ
 The palette (`CommandPalette.svelte`, model in `lib/commandPaletteModel.js`) is keyboard-first and takes actions, not only searches. Rows are grouped, in this order:
 
 1. **Actions on the task or doc in view.** Task: Move to… (M), Assign to… (A, Nexus-owned tasks only; source-owned assignment belongs to the source), Open in <source> (O, when the source has a URL), Copy link, Copy ref, Ask PM about this task. Doc: Edit doc (E), Copy link, Copy ref. "Move to…" and "Assign to…" open a sub-list; with a query, their leaves ("Move to In review", "Assign to Leo Park") match directly. A source-owned task's moves read "Request move to … at GitHub" and file a PM decision exactly like a board drop. Done is not offered: completion needs an evidence ref, which the board's evidence form collects.
-2. **Go to:** Overview (G O), Inbox (G I), Agents (G A), Tasks (G T), Docs (G D), Ask PM (⌘J), then every Settings and Diagnostics destination.
+2. **Go to:** Overview (G O), Inbox (G I), Agents (G A), Tasks (G T), Docs (G D), Ask PM (⌘J), then every Settings and Diagnostics destination. With no PM agent onboarded, "Ask PM about this task" and "Ask PM" are absent and "Set up your PM" takes their place (3.9).
 3. **Search results:** tasks (one row per source item) and docs, from two characters on.
 
 Matching is fuzzy (subsequence, word starts and runs rank higher; spaces are ignored, so "assign leo" finds "Assign to Leo Park"). Arrow keys or Ctrl+N/P move, Enter runs, Esc backs out of a sub-list and then closes, Backspace on an empty sub-list query goes back. Actions use existing calls only (`cards.move` through `applyTaskPhaseMove`, `cards.patch` for `assignee_refs` fenced on the card's current `updated_at`, PM decisions) and report the outcome in a transient notice (with "Open in Inbox" for a filed request).
@@ -427,6 +428,87 @@ Waiting rows read everything from the roster: `waiting_ask` carries the ask's ti
 - **Notes and messages:** progress notes and the agent's messages (`events.list` by actor), newest first, with task and "via run" attribution; six first, then the rest.
 - **Recent tasks** with phase and age.
 - **Identity** (secondary, aside): host and machine, name and kind, derived/adopted/standalone, created, agent and actor ids behind copy buttons. Auth admins can exclude the agent's name on its host (reversible; inline confirmation) or revoke the agent (permanent: for a derived agent the host can never use that name again, and the confirmation says so). Revoking every agent on a machine is done on the host in Access.
+
+---
+
+### 3.9 PM onboarding and gating
+
+A PM agent runs on the reader's own computer, never on the server, so a
+workspace can have none. `GET /pm/presence` answers
+`{ state, last_seen, runner, host }` — `not_onboarded` until a PM has
+connected at least once, then `connected` or `offline` by heartbeat freshness
+— read in `lib/pm/onboardingState.js` and held for the shell by
+`lib/pm/presence.js`, which shows a PM surface only on a state core has
+positively reported. The response's older `configured` / `connected`
+booleans are used only when `state` is absent, so this UI still works against
+a core that predates it; there `configured` alone decides, and a missing
+`last_seen_at` is deliberately not read as "never connected", because that
+core's presence projection is newer than the PM itself and a workspace that
+has used its PM for months reports no last-seen on its first run.
+
+**The gate is on affordances, never on reads.** A PM runs on the reader's own
+computer, so one can be absent while proposals it filed earlier still wait for
+a yes — and core still lists them and still accepts an answer. The Inbox and
+Tasks therefore always read the PM decision and receipt feeds, whatever the
+state says; hiding an obligation the Inbox is the only place to answer would
+be worse than two already-bounded reads. When core answers the reserved
+`pm_not_onboarded` code, the UI reads that as an empty feed rather than an
+error, so the Inbox does not look broken for a feature the workspace does not
+have. Core does not emit that code yet: today a missing PM identity and a PM
+bridge that is merely down both answer 503 `unavailable`, and those cannot be
+told apart from the response — so a bare 503 keeps its error rather than being
+read as "install a PM", which would throw away the reader's draft.
+
+- **`not_onboarded`:** every PM surface is **absent, not disabled** — the
+  sidebar and bottom-bar Ask PM action, the PM conversation, "Ask PM about
+  this" on Inbox rows and tasks, the palette's PM rows, and PM hints in copy
+  elsewhere. ⌘J is swallowed rather than left to the browser. `/pm`
+  redirects to `/pm/setup`; a conversation already in core stays there and is
+  readable again once a PM is set up. What stays named is a PM proposal the
+  reader has in front of them: a row the PM filed earlier is still a PM
+  proposal, and describing it without the word would be a worse sentence than
+  an accurate one. Moving work a source owns is also gone: that move
+  is a PM proposal the PM carries out at the source, so with no PM
+  `applyTaskPhaseMove` refuses before writing and the surfaces say where to
+  set one up, rather than filing a proposal nobody would carry out. A move on
+  Nexus-owned work is unaffected.
+- **Setup:** exactly one calm entry point, in the slot Ask PM occupies, leading
+  to `/pm/setup`. That page says in two sentences that the PM runs on the
+  reader's computer through their own agent, gives the copyable
+  `anx pm install` command for this workspace, and shows a live "Waiting for
+  your PM to connect…" state that flips to "Connected" in place on the first
+  heartbeat. PM surfaces appear without a reload. The live watch is bounded:
+  after a few minutes it stops and names the `anx pm status` check instead of
+  waiting silently forever, and it spends no requests while the tab is hidden.
+- **`offline`:** PM features stay visible with a quiet "PM offline, last seen
+  X" status and the `anx pm status` hint. Sending stays open; the answer waits
+  for the machine to come back.
+- **Manage:** `/pm/setup` doubles as the status page once a PM exists (state,
+  last seen, and the runner and host the PM registered with, plus the
+  `anx pm status` and `anx pm uninstall` commands), reached from the "Manage"
+  link beside the PM status.
+- **An unknown state shows nothing.** Before the first read returns, after a
+  read fails, and against a core with no `/pm/presence` at all, no PM
+  affordance is rendered anywhere the reader did not ask for one — the shell
+  slot, the palette, the Inbox and Tasks entry points, the ⌘J shortcut: the
+  slot holds its space and commits to a label only once core answers.
+  `/pm/setup` stays reachable by typing the URL, and says it is still checking
+  rather than claiming either answer. Showing a guess made the row flash in and out
+  on every load, and a read that never succeeded left a button that could not
+  work. Answering an existing proposal is never gated this way (see above), so
+  nothing already asked of the reader becomes unreachable. A core old enough
+  to lack the route cannot serve this UI anyway: `pm.presence` is in the
+  command registry the shell checks against core's handshake at startup.
+- **Refusing a PM write needs a confirmed absence**, not an unproven one.
+  `pmFeaturesVisible` and `pmKnownAbsent` are mirror images rather than
+  negations of each other — both false while the state is unknown — so a slow
+  or failed read defers the source-owned move to core instead of telling a
+  workspace that has a PM that it has none.
+- **Server-side gating** is core's, not the UI's: the PM routes answer
+  `pm_not_onboarded` where there is no PM. The UI reads that refusal as "no
+  PM" wherever it can arrive. A bare 503 `unavailable` is not read that way:
+  core answers it both for a missing PM identity and for a PM bridge that is
+  merely down, and swallowing the second would throw away the reader's draft.
 
 ---
 

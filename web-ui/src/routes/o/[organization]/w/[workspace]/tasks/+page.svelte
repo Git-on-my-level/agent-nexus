@@ -28,6 +28,13 @@
     workKey,
   } from "$lib/pm/presentation.js";
   import {
+    PM_STATES,
+    isPmNotOnboardedRefusal,
+    pmFeaturesVisible,
+    pmKnownAbsent,
+  } from "$lib/pm/onboardingState.js";
+  import { pmPresence, publishPmPresence } from "$lib/pm/presence.js";
+  import {
     actorDirectoryIncomplete,
     actorRegistry,
     principalDirectoryIncomplete,
@@ -148,6 +155,21 @@
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
+  // With no PM agent onboarded, moving source-owned work still files a
+  // request for the reader to approve; only the PM wording and the PM
+  // affordances go away.
+  let workspaceSlug = $derived($page.data?.workspace?.slug ?? "");
+  let pmState = $derived(
+    $pmPresence.workspace === workspaceSlug ? $pmPresence : null,
+  );
+  // Gates the PM affordances and wording only, never a read.
+  let pmVisible = $derived(pmFeaturesVisible(pmState));
+  /*
+   * Refusing the source-owned move needs the opposite test, not the negation:
+   * while presence is still loading neither is true, and refusing then would
+   * tell a workspace that has a PM that it has none. Core is the authority.
+   */
+  let pmAbsent = $derived(pmKnownAbsent(pmState));
   let view = $derived(
     $page.url.searchParams.get("view") === "board" ? "board" : "table",
   );
@@ -393,6 +415,12 @@
     }
   }
   const DECISION_PREFETCH_PAGES = 25;
+  /*
+   * Read the proposals whatever the PM state says. A PM runs on the reader's
+   * own computer, so one can be absent while proposals it filed earlier still
+   * wait for a yes — and the "Requested" badge is how the reader finds them.
+   * Only the PM affordances are gated.
+   */
   async function loadDecisions() {
     decisionsLoaded = true;
     try {
@@ -453,6 +481,15 @@
       // is an obligation, so it is never created by an accidental keypress.
       if (samePhase) return;
       const source = sourceLabel(work.source);
+      /*
+       * The request is carried out at the source by the PM, and answered in
+       * the Inbox. With no PM there is nobody to carry it out, so say that
+       * instead of filing a proposal that would wait forever.
+       */
+      if (pmAbsent) {
+        noticeNoPm(source, { pointer });
+        return;
+      }
       if (
         !window.confirm(
           `Ask the PM to request moving “${work.title}” to ${label(phase)} at ${source}? You approve the request in Inbox.`,
@@ -494,11 +531,17 @@
       }
       const result = await applyTaskPhaseMove(coreClient, work, phase, {
         resolutionRefs,
+        pmOnboarded: !pmAbsent,
         ...(Number.isInteger(index) ? { beforeCardId } : {}),
       });
       // The evidence form closes only once core accepted the ref; a rejected
       // ref keeps the typed value in front of the reader with the error.
       if (result.kind !== "needs_evidence") evidenceFor = null;
+      if (result.kind === "needs_pm") {
+        // Refused before any write; the guard above already explained it.
+        records = previous;
+        return;
+      }
       if (result.kind === "needs_evidence") {
         setMoveNotice(
           {
@@ -544,7 +587,7 @@
           {
             text: `That request was already ${
               result.decision.status === "declined" ? "declined" : "answered"
-            }; nothing new was filed. Change the target or ask the PM to propose again.`,
+            }; nothing new was filed. Change the target${pmVisible ? " or ask the PM to propose again" : " and request it again"}.`,
             href: workspaceHref(
               `/inbox?item=decision:${encodeURIComponent(result.decision.id)}`,
             ),
@@ -587,10 +630,32 @@
         );
         return;
       }
+      /*
+       * The move was attempted because presence had not answered yet, and
+       * core has now settled it: there is no PM. Record that so the whole
+       * shell stops waiting and offers setup, and say it the same way the
+       * pre-check does rather than passing core's sentence through.
+       */
+      if (isPmNotOnboardedRefusal(err)) {
+        publishPmPresence(workspaceSlug, PM_STATES.NOT_ONBOARDED);
+        noticeNoPm(sourceLabel(work.source), { pointer });
+        return;
+      }
       setMoveNotice(null);
       moveError = readableMoveError(err);
       moveSessionExpired = isSessionExpired(err);
     }
+  }
+  /** The one explanation for a source-owned move with no PM to carry it. */
+  function noticeNoPm(source, { pointer = false } = {}) {
+    setMoveNotice(
+      {
+        text: `Changing work owned by ${source} is a request a PM carries out, and this workspace has none. Set one up to request the move.`,
+        href: workspaceHref("/pm/setup"),
+        hrefLabel: "Set up your PM",
+      },
+      { pointer },
+    );
   }
   // Core's validation names the field; the reader needs the fix.
   function readableMoveError(err) {
@@ -839,7 +904,9 @@
           <path d={navIconPath("search")} />
         </svg>
       </button>
-      <a class="ui-btn-secondary" href={workspaceHref("/pm")}>Ask PM</a>
+      {#if pmVisible}
+        <a class="ui-btn-secondary" href={workspaceHref("/pm")}>Ask PM</a>
+      {/if}
       <a class="ui-btn-primary" href={workspaceHref("/tasks/new")}>New task</a>
     {/snippet}
   </WorkspacePageHeader>
@@ -1052,11 +1119,13 @@
         type="submit"
         disabled={!evidenceFor.ref?.trim()}>Mark done</button
       >
-      <a
-        class="ui-prose-link text-micro"
-        href={`${workspaceHref("/pm")}?work_ref=${encodeURIComponent(evidenceFor.work.ref || "")}`}
-        >Ask the PM instead</a
-      >
+      {#if pmVisible}
+        <a
+          class="ui-prose-link text-micro"
+          href={`${workspaceHref("/pm")}?work_ref=${encodeURIComponent(evidenceFor.work.ref || "")}`}
+          >Ask the PM instead</a
+        >
+      {/if}
       <button
         class="ui-prose-link text-micro"
         type="button"
@@ -1087,7 +1156,7 @@
       {/if}
       {#if moveNotice.href}
         <a class="ui-prose-link text-micro" href={moveNotice.href}
-          >Open in Inbox</a
+          >{moveNotice.hrefLabel || "Open in Inbox"}</a
         >
       {/if}
       <button

@@ -152,6 +152,11 @@ func TestCompleteTurnDropsUnresolvableEvidenceRefs(t *testing.T) {
 	var completeBody map[string]any
 	var gets []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		if r.Method == http.MethodGet {
 			gets = append(gets, r.URL.Path)
 		}
@@ -275,6 +280,11 @@ func TestPMAskTextRendersQueuedAndInProgress(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/pm/connect" {
+					w.Header().Set("Content-Type", "application/json")
+					fmt.Fprint(w, `{"state":"connected"}`)
+					return
+				}
 				w.Header().Set("Content-Type", "application/json")
 				switch {
 				case r.Method == http.MethodGet && r.URL.Path == "/pm/conversations":
@@ -311,6 +321,11 @@ func TestPMAskReusesRecentEmptyConversation(t *testing.T) {
 	creates := 0
 	messages := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/pm/conversations":
@@ -352,6 +367,11 @@ func TestPMAskReusesRecentEmptyConversation(t *testing.T) {
 func TestPMAskDoesNotReuseStaleOrNonEmptyConversation(t *testing.T) {
 	stale := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339Nano)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/pm/conversations":
@@ -376,6 +396,11 @@ func TestPMAskDoesNotReuseEmptyConversationWithMismatchedWorkRef(t *testing.T) {
 	created := time.Now().UTC().Add(-2 * time.Minute).Format(time.RFC3339Nano)
 	var createdBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/pm/conversations":
@@ -415,6 +440,11 @@ func TestPMAskReusesEmptyConversationWhenWorkRefAndTitleMatch(t *testing.T) {
 	created := time.Now().UTC().Add(-2 * time.Minute).Format(time.RFC3339Nano)
 	creates := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/pm/conversations":
@@ -453,6 +483,11 @@ func TestPMAskReusesMatchingEmptyConversationBehindNewerMismatch(t *testing.T) {
 	gotEmpty := 0
 	gotOther := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/pm/conversations":
@@ -521,6 +556,11 @@ func TestPMChannelsDoctorReportsMissingSecretsWithoutSending(t *testing.T) {
 func TestPMChannelsDoctorProbesWebhooksWithGETOnly(t *testing.T) {
 	var methods []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		methods = append(methods, r.Method)
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}))
@@ -1219,6 +1259,11 @@ func pmTurnHarness(t *testing.T) (pmTurnTest, *pmTurnPosts) {
 	t.Helper()
 	posts := &pmTurnPosts{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		body, _ := io.ReadAll(r.Body)
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/complete"):
@@ -1424,6 +1469,11 @@ func TestHandleClaimedTurnDirectRunnerNeverExitsMapsDeadline(t *testing.T) {
 func TestPMServeExitsAfterThreeForbiddenClaims(t *testing.T) {
 	var claims int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		if r.URL.Path != "/pm/turns/claim" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 			http.NotFound(w, r)
@@ -1476,6 +1526,11 @@ func TestPMServeExitsAfterThreeForbiddenClaims(t *testing.T) {
 func TestPMServeBacksOffAndExitsOnNonRetryableClaim(t *testing.T) {
 	var claims int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		if r.URL.Path != "/pm/turns/claim" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 			http.NotFound(w, r)
@@ -1521,6 +1576,11 @@ func TestPMServeBacksOffAndExitsOnNonRetryableClaim(t *testing.T) {
 func TestPMServeKeepsPollingTransientClaimErrors(t *testing.T) {
 	claimed := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		select {
 		case <-claimed:
 		default:
@@ -1575,6 +1635,11 @@ func TestPMServeReleasesHeldTurnOnShutdown(t *testing.T) {
 		claimed  bool
 	)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/pm/turns/claim":
@@ -1690,6 +1755,11 @@ func requirePMReleaseContractBody(t *testing.T, body []byte) map[string]any {
 func TestReleaseTurnPostsRunnerIDAndLeaseToken(t *testing.T) {
 	var got map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		if r.Method != http.MethodPost || r.URL.Path != "/pm/turns/turn-1/release" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 			http.NotFound(w, r)
@@ -1734,6 +1804,11 @@ func TestHandleClaimedTurnDoesNotFailWhenShutdownBegun(t *testing.T) {
 
 func TestPMServeCleanStopReturnsNil(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		if r.URL.Path != "/pm/turns/claim" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 			http.NotFound(w, r)
@@ -1774,6 +1849,11 @@ func TestPMServeSignalDuringRunReleasesInsteadOfFailing(t *testing.T) {
 				claimed  bool
 			)
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/pm/connect" {
+					w.Header().Set("Content-Type", "application/json")
+					fmt.Fprint(w, `{"state":"connected"}`)
+					return
+				}
 				w.Header().Set("Content-Type", "application/json")
 				switch {
 				case r.Method == http.MethodPost && r.URL.Path == "/pm/turns/claim":
@@ -1915,6 +1995,11 @@ func TestClipReplyForTurnAddsTruncationMarker(t *testing.T) {
 func TestCompleteTurnTruncatesWithMarkerAndKeepsEvidence(t *testing.T) {
 	var completeBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		switch {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
 			body, _ := io.ReadAll(r.Body)
@@ -1965,6 +2050,11 @@ func TestHandleClaimedTurnRetriesCompleteThenSucceeds(t *testing.T) {
 	completeCalls := 0
 	var lastBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		switch {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
 			completeCalls++
@@ -2014,6 +2104,11 @@ func TestHandleClaimedTurnPersistentComplete503SavesReplyAndReleases(t *testing.
 	failCalls := 0
 	released := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		switch {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
 			completeCalls++
@@ -2073,6 +2168,11 @@ func TestHandleClaimedTurnFailAlso503ReleasesLease(t *testing.T) {
 	released := 0
 	failCalls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		switch {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/fail"):
 			failCalls++
@@ -2122,6 +2222,11 @@ func TestHandleClaimedTurnLeaseMismatchAlreadyCompletedDoesNotRerun(t *testing.T
 	})
 	defer restore()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		switch {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
 			w.WriteHeader(http.StatusConflict)
@@ -2164,6 +2269,11 @@ func TestHandleClaimedTurnLeaseMismatchPendingRetriesOnNextClaim(t *testing.T) {
 	})
 	defer restore()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		switch {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
 			completeCalls++
@@ -2239,6 +2349,11 @@ func TestHandleClaimedTurnReclaimDeliversSavedReplyWithoutHarness(t *testing.T) 
 	failCalls := 0
 	released := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		switch {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
 			completeCalls++
@@ -2337,6 +2452,11 @@ func TestPMServePersistentLeaseMismatchCapsHarnessRuns(t *testing.T) {
 	t.Cleanup(func() { nowFn = prevNow })
 	dir := t.TempDir()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/pm/turns/claim":
 			mu.Lock()
@@ -2467,6 +2587,11 @@ func TestHandleClaimedTurnSavedReplyPersistent503DoesNotRunHarness(t *testing.T)
 	completeCalls := 0
 	released := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		switch {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
 			completeCalls++
@@ -2528,6 +2653,11 @@ func TestHandleClaimedTurnSavedReplyDeletesWhenTurnDelivered(t *testing.T) {
 	})
 	defer restore()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		http.NotFound(w, r)
 	}))
@@ -2574,6 +2704,11 @@ func TestPMServeMaxConcurrentClaimsTwoTurns(t *testing.T) {
 	completesAtSecondClaim := -1
 	deadline := frozen.Add(10 * time.Minute).UTC().Format(time.RFC3339Nano)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/pm/turns/claim":
 			body, _ := io.ReadAll(r.Body)
@@ -2698,6 +2833,11 @@ func TestPMServeCapacityClaimSleepsWithoutError(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/pm/connect" {
+					w.Header().Set("Content-Type", "application/json")
+					fmt.Fprint(w, `{"state":"connected"}`)
+					return
+				}
 				if r.Method != http.MethodPost || r.URL.Path != "/pm/turns/claim" {
 					t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 					http.NotFound(w, r)
@@ -2780,6 +2920,11 @@ func TestHandleClaimedTurnPersistentComplete409FailsAfterThreeDeliveries(t *test
 	completeCalls := 0
 	failReasons := []string{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		switch {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
 			completeCalls++
@@ -2843,6 +2988,11 @@ func TestHandleClaimedTurnTransientCompleteThenSucceeds(t *testing.T) {
 	completeCalls := 0
 	failCalls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		switch {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
 			completeCalls++
@@ -2912,6 +3062,11 @@ func TestHandleClaimedTurnFailRefusedAfterUndeliverableForgetsTurn(t *testing.T)
 	}
 	failCalls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		switch {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
 			w.WriteHeader(http.StatusConflict)
@@ -2949,6 +3104,11 @@ func TestHandleClaimedTurnHeartbeat409CancelsHarness(t *testing.T) {
 	heartbeats := 0
 	gets := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		switch {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/heartbeat"):
 			mu.Lock()
@@ -3011,6 +3171,11 @@ func TestHandleClaimedTurnHeartbeat404Disables(t *testing.T) {
 	heartbeats := 0
 	completes := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		switch {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/heartbeat"):
 			mu.Lock()
@@ -3083,6 +3248,11 @@ func TestHandleClaimedTurnHeartbeatRenewsWhileRunning(t *testing.T) {
 	heartbeats := 0
 	heartbeatSeen := make(chan struct{}, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		switch {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/heartbeat"):
 			mu.Lock()
@@ -3145,6 +3315,11 @@ func TestHandleClaimedTurnHeartbeat503RetriesThenSucceeds(t *testing.T) {
 	var statuses []int
 	completes := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/connect" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"state":"connected"}`)
+			return
+		}
 		switch {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/heartbeat"):
 			mu.Lock()

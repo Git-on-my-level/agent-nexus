@@ -209,6 +209,7 @@ export declare class AnxClient {
     pmActionsReconcile(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     pmBindingsCreate(options?: RequestOptions): Promise<InvokeResult>;
     pmBindingsList(options?: RequestOptions): Promise<InvokeResult>;
+    pmConnect(options?: RequestOptions): Promise<InvokeResult>;
     pmContext(options?: RequestOptions): Promise<InvokeResult>;
     pmConversationsCreate(options?: RequestOptions): Promise<InvokeResult>;
     pmConversationsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
@@ -219,6 +220,7 @@ export declare class AnxClient {
     pmDecisionsDispatch(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     pmDecisionsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     pmDecisionsList(options?: RequestOptions): Promise<InvokeResult>;
+    pmPresence(options?: RequestOptions): Promise<InvokeResult>;
     pmTurnsClaim(options?: RequestOptions): Promise<InvokeResult>;
     pmTurnsComplete(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     pmTurnsContext(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

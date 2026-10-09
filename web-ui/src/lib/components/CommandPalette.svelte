@@ -38,6 +38,14 @@
     rankCommands,
   } from "$lib/commandPaletteModel.js";
   import { workspacePath } from "$lib/workspacePaths";
+  import {
+    PM_STATES,
+    isPmNotOnboardedRefusal,
+    pmFeaturesVisible,
+    pmKnownAbsent,
+    pmSetupOffered,
+  } from "$lib/pm/onboardingState.js";
+  import { pmPresence, publishPmPresence } from "$lib/pm/presence.js";
   import WorkSummary from "$lib/components/WorkSummary.svelte";
   import { workSummaryModel } from "$lib/workSummary.js";
 
@@ -76,6 +84,16 @@
   let debounceTimer = null;
   let latestRequestId = 0;
   let contextRequestId = 0;
+
+  // No PM agent onboarded: the palette must not offer a conversation that
+  // cannot answer, here or on a task.
+  let pmState = $derived(
+    $pmPresence.workspace === workspaceSlug ? $pmPresence : null,
+  );
+  let pmVisible = $derived(pmFeaturesVisible(pmState));
+  let pmNeedsSetup = $derived(pmSetupOffered(pmState));
+  // Refusing the move needs a confirmed absence, not an unproven one.
+  let pmAbsent = $derived(pmKnownAbsent(pmState));
 
   let workId = $derived(String($page.params?.workId ?? "").trim());
   let documentId = $derived(
@@ -182,7 +200,22 @@
   async function moveContextTask(phase) {
     const work = contextWork;
     close();
-    const result = await applyTaskPhaseMove(coreClient, work, phase);
+    let result;
+    try {
+      result = await applyTaskPhaseMove(coreClient, work, phase, {
+        pmOnboarded: !pmAbsent,
+      });
+    } catch (err) {
+      /*
+       * The move was attempted because presence had not answered yet, and
+       * core has now settled it. Record that so the shell stops waiting and
+       * offers setup, and say it the way the absent case does instead of
+       * passing core's sentence through as a raw failure.
+       */
+      if (!isPmNotOnboardedRefusal(err)) throw err;
+      publishPmPresence(workspaceSlug, PM_STATES.NOT_ONBOARDED);
+      result = { kind: "needs_pm", work };
+    }
     if (result.kind === "moved") {
       contextWork = { ...work, phase };
       return {
@@ -199,6 +232,16 @@
             )
           : "",
         hrefLabel: "Open in Inbox",
+      };
+    }
+    if (result.kind === "needs_pm") {
+      // The rows above are absent once a PM is known to be missing; this
+      // covers running the row before presence answered, and a state that
+      // changed while the palette was open.
+      return {
+        text: `Changing work owned by ${sourceLabel(work.source)} is a request a PM carries out, and this workspace has none.`,
+        href: href("/pm/setup"),
+        hrefLabel: "Set up your PM",
       };
     }
     return null;
@@ -250,7 +293,13 @@
     const group = `Actions on “${work.title || "this task"}”`;
     const owned = isNexusOwned(work);
     const source = sourceLabel(work.source);
-    const move = moveTargets(work).map((phase) => ({
+    /*
+     * A source-owned move is a request a PM carries out at the source. With
+     * no PM onboarded there is nobody to carry it out, so the rows are absent
+     * rather than filing a proposal that would wait forever.
+     */
+    const movable = owned || !pmAbsent;
+    const move = (movable ? moveTargets(work) : []).map((phase) => ({
       id: `move:${phase}`,
       group,
       label: owned
@@ -278,15 +327,19 @@
       href(`/tasks/${encodeURIComponent(workKey(work))}`),
     );
     const root = [
-      {
-        id: "task:move",
-        group,
-        label: "Move to…",
-        keywords: ["status", "phase"],
-        shortcut: ["M"],
-        icon: "move",
-        page: "move",
-      },
+      ...(movable
+        ? [
+            {
+              id: "task:move",
+              group,
+              label: "Move to…",
+              keywords: ["status", "phase"],
+              shortcut: ["M"],
+              icon: "move",
+              page: "move",
+            },
+          ]
+        : []),
       ...(owned
         ? [
             {
@@ -332,15 +385,21 @@
         icon: "copy",
         run: () => copy(work.ref || workKey(work), "ref"),
       },
-      {
-        id: "task:ask-pm",
-        group,
-        label: "Ask PM about this task",
-        keywords: ["pm"],
-        icon: "askPm",
-        run: () =>
-          go(`/pm?work_ref=${encodeURIComponent(work.ref || workKey(work))}`),
-      },
+      ...(pmVisible
+        ? [
+            {
+              id: "task:ask-pm",
+              group,
+              label: "Ask PM about this task",
+              keywords: ["pm"],
+              icon: "askPm",
+              run: () =>
+                go(
+                  `/pm?work_ref=${encodeURIComponent(work.ref || workKey(work))}`,
+                ),
+            },
+          ]
+        : []),
     ];
     return { root, move, assign };
   });
@@ -384,7 +443,13 @@
   });
 
   let destinations = $derived(
-    goToCommands({ settingsGroups: settingsNavGroups, go, mod: modSymbol() }),
+    goToCommands({
+      settingsGroups: settingsNavGroups,
+      go,
+      mod: modSymbol(),
+      pmVisible,
+      pmNeedsSetup,
+    }),
   );
 
   // ---- Search -------------------------------------------------------------

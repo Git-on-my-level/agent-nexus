@@ -146,6 +146,20 @@ export async function installWorkspaceApi(page, overrides = {}) {
   const api = {
     self: SELF,
     authenticated: true,
+    /*
+     * `GET /pm/presence`, as core answers it. A PM agent runs on the reader's
+     * own computer, so a workspace can have none; flip this to drive the UI
+     * between not onboarded, connected and offline. `null` plays an older
+     * core that has no such route.
+     */
+    pm: {
+      state: "connected",
+      runner: "Hermes",
+      host: "studio",
+      configured: true,
+      connected: true,
+      last_seen: null,
+    },
     actors: [
       { id: "actor-operator", display_name: "Operator", tags: ["human"] },
     ],
@@ -247,6 +261,18 @@ export async function installWorkspaceApi(page, overrides = {}) {
         human_auth_mode: "workspace_local",
       });
     }
+    if (path === "/pm/presence") {
+      // An older core has no such route; the state then stays unknown and no
+      // PM surface is shown.
+      if (api.pm === null) return reply({ error: { code: "not_found" } }, 404);
+      return respond("pmPresence", () => ({
+        ...api.pm,
+        last_seen:
+          api.pm.last_seen === null
+            ? new Date().toISOString()
+            : api.pm.last_seen,
+      }));
+    }
     if (path === "/auth/session") {
       return reply(
         api.authenticated
@@ -347,8 +373,11 @@ export async function installWorkspaceApi(page, overrides = {}) {
       }
       return respond(`decision:${id}`, () => record);
     }
-    if (path === "/pm/decisions") return reply({ items: [], has_more: false });
-    if (path === "/pm/actions") return reply({ items: [], has_more: false });
+    // Recorded, so a spec can assert that no proposal was filed at all.
+    if (path === "/pm/decisions")
+      return respond("pmDecisions", () => ({ items: [], has_more: false }));
+    if (path === "/pm/actions")
+      return respond("pmActions", () => ({ items: [], has_more: false }));
 
     // ---- Work / integrations -----------------------------------------------
     if (path === "/work/capabilities")

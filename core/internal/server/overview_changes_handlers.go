@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -37,6 +38,9 @@ func appendOverviewDecisions(r *http.Request, opts handlerOptions, d *primitives
 		return err
 	}
 	decisions, partial, err := opts.pmRuntime.Service.NewDecisions(r.Context(), pm.Principal{WorkspaceID: opts.pmRuntime.cfg.PM.WorkspaceID, ActorID: p.ActorID, Human: p.PrincipalKind == "human"}, since, now)
+	if errors.Is(err, pm.ErrNotOnboarded) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}

@@ -3,7 +3,8 @@
  * it does not take attention actions), Inbox (the only attention surface),
  * Agents (presence: who is working, waiting or stale), then Tasks and Docs.
  * The PM conversation is an action ("Ask PM" in the sidebar header and the
- * mobile bottom bar), not a destination category. Settings (Access, Secrets,
+ * mobile bottom bar), not a destination category; that same slot offers
+ * setup while no PM agent is onboarded. Settings (Access, Secrets,
  * Integrations) and Diagnostics (Audit, Threads) live in the account menu in
  * the sidebar footer and in the mobile More hub.
  */
@@ -109,6 +110,12 @@ export const settingsNavItems = settingsNavGroups.flatMap(
 
 const SHELL_CONTENT_RULES = [
   {
+    // Setup is a short read, not a thread; it does not want the chat column.
+    match: /^\/pm\/setup$/,
+    mode: "standard",
+    maxWidth: "42rem",
+  },
+  {
     match: /^\/pm(\/|$)/,
     mode: "standard",
     maxWidth: "56rem",
@@ -167,8 +174,12 @@ function normalizePathname(pathname) {
   return pathname;
 }
 
-/** Live routes that are not nav items: the Ask PM action target. */
-const NON_NAV_ROUTES = ["/pm"];
+/**
+ * Live routes that are not nav items: the PM action's targets. The sidebar
+ * slot points at setup until a PM is onboarded, and at the conversation
+ * after, so both have to count as known sections.
+ */
+const NON_NAV_ROUTES = ["/pm", "/pm/setup"];
 
 export function isKnownSection(pathname) {
   const normalizedPathname = normalizePathname(pathname);

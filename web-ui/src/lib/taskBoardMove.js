@@ -106,10 +106,15 @@ export function requestedDecisionMap(
  * Apply a board drop. Nexus-owned tasks move via cards.move.
  * Source-owned tasks never mutate the source: propose a PM decision instead.
  *
- * @returns {Promise<{ kind: "moved" | "requested" | "noop" | "needs_evidence", work: object, decision?: object }>}
+ * `pmOnboarded` false means this workspace has no PM agent (they run on the
+ * reader's own computer, so a workspace can have none). A proposal filed then
+ * has nobody to carry it out at the source and nowhere to be answered, so the
+ * request is refused before it is written rather than left on the board.
+ *
+ * @returns {Promise<{ kind: "moved" | "requested" | "noop" | "needs_evidence" | "needs_pm", work: object, decision?: object }>}
  */
 export async function applyTaskPhaseMove(coreClient, work, phase, opts = {}) {
-  const { resolutionRefs = [], beforeCardId } = opts;
+  const { resolutionRefs = [], beforeCardId, pmOnboarded = true } = opts;
   const samePhase = (work?.phase || "unknown") === phase;
   if (!work || !phase) {
     return { kind: "noop", work };
@@ -150,6 +155,9 @@ export async function applyTaskPhaseMove(coreClient, work, phase, opts = {}) {
         : {}),
     });
     return { kind: "moved", work: { ...work, phase } };
+  }
+  if (!pmOnboarded) {
+    return { kind: "needs_pm", work };
   }
   const decision = await coreClient.createPmDecision(
     createStatusChangeDecisionPayload(work, phase, { resolutionRefs }),

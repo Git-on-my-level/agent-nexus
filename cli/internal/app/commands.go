@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -407,6 +408,13 @@ func (a *App) readInputFile(path string) ([]byte, error) {
 		readFile = a.ReadFile
 	}
 	return readFile(path)
+}
+
+// readStdinScanner is the bounded line-oriented accessor for the explicitly
+// interactive PM install wizard. Mark consumption so setup cannot auto-replay.
+func (a *App) readStdinScanner(limit int64) *bufio.Scanner {
+	a.stdinConsumed = true
+	return bufio.NewScanner(io.LimitReader(a.Stdin, limit))
 }
 
 func (a *App) readStdinBytes(limit int64) ([]byte, error) {

@@ -28,6 +28,7 @@
     actionError = "",
     actorLabel = (id) => id,
     currentActorId = "",
+    /** Empty when no PM agent is onboarded: the PM retry path disappears. */
     pmHref = "",
     replacement = null,
     answer = $bindable(""),
@@ -426,13 +427,16 @@
             To try again, <a class="ui-prose-link" href={workHref}
               >propose it again from the task</a
             > and approve the new proposal.
-          {:else}
+          {:else if pmHref}
             To try again,
             <a
               class="ui-prose-link"
               href={`${pmHref}?work_ref=${encodeURIComponent(selected.work_ref || "")}`}
               >ask the PM to propose it again</a
             > and approve the new proposal.
+          {:else}
+            <!-- No PM is onboarded, so nothing here can be asked to retry. -->
+            To try again, propose it again and approve the new proposal.
           {/if}
         </p>
       {/if}

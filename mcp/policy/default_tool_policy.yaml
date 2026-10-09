@@ -67,6 +67,7 @@ hosted_default_commands:
   - "pm.actions.list"
   - "pm.bindings.list"
   - "pm.context"
+  - "pm.presence"
   - "pm.conversations.get"
   - "pm.conversations.list"
   - "pm.decisions.get"
@@ -613,6 +614,12 @@ commands:
   "pm.bindings.create":
     classification: gated_admin
     reason: "Binds an external channel user to a workspace principal; requires explicit human administration."
+  "pm.connect":
+    classification: unsupported_bootstrap_auth
+    reason: Local runner bootstrap is owned by anx pm serve; model tools must not claim workspace PM ownership.
+  "pm.presence":
+    classification: exposed_read
+    reason: "Read computed workspace PM connection state, bounded display labels and timestamps without turn data or commands."
   "pm.context":
     classification: exposed_read
     reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."

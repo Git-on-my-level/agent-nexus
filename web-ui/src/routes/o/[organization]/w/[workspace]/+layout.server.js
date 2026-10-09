@@ -15,6 +15,7 @@ import {
   hostedWorkspaceCoreProxyHeaders,
 } from "$lib/server/hostedWorkspaceCore.js";
 import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
+import { resolveCliBaseUrl } from "$lib/server/cliBaseUrl.js";
 import {
   LAST_WORKSPACE_COOKIE,
   lastWorkspaceCookieValue,
@@ -298,6 +299,9 @@ export async function load(event) {
       description: resolved.workspace.description,
       coreBaseUrl,
       workspaceId,
+      // Copyable `anx` commands (PM setup, host enrollment) need the API
+      // origin, and they are offered from the shell, not from one route.
+      cliBaseUrl: resolveCliBaseUrl(event, resolved),
     },
     ...(coreSchemaCheckWarning ? { coreSchemaCheckWarning } : {}),
   };

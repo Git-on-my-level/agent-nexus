@@ -42,8 +42,9 @@ func TestEveryStdinReadUsesSharedAccessor(t *testing.T) {
 			if !ok || !callArgReadsStdin(call) {
 				return true
 			}
-			if enclosingFuncName(file, call) != "readStdinBytes" {
-				t.Errorf("%s reads stdin outside readStdinBytes", fset.Position(call.Pos()))
+			accessor := enclosingFuncName(file, call)
+			if accessor != "readStdinBytes" && accessor != "readStdinScanner" {
+				t.Errorf("%s reads stdin outside the shared accessors", fset.Position(call.Pos()))
 			}
 			return true
 		})

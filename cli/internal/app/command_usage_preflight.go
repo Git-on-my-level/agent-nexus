@@ -105,7 +105,7 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 		return "refs resolve", err
 	}
 	if isWorkCommandRoot(args[0]) && !isReportLocalCommand(args) {
-		if len(args) >= 2 && args[0] == "pm" && (args[1] == "serve" || args[1] == "ask") {
+		if len(args) >= 2 && args[0] == "pm" && (args[1] == "serve" || args[1] == "ask" || args[1] == "install" || args[1] == "status" || args[1] == "uninstall") {
 			commandName := "pm " + args[1]
 			if err := preflightFlagUsage(args[2:], preflightFlagSpecs()[commandName]); err != nil {
 				return commandName, err

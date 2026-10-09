@@ -1522,6 +1522,26 @@ async function handleWorkspaceApiRoute(
     return;
   }
 
+  /*
+   * The shell shows a PM surface only on a state core confirmed, so the
+   * baseline needs one: without this the slot stays a blank placeholder and
+   * every scene that paints the nav differs from its baseline for a reason
+   * that has nothing to do with the scene.
+   */
+  if (pathname === "/pm/presence" && request.method() === "GET") {
+    await route.fulfill(
+      jsonResponse(200, {
+        state: "connected",
+        last_seen: QA_FIXED_NOW_ISO,
+        runner: "Hermes",
+        host: "studio",
+        configured: true,
+        connected: true,
+      }),
+    );
+    return;
+  }
+
   if (pathname === "/pm/decisions" && request.method() === "GET") {
     await route.fulfill(jsonResponse(200, { items: [], has_more: false }));
     return;

@@ -110,6 +110,74 @@ describe("task board moves", () => {
   });
 });
 
+describe("a source-owned move with no PM agent onboarded", () => {
+  const sourceOwned = {
+    ref: "card:vendor",
+    board_ref: "board:studio",
+    phase: "backlog",
+    source: { authority: "github", native_id: "12" },
+  };
+
+  /*
+   * The request is a PM proposal: the PM carries it out at the source and the
+   * reader answers it in the Inbox. A PM agent runs on the reader's own
+   * computer, so a workspace can have none — and a proposal filed then has
+   * nobody to carry it out. Refuse before writing rather than leaving one
+   * waiting forever.
+   */
+  it("refuses before writing anything", async () => {
+    const coreClient = {
+      getBoard: vi.fn(),
+      moveBoardCard: vi.fn(),
+      createPmDecision: vi.fn(),
+    };
+    const result = await applyTaskPhaseMove(
+      coreClient,
+      sourceOwned,
+      "in_progress",
+      { pmOnboarded: false },
+    );
+    expect(result).toMatchObject({ kind: "needs_pm" });
+    expect(coreClient.createPmDecision).not.toHaveBeenCalled();
+    expect(coreClient.moveBoardCard).not.toHaveBeenCalled();
+  });
+
+  it("still files the proposal when a PM exists", async () => {
+    const coreClient = {
+      getBoard: vi.fn(),
+      moveBoardCard: vi.fn(),
+      createPmDecision: vi.fn().mockResolvedValue({ id: "decision-1" }),
+    };
+    const result = await applyTaskPhaseMove(
+      coreClient,
+      sourceOwned,
+      "in_progress",
+      { pmOnboarded: true },
+    );
+    expect(result).toMatchObject({ kind: "requested" });
+    expect(coreClient.createPmDecision).toHaveBeenCalledTimes(1);
+  });
+
+  // A Nexus-owned move is the UI's own write and needs no PM at all.
+  it("does not touch a Nexus-owned move", async () => {
+    const coreClient = {
+      getBoard: vi
+        .fn()
+        .mockResolvedValue({ board: { updated_at: "2026-09-12T10:00:00Z" } }),
+      moveBoardCard: vi.fn().mockResolvedValue({}),
+      createPmDecision: vi.fn(),
+    };
+    const result = await applyTaskPhaseMove(
+      coreClient,
+      { ...sourceOwned, source: { authority: "nexus" } },
+      "in_progress",
+      { pmOnboarded: false },
+    );
+    expect(result.kind).toBe("moved");
+    expect(coreClient.moveBoardCard).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("requestedDecisionMap", () => {
   const records = [{ ref: "card:gh" }, { handle: "no-ref-work" }];
 

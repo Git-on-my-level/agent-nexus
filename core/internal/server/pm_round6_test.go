@@ -34,7 +34,7 @@ func TestRound6ResolutionEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	ref := "artifact:" + asString(artifact["id"])
-	rt, err := NewPMRuntime(db, store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: machine.ActorID}})
+	rt, err := newOnboardedPMRuntime(t, db, store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: machine.ActorID}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +194,7 @@ func TestRound6RuntimeAuthentication(t *testing.T) {
 	db := env.workspace.DB()
 	h := seedHumanPrincipalForLockoutTest(t, ctx, db, "r6-auth", "r6-auth-actor", "r6-auth", "r6-auth-token")
 	seedMachinePrincipalForLockoutTest(t, ctx, db, "r6-auth-agent", "r6-auth-agent-actor", "r6-auth-agent", "r6-machine-token")
-	rt, err := NewPMRuntime(db, env.primitiveStore.(*primitives.Store), env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	rt, err := newOnboardedPMRuntime(t, db, env.primitiveStore.(*primitives.Store), env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}

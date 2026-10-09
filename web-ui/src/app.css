@@ -832,6 +832,40 @@
     opacity: 1;
   }
 
+  /*
+   * No PM is onboarded yet, so this is an invitation, not the primary verb.
+   * It keeps the slot (one entry point, always in the same place) and drops
+   * the accent: a workspace without a PM should read as unfinished, not as
+   * being nagged.
+   */
+  .shell-ask-pm--setup {
+    background: transparent;
+    border-color: var(--line);
+    border-style: dashed;
+    color: var(--fg-muted);
+    font-weight: 500;
+  }
+
+  .shell-ask-pm--setup:hover {
+    background: var(--panel-hover);
+    color: var(--fg);
+  }
+
+  .shell-ask-pm--setup .shell-ask-pm-icon {
+    opacity: 0.7;
+  }
+
+  /*
+   * Core has not said whether this workspace has a PM. The row keeps its
+   * space so the sidebar does not jump when the answer lands, and says
+   * nothing: either label would be a guess.
+   */
+  .shell-ask-pm--pending {
+    background: transparent;
+    border-color: transparent;
+    pointer-events: none;
+  }
+
   .shell-search-kbd {
     margin-left: auto;
     flex-shrink: 0;

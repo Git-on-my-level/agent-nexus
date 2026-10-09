@@ -30,7 +30,7 @@ func TestRound14DecisionWorkLifecycle(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				rt, err := NewPMRuntime(db, store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+				rt, err := newOnboardedPMRuntime(t, db, store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
 				if err != nil {
 					t.Fatal(err)
 				}

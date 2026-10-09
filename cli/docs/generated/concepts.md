@@ -15,7 +15,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `agents`
 
-- Commands: `18`
+- Commands: `20`
 - Command IDs:
   - `agent.inbox.answers.read`
   - `agent.inbox.asks.list`
@@ -32,6 +32,8 @@ Generated from `contracts/anx-openapi.yaml`.
   - `hosts.get`
   - `hosts.list`
   - `hosts.patch`
+  - `pm.connect`
+  - `pm.presence`
   - `runs.get`
   - `runs.list`
   - `runs.upsert`

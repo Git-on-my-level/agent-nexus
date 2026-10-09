@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 220
+- Command count: 222
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -29,7 +29,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | ops | 3 |
 | overview | 2 |
 | plan | 2 |
-| pm | 24 |
+| pm | 26 |
 | ref-edges | 1 |
 | refs | 1 |
 | report | 2 |
@@ -47,11 +47,11 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 80 |
+| exposed_read | 81 |
 | exposed_write | 67 |
 | gated_admin | 28 |
 | gated_sensitive | 13 |
-| unsupported_bootstrap_auth | 9 |
+| unsupported_bootstrap_auth | 10 |
 | unsupported_interactive | 9 |
 | unsupported_other | 6 |
 | unsupported_shell_shaped | 2 |
@@ -61,11 +61,11 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 147 | exposed_read + exposed_write + adapted |
-| hosted default | 65 | explicit read-only private-app allowlist |
+| standalone default | 148 | exposed_read + exposed_write + adapted |
+| hosted default | 66 | explicit read-only private-app allowlist |
 | gated | 41 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
-| unsupported | 32 | not represented as direct MCP tools in v1 |
+| unsupported | 33 | not represented as direct MCP tools in v1 |
 
 ## Command Inventory
 
@@ -225,6 +225,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | pm.actions.reconcile | pm | POST | /pm/actions/{action_id}/reconcile | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | pm.bindings.create | pm | POST | /pm/bindings | gated_admin | Binds an external channel user to a workspace principal; requires explicit human administration. |
 | pm.bindings.list | pm | GET | /pm/bindings | exposed_read | Read which exact channel identities are bound to workspace principals; an operator check that sends nothing. |
+| pm.connect | pm | POST | /pm/connect | unsupported_bootstrap_auth | Local runner bootstrap is owned by anx pm serve; model tools must not claim workspace PM ownership. |
 | pm.context | pm | GET | /pm/context | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | pm.conversations.create | pm | POST | /pm/conversations | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | pm.conversations.get | pm | GET | /pm/conversations/{conversation_id} | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
@@ -235,6 +236,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | pm.decisions.dispatch | pm | POST | /pm/decisions/{decision_id}/dispatch | gated_sensitive | Human approval or consequential source handoff; explicit exposure never bypasses core authorization. |
 | pm.decisions.get | pm | GET | /pm/decisions/{decision_id} | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | pm.decisions.list | pm | GET | /pm/decisions | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
+| pm.presence | pm | GET | /pm/presence | exposed_read | Read computed workspace PM connection state, bounded display labels and timestamps without turn data or commands. |
 | pm.turns.claim | pm | POST | /pm/turns/claim | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | pm.turns.complete | pm | POST | /pm/turns/{turn_id}/complete | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | pm.turns.context | pm | POST | /pm/turns/{turn_id}/context | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |

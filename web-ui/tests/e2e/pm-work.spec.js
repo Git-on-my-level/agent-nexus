@@ -824,3 +824,162 @@ test("PM pins multiple refs in history and resolves answer chips with streamed a
     page.getByRole("navigation", { name: "Conversation history" }),
   ).toContainText("review");
 });
+
+/*
+ * A PM agent runs on the reader's own computer, so a workspace can have none.
+ * Core reports that, and the UI then offers setup in the slot Ask PM
+ * occupies rather than a conversation nothing can answer. The full state
+ * matrix lives in `pm-onboarding.spec.js`; these two keep the real work
+ * surfaces honest.
+ */
+test("a workspace with no PM offers setup instead of Ask PM", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.route("**/pm/presence", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ configured: false, connected: false }),
+    }),
+  );
+
+  await page.goto(`${root}/tasks`);
+  await expect(page.locator('[data-pm-nav="setup"]').first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Ask PM" })).toHaveCount(0);
+
+  await page.goto(`${root}/inbox?mailbox=needs-you`);
+  await expect(page.getByRole("link", { name: "Ask PM" })).toHaveCount(0);
+
+  // The conversation itself is not reachable; setup is what it leads to. The
+  // redirect can abort the navigation before it commits, which rejects `goto`
+  // although nothing is wrong; where we land is the assertion that matters.
+  await page.goto(`${root}/pm`).catch((error) => {
+    if (!String(error?.message ?? "").includes("ERR_ABORTED")) throw error;
+  });
+  await expect(page).toHaveURL(new RegExp(`${root}/pm/setup$`));
+  await expect(page.locator("[data-pm-install-command]")).toContainText("anx");
+});
+
+/*
+ * Moving work another system owns is a request a PM carries out at the source
+ * and the reader answers in the Inbox. With no PM there is nobody to carry it
+ * out, so the affordance is gone and nothing is written — rather than a
+ * proposal waiting in an Inbox that cannot show it.
+ */
+test("a source-owned move is not offered with no PM, and writes nothing", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.route("**/pm/presence", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ configured: false, connected: false }),
+    }),
+  );
+  const writes = [];
+  await page.route("**/pm/decisions", async (route) => {
+    const request = route.request();
+    if (request.method() === "POST") writes.push(request.postDataJSON());
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ items: [], has_more: false }),
+    });
+  });
+
+  // `card:release` is owned by GitHub in this fixture.
+  await page.goto(`${root}/tasks/card%3Arelease`);
+  await expect(
+    page.getByRole("heading", { name: "Release the sample workspace" }),
+  ).toBeVisible();
+
+  await page.keyboard.press("ControlOrMeta+k");
+  const palette = page.getByRole("dialog", { name: "Command palette" });
+  await expect(palette).toBeVisible();
+  await expect(palette.getByRole("option", { name: /Move to/ })).toHaveCount(0);
+  await expect(palette.getByRole("option", { name: /Ask PM/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  expect(writes).toEqual([]);
+});
+
+/*
+ * The move is attempted while presence is unknown, because refusing it on an
+ * unproven state would block a workspace that has a PM. Core settles it — and
+ * that answer has to land in the UI, not just in a toast: the shell stops
+ * waiting and offers setup, and the reader gets the UI's own explanation
+ * rather than core's raw sentence.
+ */
+test("a move attempted before the PM state loads self-corrects", async ({
+  page,
+}) => {
+  await setup(page);
+  // Presence never answers: the request is left pending on purpose.
+  await page.route("**/pm/presence", () => {});
+  await page.route("**/pm/decisions", async (route) => {
+    if (route.request().method() !== "POST") {
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ items: [], has_more: false }),
+      });
+    }
+    await route.fulfill({
+      status: 409,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: {
+          code: "pm_not_onboarded",
+          message: "PM is not onboarded.",
+        },
+      }),
+    });
+  });
+
+  // `card:release` is GitHub-owned in this fixture.
+  await page.goto(`${root}/tasks/card%3Arelease`);
+  await expect(
+    page.getByRole("heading", { name: "Release the sample workspace" }),
+  ).toBeVisible();
+
+  // The rows are offered, because nothing yet says there is no PM. `M` opens
+  // the move sub-list; its leaves are the requests themselves.
+  await page.keyboard.press("m");
+  const palette = page.getByRole("dialog", { name: "Command palette" });
+  const request = palette
+    .getByRole("option", { name: /Request move to .* at / })
+    .first();
+  await expect(request).toBeVisible();
+  await request.click();
+
+  // Core's answer, in the UI's words, with the way forward.
+  await expect(page.getByText(/this workspace has none/i)).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Set up your PM" }).first(),
+  ).toBeVisible();
+  // And recorded, so the shell stops waiting and commits to setup.
+  await expect(page.locator('[data-pm-nav="setup"]').first()).toBeVisible();
+});
+
+test("a connected PM keeps Ask PM and says nothing about setup", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.route("**/pm/presence", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        configured: true,
+        connected: true,
+        last_seen_at: new Date().toISOString(),
+        signal: "claim",
+      }),
+    }),
+  );
+  const presence = page.waitForResponse((response) =>
+    new URL(response.url()).pathname.endsWith("/pm/presence"),
+  );
+  await page.goto(`${root}/pm`);
+  await presence;
+  await expect(page.getByRole("heading", { name: "Ask PM" })).toBeVisible();
+  await expect(page.locator('[data-pm-nav="setup"]')).toHaveCount(0);
+  await expect(page.locator("[data-pm-offline-note]")).toHaveCount(0);
+});

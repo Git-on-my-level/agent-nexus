@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 226,
+  "route_count": 228,
   "routes": [
     {
       "method": "GET",
@@ -758,6 +758,11 @@
       "access_class": "workspace_business_surface"
     },
     {
+      "method": "POST",
+      "path": "/pm/connect",
+      "access_class": "workspace_business_surface"
+    },
+    {
       "method": "GET",
       "path": "/pm/context",
       "access_class": "workspace_business_surface"
@@ -816,6 +821,11 @@
       "method": "POST",
       "path": "/pm/ingress/telegram",
       "access_class": "always_public"
+    },
+    {
+      "method": "GET",
+      "path": "/pm/presence",
+      "access_class": "workspace_business_surface"
     },
     {
       "method": "POST",

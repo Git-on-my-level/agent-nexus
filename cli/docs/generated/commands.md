@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `220`
+- Commands: `222`
 
 ## `actors.create`
 
@@ -233,7 +233,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: Resolve any workspace bearer to its principal and durable actor identity, including host-derived agent details when present.
 - Concepts: `auth`, `agents`
 - Error codes: `auth_required`, `invalid_token`
-- Output: Returns `{ agent: PrincipalSelf }` for a human, derived/adopted agent, or standalone agent. The agent key is retained for existing clients.
+- Output: Returns `{ agent: PrincipalSelf, pm: PMState }` for a human, derived/adopted agent, or standalone agent. The agent key is retained for existing clients.
 
 ## `agents.me.presence`
 
@@ -1877,7 +1877,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Acknowledge a failed, unresolvable, or undeliverable action.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMAction`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 
@@ -1890,7 +1890,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Read an action and its receipts.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMAction`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 
@@ -1903,7 +1903,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: List action receipts and attempts.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMActionListResponse`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 
@@ -1916,7 +1916,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Read back an action outcome without resending.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMAction`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 
@@ -1929,7 +1929,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Bind an exact channel identity to a workspace principal.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMBinding`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 
@@ -1942,9 +1942,22 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Show which exact channel identities may talk to the PM, and with what authority, without sending anything.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMBindingListResponse`.
 - Agent notes: Workspace principal is authoritative. A binding is an operator mapping, not proof that the channel is configured or reachable; `anx pm channels doctor` checks configuration without sending.
+
+## `pm.connect`
+
+- CLI path: `pm connect`
+- HTTP: `POST /pm/connect`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Register the selected PM's local connection without queueing a turn.
+- Concepts: `agents`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `conflict`, `invalid_request`, `unavailable`
+- Output: Returns `PMPresence`.
+- Agent notes: Send safe runner and host labels only. This bootstrap operation remains available before onboarding.
 
 ## `pm.context`
 
@@ -1955,7 +1968,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Read bounded authorized PM context.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMContextResponse`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 
@@ -1968,7 +1981,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Create a durable PM conversation.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMConversation`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 
@@ -1981,7 +1994,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Read PM conversation and turns.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMConversationDetailResponse`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 
@@ -1994,7 +2007,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: List PM conversations.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMConversationListResponse`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 
@@ -2007,7 +2020,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Queue a contextual PM turn.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMTurn`.
 - Agent notes: Workspace principal is authoritative. Channel ingress uses this same turn pipeline; Telegram and Discord messages become turns with `origin` set. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 
@@ -2020,7 +2033,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Answer and authorize a scoped decision.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMDecision`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 
@@ -2033,7 +2046,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Propose a scoped PM decision.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `human_proposal_pending`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `human_proposal_pending`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMDecision`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 
@@ -2046,7 +2059,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Hand off an authorized source action.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMAction`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 
@@ -2059,7 +2072,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Read a PM decision.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMDecision`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 
@@ -2072,9 +2085,22 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: List durable PM decisions.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMDecisionListResponse`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+
+## `pm.presence`
+
+- CLI path: `pm presence`
+- HTTP: `GET /pm/presence`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Check whether a PM runner is connected before requesting help.
+- Concepts: `agents`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `unavailable`
+- Output: Returns `PMPresence`.
+- Agent notes: Same computed PM state included in agents me. Accepted local connections, claims and lease heartbeats count; connected expires after 90 seconds. Labels never contain runner commands. Upgrades preserve prior PM activity as durable offline onboarding; existing proposals remain readable and answerable independently of onboarding. New questions and proposals require onboarding.
 
 ## `pm.turns.claim`
 
@@ -2098,7 +2124,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Record a selected PM agent response.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `lease_required`, `lease_mismatch`, `busy`, `unavailable`
+- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `lease_required`, `lease_mismatch`, `busy`, `unavailable`
 - Output: Returns `PMTurn`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 
@@ -2111,7 +2137,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Read requesting principal context as selected PM agent.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `lease_required`, `lease_mismatch`, `busy`, `unavailable`
+- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `lease_required`, `lease_mismatch`, `busy`, `unavailable`
 - Output: Returns `PMContextResponse`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 
@@ -2124,7 +2150,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Record a selected PM agent proposal.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `human_proposal_pending`, `turn_closed`, `lease_required`, `lease_mismatch`, `busy`, `unavailable`
+- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `human_proposal_pending`, `turn_closed`, `lease_required`, `lease_mismatch`, `busy`, `unavailable`
 - Output: Returns `PMDecision`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 
@@ -2137,7 +2163,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Record a selected PM agent failure reason without inventing a reply.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `lease_required`, `lease_mismatch`, `busy`, `unavailable`
+- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `lease_required`, `lease_mismatch`, `busy`, `unavailable`
 - Output: Returns `PMTurn`.
 - Agent notes: Selected PM agent only. An active lease is required and lease_token must match. Missing tokens return 409 lease_required; stale or expired lease tokens return 409 lease_mismatch and require claiming again. Identical terminal failure replays with the token that failed the turn return 200 without mutation, including after the deadline; a different reason returns 409 turn_closed; a stale or missing replay token returns 409 lease_mismatch explaining that the turn is already failed and no retry is needed.
 
@@ -2150,7 +2176,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Read a PM conversation turn.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMTurn`.
 - Agent notes: Only the requesting conversation actor can read this turn. Past-deadline open turns are failed before returning.
 
@@ -2176,7 +2202,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Return interrupted work to the queue for another claim.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `lease_mismatch`, `turn_not_claimed`, `turn_closed`, `busy`, `unavailable`
+- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `lease_mismatch`, `turn_not_claimed`, `turn_closed`, `busy`, `unavailable`
 - Output: Returns `PMTurn`.
 - Agent notes: Selected PM agent only; runner_id and lease_token must match the unexpired lease owner.
 
