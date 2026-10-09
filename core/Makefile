@@ -80,12 +80,14 @@ test:
 	@go test -p=4 -parallel=4 -timeout=$(GO_TEST_TIMEOUT) ./...
 
 # Advisory only: keep scale/latency tests out of default and short runs.
+# The separately sharded TestPerformanceRoutes lane stays outside this target.
 # Callers can preserve route shard/worker/report environment variables.
+PERF_TEST_PATTERN ?= ^(TestPerformanceAskDeliveryReadBudgets|TestPerformanceAskCompatibilityBoardLookupBudget|TestPerformancePlanAndReportReadsHaveBoundedQueryCounts|TestPerformanceReceiptStreamTickBudgetIndependentOfHistory|TestPerformanceReceiptStreamHiddenHistoryTickTiming|TestPerformanceSourceURLResolutionBoundsTotalReturnedRows|TestPerformanceOverviewSmallWorkspaceLatency|TestPerformanceOverviewPersonalSizedWorkspaceLatency|TestPerformanceOverviewDenseAccessWorkspaceLatency|TestPerformanceInboxStreamTickHiddenVolumeBudget|TestPerformancePlanReadsStayBoundedAtMaximumFanOut|TestResourceAccessCommonReadPerformance|TestResourceAccessLargeDenialPrepareAndPMRoutes)$$
 PERF_TEST_ARGS ?=
 PERF_TEST_PACKAGES ?= ./internal/primitives ./internal/server ./internal/storage
 
 test-perf:
-	@ANX_PERFORMANCE_TEST=1 go test -p=1 -parallel=1 -timeout=30m -count=1 $(PERF_TEST_PACKAGES) -run '^TestPerformance|^TestResourceAccess(CommonReadPerformance|LargeDenialPrepareAndPMRoutes)$$' $(PERF_TEST_ARGS)
+	@ANX_PERFORMANCE_TEST=1 go test -p=1 -parallel=1 -timeout=30m -count=1 $(PERF_TEST_PACKAGES) -run '$(PERF_TEST_PATTERN)' $(PERF_TEST_ARGS)
 
 check: fmt vet test check-offline check-linux-observation
 
