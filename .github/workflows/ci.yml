@@ -213,7 +213,7 @@ jobs:
 
       - name: Run core partition
         working-directory: core
-        # Two fixture tests run together; two CPUs measured faster for this package.
+        # Keep this fixture package at two CPUs; four CPUs did not improve it.
         env:
           GOMAXPROCS: "2"
           GOFLAGS: "-p=4 -count=1"
