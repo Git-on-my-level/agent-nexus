@@ -422,15 +422,17 @@ test("Overview keeps its skeleton while the snapshot loads", async ({
 
 test("failed snapshot reports an error", async ({ page }) => {
   test.skip(BEFORE);
+  test.setTimeout(60_000);
   await installOverview(page, { failure: true });
   await page.goto(OVERVIEW);
-  // Each section says it could not load; the band says the same thing in one
-  // line rather than claiming nothing is waiting.
+  await expect(page.getByText("Reconnecting…", { exact: true })).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText(
+    "Overview could not be loaded",
+    { timeout: 45_000 },
+  );
   await expect(
-    page.getByRole("alert").filter({ hasText: "Initiatives are unavailable" }),
+    page.getByRole("button", { name: "Retry", exact: true }),
   ).toBeVisible();
-  const band = page.locator('[data-overview-section="urgent"]');
-  await expect(band).toContainText("could not be read");
 });
 
 test("compact dashboard ignores document filter state", async ({ page }) => {
@@ -474,4 +476,25 @@ test("truncated idle agent sample visibly qualifies zero counts", async ({
   await expect(page.locator("[data-overview-agents='working']")).toContainText(
     "0+",
   );
+});
+
+test("Overview restores its snapshot on reload while revalidation is held", async ({
+  page,
+}) => {
+  await installOverview(page);
+  await page.goto(OVERVIEW);
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(6);
+  await page.route("**/overview?**", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 8000));
+    await route.fallback();
+  });
+  const navigatedAt = Date.now();
+  await page.reload();
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(6, { timeout: 3000 });
+  console.log("Overview cached reload paint ms:", Date.now() - navigatedAt);
+  await expect(page.getByText("Refreshing…", { exact: true })).toBeVisible();
 });

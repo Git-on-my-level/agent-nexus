@@ -887,3 +887,22 @@ for (const viewport of AUDIT_VIEWPORTS) {
     });
   });
 }
+
+test("Tasks restores its list on reload while revalidation is held", async ({
+  page,
+}) => {
+  await installTasksApi(page);
+  await page.goto(TASKS);
+  await expect(
+    page.getByText(LONG_TITLE, { exact: true }).first(),
+  ).toBeVisible();
+  await page.route("**/work?**", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 8000));
+    await route.fallback();
+  });
+  await page.reload();
+  await expect(page.getByText(LONG_TITLE, { exact: true }).first()).toBeVisible(
+    { timeout: 3000 },
+  );
+  await expect(page.getByText("Refreshing…", { exact: true })).toBeVisible();
+});

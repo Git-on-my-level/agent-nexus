@@ -1,3 +1,8 @@
+import { readerScope, readerScopeKey } from "$lib/readerScope.js";
+import {
+  readWorkspaceView,
+  writeWorkspaceView,
+} from "$lib/workspaceViewCache.js";
 import { humanActorIdSet } from "$lib/humanActors.js";
 import { get, writable } from "svelte/store";
 import {
@@ -37,10 +42,17 @@ export const inboxNeedsYouCount = writable(
   }),
 );
 
+let countScope = readerScopeKey();
+readerScope.subscribe((scope) => {
+  if (scope === countScope) return;
+  countScope = scope;
+  inboxNeedsYouCount.set({ workspace: "", count: null, truncated: false });
+});
+
 const REFRESH_DELAY_MS = 1_500;
 
 let pageClaims = 0;
-/** @type {null | { workspace: string, users: number, stop: () => void, refresh: () => void }} */
+/** @type {null | { workspace: string, scope: string, users: number, stop: () => void, refresh: () => void }} */
 let controller = null;
 
 /** The Inbox page owns the count while mounted. Returns a release function. */
@@ -65,7 +77,9 @@ export function publishInboxCount(workspace, count, truncated = false) {
 }
 
 async function fetchSources() {
+  const scope = readerScopeKey();
   const results = await loadInboxSources({ withHistory: false });
+  if (scope !== readerScopeKey()) return null;
   /*
    * A count built on a failed source would claim "clear" when it is not; keep
    * the last number rather than show a wrong one.
@@ -81,6 +95,19 @@ async function fetchSources() {
   ) {
     return null;
   }
+  if (
+    results.slice(0, 5).every((result) => result.complete && !result.reason)
+  ) {
+    const previous = readWorkspaceView(`${scope}:inbox`);
+    writeWorkspaceView(`${scope}:inbox`, [
+      ...results.slice(0, 5),
+      previous?.[5] || results[5],
+    ]);
+  }
+  return sourcesFromResults(results);
+}
+
+function sourcesFromResults(results) {
   const value = (index, key) => results[index].value?.[key] || [];
   return {
     decisions: value(0, "items"),
@@ -127,9 +154,13 @@ function countFrom(sources, overlay) {
  * Returns a stop function.
  */
 export function startInboxCount(workspace) {
+  const scope = readerScopeKey();
   const key = String(workspace ?? "").trim();
   if (!key) return () => {};
-  if (controller && controller.workspace !== key) {
+  if (
+    controller &&
+    (controller.workspace !== key || controller.scope !== scope)
+  ) {
     controller.stop();
     controller = null;
   }
@@ -140,10 +171,12 @@ export function startInboxCount(workspace) {
     let timer = null;
     let inflight = false;
     let again = false;
-    let sources = null;
+    const cached = readWorkspaceView(`${scope}:inbox`);
+    let sources = cached ? sourcesFromResults(cached) : null;
     let streamPartial = false;
     const publish = () => {
-      if (stopped || pageClaims || !sources) return;
+      if (stopped || pageClaims || !sources || scope !== readerScopeKey())
+        return;
       publishInboxCount(
         key,
         countFrom(sources, get(inboxResponseOverlay)),
@@ -194,6 +227,7 @@ export function startInboxCount(workspace) {
     const unsubscribeOverlay = inboxResponseOverlay.subscribe(publish);
     controller = {
       workspace: key,
+      scope,
       users: 1,
       refresh: schedule,
       stop: () => {
@@ -209,10 +243,12 @@ export function startInboxCount(workspace) {
     // Let the route mount and claim its count before starting five background
     // reads. On other pages these badge reads should follow the primary data,
     // rather than competing for core's SQLite connection on first paint.
+    publish();
     schedule();
   }
+  const owner = controller;
   return () => {
-    if (!controller || controller.workspace !== key) return;
+    if (!controller || controller !== owner) return;
     controller.users -= 1;
     if (controller.users <= 0) {
       controller.stop();

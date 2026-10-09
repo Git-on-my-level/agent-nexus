@@ -1,6 +1,8 @@
 <script>
   import { inboxNeedsYouCount, startInboxCount } from "$lib/inboxCount.js";
 
+  import { readerScope } from "$lib/readerScope.js";
+
   /**
    * The Needs you count beside the Inbox nav item. Zero renders nothing: an
    * empty inbox has no badge, not a grey "0".
@@ -8,6 +10,7 @@
   let { workspace = "", enabled = false, variant = "sidebar" } = $props();
 
   $effect(() => {
+    void $readerScope;
     if (!enabled || !workspace) return;
     return startInboxCount(workspace);
   });

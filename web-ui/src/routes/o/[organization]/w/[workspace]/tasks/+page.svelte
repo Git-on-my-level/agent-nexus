@@ -1,5 +1,5 @@
 <script>
-  import { onMount, tick } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import { page } from "$app/stores";
   import { goto } from "$app/navigation";
   import { coreClient } from "$lib/coreClient";
@@ -60,6 +60,16 @@
     requestedDecisionMap,
   } from "$lib/taskBoardMove.js";
 
+  import { readerScopeKey } from "$lib/readerScope.js";
+  import {
+    readWorkspaceView,
+    writeWorkspaceView,
+  } from "$lib/workspaceViewCache.js";
+  import { reliableRead } from "$lib/reliableRead.js";
+  let listController;
+  let pendingLiveRead = null;
+  let listCacheKey = $state("");
+  let reconnecting = $state(false);
   let records = $state([]),
     loading = $state(true),
     error = $state(""),
@@ -309,7 +319,8 @@
     // Re-read when a local filter is toggled; neither is part of `filters`,
     // and both need more than the first page to narrow honestly.
     const local = humanOnly || initiativesOnly;
-    if (loaded) void load(false, JSON.parse(key), { scanAll: local });
+    if (loaded)
+      void untrack(() => load(false, JSON.parse(key), { scanAll: local }));
   });
 
   function queryHref(changes) {
@@ -337,6 +348,29 @@
     query = filters,
     { live = false, scanAll = false } = {},
   ) {
+    if (live && loading) {
+      pendingLiveRead = { query, scanAll };
+      return;
+    }
+    if (!live) pendingLiveRead = null;
+    const scope = readerScopeKey();
+    const key = `${scope}:tasks:${JSON.stringify(query)}:${scanAll}`;
+    if (!append && listCacheKey !== key) {
+      const cached = readWorkspaceView(key);
+      records = cached?.records || [];
+      nextCursor = cached?.nextCursor || "";
+      listCacheKey = key;
+    }
+    listController?.abort();
+    listController = new AbortController();
+    const signal = listController.signal;
+    const read = (params) =>
+      reliableRead(() => coreClient.listWork({ ...params, summary: 1 }), {
+        signal,
+        onRetry: () => {
+          reconnecting = true;
+        },
+      });
     const id = ++requestId;
     loading = true;
     if (!live) error = "";
@@ -345,13 +379,13 @@
         const rows = [];
         let cursor = "";
         while (rows.length < WORK_ROW_CAP) {
-          const result = await coreClient.listWork({
+          const result = await read({
             ...query,
             ...SUMMARY_READ,
             limit: Math.min(WORK_PAGE_LIMIT, WORK_ROW_CAP - rows.length),
             cursor: cursor || undefined,
           });
-          if (id !== requestId) return;
+          if (id !== requestId || scope !== readerScopeKey()) return;
           if (!Array.isArray(result.work))
             throw new Error(
               "The workspace returned an invalid work list. Reload to try again.",
@@ -360,18 +394,20 @@
           cursor = result.next_cursor || "";
           if (!cursor) break;
         }
-        if (id !== requestId) return;
+        if (id !== requestId || scope !== readerScopeKey()) return;
         const capped = rows.slice(0, WORK_ROW_CAP);
         records = [
           ...new Map(capped.map((work) => [workKey(work), work])).values(),
         ];
         nextCursor = cursor && rows.length >= WORK_ROW_CAP ? cursor : "";
         error = "";
+        reconnecting = false;
+        writeWorkspaceView(key, { records, nextCursor });
         if (!decisionsLoaded) void loadDecisions();
         if (!boardsRequested) void loadBoards();
         return;
       }
-      const result = await coreClient.listWork({
+      const result = await read({
         ...query,
         ...SUMMARY_READ,
         // A live re-read keeps as many rows as the operator already paged in.
@@ -380,7 +416,7 @@
           : PAGE_SIZE,
         cursor: append ? nextCursor : undefined,
       });
-      if (id !== requestId) return;
+      if (id !== requestId || scope !== readerScopeKey()) return;
       if (!Array.isArray(result.work))
         throw new Error(
           "The workspace returned an invalid work list. Reload to try again.",
@@ -391,15 +427,28 @@
       ];
       nextCursor = result.next_cursor || "";
       error = "";
+      reconnecting = false;
+      writeWorkspaceView(key, { records, nextCursor });
       if (!decisionsLoaded) void loadDecisions();
       if (!boardsRequested) void loadBoards();
     } catch (err) {
-      if (id === requestId) {
+      if (id === requestId && scope === readerScopeKey() && !signal.aborted) {
+        reconnecting = false;
         error = errorMessage(err);
         sessionExpired = isSessionExpired(err);
       }
     } finally {
-      if (id === requestId) loading = false;
+      if (id === requestId) {
+        loading = false;
+        if (pendingLiveRead && !signal.aborted) {
+          const pending = pendingLiveRead;
+          pendingLiveRead = null;
+          void load(false, pending.query, {
+            live: true,
+            scanAll: pending.scanAll,
+          });
+        }
+      }
     }
   }
   async function loadBoards() {
@@ -818,6 +867,7 @@
     });
     return () => {
       disposed = true;
+      listController?.abort();
       requestId++;
       clearInterval(timer);
       clearTimeout(humanLiveTimer);
@@ -1174,6 +1224,11 @@
     />
   {/if}
 
+  {#if reconnecting || (loading && records.length)}
+    <p class="text-micro text-fg-muted" role="status">
+      {reconnecting ? "Reconnecting…" : "Refreshing…"}
+    </p>
+  {/if}
   {#if error}
     <StateError
       title="Tasks could not be refreshed"

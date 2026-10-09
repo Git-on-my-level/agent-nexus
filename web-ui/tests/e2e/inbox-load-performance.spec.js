@@ -749,7 +749,7 @@ test("a never-resolving unread feed cannot hold asks or revive an answered task"
   await expect(
     page.getByText("Inbox loading timed out", { exact: false }),
   ).toHaveCount(0);
-  // Let the five-second overall deadline finish; the safe snapshot stays.
+  // The old five-second deadline must no longer terminate a cold read.
   await expect(page.locator("[data-inbox-loading]")).toHaveCount(0);
   await page.waitForTimeout(5200);
   await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible();
@@ -762,6 +762,7 @@ test("a never-resolving unread feed cannot hold asks or revive an answered task"
 test("stalled completed history keeps work suppressed even after the final deadline", async ({
   page,
 }) => {
+  test.setTimeout(70_000);
   const gate = { promise: new Promise(() => {}) };
   await installScaleCore(page, {
     latency: 0,
@@ -780,7 +781,7 @@ test("stalled completed history keeps work suppressed even after the final deadl
     page.getByText(
       "This item could not be loaded. Retry or open the task directly.",
     ),
-  ).toBeVisible({ timeout: 10_000 });
+  ).toBeVisible({ timeout: 55_000 });
   await expect(
     page.getByTestId("inbox-row-task:card:possibly-answered"),
   ).toHaveCount(0);
@@ -895,6 +896,7 @@ for (const failWork of [false, true]) {
   test(`an absent deep link reports ${failWork ? "an incomplete load" : "absence after loading"}`, async ({
     page,
   }) => {
+    test.setTimeout(65_000);
     const gate = deferred();
     await installScaleCore(page, {
       latency: 0,
@@ -905,7 +907,7 @@ for (const failWork of [false, true]) {
     await page.goto(`${ROOT}/inbox?item=task:card:absent`);
     await expect(
       page.getByText("Loading requested item…", { exact: true }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: failWork ? 45_000 : 10_000 });
     await expect(
       page.getByText("This item is not in the loaded mailbox."),
     ).toHaveCount(0);
@@ -917,7 +919,7 @@ for (const failWork of [false, true]) {
           : "This item is not in the loaded mailbox.",
         { exact: true },
       ),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: failWork ? 45_000 : 10_000 });
   });
 }
 
@@ -978,6 +980,7 @@ for (const onlyStale of [false, true]) {
 test("an arrived verified receipt stays handled while the next action page stalls", async ({
   page,
 }) => {
+  test.setTimeout(70_000);
   await installScaleCore(page, {
     latency: 0,
     decisions: [
@@ -1015,8 +1018,8 @@ test("an arrived verified receipt stays handled while the next action page stall
   ).toBeVisible();
   await page.getByRole("link", { name: /^Needs you/ }).click();
   await expect(
-    page.getByText("Inbox loading timed out", { exact: false }).first(),
-  ).toBeVisible({ timeout: 10_000 });
+    page.getByRole("button", { name: "Retry", exact: true }),
+  ).toBeVisible({ timeout: 55_000 });
   await expect(
     page.getByTestId("inbox-row-decision:known-receipt"),
   ).toHaveCount(0);
@@ -1060,4 +1063,108 @@ test("an expired session on a later work page retains rows and offers sign-in re
   await expect(
     page.getByText("Not everything is loaded; the counts are lower bounds."),
   ).toBeVisible();
+});
+
+test("a persisted visit paints immediately while Inbox is slow", async ({
+  page,
+}) => {
+  await installScaleCore(page, { latency: 0, workRecords: [] });
+  await page.goto(`${ROOT}/inbox`);
+  await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        localStorage.getItem("anx.workspace-views.v1")?.includes("scale-ask"),
+      ),
+    )
+    .toBe(true);
+  await page.route("**/inbox?**", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 8000));
+    await route.fallback();
+  });
+  const navigatedAt = Date.now();
+  await page.reload();
+  await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible({
+    timeout: 3000,
+  });
+  console.log("Inbox cached reload paint ms:", Date.now() - navigatedAt);
+  await expect(page.getByText("Refreshing…", { exact: true })).toBeVisible();
+});
+
+test("a cold Inbox keeps the known badge as one skeleton until confirmed", async ({
+  page,
+}) => {
+  await installScaleCore(page, { latency: 0, workRecords: [] });
+  await page.goto(`${ROOT}/tasks`);
+  await expect(page.locator("[data-inbox-nav-count]").first()).toHaveText("1");
+  // Simulate a badge without a cached payload (for example storage was denied).
+  await page.evaluate(() => localStorage.removeItem("anx.workspace-views.v1"));
+  await page.route("**/inbox?**", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 8000));
+    await route.fallback();
+  });
+  // A full reload clears memory; inject just the last count through the existing store.
+  await page.evaluate(async () => {
+    const cache = await import("/src/lib/workspaceViewCache.js");
+    cache.clearWorkspaceViews();
+  });
+  await page.getByRole("link", { name: "Inbox", exact: true }).first().click();
+  await expect(page.locator("[data-inbox-loading]")).toBeVisible();
+  await expect(page.locator("[data-inbox-loading] > div > div")).toHaveCount(1);
+  await expect(
+    page.getByText("No items loaded yet.", { exact: true }),
+  ).toHaveCount(0);
+  await expect(page.locator("[data-inbox-nav-count]").first()).toHaveText("1");
+});
+
+test("a 504 followed by success reconnects without a red error", async ({
+  page,
+}) => {
+  await installScaleCore(page, { latency: 0, workRecords: [] });
+  let attempts = 0;
+  await page.route("**/inbox?**", async (route) => {
+    if (
+      new URL(route.request().url()).searchParams.get("status") === "open" &&
+      attempts++ === 0
+    ) {
+      await route.fulfill({
+        status: 504,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { message: "gateway unavailable" } }),
+      });
+    } else await route.fallback();
+  });
+  await page.goto(`${ROOT}/inbox`);
+  await expect(page.getByText("Reconnecting…", { exact: true })).toBeVisible();
+  await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Retry", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("No items loaded yet.", { exact: true }),
+  ).toHaveCount(0);
+});
+
+test("sustained 504 failures eventually offer Retry while keeping skeletons", async ({
+  page,
+}) => {
+  test.setTimeout(65_000);
+  await installScaleCore(page, { latency: 0, workRecords: [] });
+  await page.route("**/inbox?**", (route) =>
+    route.fulfill({
+      status: 504,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { message: "gateway unavailable" } }),
+    }),
+  );
+  await page.goto(`${ROOT}/inbox`);
+  await expect(page.getByText("Reconnecting…", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Retry", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Retry", exact: true }),
+  ).toBeVisible({ timeout: 45_000 });
+  await expect(page.locator("[data-inbox-loading]")).toBeVisible();
+  await expect(page.getByText("You're clear.", { exact: true })).toHaveCount(0);
 });

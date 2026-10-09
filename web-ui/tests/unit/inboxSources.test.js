@@ -113,7 +113,7 @@ describe("Inbox sources", () => {
         progress[0][4].value.items,
       ).some((item) => item.id === "ask"),
     ).toBe(false);
-    await vi.advanceTimersByTimeAsync(4200);
+    await vi.advanceTimersByTimeAsync(44_200);
     expect((await pending)[5].status).toBe("rejected");
     expect(vi.getTimerCount()).toBe(0);
   });
@@ -176,7 +176,7 @@ describe("Inbox sources", () => {
         }),
         onProgress: (snapshot) => progress.push(snapshot),
       });
-      await vi.advanceTimersByTimeAsync(5000);
+      await vi.advanceTimersByTimeAsync(45_000);
       const result = await pending;
       expect(progress.length).toBeGreaterThan(0);
       for (const snapshot of [...progress, result])
@@ -204,7 +204,7 @@ describe("Inbox sources", () => {
     await pending;
     const count = progress.length;
     finish({ work: [], next_cursor: "never-request" });
-    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(45_000);
     expect(progress).toHaveLength(count);
     expect(listWork).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);

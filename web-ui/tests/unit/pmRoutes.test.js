@@ -121,6 +121,7 @@ import {
   flushInboxResponse,
   resetInboxResponseQueue,
 } from "../../src/lib/inboxResponseQueue.js";
+import { clearWorkspaceViews } from "../../src/lib/workspaceViewCache.js";
 import WorkViews from "../../src/lib/components/pm/WorkViews.svelte";
 
 const work = (ref, title) => ({
@@ -138,6 +139,7 @@ function deferred() {
   return { promise, resolve };
 }
 beforeEach(() => {
+  clearWorkspaceViews();
   vi.clearAllMocks();
   for (const mock of Object.values(client)) mock.mockReset();
   navigation.guards.length = 0;
@@ -247,6 +249,158 @@ describe("PM operator interactions", () => {
       screen.getByText(/Showing the previously loaded records/),
     ).toBeTruthy();
   });
+  it("queues the final Tasks event arriving during an active read", async () => {
+    let emit;
+    client.streamEvents.mockImplementation(
+      ({ onEvent, signal }) =>
+        new Promise((resolve) => {
+          emit = onEvent;
+          signal?.addEventListener("abort", resolve);
+        }),
+    );
+    const slow = deferred();
+    client.listWork.mockReturnValueOnce(slow.promise).mockResolvedValue({
+      work: [work("card:latest", "Latest work")],
+      next_cursor: "",
+    });
+    render(WorkPage);
+    await waitFor(() => expect(client.listWork).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(emit).toBeTypeOf("function"));
+    emit({
+      id: "during-read",
+      event: "event",
+      data: {
+        event: {
+          id: "during-read",
+          type: "card_moved",
+          ts: new Date().toISOString(),
+          refs: ["card:latest"],
+        },
+      },
+    });
+    // Stream coalescing delivers while the first read remains outstanding.
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    slow.resolve({ work: [work("card:old", "Old snapshot")], next_cursor: "" });
+    await screen.findByText("Latest work", {}, { timeout: 3000 });
+    expect(client.listWork).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not replay a queued live read for an obsolete Tasks filter", async () => {
+    let emit;
+    client.streamEvents.mockImplementation(
+      ({ onEvent, signal }) =>
+        new Promise((resolve) => {
+          emit = onEvent;
+          signal?.addEventListener("abort", resolve);
+        }),
+    );
+    const slow = deferred();
+    client.listWork.mockImplementation(({ q }) =>
+      q === "new"
+        ? Promise.resolve({
+            work: [work("card:new", "New filter result")],
+            next_cursor: "",
+          })
+        : slow.promise,
+    );
+    render(WorkPage);
+    await waitFor(() => expect(client.listWork).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(emit).toBeTypeOf("function"));
+    emit({
+      id: "queued",
+      event: "event",
+      data: {
+        event: {
+          id: "queued",
+          type: "card_moved",
+          ts: new Date().toISOString(),
+          refs: ["card:old"],
+        },
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    state.route("/tasks?q=new");
+    await screen.findByText("New filter result");
+    slow.resolve({
+      work: [work("card:old", "Old filter result")],
+      next_cursor: "",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText("Old filter result")).toBeNull();
+    expect(screen.getByText("New filter result")).toBeTruthy();
+    expect(client.listWork).toHaveBeenCalledTimes(2);
+  });
+
+  it("queues the final Inbox event arriving during an active read", async () => {
+    state.route("/inbox");
+    let emit;
+    client.streamEvents.mockImplementation(
+      ({ onEvent, signal }) =>
+        new Promise((resolve) => {
+          emit = onEvent;
+          signal?.addEventListener("abort", resolve);
+        }),
+    );
+    const slow = deferred();
+    client.getHomeUnread
+      .mockReturnValueOnce(slow.promise)
+      .mockResolvedValue({ groups: [] });
+    render(InboxPage);
+    await waitFor(() => expect(client.getHomeUnread).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(emit).toBeTypeOf("function"));
+    emit({
+      id: "inbox-during-read",
+      event: "event",
+      data: {
+        event: {
+          id: "inbox-during-read",
+          type: "card_moved",
+          ts: new Date().toISOString(),
+          refs: ["card:latest"],
+        },
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    slow.resolve({ groups: [] });
+    await waitFor(() => expect(client.getHomeUnread).toHaveBeenCalledTimes(2), {
+      timeout: 3000,
+    });
+  });
+
+  it("committing an Inbox answer during a slow load still refreshes sources", async () => {
+    state.route("/inbox");
+    const slow = deferred();
+    client.getHomeUnread
+      .mockReturnValueOnce(slow.promise)
+      .mockResolvedValue({ groups: [] });
+    client.listInboxItems.mockImplementation(async ({ status }) => ({
+      items:
+        status === "open"
+          ? [
+              {
+                id: "inbox:ask-one",
+                kind: "ask",
+                title: "Choose a path",
+                response_proposals: ["Proceed"],
+                source_event_time: new Date().toISOString(),
+              },
+            ]
+          : [],
+    }));
+    client.respondInboxItem.mockResolvedValue({ event: { id: "answered" } });
+    const { container } = render(InboxPage);
+    await screen.findByRole("heading", { name: "Choose a path" });
+    await fireEvent.click(container.querySelector('[data-inbox-proposal="1"]'));
+    await new Promise((resolve) =>
+      setTimeout(resolve, PROPOSAL_FLASH_MS + 100),
+    );
+    await flushInboxResponse();
+    await waitFor(() => expect(client.getHomeUnread).toHaveBeenCalledTimes(2), {
+      timeout: 3000,
+    });
+    slow.resolve({ groups: [] });
+  });
+
   it.each([
     [{ health: "stalled" }, "Stale"],
     [{ health: "on_track", health_state: "done" }, "Done"],
