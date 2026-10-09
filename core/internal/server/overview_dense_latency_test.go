@@ -24,7 +24,9 @@ import (
 
 // Reproduce payload-derived edge density, not just live-card cardinality.
 // All canonical imports pass through the production SQLite write triggers.
-func TestOverviewDenseAccessWorkspaceLatency(t *testing.T) {
+func TestPerformanceOverviewDenseAccessWorkspaceLatency(t *testing.T) {
+	requirePerformanceTest(t)
+	// Serial: performance samples must not compete with parallel fixtures.
 	if testing.Short() {
 		t.Skip("dense full-stack fixture")
 	}
@@ -308,9 +310,7 @@ func TestOverviewDenseAccessWorkspaceLatency(t *testing.T) {
 								}
 							}
 						}
-						if strings.Contains(string(body), "PrivateDenseSecret") || strings.Contains(string(body), "private-dense-inbox") {
-							t.Fatal("private work leaked")
-						}
+						assertOverviewPrivatePayloadExcluded(t, body)
 						if i > 1 && i < 6 {
 							samples = append(samples, elapsed)
 						}
@@ -348,4 +348,103 @@ func denseEvidencePayload(source int) string {
 	}
 	raw, _ := json.Marshal(map[string]any{"aliases": values})
 	return string(raw)
+}
+
+// Keep payload disclosure and epoch invalidation in the gate without the ledger scale.
+func TestOverviewPrivatePayloadExcludedAcrossEpochsAndInboxReaders(t *testing.T) {
+	t.Parallel()
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	ctx := context.Background()
+	reader := seedMachinePrincipalForLockoutTest(t, ctx, env.workspace.DB(), "dense-reader", "dense-reader-actor", "dense-reader", "dense-token")
+	store := env.primitiveStore.(*primitives.Store)
+	board, err := store.CreateBoard(ctx, reader.ActorID, map[string]any{"title": "Public portfolio"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	public := anyString(board["thread_id"])
+	if _, err = store.CreateWork(ctx, reader.ActorID, anyString(board["id"]), map[string]any{"title": "Visible work"}); err != nil {
+		t.Fatal(err)
+	}
+	private := seedStreamPrivacyThread(t, store, "private-owner", true)
+	items := make([]primitives.DerivedInboxItem, 0, 32)
+	for i := 0; i < 32; i++ {
+		item := streamPrivacyInboxItem(private, fmt.Sprintf("private-dense-inbox-%d", i), "PrivateDenseSecret")
+		item.Data["title"] = "PrivateDenseSecret"
+		items = append(items, item)
+	}
+	seedStreamPrivacyInbox(t, store, private, items...)
+	items = nil
+	for i := 0; i < 4; i++ {
+		items = append(items, streamPrivacyInboxItem(public, fmt.Sprintf("visible-dense-inbox-%d", i), "Public ask"))
+	}
+	seedStreamPrivacyInbox(t, store, public, items...)
+	assertPrivateControls := func(t *testing.T) {
+		t.Helper()
+		var privateControls int
+		if err := env.workspace.DB().QueryRow(`SELECT count(*) FROM derived_inbox_items WHERE thread_id=? AND json_extract(data_json,'$.title')='PrivateDenseSecret'`, private).Scan(&privateControls); err != nil || privateControls != 32 {
+			t.Fatalf("missing private payload controls: %d %v", privateControls, err)
+		}
+	}
+	assertPrivateControls(t)
+	runtime, err := newOnboardedPMRuntime(t, env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(NewHandler("test", WithPrimitiveStore(store), WithAuthStore(env.authStore), WithActorRegistry(env.registry), WithRunStore(commandcenter.NewStore(env.workspace.DB(), commandcenter.SQLIdentities{DB: env.workspace.DB()})), WithPMRuntime(runtime)))
+	t.Cleanup(server.Close)
+	for _, mode := range []string{"legacy", "scoped"} {
+		if mode == "scoped" {
+			for done := false; !done; {
+				done, err = env.workspace.MaintainScopeInboxBatch(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			primitives.WithScopedInboxReader(true)(store)
+		}
+		t.Run(mode, func(t *testing.T) {
+			assertPrivateControls(t)
+			for _, invalidated := range []bool{false, true} {
+				if invalidated {
+					if _, err := env.workspace.DB().Exec(`UPDATE resource_access_epoch SET version=version+1`); err != nil {
+						t.Fatal(err)
+					}
+				}
+				for _, path := range []string{"/inbox", "/overview", "/overview?work_view=summary"} {
+					req, err := http.NewRequest("GET", server.URL+path, nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+					req.Header.Set("Authorization", "Bearer "+reader.AccessToken)
+					resp, err := server.Client().Do(req)
+					if err != nil {
+						t.Fatal(err)
+					}
+					body, err := io.ReadAll(resp.Body)
+					resp.Body.Close()
+					if err != nil || resp.StatusCode != http.StatusOK {
+						t.Fatalf("%s status=%d body=%s err=%v", path, resp.StatusCode, body, err)
+					}
+					assertOverviewPrivatePayloadExcluded(t, body)
+					var payload map[string]any
+					if err := json.Unmarshal(body, &payload); err != nil {
+						t.Fatal(err)
+					}
+					if path == "/inbox" && len(payload["items"].([]any)) != 4 {
+						t.Fatalf("lost public inbox items: %s", body)
+					}
+					if strings.HasPrefix(path, "/overview") && len(payload["work"].(map[string]any)["items"].([]any)) != 1 {
+						t.Fatalf("lost public work: %s", body)
+					}
+				}
+			}
+		})
+	}
+}
+
+func assertOverviewPrivatePayloadExcluded(t *testing.T, body []byte) {
+	t.Helper()
+	if strings.Contains(string(body), "PrivateDenseSecret") || strings.Contains(string(body), "private-dense-inbox") {
+		t.Fatal("private work leaked")
+	}
 }

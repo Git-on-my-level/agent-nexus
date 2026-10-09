@@ -5,15 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
-
-	"agent-nexus-core/internal/storage"
 )
 
 func TestResourceAccessResponseClaimsFollowCurrentOwnership(t *testing.T) {
+	t.Parallel()
 	for _, relation := range []string{"request", "response", "stored-payload"} {
 		t.Run(relation, func(t *testing.T) {
 			ctx := context.Background()
-			ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+			ws, err := initializeTestWorkspace(ctx, t.TempDir())
 			if err != nil {
 				t.Fatal(err)
 			}

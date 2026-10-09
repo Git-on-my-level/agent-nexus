@@ -10,13 +10,13 @@ import (
 
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/storage"
 	"agent-nexus-core/internal/testsql"
 )
 
 func TestOverviewAndReportBudgetsIgnoreInaccessibleWork(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,8 +95,9 @@ func TestOverviewAndReportBudgetsIgnoreInaccessibleWork(t *testing.T) {
 }
 
 func TestDigestSubjectBudgetTruncatesWithoutFailingOrInferringAnswers(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,8 +147,9 @@ func TestDigestSubjectBudgetTruncatesWithoutFailingOrInferringAnswers(t *testing
 }
 
 func TestHiddenAnswersDoNotConsumeDigestCandidateBudget(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,8 +199,9 @@ func TestHiddenAnswersDoNotConsumeDigestCandidateBudget(t *testing.T) {
 }
 
 func TestDashboardFiltersPrivatePinsAndNewerReportsBeforeBlobReads(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

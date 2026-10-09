@@ -9,6 +9,7 @@ import (
 )
 
 func TestScopeInboxMetadataMigrationResumes(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	root := t.TempDir()
 	ws, err := InitializeWorkspace(ctx, root)
@@ -73,6 +74,7 @@ func TestScopeInboxMetadataMigrationResumes(t *testing.T) {
 }
 
 func TestScopeInboxMaintenanceYieldsOnWriterContention(t *testing.T) {
+	// Keep the wall-clock contention assertion isolated from other storage tests.
 	ctx := context.Background()
 	ws, err := InitializeWorkspace(ctx, t.TempDir())
 	if err != nil {
@@ -100,6 +102,7 @@ func TestScopeInboxMaintenanceYieldsOnWriterContention(t *testing.T) {
 }
 
 func TestScopeInboxOrderingPlansSeekBeforeLimit(t *testing.T) {
+	t.Parallel()
 	ws, err := InitializeWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)

@@ -14,7 +14,6 @@ import (
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
-	"agent-nexus-core/internal/storage"
 )
 
 type manualProjectionHarness struct {
@@ -31,7 +30,7 @@ func newManualProjectionTestServerWithAttachedMaintainer(t *testing.T, attachMai
 	requireIntegrationTest(t)
 	t.Helper()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}

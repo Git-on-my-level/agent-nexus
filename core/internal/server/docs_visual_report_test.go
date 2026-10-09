@@ -10,6 +10,7 @@ import (
 )
 
 func TestWriteInvalidDocumentRequestIncludesValidatorErrors(t *testing.T) {
+	t.Parallel()
 	rec := httptest.NewRecorder()
 	writeInvalidDocumentRequest(rec, &primitives.VisualReportValidationError{Errors: []string{"title: required"}})
 	if rec.Code != http.StatusBadRequest {

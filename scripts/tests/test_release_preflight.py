@@ -31,6 +31,7 @@ class ReleasePreflightTest(unittest.TestCase):
         scripts = self.repo / "scripts"
         (scripts / "git-hooks").mkdir(parents=True)
         shutil.copy2(SOURCE / "release-patch.sh", scripts)
+        shutil.copy2(SOURCE / "ci-release-base.py", scripts)
         for hook in ("pre-commit", "pre-push"):
             shutil.copy2(SOURCE / "git-hooks" / hook, scripts / "git-hooks")
         self.executable(scripts / "set-version.sh", '''\
@@ -66,7 +67,9 @@ case "$1" in
                     *) exit 2 ;;
                 esac
                 ;;
-            watch) exit 0 ;;
+            watch)
+                if [[ "${FAIL_WATCH_RUN:-}" == "$3" ]]; then exit 1; fi
+                exit 0 ;;
             *) exit 2 ;;
         esac
         ;;
@@ -169,6 +172,88 @@ esac
         self.assertIn("run watch 202 --exit-status", calls)
         self.assertIn("run watch 303 --exit-status", calls)
         self.assertIn("release view v0.0.2", calls)
+
+    def test_failed_ci_blocks_checks_and_version_mutation_even_with_no_wait(self):
+        self.tooling()
+        self.env['FAIL_WATCH_RUN'] = '101'
+        result = self.run_release('--skip-checks', '--no-wait')
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        calls = self.calls.read_text()
+        self.assertIn('run watch 101 --exit-status', calls)
+        self.assertNotIn('bump', calls)
+        self.assertNotIn('make', calls)
+        self.assertEqual(self.git('tag', '--list', 'v0.0.2'), b'')
+
+    def test_no_wait_preserves_source_gates_and_skips_only_release_watch(self):
+        self.use_prepared_release_main()
+        result = self.run_release('--skip-checks', '--no-wait')
+        self.assertEqual(result.returncode, 0, result.stdout)
+        calls = self.calls.read_text()
+        self.assertIn('run watch 101 --exit-status', calls)
+        self.assertIn('run watch 202 --exit-status', calls)
+        self.assertNotIn('run watch 303', calls)
+
+    def canonical_prepared_chain(self, count):
+        self.tooling()
+        # Build the hermetic fixture before attaching its local-only remote.
+        self.git('remote', 'remove', 'origin')
+        files = subprocess.check_output(['bash', str(SOURCE / 'version-managed-files.sh')], text=True).splitlines()
+        files += ['scripts/' + name for name in
+                  ('set-version.sh', 'sync-version.sh', 'read-version.sh', 'version-managed-files.sh')]
+        for name in files:
+            dest = self.repo / name
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(SOURCE.parent / name, dest)
+        self.git('add', '.')
+        self.git('commit', '-m', 'substantive source')
+        source_sha = self.git('rev-parse', 'HEAD').decode().strip()
+        for i in range(1, count + 1):
+            subprocess.run(['bash', 'scripts/set-version.sh', f'v99.0.{i}'], cwd=self.repo,
+                           env=self.env, check=True, stdout=subprocess.DEVNULL)
+            self.git('add', '.')
+            self.git('commit', '-m', 'Prepare release')
+        self.git('remote', 'add', 'origin', str(self.repo))
+        self.calls.unlink(missing_ok=True)
+        return source_sha
+
+    def test_canonical_resume_gates_substantive_source_across_multiple_bumps(self):
+        source_sha = self.canonical_prepared_chain(2)
+        prepared_sha = self.git('rev-parse', 'HEAD').decode().strip()
+        result = self.run_release('--version', 'v99.0.2', '--skip-checks')
+        self.assertEqual(result.returncode, 0, result.stdout)
+        queries = [line for line in self.calls.read_text().splitlines()
+                   if 'run list' in line and 'Release CLI' not in line]
+        self.assertEqual(len(queries), 2)
+        for query in queries:
+            self.assertIn(source_sha, query)
+            self.assertNotIn(prepared_sha, query)
+        self.assertEqual(self.git('rev-parse', 'v99.0.2^{}').decode().strip(), prepared_sha)
+
+    def test_shallow_resume_fetches_substantive_source_before_gating(self):
+        source_sha = self.canonical_prepared_chain(2)
+        shallow = self.root / 'shallow'
+        subprocess.run(['git', 'clone', '--depth=1', f'file://{self.repo}', str(shallow)],
+                       env=self.env, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.repo = shallow
+        self.git('config', 'user.name', 'Release Test')
+        self.git('config', 'user.email', 'release@example.invalid')
+        self.git('config', 'core.hooksPath', 'scripts/git-hooks')
+        self.tooling()
+        self.assertEqual(self.git('rev-parse', '--is-shallow-repository').strip(), b'true')
+        result = self.run_release('--version', 'v99.0.2', '--no-wait')
+        self.assertEqual(result.returncode, 0, result.stdout)
+        queries = [line for line in self.calls.read_text().splitlines() if 'run list' in line]
+        self.assertEqual(len(queries), 2)
+        for query in queries:
+            self.assertIn(source_sha, query)
+        self.assertEqual(self.git('rev-parse', '--is-shallow-repository').strip(), b'false')
+
+    def test_failed_source_smokes_blocks_canonical_resume_tag(self):
+        self.canonical_prepared_chain(1)
+        self.env['FAIL_WATCH_RUN'] = '202'
+        result = self.run_release('--version', 'v99.0.1', '--no-wait')
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(self.git('tag', '--list', 'v99.0.1'), b'')
 
     def test_existing_tag_is_refused_with_clear_message(self):
         result = self.run_release("--version", "v0.0.1", "--dry-run")

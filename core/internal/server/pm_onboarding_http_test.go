@@ -13,6 +13,7 @@ import (
 )
 
 func TestPMOnboardingHTTPGateBootstrapAndIdentitySelection(t *testing.T) {
+	t.Parallel()
 	env := newPMStoreTestEnv(t)
 	ctx := context.Background()
 	db := env.workspace.DB()

@@ -12,6 +12,7 @@ import (
 )
 
 func TestInboxAskStalenessPolicyAndAliases(t *testing.T) {
+	t.Parallel()
 	s, ws, card, ask := askDeliveryFixture(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -65,6 +66,7 @@ func TestInboxAskStalenessPolicyAndAliases(t *testing.T) {
 }
 
 func TestInboxAskStalenessPageBoundAndQueryPlan(t *testing.T) {
+	t.Parallel()
 	_, ws, card, _ := askDeliveryFixture(t)
 	ctx := context.Background()
 	db, counter := testsql.Open("file:" + ws.Layout().DatabasePath)
@@ -131,6 +133,7 @@ func TestInboxAskStalenessPageBoundAndQueryPlan(t *testing.T) {
 }
 
 func TestInboxAskStalenessPrivateAliasDoesNotGrantAccess(t *testing.T) {
+	t.Parallel()
 	s, ws, card, _ := askDeliveryFixture(t)
 	ctx := context.Background()
 	if _, err := s.PatchThread(ctx, "requester", anyStringValue(card["thread_id"]), map[string]any{"pm_actor_id": "private-owner"}, nil); err != nil {

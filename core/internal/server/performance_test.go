@@ -112,7 +112,10 @@ func performanceReadPOST(method, path string) bool {
 	return method == http.MethodPost && (path == "/refs/resolve" || path == "/reports/preview" || path == "/pm/turns/{turn_id}/context" || path == "/secrets/{secret_id}/reveal" || path == "/secrets/reveal-batch")
 }
 
-func TestPerformanceRouteInventory(t *testing.T) { performanceBudgets(t) }
+func TestPerformanceRouteInventory(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
+	performanceBudgets(t)
+}
 
 // Go's JSON response writer uses canonical key ordering. Compare the complete
 // denial body, allowing formatting whitespace but rejecting extra/duplicate
@@ -128,6 +131,7 @@ func performanceExactDenialBody(got, want []byte) bool {
 }
 
 func TestPerformanceExactDeniedReferenceEcho(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	want := []byte(`{"items":[{"ref":"card:private-input","resolvable":false}]}`)
 	for _, tc := range []struct {
 		name string
@@ -356,6 +360,7 @@ func (w *performanceWriter) Flush() {
 }
 
 func TestPerformanceRoutes(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	requirePerformanceTest(t)
 	budgets := performanceBudgets(t)
 	allBudgets := budgets
@@ -758,6 +763,7 @@ func TestPerformanceRoutes(t *testing.T) {
 
 // Header readiness must not count as either of the two measured stream polls.
 func TestPerformanceStreamSampleRequiresTwoDataFlushes(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ticks := 0
@@ -784,6 +790,7 @@ func TestPerformanceStreamSampleRequiresTwoDataFlushes(t *testing.T) {
 // Independent keepalives can fire while the scanner is blocked. None is a
 // completed read, and an empty scanner result still counts when it arrives.
 func TestPerformanceEventStreamKeepalivesCannotCompleteSample(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	completed := 0
@@ -812,6 +819,7 @@ func TestPerformanceEventStreamKeepalivesCannotCompleteSample(t *testing.T) {
 }
 
 func TestPerformanceReceiptKeepalivesCannotCompleteSample(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	w := &performanceWriter{ResponseRecorder: httptest.NewRecorder(), cancel: cancel, receiptStream: true}

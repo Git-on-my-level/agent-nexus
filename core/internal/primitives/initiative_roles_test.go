@@ -9,6 +9,7 @@ import (
 )
 
 func TestInitiativeBoardRoleSelectionAndFallback(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s, defaultBoard := newWorkTestStore(t)
 	designated, err := s.CreateBoard(ctx, "actor-1", map[string]any{"title": "Initiatives", "role": "initiatives"})

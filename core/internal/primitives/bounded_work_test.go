@@ -1,7 +1,6 @@
 package primitives
 
 import (
-	"agent-nexus-core/internal/storage"
 	"context"
 	"fmt"
 	"strings"
@@ -9,8 +8,9 @@ import (
 )
 
 func TestBoundedWorkFiltersMatchProjectionAndCursorOrder(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,8 +82,9 @@ func TestBoundedWorkFiltersMatchProjectionAndCursorOrder(t *testing.T) {
 }
 
 func TestClosedWorkSelectorsPreserveExternalOverrides(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,8 +129,9 @@ func TestClosedWorkSelectorsPreserveExternalOverrides(t *testing.T) {
 }
 
 func TestDecisionWorkSnapshotsMatchPointProjection(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

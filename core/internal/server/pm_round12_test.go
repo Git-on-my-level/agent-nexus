@@ -16,6 +16,7 @@ import (
 )
 
 func TestRound12DecisionWorkProjectionAndMissingWork(t *testing.T) {
+	t.Parallel()
 	env := newPMStoreTestEnv(t)
 	ctx := context.Background()
 	human := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "r12-human", "r12-actor", "r12-human", "r12-token")

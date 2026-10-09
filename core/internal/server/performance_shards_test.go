@@ -148,6 +148,7 @@ func performanceShardBudgets(t *testing.T, budgets []routeBudget, shard, count i
 }
 
 func TestPerformanceShardInventory(t *testing.T) {
+	t.Parallel()
 	budgets := performanceBudgets(t)
 	if len(budgets) < 109 {
 		t.Fatal("scale route inventory shrank below 109 cases")

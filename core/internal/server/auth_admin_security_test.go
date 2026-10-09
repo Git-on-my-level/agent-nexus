@@ -67,6 +67,7 @@ func securityEnv(t *testing.T) (authIntegrationEnv, auth.Principal, auth.Princip
 }
 
 func TestAuthAdminCannotMintHumanCredentials(t *testing.T) {
+	t.Parallel()
 	env, human, agent, bearer := securityEnv(t)
 	ctx := context.Background()
 	before, err := env.authStore.CountActiveHumanPrincipals(ctx)
@@ -144,6 +145,7 @@ func TestAuthAdminCannotMintHumanCredentials(t *testing.T) {
 }
 
 func TestAuthAdminCannotRemoveHumanRecovery(t *testing.T) {
+	t.Parallel()
 	env, human, agent, bearer := securityEnv(t)
 	ctx := context.Background()
 	// Provision a second human independently of the agent's grant.
@@ -242,6 +244,7 @@ func TestAuthAdminCannotRemoveHumanRecovery(t *testing.T) {
 }
 
 func TestAuthAdminRemovalPreservesIssuedEnrollmentAuthority(t *testing.T) {
+	t.Parallel()
 	env, human, agent, _ := securityEnv(t)
 	ctx := context.Background()
 	newInput := func(slug string) (auth.HostEnrollmentInput, ed25519.PrivateKey) {
@@ -332,6 +335,7 @@ func (b *blockedAdminBody) Read(p []byte) (int, error) {
 func (b *blockedAdminBody) Close() error { return nil }
 
 func TestAuthAdminRevokedDuringBodyUpload(t *testing.T) {
+	t.Parallel()
 	env, human, agent, bearer := securityEnv(t)
 	other := seedNotificationTestAgent(t, env, "fleet.other-security-host")
 	body := &blockedAdminBody{Reader: strings.NewReader(`{"label":"must-not-exist","expires_in_seconds":600}`), entered: make(chan struct{}), release: make(chan struct{})}

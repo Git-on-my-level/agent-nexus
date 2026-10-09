@@ -80,6 +80,7 @@ func waitPerformanceOwnerStages(ctx context.Context, dir, source string, ownerCo
 }
 
 func TestPerformanceOwnerStageBarrier(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	const source = "current-source"
 	if err := publishPerformanceOwnerStage(dir, source, 1, true); err != nil {

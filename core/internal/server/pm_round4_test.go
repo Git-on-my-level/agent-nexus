@@ -16,6 +16,7 @@ import (
 )
 
 func TestRound4WorkDecisionRevisionAndContextPagination(t *testing.T) {
+	t.Parallel()
 	env := newPMStoreTestEnv(t)
 	ctx := context.Background()
 	human := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "r4-human", "r4-human-actor", "r4-human", "r4-token")
@@ -137,6 +138,7 @@ func (s *round4PrincipalStore) GetPrincipalSummary(context.Context, string) (aut
 	return s.principal, nil
 }
 func TestRound4PrincipalIdentityCacheFreshAuthority(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := &round4PrincipalStore{principal: auth.AuthPrincipalSummary{ActorID: "actor", AgentID: "agent", PrincipalKind: "human"}}
 	lookup := newPMPrincipalLookup(store)
@@ -174,6 +176,7 @@ func TestRound4PrincipalIdentityCacheFreshAuthority(t *testing.T) {
 }
 
 func TestRound4RevisionIgnoresFreshnessAndInjectedProjection(t *testing.T) {
+	t.Parallel()
 	w := map[string]any{"source": map[string]any{"authority": "github"}, "freshness": map[string]any{"source_revision": "stale"}, "version": int64(7), "decision_revision": "forged"}
 	if publicWork(w)["decision_revision"] != "7.0" {
 		t.Fatal(publicWork(w))

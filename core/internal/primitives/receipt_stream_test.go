@@ -4,27 +4,29 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/storage"
 	"agent-nexus-core/internal/testsql"
 )
 
 func TestReceiptStreamResumeAndUpdateReplay(t *testing.T) {
+	t.Parallel()
 	testReceiptStreamResumeAndUpdateReplay(t, false)
 }
 
 func TestReceiptStreamHistoricalResumeWithoutBackfill(t *testing.T) {
+	t.Parallel()
 	testReceiptStreamResumeAndUpdateReplay(t, true)
 }
 
 func testReceiptStreamResumeAndUpdateReplay(t *testing.T, historical bool) {
 	t.Helper()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +155,11 @@ func testReceiptStreamResumeAndUpdateReplay(t *testing.T, historical bool) {
 	}
 }
 
-func TestReceiptStreamTickBudgetIndependentOfHistory(t *testing.T) {
+func TestPerformanceReceiptStreamTickBudgetIndependentOfHistory(t *testing.T) {
+	if testing.Short() || os.Getenv("ANX_PERFORMANCE_TEST") != "1" {
+		t.Skip("advisory performance tier: make -C core test-perf")
+	}
+	// Serial: performance samples must not compete with parallel fixtures.
 	if testing.Short() {
 		t.Skip("counts statements across 100k receipt rows")
 	}
@@ -186,7 +192,7 @@ type receiptTickBudget struct {
 func measureReceiptTickBudget(t *testing.T, count int) receiptTickBudget {
 	t.Helper()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,8 +312,9 @@ func assertReceiptPlans(t *testing.T, db *sql.DB, counter *testsql.Counter) {
 }
 
 func TestReceiptStreamStaleDigestResumesAtReceipt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -343,8 +350,9 @@ func TestReceiptStreamStaleDigestResumesAtReceipt(t *testing.T) {
 }
 
 func TestReceiptStreamVisibilityChangeReplaysHiddenReceipt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -424,8 +432,9 @@ func TestReceiptStreamVisibilityChangeReplaysHiddenReceipt(t *testing.T) {
 }
 
 func TestReceiptStreamNewPrivateRefStaysHidden(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -473,8 +482,9 @@ func TestReceiptStreamNewPrivateRefStaysHidden(t *testing.T) {
 }
 
 func TestReceiptPayloadPlanSeeksWakeupID(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -562,12 +572,16 @@ func TestReceiptPayloadPlanSeeksWakeupID(t *testing.T) {
 	}
 }
 
-func TestReceiptStreamHiddenHistoryTickTiming(t *testing.T) {
+func TestPerformanceReceiptStreamHiddenHistoryTickTiming(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
+	if testing.Short() || os.Getenv("ANX_PERFORMANCE_TEST") != "1" {
+		t.Skip("advisory performance tier: make -C core test-perf")
+	}
 	if testing.Short() {
 		t.Skip("times idle and append ticks across 100k hidden receipts")
 	}
-	small := measureHiddenReceiptTicks(t, 1000)
-	large := measureHiddenReceiptTicks(t, 100000)
+	small := measureHiddenReceiptTicks(t, 1000, true)
+	large := measureHiddenReceiptTicks(t, 100000, true)
 	t.Logf("hidden 1k idle=%s append=%s; 100k idle=%s append=%s", small.idle, small.append, large.idle, large.append)
 	t.Logf("during ten unrelated private changes: 1k max=%s budget=%+v; 100k max=%s budget=%+v", small.replay, small.replayBudget, large.replay, large.replayBudget)
 	if small.replayBudget != large.replayBudget || large.replayBudget.statements > 10 || large.replayBudget.rows > 10 {
@@ -593,10 +607,15 @@ type hiddenReceiptTicks struct {
 	replayBudget         receiptReadBudget
 }
 
-func measureHiddenReceiptTicks(t *testing.T, count int) hiddenReceiptTicks {
+func TestReceiptStreamPrivateEpochReplayExcludesHiddenHistory(t *testing.T) {
+	t.Parallel()
+	measureHiddenReceiptTicks(t, 32, false)
+}
+
+func measureHiddenReceiptTicks(t *testing.T, count int, measure bool) hiddenReceiptTicks {
 	t.Helper()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -707,6 +726,7 @@ func measureHiddenReceiptTicks(t *testing.T, count int) hiddenReceiptTicks {
 		t.Fatal(err)
 	}
 	cursor = page.Cursor
+	publicIDs := map[string]bool{prime.WakeupID: true, next.WakeupID: true}
 	for i := 0; i < 10; i++ {
 		trash := "now"
 		if i%2 == 1 {
@@ -733,11 +753,43 @@ func measureHiddenReceiptTicks(t *testing.T, count int) hiddenReceiptTicks {
 			t.Fatalf("private epoch change starved append %d: %+v", i, page.Wakeups)
 		}
 		budget := receiptReadBudget{statements: int(counter.Count()), rows: counter.ReturnedRows()}
-		if i > 0 && budget != result.replayBudget {
+		if measure && i > 0 && budget != result.replayBudget {
 			t.Fatalf("replay work grew across epochs: prior=%+v current=%+v", result.replayBudget, budget)
 		}
 		result.replayBudget = budget
 		cursor = page.Cursor
+		if !measure {
+			// The first page prioritizes the new tail receipt. Drain the snapshot
+			// too: only historical replay can expose the private-trigger receipts.
+			publicIDs[probe.WakeupID] = true
+			if !page.AccessChanged || !cursor.Replay || !cursor.Snapshot || !page.HasMore {
+				t.Fatalf("epoch %d did not schedule historical replay: %+v", i, page)
+			}
+			seen := map[string]bool{}
+			maxPages := (count+12)/primitives.ReceiptStreamPageSize + 3
+			for pages := 0; page.HasMore; pages++ {
+				if pages >= maxPages {
+					t.Fatalf("epoch %d replay did not finish within %d pages", i, maxPages)
+				}
+				page, err = store.ListReceiptStreamPage(scope, publicID, cursor)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, wakeup := range page.Wakeups {
+					if !publicIDs[wakeup.WakeupID] {
+						t.Fatalf("epoch %d historical replay disclosed hidden receipt %q", i, wakeup.WakeupID)
+					}
+					seen[wakeup.WakeupID] = true
+				}
+				cursor = page.Cursor
+			}
+			if cursor.Snapshot || cursor.Replay || cursor.ReplayAgain {
+				t.Fatalf("epoch %d replay cursor remained active: %+v", i, cursor)
+			}
+			if !seen[prime.WakeupID] || !seen[next.WakeupID] {
+				t.Fatalf("epoch %d replay did not visit public historical receipts: %v", i, seen)
+			}
+		}
 	}
 	return result
 }

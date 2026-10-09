@@ -9,6 +9,7 @@ import (
 )
 
 func TestCLIVersionFloorRejectsHistoricalClients(t *testing.T) {
+	t.Parallel()
 	opts := handlerOptions{
 		minCLIVersion:         buildinfo.MinCompatibleCLI,
 		recommendedCLIVersion: "v9.0.0",

@@ -49,6 +49,7 @@ func mainHistoryDatabase(t *testing.T, root string, version int) *sql.DB {
 }
 
 func TestFeatureUpgradeFromReleased54AndMain60And63(t *testing.T) {
+	t.Parallel()
 	for _, version := range []int{54, 60, 63} {
 		t.Run(fmt.Sprintf("main-%d", version), func(t *testing.T) {
 			ctx := context.Background()

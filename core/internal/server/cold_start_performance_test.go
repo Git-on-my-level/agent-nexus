@@ -17,6 +17,7 @@ import (
 // The fixture deliberately runs ANALYZE with mostly NULL optional parents:
 // SQLite must not turn their recursive point probes into table scans.
 func TestPerformanceColdStartReads(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	requirePerformanceTest(t)
 	env := newPerformanceEnv(t)
 	if path := os.Getenv("ANX_COLD_START_PROFILE"); path != "" {

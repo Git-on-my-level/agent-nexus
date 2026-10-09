@@ -19,6 +19,7 @@ import (
 )
 
 func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
+	t.Parallel()
 	h := newPrimitivesTestServer(t)
 	ctx := context.Background()
 	db, counter := testsql.Open("file:" + h.workspace.Layout().DatabasePath)
@@ -122,6 +123,7 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 }
 
 func TestOverviewDigestDecisionsRespectCurrentWorkVisibility(t *testing.T) {
+	t.Parallel()
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	owner := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "digest-human", "digest-human-actor", "digest-human", "digest-token")
@@ -161,6 +163,7 @@ func TestOverviewDigestDecisionsRespectCurrentWorkVisibility(t *testing.T) {
 }
 
 func TestOverviewDigestDistinctDecisionRefsQueryBudget(t *testing.T) {
+	t.Parallel()
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	owner := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "digest-human", "digest-human-actor", "digest-human", "digest-token")
@@ -216,6 +219,7 @@ func TestOverviewDigestDistinctDecisionRefsQueryBudget(t *testing.T) {
 }
 
 func TestOverviewVisitsPersistPerPrincipalAndDigestDoesNotAdvance(t *testing.T) {
+	t.Parallel()
 	h := newPrimitivesTestServer(t)
 	ctx := context.Background()
 	store := h.primitiveStore.(*primitives.Store)

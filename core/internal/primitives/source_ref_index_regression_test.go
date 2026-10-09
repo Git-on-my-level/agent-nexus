@@ -13,8 +13,9 @@ import (
 )
 
 func TestIndexedAliasesAreGenericAndBounded(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,8 +105,9 @@ func TestIndexedAliasesAreGenericAndBounded(t *testing.T) {
 }
 
 func TestAggregatedPlanRefsRespectBudgetAndBatchGuard(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,6 +134,7 @@ func TestAggregatedPlanRefsRespectBudgetAndBatchGuard(t *testing.T) {
 }
 
 func TestSourceRefIndexBackfillsExistingMetadata(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
 	ws, err := storage.InitializeWorkspace(ctx, dir)
@@ -161,8 +164,9 @@ func TestSourceRefIndexBackfillsExistingMetadata(t *testing.T) {
 	}
 }
 func TestSourceURLLookupStaysBounded(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,8 +188,9 @@ func TestSourceURLLookupStaysBounded(t *testing.T) {
 // Provider identity interpretation belongs in the publisher. A URL is a
 // literal key even when its spelling resembles a different provider identity.
 func TestProviderSpellingsUseOnlyPublishedKeys(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

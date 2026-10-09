@@ -10,6 +10,7 @@ import (
 )
 
 func TestScopedInboxMountedReaderRetainsEnrichmentAndPrivacy(t *testing.T) {
+	t.Parallel()
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{scopedInboxReader: true})
 	ctx := context.Background()
 	db := env.workspace.DB()

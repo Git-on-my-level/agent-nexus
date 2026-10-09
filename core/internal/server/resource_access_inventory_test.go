@@ -63,6 +63,7 @@ func privacyMountedRoutes() map[string]routeAccessClassifier {
 }
 
 func TestResourceAccessMountedInventory(t *testing.T) {
+	t.Parallel()
 	policies := loadPrivacyRouteMatrix(t)
 	mounted := privacyMountedRoutes()
 	if err := validatePrivacyMounts(policies, mounted); err != nil {
@@ -86,6 +87,7 @@ func TestResourceAccessMountedInventory(t *testing.T) {
 }
 
 func TestResourceAccessRegistrationCannotBypassObserver(t *testing.T) {
+	t.Parallel()
 	checkResourceAccessRegistration(t)
 }
 

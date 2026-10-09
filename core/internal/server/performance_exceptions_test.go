@@ -56,7 +56,7 @@ func performanceRuntimeSourceHash(root string) (string, error) {
 				return nil
 			}
 			name := e.Name()
-			fixtureHelper := rel == "core/internal/server/auth_integration_test.go" || rel == "core/internal/server/stream_privacy_integration_test.go" || rel == "core/internal/server/notifications_integration_test.go"
+			fixtureHelper := rel == "core/internal/server/workspace_template_test.go" || rel == "core/internal/server/auth_integration_test.go" || rel == "core/internal/server/stream_privacy_integration_test.go" || rel == "core/internal/server/notifications_integration_test.go"
 			if strings.HasSuffix(name, "_test.go") && !fixtureHelper && !strings.HasPrefix(name, "performance_") && name != "resource_access_performance_test.go" && name != "resource_access_prepare_test.go" {
 				return nil
 			}
@@ -135,7 +135,11 @@ func performanceBaselineBudgets(t *testing.T, routes []routeBudget) map[string]b
 				if os.Getenv("ANX_PERFORMANCE_DIAGNOSTIC") == "1" {
 					t.Errorf("diagnostic only: expired baseline %s: %v", key, err)
 				} else {
-					t.Fatalf("runtime/dependency/fixture changed: source-pinned existing-main baseline expired for %s: %v", key, err)
+					// Expired allowances cannot relax a route's standard budget. Keep
+					// measuring the route so advisory CI reports actual regressions
+					// instead of dying during setup without a measurement report.
+					t.Errorf("runtime/dependency/fixture changed: source-pinned existing-main baseline expired for %s: %v; measuring with standard budget", key, err)
+					continue
 				}
 			}
 		}
@@ -154,6 +158,7 @@ func performanceBaselineBudgets(t *testing.T, routes []routeBudget) map[string]b
 }
 
 func TestPerformanceRuntimeSourcePin(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	root := t.TempDir()
 	for _, dir := range []string{"core/internal/server", "core/internal/buildinfo", "tests/channels", "contracts/visualreport"} {
 		if err := os.MkdirAll(filepath.Join(root, dir), 0755); err != nil {
@@ -184,7 +189,7 @@ func TestPerformanceRuntimeSourcePin(t *testing.T) {
 	if hash() != before {
 		t.Fatal("release metadata/unrelated tests expired runtime pin")
 	}
-	for _, path := range []string{"core/go.mod", "core/go.sum", "tests/channels/new.go", "contracts/visualreport/go.mod", "contracts/anx-schema.yaml", "core/internal/server/auth_integration_test.go", "core/internal/server/stream_privacy_integration_test.go", "core/internal/server/notifications_integration_test.go", "core/internal/server/performance_test.go", "core/internal/server/routes.json", "core/new.go", "scripts/check-performance-shards.py", "scripts/tests/test_performance_shards.py", ".github/workflows/performance.yml"} {
+	for _, path := range []string{"core/go.mod", "core/go.sum", "tests/channels/new.go", "contracts/visualreport/go.mod", "contracts/anx-schema.yaml", "core/internal/server/auth_integration_test.go", "core/internal/server/workspace_template_test.go", "core/internal/server/stream_privacy_integration_test.go", "core/internal/server/notifications_integration_test.go", "core/internal/server/performance_test.go", "core/internal/server/routes.json", "core/new.go", "scripts/check-performance-shards.py", "scripts/tests/test_performance_shards.py", ".github/workflows/performance.yml"} {
 		before = hash()
 		write(path, "changed runtime input")
 		if hash() == before {
@@ -228,6 +233,7 @@ func performancePlanExceptions(t *testing.T) map[string]bool {
 }
 
 func TestPerformanceExceptionInventory(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	performanceBaselineBudgets(t, performanceBudgets(t))
 	performancePlanExceptions(t)
 }
@@ -250,6 +256,7 @@ func validatePerformanceSourcePin(pin, actual string) error {
 	return nil
 }
 func TestPerformanceEveryAllowanceRequiresSourcePin(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	raw, err := os.ReadFile("testdata/performance_budget_allowlist.json")
 	if err != nil {
 		t.Fatal(err)

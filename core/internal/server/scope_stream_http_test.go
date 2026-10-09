@@ -38,6 +38,7 @@ func scopeCStreamHTTP(t *testing.T, c *scopeCRepository, streams []scopestream.S
 }
 
 func TestScopeStreamHTTP64ScopesWrongAudienceAndUnavailableScopes(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	c := newScopeCRepository(t)
 	var streams []scopestream.Stream
 	tx, err := c.db.Begin()
@@ -150,6 +151,7 @@ func TestScopeStreamHTTP64ScopesWrongAudienceAndUnavailableScopes(t *testing.T) 
 }
 
 func TestScopeStreamHTTPReconnectAcknowledgesOnlyEmittedPrefix(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	c := newScopeCRepository(t)
 	c.grant(t, "s", "reader", "active")
 	stream := scopestream.Stream{Scope: "s", Family: "events", Audience: "all"}
@@ -176,6 +178,7 @@ func TestScopeStreamHTTPReconnectAcknowledgesOnlyEmittedPrefix(t *testing.T) {
 }
 
 func TestScopeStreamHTTPReauthorizationAndBindingValidation(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	c := newScopeCRepository(t)
 	c.grant(t, "s", "reader", "active")
 	stream := scopestream.Stream{Scope: "s", Family: "inbox", Audience: "person:reader"}
@@ -225,6 +228,7 @@ func TestScopeStreamHTTPReauthorizationAndBindingValidation(t *testing.T) {
 }
 
 func TestScopeStreamRetentionResyncAndNoTokenTampering(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	c := newScopeCRepository(t)
 	c.grant(t, "s", "reader", "active")
 	stream := scopestream.Stream{Scope: "s", Family: "events", Audience: "all"}
@@ -252,6 +256,7 @@ func TestScopeStreamRetentionResyncAndNoTokenTampering(t *testing.T) {
 }
 
 func TestScopeStreamAndSearchRejectCrossScopeDerivations(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	c := newScopeCRepository(t)
 	c.grant(t, "public", "owner", "active")
 	c.grant(t, "private", "owner", "active")
@@ -297,6 +302,7 @@ func TestScopeStreamAndSearchRejectCrossScopeDerivations(t *testing.T) {
 }
 
 func TestScopeStreamHTTPDisabledByDefault(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	r := httptest.NewRequest(http.MethodGet, "/stream/scope-test", nil)
 	w := httptest.NewRecorder()
 	streamhttp.ScopeHandler(streamhttp.ScopeOptions{}).ServeHTTP(w, r)
@@ -313,6 +319,7 @@ type scopeCCancelOnFlush struct {
 func (w *scopeCCancelOnFlush) Flush() { w.ResponseRecorder.Flush(); w.cancel() }
 
 func TestScopeStreamHTTPActualWireBytesForHTMLSensitivePayload(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	c := newScopeCRepository(t)
 	c.grant(t, "s", "reader", "active")
 	s := scopestream.Stream{Scope: "s", Family: "events", Audience: "all"}

@@ -16,6 +16,7 @@ import (
 )
 
 func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
+	t.Parallel()
 	h := newPrimitivesTestServer(t)
 	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"One","created_at":"2026-03-04T10:00:00Z"}}`, 201)
 	ctx := context.Background()
@@ -135,7 +136,19 @@ func TestInitiativesAndMixedRefQueriesStayBounded(t *testing.T) {
 
 // Each checkpoint has full-size plans with distinct missing refs across cards.
 // Small plans would miss a per-plan chunking regression at the 200-step limit.
-func TestPlanReadsStayBoundedAtMaximumFanOut(t *testing.T) {
+func TestPerformancePlanReadsStayBoundedAtMaximumFanOut(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
+	requirePerformanceTest(t)
+	testPlanReadsAtFanOut(t, []int{1, 20, 200}, true)
+}
+
+func TestPlanFanOutPreservesStepsResolutionAndTruncation(t *testing.T) {
+	t.Parallel()
+	testPlanReadsAtFanOut(t, []int{1, 21}, false)
+}
+
+func testPlanReadsAtFanOut(t *testing.T, sizes []int, measure bool) {
+	t.Helper()
 	for _, mixed := range []bool{false, true} {
 		name := "unknown-card-refs"
 		if mixed {
@@ -175,7 +188,7 @@ func TestPlanReadsStayBoundedAtMaximumFanOut(t *testing.T) {
 			baseID, observationID := anyString(base["id"]), observed["observation"].(map[string]any)["id"]
 			refs := []string{}
 			var renderQueries int64
-			for _, size := range []int{1, 20, 200} {
+			for _, size := range sizes {
 				// Clone canonical rows in one transaction: the read cost test
 				// must not spend its time exercising event-producing writes.
 				tx, err := db.BeginTx(ctx, nil)
@@ -258,7 +271,7 @@ func TestPlanReadsStayBoundedAtMaximumFanOut(t *testing.T) {
 					}
 					if size == 1 {
 						renderQueries = counter.Count()
-					} else if got := counter.Count(); got > renderQueries+4*int64(min(size, 20))+4 {
+					} else if got := counter.Count(); measure && got > renderQueries+4*int64(min(size, 20))+4 {
 						t.Fatalf("render exceeded bounded batches: one card=%d %d cards=%d", renderQueries, size, got)
 					}
 					var rendered map[string]any
@@ -276,8 +289,15 @@ func TestPlanReadsStayBoundedAtMaximumFanOut(t *testing.T) {
 					}
 					projectionQueries := counter.Count()
 					// Each bounded batch can query card/doc/topic facts plus a full-page continuation.
-					if projectionQueries > 5+4*int64(min(size, 20)) {
+					if measure && projectionQueries > 5+4*int64(min(size, 20)) {
 						t.Fatalf("projection exceeded bounded batches: %d queries for %d cards x %d steps", projectionQueries, size, plans.MaxSteps)
+					}
+
+					if !measure && size == 21 {
+						page, partial, err := reader.materialize(reports.Panel{Type: "live-initiatives", Query: reports.Query{Limit: 20}})
+						if err != nil || !partial || len(page["items"].([]map[string]any)) != 20 {
+							t.Fatalf("partial report page=%+v partial=%v err=%v", page, partial, err)
+						}
 					}
 					items := data["items"].([]map[string]any)
 					if len(items) != min(size, 100) || partial != (size > 100) {
@@ -311,7 +331,7 @@ func TestPlanReadsStayBoundedAtMaximumFanOut(t *testing.T) {
 					attachResourceAccessScope(resolveReq, handlerOptions{primitiveStore: store})
 					handleResolveRefs(out, resolveReq, handlerOptions{primitiveStore: store})
 					resolveQueries := counter.Count()
-					if out.Code != 200 || resolveQueries > 6+4*int64(min(size, 20)) {
+					if out.Code != 200 || (measure && resolveQueries > 6+4*int64(min(size, 20))) {
 						t.Fatalf("resolve exceeded bounded batches: %d queries for %d cards x %d steps; status=%d body=%s", resolveQueries, size, plans.MaxSteps, out.Code, out.Body.String())
 					}
 					var previews struct {

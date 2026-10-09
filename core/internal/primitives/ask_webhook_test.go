@@ -18,6 +18,7 @@ type askRoundTrip func(*http.Request) (*http.Response, error)
 
 func (f askRoundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 func TestAskWebhookSignatureRetryDeadLetter(t *testing.T) {
+	t.Parallel()
 	s, ws, _, ask := askDeliveryFixture(t)
 	ctx := context.Background()
 	sub, err := s.CreateAskSubscription(ctx, "requester", anyStringValue(ask["ref"]), AskSubscriptionInput{Kind: "webhook", Label: "service", URL: "https://example.com/hook"})
@@ -68,6 +69,7 @@ func TestAskWebhookSignatureRetryDeadLetter(t *testing.T) {
 	}
 }
 func TestAskWebhookDialPinsDNSAndRejectsRebinding(t *testing.T) {
+	t.Parallel()
 	resolved, dialed := 0, 0
 	client := webhookHTTPClientWithDial(func(context.Context, string, string) ([]netip.Addr, error) {
 		resolved++

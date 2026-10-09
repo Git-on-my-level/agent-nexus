@@ -4,7 +4,6 @@ import (
 	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/resourceaccess"
-	"agent-nexus-core/internal/storage"
 	"context"
 	"encoding/json"
 	"sort"
@@ -14,8 +13,9 @@ import (
 )
 
 func TestResourceAccessPMWriteIndex(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

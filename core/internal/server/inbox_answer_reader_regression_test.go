@@ -14,6 +14,7 @@ import (
 // Both readers must remove the ask and retain its card reference in history,
 // regardless of whether the human chose a proposal or wrote their own answer.
 func TestInboxAnswerReaderModes(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	for _, scoped := range []bool{false, true} {
 		for _, answer := range []string{"Approve", "Use a smaller rollout first"} {

@@ -10,12 +10,11 @@ import (
 	"testing"
 
 	"agent-nexus-core/internal/resourceaccess"
-	"agent-nexus-core/internal/storage"
 )
 
 func inboxInvalidationFixture(t *testing.T, withPM bool) (*sql.DB, *Store) {
 	t.Helper()
-	ws, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	ws, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,6 +116,7 @@ func inboxInvalidationAssertAdvance(t *testing.T, db *sql.DB, write func() error
 }
 
 func TestScopeInboxInvalidationRegistryComplete(t *testing.T) {
+	t.Parallel()
 	db, _ := inboxInvalidationFixture(t, true)
 	sources, hash, err := scopeInboxInvalidationSources()
 	if err != nil {
@@ -198,6 +198,7 @@ func TestScopeInboxInvalidationRegistryPinsSourceMeaning(t *testing.T) {
 }
 
 func TestScopeInboxInvalidationCanonicalAndBulk(t *testing.T) {
+	t.Parallel()
 	db, s := inboxInvalidationFixture(t, true)
 	ctx := context.Background()
 	thread, err := s.CreateThread(ctx, "owner", map[string]any{"title": "source"})
@@ -247,6 +248,7 @@ func TestScopeInboxInvalidationCanonicalAndBulk(t *testing.T) {
 }
 
 func TestScopeInboxInvalidationOutsideInboxAuthorityAndEnrichment(t *testing.T) {
+	t.Parallel()
 	db, s := inboxInvalidationFixture(t, true)
 	ctx := context.Background()
 	work, err := s.CreateWork(ctx, "owner", "", map[string]any{"title": "outside inbox"})
@@ -301,6 +303,7 @@ func TestScopeInboxInvalidationOutsideInboxAuthorityAndEnrichment(t *testing.T) 
 }
 
 func TestScopeInboxInvalidationCanonicalLedgerEnrichment(t *testing.T) {
+	t.Parallel()
 	db, _ := inboxInvalidationFixture(t, true)
 	for _, q := range []string{
 		`INSERT INTO actors(id,display_name,tags_json,created_at,metadata_json) VALUES('ledger-actor','Actor','[]','now','{}')`,
@@ -342,6 +345,7 @@ func TestScopeInboxInvalidationCanonicalLedgerEnrichment(t *testing.T) {
 }
 
 func TestScopeInboxInvalidationPMOrderAndChanges(t *testing.T) {
+	t.Parallel()
 	db, _ := inboxInvalidationFixture(t, false)
 	if _, err := ReadScopeInboxSourceSnapshot(context.Background(), db); !errors.Is(err, ErrScopeInboxInvalidationIncomplete) {
 		t.Fatal("absent PM certified", err)
@@ -373,6 +377,7 @@ func TestScopeInboxInvalidationPMOrderAndChanges(t *testing.T) {
 }
 
 func TestScopeInboxInvalidationRollbackAndSchemaFailure(t *testing.T) {
+	t.Parallel()
 	for _, damage := range []string{"source-missing", "selection-missing", "source-overflow", "authority-overflow", "directory-overflow", "selection-overflow"} {
 		t.Run(damage, func(t *testing.T) {
 			db, _ := inboxInvalidationFixture(t, true)

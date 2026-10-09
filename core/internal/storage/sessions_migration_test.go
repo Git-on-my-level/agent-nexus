@@ -9,6 +9,7 @@ import (
 )
 
 func TestSessionMigrationUpgradeAndRestart(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	root := t.TempDir()
 	ws, err := storage.InitializeWorkspace(ctx, root)

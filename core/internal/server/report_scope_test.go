@@ -19,6 +19,7 @@ func (s *reportScopeStore) ListReportWork(ctx context.Context, filter primitives
 	return s.Store.ListReportWork(ctx, filter)
 }
 func TestReportPanelsShareBoundedReadsByScope(t *testing.T) {
+	t.Parallel()
 	h := newPrimitivesTestServer(t)
 	board, err := h.primitiveStore.CreateBoard(context.Background(), "actor", map[string]any{"title": "Selected"})
 	if err != nil {
@@ -45,6 +46,7 @@ func TestReportPanelsShareBoundedReadsByScope(t *testing.T) {
 }
 
 func TestReportInitiativesResolveCardScopeBeforeTheBoundedRead(t *testing.T) {
+	t.Parallel()
 	h := newPrimitivesTestServer(t)
 	ctx := context.Background()
 	board, err := h.primitiveStore.CreateBoard(ctx, "actor", map[string]any{"title": "Initiatives"})

@@ -16,6 +16,7 @@ import (
 )
 
 func TestInboxDetailAndComposedWorkspacesAuthorizeSubjects(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("HTTP/storage integration")
 	}
@@ -104,6 +105,7 @@ func TestInboxDetailAndComposedWorkspacesAuthorizeSubjects(t *testing.T) {
 }
 
 func TestInboxFreshnessLoadsOnlyAccessibleBackingThreads(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("HTTP/storage integration")
 	}
@@ -189,6 +191,7 @@ func TestInboxFreshnessLoadsOnlyAccessibleBackingThreads(t *testing.T) {
 }
 
 func TestOverviewAndChangesBatchMoreThan200DigestSubjects(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("HTTP/storage integration")
 	}
@@ -253,6 +256,7 @@ func TestOverviewAndChangesBatchMoreThan200DigestSubjects(t *testing.T) {
 }
 
 func TestReportEventBudgetsAuthorizePayloadSubjectsAndRelatedRefs(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("HTTP/storage integration")
 	}

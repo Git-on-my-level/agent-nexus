@@ -11,6 +11,7 @@ import (
 )
 
 func TestWorkEvidencePrivacyAcrossReadPaths(t *testing.T) {
+	t.Parallel()
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	owner := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "evidence-owner", "evidence-owner-actor", "evidence-owner", "evidence-owner-token")
@@ -88,6 +89,7 @@ func TestWorkEvidencePrivacyAcrossReadPaths(t *testing.T) {
 }
 
 func TestPrivateChildrenExcludedFromBoardSummariesAndArchivedRefs(t *testing.T) {
+	t.Parallel()
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	owner := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "hidden-owner", "hidden-owner-actor", "hidden-owner", "hidden-owner-token")

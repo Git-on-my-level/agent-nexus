@@ -11,6 +11,7 @@ import (
 )
 
 func TestPrivateBoardEvidenceHiddenFromEventsAndThreadTimeline(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("HTTP/storage integration")
 	}
@@ -82,6 +83,7 @@ func TestPrivateBoardEvidenceHiddenFromEventsAndThreadTimeline(t *testing.T) {
 }
 
 func TestInboxSubjectCardAndBoardAccessBeforeCountsAndOverview(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("HTTP/storage integration")
 	}
@@ -155,6 +157,7 @@ func TestInboxSubjectCardAndBoardAccessBeforeCountsAndOverview(t *testing.T) {
 }
 
 func TestBoardCursorUsesOnlyAccessibleTitleMatches(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("HTTP/storage integration")
 	}
@@ -198,6 +201,7 @@ func TestBoardCursorUsesOnlyAccessibleTitleMatches(t *testing.T) {
 }
 
 func TestLegacyBackingThreadAndInboxRefsRespectPrivateBoard(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("HTTP/storage integration")
 	}
@@ -280,6 +284,7 @@ func TestLegacyBackingThreadAndInboxRefsRespectPrivateBoard(t *testing.T) {
 }
 
 func TestProjectionRebuildRemainsCanonicalUnderScopedRequest(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("HTTP/storage integration")
 	}

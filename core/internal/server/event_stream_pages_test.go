@@ -16,6 +16,7 @@ import (
 )
 
 func TestEventsStreamBoundedResumeFramesAndHiddenPositions(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
@@ -137,6 +138,7 @@ func readQuietEventStream(t *testing.T, url, token, id string, header bool) stri
 }
 
 func TestEventsStreamHiddenAndUnknownResumeIDsAreIdenticalOverHTTP(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	reader := seedHumanPrincipalForLockoutTest(t, context.Background(), env.workspace.DB(), "probe-reader", "probe-reader-actor", "probe-reader", "probe-reader-token")
 	for _, query := range []string{
@@ -162,6 +164,7 @@ func TestEventsStreamHiddenAndUnknownResumeIDsAreIdenticalOverHTTP(t *testing.T)
 }
 
 func TestEventsStreamHiddenOnlyHistoryMatchesIdleOverHTTP(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	for _, hidden := range []int{0, 401, 10000} {
 		t.Run(fmt.Sprint(hidden), func(t *testing.T) {
 			env := newAuthIntegrationEnv(t, authIntegrationOptions{})
@@ -228,6 +231,7 @@ func (s *eventTickBudgetStore) ListEventStreamPage(ctx context.Context, _ primit
 
 // A one-hour poll interval makes any timer wait during hidden catch-up fail.
 func TestEventsStreamChunksContinueWithoutPollWait(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	for _, fixture := range []struct{ hidden, visible int }{{50, 1}, {0, 3}, {10, 3}} {
 		t.Run(fmt.Sprintf("hidden-%d-visible-%d", fixture.hidden, fixture.visible), func(t *testing.T) {
 			s := &eventTickBudgetStore{calls: make(chan int, 60), hiddenPages: fixture.hidden, visiblePages: fixture.visible}
@@ -278,6 +282,7 @@ func TestEventsStreamChunksContinueWithoutPollWait(t *testing.T) {
 // Keepalives must continue even while a hidden-page read has not returned.
 // Blocking instead of sleeping makes this independent of machine/query timing.
 func TestEventsStreamKeepalivesContinueDuringHiddenScanAndCancelWorker(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	s := &eventTickBudgetStore{calls: make(chan int, 20), gate: make(chan struct{})}
 	done := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -337,6 +342,7 @@ func (s *timedEventPageStore) ListEventStreamPage(ctx context.Context, filter pr
 }
 
 func TestEventsStreamPublicProbeLatencyDoesNotWaitForHiddenPollTicks(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	const schedulingTolerance = 100 * time.Millisecond
 	idleLatency := map[time.Duration]time.Duration{}
 	for _, hidden := range []int{0, 10000} {

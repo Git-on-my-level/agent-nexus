@@ -10,6 +10,7 @@ import (
 )
 
 func TestAgentAuthAdminFleetLifecycle(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken, allowPasskeyDevBypass: true})
 	base := env.server.URL

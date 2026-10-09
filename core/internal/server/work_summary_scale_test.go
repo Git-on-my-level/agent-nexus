@@ -16,6 +16,7 @@ import (
 // and hydrated its bounded inputs. The broad route matrix remains separate;
 // its source-pinned existing-main exceptions must not hide new summary costs.
 func TestPerformanceWorkSummaryBudgetAndPlans(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	requirePerformanceTest(t)
 	allowed := performancePlanExceptions(t)
 	var observed []perfguard.PlanException
@@ -152,6 +153,7 @@ func TestPerformanceWorkSummaryBudgetAndPlans(t *testing.T) {
 }
 
 func TestPerformanceAgentSummarySelection(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	requirePerformanceTest(t)
 	env := newPerformanceEnv(t)
 	if _, err := env.db.Exec(`UPDATE cards SET assignee='scale-summary-actor' WHERE id LIKE 'scale-card-%'`); err != nil {

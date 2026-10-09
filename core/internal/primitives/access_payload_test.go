@@ -2,15 +2,15 @@ package primitives
 
 import (
 	"agent-nexus-core/internal/plans"
-	"agent-nexus-core/internal/storage"
 	"context"
 	"errors"
 	"testing"
 )
 
 func TestResourceAccessPayloadNotificationsAndPlans(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,8 +81,9 @@ func TestResourceAccessPayloadNotificationsAndPlans(t *testing.T) {
 }
 
 func TestAppendEventAuthorizationEdgesAreAtomic(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,8 +109,9 @@ func TestAppendEventAuthorizationEdgesAreAtomic(t *testing.T) {
 }
 
 func TestResourceAccessRetainsPrivateSourceURLAfterPurge(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

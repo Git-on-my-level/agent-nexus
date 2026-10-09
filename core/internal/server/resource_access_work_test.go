@@ -13,6 +13,7 @@ import (
 )
 
 func TestResourceAccessWorkMetadataReferences(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()

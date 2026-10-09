@@ -2,7 +2,6 @@ package primitives_test
 
 import (
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/storage"
 	"context"
 	"errors"
 	"fmt"
@@ -13,7 +12,7 @@ import (
 
 func newWorkTestStore(t *testing.T) (*primitives.Store, string) {
 	t.Helper()
-	ws, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	ws, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +27,7 @@ func newWorkTestStore(t *testing.T) (*primitives.Store, string) {
 
 func newEmptyWorkTestStore(t *testing.T) *primitives.Store {
 	t.Helper()
-	ws, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	ws, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,6 +44,7 @@ func registerWork(t *testing.T, s *primitives.Store, b string) map[string]any {
 	return w
 }
 func TestWorkSourceDeduplicationAndAuthority(t *testing.T) {
+	t.Parallel()
 	s, b := newWorkTestStore(t)
 	ctx := context.Background()
 	w := registerWork(t, s, b)
@@ -73,6 +73,7 @@ func TestWorkSourceDeduplicationAndAuthority(t *testing.T) {
 	}
 }
 func TestWorkObservationReplayOrderingAndFailure(t *testing.T) {
+	t.Parallel()
 	s, b := newWorkTestStore(t)
 	ctx := context.Background()
 	w := registerWork(t, s, b)
@@ -114,6 +115,7 @@ func TestWorkObservationReplayOrderingAndFailure(t *testing.T) {
 	}
 }
 func TestWorkRefreshCoalescesAndUnknownIsNotHealthy(t *testing.T) {
+	t.Parallel()
 	s, b := newWorkTestStore(t)
 	ctx := context.Background()
 	w := registerWork(t, s, b)
@@ -135,6 +137,7 @@ func TestWorkRefreshCoalescesAndUnknownIsNotHealthy(t *testing.T) {
 }
 
 func TestWorkRejectsLegacySourceMutations(t *testing.T) {
+	t.Parallel()
 	s, b := newWorkTestStore(t)
 	ctx := context.Background()
 	w := registerWork(t, s, b)
@@ -155,6 +158,7 @@ func TestWorkRejectsLegacySourceMutations(t *testing.T) {
 	}
 }
 func TestWorkConflictingReplayAndCompletionEvidence(t *testing.T) {
+	t.Parallel()
 	s, b := newWorkTestStore(t)
 	ctx := context.Background()
 	w := registerWork(t, s, b)
@@ -180,6 +184,7 @@ func TestWorkConflictingReplayAndCompletionEvidence(t *testing.T) {
 }
 
 func TestWorkUnsequencedOutageAfterSequencedSuccess(t *testing.T) {
+	t.Parallel()
 	s, b := newWorkTestStore(t)
 	ctx := context.Background()
 	w := registerWork(t, s, b)
@@ -203,6 +208,7 @@ func TestWorkUnsequencedOutageAfterSequencedSuccess(t *testing.T) {
 }
 
 func TestWorkUnchangedSequenceRefreshesWithoutProgress(t *testing.T) {
+	t.Parallel()
 	s, b := newWorkTestStore(t)
 	ctx := context.Background()
 	w := registerWork(t, s, b)
@@ -228,6 +234,7 @@ func TestWorkUnchangedSequenceRefreshesWithoutProgress(t *testing.T) {
 }
 
 func TestWorkObservationPaginationSurvivesInsert(t *testing.T) {
+	t.Parallel()
 	s, b := newWorkTestStore(t)
 	ctx := context.Background()
 	w := registerWork(t, s, b)
@@ -268,6 +275,7 @@ func TestWorkObservationPaginationSurvivesInsert(t *testing.T) {
 }
 
 func TestWorkObservationMovesExternalBoardCard(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	type step struct {
 		key      string
@@ -451,6 +459,7 @@ func TestWorkObservationMovesExternalBoardCard(t *testing.T) {
 }
 
 func TestWorkReferencesRemainWorkspaceScoped(t *testing.T) {
+	t.Parallel()
 	s, b := newWorkTestStore(t)
 	ctx := context.Background()
 	_, err := s.CreateWork(ctx, "actor-1", b, map[string]any{"title": "Invalid project", "project_ref": "topic:missing"})
@@ -465,8 +474,9 @@ func TestWorkReferencesRemainWorkspaceScoped(t *testing.T) {
 }
 
 func TestWorkMigrationRelationRoundTrip(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -512,6 +522,7 @@ func TestWorkMigrationRelationRoundTrip(t *testing.T) {
 }
 
 func TestCreateWorkHonorsStableCardID(t *testing.T) {
+	t.Parallel()
 	s, b := newWorkTestStore(t)
 	w, err := s.CreateWork(context.Background(), "actor-1", b, map[string]any{"id": "card-anx-github-208", "title": "Public issue", "source": map[string]any{"authority": "github", "connection_id": "github-main", "native_id": "Git-on-my-level/agent-nexus#208"}})
 	if err != nil {
@@ -523,6 +534,7 @@ func TestCreateWorkHonorsStableCardID(t *testing.T) {
 }
 
 func TestCreateWorkMoveReplayReusesOnlyMatchingMove(t *testing.T) {
+	t.Parallel()
 	s, b := newWorkTestStore(t)
 	ctx := context.Background()
 	input := map[string]any{
@@ -554,6 +566,7 @@ func TestCreateWorkMoveReplayReusesOnlyMatchingMove(t *testing.T) {
 }
 
 func TestBoardMoveBindsAndAdvancesWorkRevision(t *testing.T) {
+	t.Parallel()
 	s, b := newWorkTestStore(t)
 	ctx := context.Background()
 	w, err := s.CreateWork(ctx, "actor-1", b, map[string]any{"title": "Native revision"})
@@ -588,6 +601,7 @@ func TestBoardMoveBindsAndAdvancesWorkRevision(t *testing.T) {
 }
 
 func TestCreateWorkWithoutBoardRefCreatesDefaultBoard(t *testing.T) {
+	t.Parallel()
 	s := newEmptyWorkTestStore(t)
 	ctx := context.Background()
 	boards, _, err := s.ListBoards(ctx, primitives.BoardListFilter{})
@@ -623,6 +637,7 @@ func TestCreateWorkWithoutBoardRefCreatesDefaultBoard(t *testing.T) {
 }
 
 func TestCreateWorkWithoutBoardRefReusesExistingBoard(t *testing.T) {
+	t.Parallel()
 	s, existing := newWorkTestStore(t)
 	ctx := context.Background()
 	w, err := s.CreateWork(ctx, "actor-1", "", map[string]any{"title": "On existing board"})
@@ -639,6 +654,7 @@ func TestCreateWorkWithoutBoardRefReusesExistingBoard(t *testing.T) {
 }
 
 func TestCreateWorkWithoutBoardRefConcurrent(t *testing.T) {
+	t.Parallel()
 	s := newEmptyWorkTestStore(t)
 	ctx := context.Background()
 	const n = 12
@@ -679,6 +695,7 @@ func TestCreateWorkWithoutBoardRefConcurrent(t *testing.T) {
 }
 
 func TestCreateWorkRejectedRequestLeavesNoDefaultBoard(t *testing.T) {
+	t.Parallel()
 	s := newEmptyWorkTestStore(t)
 	ctx := context.Background()
 	for _, input := range []map[string]any{
@@ -700,6 +717,7 @@ func TestCreateWorkRejectedRequestLeavesNoDefaultBoard(t *testing.T) {
 }
 
 func TestWorkObservationOnArchivedExternalCardIsAcceptedWithoutMove(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s, boardID := newWorkTestStore(t)
 	w, err := s.CreateWork(ctx, "actor-1", boardID, map[string]any{

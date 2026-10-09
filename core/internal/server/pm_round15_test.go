@@ -33,6 +33,7 @@ func (s *round15PrincipalStore) GetPrincipalSummary(ctx context.Context, id stri
 }
 
 func TestRound15PrincipalLookupFailureClassification(t *testing.T) {
+	t.Parallel()
 	for _, warm := range []bool{false, true} {
 		for _, tc := range []struct {
 			name          string
@@ -70,6 +71,7 @@ func TestRound15PrincipalLookupFailureClassification(t *testing.T) {
 }
 
 func TestRound15TurnProposalOwnerReason(t *testing.T) {
+	t.Parallel()
 	for _, humanOwner := range []bool{false, true} {
 		t.Run(map[bool]string{false: "agent", true: "human"}[humanOwner], func(t *testing.T) {
 			env := newPMStoreTestEnv(t)

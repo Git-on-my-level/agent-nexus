@@ -9,6 +9,7 @@ import (
 )
 
 func TestCommandCenterRoutesAndAttribution(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()

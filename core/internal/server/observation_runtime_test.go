@@ -47,6 +47,7 @@ func (r *typedErrorReader) Read(_ context.Context, target observation.Target) (o
 }
 
 func TestObservationRuntimePersistsTypedRefreshErrorAndLastGood(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name    string
 		failure *observation.ReadError
@@ -117,6 +118,7 @@ func TestObservationRuntimePersistsTypedRefreshErrorAndLastGood(t *testing.T) {
 }
 
 func TestObservationRuntimePersistsUnchangedReadsAndOutage(t *testing.T) {
+	t.Parallel()
 	h := newPrimitivesTestServer(t)
 	s := h.primitiveStore.(*primitives.Store)
 	ctx := context.Background()
@@ -181,6 +183,7 @@ func TestObservationRuntimePersistsUnchangedReadsAndOutage(t *testing.T) {
 	}
 }
 func TestObservationRuntimeRejectsBindingMismatch(t *testing.T) {
+	t.Parallel()
 	h := newPrimitivesTestServer(t)
 	s := h.primitiveStore.(*primitives.Store)
 	ctx := context.Background()
@@ -200,6 +203,7 @@ func TestObservationRuntimeRejectsBindingMismatch(t *testing.T) {
 }
 
 func TestObservationRuntimeAcceptsCanonicalGitAuthorityForSSH(t *testing.T) {
+	t.Parallel()
 	h := newPrimitivesTestServer(t)
 	s := h.primitiveStore.(*primitives.Store)
 	ctx := context.Background()
@@ -235,6 +239,7 @@ func TestObservationRuntimeAcceptsCanonicalGitAuthorityForSSH(t *testing.T) {
 }
 
 func TestObservationConfigSupportsExplicitTrustedMulticaCLI(t *testing.T) {
+	t.Parallel()
 	h := newPrimitivesTestServer(t)
 	path := filepath.Join(t.TempDir(), "readers.json")
 	config := `{"targets":[{"work_ref":"card:tracked","source_native_id":"issue-1","target":{"source":"multica","connection_id":"approved","kind":"issue","native_id":"issue-1"},"transport":"multica_cli","cli_binary":"/opt/approved/multica","cli_profile":"approved-profile","base_url":"https://example.test","source_workspace_id":"source-workspace"}]}`
@@ -257,6 +262,7 @@ func TestObservationConfigSupportsExplicitTrustedMulticaCLI(t *testing.T) {
 }
 
 func TestJITAndInvestigationTransportsFailClosedWithoutSandbox(t *testing.T) {
+	t.Parallel()
 	h := newPrimitivesTestServer(t)
 	root := filepath.Join(t.TempDir(), "jit")
 	if err := os.MkdirAll(root, 0700); err != nil {
@@ -301,6 +307,7 @@ func TestJITAndInvestigationTransportsFailClosedWithoutSandbox(t *testing.T) {
 }
 
 func TestJITBoundReaderMissingManagerReportsIsolation(t *testing.T) {
+	t.Parallel()
 	_, err := (jitBoundReader{}).Read(context.Background(), observation.Target{})
 	out := observation.PersistableRefreshError(err, "github", time.Time{})
 	if out["code"] != "isolation_unavailable" || out["message"] != "Generated reader has no isolation manager" {

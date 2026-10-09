@@ -12,6 +12,7 @@ import (
 )
 
 func TestInboxLifecycleUpgradeDoesNotBackfillAtStartup(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("real SQLite upgrade benchmark")
 	}

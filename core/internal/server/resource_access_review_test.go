@@ -16,6 +16,7 @@ import (
 )
 
 func TestResourceAccessPayloadHTTPAndPositiveAuthentication(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
@@ -70,7 +71,13 @@ func TestResourceAccessPayloadHTTPAndPositiveAuthentication(t *testing.T) {
 	env.server.Config.Handler = NewHandler("0.2.2", WithAuthStore(env.authStore), WithActorRegistry(env.registry), WithPrimitiveStore(s), WithSchemaContract(contract), WithRunStore(commandcenter.NewStore(env.workspace.DB(), commandcenter.SQLIdentities{DB: env.workspace.DB()})), WithProjectionMaintainer(maintainer), WithStreamPollInterval(10*time.Millisecond))
 	request := func(method, path, token string) (int, string) {
 		t.Helper()
-		c, cancel := context.WithTimeout(ctx, 5*time.Second)
+		// Ordinary requests assert privacy, not latency; allow scheduler contention.
+		// Streaming bodies still need the short deadline to terminate their reads.
+		requestTimeout := 30 * time.Second
+		if strings.HasPrefix(path, "/stream/") {
+			requestTimeout = 5 * time.Second
+		}
+		c, cancel := context.WithTimeout(ctx, requestTimeout)
 		defer cancel()
 		r, err := http.NewRequestWithContext(c, method, env.server.URL+path, nil)
 		if err != nil {
@@ -84,7 +91,10 @@ func TestResourceAccessPayloadHTTPAndPositiveAuthentication(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer resp.Body.Close()
-		b, _ := io.ReadAll(resp.Body)
+		b, err := io.ReadAll(resp.Body)
+		if err != nil && !strings.HasPrefix(path, "/stream/") {
+			t.Fatal(err)
+		}
 		return resp.StatusCode, string(b)
 	}
 	for _, token := range []string{stranger.AccessToken, agent.AccessToken} {

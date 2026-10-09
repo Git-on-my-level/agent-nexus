@@ -6,13 +6,12 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"agent-nexus-core/internal/storage"
 )
 
 func TestEventHandlesUseFullIdentityWithLongCommonPrefixes(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,8 +36,9 @@ func TestEventHandlesUseFullIdentityWithLongCommonPrefixes(t *testing.T) {
 }
 
 func TestWorkRelationStoreFailureIsNotInvalidInput(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestWorkRelationStoreFailureIsNotInvalidInput(t *testing.T) {
 func TestResolveResourceRef(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestResolveResourceRef(t *testing.T) {
 func TestResolveResourceRefRejectsMismatchedTypedRefPrefix(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestResolveResourceRefRejectsMismatchedTypedRefPrefix(t *testing.T) {
 func TestResolveResourceRefPrefersHandleBeforeLegacyIDFallback(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}

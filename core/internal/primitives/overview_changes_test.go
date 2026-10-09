@@ -12,13 +12,13 @@ import (
 
 	"agent-nexus-core/internal/plans"
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/storage"
 	"agent-nexus-core/internal/testsql"
 )
 
 func TestOverviewDigestNetTransitionsVisibilityAndBounds(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func TestOverviewDigestNetTransitionsVisibilityAndBounds(t *testing.T) {
 	if d, err = s.LoadOverviewChanges(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), "bob", visible, now.Add(2*time.Hour), time.Hour); err != nil || d.Since != nil || len(d.Items) != 0 {
 		t.Fatalf("%+v %v", d, err)
 	}
-	other, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	other, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,8 +168,9 @@ func TestOverviewDigestNetTransitionsVisibilityAndBounds(t *testing.T) {
 }
 
 func TestRefPreviewRealWireFixtureAndBoardPrivacy(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

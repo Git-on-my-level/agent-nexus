@@ -13,7 +13,6 @@ import (
 
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/storage"
 )
 
 const validVisualReport = `{"kind":"anx.visual-report","schema_version":1,"title":"Demo dashboard","summary":"Seven initiatives","generated_at":"2026-10-04T12:00:00Z","projects":[{"id":"demo","title":"Demo","summary":"Build","outcome":"Launch"}],"sources":[],"panels":[{"id":"note","project_id":"demo","type":"explanation","title":"Progress","author":"Test","provenance":"reported","observed_at":null,"freshness":"unavailable","source_ids":[],"data":{"text":"3 of 7 ready"}}]}`
@@ -38,7 +37,7 @@ func TestDocumentWriteMatchesReportReader(t *testing.T) {
 		`{"kind":" anx.visual-report ",`,
 	}
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -108,8 +107,9 @@ func TestDocumentWriteMatchesReportReader(t *testing.T) {
 }
 
 func TestDocumentReviewDeadlineRejectedAtCreateAndRevise(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,8 +137,9 @@ func TestDocumentReviewDeadlineRejectedAtCreateAndRevise(t *testing.T) {
 }
 
 func TestDocumentRevisionRetainsExpiredPanelDeadline(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

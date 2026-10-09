@@ -10,6 +10,7 @@ import (
 )
 
 func TestExternalEvidenceResolutionContract(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s, board := newWorkTestStore(t)
 	at := "2026-10-05T10:00:00Z"
@@ -73,6 +74,7 @@ func TestExternalEvidenceResolutionContract(t *testing.T) {
 }
 
 func TestExternalObservationAliasesAndConnectionAmbiguity(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s, board := newWorkTestStore(t)
 	for _, connection := range []string{"one", "two"} {

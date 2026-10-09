@@ -8,6 +8,7 @@ import (
 )
 
 func TestEvidenceUpgradePreservesUnrelatedAuthorizationIndexes(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	root := t.TempDir()
 	db := mainHistoryDatabase(t, root, 63)
@@ -70,6 +71,7 @@ func TestEvidenceUpgradePreservesUnrelatedAuthorizationIndexes(t *testing.T) {
 }
 
 func TestEvidenceUpgradeBackfillsChangedSourcesAcrossBatches(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	root := t.TempDir()
 	db := mainHistoryDatabase(t, root, 63)

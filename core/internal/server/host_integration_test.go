@@ -75,6 +75,7 @@ func hostSignedHTTPAt(t *testing.T, method, url, hostID, keyID, kind string, pri
 }
 
 func TestHostIdentityLifecycle(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken, allowPasskeyDevBypass: true})
 	url := env.server.URL
@@ -263,6 +264,7 @@ func TestHostIdentityLifecycle(t *testing.T) {
 }
 
 func TestHostInteractiveApproveDenyAndPoll(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	verificationURL := "https://example.com/o/acme/w/main/access/hosts/enroll"
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken, allowPasskeyDevBypass: true, hostEnrollmentVerificationURL: verificationURL})
@@ -344,6 +346,7 @@ func TestHostInteractiveApproveDenyAndPoll(t *testing.T) {
 }
 
 func TestHostAdoptionProofPreservesActor(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken, allowPasskeyDevBypass: true})
 	url := env.server.URL
@@ -409,6 +412,7 @@ func TestHostAdoptionProofPreservesActor(t *testing.T) {
 }
 
 func TestHostPersonaRunRosterAndBridge(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken, allowPasskeyDevBypass: true})
 	url := env.server.URL
@@ -539,6 +543,7 @@ func TestHostPersonaRunRosterAndBridge(t *testing.T) {
 }
 
 func TestRevokedDerivedAgentGrantCreatesNoToken(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken, allowPasskeyDevBypass: true})
 	url := env.server.URL
@@ -607,6 +612,7 @@ func TestRevokedDerivedAgentGrantCreatesNoToken(t *testing.T) {
 }
 
 func TestInteractiveEnrollmentBoundsAndRetention(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken, allowPasskeyDevBypass: true})
 	ctx := context.Background()

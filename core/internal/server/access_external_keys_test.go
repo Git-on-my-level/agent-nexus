@@ -14,6 +14,7 @@ import (
 )
 
 func TestBatchResolutionKeepsVisibleSharedEvidenceAndInputEntries(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
@@ -110,6 +111,7 @@ func TestBatchResolutionKeepsVisibleSharedEvidenceAndInputEntries(t *testing.T) 
 }
 
 func TestExternalEvidenceKeysProtectStoredPlansAcrossHTTPReaders(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("HTTP/storage integration")
 	}

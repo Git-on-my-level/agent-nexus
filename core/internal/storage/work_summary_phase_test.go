@@ -7,6 +7,7 @@ import (
 )
 
 func TestPrimaryCardPhaseRepairPreservesActivityAndSecondaryPlacement(t *testing.T) {
+	t.Parallel()
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		t.Fatal(err)

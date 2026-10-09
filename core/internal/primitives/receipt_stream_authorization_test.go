@@ -14,6 +14,7 @@ import (
 )
 
 func TestReceiptStreamCanonicalReferenceChanges(t *testing.T) {
+	t.Parallel()
 	for _, change := range []struct{ name, sql string }{
 		{"new-event", `INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) VALUES('new-trigger','message_posted','now','owner','public','["thread:private"]','{}'); UPDATE agent_wakeups SET trigger_event_id='new-trigger' WHERE wakeup_id='wake'`},
 		{"event-refs", `UPDATE events SET refs_json='["thread:private"]' WHERE id='trigger'`},
@@ -68,6 +69,7 @@ func TestReceiptStreamCanonicalReferenceChanges(t *testing.T) {
 }
 
 func TestReceiptStreamNewLeavesUseCanonicalReferenceIndexes(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_, store := receiptAuthorizationFixture(t)
 	scope := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "stranger"})
@@ -95,6 +97,7 @@ func TestReceiptStreamNewLeavesUseCanonicalReferenceIndexes(t *testing.T) {
 }
 
 func TestReceiptStreamCrossReceiptReferencesInvalidateBase(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ws, store := receiptAuthorizationFixture(t)
 	scope := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "stranger"})
@@ -140,6 +143,7 @@ func TestReceiptStreamCrossReceiptReferencesInvalidateBase(t *testing.T) {
 }
 
 func TestReceiptStreamLateWakeupNavigationReference(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ws, store := receiptAuthorizationFixture(t)
 	if _, err := ws.DB().Exec(`INSERT INTO ref_edges(id,source_type,source_id,target_type,target_id,edge_type,created_at) VALUES('late-link','event','trigger','wakeup','late','ref','now')`); err != nil {
@@ -171,6 +175,7 @@ func TestReceiptStreamLateWakeupNavigationReference(t *testing.T) {
 }
 
 func TestReceiptStreamPayloadChecksConcurrentTriggerTrash(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ws, _ := receiptAuthorizationFixture(t)
 	db, counter := testsql.Open("file:" + ws.Layout().DatabasePath)
@@ -204,6 +209,7 @@ func TestReceiptStreamPayloadChecksConcurrentTriggerTrash(t *testing.T) {
 }
 
 func TestReceiptStreamPayloadValidatesEpochDuringRevocation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ws, _ := receiptAuthorizationFixture(t)
 	db, counter := testsql.Open("file:" + ws.Layout().DatabasePath)
@@ -243,6 +249,7 @@ func TestReceiptStreamPayloadValidatesEpochDuringRevocation(t *testing.T) {
 }
 
 func TestReceiptStreamReplayRetainsProgressAndPrioritizesAppends(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ws, store := receiptAuthorizationFixture(t)
 	if _, err := ws.DB().Exec(`WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<2401)
@@ -301,7 +308,7 @@ func TestReceiptStreamReplayRetainsProgressAndPrioritizesAppends(t *testing.T) {
 func receiptAuthorizationFixture(t *testing.T) (*storage.Workspace, *primitives.Store) {
 	t.Helper()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

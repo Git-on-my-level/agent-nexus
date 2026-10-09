@@ -3,13 +3,12 @@ package primitives
 import (
 	"context"
 	"testing"
-
-	"agent-nexus-core/internal/storage"
 )
 
 func TestPointSnapshotMissingAndExpiredProofDenies(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,6 +38,7 @@ func TestPointSnapshotMissingAndExpiredProofDenies(t *testing.T) {
 }
 
 func TestPointSnapshotInvalidUTF8RetainsCanonicalFallback(t *testing.T) {
+	t.Parallel()
 	snapshot := &denialSnapshot{rows: "[[\"card\",\"private\xff\"]]"}
 	snapshot.preparePointIndex()
 	if snapshot.pointIndex != nil {

@@ -7,7 +7,6 @@ import (
 
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/storage"
 )
 
 // Regression: timeline_message_count aggregates must treat thread_id equality on trim.
@@ -15,7 +14,7 @@ func TestListTopicsEmbedsTimelineMessageCountWithWhitespaceThreadMismatch(t *tes
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}

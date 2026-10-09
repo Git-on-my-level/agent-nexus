@@ -20,6 +20,7 @@ import (
 // Opt-in, synthetic only. Profile starts after all five streams complete their
 // initial sweep, so fixture construction and initial delivery are excluded.
 func TestStreamIdleScaleProfile(t *testing.T) {
+	t.Parallel()
 	if os.Getenv("ANX_STREAM_PROFILE") == "" {
 		t.Skip("set ANX_STREAM_PROFILE to a CPU profile path")
 	}

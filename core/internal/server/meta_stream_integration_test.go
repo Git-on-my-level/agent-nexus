@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,7 +20,6 @@ import (
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
-	"agent-nexus-core/internal/storage"
 )
 
 func TestMetaHandshakeAndGeneratedMetaEndpoints(t *testing.T) {
@@ -251,6 +251,15 @@ func TestEventsStreamSurvivesServerWriteTimeout(t *testing.T) {
 	reader, stop := startSSEReader(resp.Body)
 	defer stop()
 
+	// Establish delivery before waiting past the deadline. The initial
+	// keepalive alone does not prove that the event pager has caught up.
+	ready, err := store.AppendEvent(context.Background(), "actor-timeout", map[string]any{"type": "message_posted", "thread_id": "thread-timeout-1", "refs": []string{}, "payload": map[string]any{"text": "stream ready"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := awaitSSEEvent(t, reader, 2*time.Second); got.ID != anyString(ready["id"]) {
+		t.Fatalf("initial stream delivery: %#v", got)
+	}
 	time.Sleep(250 * time.Millisecond)
 
 	// Seed through the store: the deliberately tiny HTTP write deadline tests
@@ -450,7 +459,7 @@ func newMetaStreamTestServer(t *testing.T, configure func(*httptest.Server), opt
 	requireIntegrationTest(t)
 	t.Helper()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -554,8 +563,12 @@ type sseEvent struct {
 
 func startSSEReader(body io.ReadCloser) (<-chan sseEvent, func()) {
 	events := make(chan sseEvent, 16)
+	done := make(chan struct{})
+	stopped := make(chan struct{})
+	var stopOnce sync.Once
 
 	go func() {
+		defer close(done)
 		defer close(events)
 		scanner := bufio.NewScanner(body)
 		var (
@@ -572,10 +585,9 @@ func startSSEReader(body io.ReadCloser) (<-chan sseEvent, func()) {
 			}
 			var payload map[string]any
 			if err := json.Unmarshal([]byte(strings.Join(dataLines, "\n")), &payload); err == nil {
-				events <- sseEvent{
-					ID:    currentID,
-					Event: currentEvent,
-					Data:  payload,
+				select {
+				case events <- sseEvent{ID: currentID, Event: currentEvent, Data: payload}:
+				case <-stopped:
 				}
 			}
 			currentID = ""
@@ -605,7 +617,8 @@ func startSSEReader(body io.ReadCloser) (<-chan sseEvent, func()) {
 	}()
 
 	stop := func() {
-		_ = body.Close()
+		stopOnce.Do(func() { close(stopped); _ = body.Close() })
+		<-done
 	}
 	return events, stop
 }

@@ -8,6 +8,7 @@ import (
 )
 
 func TestAskSubjectBoardPrivateDefaultAndReplacement(t *testing.T) {
+	t.Parallel()
 	s, ws, card, _ := askDeliveryFixture(t)
 	ctx := context.Background()
 	board, err := s.GetBoard(ctx, anyStringValue(card["board_id"]))
@@ -65,6 +66,7 @@ func TestAskSubjectBoardPrivateDefaultAndReplacement(t *testing.T) {
 }
 
 func TestAskSubjectBoardAllocationRollsBackAndSerializes(t *testing.T) {
+	t.Parallel()
 	s, ws, _, _ := askDeliveryFixture(t)
 	ctx := context.Background()
 	tx, err := s.db.BeginTx(ctx, nil)

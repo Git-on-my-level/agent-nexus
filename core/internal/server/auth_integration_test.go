@@ -68,7 +68,7 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 	requireIntegrationTest(t)
 	t.Helper()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}

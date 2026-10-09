@@ -14,6 +14,7 @@ import (
 // This new route has no historical baseline exception. Exercise its own strict
 // budget on the shared 4096-record fixture, independently of old route pins.
 func TestPerformancePMPresence(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	requirePerformanceTest(t)
 	env := newPerformanceEnv(t)
 	tx, err := env.db.Begin()

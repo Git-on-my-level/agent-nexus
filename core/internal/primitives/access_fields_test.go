@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/resourceaccess"
-	"agent-nexus-core/internal/storage"
 )
 
 func TestResourceAccessScopeRechecksRootsAndQuotedRelations(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,8 +73,9 @@ func TestResourceAccessScopeRechecksRootsAndQuotedRelations(t *testing.T) {
 }
 
 func TestResourceAccessEveryOwnershipField(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,8 +192,9 @@ func TestResourceAccessEveryOwnershipField(t *testing.T) {
 }
 
 func TestResourceAccessScalarDocumentID(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

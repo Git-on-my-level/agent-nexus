@@ -51,9 +51,11 @@ func reportPanelByType(t *testing.T, response map[string]any, kind string) map[s
 }
 
 func TestReportLiveWorkAndArchiveBoundary(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	for _, structured := range []bool{false, true} {
 		t.Run(fmt.Sprint(structured), func(t *testing.T) {
+			t.Parallel()
 			h := newPrimitivesTestServer(t)
 			workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"One","created_at":"2026-03-04T10:00:00Z"}}`, 201)
 			board := workPostJSON(t, h.baseURL+"/boards", `{"actor_id":"actor-1","board":{"title":"Initiatives"}}`, 201)["board"].(map[string]any)
@@ -112,6 +114,7 @@ func (s reportWorkFailure) ListReportWork(context.Context, primitives.ReportWork
 }
 
 func TestReportPartialAndUnavailablePanels(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"One","created_at":"2026-03-04T10:00:00Z"}}`, 201)
@@ -158,6 +161,7 @@ func TestReportPartialAndUnavailablePanels(t *testing.T) {
 }
 
 func TestReportAskAgeAnswersAndPrivateEvents(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"One","created_at":"2026-03-04T10:00:00Z"}}`, 201)
@@ -211,6 +215,7 @@ func TestReportAskAgeAnswersAndPrivateEvents(t *testing.T) {
 }
 
 func TestReportActivityCollapsesBoardEditBursts(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	now := time.Now().UTC()
 	reader := reportReader{now: now, eventsRead: true, visibility: map[string]bool{"board:launch": true}, events: []map[string]any{}}
@@ -228,6 +233,7 @@ func TestReportActivityCollapsesBoardEditBursts(t *testing.T) {
 }
 
 func TestReportActivityIncludesAuthorizedDecisions(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()

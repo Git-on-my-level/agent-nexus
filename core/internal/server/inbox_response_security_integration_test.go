@@ -27,6 +27,7 @@ func responseSecurityFixture(t *testing.T) (primitivesTestHarness, string) {
 }
 
 func TestInboxResponseRequiresHumanAcrossWritePaths(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	h, itemID := responseSecurityFixture(t)
 	ctx := context.Background()
@@ -57,6 +58,7 @@ func TestInboxResponseRequiresHumanAcrossWritePaths(t *testing.T) {
 }
 
 func TestInboxResponseConcurrentReplayIsSingleEvent(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	h, itemID := responseSecurityFixture(t)
 	endpoint := h.baseURL + "/inbox/" + url.PathEscape(itemID) + "/respond"

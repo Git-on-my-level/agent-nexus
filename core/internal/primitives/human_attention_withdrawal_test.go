@@ -6,12 +6,12 @@ import (
 	"testing"
 
 	"agent-nexus-core/internal/blob"
-	"agent-nexus-core/internal/storage"
 )
 
 func TestHumanAttentionWithdrawalResolvesOnlyTheRequestingAgentsOpenAsk(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -39,6 +39,7 @@ func scopeInboxHTTP(t *testing.T, env authIntegrationEnv, token, path string) ma
 }
 
 func TestScopeInboxHTTPAccessRequestAndRevokedTargetEnrichment(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
@@ -115,6 +116,7 @@ func TestScopeInboxHTTPAccessRequestAndRevokedTargetEnrichment(t *testing.T) {
 // This runs the actual HTTP oracle and actual repository refusal boundaries;
 // no production dispatcher exists yet, so it does not claim fallback wiring.
 func TestScopeInboxHTTPDirectoryCompletenessAndRefusalMatrix(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()

@@ -14,14 +14,13 @@ import (
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
-	"agent-nexus-core/internal/storage"
 )
 
 func TestActorEndpointsRegisterAndListStableOrder(t *testing.T) {
 	requireIntegrationTest(t)
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -78,7 +77,7 @@ func TestPostThreadsRejectsUnknownActorID(t *testing.T) {
 	requireIntegrationTest(t)
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
