@@ -71,6 +71,8 @@
   >
 {:else if client && text}
   <span class="anx-time {className}">{text}</span>
+{:else if datetime}
+  <time class="anx-time {className}" {datetime}></time>
 {:else}
   <span class="anx-time {className}">{fallback}</span>
 {/if}

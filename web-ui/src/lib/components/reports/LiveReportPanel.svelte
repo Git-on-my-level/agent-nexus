@@ -6,7 +6,7 @@
   import { inboxItemMailboxId } from "$lib/inboxUtils.js";
   import { LIVE_REPORT_TYPES, formatLiveAge } from "$lib/liveReports.js";
   import Time from "$lib/time/Time.svelte";
-  import { instantIso } from "$lib/time/format.js";
+  import { formatElapsed, instantIso, instantMs } from "$lib/time/format.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   let {
     panel,
@@ -39,6 +39,15 @@
     if (latest?.state !== undefined) return latest.state;
     if (latest?.value !== undefined) return String(latest.value);
     return null;
+  };
+  /**
+   * Remaining length of an enrollment, not a relative instant: "expires in 41m"
+   * while it is still open, "expired" once the deadline has passed.
+   */
+  const enrollmentExpiry = (expiresAt) => {
+    const at = instantMs(expiresAt);
+    if (at == null) return "";
+    return at <= now ? "expired" : `expires in ${formatElapsed(at - now)}`;
   };
 </script>
 
@@ -179,13 +188,11 @@
       {#if fleetEnrollments.length}
         <ul class="rows">
           {#each fleetEnrollments as enrollment}
+            {@const expiry = enrollmentExpiry(enrollment.expires_at)}
             <li>
               <strong>{enrollment.requested_slug}</strong>
               <p class="muted">
-                {enrollment.status} · expires {#if instantIso(enrollment.expires_at)}<Time
-                    value={enrollment.expires_at}
-                    {now}
-                  />{:else}<UnavailableValue
+                {enrollment.status} · {#if expiry}{expiry}{:else}<UnavailableValue
                     reason="No expiry recorded for this request."
                   />{/if}
               </p>
