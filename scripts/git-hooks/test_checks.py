@@ -301,6 +301,117 @@ class RepoTest(unittest.TestCase):
                 checks.go_fast_tests("core", {"core/internal/leaf/leaf.go"}, False)
         self.assertEqual(killpg.call_args.args[0], started.pid)
 
+    # Only the files the release tooling cannot generate from VERSION itself.
+    VERSION_SOURCES = {
+        "VERSION": "v0.1.0\n",
+        "adapters/agent-bridge/pyproject.toml":
+            '[project]\nname = "anx-agent-bridge"\nversion = "0.1.0"\n',
+        "web-ui/package.json": '{\n  "name": "web-ui",\n  "version": "0.1.0"\n}\n',
+    }
+
+    def write_release_fixture(self):
+        """A repo carrying the real version tooling, so bumps verify for real."""
+        for name in ("version-managed-files.sh", "read-version.sh", "sync-version.sh",
+                     "set-version.sh", "ci-release-base.py"):
+            source = Path(__file__).resolve().parents[1] / name
+            destination = self.root / "scripts" / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(source.read_bytes())
+            destination.chmod(0o755)
+        for path, content in self.VERSION_SOURCES.items():
+            self.write(path, content)
+        self.set_version("v0.1.0")
+        self.git("add", ".")
+        self.git("commit", "-qm", "version tooling")
+        self.git("update-ref", "refs/remotes/origin/main", "HEAD")
+
+    def set_version(self, version):
+        subprocess.check_output(["bash", str(self.root / "scripts/set-version.sh"), version],
+                                cwd=self.root, stderr=subprocess.PIPE)
+
+    def bump_version(self, version):
+        self.set_version(version)
+        self.git("add", "--", *sorted(checks.version_managed_files()))
+        self.git("commit", "-qm", f"Prepare release {version}")
+
+    def test_release_version_bump_selects_no_tests(self):
+        self.write_release_fixture()
+        base = self.git("rev-parse", "HEAD").decode().strip()
+        self.bump_version("v0.1.1")
+        changed = checks.changed_paths("fast")
+        # The bump is exactly the shared list the CI short-circuit reads.
+        self.assertEqual(changed, checks.version_managed_files())
+        with patch.object(checks, "run") as run, \
+                patch("sys.stdout", new_callable=io.StringIO) as out:
+            checks.fast_tests(changed, base)
+        self.assertEqual(run.call_args_list, [])
+        self.assertIn("release version bump only; source commit verified by CI", out.getvalue())
+        # Same commits, but an uncommitted edit the commit walk cannot see.
+        self.write("VERSION", "v9.9.9\n")
+        self.assertFalse(checks.release_bump_only(changed, base))
+        self.git("checkout", "--", "VERSION")
+        # Consecutive bumps in one push are still only bumps.
+        self.bump_version("v0.1.2")
+        self.assertTrue(checks.release_bump_only(checks.changed_paths("fast"), base))
+
+    def test_only_a_regenerated_bump_skips_selection(self):
+        self.write_release_fixture()
+        base = self.git("rev-parse", "HEAD").decode().strip()
+        # A hand edit of a version-managed file is not a generated bump, even
+        # though its path is on the list: package.json also carries dependencies.
+        self.write("web-ui/package.json", '{\n  "name": "web-ui",\n  "version": "0.1.0",\n'
+                                          '  "dependencies": {"first": "1.0.0"}\n}\n')
+        self.git("add", ".")
+        self.git("commit", "-qm", "add a dependency")
+        changed = checks.changed_paths("fast")
+        self.assertFalse(changed - checks.version_managed_files())
+        self.assertFalse(checks.release_bump_only(changed, base))
+        self.assertIn(("pnpm", "-C", "web-ui", "run", "test:unit"),
+                      self.fast_commands(changed, base))
+        # Nor is a bump that smuggles a dependency in beside the version fields,
+        # even though its diff is exactly the list: regenerating the parent's
+        # files at the new version does not reproduce it.
+        dependencies = self.git("rev-parse", "HEAD").decode().strip()
+        self.set_version("v0.1.1")
+        self.write("web-ui/package.json", '{\n  "name": "web-ui",\n  "version": "0.1.1",\n'
+                                          '  "dependencies": {"first": "1.0.0", "second": "2.0.0"}\n}\n')
+        self.git("add", "--", *sorted(checks.version_managed_files()))
+        self.git("commit", "-qm", "Prepare release v0.1.1")
+        changed = checks.changed_paths("fast")
+        self.assertEqual(changed, checks.version_managed_files())
+        self.assertFalse(checks.release_bump_only(changed, dependencies))
+
+    def test_a_bump_mixed_with_other_work_or_local_edits_still_runs_tests(self):
+        self.write_release_fixture()
+        base = self.git("rev-parse", "HEAD").decode().strip()
+        self.write("core/a.go", "package core\n\nfunc A() {}\n")
+        self.git("add", ".")
+        self.git("commit", "-qm", "source change")
+        self.bump_version("v0.1.1")
+        changed = checks.changed_paths("fast")
+        self.assertFalse(checks.release_bump_only(changed, base))
+        self.assertIn(("go", "test", "-short", "./."), self.fast_commands(changed, base))
+        # A base at HEAD leaves the walk no commit to clear.
+        head = self.git("rev-parse", "HEAD").decode().strip()
+        self.assertFalse(checks.release_bump_only({"VERSION"}, head))
+
+    def test_a_detector_that_cannot_answer_fails_closed(self):
+        self.write_release_fixture()
+        # Commit the break, so the status guard cannot stand in for the detector.
+        self.write("scripts/ci-release-base.py", "import sys\n\nsys.exit(3)\n")
+        self.git("add", ".")
+        self.git("commit", "-qm", "break the release detector")
+        self.git("update-ref", "refs/remotes/origin/main", "HEAD")
+        base = self.git("rev-parse", "HEAD").decode().strip()
+        self.bump_version("v0.1.1")
+        changed = checks.changed_paths("fast")
+        self.assertEqual(changed, checks.version_managed_files())
+        self.assertFalse(checks.release_bump_only(changed, base))
+        # A missing file list is just as unverifiable.
+        self.git("rm", "-q", "scripts/version-managed-files.sh")
+        self.git("commit", "-qm", "drop the list")
+        self.assertFalse(checks.release_bump_only(changed, base))
+
     def write_routes(self, path, routes):
         document = {"version": 1, "route_count": len(routes),
                     "routes": [{"method": m, "path": p, "access_class": c} for m, p, c in routes]}
