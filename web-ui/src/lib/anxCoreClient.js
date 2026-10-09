@@ -484,11 +484,6 @@ const adapterCommandTable = [
   ],
   ["listHostEnrollmentTokens", "hosts.tokens.list"],
   [
-    "getHostEnrollmentToken",
-    "hosts.tokens.get",
-    (tokenId) => p(pathParams({ token_id: tokenId })),
-  ],
-  [
     "createHostEnrollmentToken",
     "hosts.tokens.create",
     (payload) => ({ options: b(payload) }),

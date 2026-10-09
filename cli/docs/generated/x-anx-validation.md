@@ -4,9 +4,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `223`
+- Command operations: `222`
 - Baseline-allowed required-field gaps: `120`
-- Missing recommended examples: `203`
+- Missing recommended examples: `202`
 
 ## Baseline gap counts
 
@@ -247,7 +247,6 @@ Generated from `contracts/anx-openapi.yaml`.
 - `hosts.patch` `PATCH /hosts/{host_id}`
 - `hosts.revoke` `DELETE /hosts/{host_id}`
 - `hosts.tokens.create` `POST /auth/hosts/enrollment-tokens`
-- `hosts.tokens.get` `GET /auth/hosts/enrollment-tokens/{token_id}`
 - `hosts.tokens.list` `GET /auth/hosts/enrollment-tokens`
 - `hosts.tokens.revoke` `POST /auth/hosts/enrollment-tokens/{token_id}/revoke`
 - `inbox.get` `GET /inbox/{inbox_id}`

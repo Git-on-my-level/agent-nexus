@@ -6522,31 +6522,6 @@ paths:
         '401': {$ref: '#/components/responses/ErrorResponse'}
         '403': {$ref: '#/components/responses/ErrorResponse'}
 
-  /auth/hosts/enrollment-tokens/{token_id}:
-    get:
-      operationId: getHostEnrollmentToken
-      summary: Get one headless enrollment token
-      description: Human or explicitly granted auth-admin agent. One indexed row, for watching whether a specific grant has been redeemed without reading the whole history. The secret is never returned.
-      tags: [auth, hosts]
-      x-anx-surface: utility
-      x-anx-command-id: hosts.tokens.get
-      x-anx-cli-path: host tokens get
-      x-anx-why: Check whether one enrollment grant has been used.
-      x-anx-input-mode: none
-      x-anx-streaming: {mode: none}
-      x-anx-output-envelope: Returns `{ enrollment_token }` without the secret.
-      x-anx-error-codes: [auth_required, invalid_token, auth_admin_required, host_not_found]
-      x-anx-concepts: [auth, hosts]
-      x-anx-stability: beta
-      x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-      parameters:
-        - {name: token_id, in: path, required: true, schema: {type: string}}
-      responses:
-        '200': {description: Token metadata, content: {application/json: {schema: {$ref: '#/components/schemas/HostEnrollmentTokenResponse'}}}}
-        '401': {$ref: '#/components/responses/ErrorResponse'}
-        '403': {$ref: '#/components/responses/ErrorResponse'}
-        '404': {$ref: '#/components/responses/ErrorResponse'}
-
   /auth/hosts/enrollment-tokens/{token_id}/revoke:
     post:
       operationId: revokeHostEnrollmentToken

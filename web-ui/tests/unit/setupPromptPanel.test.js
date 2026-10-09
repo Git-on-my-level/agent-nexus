@@ -20,7 +20,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const coreClientMock = vi.hoisted(() => ({
   createHostEnrollmentToken: vi.fn(),
   revokeHostEnrollmentToken: vi.fn(),
-  getHostEnrollmentToken: vi.fn(),
 }));
 
 /**
@@ -65,10 +64,6 @@ beforeEach(() => {
     tokenResponse("htok_first"),
   );
   coreClientMock.revokeHostEnrollmentToken.mockResolvedValue({});
-  coreClientMock.getHostEnrollmentToken.mockReset();
-  coreClientMock.getHostEnrollmentToken.mockResolvedValue({
-    enrollment_token: { id: "htok_htok_first", consumed_at: null },
-  });
 });
 
 afterEach(() => cleanup());
@@ -322,69 +317,8 @@ describe("a deployment agents can reach", () => {
   });
 });
 
-describe("watching for the machine", () => {
-  /*
-   * The confirmation read has to be bounded by the request, not by workspace
-   * size: a workspace with a thousand hosts and years of token history pays
-   * the same as an empty one, because this reads one indexed row.
-   */
-  it("reads one token by id, not the host or token lists", async () => {
-    vi.useFakeTimers();
-    try {
-      render(SetupPrompt, {
-        props: { kind: "machine", cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
-      });
-      await vi.waitFor(() =>
-        expect(coreClientMock.createHostEnrollmentToken).toHaveBeenCalled(),
-      );
-      await vi.advanceTimersByTimeAsync(11_000);
-      expect(coreClientMock.getHostEnrollmentToken).toHaveBeenCalledWith(
-        "htok_htok_first",
-      );
-      // The panel has no other read: no listHosts, no listHostEnrollmentTokens.
-      expect(Object.keys(coreClientMock).sort()).toEqual([
-        "createHostEnrollmentToken",
-        "getHostEnrollmentToken",
-        "revokeHostEnrollmentToken",
-      ]);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("tells the page once when the token is redeemed, then stops", async () => {
-    vi.useFakeTimers();
-    try {
-      const onredeemed = vi.fn();
-      render(SetupPrompt, {
-        props: {
-          kind: "machine",
-          cliBaseUrl: REMOTE,
-          workspaceLabel: "Ops",
-          onredeemed,
-        },
-      });
-      await vi.waitFor(() =>
-        expect(coreClientMock.createHostEnrollmentToken).toHaveBeenCalled(),
-      );
-      coreClientMock.getHostEnrollmentToken.mockResolvedValue({
-        enrollment_token: {
-          id: "htok_htok_first",
-          consumed_at: new Date().toISOString(),
-        },
-      });
-      await vi.advanceTimersByTimeAsync(6_000);
-      expect(onredeemed).toHaveBeenCalledTimes(1);
-
-      // The roster is read on the event, not on every tick after it.
-      await vi.advanceTimersByTimeAsync(30_000);
-      expect(onredeemed).toHaveBeenCalledTimes(1);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("stops watching when the token expires, and takes the secret with it", async () => {
+describe("an expired token leaves the page", () => {
+  it("removes Copy, the secret and the prompt, and offers a new one", async () => {
     vi.useFakeTimers();
     try {
       coreClientMock.createHostEnrollmentToken.mockResolvedValue(
@@ -398,13 +332,6 @@ describe("watching for the machine", () => {
       );
 
       await vi.advanceTimersByTimeAsync(70_000);
-      const reads = coreClientMock.getHostEnrollmentToken.mock.calls.length;
-      await vi.advanceTimersByTimeAsync(120_000);
-      expect(coreClientMock.getHostEnrollmentToken.mock.calls.length).toBe(
-        reads,
-      );
-
-      // Expired means gone: no Copy, no secret in the DOM, and a way back.
       expect(
         screen.queryByRole("button", { name: "Copy setup prompt" }),
       ).toBeNull();

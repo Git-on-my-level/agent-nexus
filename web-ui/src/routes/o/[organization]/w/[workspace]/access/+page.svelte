@@ -704,7 +704,13 @@
     // shell badge reads that instead of polling a second time.
     const releaseCount = claimPendingAccessCount();
     void loadAll();
-    // Host cards show agent states; core's roster stream says when they move.
+    /*
+     * Host cards show agent states; core's roster stream says when they move.
+     * It is also what says a machine arrived: core publishes on this hub when
+     * a headless enrollment completes, so the first machine shows up here with
+     * no poll of its own and no reload — which is why there is no watcher on
+     * the setup panel's token.
+     */
     const stopAgentChanges = liveAgentChanges({
       client: coreClient,
       debounceMs: 600,
@@ -987,7 +993,6 @@
                 ? "Connect another machine"
                 : "Connect your first machine"}
               lede="Agents reach this workspace through the computer they run on. Set one up once — every agent on that computer is in from then on, with no per-agent setup. Agents already set up there keep their history."
-              onredeemed={() => void loadHosts()}
             >
               {#snippet status()}
                 {#if !activeHosts.length}

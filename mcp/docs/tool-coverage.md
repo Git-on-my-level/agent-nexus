@@ -196,7 +196,6 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | hosts.patch | host | PATCH | /hosts/{host_id} | gated_admin | host exclusions and names are auth administration |
 | hosts.revoke | host | DELETE | /hosts/{host_id} | gated_admin | host revocation cascades to derived agent credentials |
 | hosts.tokens.create | host | POST | /auth/hosts/enrollment-tokens | gated_sensitive | headless enrollment tokens are one-time secrets |
-| hosts.tokens.get | host | GET | /auth/hosts/enrollment-tokens/{token_id} | gated_admin | enrollment grant state is auth administration |
 | hosts.tokens.list | host | GET | /auth/hosts/enrollment-tokens | gated_admin | enrollment token inventory is auth administration |
 | hosts.tokens.revoke | host | POST | /auth/hosts/enrollment-tokens/{token_id}/revoke | gated_admin | enrollment token revocation is auth administration |
 | inbox.get | inbox | GET | /inbox/{inbox_id} | exposed_read | inbox item read |

@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `223`
+- Commands: `222`
 
 ## `actors.create`
 
@@ -1588,19 +1588,6 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `auth`, `hosts`
 - Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `invalid_request`
 - Output: Returns `{ enrollment_token, token }` once.
-- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-
-## `hosts.tokens.get`
-
-- CLI path: `host tokens get`
-- HTTP: `GET /auth/hosts/enrollment-tokens/{token_id}`
-- Stability: `beta`
-- Surface: `utility`
-- Input mode: `none`
-- Why: Check whether one enrollment grant has been used.
-- Concepts: `auth`, `hosts`
-- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `host_not_found`
-- Output: Returns `{ enrollment_token }` without the secret.
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
 
 ## `hosts.tokens.list`

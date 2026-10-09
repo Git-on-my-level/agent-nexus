@@ -180,7 +180,6 @@ export declare class AnxClient {
     hostsPatch(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     hostsRevoke(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     hostsTokensCreate(options?: RequestOptions): Promise<InvokeResult>;
-    hostsTokensGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     hostsTokensList(options?: RequestOptions): Promise<InvokeResult>;
     hostsTokensRevoke(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     inboxGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

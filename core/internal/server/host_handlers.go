@@ -88,9 +88,6 @@ func hostRouteAccess(r *http.Request) routeAccessRequirement {
 	}
 	if strings.HasPrefix(path, "/auth/hosts/enrollment-tokens/") {
 		parts := strings.Split(strings.TrimPrefix(path, "/auth/hosts/enrollment-tokens/"), "/")
-		if len(parts) == 1 && parts[0] != "" && method == http.MethodGet {
-			return authenticated
-		}
 		if len(parts) == 2 && parts[0] != "" && parts[1] == "revoke" && method == http.MethodPost {
 			return write
 		}
@@ -323,18 +320,6 @@ func handleHostAuthRoutes(w http.ResponseWriter, r *http.Request, opts handlerOp
 	}
 	if strings.HasPrefix(path, "/auth/hosts/enrollment-tokens/") {
 		parts := strings.Split(strings.TrimPrefix(path, "/auth/hosts/enrollment-tokens/"), "/")
-		if len(parts) == 1 && parts[0] != "" && r.Method == http.MethodGet {
-			if _, ok := hostAdmin(w, r, opts); !ok {
-				return
-			}
-			out, err := opts.authStore.GetHostEnrollmentToken(r.Context(), parts[0])
-			if err != nil {
-				hostError(w, err)
-				return
-			}
-			writeJSON(w, 200, map[string]any{"enrollment_token": out})
-			return
-		}
 		if len(parts) == 2 && parts[1] == "revoke" && r.Method == http.MethodPost {
 			admin, ok := hostAdmin(w, r, opts)
 			if !ok {

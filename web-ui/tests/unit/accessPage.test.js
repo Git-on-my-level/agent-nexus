@@ -63,7 +63,6 @@ const coreClientMock = vi.hoisted(() => ({
   listPendingHostEnrollments: vi.fn(),
   listHostEnrollmentTokens: vi.fn(),
   createHostEnrollmentToken: vi.fn(),
-  getHostEnrollmentToken: vi.fn(),
   revokeHostEnrollmentToken: vi.fn(),
   approveHostEnrollment: vi.fn(),
   denyHostEnrollment: vi.fn(),
@@ -77,6 +76,21 @@ vi.mock("$app/stores", () => ({
   page: {
     subscribe: pageStore.subscribe,
   },
+}));
+
+/**
+ * The page learns that a machine arrived from core's roster stream, so the
+ * test needs to be able to fire it.
+ */
+const agentChangeListeners = vi.hoisted(() => new Set());
+
+vi.mock("$lib/liveWorkspaceEvents.js", () => ({
+  liveAgentChanges: ({ onChange }) => {
+    agentChangeListeners.add(onChange);
+    return () => agentChangeListeners.delete(onChange);
+  },
+  liveWorkspaceEvents: () => () => {},
+  liveInboxChanges: () => () => {},
 }));
 
 vi.mock("$lib/coreClient", () => ({
@@ -146,9 +160,6 @@ describe("access page", () => {
         id: "htok_watch",
         expires_at: new Date(Date.now() + 30 * 60_000).toISOString(),
       },
-    });
-    coreClientMock.getHostEnrollmentToken.mockResolvedValue({
-      enrollment_token: { id: "htok_watch", consumed_at: null },
     });
     coreClientMock.revokeHostEnrollmentToken.mockResolvedValue({});
     coreClientMock.listHostEnrollmentTokens.mockResolvedValue({
@@ -416,65 +427,49 @@ describe("access page", () => {
     expect(row.textContent).not.toContain("since");
   });
 
-  it("flips to Enrolled when the setup token is redeemed, without reading the roster on a timer", async () => {
+  it("flips to Enrolled on the roster signal, with no poll of its own", async () => {
     /*
      * A machine that enrols with a token files no approval request, so the
-     * only cheap signal is the token itself. The panel watches that one
-     * indexed row; the page reads the roster once, on the event.
+     * page cannot learn about it from the pending list. Core publishes on the
+     * agent-change hub when a headless enrollment completes, and this page
+     * already holds that stream open for host cards — so the first machine
+     * arrives on a signal, not on a timer, and nothing here reads the host or
+     * token lists on a schedule.
      */
-    vi.useFakeTimers();
-    try {
-      coreClientMock.listHosts.mockResolvedValue({ hosts: [] });
-      render(AccessPage, {
-        props: {
-          data: {
-            outOfWorkspaceMode: "local",
-            cliBaseUrl: "https://anx.example.test/o/acme/w/ops",
-          },
+    coreClientMock.listHosts.mockResolvedValue({ hosts: [] });
+    render(AccessPage, {
+      props: {
+        data: {
+          outOfWorkspaceMode: "local",
+          cliBaseUrl: "https://anx.example.test/o/acme/w/ops",
         },
-      });
-      await vi.waitFor(() =>
-        expect(coreClientMock.createHostEnrollmentToken).toHaveBeenCalled(),
-      );
-      const rosterReads = coreClientMock.listHosts.mock.calls.length;
+      },
+    });
+    await screen.findByText("Connect your first machine");
+    const rosterReads = coreClientMock.listHosts.mock.calls.length;
 
-      // Ticks while nothing has happened cost one token read each, and no
-      // roster read at all.
-      await vi.advanceTimersByTimeAsync(16_000);
-      expect(coreClientMock.getHostEnrollmentToken).toHaveBeenCalledWith(
-        "htok_watch",
-      );
-      expect(coreClientMock.listHosts.mock.calls.length).toBe(rosterReads);
-
-      coreClientMock.getHostEnrollmentToken.mockResolvedValue({
-        enrollment_token: {
-          id: "htok_watch",
-          consumed_at: new Date().toISOString(),
+    coreClientMock.listHosts.mockResolvedValue({
+      hosts: [
+        {
+          id: "host_new",
+          slug: "studio-m4",
+          handle: "studio-m4",
+          display_name: "studio-m4",
+          agents: [],
+          created_at: new Date().toISOString(),
+          revoked_at: null,
         },
-      });
-      coreClientMock.listHosts.mockResolvedValue({
-        hosts: [
-          {
-            id: "host_new",
-            slug: "studio-m4",
-            handle: "studio-m4",
-            display_name: "studio-m4",
-            agents: [],
-            created_at: new Date().toISOString(),
-            revoked_at: null,
-          },
-        ],
-      });
-      await vi.advanceTimersByTimeAsync(6_000);
-      await vi.waitFor(() =>
-        expect(document.querySelector("[data-host-enrolled]")).toBeTruthy(),
-      );
-      expect(
-        document.querySelector("[data-host-enrolled]").textContent,
-      ).toContain("studio-m4");
-    } finally {
-      vi.useRealTimers();
-    }
+      ],
+    });
+    // The stream fires; the page reads the roster once, on the event.
+    agentChangeListeners.forEach((fn) => fn());
+    await waitFor(() =>
+      expect(document.querySelector("[data-host-enrolled]")).toBeTruthy(),
+    );
+    expect(
+      document.querySelector("[data-host-enrolled]").textContent,
+    ).toContain("studio-m4");
+    expect(coreClientMock.listHosts.mock.calls.length).toBe(rosterReads + 1);
   });
 
   it("says access is not yours to manage, once, when every read is refused", async () => {

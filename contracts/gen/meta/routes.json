@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 229,
+  "route_count": 228,
   "routes": [
     {
       "method": "GET",
@@ -225,11 +225,6 @@
     {
       "method": "POST",
       "path": "/auth/hosts/enrollment-tokens",
-      "access_class": "authenticated_principal_surface"
-    },
-    {
-      "method": "GET",
-      "path": "/auth/hosts/enrollment-tokens/{token_id}",
       "access_class": "authenticated_principal_surface"
     },
     {
