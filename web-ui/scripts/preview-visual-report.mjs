@@ -12,7 +12,7 @@ function args(argv) {
     const key = argv[index];
     if (!key.startsWith("--") || !argv[index + 1])
       throw new Error(
-        "usage: preview-visual-report.mjs --report <file> --observations <file> --output <png> [--expect-text <text>]",
+        "usage: preview-visual-report.mjs --report <file> --observations <file> --output <png> [--expect-text <text>] [--chromium-sandbox <true|false>]",
       );
     const name = key.slice(2);
     const value = argv[++index];
@@ -80,6 +80,9 @@ export async function main(
   { launchBrowser = (options) => chromium.launch(options) } = {},
 ) {
   const input = args(argv);
+  const sandbox = input["chromium-sandbox"] ?? "true";
+  if (sandbox !== "true" && sandbox !== "false")
+    throw new Error("--chromium-sandbox must be true or false");
   JSON.parse(await readFile(input.report, "utf8"));
   const observations = JSON.parse(await readFile(input.observations, "utf8"));
   if (!Array.isArray(observations))
@@ -100,11 +103,15 @@ export async function main(
       // Use full Chromium's new headless mode. The default headless shell
       // can segfault during sandboxed startup on Linux runners.
       channel: "chromium",
-      chromiumSandbox: true,
+      // Keep sandboxing by default. Trusted test containers running as root
+      // may explicitly opt out through the command line.
+      chromiumSandbox: sandbox === "true",
     });
   } catch (error) {
-    if (isSandboxLaunchFailure(error))
+    if (isSandboxLaunchFailure(error)) {
+      process.stderr.write(`${error?.message ?? String(error)}\n`);
       return { rendered: false, reason: "sandbox_unavailable" };
+    }
     throw error;
   }
 

@@ -1,12 +1,10 @@
-import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
 import { expect, test } from "@playwright/test";
+import { runReportRenderer } from "./helpers/report-renderer.js";
 
-const execFileAsync = promisify(execFile);
 const renderer = new URL(
   "../../scripts/preview-visual-report.mjs",
   import.meta.url,
@@ -55,7 +53,7 @@ test("browser renders all six report templates against live fixtures", async ({
       writeFile(reportPath, JSON.stringify(fixture.report), "utf8"),
       writeFile(observationsPath, JSON.stringify(fixture.observations), "utf8"),
     ]);
-    await execFileAsync(
+    await runReportRenderer(
       process.execPath,
       [
         renderer.pathname,
@@ -68,6 +66,7 @@ test("browser renders all six report templates against live fixtures", async ({
         ...fixtureText[name].flatMap((text) => ["--expect-text", text]),
       ],
       { cwd: webRoot, timeout: 100_000 },
+      outputPath,
     );
     const png = await readFile(outputPath);
     expect(png.subarray(0, 8), name).toEqual(

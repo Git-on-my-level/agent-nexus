@@ -328,6 +328,9 @@ jobs:
         shell: bash
     env:
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      # The official image runs as root. Only the trusted fixture renderer
+      # explicitly opts out; its default/fallback sandbox contract stays intact.
+      ANX_TEST_REPORT_CHROMIUM_SANDBOX: "false"
     needs: changes
     if: needs.changes.outputs.web_ui == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.node_shared == 'true' || needs.changes.outputs.go_shared == 'true'
     strategy:
@@ -385,6 +388,9 @@ jobs:
         shell: bash
     env:
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      # The official image runs as root. Only the trusted fixture renderer
+      # explicitly opts out; its default/fallback sandbox contract stays intact.
+      ANX_TEST_REPORT_CHROMIUM_SANDBOX: "false"
     needs:
       - changes
       - web-ui-static-check
