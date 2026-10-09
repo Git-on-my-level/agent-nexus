@@ -264,6 +264,25 @@ class RepoTest(unittest.TestCase):
                 checks.go_fast_tests("core", {"core/internal/leaf/leaf.go"}, False)
         self.assertEqual(killpg.call_args.args[0], started.pid)
 
+    def test_an_interrupt_while_waiting_for_dependents_terminates_them(self):
+        self.write_go_module()
+        started, start = self.fake_dependents(0)
+        waits = []
+
+        def wait():
+            waits.append(1)
+            if len(waits) == 1:
+                raise KeyboardInterrupt
+            return started.returncode
+
+        started.wait = wait
+        with patch.object(checks, "run"), patch.object(checks, "start", start), \
+                patch.object(checks.os, "killpg") as killpg, \
+                patch("sys.stdout", new_callable=io.StringIO):
+            with self.assertRaises(KeyboardInterrupt):
+                checks.go_fast_tests("core", {"core/internal/leaf/leaf.go"}, False)
+        self.assertEqual(killpg.call_args.args[0], started.pid)
+
     def write_routes(self, path, routes):
         document = {"version": 1, "route_count": len(routes),
                     "routes": [{"method": m, "path": p, "access_class": c} for m, p, c in routes]}

@@ -351,10 +351,11 @@ def go_fast_tests(module, changed, whole_module):
     later = start(argv, cwd=ROOT / module)
     try:
         run("go", "test", "-short", *selected, cwd=ROOT / module)
+        output = finish(later)
     except BaseException:
         end(later)
         raise
-    print(finish(later).decode(errors="replace"), end="", flush=True)
+    print(output.decode(errors="replace"), end="", flush=True)
     if later.returncode:
         raise subprocess.CalledProcessError(later.returncode, argv)
 
