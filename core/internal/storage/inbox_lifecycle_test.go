@@ -10,6 +10,7 @@ import (
 )
 
 func TestInboxLifecycleMigrationBackfillsAndReplays(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	root := t.TempDir()
 	w, err := storage.InitializeWorkspace(ctx, root)
@@ -83,6 +84,7 @@ func TestInboxLifecycleMigrationBackfillsAndReplays(t *testing.T) {
 }
 
 func TestInboxLifecycleAppliedPreviewGetsReadinessMetadata(t *testing.T) {
+	t.Parallel()
 	for _, version := range []int{67, 70} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			testInboxLifecycleAppliedPreviewGetsReadinessMetadata(t, version)

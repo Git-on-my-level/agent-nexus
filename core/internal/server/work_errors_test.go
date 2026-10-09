@@ -20,6 +20,7 @@ func (codedWorkError) Error() string { return "database failure containing secre
 func (codedWorkError) Code() int     { return 5 }
 
 func TestWorkStoreUnmappedErrorsAreLoggedWithoutSecrets(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	var output bytes.Buffer
 	previous := log.Writer()
 	log.SetOutput(&output)
@@ -51,6 +52,7 @@ func TestWorkStoreUnmappedErrorsAreLoggedWithoutSecrets(t *testing.T) {
 }
 
 func TestWorkStoreMappedErrorsKeepTheirStatus(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	for _, tc := range []struct {
 		err    error
 		status int

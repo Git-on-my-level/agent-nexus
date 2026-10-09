@@ -13,6 +13,7 @@ import (
 )
 
 func TestInboxAskStalenessListGetSummaryAndStream(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	s := h.primitiveStore.(*primitives.Store)
@@ -51,6 +52,7 @@ func TestInboxAskStalenessListGetSummaryAndStream(t *testing.T) {
 }
 
 func TestInboxAskStalenessCrossesDeadlineWithoutWrite(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	requireIntegrationTest(t)
 	h := newMetaStreamTestHarness(t, WithStreamPollInterval(100*time.Millisecond))
 	s := h.primitiveStore.(*primitives.Store)
@@ -86,6 +88,7 @@ func TestInboxAskStalenessCrossesDeadlineWithoutWrite(t *testing.T) {
 // Isolate the changed projection from preexisting page/authorization costs.
 // Scope is primed before measuring, as it is by an authorized page loader.
 func TestPerformanceInboxAskStalenessBudgetAndPlans(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	requirePerformanceTest(t)
 	allowed := performancePlanExceptions(t)
 	env := newPerformanceEnv(t)

@@ -20,17 +20,26 @@ import (
 
 // Measure a small workspace through the full authenticated handler, rather
 // than extrapolating from a CLI process or an unscoped projection.
-func TestOverviewSmallWorkspaceLatency(t *testing.T) {
-	testOverviewWorkspaceLatency(t, 10, 1)
+func TestPerformanceOverviewSmallWorkspaceLatency(t *testing.T) {
+	requirePerformanceTest(t)
+	// Serial: performance samples must not compete with parallel fixtures.
+	testOverviewWorkspaceLatency(t, 10, 1, true)
 }
 
 // Cardinalities observed through a read-only Overview of the personal
 // workspace; all fixture names, content and credentials remain synthetic.
-func TestOverviewPersonalSizedWorkspaceLatency(t *testing.T) {
-	testOverviewWorkspaceLatency(t, 49, 23)
+func TestPerformanceOverviewPersonalSizedWorkspaceLatency(t *testing.T) {
+	requirePerformanceTest(t)
+	// Serial: performance samples must not compete with parallel fixtures.
+	testOverviewWorkspaceLatency(t, 49, 23, true)
 }
 
-func testOverviewWorkspaceLatency(t *testing.T, cards, principals int) {
+func TestOverviewAuthenticatedResponsePhases(t *testing.T) {
+	t.Parallel()
+	testOverviewWorkspaceLatency(t, 1, 1, false)
+}
+
+func testOverviewWorkspaceLatency(t *testing.T, cards, principals int, measure bool) {
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	reader := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "latency-reader", "latency-reader-actor", "latency-reader", "latency-token")
@@ -61,7 +70,11 @@ func testOverviewWorkspaceLatency(t *testing.T, cards, principals int) {
 	for _, path := range []string{"/overview", "/inbox", "/inbox/summary"} {
 		t.Run(path, func(t *testing.T) {
 			var samples []time.Duration
-			for i := 0; i < 12; i++ {
+			requests := 1
+			if measure {
+				requests = 12
+			}
+			for i := 0; i < requests; i++ {
 				counter.Reset()
 				req, _ := http.NewRequest("GET", server.URL+path, nil)
 				req.Header.Set("Authorization", "Bearer "+reader.AccessToken)
@@ -86,6 +99,9 @@ func testOverviewWorkspaceLatency(t *testing.T, cards, principals int) {
 				if i >= 2 {
 					samples = append(samples, elapsed)
 				}
+			}
+			if !measure {
+				return
 			}
 			p95 := performanceP95(samples)
 			t.Logf("p95=%s", p95)

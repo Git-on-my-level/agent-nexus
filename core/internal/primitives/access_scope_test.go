@@ -1,7 +1,6 @@
 package primitives
 
 import (
-	"agent-nexus-core/internal/storage"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,8 +10,9 @@ import (
 )
 
 func TestResourceAccessScopeInheritanceAndMutationGuards(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,8 +125,9 @@ func TestResourceAccessScopeInheritanceAndMutationGuards(t *testing.T) {
 }
 
 func TestResourceAccessScopeFiltersBeforeAggregationAndCursor(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,8 +185,9 @@ func TestResourceAccessScopeFiltersBeforeAggregationAndCursor(t *testing.T) {
 }
 
 func TestResourceAccessPurgeRetainsEvidenceAndSharedBlobs(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

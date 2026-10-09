@@ -4,19 +4,33 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"reflect"
 	"testing"
 	"time"
 
 	"agent-nexus-core/internal/plans"
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/storage"
 	"agent-nexus-core/internal/testsql"
 )
 
-func TestPlanAndReportReadsHaveBoundedQueryCounts(t *testing.T) {
+func TestPerformancePlanAndReportReadsHaveBoundedQueryCounts(t *testing.T) {
+	if testing.Short() || os.Getenv("ANX_PERFORMANCE_TEST") != "1" {
+		t.Skip("advisory performance tier: make -C core test-perf")
+	}
+	// Serial: performance samples must not compete with parallel fixtures.
+	testPlanAndReportReads(t, []int{1, 200, 2000}, true)
+}
+
+func TestPlanAndReportBatchReadSemantics(t *testing.T) {
+	t.Parallel()
+	testPlanAndReportReads(t, []int{1, 2}, false)
+}
+
+func testPlanAndReportReads(t *testing.T, sizes []int, measure bool) {
+	t.Helper()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +55,7 @@ func TestPlanAndReportReadsHaveBoundedQueryCounts(t *testing.T) {
 	ids, refs := []string{baseID}, []string{base["ref"].(string)}
 	// Seed canonical rows directly so a 2,000-row cost regression test does not
 	// spend most of its time exercising unrelated event-producing mutations.
-	for _, size := range []int{1, 200, 2000} {
+	for _, size := range sizes {
 		tx, err := db.BeginTx(ctx, nil)
 		if err != nil {
 			t.Fatal(err)
@@ -87,14 +101,14 @@ func TestPlanAndReportReadsHaveBoundedQueryCounts(t *testing.T) {
 			if err != nil || len(page.Work) != size || page.Truncated {
 				t.Fatalf("report rows=%d truncated=%v error=%v", len(page.Work), page.Truncated, err)
 			}
-			if got := counter.Count(); got != 1 {
+			if got := counter.Count(); measure && got != 1 {
 				t.Fatalf("report hydration: %d queries for %d cards", got, size)
 			}
 			counter.Reset()
 			if err = s.EnrichCardPlans(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "selected-pm", PMActorID: "selected-pm"}), page.Work, func(string, string) bool { return true }, time.Now(), 0); err != nil {
 				t.Fatal(err)
 			}
-			if got := counter.Count(); got != int64(2+2*((size+49)/50)+2*((size+199)/200)+size/200) {
+			if got := counter.Count(); measure && got != int64(2+2*((size+49)/50)+2*((size+199)/200)+size/200) {
 				t.Fatalf("plan roll-up: %d queries for %d distinct linked refs", got, size)
 			}
 			for _, work := range page.Work {
@@ -112,7 +126,7 @@ func TestPlanAndReportReadsHaveBoundedQueryCounts(t *testing.T) {
 			if err != nil || len(items) != n {
 				t.Fatalf("batch=%d error=%v", len(items), err)
 			}
-			if got := counter.Count(); got != int64(4+2*((n+49)/50)+2*(n/200)) {
+			if got := counter.Count(); measure && got != int64(4+2*((n+49)/50)+2*(n/200)) {
 				t.Fatalf("batch resolve: %d queries for %d refs", got, n)
 			}
 		})
@@ -120,6 +134,7 @@ func TestPlanAndReportReadsHaveBoundedQueryCounts(t *testing.T) {
 }
 
 func TestReportBatchProjectionMatchesCanonicalWork(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s, board := newWorkTestStore(t)
 	native, err := s.CreateWork(ctx, "actor-1", board, map[string]any{"title": "Native", "priority": "p1", "phase": "review", "summary": "Evidence"})

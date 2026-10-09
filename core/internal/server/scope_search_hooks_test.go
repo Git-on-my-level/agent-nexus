@@ -25,6 +25,7 @@ func (h scopeCProposedHook) ApplyCanonical(ctx context.Context, tx scopedrepo.Mu
 }
 
 func TestScopeSearchAndStreamExistingCanonicalTransactionProposal(t *testing.T) {
+	t.Parallel()
 	for _, rollback := range []bool{false, true} {
 		t.Run(fmt.Sprint("rollback=", rollback), func(t *testing.T) {
 			c := newScopeCRepository(t)

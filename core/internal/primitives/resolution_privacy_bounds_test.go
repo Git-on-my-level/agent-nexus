@@ -3,11 +3,11 @@ package primitives_test
 import (
 	"agent-nexus-core/internal/plans"
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/storage"
 	"agent-nexus-core/internal/testsql"
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -15,8 +15,9 @@ import (
 )
 
 func TestResolutionIgnoresHiddenCandidatesBeforeLimits(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,9 +105,13 @@ func TestResolutionIgnoresHiddenCandidatesBeforeLimits(t *testing.T) {
 	}
 }
 
-func TestSourceURLResolutionBoundsTotalReturnedRows(t *testing.T) {
+func TestPerformanceSourceURLResolutionBoundsTotalReturnedRows(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
+	if testing.Short() || os.Getenv("ANX_PERFORMANCE_TEST") != "1" {
+		t.Skip("advisory performance tier: make -C core test-perf")
+	}
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,8 +165,9 @@ print(steps)
 }
 
 func TestEveryIndexedAliasInputUsesSharedCaps(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,8 +225,9 @@ func TestEveryIndexedAliasInputUsesSharedCaps(t *testing.T) {
 }
 
 func TestInboxSummaryCountsAndPagesWithoutLoadingEveryPayload(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

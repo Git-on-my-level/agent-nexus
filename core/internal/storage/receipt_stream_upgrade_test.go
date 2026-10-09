@@ -8,6 +8,7 @@ import (
 )
 
 func TestReceiptStreamUpgradeFromReleasedAndMain(t *testing.T) {
+	t.Parallel()
 	type work struct {
 		changes, pages int
 		elapsed        time.Duration

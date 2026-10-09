@@ -153,7 +153,7 @@ func TestProjectionQueueStatsAndListingRecoverStrandedGenerationRows(t *testing.
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}

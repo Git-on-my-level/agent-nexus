@@ -35,7 +35,7 @@ func newProjectionMaintenanceTestServerWithMode(t *testing.T, mode string) proje
 	requireIntegrationTest(t)
 	t.Helper()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -402,7 +402,7 @@ func TestProjectionMaintainerKeepsProjectionPendingForConcurrentWrites(t *testin
 	requireIntegrationTest(t)
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -479,10 +479,17 @@ func TestProjectionMaintainerKeepsProjectionPendingForConcurrentWrites(t *testin
 		}
 	}`, http.StatusCreated).Body.Close()
 
+	stepCtx, stopStep := context.WithCancel(context.Background())
+	stepDone := make(chan struct{})
 	stepErrCh := make(chan error, 1)
 	go func() {
-		stepErrCh <- maintainer.Step(context.Background(), time.Now().UTC())
+		defer close(stepDone)
+		stepErrCh <- maintainer.Step(stepCtx, time.Now().UTC())
 	}()
+	t.Cleanup(func() {
+		stopStep()
+		<-stepDone
+	})
 
 	select {
 	case <-store.blocked:
@@ -562,7 +569,7 @@ func TestProjectionMaintainerNotifyWakesRunLoopPromptly(t *testing.T) {
 	requireIntegrationTest(t)
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -601,8 +608,15 @@ func TestProjectionMaintainerNotifyWakesRunLoopPromptly(t *testing.T) {
 	postJSONExpectStatus(t, server.URL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go maintainer.Run(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		maintainer.Run(ctx)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
 
 	threadID := integrationSeedThreadWithStore(t, store, maintainer, "actor-1", map[string]any{
 		"title":           "Wakeup projection thread",
@@ -651,7 +665,7 @@ func TestOpsHealthEndpointReportsProjectionMaintenanceErrors(t *testing.T) {
 	requireIntegrationTest(t)
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -728,7 +742,7 @@ func TestOpsHealthEndpointKeepsDiagnosticsWhenReadinessFails(t *testing.T) {
 	requireIntegrationTest(t)
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}

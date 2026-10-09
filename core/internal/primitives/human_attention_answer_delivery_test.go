@@ -13,8 +13,9 @@ import (
 )
 
 func TestAnswerWakeDeliveryRollsBackClaimIfWakeInsertFails(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,6 +46,7 @@ func TestAnswerWakeDeliveryRollsBackClaimIfWakeInsertFails(t *testing.T) {
 }
 
 func TestAnswerWakeDeliveryCrashBeforeCommit(t *testing.T) {
+	t.Parallel()
 	const rootEnv = "ANX_TEST_ANSWER_WAKE_CRASH_ROOT"
 	if root := os.Getenv(rootEnv); root != "" {
 		ctx := context.Background()
@@ -132,8 +134,9 @@ func TestAnswerWakeDeliveryCrashBeforeCommit(t *testing.T) {
 }
 
 func TestAnswerWakeClaimSerializesAnAnswerIntoTheNextGeneration(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

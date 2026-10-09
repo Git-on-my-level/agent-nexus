@@ -11,17 +11,18 @@ import (
 )
 
 func TestArtifactAttachmentMultipartUploadAndContentHeaders(t *testing.T) {
+	t.Parallel()
 	testArtifactAttachmentUploadAndContent(t, "hello.txt", "text/plain; charset=utf-8", "text/plain", "hello-attachment")
 }
 
 func TestArtifactAttachmentBinaryNULRoundTrip(t *testing.T) {
+	t.Parallel()
 	testArtifactAttachmentUploadAndContent(t, "pixel.png", "image/png", "image/png", "\x89PNG\r\n\x1a\n\x00binary")
 }
 
 func testArtifactAttachmentUploadAndContent(t *testing.T, filename, declaredMIME, expectedMIME, content string) {
 	t.Helper()
 	requireIntegrationTest(t)
-	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
 

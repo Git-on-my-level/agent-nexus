@@ -15,6 +15,7 @@ import (
 )
 
 func TestReceiptStreamChunksContinueWithoutPollWait(t *testing.T) {
+	t.Parallel()
 	for _, fixture := range []struct{ hidden, visible int }{{50, 1}, {0, 2}, {10, 2}} {
 		t.Run(fmt.Sprintf("hidden-%d-visible-%d", fixture.hidden, fixture.visible), func(t *testing.T) {
 			s := &receiptTickStore{calls: make(chan int, 80), hiddenPages: fixture.hidden, visiblePages: fixture.visible}
@@ -63,6 +64,7 @@ func TestReceiptStreamChunksContinueWithoutPollWait(t *testing.T) {
 }
 
 func TestReceiptStreamKeepalivesContinueDuringHiddenScan(t *testing.T) {
+	t.Parallel()
 	s := &receiptTickStore{calls: make(chan int, 20), gate: make(chan struct{})}
 	done := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -107,6 +109,7 @@ func TestReceiptStreamKeepalivesContinueDuringHiddenScan(t *testing.T) {
 }
 
 func TestReceiptStreamPrivateUnknownAndTrashedResumeIDsMatch(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
@@ -151,6 +154,7 @@ func TestReceiptStreamPrivateUnknownAndTrashedResumeIDsMatch(t *testing.T) {
 }
 
 func TestReceiptStreamHiddenBacklogDoesNotWaitOnThePollTimer(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	// One chunk examines 2000 candidates. 2001 hidden rows force a second chunk.
 	// The poll interval is one hour, so any timer wait between those chunks misses

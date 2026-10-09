@@ -59,6 +59,7 @@ func briefItems(t *testing.T, section map[string]any) []map[string]any {
 // Blocking open work is the only signal that says other work cannot proceed,
 // so it must outrank a louder-looking but harmless row.
 func TestBriefRanksBlockingWorkAboveAgeAndPriority(t *testing.T) {
+	t.Parallel()
 	gate := briefCard("card:gate", "Approve the pricing change", "in_progress", 2*time.Hour, map[string]any{"priority": "low"})
 	ancient := briefCard("card:ancient", "Confirm the logo", "in_progress", 40*24*time.Hour, map[string]any{"priority": "high"})
 	work := []map[string]any{
@@ -94,6 +95,7 @@ func TestBriefRanksBlockingWorkAboveAgeAndPriority(t *testing.T) {
 }
 
 func TestBriefRankPrecedenceDoesNotInvertAcrossTiers(t *testing.T) {
+	t.Parallel()
 	gate := briefCard("card:gate", "Approve the pricing change", "in_progress", 2*time.Hour, map[string]any{"priority": "p3"})
 	stacked := briefCard("card:stacked", "Confirm the logo", "blocked", 40*24*time.Hour, map[string]any{"priority": "p0", "due_at": briefAt(48 * time.Hour)})
 	aged := briefCard("card:aged", "Rename the folder", "in_progress", 40*24*time.Hour, nil)
@@ -128,6 +130,7 @@ func TestBriefRankPrecedenceDoesNotInvertAcrossTiers(t *testing.T) {
 }
 
 func TestBriefWorkPriorityP0OutranksP3(t *testing.T) {
+	t.Parallel()
 	work := []map[string]any{
 		briefCard("card:nit", "Fix the typo", "in_progress", time.Hour, map[string]any{"priority": "p3"}),
 		briefCard("card:gate", "Approve the pricing change", "in_progress", time.Hour, map[string]any{"priority": "p0"}),
@@ -154,6 +157,7 @@ func TestBriefWorkPriorityP0OutranksP3(t *testing.T) {
 }
 
 func TestBriefDecisionReasonNamesOverdueAndAge(t *testing.T) {
+	t.Parallel()
 	work := []map[string]any{
 		briefCard("card:late", "Sign the renewal", "blocked", 72*time.Hour, map[string]any{"due_at": briefAt(48 * time.Hour), "priority": "critical"}),
 	}
@@ -184,6 +188,7 @@ The ranking must not reorder itself between two reads of the same data, or a
 reader cannot trust "the top one is the top one".
 */
 func TestBriefRankingIsStableForEquivalentRows(t *testing.T) {
+	t.Parallel()
 	work := []map[string]any{
 		briefCard("card:one", "One", "in_progress", 5*time.Hour, nil),
 		briefCard("card:two", "Two", "in_progress", 5*time.Hour, nil),
@@ -215,6 +220,7 @@ denying access removes a dependent from the count and nothing else: no
 "1 hidden card" anywhere in the payload.
 */
 func TestBriefCountsNeverLeakRowsTheReaderCannotSee(t *testing.T) {
+	t.Parallel()
 	gate := briefCard("card:gate", "Approve", "in_progress", 3*time.Hour, nil)
 	open := briefCard("card:open", "Open dependent", "in_progress", time.Hour, map[string]any{"relations": briefDependsOn("card:gate")})
 	secret := briefCard("card:secret", "Private dependent", "blocked", time.Hour, map[string]any{"relations": briefDependsOn("card:gate")})
@@ -248,6 +254,7 @@ func TestBriefCountsNeverLeakRowsTheReaderCannotSee(t *testing.T) {
 }
 
 func TestBriefSinceLastLookGroupsAndSeparatesFirstVisit(t *testing.T) {
+	t.Parallel()
 	since := briefAt(12 * time.Hour)
 	work := []map[string]any{
 		briefCard("card:done-1", "Shipped the proxy", "done", 2*time.Hour, nil),
@@ -309,6 +316,7 @@ func TestBriefSinceLastLookGroupsAndSeparatesFirstVisit(t *testing.T) {
 }
 
 func TestBriefSinceLastLookTreatsEditsAsUpdatesNotTransitions(t *testing.T) {
+	t.Parallel()
 	since := briefAt(12 * time.Hour)
 	work := []map[string]any{
 		briefCard("card:done", "Shipped the proxy", "done", 2*time.Hour, nil),
@@ -350,6 +358,7 @@ func TestBriefSinceLastLookTreatsEditsAsUpdatesNotTransitions(t *testing.T) {
 }
 
 func TestBriefMachineCountsStuckOnlyWhenWorkRidesOnTheSilence(t *testing.T) {
+	t.Parallel()
 	roster := []commandcenter.Summary{
 		{ID: "a", Handle: "builder", DisplayName: "Builder", State: "working"},
 		{ID: "b", Handle: "waiter", DisplayName: "Waiter", State: "waiting_on_human"},
@@ -402,6 +411,7 @@ on_track, which rendered green. no_plan must be visible as a gap and must
 never be counted as healthy.
 */
 func TestBriefInitiativesReportNoPlanHonestly(t *testing.T) {
+	t.Parallel()
 	planless := map[string]any{"ref": "card:i1", "title": "Hosted onboarding", "phase": "in_progress", "updated_at": briefAt(time.Hour), "progress": map[string]any{"done": 0, "total": 3}, "health": map[string]any{"status": "no_plan", "state": "no_plan", "reason": "Initiative has no plan steps."}}
 	blockedSince := briefAt(50 * time.Hour)
 	blocked := map[string]any{"ref": "card:i2", "title": "Billing", "phase": "in_progress", "updated_at": briefAt(time.Hour), "progress": map[string]any{"done": 1, "total": 4}, "health": map[string]any{"status": "blocked", "state": "blocked", "reason": "An unfinished step or dependency is blocked."}, "plan_health": plans.Health{State: "blocked", Reason: "An unfinished step or dependency is blocked.", Since: &blockedSince}}
@@ -443,6 +453,7 @@ func TestBriefInitiativesReportNoPlanHonestly(t *testing.T) {
 }
 
 func TestBriefAtRiskExplainsBlockedWorkWithRecordedBlockers(t *testing.T) {
+	t.Parallel()
 	work := []map[string]any{
 		briefCard("card:stuck", "Restore the replica", "blocked", 8*time.Hour, map[string]any{"blockers": []any{"waiting on vendor access", "needs a maintenance window"}}),
 		briefCard("card:quiet", "Blocked, unexplained", "blocked", 2*time.Hour, nil),
@@ -462,6 +473,7 @@ func TestBriefAtRiskExplainsBlockedWorkWithRecordedBlockers(t *testing.T) {
 }
 
 func TestBriefSectionsShowTopRowsAndCountTheRest(t *testing.T) {
+	t.Parallel()
 	work := []map[string]any{}
 	rows := []map[string]any{}
 	for i := 0; i < 9; i++ {
@@ -484,6 +496,7 @@ func TestBriefSectionsShowTopRowsAndCountTheRest(t *testing.T) {
 }
 
 func TestBriefReportsUnavailableNeedsWithoutInventingARanking(t *testing.T) {
+	t.Parallel()
 	in := briefInputs{now: briefNow, workAvailable: true, signals: map[string]briefSignal{}, needsOK: false, needsRows: []map[string]any{briefNeedsRow("task:card:x", "Hidden")}}
 	section := briefSection(t, buildOverviewBrief(in), "decisions")
 	if section["status"] != "unavailable" || section["count"] != 0 {
@@ -506,6 +519,7 @@ what is waiting, but it must not report "nothing is at risk" or "nothing
 finished today" from rows it never counted.
 */
 func TestBriefWithoutWorkSnapshotSaysSoRatherThanReportingZero(t *testing.T) {
+	t.Parallel()
 	in := briefInputs{now: briefNow, workAvailable: false, needsOK: true, signals: map[string]briefSignal{}, dependents: map[string]int{}}
 	in.needsRows = []map[string]any{briefNeedsRow("inbox:ask-1", "Approve the budget")}
 	in.signals["inbox:ask-1"] = briefSignal{Kind: "ask", At: briefAt(3 * time.Hour)}
@@ -533,6 +547,7 @@ is what separates the two, and where it is unknown the row is an update, not
 an alarm.
 */
 func TestBriefNewlyBlockedCountsOnlyTransitions(t *testing.T) {
+	t.Parallel()
 	since := briefAt(12 * time.Hour)
 	work := []map[string]any{
 		briefCard("card:fresh", "Lost the credential", "blocked", time.Hour, nil),
@@ -587,6 +602,7 @@ needs its step id to be identifiable. Without it a client keying rows on ref
 has a duplicate key, not two rows.
 */
 func TestBriefCompletedStepRowsCarryStepIdentity(t *testing.T) {
+	t.Parallel()
 	since := briefAt(6 * time.Hour)
 	in := briefInputs{
 		now:     briefNow,
@@ -633,6 +649,7 @@ func TestBriefCompletedStepRowsCarryStepIdentity(t *testing.T) {
 // Work carries p0..p3; inbox severity and PM carry words. Ranking only the
 // words scored every card zero, which put a p0 below a three-day-old question.
 func TestBriefRanksNumericWorkPriorities(t *testing.T) {
+	t.Parallel()
 	for raw, want := range map[string]string{
 		"p0": "critical", "P0": "critical", "critical": "critical", "urgent": "critical",
 		"p1": "high", "high": "high",

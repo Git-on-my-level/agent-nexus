@@ -32,6 +32,7 @@ first, with every other test still green. Comparing the two views is the only
 assertion that fails loudly when that happens.
 */
 func TestBriefIsIdenticalUnderSummaryWorkView(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"executive","display_name":"Alex","created_at":"2026-10-04T12:00:00Z","tags":["human"]}}`, 201).Body.Close()

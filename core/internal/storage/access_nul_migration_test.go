@@ -14,6 +14,7 @@ import (
 )
 
 func TestResourceAccessMigrationRepairsNULRows(t *testing.T) {
+	t.Parallel()
 	ctx, root := context.Background(), t.TempDir()
 	ws, err := storage.InitializeWorkspace(ctx, root)
 	if err != nil {

@@ -16,6 +16,7 @@ import (
 )
 
 func TestOverviewSummaryCompatibilityAndPrivacy(t *testing.T) {
+	t.Parallel()
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	reader := seedMachinePrincipalForLockoutTest(t, context.Background(), env.workspace.DB(), "summary-reader", "summary-actor", "summary-reader", "summary-token")
 	exec := func(query string, args ...any) {

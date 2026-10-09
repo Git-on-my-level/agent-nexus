@@ -12,6 +12,7 @@ import (
 )
 
 func TestResourceAccessMigrationReconcilesPrivacy56(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	root := t.TempDir()
 	ws, err := storage.InitializeWorkspace(ctx, root)
@@ -78,6 +79,7 @@ func TestResourceAccessMigrationReconcilesPrivacy56(t *testing.T) {
 }
 
 func TestResourceAccessMigrationReconcilesPrivacy54(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	root := t.TempDir()
 	ws, err := storage.InitializeWorkspace(ctx, root)
@@ -119,6 +121,7 @@ func TestResourceAccessMigrationReconcilesPrivacy54(t *testing.T) {
 }
 
 func TestResourceAccessMigrationReconcilesPrivacy55(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	root := t.TempDir()
 	ws, err := storage.InitializeWorkspace(ctx, root)
@@ -183,6 +186,7 @@ func TestResourceAccessMigrationReconcilesPrivacy55(t *testing.T) {
 }
 
 func TestResourceAccessMigrationBackfillsAndMaintainsPayloadEdges(t *testing.T) {
+	t.Parallel()
 	for _, history := range []string{"v53", "main-v54"} {
 		t.Run(history, func(t *testing.T) {
 			ctx := context.Background()
@@ -327,6 +331,7 @@ func assertAccessIndexesUsed(t *testing.T, db *sql.DB) {
 }
 
 func TestResourceAccessMigrationReconcilesPrivacy57(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	root := t.TempDir()
 	ws, err := storage.InitializeWorkspace(ctx, root)
@@ -387,6 +392,7 @@ func TestResourceAccessMigrationReconcilesPrivacy57(t *testing.T) {
 }
 
 func TestResourceAccessMigrationRepairsLegacyProseAndUnknownRollups(t *testing.T) {
+	t.Parallel()
 	for _, version := range []int{56, 58} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			ctx := context.Background()

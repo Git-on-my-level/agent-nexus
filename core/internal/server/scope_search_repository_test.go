@@ -17,7 +17,6 @@ import (
 	"agent-nexus-core/internal/scopes"
 	"agent-nexus-core/internal/scopesearch"
 	"agent-nexus-core/internal/scopestream"
-	"agent-nexus-core/internal/storage"
 	"modernc.org/sqlite"
 )
 
@@ -75,7 +74,7 @@ func (s *scopeCStreamSnapshot) selected(stream scopestream.Stream) bool {
 func newScopeCRepository(t *testing.T) *scopeCRepository {
 	t.Helper()
 	requireIntegrationTest(t)
-	ws, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	ws, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -454,6 +453,7 @@ func scopeCPlan(t *testing.T, db *sql.DB, q string, args ...any) string {
 }
 
 func TestScopeSearchAndStreamIndexPlans(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	c := newScopeCRepository(t)
 	t.Log(scopeCPlan(t, c.db, `SELECT rid FROM scope_changes WHERE scope_id=? AND family=? AND audience_key=? AND seq>? ORDER BY seq LIMIT ?`, "s", "inbox", "person:p", 0, 2))
 	t.Log(scopeCPlan(t, c.db, `SELECT rid,kind FROM scope_search_postings WHERE scope_id=? AND term=? AND (sort_key,rid,kind,scope_id)>(?,?,?,?) ORDER BY sort_key,rid,kind LIMIT ?`, "s", "needle", -1, "r", "document", "s", 4))
@@ -464,6 +464,7 @@ func TestScopeSearchAndStreamIndexPlans(t *testing.T) {
 }
 
 func TestScopeSearchAndStreamSnapshotRejectsAnotherScopeEvenForOwner(t *testing.T) {
+	// Serial: this file mutates process-wide environment, logging or counters.
 	c := newScopeCRepository(t)
 	c.grant(t, "public", "owner", "active")
 	c.grant(t, "private", "owner", "active")

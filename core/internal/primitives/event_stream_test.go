@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/resourceaccess"
-	"agent-nexus-core/internal/storage"
 	"agent-nexus-core/internal/testsql"
 )
 
 func TestEventStreamPagesAdvanceAcrossHiddenRowsAndFreshAuthority(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,8 +103,9 @@ func TestEventStreamPagesAdvanceAcrossHiddenRowsAndFreshAuthority(t *testing.T) 
 }
 
 func TestEventStreamChronologyAndSparseFilters(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,8 +139,9 @@ func TestEventStreamChronologyAndSparseFilters(t *testing.T) {
 }
 
 func TestEventStreamPlainThreadAppendRefreshesInheritedDenials(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,8 +175,9 @@ func TestEventStreamPlainThreadAppendRefreshesInheritedDenials(t *testing.T) {
 }
 
 func TestEventStreamBatchesRevisionRefs(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,10 +270,11 @@ func TestEventStreamBatchesRevisionRefs(t *testing.T) {
 }
 
 func TestEventStreamWarmHiddenPageCostIsIndependentOfDenialHistory(t *testing.T) {
+	t.Parallel()
 	for _, total := range []int{1000, 10000} {
 		t.Run(fmt.Sprint(total), func(t *testing.T) {
 			ctx := context.Background()
-			ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+			ws, err := initializeTestWorkspace(ctx, t.TempDir())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -325,8 +329,9 @@ func TestEventStreamWarmHiddenPageCostIsIndependentOfDenialHistory(t *testing.T)
 }
 
 func TestEventStreamNarrowedSnapshotFallsBackOnConcurrentParentRevocation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

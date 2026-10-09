@@ -7,14 +7,13 @@ import (
 	"testing"
 
 	"agent-nexus-core/internal/blob"
-	"agent-nexus-core/internal/storage"
 )
 
 func TestWorkspaceListQueriesUseIndexedPlans(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}

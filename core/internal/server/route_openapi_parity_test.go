@@ -45,6 +45,7 @@ func repoRootFromServerTest(t *testing.T) string {
 }
 
 func TestExactRegisterRoutesCoveredByOpenAPOrExceptions(t *testing.T) {
+	t.Parallel()
 	root := repoRootFromServerTest(t)
 	commandsPath := filepath.Join(root, "contracts", "gen", "meta", "commands.json")
 	commandsRaw, err := os.ReadFile(commandsPath)

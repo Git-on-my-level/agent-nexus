@@ -3,7 +3,6 @@ package primitives_test
 import (
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/storage"
 	"context"
 	"errors"
 	"testing"
@@ -12,7 +11,7 @@ import (
 func TestArchiveLifecycleFencesRejectStaleSnapshots(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

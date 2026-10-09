@@ -11,6 +11,7 @@ import (
 )
 
 func TestRound10RefreshBookkeepingPreservesDecisionFence(t *testing.T) {
+	t.Parallel()
 	for _, authority := range []string{"nexus", "github"} {
 		t.Run(authority, func(t *testing.T) {
 			env := newPMStoreTestEnv(t)

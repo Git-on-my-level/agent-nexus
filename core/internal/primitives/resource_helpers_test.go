@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"agent-nexus-core/internal/blob"
-	"agent-nexus-core/internal/storage"
 )
 
 func TestTypedRefHelpersLifecycleAndConcurrency(t *testing.T) {
@@ -88,7 +87,7 @@ func TestSharedResourceWritesIndexRefEdges(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -222,7 +221,7 @@ func TestRefEdgesBackArtifactAndEventReverseLookups(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -339,7 +338,7 @@ func TestRefEdgesStoreTypedRefRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -457,7 +456,7 @@ func TestInfrastructureRefsUsePublicRefsWithInternalJoinMetadata(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}

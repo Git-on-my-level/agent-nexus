@@ -3,13 +3,12 @@ package primitives
 import (
 	"context"
 	"testing"
-
-	"agent-nexus-core/internal/storage"
 )
 
 func TestResourceAccessIndexedIdentityReferenceEdges(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,11 +64,12 @@ func TestResourceAccessIndexedIdentityReferenceEdges(t *testing.T) {
 }
 
 func TestResourceAccessEmptyImportedIdentityEdges(t *testing.T) {
+	t.Parallel()
 	for _, spelling := range []string{"handle", "alias", "tombstone"} {
 		for _, edge := range []string{"navigation", "exact"} {
 			t.Run(spelling+"/"+edge, func(t *testing.T) {
 				ctx := context.Background()
-				ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+				ws, err := initializeTestWorkspace(ctx, t.TempDir())
 				if err != nil {
 					t.Fatal(err)
 				}

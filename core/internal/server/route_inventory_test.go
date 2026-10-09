@@ -3,6 +3,7 @@ package server
 import "testing"
 
 func TestRouteInventoryUsesMountedClassifiers(t *testing.T) {
+	t.Parallel()
 	routes, err := RouteInventory([]RouteOperation{
 		{Method: "POST", Path: "/reports/preview"},
 		{Method: "GET", Path: "/stream/events"},

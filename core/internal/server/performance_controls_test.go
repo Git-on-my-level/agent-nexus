@@ -8,6 +8,7 @@ import (
 )
 
 func TestPerformanceTimingResistsSingleLoadSpike(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	// The contested-host observation from independent review is a real spike,
 	// not an increase in statements, rows or work. Timing is secondary.
 	values := []time.Duration{2010 * time.Millisecond, 2470 * time.Millisecond, 10040 * time.Millisecond, 2200 * time.Millisecond, 2400 * time.Millisecond}
@@ -25,6 +26,7 @@ func TestPerformanceTimingResistsSingleLoadSpike(t *testing.T) {
 }
 
 func TestPerformanceWorkRejectsIndexedAggregateMutation(t *testing.T) {
+	// Serial: performance samples must not compete with parallel fixtures.
 	db, capture, err := perfguard.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)

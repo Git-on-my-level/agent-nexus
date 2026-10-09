@@ -4,13 +4,12 @@ import (
 	"context"
 	"errors"
 	"testing"
-
-	"agent-nexus-core/internal/storage"
 )
 
 func TestResourceAccessLegacyProseDocumentIDs(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,8 +49,9 @@ func TestResourceAccessLegacyProseDocumentIDs(t *testing.T) {
 }
 
 func TestResourceAccessProseGraphIdentityForms(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,8 +100,9 @@ func TestResourceAccessProseGraphIdentityForms(t *testing.T) {
 }
 
 func TestResourceAccessProseRevisionRenameAndDuplicateIdentity(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

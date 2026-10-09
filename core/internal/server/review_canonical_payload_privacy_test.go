@@ -15,6 +15,7 @@ import (
 )
 
 func TestCanonicalPayloadPrivacyAcrossEventSurfaces(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("HTTP/storage integration")
 	}
@@ -112,6 +113,7 @@ func TestCanonicalPayloadPrivacyAcrossEventSurfaces(t *testing.T) {
 }
 
 func TestBoardWorkspaceAuthorizesCanonicalInboxBeforeCounting(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("HTTP/storage integration")
 	}
@@ -163,6 +165,7 @@ func TestBoardWorkspaceAuthorizesCanonicalInboxBeforeCounting(t *testing.T) {
 }
 
 func TestCanonicalPayloadReferenceNormalizationAndEventChains(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("HTTP/storage integration")
 	}

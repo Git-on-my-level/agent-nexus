@@ -10,10 +10,10 @@ import (
 
 	"agent-nexus-core/internal/plans"
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/storage"
 )
 
 func TestPlanEditsRefStateAndHistory(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, board := newWorkTestStore(t)
 	parent, err := store.CreateWork(ctx, "actor-1", "", map[string]any{"title": "Initiative", "board_id": board})
@@ -86,6 +86,7 @@ func TestPlanEditsRefStateAndHistory(t *testing.T) {
 }
 
 func TestBatchRefsSharedCorpus(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, board := newWorkTestStore(t)
 	initiative, err := store.CreateWork(ctx, "actor-1", "", map[string]any{"handle": "initiative", "title": "Initiative", "board_id": board})
@@ -136,6 +137,7 @@ func TestBatchRefsSharedCorpus(t *testing.T) {
 }
 
 func TestRefPreviewKeepsPrivatePlanOutOfPublicCardPreview(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, board := newWorkTestStore(t)
 	initiative, err := store.CreateWork(ctx, "actor-1", board, map[string]any{"title": "Initiative"})
@@ -180,6 +182,7 @@ func TestRefPreviewKeepsPrivatePlanOutOfPublicCardPreview(t *testing.T) {
 }
 
 func TestExternalPlanRefAndPollFreshness(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, board := newWorkTestStore(t)
 	externalURL := "https://github.com/org/repo/pull/42"
@@ -209,10 +212,11 @@ func TestExternalPlanRefAndPollFreshness(t *testing.T) {
 }
 
 func TestCardAndStepMessagesResetPlanRecency(t *testing.T) {
+	t.Parallel()
 	for _, subject := range []string{"card", "step"} {
 		t.Run(subject, func(t *testing.T) {
 			ctx := context.Background()
-			ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+			ws, err := initializeTestWorkspace(ctx, t.TempDir())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -275,6 +279,7 @@ func TestCardAndStepMessagesResetPlanRecency(t *testing.T) {
 // linked card is done carries the completion anchor the Overview dates it from,
 // a step in flight is current, and only ready unstarted work is next.
 func TestPlanStepDigestOverRealCards(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, board := newWorkTestStore(t)
 	card := func(title string) map[string]any {

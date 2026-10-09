@@ -11,6 +11,7 @@ import (
 )
 
 func TestScopeInboxDetachedRowRestoresTransportColumnsAndExactNumbers(t *testing.T) {
+	t.Parallel()
 	i := scopes.ResourceIdentity{ScopeID: "scope", Kind: "inbox", ResourceID: "private-key", CanonicalID: "canonical-item", RID: 7, CanonicalVersion: 2}
 	item := p.DerivedInboxItem{ID: i.CanonicalID, ThreadID: "thread", Category: "ask", TriggerAt: "now", GeneratedAt: "generated", SourceEventID: "event", Data: map[string]any{"id": "stale-id", "thread_id": "stale-thread", "unknown": json.Number("9007199254740993")}}
 	raw, err := p.EncodeScopeInbox(i, item)

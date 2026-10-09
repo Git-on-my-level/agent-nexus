@@ -10,6 +10,7 @@ import (
 )
 
 func TestWorkHTTPRegistrationObservationAndAuthority(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
@@ -44,6 +45,7 @@ func TestWorkHTTPRegistrationObservationAndAuthority(t *testing.T) {
 }
 
 func TestWorkCreateOmittingBoardRefProvisionsDefaultBoard(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
@@ -76,6 +78,7 @@ func TestWorkCreateOmittingBoardRefProvisionsDefaultBoard(t *testing.T) {
 }
 
 func TestWorkHTTPMigrationRelationRoundTrip(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
@@ -162,6 +165,7 @@ func workGetJSON(t *testing.T, url string, status int) map[string]any {
 }
 
 func TestArchiveCardLatestObservationFence(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)

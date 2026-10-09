@@ -9,6 +9,7 @@ import (
 )
 
 func TestHostEnrollmentVerificationURL(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name, configured, want string
 		invalid                bool
@@ -38,6 +39,7 @@ func TestHostEnrollmentVerificationURL(t *testing.T) {
 }
 
 func TestHostEnrollmentWithoutPublicWebURLOmitsLink(t *testing.T) {
+	t.Parallel()
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	pub, _, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

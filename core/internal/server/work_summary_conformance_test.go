@@ -12,6 +12,7 @@ import (
 )
 
 func TestWorkSummaryCardReadConformanceAndLegacyProse(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	ctx := context.Background()
@@ -106,6 +107,7 @@ func collectSummaryCards(value any) []map[string]any {
 }
 
 func TestInboxRelatedCardsCarryComputedSummaryAndPrivacy(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	s := h.primitiveStore.(*primitives.Store)
@@ -139,6 +141,7 @@ func TestInboxRelatedCardsCarryComputedSummaryAndPrivacy(t *testing.T) {
 }
 
 func TestCardSummaryPageLimitsAndCursors(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	s := h.primitiveStore.(*primitives.Store)

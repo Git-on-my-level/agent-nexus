@@ -13,6 +13,7 @@ import (
 )
 
 func TestRound19NativeContentAndMetadataFence(t *testing.T) {
+	t.Parallel()
 	for _, scope := range []string{"work.phase", "work.annotate"} {
 		for _, change := range []string{"content", "metadata", "none"} {
 			for _, afterApproval := range []bool{false, true} {

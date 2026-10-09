@@ -9,6 +9,7 @@ import (
 )
 
 func TestSourceRefsGenericAnnotationsAndMarkdownIsolation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s, board := newWorkTestStore(t)
 	evidence := []any{map[string]any{"authority": "github", "connection_id": "any-adapter", "native_id": "org/repo#42", "url": "https://github.com/org/repo/pull/42", "status": "merged", "observed_at": "2026-10-05T10:00:00Z", "custom": map[string]any{"retain": true}}}

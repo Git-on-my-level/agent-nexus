@@ -2,15 +2,15 @@ package primitives
 
 import (
 	"agent-nexus-core/internal/resourceaccess"
-	"agent-nexus-core/internal/storage"
 	"context"
 	"errors"
 	"testing"
 )
 
 func TestResourceAccessReadCachePrefersNewestEpochAfterDelayedFill(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,10 +58,11 @@ func TestResourceAccessReadCachePrefersNewestEpochAfterDelayedFill(t *testing.T)
 }
 
 func TestResourceAccessReadCacheSeparatesDatabaseAndPMScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	var captured *denialSnapshot
 	for i := 0; i < 2; i++ {
-		ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+		ws, err := initializeTestWorkspace(ctx, t.TempDir())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -91,8 +92,9 @@ func TestResourceAccessReadCacheSeparatesDatabaseAndPMScope(t *testing.T) {
 }
 
 func TestResourceAccessRequestSnapshotInvalidatesInsideStatement(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,8 +177,9 @@ func TestResourceAccessRequestSnapshotInvalidatesInsideStatement(t *testing.T) {
 }
 
 func TestResourceAccessRequestSnapshotMissingEpochFallsBack(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,8 +209,9 @@ func TestResourceAccessRequestSnapshotMissingEpochFallsBack(t *testing.T) {
 }
 
 func TestResourceAccessRequestSnapshotSeesLateAliasAndProse(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

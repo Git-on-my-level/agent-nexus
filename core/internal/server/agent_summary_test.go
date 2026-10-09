@@ -13,6 +13,7 @@ import (
 )
 
 func TestAgentSummaryOptInBoundsParityAndPrivacy(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()

@@ -9,6 +9,7 @@ import (
 )
 
 func TestWorkRefreshLeaseFencing(t *testing.T) {
+	t.Parallel()
 	s, b := newWorkTestStore(t)
 	w := registerWork(t, s, b)
 	ctx := context.Background()

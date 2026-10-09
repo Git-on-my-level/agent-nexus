@@ -80,6 +80,7 @@ func loadPrivacyRouteMatrix(t *testing.T) []privacyRoutePolicy {
 	return policies
 }
 func TestResourceAccessRouteInventory(t *testing.T) {
+	t.Parallel()
 	policies := loadPrivacyRouteMatrix(t)
 	if err := validatePrivacyMounts(policies, privacyMountedRoutes()); err != nil {
 		t.Fatal(err)
@@ -88,6 +89,7 @@ func TestResourceAccessRouteInventory(t *testing.T) {
 }
 
 func TestResourceAccessRouteMatrix(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	policies := loadPrivacyRouteMatrix(t)
 	// Rebuild is a successful canonical maintenance action; run it after the

@@ -16,7 +16,7 @@ import (
 func askDeliveryFixture(t *testing.T) (*Store, *storage.Workspace, map[string]any, map[string]any) {
 	t.Helper()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,6 +43,7 @@ func answerDeliveryFixture(s *Store, ask map[string]any, outcome string) (map[st
 	return result, err
 }
 func TestAskAnswerAtomicTaskOutcome(t *testing.T) {
+	t.Parallel()
 	for _, outcome := range []string{"answered", "needs_context", "resolved"} {
 		t.Run(outcome, func(t *testing.T) {
 			s, ws, card, ask := askDeliveryFixture(t)
@@ -81,6 +82,7 @@ func TestAskAnswerAtomicTaskOutcome(t *testing.T) {
 	}
 }
 func TestAskAnswerPreservesOtherBlockersAndRollsBack(t *testing.T) {
+	t.Parallel()
 	s, ws, card, ask := askDeliveryFixture(t)
 	if _, err := ws.DB().Exec(`UPDATE work_metadata SET metadata_json=json_set(metadata_json,'$.blockers',json_array(?,'external dependency')) WHERE card_id=?`, "event:"+anyStringValue(ask["id"]), card["id"]); err != nil {
 		t.Fatal(err)
@@ -105,6 +107,7 @@ func TestAskAnswerPreservesOtherBlockersAndRollsBack(t *testing.T) {
 	}
 }
 func TestAskSubjectCloseWithdrawsAndExpiryRejectsAnswer(t *testing.T) {
+	t.Parallel()
 	s, ws, card, ask := askDeliveryFixture(t)
 	if _, err := ws.DB().Exec(`UPDATE cards SET archived_at=? WHERE id=?`, time.Now().UTC().Format(time.RFC3339Nano), card["id"]); err != nil {
 		t.Fatal(err)
@@ -128,6 +131,7 @@ func TestAskSubjectCloseWithdrawsAndExpiryRejectsAnswer(t *testing.T) {
 	}
 }
 func TestAskSubscriptionSecretAndQueue(t *testing.T) {
+	t.Parallel()
 	s, ws, _, ask := askDeliveryFixture(t)
 	ctx := context.Background()
 	sub, err := s.CreateAskSubscription(ctx, "requester", anyStringValue(ask["ref"]), AskSubscriptionInput{Kind: "webhook", Label: "service", URL: "https://example.com/answer"})
@@ -160,6 +164,7 @@ func TestAskSubscriptionSecretAndQueue(t *testing.T) {
 	}
 }
 func TestAskWebhookSSRFAddressPolicy(t *testing.T) {
+	t.Parallel()
 	for _, ip := range []string{"127.0.0.1", "169.254.169.254", "10.0.0.1", "100.64.0.1", "::1", "::ffff:127.0.0.1", "fc00::1", "2002:7f00:1::"} {
 		if publicWebhookIP(netip.MustParseAddr(ip)) {
 			t.Fatalf("allowed %s", ip)
@@ -176,6 +181,7 @@ func TestAskWebhookSSRFAddressPolicy(t *testing.T) {
 }
 
 func TestAskLifecycleBackfillAndDedicatedBridgeWakes(t *testing.T) {
+	t.Parallel()
 	s, ws, card, ask := askDeliveryFixture(t)
 	ctx := context.Background()
 	for _, kind := range []string{"bridge", "await", "webhook"} {
@@ -262,6 +268,7 @@ func TestAskLifecycleBackfillAndDedicatedBridgeWakes(t *testing.T) {
 }
 
 func TestAskExpiryPersistsDeliveries(t *testing.T) {
+	t.Parallel()
 	s, _, card, _ := askDeliveryFixture(t)
 	ctx := context.Background()
 	ask, err := s.AppendEvent(ctx, "requester", map[string]any{"type": "human_attention_requested", "thread_id": card["thread_id"], "refs": []string{anyStringValue(card["ref"])}, "payload": map[string]any{"subject_ref": card["ref"], "requester_actor_id": "requester", "expires_at": time.Now().Add(-time.Hour).Format(time.RFC3339Nano)}})
@@ -298,6 +305,7 @@ func TestAskExpiryPersistsDeliveries(t *testing.T) {
 }
 
 func TestAskLegacyAliasLifecycleAndStaleness(t *testing.T) {
+	t.Parallel()
 	s, ws, card, _ := askDeliveryFixture(t)
 	ctx := context.Background()
 	if _, err := ws.DB().Exec(`INSERT INTO resource_handle_aliases(resource_type,alias_handle,resource_id,canonical_handle,created_at) VALUES('card','old-decision',?,?,'now')`, card["id"], card["handle"]); err != nil {
@@ -331,6 +339,7 @@ func TestAskLegacyAliasLifecycleAndStaleness(t *testing.T) {
 }
 
 func TestAskLegacyNonCardExpiryPersistsBeforeDelivery(t *testing.T) {
+	t.Parallel()
 	s, _, card, _ := askDeliveryFixture(t)
 	ctx := context.Background()
 	ask, err := s.AppendEvent(ctx, "requester", map[string]any{"type": "human_attention_requested", "thread_id": card["thread_id"], "refs": []string{"thread:" + anyStringValue(card["thread_id"])}, "payload": map[string]any{"subject_ref": "thread:" + anyStringValue(card["thread_id"]), "requester_actor_id": "requester", "expires_at": time.Now().Add(-time.Hour).Format(time.RFC3339Nano)}})
@@ -358,6 +367,7 @@ func TestAskLegacyNonCardExpiryPersistsBeforeDelivery(t *testing.T) {
 }
 
 func TestAskNeedsContextRoutesToRequesterWithCustomPolicy(t *testing.T) {
+	t.Parallel()
 	for _, outcome := range []string{"answered", "needs_context"} {
 		t.Run(outcome, func(t *testing.T) {
 			s, ws, card, ask := askDeliveryFixture(t)
@@ -404,6 +414,7 @@ func sourceAskObservation(t *testing.T, s *Store, work map[string]any, key, stat
 	}
 }
 func TestAskUsesEffectiveSourceOwner(t *testing.T) {
+	t.Parallel()
 	for _, outcome := range []string{"answered", "needs_context"} {
 		for _, observed := range []bool{false, true} {
 			t.Run(outcome+fmt.Sprint(observed), func(t *testing.T) {
@@ -432,6 +443,7 @@ func TestAskUsesEffectiveSourceOwner(t *testing.T) {
 	}
 }
 func TestAskSourceCancellationWithdrawsAndRejectsAnswers(t *testing.T) {
+	t.Parallel()
 	s, ws, card, _ := askDeliveryFixture(t)
 	work, ask := sourceAskFixture(t, s, anyStringValue(card["board_id"]))
 	sourceAskObservation(t, s, work, "cancel", "reported", map[string]any{"phase": "cancelled"})
@@ -459,6 +471,7 @@ func TestAskSourceCancellationWithdrawsAndRejectsAnswers(t *testing.T) {
 }
 
 func TestAskCompatibilityCardRollsBackWithEvent(t *testing.T) {
+	t.Parallel()
 	s, ws, card, _ := askDeliveryFixture(t)
 	if _, err := ws.DB().Exec(`CREATE TRIGGER reject_compat_ask BEFORE INSERT ON events WHEN NEW.type='human_attention_requested' BEGIN SELECT RAISE(ABORT,'reject ask'); END`); err != nil {
 		t.Fatal(err)
@@ -478,6 +491,7 @@ func TestAskCompatibilityCardRollsBackWithEvent(t *testing.T) {
 }
 
 func TestAskSourceClosureBackfillAndNullOwner(t *testing.T) {
+	t.Parallel()
 	s, ws, card, _ := askDeliveryFixture(t)
 	work, ask := sourceAskFixture(t, s, anyStringValue(card["board_id"]))
 	sourceAskObservation(t, s, work, "owner-clear", "reported", map[string]any{"owner": nil})
@@ -522,6 +536,7 @@ func TestAskSourceClosureBackfillAndNullOwner(t *testing.T) {
 }
 
 func TestAskCompatibilityCardInheritsEntireAskPrivacy(t *testing.T) {
+	t.Parallel()
 	for _, dependency := range []string{"body", "thread", "provenance"} {
 		t.Run(dependency, func(t *testing.T) {
 			s, _, public, _ := askDeliveryFixture(t)
@@ -567,6 +582,7 @@ func TestAskCompatibilityCardInheritsEntireAskPrivacy(t *testing.T) {
 }
 
 func TestAskSourceReopenDoesNotWithdrawNewAsk(t *testing.T) {
+	t.Parallel()
 	s, _, card, _ := askDeliveryFixture(t)
 	work, _ := sourceAskFixture(t, s, anyStringValue(card["board_id"]))
 	sourceAskObservation(t, s, work, "cancel", "reported", map[string]any{"phase": "cancelled"})
@@ -590,6 +606,7 @@ func TestAskSourceReopenDoesNotWithdrawNewAsk(t *testing.T) {
 }
 
 func TestAskEffectiveWorkLookupPlans(t *testing.T) {
+	t.Parallel()
 	_, ws, card, _ := askDeliveryFixture(t)
 	for _, projection := range []string{projectedWorkStringSQL("owner", `COALESCE(c.assignee,'')`), projectedWorkStringSQL("phase", `c.column_key`)} {
 		rows, err := ws.DB().Query(`EXPLAIN QUERY PLAN SELECT `+projection+` FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id WHERE c.id=?`, card["id"])

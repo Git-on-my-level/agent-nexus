@@ -485,6 +485,7 @@ func asString(value any) string {
 }
 
 func TestAskCanonicalSubjectSurvivesIDHandleCollision(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	h := newPrimitivesTestServerWithHumanPrincipal(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
@@ -530,6 +531,7 @@ func TestAskCanonicalSubjectSurvivesIDHandleCollision(t *testing.T) {
 }
 
 func TestAskLegacyClientSubjectsBecomeTasks(t *testing.T) {
+	t.Parallel()
 	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Legacy client","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()

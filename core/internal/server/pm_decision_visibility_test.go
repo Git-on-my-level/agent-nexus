@@ -15,6 +15,7 @@ import (
 // PM decisions inherit privacy from their evidence. Accessible live summaries
 // follow the shared policy without persisting summaries into durable records.
 func TestPMDecisionRefSummariesRespectRequesterVisibility(t *testing.T) {
+	t.Parallel()
 	env := newPMStoreTestEnv(t)
 	ctx := context.Background()
 	db := env.workspace.DB()

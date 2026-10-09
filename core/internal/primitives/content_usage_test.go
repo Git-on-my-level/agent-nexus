@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/blob"
-	"agent-nexus-core/internal/storage"
 	"agent-nexus-core/internal/testsql"
 )
 
 func TestStorageQuotaExcludesDerivedData(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,8 +67,9 @@ func TestStorageQuotaExcludesDerivedData(t *testing.T) {
 }
 
 func TestContentUsageCacheAndReaderScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,8 +121,9 @@ func TestContentUsageCacheAndReaderScope(t *testing.T) {
 }
 
 func TestContentUsageCountsCanonicalRelationsAndWakeups(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

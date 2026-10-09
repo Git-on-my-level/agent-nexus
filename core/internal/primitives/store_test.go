@@ -15,13 +15,12 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/storage"
 )
 
 func TestStoreAppendAndGetEventUnknownTypeAccepted(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -52,7 +51,7 @@ func TestStoreAppendAndGetEventUnknownTypeAccepted(t *testing.T) {
 func TestListEventsAfterUsesChronologicalTimestampOrdering(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -118,7 +117,7 @@ func TestListEventsWithoutLimitReturnsAllMatchingRows(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -157,7 +156,7 @@ func TestBatchCountMessagePostedEventsByThreadIDs(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -223,7 +222,7 @@ func TestListEventsPageKeysetPaginationNoSkipsOrDuplicates(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -279,7 +278,7 @@ func TestListEventsPageHomeFeedPresetIntersectsExplicitTypes(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -324,7 +323,7 @@ func TestListEventsPageSinceExclusiveIDBoundsRows(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -386,7 +385,7 @@ func TestArchiveEventCascadesMessageThreadReplies(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -467,7 +466,7 @@ func TestArchiveEventDoesNotCascadeNonMessagePosted(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -514,7 +513,7 @@ func TestEventLifecycleMutatesOnlyVisibilityColumns(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -601,7 +600,7 @@ func TestEventLifecycleMutatesOnlyVisibilityColumns(t *testing.T) {
 func TestCreateArtifactAcceptsSafeIDAndRejectsUnsafeIDs(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -654,7 +653,7 @@ func TestCreateArtifactAcceptsSafeIDAndRejectsUnsafeIDs(t *testing.T) {
 func TestCreateDocumentRejectsOversizedUpload(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -690,7 +689,7 @@ func TestCreateDocumentRejectsOversizedUpload(t *testing.T) {
 func TestCreateDocumentRejectsBlobQuotaExceeded(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -733,7 +732,7 @@ func TestCreateDocumentRejectsBlobQuotaExceeded(t *testing.T) {
 func TestUpdateDocumentRejectsRevisionQuotaExceeded(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -778,7 +777,7 @@ func TestListDocumentsEmbedsListOnlyMetrics(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -835,7 +834,7 @@ func TestDocumentRefsCorruptionReturnsError(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	workspace, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -866,7 +865,7 @@ func TestDocumentRefsCorruptionReturnsError(t *testing.T) {
 func TestCreateArtifactConflictDoesNotLeakStagedContent(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -911,7 +910,7 @@ func TestCreateArtifactConflictDoesNotLeakStagedContent(t *testing.T) {
 func TestWorkspaceUsageSummaryInitializesBlobLedgerFromCanonicalState(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -987,7 +986,7 @@ func TestWorkspaceUsageSummaryInitializesBlobLedgerFromCanonicalState(t *testing
 func TestWorkspaceUsageSummaryDeduplicatesDuplicateBlobContent(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -1023,7 +1022,7 @@ func TestWorkspaceUsageSummaryDeduplicatesDuplicateBlobContent(t *testing.T) {
 func TestWorkspaceUsageSummaryTracksCreateAndUpdateFlows(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -1069,7 +1068,7 @@ func TestWorkspaceUsageSummaryTracksCreateAndUpdateFlows(t *testing.T) {
 func TestRebuildBlobUsageLedgerRepairsDrift(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -1145,7 +1144,7 @@ func TestRebuildBlobUsageLedgerRepairsDrift(t *testing.T) {
 func TestUpdateDocumentWriteFailureDoesNotLeakStagedContent(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -1193,7 +1192,7 @@ func TestUpdateDocumentWriteFailureDoesNotLeakStagedContent(t *testing.T) {
 func TestPatchThreadPreservesUnknownFieldsAndEmitsChangedFields(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -1295,7 +1294,7 @@ func TestPatchThreadPreservesUnknownFieldsAndEmitsChangedFields(t *testing.T) {
 func TestGetThreadCanonicalizesLegacyTopicRefToSubjectRef(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -1343,7 +1342,7 @@ func TestGetThreadCanonicalizesLegacyTopicRefToSubjectRef(t *testing.T) {
 func TestPatchThreadOptimisticLockingIfUpdatedAt(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -1438,7 +1437,7 @@ func TestPatchThreadOptimisticLockingIfUpdatedAt(t *testing.T) {
 func TestCreateThreadStoresProvenanceOnlyInProvenanceJSON(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -1506,7 +1505,7 @@ func TestCreateThreadStoresProvenanceOnlyInProvenanceJSON(t *testing.T) {
 func TestPatchThreadProvenanceRoundTripAndPreserveWhenOmitted(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
@@ -1603,7 +1602,7 @@ func TestPatchThreadProvenanceRoundTripAndPreserveWhenOmitted(t *testing.T) {
 func TestListRecentEventsByThreadLimitAndOrder(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}

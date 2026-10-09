@@ -33,6 +33,7 @@ func (b *upgradeCountingBlobs) OpenReadStream(ctx context.Context, hash string) 
 // manifests committed, while present and missing blobs still have NULL manifests.
 // NewStore and another restart must preserve that state without retrying it.
 func TestScopeUpgradeUnindexedPrivateArtifactsStayDenied(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("real storage upgrade privacy gate")
 	}

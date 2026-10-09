@@ -11,6 +11,7 @@ import (
 )
 
 func TestResourceAccessReadIndexMigration62(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	root := t.TempDir()
 	ws, err := storage.InitializeWorkspace(ctx, root)
@@ -85,6 +86,7 @@ func TestResourceAccessReadIndexMigration62(t *testing.T) {
 }
 
 func TestResourceAccessProfileMigration63(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	root := t.TempDir()
 	ws, err := storage.InitializeWorkspace(ctx, root)

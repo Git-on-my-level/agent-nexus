@@ -10,6 +10,7 @@ import (
 )
 
 func TestPMNativeRoutesHideConversationFromOtherPrincipals(t *testing.T) {
+	t.Parallel()
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	owner := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "pm-owner", "pm-owner-actor", "pm-owner", "pm-owner-token")

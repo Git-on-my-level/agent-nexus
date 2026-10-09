@@ -9,7 +9,6 @@ import (
 
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/storage"
 )
 
 type countingReportBackend struct {
@@ -23,8 +22,9 @@ func (b *countingReportBackend) Read(ctx context.Context, hash string) ([]byte, 
 }
 
 func TestOverviewDefersReportSelectorBlobReads(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,6 +84,7 @@ func TestOverviewDefersReportSelectorBlobReads(t *testing.T) {
 }
 
 func TestBulkWorkMatchesIndividualProjectionAndPagination(t *testing.T) {
+	t.Parallel()
 	store, board := newWorkTestStore(t)
 	ctx := context.Background()
 	if _, err := store.CreateWork(ctx, "actor-1", board, map[string]any{"title": "Native work", "next_actor": "human", "priority": "p1"}); err != nil {

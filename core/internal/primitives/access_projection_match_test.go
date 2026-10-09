@@ -8,14 +8,14 @@ import (
 	"testing"
 
 	"agent-nexus-core/internal/resourceaccess"
-	"agent-nexus-core/internal/storage"
 )
 
 // Compare the optimized projection predicate with the original complete
 // spelling/OR matcher. Buckets must never become a visibility decision.
 func TestProjectionReferenceProbeParity(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
-	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
