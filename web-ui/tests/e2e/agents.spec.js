@@ -425,7 +425,8 @@ test("waiting agent page links its ask into the Inbox", async ({ page }) => {
   await page.goto(`${BASE}/agents/claude.workstation-a`);
   const ask = page.locator("[data-agent-open-ask]");
   await expect(ask).toContainText("Confirm 20-minute quest path");
-  await expect(ask).toContainText("3h 12m");
+  // created_at is an instant: 192 minutes floors to the shared hour phrase.
+  await expect(ask).toContainText("3 h ago");
   await expect(
     ask.getByRole("link", { name: "Answer in Inbox" }),
   ).toHaveAttribute(

@@ -7,7 +7,7 @@
     actorRegistry,
     principalRegistry,
   } from "$lib/actorSession";
-  import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
+  import Time from "$lib/time/Time.svelte";
   import {
     observationStatusLabel,
     observationStatusTone,
@@ -51,11 +51,7 @@
           prefix="by"
         />
       {:else}<span>Attribution unavailable</span>{/if}
-      {#if report.observed_at}<time
-          datetime={report.observed_at}
-          title={formatAbsoluteDateTime(report.observed_at)}
-          >{formatTimestamp(report.observed_at)}</time
-        >{/if}
+      {#if report.observed_at}<Time value={report.observed_at} />{/if}
     </div>
     <p>
       {links.length} linked evidence {links.length === 1 ? "item" : "items"} in this

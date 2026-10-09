@@ -1,4 +1,5 @@
 import { accessRequestFromInboxItem } from "$lib/accessGrant.js";
+import { formatElapsed } from "$lib/time/format.js";
 import { NEEDS_CONTEXT_OUTCOME } from "./askDelivery.js";
 import { isHumanNextActor } from "./humanActors.js";
 import { updateDigest } from "./inboxDigest.js";
@@ -311,23 +312,11 @@ export function shortIdLabel(value) {
 }
 
 /**
- * How long something has waited on the reader, in the units an operator
- * reads at a glance: "41m", "3h 12m", "2d 4h".
+ * How long something has waited, from the shared time module: "41m",
+ * "3h 12m", "2d 4h". A duration, not a timestamp.
  */
 export function formatWait(ms) {
-  const value = Number(ms);
-  if (!Number.isFinite(value) || value < 0) return "";
-  const minutes = Math.floor(value / 60_000);
-  if (minutes < 1) return "<1m";
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) {
-    const rest = minutes % 60;
-    return rest ? `${hours}h ${rest}m` : `${hours}h`;
-  }
-  const days = Math.floor(hours / 24);
-  const restHours = hours % 24;
-  return restHours ? `${days}d ${restHours}h` : `${days}d`;
+  return formatElapsed(ms);
 }
 
 /** Computed task age or elapsed ask wait, in milliseconds; NaN if unknown. */

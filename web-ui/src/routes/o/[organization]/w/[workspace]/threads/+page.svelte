@@ -3,7 +3,7 @@
   import { page } from "$app/stores";
 
   import { coreClient } from "$lib/coreClient";
-  import { formatTimestamp } from "$lib/formatDate";
+  import Time from "$lib/time/Time.svelte";
   import {
     buildThreadFilterQueryParamsFromThreadListState,
     buildTopicListSearchString,
@@ -267,7 +267,10 @@
           <!-- Names, not identifiers: the ref is one click away behind
                Copy ref for whoever needs it on the CLI. -->
           <p class="text-micro text-fg-muted">
-            Updated {formatTimestamp(thread.updated_at) || "—"}{#if topicSeg}
+            Updated <Time
+              value={thread.updated_at}
+              fallback="—"
+            />{#if topicSeg}
               · linked to a topic{/if}
           </p>
         </a>

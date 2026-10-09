@@ -1,8 +1,10 @@
 <script>
+  import { tooltip } from "$lib/actions/tooltip.js";
   import Button from "$lib/components/Button.svelte";
   import CopyButton from "$lib/components/CopyButton.svelte";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
   import { formatWait } from "$lib/inboxMailbox.js";
+  import Time from "$lib/time/Time.svelte";
 
   /**
    * Headless host enrollment for CI and cloud machines that cannot wait for
@@ -41,11 +43,7 @@
 
   function status(token) {
     if (token.revoked_at) return { key: "revoked", text: "revoked" };
-    if (token.consumed_at)
-      return {
-        key: "used",
-        text: `used ${formatWait(Math.max(0, now - Date.parse(token.consumed_at)))} ago`,
-      };
+    if (token.consumed_at) return { key: "used", text: "used" };
     const expires = Date.parse(token.expires_at);
     if (Number.isFinite(expires) && expires <= now)
       return { key: "expired", text: "expired" };
@@ -182,7 +180,10 @@
               ? 'text-fg-muted'
               : 'text-fg-subtle'}"
             title={`Created ${formatAbsoluteDateTime(row.token.created_at)}`}
-            >{row.status.text}</span
+            use:tooltip={`Created ${formatAbsoluteDateTime(row.token.created_at)}`}
+            >{row.status.text}{#if row.status.key === "used"}
+              {" "}<Time value={row.token.consumed_at} {now} />
+            {/if}</span
           >
           {#if row.status.key === "active"}
             <button

@@ -1,7 +1,9 @@
 <script>
+  import { tooltip } from "$lib/actions/tooltip.js";
   import Button from "$lib/components/Button.svelte";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
   import { formatWait } from "$lib/inboxMailbox.js";
+  import Time from "$lib/time/Time.svelte";
 
   /**
    * One machine asking to join the workspace (`anx host enroll`). Approval
@@ -26,10 +28,11 @@
   });
   let approved = $derived(enrollment?.status === "approved");
   let expired = $derived(expiresIn === "expired");
-  let requestedAgo = $derived.by(() => {
-    const at = Date.parse(enrollment?.created_at ?? "");
-    return Number.isFinite(at) ? formatWait(Math.max(0, now - at)) : "";
-  });
+  let requestedAt = $derived(
+    Number.isFinite(Date.parse(enrollment?.created_at ?? ""))
+      ? enrollment.created_at
+      : "",
+  );
   let adapters = $derived(enrollment?.discovered_adapters ?? []);
   let adoptions = $derived(enrollment?.adoption_names ?? []);
 </script>
@@ -70,15 +73,13 @@
           </dd>
         {/if}
         <dt class="text-fg-subtle">Requested</dt>
-        <dd
-          class="text-fg-muted"
-          title={formatAbsoluteDateTime(enrollment.created_at)}
-        >
-          {requestedAgo === "<1m" ? "just now" : `${requestedAgo} ago`}
+        <dd class="text-fg-muted">
+          {#if requestedAt}<Time value={requestedAt} {now} />{:else}—{/if}
           <span class="text-fg-subtle">·</span>
           <span
             class={expired ? "text-danger-text" : ""}
             title={formatAbsoluteDateTime(enrollment.expires_at)}
+            use:tooltip={formatAbsoluteDateTime(enrollment.expires_at)}
             >{expired ? "expired" : `expires in ${expiresIn}`}</span
           >
         </dd>

@@ -298,10 +298,10 @@ describe("instants in core's messages read as times, not ISO strings", () => {
     const { humanizeInstants } = await import("$lib/pm/presentation.js");
     const soon = new Date(Date.now() + 4.5 * 60_000).toISOString();
     expect(humanizeInstants(`rate limited; next attempt at ${soon}`)).toBe(
-      "rate limited; next attempt in 4m",
+      "rate limited; next attempt in 4 min",
     );
     const ago = new Date(Date.now() - 3.5 * 60_000).toISOString();
-    expect(humanizeInstants(`last read ${ago}`)).toBe("last read 3m ago");
+    expect(humanizeInstants(`last read ${ago}`)).toBe("last read 3 min ago");
     expect(humanizeInstants("no dates here")).toBe("no dates here");
     expect(humanizeInstants(undefined)).toBe("");
   });

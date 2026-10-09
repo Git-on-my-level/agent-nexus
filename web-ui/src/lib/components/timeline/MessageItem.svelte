@@ -13,7 +13,7 @@
   import MessageActions from "$lib/components/timeline/MessageActions.svelte";
   import RunAttribution from "$lib/components/agents/RunAttribution.svelte";
   import { scrollAndHighlightTarget } from "$lib/deepLinkTargets";
-  import { formatTimestamp } from "$lib/formatDate";
+  import Time from "$lib/time/Time.svelte";
   import { resolveRefLink } from "$lib/refLinkModel.js";
   import {
     docCommentBodyFocus,
@@ -396,9 +396,11 @@
             >
               {actorDisplayLine}
             </span>
-            <span class="shrink-0 text-micro leading-tight text-fg-muted"
-              >{formatTimestamp(message.ts) || "—"}</span
-            >
+            <Time
+              value={message.ts}
+              fallback="—"
+              class="shrink-0 text-micro leading-tight text-fg-muted"
+            />
             <RunAttribution attribution={message.run_attribution} />
             {#if notificationReceipts.length > 0}
               <span class="ml-1 flex shrink-0 items-center gap-1 text-micro">
@@ -466,7 +468,7 @@
                               </span>
                               <span class="block text-fg-muted">
                                 {#if stage.timestamp}
-                                  {formatTimestamp(stage.timestamp)}
+                                  <Time value={stage.timestamp} />
                                 {:else if stage.status === "pending"}
                                   Pending
                                 {:else if stage.status === "failed"}

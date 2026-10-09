@@ -11,6 +11,7 @@
     withReportDefaults,
   } from "$lib/reportProvenance.js";
   import { getPanelFreshness } from "$lib/visualReports.js";
+  import Time from "$lib/time/Time.svelte";
   import VisualReportPanel from "./VisualReportPanel.svelte";
   import AnxRefPreview from "$lib/components/AnxRefPreview.svelte";
   import {
@@ -380,12 +381,7 @@
     {#if !compact}<div class="report-snapshot">
         <span class="report-snapshot-dot" aria-hidden="true"></span><span
           >{hasLive ? "Live workspace + snapshots" : "Snapshot, not live"}<br
-          /><time datetime={report.generated_at}
-            >{new Date(report.generated_at)
-              .toISOString()
-              .slice(0, 16)
-              .replace("T", " ")} UTC</time
-          ></span
+          /><Time value={report.generated_at} /></span
         >
       </div>{/if}
   </header>

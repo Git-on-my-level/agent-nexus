@@ -5,7 +5,7 @@
     actorRegistry,
     principalRegistry,
   } from "$lib/actorSession";
-  import { formatTimestamp } from "$lib/formatDate";
+  import Time from "$lib/time/Time.svelte";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { topicDetailStore } from "$lib/topicDetailStore";
   import {
@@ -116,7 +116,7 @@
                 {resourceDisplayLabel(doc)}
               </p>
               <p class="mt-1 text-micro text-fg-muted">
-                Updated {formatTimestamp(doc.updated_at) || "—"} by {actorName(
+                Updated <Time value={doc.updated_at} fallback="—" /> by {actorName(
                   doc.updated_by,
                 )}
               </p>
@@ -127,7 +127,9 @@
                   doc.head_revision_number ??
                   "?"}
               </div>
-              <div>{formatTimestamp(doc.head_revision?.created_at) || "—"}</div>
+              <div>
+                <Time value={doc.head_revision?.created_at} fallback="—" />
+              </div>
             </div>
           </div>
         </a>

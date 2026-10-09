@@ -77,8 +77,10 @@ describe("AnxRefPreview", () => {
     // tooltip is ours rather than the browser's `title`, so it is readable
     // from `data-tooltip` and shows in 60ms instead of a second.
     const age = container.querySelector("time.age-badge");
-    expect(age?.textContent?.trim()).toMatch(/^\d+[mhdwy]$|^now$/);
-    expect(age?.getAttribute("title")).toBeNull();
+    expect(age?.textContent?.trim()).toMatch(
+      /just now|min ago|h ago|yesterday|tomorrow|^[A-Z][a-z]{2} \d/,
+    );
+    expect(age?.getAttribute("title")).toMatch(/^Moved /);
     expect(age?.getAttribute("data-tooltip")).toMatch(/^Moved /);
   });
 

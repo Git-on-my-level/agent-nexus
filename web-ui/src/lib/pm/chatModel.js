@@ -5,6 +5,7 @@
  * turn status; this module decides how a turn reads on screen.
  */
 
+import { formatTime } from "$lib/time/format.js";
 import { decisionIdsFromTurn } from "./turnDecisions.js";
 
 /**
@@ -222,20 +223,13 @@ export function startsTimeGroup(turn, previous) {
 }
 
 /**
- * Local wall-clock time (`14:32`) for a group header. Empty when the instant is
+ * Local time of day for a group header. Empty when the instant is
  * missing or unparseable, so the caller can drop the header entirely.
  *
  * @param {unknown} iso
  */
 export function clockTime(iso) {
-  if (!iso) return "";
-  const date = new Date(String(iso));
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+  return formatTime(iso, { style: "clock" });
 }
 
 /**

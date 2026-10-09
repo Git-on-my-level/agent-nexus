@@ -1,5 +1,5 @@
 <script>
-  import { ageTitle, formatAge } from "$lib/ageBadge.js";
+  import Time from "$lib/time/Time.svelte";
   import ReportChart from "./ReportChart.svelte";
   import ReportDetails from "./ReportDetails.svelte";
   let { panel, freshness, now = Date.now() } = $props();
@@ -52,14 +52,14 @@
       <ol class="grid gap-2 text-meta">
         {#each timeline as item, index (index)}
           <li
-            class="grid grid-cols-[2.5rem_minmax(0,1fr)] items-baseline gap-x-3 border-b border-line-subtle pb-2 last:border-0 last:pb-0"
+            class="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 border-b border-line-subtle pb-2 last:border-0 last:pb-0"
           >
-            <time
-              class="text-micro tabular-nums text-fg-muted"
-              datetime={item.at}
-              title={ageTitle(item.at, "observed", now)}
-              >{formatAge(item.at, now)}</time
-            >
+            <Time
+              value={item.at}
+              {now}
+              verb="observed"
+              class="text-micro text-fg-muted"
+            />
             <span class="min-w-0 [overflow-wrap:anywhere]"
               >{item.value}{#if item.label}<span class="text-fg-muted">
                   · {item.label}</span

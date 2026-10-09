@@ -2,14 +2,10 @@
   import { page } from "$app/stores";
 
   import { agentRegistry, findAgentSummary } from "$lib/actorSession";
-  import {
-    agentPath,
-    agentPresentationState,
-    formatAge,
-  } from "$lib/agentPresence.js";
-  import { tooltip } from "$lib/actions/tooltip.js";
+  import { agentPath, agentPresentationState } from "$lib/agentPresence.js";
   import AgentStateDot from "$lib/components/agents/AgentStateDot.svelte";
-  import { formatAbsoluteDateTime } from "$lib/formatDate";
+  import Time from "$lib/time/Time.svelte";
+  import { instantIso } from "$lib/time/format.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
 
   /**
@@ -20,7 +16,6 @@
 
   let agent = $derived(findAgentSummary(actorId, $agentRegistry));
   let note = $derived(String(agent?.last_progress_note ?? "").trim());
-  let age = $derived(agent ? formatAge(agent.last_progress_at) : "");
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
@@ -37,11 +32,10 @@
     <span class="line-clamp-2 min-w-0">
       <a class="text-fg hover:underline" href={workspaceHref(agentPath(agent))}
         >{agent.display_name}</a
-      ><span class="text-fg-subtle">{" · "}</span>{#if age}<time
-          datetime={agent.last_progress_at}
-          use:tooltip={formatAbsoluteDateTime(agent.last_progress_at)}
-          >{age === "<1m" ? "just now" : `${age} ago`}</time
-        >{": "}{/if}“{note}”
+      ><span class="text-fg-subtle">{" · "}</span
+      >{#if instantIso(agent.last_progress_at)}<Time
+          value={agent.last_progress_at}
+        />{": "}{/if}“{note}”
     </span>
   </p>
 {/if}

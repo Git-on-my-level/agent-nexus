@@ -34,7 +34,7 @@ it("renders the age as a <time> the machine can read", () => {
   });
   const chip = container.querySelector("[data-anx-provenance]");
   expect(chip.textContent.replace(/\s+/g, " ").trim()).toBe(
-    "Written by claude · 3d ago",
+    "Written by claude · Oct 3",
   );
   expect(chip.dataset.anxProvenance).toBe("authored");
   expect(chip.dataset.anxProvenanceClass).toBe("authored");
@@ -54,7 +54,7 @@ it("says a panel past its review date may be stale, in words", () => {
   const chip = container.querySelector("[data-anx-provenance]");
   expect(chip.dataset.anxProvenance).toBe("due-for-review");
   expect(chip.textContent).toContain("May be stale");
-  expect(chip.textContent).toContain("9d ago");
+  expect(chip.textContent).toContain("Sep 27");
 });
 
 it("marks a live panel in the header, in the compact embed too", () => {
@@ -86,7 +86,7 @@ it("marks a live panel in the header, in the compact embed too", () => {
     ".report-panel-header [data-anx-provenance]",
   );
   expect(chip.textContent.replace(/\s+/g, " ").trim()).toBe(
-    "Live · updated 2m ago",
+    "Live · updated 2 min ago",
   );
   // The read time is no longer repeated at the foot of the panel body.
   expect(section.textContent).not.toContain("Live as of");
@@ -160,7 +160,7 @@ it("separates when a note was written from how old its evidence is", () => {
   });
   const section = container.querySelector("[data-report-panel='standing']");
   expect(section.querySelector("[data-anx-provenance]").textContent).toContain(
-    "Written by claude · 1h ago",
+    "Written by claude · 1 h ago",
   );
   expect(section.querySelector(".report-state").textContent).toContain(
     "Stale evidence",
@@ -219,7 +219,7 @@ it("keeps showing a release timeline that has gone quiet", () => {
   // `stale` answered; saying "read failed" over two visible releases is the
   // contradiction this line exists to remove.
   expect(section.querySelector("[data-anx-provenance]").textContent).toContain(
-    "May be stale · last read 4d ago",
+    "May be stale · last read Oct 2",
   );
   expect(section.dataset.provenanceState).toBe("live-stale");
 });
@@ -241,8 +241,8 @@ it("clamps a long principal label without losing the words around it", () => {
   // Clamped by CSS, so the full label is still in the DOM and in a tooltip.
   expect(name.getAttribute("data-tooltip")).toBe(long);
   expect(chip.textContent).toContain("Written by");
-  expect(chip.textContent).toContain("3d ago");
-  expect(chip.querySelector("time").textContent).toBe("3d ago");
+  expect(chip.textContent).toContain("Oct 3");
+  expect(chip.querySelector("time").textContent).toBe("Oct 3");
 });
 
 it("stops trusting a stale review_due as the clock passes the deadline", () => {

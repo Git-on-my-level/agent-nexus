@@ -6,13 +6,22 @@ const now = Date.parse("2026-10-04T12:00:00Z");
 const ago = (ms) => new Date(now - ms).toISOString();
 
 describe("formatAge", () => {
-  it("reads in minutes, hours, days, weeks and years", () => {
-    expect(formatAge(ago(30_000), now)).toBe("now");
-    expect(formatAge(ago(8 * 60_000), now)).toBe("8m");
-    expect(formatAge(ago(8 * 3_600_000), now)).toBe("8h");
-    expect(formatAge(ago(3 * 86_400_000), now)).toBe("3d");
-    expect(formatAge(ago(30 * 86_400_000), now)).toBe("4w");
-    expect(formatAge(ago(800 * 86_400_000), now)).toBe("2y");
+  it("uses the shared friendly phrases", () => {
+    expect(formatAge(ago(30_000), now)).toBe("just now");
+    expect(formatAge(ago(8 * 60_000), now)).toBe("8 min ago");
+    const eightHours = ago(8 * 3_600_000);
+    const here = new Date(now);
+    const there = new Date(now - 8 * 3_600_000);
+    const day =
+      Date.UTC(here.getFullYear(), here.getMonth(), here.getDate()) -
+      Date.UTC(there.getFullYear(), there.getMonth(), there.getDate());
+    expect(formatAge(eightHours, now)).toBe(
+      day === 86_400_000 ? "yesterday" : "8 h ago",
+    );
+    expect(formatAge(ago(3 * 86_400_000), now)).toMatch(
+      /^[A-Z][a-z]{2} \d{1,2}/,
+    );
+    expect(formatAge(ago(400 * 86_400_000), now)).toMatch(/\d{4}/);
   });
 
   it("says nothing for a missing or unparseable instant", () => {
@@ -21,36 +30,28 @@ describe("formatAge", () => {
     expect(formatAge("not a date", now)).toBe("");
   });
 
-  it("reads a future instant as a countdown", () => {
-    expect(formatAge(new Date(now + 2 * 86_400_000).toISOString(), now)).toBe(
-      "in 2d",
+  it("reads a near future as a countdown and a later one as a date", () => {
+    expect(formatAge(new Date(now + 10 * 60_000).toISOString(), now)).toBe(
+      "in 10 min",
     );
-  });
-
-  it("is never long enough to need truncating", () => {
-    for (const ms of [0, 60_000, 3_600_000, 86_400_000, 1e11]) {
-      expect(formatAge(ago(ms), now).length).toBeLessThanOrEqual(6);
-    }
+    expect(
+      formatAge(new Date(now + 2 * 86_400_000).toISOString(), now),
+    ).toMatch(/^[A-Z][a-z]{2} \d{1,2}/);
   });
 });
 
 describe("ageTitle", () => {
-  it("carries the verb, the exact instant and the relative age", () => {
+  it("carries the verb and the exact local instant", () => {
     const title = ageTitle(ago(8 * 3_600_000), "moved", now);
     expect(title.startsWith("Moved ")).toBe(true);
-    expect(title).toContain("(8h)");
-    // The exact instant, not a relative one.
     expect(title).toMatch(/\d{4}/);
-  });
-
-  it("drops the relative suffix when it says nothing", () => {
-    expect(ageTitle(ago(1000), "checked", now)).not.toContain("(");
+    expect(title).not.toContain("(8h)");
   });
 
   it("works without a verb", () => {
     const title = ageTitle(ago(86_400_000), "", now);
-    expect(title).toContain("(1d)");
     expect(title.startsWith("Moved")).toBe(false);
+    expect(title).toMatch(/\d{4}/);
   });
 
   it("says nothing for a missing instant", () => {
