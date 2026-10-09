@@ -153,6 +153,13 @@ describe("machine prompt", () => {
     expect(prompt).toContain("host_enrollment");
   });
 
+  it("asks the server with a runnable --as, not a <placeholder>", () => {
+    expect(prompt).toContain(`--as ${shellQuote("claude")}`);
+    expect(prompt).not.toMatch(/--as\s+</);
+    expect(prompt).toContain("auth whoami");
+    expect(prompt).toContain("host list");
+  });
+
   it("keeps human-only actions human", () => {
     expect(prompt).toContain("Do not create passkeys");
     expect(prompt).toContain("grant administration");
@@ -215,6 +222,14 @@ describe("PM prompt", () => {
 
   it("verifies the PM with a real call", () => {
     expect(prompt).toContain("--json pm status");
+  });
+
+  it("uses the chosen runner as --as, not a documentation placeholder", () => {
+    expect(prompt).toContain(`--as ${shellQuote("claude")}`);
+    expect(prompt).not.toMatch(/--as\s+</);
+    const hermes = buildPmPrompt({ ...BASE, runnerKey: "hermes" });
+    expect(hermes).toContain(`--as ${shellQuote("hermes")}`);
+    expect(hermes).not.toMatch(/--as\s+</);
   });
 });
 

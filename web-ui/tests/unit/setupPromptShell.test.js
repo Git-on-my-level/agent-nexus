@@ -19,6 +19,7 @@ import {
   isPlainHttpUrl,
   sanitizePromptLabel,
   setupPromptBlockedReason,
+  shellQuote,
 } from "../../src/lib/setup/setupPrompt.js";
 
 /**
@@ -297,17 +298,53 @@ describe("branching is local, confirmation is not", () => {
     expect(branch).not.toContain("auth whoami");
     expect(branch).not.toContain("host list");
 
-    // And the prompt always ends up asking the server.
+    // And the prompt always ends up asking the server, with a real `--as`
+    // so a literal run is not eaten by shell redirections.
     const authed = commands
       .join("\n")
       .split("\n")
-      .filter((line) => line.includes("anx ") && line.includes("--as <"));
+      .filter((line) => line.includes("anx ") && line.includes(" --as "));
     expect(authed).toHaveLength(2);
     expect(authed.some((line) => line.includes("auth whoami"))).toBe(true);
     expect(authed.some((line) => line.includes("host list"))).toBe(true);
+    for (const line of authed) {
+      expect(line).not.toMatch(/--as\s+</);
+    }
     expect(prompt).toContain("this machine's access has been taken away");
     // The local check is explicitly described as insufficient.
     expect(prompt).toContain("it cannot tell you the server still accepts it");
+  });
+
+  it("bakes the PM runner into --as so the verify lines run unread", () => {
+    for (const runnerKey of ["claude", "hermes"]) {
+      const prompt = buildPmPrompt({ ...BASE, runnerKey });
+      const authed = snippets(prompt)
+        .join("\n")
+        .split("\n")
+        .filter((line) => line.includes(" --as "));
+      expect(authed).toHaveLength(2);
+      for (const line of authed) {
+        expect(line).toContain(`--as ${shellQuote(runnerKey)}`);
+      }
+    }
+  });
+
+  it("runs the server-check snippet as printed", () => {
+    const stub = stubAnx();
+    const check = snippets(
+      buildPmPrompt({ ...BASE, runnerKey: "hermes" }),
+    ).find(
+      (part) => part.includes("auth whoami") && part.includes("host list"),
+    );
+    expect(check).toBeTruthy();
+    const calls = runSnippet(check, stub);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toContain("auth");
+    expect(calls[0]).toContain("whoami");
+    expect(calls[0][calls[0].indexOf("--as") + 1]).toBe("hermes");
+    expect(calls[1]).toContain("host");
+    expect(calls[1]).toContain("list");
+    expect(calls[1][calls[1].indexOf("--as") + 1]).toBe("hermes");
   });
 
   it("tells the PM prompt to skip enrollment when doctor says it is enrolled", () => {
