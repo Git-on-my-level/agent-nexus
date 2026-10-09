@@ -2,7 +2,6 @@ import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { getExpectedCommandRegistryDigest } from "../../src/lib/commandRegistryDigest.js";
 import { EXPECTED_SCHEMA_VERSION } from "../../src/lib/config.js";
-import { holdOpenStream } from "../helpers/openStream.js";
 
 const root = "/o/local/w/local";
 const stamp = (hours = 0) =>
@@ -528,8 +527,6 @@ test("a live task event re-reads the list; a failed re-read keeps visible work",
 }) => {
   test.setTimeout(60_000);
   let fail = false;
-  let release;
-  const released = new Promise((resolve) => (release = resolve));
   await setup(page, {
     handle: async ({ path, method, reply }) => {
       if (fail && path === "/work" && method === "GET") {
@@ -550,29 +547,65 @@ test("a live task event re-reads the list; a failed re-read keeps visible work",
       body: JSON.stringify({ events: [] }),
     }),
   );
-  // The list subscribes to /stream/events; the stream stays open until the
-  // test sends one card event down it.
+  // One waiter per live connection. Claiming the first stream bound the
+  // event to a request Playwright often aborts during navigation, so later
+  // connections never saw card_moved. Aborted connections leave the queue.
+  const deferred = () => {
+    let resolve;
+    let reject;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const liveWaiters = [];
+  let queuedLive = 0;
+  const release = () => {
+    const waiter = liveWaiters.shift();
+    if (waiter) waiter.resolve();
+    else queuedLive += 1;
+  };
   let connected;
   const streamReady = new Promise((resolve) => {
     connected = resolve;
   });
-  let delivered = false;
   await page.route("**/stream/events**", async (route) => {
-    if (delivered) return holdOpenStream(page, route);
-    delivered = true;
+    const request = route.request();
+    const waiter = deferred();
+    if (queuedLive > 0) {
+      queuedLive -= 1;
+      waiter.resolve();
+    } else liveWaiters.push(waiter);
     connected();
-    await released;
+    const onFailed = (failed) => {
+      if (failed !== request) return;
+      page.off("requestfailed", onFailed);
+      const index = liveWaiters.indexOf(waiter);
+      if (index >= 0) liveWaiters.splice(index, 1);
+      waiter.reject(new Error("stream aborted"));
+    };
+    page.on("requestfailed", onFailed);
+    try {
+      await waiter.promise;
+    } catch {
+      await route.abort().catch(() => {});
+      return;
+    }
+    page.off("requestfailed", onFailed);
     const event = {
       id: "evt-live-1",
       type: "card_moved",
       ts: new Date().toISOString(),
       refs: ["card:docs"],
     };
-    await route.fulfill({
-      status: 200,
-      contentType: "text/event-stream",
-      body: `id: evt-live-1\nevent: event\ndata: ${JSON.stringify({ event })}\n\n`,
-    });
+    await route
+      .fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: `id: evt-live-1\nevent: event\ndata: ${JSON.stringify({ event })}\n\n`,
+      })
+      .catch(() => {});
   });
   await page.goto(`${root}/tasks`);
   await expect(page.locator("[data-work-ref]")).toHaveCount(3);

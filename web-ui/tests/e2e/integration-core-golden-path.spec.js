@@ -9,6 +9,9 @@ function normalizeBaseUrl(value) {
     .replace(/\/+$/, "");
 }
 
+const GOLDEN_PATH_TIMEOUT_MS = 180_000;
+const CORE_LOCK_WAIT_MS = 20 * 60_000;
+
 function releaseCoreLock(path) {
   try {
     unlinkSync(path);
@@ -25,7 +28,7 @@ function releaseCoreLock(path) {
  */
 async function acquireCoreLock() {
   const path = `/tmp/anx-e2e-golden-lock-${process.env.PLAYWRIGHT_CORE_PORT ?? 8000}`;
-  const deadline = Date.now() + 20 * 60_000;
+  const deadline = Date.now() + CORE_LOCK_WAIT_MS;
   while (Date.now() < deadline) {
     try {
       writeFileSync(path, String(process.pid), { flag: "wx" });
@@ -164,9 +167,12 @@ test("golden path integration runs against a real anx-core", async ({
   page,
   request,
 }) => {
-  test.setTimeout(180000);
-  const release = await acquireCoreLock();
+  const started = Date.now();
+  test.setTimeout(CORE_LOCK_WAIT_MS + GOLDEN_PATH_TIMEOUT_MS);
+  let release = () => {};
   try {
+    release = await acquireCoreLock();
+    test.setTimeout(Date.now() - started + GOLDEN_PATH_TIMEOUT_MS);
     await runGoldenPath(page, request);
   } finally {
     release();
