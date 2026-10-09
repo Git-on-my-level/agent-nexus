@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: performance-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Separate from CI: results stay visible without delaying PRs or releases.
 jobs:
@@ -130,3 +130,26 @@ jobs:
 
       - name: Assert executed union covers all cases and both principals
         run: python3 scripts/check-performance-shards.py .tmp/performance/shards
+
+  core-advisory-tests:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+
+      - name: Performance and latency tests outside the merge gate
+        working-directory: core
+        env:
+          GOMAXPROCS: "2"
+          GOFLAGS: "-p=1"
+          ANX_PERFORMANCE_TEST: "1"
+        # The core owner's test-perf target is not available yet. Discover by
+        # name until it lands; the route fixture keeps its four-shard lane.
+        run: python3 ../scripts/ci-core.py advisory

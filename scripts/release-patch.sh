@@ -13,7 +13,8 @@ Usage:
 Options:
   --version <version>  Override the computed next patch version.
   --skip-checks        Skip local release checks.
-  --no-wait            Do not wait for GitHub main/release workflows to finish.
+  --no-wait            Do not wait for the tag-triggered Release CLI workflow.
+                       CI/System Smokes source gates are always required.
   --dry-run            Print the planned version, release base, and release path, then exit.
   -h, --help           Show this help text.
 EOF
@@ -96,6 +97,7 @@ find_main_workflow_run_id() {
 
   gh run list \
     --workflow "${workflow_name}" \
+    --event push \
     --branch main \
     --limit 20 \
     --json databaseId,headSha \
@@ -181,6 +183,7 @@ cd "${REPO_ROOT}"
 
 require_cmd git
 require_cmd make
+require_cmd python3
 ensure_clean_worktree
 
 if [[ "${DRY_RUN}" != "1" ]]; then
@@ -189,7 +192,13 @@ if [[ "${DRY_RUN}" != "1" ]]; then
   gh auth status >/dev/null
 fi
 
-git fetch origin main --tags
+# Release ancestry must reach the substantive source; a shallow boundary could
+# otherwise make a generated bump's skipped-green CI look like real validation.
+if [[ "$(git rev-parse --is-shallow-repository)" == "true" ]]; then
+  git fetch --unshallow origin main --tags
+else
+  git fetch origin main --tags
+fi
 ensure_clean_worktree
 
 HEAD_SHA="$(git rev-parse HEAD)"
@@ -206,6 +215,15 @@ if git rev-parse -q --verify "refs/tags/${TARGET_VERSION}" >/dev/null 2>&1; then
   die "tag ${TARGET_VERSION} already exists"
 fi
 
+# A prepared release inherits checks only when it is an exact generated bump.
+# Normal commits (including mixed version/code edits) must pass their own gates.
+CHECKED_SHA="${ORIGIN_MAIN_SHA}"
+while :; do
+  PREPARED_PARENT="$(python3 "${SCRIPT_DIR}/ci-release-base.py" --strict "${CHECKED_SHA}")"
+  [[ -n "${PREPARED_PARENT}" ]] || break
+  CHECKED_SHA="${PREPARED_PARENT}"
+done
+
 RESUME_PREPARED_RELEASE=0
 if "${SCRIPT_DIR}/set-version.sh" --check "${TARGET_VERSION}" >/dev/null 2>&1; then
   RESUME_PREPARED_RELEASE=1
@@ -219,6 +237,7 @@ if [[ "${DRY_RUN}" == "1" ]]; then
   fi
   cat <<EOF
 release base: ${ORIGIN_MAIN_SHA}
+CI/System Smokes gate commit: ${CHECKED_SHA}
 next version: ${TARGET_VERSION}
 release path: ${RELEASE_PATH}
 skip checks: ${SKIP_CHECKS}
@@ -226,6 +245,11 @@ wait for release: ${WAIT_FOR_RELEASE}
 EOF
   exit 0
 fi
+
+# Gate before writing or pushing the bump, including --skip-checks/--no-wait.
+# This preserves the coordinator's missing-workflow diagnostics.
+wait_for_main_workflow "CI" "${CHECKED_SHA}"
+wait_for_main_workflow "System Smokes" "${CHECKED_SHA}"
 
 if [[ "${RESUME_PREPARED_RELEASE}" == "1" ]]; then
   RELEASE_SHA="${ORIGIN_MAIN_SHA}"
@@ -265,13 +289,6 @@ else
   git commit -m "Prepare release ${TARGET_VERSION}"
   git push origin HEAD:main
   RELEASE_SHA="$(git rev-parse HEAD)"
-fi
-
-if [[ "${WAIT_FOR_RELEASE}" == "1" ]]; then
-  wait_for_main_workflow "CI" "${RELEASE_SHA}"
-  wait_for_main_workflow "System Smokes" "${RELEASE_SHA}"
-else
-  echo "warning: --no-wait skips GitHub main workflow gates; a tag may be published before CI/System Smokes complete" >&2
 fi
 
 git tag -a "${TARGET_VERSION}" -m "Release ${TARGET_VERSION}"

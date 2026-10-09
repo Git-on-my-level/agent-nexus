@@ -1,5 +1,5 @@
 name: Setup Go
-description: Set up Go with module cache support for this monorepo.
+description: Set up Go with reusable modules and refreshed branch build caches.
 
 inputs:
   go-version-file:
@@ -16,5 +16,35 @@ runs:
       uses: actions/setup-go@v6.3.0
       with:
         go-version-file: ${{ inputs.go-version-file }}
-        cache: true
+        cache: false
         cache-dependency-path: ${{ inputs.cache-dependency-path }}
+
+    - name: Locate Go caches
+      id: paths
+      shell: bash
+      run: |
+        echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+        echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+        echo "version=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
+
+    # Tags build once; they reuse no tag-specific cache and create none.
+    - name: Cache Go modules
+      if: github.ref_type != 'tag'
+      uses: actions/cache@v5.0.3
+      with:
+        path: ${{ steps.paths.outputs.modules }}
+        key: go-mod-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.version }}-${{ github.head_ref || github.ref_name }}-${{ hashFiles(inputs.cache-dependency-path) }}
+        restore-keys: |
+          go-mod-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.version }}-main-${{ hashFiles(inputs.cache-dependency-path) }}
+
+    # setup-go's immutable build key never refreshes on a hit. Share one snapshot
+    # across this run's jobs, then restore the latest compatible branch snapshot.
+    - name: Cache and refresh Go build cache
+      if: github.ref_type != 'tag'
+      uses: actions/cache@v5.0.3
+      with:
+        path: ${{ steps.paths.outputs.build }}
+        key: go-build-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.version }}-${{ github.head_ref || github.ref_name }}-${{ hashFiles(inputs.cache-dependency-path) }}-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: |
+          go-build-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.version }}-${{ github.head_ref || github.ref_name }}-${{ hashFiles(inputs.cache-dependency-path) }}-
+          go-build-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.version }}-main-${{ hashFiles(inputs.cache-dependency-path) }}-
