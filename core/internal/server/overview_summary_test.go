@@ -31,6 +31,7 @@ func TestOverviewSummaryCompatibilityAndPrivacy(t *testing.T) {
 	for i := 0; i < 49; i++ {
 		exec(`INSERT INTO cards(id,title,thread_id,board_id,column_key,created_at,created_by,updated_at,updated_by,definition_of_done_json,resolution_refs_json,refs_json,provenance_json) VALUES(?,?,'summary-thread','summary-board','ready','now','fixture','now','fixture',?,?,?,?)`, fmt.Sprintf("summary-card-%d", i), fmt.Sprintf("Work %d", i), string(list), string(list), string(list), string(provenance))
 	}
+	exec(`UPDATE cards SET summary='Current prose' WHERE id='summary-card-0'`)
 	exec(`INSERT INTO ref_edges(id,source_type,source_id,target_type,target_id,edge_type,created_at) SELECT 'membership-'||id,'board','summary-board','card',id,'board_card','now' FROM cards`)
 	exec(`INSERT INTO work_metadata(card_id,metadata_json,updated_at,updated_by) VALUES('summary-card-0','{"source":{"authority":"github","native_id":"issue-1","url":"https://example.invalid/issue/1","extra":"full-detail"},"next_actor":"human","next_action":"Approve","blockers":["one","two"]}','now','fixture')`)
 	exec(`INSERT INTO cards(id,title,thread_id,column_key,created_at,created_by,updated_at,updated_by) VALUES('private-summary-card','PrivateSummarySecret','private-summary-thread','ready','now','fixture','now','fixture')`)
@@ -61,10 +62,13 @@ func TestOverviewSummaryCompatibilityAndPrivacy(t *testing.T) {
 	}
 	full, fullBytes := read("/overview")
 	compact, compactBytes := read("/overview?work_view=summary")
+	optedIn, _ := read("/overview?work_view=summary&summary=1")
 	fw := full["work"].(map[string]any)
 	cw := compact["work"].(map[string]any)
+	ow := optedIn["work"].(map[string]any)
 	fi := fw["items"].([]any)
 	ci := cw["items"].([]any)
+	oi := ow["items"].([]any)
 	contract, err := openapi3.NewLoader().LoadFromFile(filepath.Join(repoRootFromServerTest(t), "contracts", "anx-openapi.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -73,10 +77,15 @@ func TestOverviewSummaryCompatibilityAndPrivacy(t *testing.T) {
 	if len(fi) != 49 || len(ci) != 49 {
 		t.Fatalf("visible work counts %d / %d", len(fi), len(ci))
 	}
+	if len(oi) != 49 {
+		t.Fatalf("opted-in visible work count %d", len(oi))
+	}
 	blockerControl := false
+	proseControl := false
 	for i := range fi {
 		f := fi[i].(map[string]any)
 		c := ci[i].(map[string]any)
+		o := oi[i].(map[string]any)
 		for _, key := range []string{"summary", "summary_text", "work_summary"} {
 			if _, ok := c[key]; ok {
 				t.Fatalf("legacy compact response gained %s", key)
@@ -108,10 +117,23 @@ func TestOverviewSummaryCompatibilityAndPrivacy(t *testing.T) {
 			if c["blocker_count"] != float64(2) {
 				t.Fatal("summary lost blocker count")
 			}
+			proseControl = true
+			if o["summary_text"] != "Current prose" {
+				t.Fatalf("opted-in response lost prose summary: %#v", o["summary_text"])
+			}
+			if !reflect.DeepEqual(o["summary"], o["work_summary"]) {
+				t.Fatal("opted-in response did not alias the computed work summary")
+			}
+			if err := workSchema.VisitJSON(o); err != nil {
+				t.Fatalf("opted-in work %v violates Work schema: %v", o["ref"], err)
+			}
 		}
 	}
 	if !blockerControl {
 		t.Fatal("fixture lost blocker-count control")
+	}
+	if !proseControl {
+		t.Fatal("fixture lost prose-summary control")
 	}
 	// These controls must fail schema validation if compaction drops a fence.
 	for _, field := range []string{"decision_revision", "version"} {
