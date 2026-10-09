@@ -173,7 +173,6 @@ func TestScopeInboxInvalidationRegistryComplete(t *testing.T) {
 }
 
 func TestScopeInboxInvalidationRegistryPinsSourceMeaning(t *testing.T) {
-	t.Parallel()
 	_, before, err := scopeInboxInvalidationSources()
 	if err != nil {
 		t.Fatal(err)

@@ -74,10 +74,12 @@ check-linux-observation:
 	@CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o /dev/null ./internal/observation
 	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /dev/null ./internal/observation
 
-# Each fixture owns its database and workers. Bound in-package concurrency
-# while allowing four packages to execute together on CI runners.
+# HTTP fixtures run projection/SSE workers; bound fixture concurrency so
+# those background workers do not compete across every available CPU.
+# The expanded privacy matrix also needs a package budget above Go's 10m
+# default. Per-request and event checks keep their own bounded deadlines.
 test:
-	@go test -p=4 -parallel=4 -timeout=$(GO_TEST_TIMEOUT) ./...
+	@go test -parallel=2 -timeout=$(GO_TEST_TIMEOUT) ./...
 
 # Advisory only: keep scale/latency tests out of default and short runs.
 # The separately sharded TestPerformanceRoutes lane stays outside this target.
