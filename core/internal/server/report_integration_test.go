@@ -55,6 +55,7 @@ func TestReportLiveWorkAndArchiveBoundary(t *testing.T) {
 	requireIntegrationTest(t)
 	for _, structured := range []bool{false, true} {
 		t.Run(fmt.Sprint(structured), func(t *testing.T) {
+			t.Parallel()
 			h := newPrimitivesTestServer(t)
 			workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"One","created_at":"2026-03-04T10:00:00Z"}}`, 201)
 			board := workPostJSON(t, h.baseURL+"/boards", `{"actor_id":"actor-1","board":{"title":"Initiatives"}}`, 201)["board"].(map[string]any)
