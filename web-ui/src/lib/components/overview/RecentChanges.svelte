@@ -12,30 +12,16 @@
    * is a baseline and nothing has moved, it says so in one line, because on a
    * primary section a silent disappearance is indistinguishable from a bug.
    */
+  import Time from "$lib/time/Time.svelte";
   import { sinceYouLastLookedStrip } from "$lib/sinceYouLastLooked.js";
-  import { briefClock } from "$lib/morningBrief.js";
-  import { formatAbsoluteDate } from "$lib/formatDate.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { page } from "$app/stores";
 
-  let { digest = null, limit = 10 } = $props();
+  let { digest = null, limit = 10, now = Date.now() } = $props();
 
   let strip = $derived(sinceYouLastLookedStrip(digest, { limit }));
   /** A baseline exists, so "nothing new" is an answer rather than a guess. */
   let baseline = $derived(String(digest?.since ?? "").trim());
-  /**
-   * The baseline is the previous *visit*, which can be months ago. A time of
-   * day alone reads as this morning: "nothing new since 9:14 AM" on a Friday
-   * is a different and much more reassuring claim than the truth, which is
-   * that nothing has moved since Monday.
-   */
-  let clock = $derived.by(() => {
-    const at = Date.parse(baseline);
-    if (!Number.isFinite(at)) return "";
-    const time = briefClock(baseline);
-    const today = new Date().toDateString() === new Date(at).toDateString();
-    return today ? time : `${formatAbsoluteDate(baseline)}, ${time}`;
-  });
   let workspaceHref = $derived(
     bindWorkspaceHref($page?.params?.organization, $page?.params?.workspace),
   );
@@ -61,8 +47,15 @@
       {#if strip?.summary}<span class="text-meta text-fg-muted"
           >{strip.summary}</span
         >{/if}
-      {#if clock}<span class="text-micro text-fg-subtle">since {clock}</span
-        >{/if}
+      <!--
+        The baseline is the previous *visit*, which can be months back. `<Time>`
+        is the one formatter for that: it reads "3 h ago", "yesterday" or a
+        short local date, so a quiet Friday cannot read as this morning, and
+        the exact local instant is a hover away.
+      -->
+      <span class="text-micro text-fg-subtle"
+        >last looked <Time value={baseline} {now} verb="looked" /></span
+      >
     </header>
     <div class="p-3">
       {#if strip}
@@ -87,7 +80,7 @@
         </ul>
       {:else}
         <p class="text-meta text-fg-muted" data-overview-changes-empty>
-          {clock ? `Nothing new since ${clock}.` : "Nothing new."}
+          Nothing new.
         </p>
       {/if}
     </div>

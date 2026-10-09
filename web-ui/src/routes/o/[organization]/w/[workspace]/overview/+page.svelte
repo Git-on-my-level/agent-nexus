@@ -510,7 +510,7 @@
       The second of the two sections this page is for. It was a one-line strip
       under the brief; with the brief folded away it is a section of its own.
     -->
-    <RecentChanges digest={model.sinceYouLastLooked} />
+    <RecentChanges digest={model.sinceYouLastLooked} {now} />
     <section
       class="rounded-md border border-line bg-panel"
       aria-labelledby="overview-reports"

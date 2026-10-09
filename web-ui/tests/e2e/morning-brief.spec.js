@@ -619,11 +619,16 @@ test("an empty section says so in one line", async ({ page }) => {
    * a second copy of it. Quiet still reads as an answer rather than an
    * absence, in one line.
    */
+  const changesSection = page.locator('[data-overview-section="changes"]');
   await expect(
-    page.locator(
-      '[data-overview-section="changes"] [data-overview-changes-empty]',
-    ),
-  ).toContainText("Nothing new since");
+    changesSection.locator("[data-overview-changes-empty]"),
+  ).toHaveText("Nothing new.");
+  // When the baseline was is `<Time>`'s job, not a second clock in this copy.
+  await expect(changesSection.locator("header")).toContainText("last looked");
+  await expect(changesSection.locator("header time")).toHaveAttribute(
+    "datetime",
+    /^\d{4}-\d{2}-\d{2}T/,
+  );
 
   await openDetail(page);
   const band = page.locator('[data-overview-section="brief"]');

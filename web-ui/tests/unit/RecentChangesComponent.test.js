@@ -32,6 +32,7 @@ describe("Recent changes", () => {
     since.setHours(since.getHours() - 2);
     const { container, getByText } = render(RecentChanges, {
       digest: { since: iso(since), items: [] },
+      now: Date.now(),
     });
     expect(
       container.querySelector('[data-overview-section="changes"]'),
@@ -40,33 +41,36 @@ describe("Recent changes", () => {
       container
         .querySelector("[data-overview-changes-empty]")
         .textContent.trim(),
-    ).toMatch(/^Nothing new since .+\.$/);
+    ).toBe("Nothing new.");
     expect(getByText("Recent changes")).toBeTruthy();
   });
 
-  it("dates a baseline that is not today, so quiet does not read as this morning", () => {
+  it("dates the baseline through <Time>, so quiet does not read as this morning", () => {
+    /*
+     * The baseline is the previous visit, not a time of day: a Friday
+     * reading "9:14 AM" is a much more reassuring claim than the truth,
+     * which is that nothing has moved since Monday. `<Time>` is the one
+     * formatter for that, and it carries the exact instant as well.
+     */
     const since = new Date();
     since.setDate(since.getDate() - 4);
     const { container } = render(RecentChanges, {
       digest: { since: iso(since), items: [] },
+      now: Date.now(),
     });
-    const line = container.querySelector(
-      "[data-overview-changes-empty]",
-    ).textContent;
-    // A time of day alone would claim this morning.
-    expect(line).toContain(
-      since.toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }),
-    );
+    const header = container.querySelector("header").textContent;
+    expect(header).toContain("last looked");
+    const stamp = container.querySelector("header time");
+    expect(stamp.getAttribute("datetime")).toBe(since.toISOString());
+    // Four days back is never a bare clock time.
+    expect(header).not.toMatch(/last looked \d{1,2}:\d{2}/);
   });
 
   it("lists what changed, worst first, each linked to the task it is about", () => {
     const since = new Date();
     since.setHours(since.getHours() - 1);
     const { container } = render(RecentChanges, {
+      now: Date.now(),
       digest: {
         since: iso(since),
         items: [
