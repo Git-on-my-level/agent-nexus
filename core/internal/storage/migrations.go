@@ -1034,6 +1034,7 @@ var migrations = []migration{
 	{Version: 75, AfterApply: installAskSubscriptions},
 	{Version: 76, AfterApply: installAskEffectiveClosure},
 	{Version: 77, Statements: []string{`CREATE TABLE IF NOT EXISTS ask_subject_boards(actor_id TEXT PRIMARY KEY, board_id TEXT NOT NULL)`}},
+	{Version: 78, AfterApply: boundIdentityRefreshes},
 }
 
 func repairNULReferenceAccess(ctx context.Context, tx *sql.Tx) error {

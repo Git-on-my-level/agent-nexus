@@ -686,9 +686,30 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		explicitReplayCardID = ""
 	}
 
-	result, err := opts.primitiveStore.CreateBoardCard(r.Context(), actorID, boardID, addBoardCardStoreInput(req))
+	input := addBoardCardStoreInput(req)
+	if key := strings.TrimSpace(req.RequestKey); key != "" {
+		hash, hashErr := hashJSONPayload(replayRequest)
+		if hashErr != nil {
+			writeError(w, 500, "internal_error", "failed to hash card create")
+			return
+		}
+		input.CreateReplay = &primitives.CardCreateReplay{Scope: idempotencyOp, Key: key, Hash: hash, Extras: hygiene.attach(map[string]any{})}
+	}
+	result, err := opts.primitiveStore.CreateBoardCard(r.Context(), actorID, boardID, input)
 	if err != nil {
 		if errors.Is(err, primitives.ErrConflict) && strings.TrimSpace(req.RequestKey) != "" {
+			status, payload, replayed, replayErr := readIdempotencyReplay(r.Context(), opts.primitiveStore, idempotencyOp, actorID, req.RequestKey, replayRequest)
+			if writeIdempotencyError(w, replayErr) {
+				return
+			}
+			if replayErr != nil {
+				writeError(w, 500, "internal_error", "failed to load card replay")
+				return
+			}
+			if replayed {
+				writeJSON(w, status, normalizeBoardCardMutationReplayPayload(payload))
+				return
+			}
 			existingCard, loadCardErr := loadExistingBoardCardForCreateReplay(r.Context(), opts, boardID, req.CardID, req.ParentThread, req.ThreadID)
 			existingBoard, loadBoardErr := opts.primitiveStore.GetBoard(r.Context(), boardID)
 			if loadCardErr == nil && loadBoardErr == nil && boardCardReplayPreconditionMatches(existingBoard, req.IfBoardUpdatedAt) && boardCardMatchesCreateReplay(
@@ -741,6 +762,11 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		enqueueCardAssigneeWakeBestEffort(r.Context(), opts, actorID, nil, result.Card, result.Board, storedLifecycle)
 	}
 
+	// Atomic creates already persisted the replay. Do not take the writer lock again.
+	if result.ReplayCommitted {
+		writeJSON(w, http.StatusCreated, normalizeBoardCardMutationReplayPayload(hygiene.attach(map[string]any{"board": result.Board, "card": result.Card})))
+		return
+	}
 	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, idempotencyOp, actorID, req.RequestKey, replayRequest, http.StatusCreated, hygiene.attach(map[string]any{
 		"board": result.Board,
 		"card":  result.Card,
@@ -1971,9 +1997,8 @@ func emitCardLifecycleEvent(ctx context.Context, opts handlerOptions, actorID st
 		}
 	}
 	enqueueTopicProjectionsBestEffort(ctx, opts, threadIDs, time.Now().UTC())
-	for _, threadID := range uniqueServerStrings(threadIDs) {
-		_ = refreshDerivedTopicProjection(ctx, opts, threadID, time.Now().UTC(), actorID)
-	}
+	// Projection work is durable and coalesced by the maintenance queue.
+	// Never replay thread history on the mutation response path.
 	return stored, nil
 }
 

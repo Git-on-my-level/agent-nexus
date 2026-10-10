@@ -606,6 +606,7 @@ resources:
       thread_id: { type: string, required: false, description: "Backing thread id for board timeline and events." }
       document_refs: { type: "list<typed_ref>", required: true }
       card_refs: { type: "list<typed_ref>", required: true }
+      card_refs_truncated: { type: boolean, required: false, description: "Single-card create echoes only the created membership; list board cards for the collection." }
       pinned_refs: { type: "list<typed_ref>", required: true }
       created_at: { type: datetime, required: true }
       created_by: { type: string, required: true }

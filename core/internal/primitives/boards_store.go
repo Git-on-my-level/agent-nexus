@@ -195,7 +195,15 @@ type BoardListItem struct {
 	Summary map[string]any
 }
 
+type CardCreateReplay struct {
+	Scope, Key, Hash string
+	Extras           map[string]any
+}
+
 type AddBoardCardInput struct {
+	// CreateReplay is internal request metadata, committed with the card.
+	CreateReplay *CardCreateReplay
+
 	// WorkMetadata is the optional one-to-one commitment extension, inserted atomically.
 	WorkMetadata     map[string]any
 	CardID           string
@@ -249,8 +257,9 @@ type RemoveBoardCardInput struct {
 }
 
 type BoardCardMutationResult struct {
-	Board map[string]any
-	Card  map[string]any
+	ReplayCommitted bool
+	Board           map[string]any
+	Card            map[string]any
 }
 
 // maxBoardCardsBatchSize caps POST /boards/{id}/cards/batch item count.
@@ -1634,6 +1643,17 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 	if err != nil {
 		return BoardCardMutationResult{}, fmt.Errorf("begin board card create transaction: %w", err)
 	}
+	defer tx.Rollback()
+	if replay := input.CreateReplay; replay != nil {
+		var hash string
+		err := tx.QueryRowContext(ctx, `SELECT request_hash FROM idempotency_replays WHERE scope=? AND actor_id=? AND request_key=?`, replay.Scope, actorID, replay.Key).Scan(&hash)
+		if err == nil {
+			return BoardCardMutationResult{}, ErrConflict
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return BoardCardMutationResult{}, err
+		}
+	}
 	boardRow, err := loadBoardRow(ctx, tx, boardID)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
@@ -1666,6 +1686,48 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 			return BoardCardMutationResult{}, err
 		}
 	}
+	// A mutation echo must not load every membership while holding the writer.
+	// The full board collection is available through its paged read endpoints.
+	typedRefs, err := decodeStoredJSONList(boardRow.RefsJSON, "board.refs")
+	if err != nil {
+		if stagedContent != nil {
+			_ = stagedContent.Cleanup()
+		}
+		return BoardCardMutationResult{}, err
+	}
+	boardMap, err := boardRow.boardToMapWithRefData(typedRefs, []string{"card:" + cardRow.CardID})
+	if err != nil {
+		if stagedContent != nil {
+			_ = stagedContent.Cleanup()
+		}
+		return BoardCardMutationResult{}, err
+	}
+	boardMap["card_refs_truncated"] = true
+	cardMap, err := cardRow.toMap()
+	if err != nil {
+		if stagedContent != nil {
+			_ = stagedContent.Cleanup()
+		}
+		return BoardCardMutationResult{}, err
+	}
+	if replay := input.CreateReplay; replay != nil {
+		response := map[string]any{"board": boardMap, "card": cardMap}
+		for key, value := range replay.Extras {
+			if key != "board" && key != "card" {
+				response[key] = value
+			}
+		}
+		raw, err := json.Marshal(response)
+		if err == nil {
+			_, err = tx.ExecContext(ctx, `INSERT INTO idempotency_replays(scope,actor_id,request_key,request_hash,response_status,response_json) VALUES(?,?,?,?,201,?)`, replay.Scope, actorID, replay.Key, replay.Hash, string(raw))
+		}
+		if err != nil {
+			if stagedContent != nil {
+				_ = stagedContent.Cleanup()
+			}
+			return BoardCardMutationResult{}, err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		if stagedContent != nil {
 			_ = stagedContent.Cleanup()
@@ -1680,15 +1742,7 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 			return BoardCardMutationResult{}, fmt.Errorf("finalize card content: %w", err)
 		}
 	}
-	boardMap, err := boardRowToAPI(ctx, s.db, boardRow)
-	if err != nil {
-		return BoardCardMutationResult{}, err
-	}
-	cardMap, err := cardRow.toMap()
-	if err != nil {
-		return BoardCardMutationResult{}, err
-	}
-	return BoardCardMutationResult{Board: boardMap, Card: cardMap}, nil
+	return BoardCardMutationResult{Board: boardMap, Card: cardMap, ReplayCommitted: input.CreateReplay != nil}, nil
 }
 
 func (s *Store) CreateBoardCardsBatch(ctx context.Context, actorID, boardID string, ifBoard *string, inputs []AddBoardCardInput) ([]BoardCardMutationResult, error) {
