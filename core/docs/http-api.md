@@ -547,7 +547,7 @@ contains `request`, including durable identity, status and Inbox correlation.
 Retries for that principal/grant return the original request, reason and decision.
 The requesting agent waits with `anx await access-request:<id>`, which subscribes to the
 request's existing ask stream. Exit 0 means approved and exit 9 means denied.
-Another agent resolving that ref, or the backing event, gets not found. Humans
+Another agent resolving that ref, the backing event id, or the event's public handle (including `event:<handle>`) gets not found. Humans
 still list and decide; they do not gain an agent-facing list. The decision queues
 the same answer-wake batch as an ask response, including `access-request:<id>` in
 the wake refs, and flushes immediately when the requester has no other open asks.
