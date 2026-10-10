@@ -104,7 +104,7 @@ func (a *App) runPMPropose(ctx context.Context, args []string, cfg config.Resolv
 	page := asMap(commandResultBody(read))
 	items, _ := page["items"].([]any)
 	if len(items) != 1 {
-		return nil, errnorm.Usage("card_unavailable", "Card is unavailable in this conversation; read `anx pm context` and choose a pinned card.")
+		return nil, errnorm.Usage("card_unavailable", "Card is unavailable in this conversation; read `anx pm context` and choose a visible card.")
 	}
 	card := asMap(items[0])
 	revision := anyString(card["decision_revision"])
@@ -214,12 +214,25 @@ func finishPMCardRead(r *commandResult) {
 			b.WriteString("  More open asks or decisions may exist.\n")
 		}
 	}
+	for _, key := range []string{"asks", "decisions", "activity"} {
+		if value := page[key]; value != nil {
+			raw, _ := json.Marshal(value)
+			fmt.Fprintf(&b, "%s: %s\n", key, raw)
+		}
+	}
 	if limits, ok := page["limitations"].([]any); ok {
 		for _, limit := range limits {
 			fmt.Fprintf(&b, "context: %v\n", limit)
 		}
 	}
 	r.Text = b.String()
+}
+
+func validatePMContextArgs(args []string) error {
+	if len(args) != 0 {
+		return errnorm.Usage("invalid_request", "usage: anx pm context (no flags inside a claimed turn); open a specific card with anx pm card <card-ref>")
+	}
+	return nil
 }
 
 func validatePMCardArgs(args []string) error {
@@ -235,7 +248,7 @@ func pmCommandError(err error) error {
 	var e *errnorm.Error
 	if errors.As(err, &e) {
 		e.Message = pmPlumbingWord.ReplaceAllString(e.Message, "card")
-		e.Hint = "Read pinned cards with `anx pm context`; inspect one with `anx pm card <card-ref>`."
+		e.Hint = "Start with `anx pm context`; inspect one with `anx pm card <card-ref>`."
 		e.Details = pmFacingValue(e.Details)
 	}
 	return err

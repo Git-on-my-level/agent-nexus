@@ -9434,14 +9434,14 @@ components:
         view:
           type: string
           enum: [cards, card]
-          description: Optional PM card view. cards returns only pinned cards (at most 8), bounded open asks, awaiting decisions and recent activity. card requires context_ref and returns that pinned card in full. No pins returns an empty page, never a workspace listing. Requester permissions apply. Query and cursor are not supported with a view.
+          description: Optional PM card view. cards returns pinned cards (at most 8) with bounded asks, decisions and activity. Without pins it returns a bounded requester-scoped workspace overview with up to 15 open initiatives ordered by attention, 15 open asks, 15 awaiting decisions and 15 recent events. Fixed candidate windows may yield partial previews. card requires a card context_ref and opens any card visible to the requester, including unpinned plan-step refs. All views validate the turn lease and requester permissions. Query and cursor are not supported with a view.
         lease_token:
           type: string
           minLength: 1
         context_ref:
           type: string
           maxLength: 512
-          description: Optional pinned ref selector. Must belong to the conversation context_refs or legacy work_ref. Defaults to the primary work_ref or first pinned ref. Reads always use the requesting reader's scope.
+          description: For view card, any card ref visible to the requesting reader. For other views, an optional pinned ref selector belonging to conversation context_refs or legacy work_ref. Defaults to the primary work_ref or first pinned ref. Reads always use the requesting reader's scope.
         query:
           type: string
         cursor:
@@ -9658,6 +9658,18 @@ components:
             type: object
             additionalProperties: true
             properties: *id006
+        asks:
+          type: array
+          description: Bounded open asks awaiting the requesting reader in a no-pin overview.
+          items: {type: object, additionalProperties: true}
+        decisions:
+          type: array
+          description: Bounded awaiting decisions owned by the requesting reader in a no-pin overview.
+          items: {type: object, additionalProperties: true}
+        activity:
+          type: array
+          description: Bounded recent visible activity in a no-pin overview.
+          items: {type: object, additionalProperties: true}
         next_cursor:
           type: string
         limitations:

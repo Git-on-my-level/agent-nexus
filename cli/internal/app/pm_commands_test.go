@@ -18,6 +18,37 @@ func TestPMProposalPreflight(t *testing.T) {
 		}
 	}
 }
+
+func TestClaimedPMContextRejectsEveryArgumentBeforeTransport(t *testing.T) {
+	for _, args := range [][]string{{"--limit", "8"}, {"--work-ref", "card:private"}, {"--query", "secret"}, {"--cursor", "x"}, {"card:private"}} {
+		a := New()
+		a.Getenv = func(k string) string {
+			if k == "ANX_PM_TURN_ID" {
+				return "turn"
+			}
+			return ""
+		}
+		_, name, err := a.runWorkCommand(context.Background(), append([]string{"pm", "context"}, args...), config.Resolved{})
+		if err == nil || name != "pm context" || !strings.Contains(err.Error(), "anx pm context") {
+			t.Fatalf("%v: %s %v", args, name, err)
+		}
+	}
+}
+
+func TestPMContextOutsideTurnKeepsLegacyFlags(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" || r.URL.Path != "/pm/context" || r.URL.Query().Get("limit") != "8" || r.URL.Query().Get("work_ref") != "card:x" {
+			t.Error(r.Method, r.URL)
+		}
+		_, _ = w.Write([]byte(`{"items":[]}`))
+	}))
+	defer srv.Close()
+	a := New()
+	a.Getenv = func(string) string { return "" }
+	if _, _, err := a.runWorkCommand(context.Background(), []string{"pm", "context", "--limit", "8", "--work-ref", "card:x"}, config.Resolved{BaseURL: srv.URL, AccessToken: "token"}); err != nil {
+		t.Fatal(err)
+	}
+}
 func TestPMProposeBuildsPayloadAndHidesPlumbing(t *testing.T) {
 	calls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

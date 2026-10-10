@@ -9411,5 +9411,59 @@
     "reason": "PM-only bounded plan enrichment: card and plan bodies are loaded by at most eight admitted card IDs through their primary keys; referenced facts use existing bounded 200-ref batches and indexed ID, partial unique handle, and source URL probes. Latest message movement selects six routing IDs via idx_events_thread_ts_id before scoped primary-key event hydration, so a dense denied prefix cannot refill or scan history. The aggregate heuristic flags the enumerated indexed SEARCH operations because they sit under the bounded max(timestamp) convenience projection, plus constant-time anx_point_snapshot_denied membership. No canonical relation SCAN or repeated closure rebuild is admitted. Populated plans and 128 private message candidates on each selected thread and referenced subject are measured separately from inherited cold admission. Only this exact SQL/ordered-plan pair and listed findings are allowed; full warm 20,000 VM/30 SQL/256 row and cold 2,000,000 VM ceilings remain mandatory.",
     "issue": "SCA-733",
     "issue_url": "mention://issue/01a1252c-c823-720a-a219-3db1f1429122"
+  },
+  {
+    "sql_sha256": "46d4136a66958733b2d8b461bfc97e0afe2a5bae7dbe263ce48c99e532dfdef4",
+    "plan_sha256": "3e4ab431f1bd6d58950bc048314b80dc85b5b8bbcf346de8aa627d08cc7f6b71",
+    "findings": [
+      "SCAN events USING COVERING INDEX idx_events_pm_recent",
+      "custom SQL function in WHERE over a large relation"
+    ],
+    "reason": "Requester-scoped no-pin PM overview, measured on the 4096-card corpus with all 15 initiative slots occupied. Routing-only indexes admit at most 64 attention-ordered card IDs, two 16-ID recipient ask windows, 32 recent event IDs, or 16 awaiting reader decision IDs before canonical scoped primary-key hydration. Any SCAN on idx_cards_pm_attention or idx_events_pm_recent ends at the constant routing LIMIT, never a refill through denied records. Other flagged predicates operate only on the bounded hydrated IDs or the inherited epoch-validated denial snapshot. The complete HTTP gate retains fixed SQL/row/VM budgets, positive controls and private-content checks; only this exact SQL/full ordered-plan pair is permitted.",
+    "issue": "SCA-733",
+    "issue_url": "mention://issue/01a1252c-c823-720a-a219-3db1f1429122"
+  },
+  {
+    "sql_sha256": "5c8c673110aeedbba9fc8c4ccbe8d7f654331ac91ffd5c871a21e41031955da2",
+    "plan_sha256": "57d443c6efde31e574ada2aa6f0b95875ce1c2517da4bf1d5bd7dc6225590a75",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "Requester-scoped no-pin PM overview, measured on the 4096-card corpus with all 15 initiative slots occupied. Routing-only indexes admit at most 64 attention-ordered card IDs, two 16-ID recipient ask windows, 32 recent event IDs, or 16 awaiting reader decision IDs before canonical scoped primary-key hydration. Any SCAN on idx_cards_pm_attention or idx_events_pm_recent ends at the constant routing LIMIT, never a refill through denied records. Other flagged predicates operate only on the bounded hydrated IDs or the inherited epoch-validated denial snapshot. The complete HTTP gate retains fixed SQL/row/VM budgets, positive controls and private-content checks; only this exact SQL/full ordered-plan pair is permitted.",
+    "issue": "SCA-733",
+    "issue_url": "mention://issue/01a1252c-c823-720a-a219-3db1f1429122"
+  },
+  {
+    "sql_sha256": "851eef40fa58858dd9a2488a08f6ad37e69b869b4b62c81ec4749592f2cf05ab",
+    "plan_sha256": "c61ba10f7f8bbe8cc1c23f559e2dec209cb259955b98830373d5825ac902c017",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "Requester-scoped no-pin PM overview, measured on the 4096-card corpus with all 15 initiative slots occupied. Routing-only indexes admit at most 64 attention-ordered card IDs, two 16-ID recipient ask windows, 32 recent event IDs, or 16 awaiting reader decision IDs before canonical scoped primary-key hydration. Any SCAN on idx_cards_pm_attention or idx_events_pm_recent ends at the constant routing LIMIT, never a refill through denied records. Other flagged predicates operate only on the bounded hydrated IDs or the inherited epoch-validated denial snapshot. The complete HTTP gate retains fixed SQL/row/VM budgets, positive controls and private-content checks; only this exact SQL/full ordered-plan pair is permitted.",
+    "issue": "SCA-733",
+    "issue_url": "mention://issue/01a1252c-c823-720a-a219-3db1f1429122"
+  },
+  {
+    "sql_sha256": "970ba47565e337c8fe941ff2713ef510dae422e122bbc9e3e7bdf20dac99458b",
+    "plan_sha256": "0e988f0c508a85748302c0f21b2e357d1f5cdf654377acc722683558d1799e4d",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "Requester-scoped no-pin PM overview, measured on the 4096-card corpus with all 15 initiative slots occupied. Routing-only indexes admit at most 64 attention-ordered card IDs, two 16-ID recipient ask windows, 32 recent event IDs, or 16 awaiting reader decision IDs before canonical scoped primary-key hydration. Any SCAN on idx_cards_pm_attention or idx_events_pm_recent ends at the constant routing LIMIT, never a refill through denied records. Other flagged predicates operate only on the bounded hydrated IDs or the inherited epoch-validated denial snapshot. The complete HTTP gate retains fixed SQL/row/VM budgets, positive controls and private-content checks; only this exact SQL/full ordered-plan pair is permitted.",
+    "issue": "SCA-733",
+    "issue_url": "mention://issue/01a1252c-c823-720a-a219-3db1f1429122"
+  },
+  {
+    "sql_sha256": "a8027cecc06893078552d2bf826fa6784c97378b9522e7e39e6821f0346c8841",
+    "plan_sha256": "780c92e901f3c58e46cb7a2d6a3dd09d73c5578841175cc9f4cccccaff9afe0b",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "Requester-scoped no-pin PM overview, measured on the 4096-card corpus with all 15 initiative slots occupied. Routing-only indexes admit at most 64 attention-ordered card IDs, two 16-ID recipient ask windows, 32 recent event IDs, or 16 awaiting reader decision IDs before canonical scoped primary-key hydration. Any SCAN on idx_cards_pm_attention or idx_events_pm_recent ends at the constant routing LIMIT, never a refill through denied records. Other flagged predicates operate only on the bounded hydrated IDs or the inherited epoch-validated denial snapshot. The complete HTTP gate retains fixed SQL/row/VM budgets, positive controls and private-content checks; only this exact SQL/full ordered-plan pair is permitted.",
+    "issue": "SCA-733",
+    "issue_url": "mention://issue/01a1252c-c823-720a-a219-3db1f1429122"
+  },
+  {
+    "sql_sha256": "b3e6412e7f9542a76de67ea4d717eb8b3ca127bb442760580eccb61012069007",
+    "plan_sha256": "397e7869edb15334c7655f498fa7454fa11b768a1d169bf4e065bd94ceb0813c",
+    "findings": [
+      "SCAN cards USING INDEX idx_cards_pm_attention",
+      "custom SQL function in WHERE over a large relation"
+    ],
+    "reason": "Requester-scoped no-pin PM overview, measured on the 4096-card corpus with all 15 initiative slots occupied. Routing-only indexes admit at most 64 attention-ordered card IDs, two 16-ID recipient ask windows, 32 recent event IDs, or 16 awaiting reader decision IDs before canonical scoped primary-key hydration. Any SCAN on idx_cards_pm_attention or idx_events_pm_recent ends at the constant routing LIMIT, never a refill through denied records. Other flagged predicates operate only on the bounded hydrated IDs or the inherited epoch-validated denial snapshot. The complete HTTP gate retains fixed SQL/row/VM budgets, positive controls and private-content checks; only this exact SQL/full ordered-plan pair is permitted.",
+    "issue": "SCA-733",
+    "issue_url": "mention://issue/01a1252c-c823-720a-a219-3db1f1429122"
   }
 ]

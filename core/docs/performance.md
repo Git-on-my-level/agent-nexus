@@ -51,30 +51,6 @@ reported explicitly. The deterministic regression requires zero page reads on
 idle ticks, one shared page for five matching readers after a non-event commit,
 and complete delivery after a mutation to an earlier page during a sweep.
 
-## PM pinned card views
-
-`pm context` / `pm card` admit at most eight exact conversation pins. Alias
-routing includes only indexed identities; canonical bodies are requester scoped.
-One immutable read snapshot covers authorization, batched card/plan hydration,
-six activity/ask candidates per card and six pending-decision candidates per pin.
-Private candidate prefixes remain partial and never refill from older history.
-
-`TestPerformancePMCardContext` checks the new selectors and complete HTTP reads
-with dense private prefixes on the shared 4,096-card fixture. The checked-in
-`pm_card_context_budget.json` limits full reads to 30 SQL calls and 256 returned
-rows, 20,000 warm VM steps and 2,000,000 cold VM steps. Cold means a fresh runtime
-and a missed inherited denial cache; the immediately repeated read is warm.
-The inherited once-per-epoch denial admission still grows with workspace size
-and retains exact SCA-665 baselines; these exceptions do not permit repeated
-closure rebuilding or a new candidate scan. Point-snapshot exceptions permit
-only the reviewed indexed probes and constant-time denial membership.
-
-```sh
-cd core
-ANX_PERFORMANCE_TEST=1 go test -p=1 -parallel=1 ./internal/server \
-  -run '^TestPerformancePMCardContext$' -count=1 -v -timeout=10m
-```
-
 ## Running the gates
 
 Agent detail's `summary=1` recent-card preview admits at most 51 current/recent-run
@@ -523,3 +499,36 @@ heuristic: page-value normalization and O(1) pinned denial membership occur only
 on indexed candidate lookups. It permits no scans or budget increases; the
 200-subject owner/stranger probes measured one SQL execution and at most 8,685 VM
 instructions.
+
+## Claimed PM card and workspace reads (SCA-733)
+
+`POST /pm/turns/{id}/context` validates the selected PM and lease, then binds
+the conversation requester and pins one epoch-validated read snapshot. Pinned
+reads admit at most eight refs; a full card read admits one requester-visible ref,
+including an unpinned plan step. Batches cover aliases, card bodies, metadata,
+plans, and six candidates each for asks, activity and awaiting decisions per card.
+Hidden candidates do not refill.
+
+Without pins, the same route returns a workspace overview: up to 15 open
+initiative cards, ordered by blocked/review/active/ready/backlog attention then
+recency, plus up to 15 requesting-reader asks, awaiting decisions and recent
+events. Routing indexes admit 64 card IDs, two 16-ID recipient ask windows,
+16 reader decision IDs and 32 event IDs before canonical scoped hydration.
+All partial markers are unconditional; no hidden candidate counts are serialized.
+Selection and projection cost depends on these fixed windows and bounded plan
+fanout, not a workspace scan. The shared denial snapshot has the inherited
+SCA-665 cold admission cost and retains epoch fallback.
+
+`TestPerformancePMCardContext` certifies full HTTP reads on 4096 cards with
+owner/stranger, one/eight pins and all fifteen overview slots filled, dense
+private messages/asks and private decision evidence. The card and workspace
+budgets are separate checked-in JSON files: pinned reads allow 30 SQL calls,
+256 rows and 20,000 warm VM steps; the fifteen-card workspace overview allows
+30 SQL calls, 512 rows and 40,000 warm VM steps. Both keep the inherited
+2,000,000 cold VM admission ceiling. Exact indexed-window query plans
+are recorded under SCA-733. Run:
+
+```sh
+GOMAXPROCS=2 GOFLAGS=-p=1 ANX_PERFORMANCE_TEST=1 go test ./internal/server \
+  -run '^TestPerformancePMCardContext$' -count=1 -timeout=4m -v
+```
