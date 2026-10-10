@@ -1035,14 +1035,7 @@ var migrations = []migration{
 	{Version: 76, AfterApply: installAskEffectiveClosure},
 	{Version: 77, Statements: []string{`CREATE TABLE IF NOT EXISTS ask_subject_boards(actor_id TEXT PRIMARY KEY, board_id TEXT NOT NULL)`}},
 	{Version: 78, Statements: []string{`CREATE VIEW IF NOT EXISTS pm_card_event_positions AS SELECT id,thread_id,ts FROM events`, `CREATE VIEW IF NOT EXISTS pm_card_ask_positions AS SELECT ask_id,card_id,open FROM ask_subjects`, `CREATE VIEW IF NOT EXISTS pm_card_alias_positions AS SELECT resource_type,alias_handle,resource_id FROM resource_handle_aliases`}},
-	{Version: 79, Statements: []string{
-		`CREATE INDEX IF NOT EXISTS idx_cards_pm_attention ON cards(CASE column_key WHEN 'blocked' THEN 0 WHEN 'review' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'ready' THEN 3 ELSE 4 END,updated_at DESC,id DESC) WHERE archived_at IS NULL AND trashed_at IS NULL AND column_key NOT IN ('done','cancelled')`,
-		`CREATE VIEW IF NOT EXISTS pm_workspace_card_positions AS SELECT id,CASE column_key WHEN 'blocked' THEN 0 WHEN 'review' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'ready' THEN 3 ELSE 4 END AS attention,updated_at FROM cards WHERE archived_at IS NULL AND trashed_at IS NULL AND column_key NOT IN ('done','cancelled')`,
-		`CREATE INDEX IF NOT EXISTS idx_inbox_pm_recipient ON derived_inbox_items(category,COALESCE(json_extract(data_json,'$.recipient_actor_id'),''),trigger_at,id)`,
-		`CREATE VIEW IF NOT EXISTS pm_workspace_ask_positions AS SELECT id,category,COALESCE(json_extract(data_json,'$.recipient_actor_id'),'') AS recipient,trigger_at FROM derived_inbox_items`,
-		`CREATE INDEX IF NOT EXISTS idx_events_pm_recent ON events(ts DESC,id DESC)`,
-		`CREATE VIEW IF NOT EXISTS pm_workspace_event_positions AS SELECT id,ts FROM events`,
-	}},
+	{Version: 79, AfterApply: installPMWorkspaceContext},
 }
 
 func repairNULReferenceAccess(ctx context.Context, tx *sql.Tx) error {
