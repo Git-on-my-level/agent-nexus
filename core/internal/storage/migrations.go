@@ -1034,6 +1034,7 @@ var migrations = []migration{
 	{Version: 75, AfterApply: installAskSubscriptions},
 	{Version: 76, AfterApply: installAskEffectiveClosure},
 	{Version: 77, Statements: []string{`CREATE TABLE IF NOT EXISTS ask_subject_boards(actor_id TEXT PRIMARY KEY, board_id TEXT NOT NULL)`}},
+	{Version: 78, Statements: []string{`CREATE VIEW IF NOT EXISTS pm_card_event_positions AS SELECT id,thread_id,ts FROM events`, `CREATE VIEW IF NOT EXISTS pm_card_ask_positions AS SELECT ask_id,card_id,open FROM ask_subjects`, `CREATE VIEW IF NOT EXISTS pm_card_alias_positions AS SELECT resource_type,alias_handle,resource_id FROM resource_handle_aliases`}},
 }
 
 func repairNULReferenceAccess(ctx context.Context, tx *sql.Tx) error {

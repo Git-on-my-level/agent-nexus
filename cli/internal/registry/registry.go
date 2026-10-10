@@ -320,7 +320,7 @@ func parseHelp(content []byte) (HelpRegistry, error) {
 }
 
 func sideEffectClass(cmd Command) string {
-	if cmd.CommandID == "refs.resolve" || cmd.CommandID == "series.query" || cmd.CommandID == "series.show" || cmd.CommandID == "series.list" || cmd.CommandID == "adapters.list" {
+	if cmd.CLIPath == "pm card" || cmd.CLIPath == "pm context" || cmd.CommandID == "refs.resolve" || cmd.CommandID == "series.query" || cmd.CommandID == "series.show" || cmd.CommandID == "series.list" || cmd.CommandID == "adapters.list" {
 		return "read_only"
 	}
 	if strings.HasPrefix(cmd.CLIPath, "config ") {

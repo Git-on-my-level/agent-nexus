@@ -46,14 +46,20 @@ func TestBuildPMPromptStaysSmallAndNamesTools(t *testing.T) {
 	if strings.Contains(prompt, "inventory") || strings.Contains(strings.ToLower(prompt), "full tracker") {
 		t.Fatal("prompt stuffed tracker context")
 	}
-	for _, needle := range []string{"What needs my decision?", "anx --as pm work list", "anx --as pm pm turns context pm_turn_1 --limit 10", "Answer directly in plain language", "Do not narrate internal mechanics", "Pinned context refs", "pm turns propose", "ANX_PM_LEASE_TOKEN", "--lease-token", "work_ref", "decision:", "---evidence---", "evidence_refs", "identical payload, instruction and target revision", "supersedes the earlier awaiting decision", "instead of duplicating"} {
+	for _, needle := range []string{"What needs my decision?", "anx pm context", "anx pm card", "anx pm propose", "---evidence---", "never approve"} {
 		if !strings.Contains(prompt, needle) {
-			t.Fatalf("missing %q in %s", needle, prompt)
+			t.Fatalf("missing %q", needle)
 		}
 	}
-	if strings.Contains(prompt, "is reused") {
-		t.Fatal("prompt still claims same work_ref/scope reuse without identical content")
+	for _, needle := range []string{"work_ref", "lease", "--as", "pm turns", "work list", "supersedes", "pm_turn_1"} {
+		if strings.Contains(prompt, needle) {
+			t.Fatalf("plumbing %q leaked", needle)
+		}
 	}
+	if len(prompt) > 1200 {
+		t.Fatalf("prompt too large: %d", len(prompt))
+	}
+
 }
 
 func TestExpandPromptPlaceholder(t *testing.T) {
@@ -1028,6 +1034,9 @@ func TestHandleClaimedTurnPassesLeaseTokenEnv(t *testing.T) {
 	}
 	if len(posts.fail) != 0 {
 		t.Fatalf("fail %v", posts.fail)
+	}
+	if envValue(gotEnv, "ANX_PM_TURN_ID") != anyString(claimedTurn()["id"]) {
+		t.Fatalf("missing turn ID: %v", gotEnv)
 	}
 	if envValue(gotEnv, "ANX_PM_LEASE_TOKEN") != "lease-1" {
 		t.Fatalf("ANX_PM_LEASE_TOKEN=%q env=%v", envValue(gotEnv, "ANX_PM_LEASE_TOKEN"), gotEnv)

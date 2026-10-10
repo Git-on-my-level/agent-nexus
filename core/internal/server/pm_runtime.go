@@ -215,7 +215,7 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 			if p.Human && actual.PrincipalKind == string(auth.PrincipalKindHuman) {
 				return nil
 			}
-		case "pm.action.work.annotate":
+		case "pm.action.work.annotate", "pm.action.work.note":
 			if p.Human && actual.PrincipalKind == string(auth.PrincipalKindHuman) {
 				w, err := store.GetWork(ctx, ref)
 				if errors.Is(err, primitives.ErrNotFound) || (err == nil && anyString(workSourceMap(w)["authority"]) == "nexus") {
@@ -329,6 +329,76 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		}
 		return pm.ContextPage{Items: items, NextCursor: page.NextCursor}, nil
 	}
+	deps.BindRequesterContext = func(ctx context.Context, p pm.Principal) context.Context {
+		return primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: p.ActorID, PMActorID: selectedActor()})
+	}
+	deps.BeginCardRead = func(ctx context.Context, _ pm.Principal) (context.Context, func(), error) {
+		return store.BeginPMCardRead(ctx)
+	}
+	deps.ReadPinnedCards = func(ctx context.Context, p pm.Principal, refs []string, full bool) (pm.ContextPage, error) {
+		cardRefs := []string{}
+		for _, ref := range refs {
+			if strings.HasPrefix(ref, "card:") {
+				cardRefs = append(cardRefs, ref)
+			}
+		}
+		page := pm.ContextPage{Items: []any{}}
+		snapshots, err := store.PMCardSnapshots(ctx, cardRefs)
+		if err != nil {
+			return page, err
+		}
+		cards := []map[string]any{}
+		for _, ref := range cardRefs {
+			if c, ok := snapshots[ref]; ok {
+				c["pm_pinned_ref"] = ref
+				cards = append(cards, c)
+			} else {
+				page.Limitations = append(page.Limitations, ref+": unavailable")
+			}
+		}
+		activity, err := store.PMCardActivity(ctx, cards, false)
+		if err != nil {
+			return page, err
+		}
+		asks, err := store.PMCardActivity(ctx, cards, true)
+		if err != nil {
+			return page, err
+		}
+		for _, c := range cards {
+			out := publicWork(c)
+			out["ref"] = c["pm_pinned_ref"]
+			encoded, _ := json.Marshal(out)
+			_ = json.Unmarshal(encoded, &out)
+			if state, ok := out["plan_state"].(map[string]any); ok {
+				out["plan_progress"] = state["progress"]
+			}
+			if health, ok := out["plan_health"].(map[string]any); ok {
+				out["health"] = health["state"]
+			}
+			if !full {
+				compact := map[string]any{}
+				for _, key := range []string{"ref", "title", "phase", "plan_progress", "health", "next_action", "blockers"} {
+					if v, ok := out[key]; ok {
+						compact[key] = v
+					}
+				}
+				out = compact
+			}
+			id := anyString(c["id"])
+			out["activity"] = activity[id]
+			out["asks"] = asks[id]
+			out["activity_partial"] = true
+			out["asks_partial"] = len(asks[id]) >= 6
+			page.Items = append(page.Items, out)
+		}
+		if len(refs) != len(cardRefs) {
+			page.Limitations = append(page.Limitations, "Only pinned cards are shown; other pinned evidence remains available through the legacy context command")
+		}
+		if len(cardRefs) == 0 {
+			page.Limitations = append(page.Limitations, "No cards pinned")
+		}
+		return page, nil
+	}
 	deps.CurrentRevision = func(ctx context.Context, p pm.Principal, ref string) (string, error) {
 		return currentWorkDecisionRevision(ctx, store, ref)
 	}
@@ -354,6 +424,7 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 	// The registry is the single source of configured native execution paths.
 	nativeExecutors := map[string]func(context.Context, pm.Action) (pm.Receipt, error){
 		"work.phase": func(ctx context.Context, a pm.Action) (pm.Receipt, error) { return executeWorkPhase(ctx, store, a) },
+		"work.note":  func(ctx context.Context, a pm.Action) (pm.Receipt, error) { return executeCardNote(ctx, store, a) },
 		"work.annotate": func(ctx context.Context, a pm.Action) (pm.Receipt, error) {
 			return executeNativeAnnotation(ctx, store, a)
 		},
@@ -400,6 +471,9 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 			if anyString(workSourceMap(w)["authority"]) == "nexus" {
 				return readBackWorkPhase(ctx, store, a)
 			}
+		}
+		if a.Scope == "work.note" {
+			return readBackCardNote(ctx, store, a)
 		}
 		if a.Scope == "work.annotate" {
 			return reconcileNativeAnnotation(ctx, store, a)

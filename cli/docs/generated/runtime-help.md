@@ -286,6 +286,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `report validate` (local-helper): Validate a visual report file or stdin against the renderer's schema.
 - `report publish` (local-helper): Validate, publish, read back, and revalidate a visual report document.
 - `host discover` (local-helper): Inspect optional local runtime identity and installed harness evidence without registration or network requests.
+- `pm card` (command): Read a pinned card in full under the requesting reader.
+- `pm propose` (command): Propose a card status or note for human approval in Inbox.
 - `work context` (command): Compose work, a bounded observation page and refresh status using read-only requests.
 - `work freshness` (command): Inspect last observed, source activity and meaningful progress independently.
 
@@ -939,6 +941,7 @@ Work is an existing card; projects are topics. Scope and identity come from the 
   anx pm actions reconcile     Request authoritative read-back of an action receipt; does not resend the action.
   anx pm bindings create       Bind an exact channel identity (transport, tenant, channel, user) to a workspace principal; humans only.
   anx pm bindings list         List channel identity bindings for this workspace; an operator check, never a send.
+  anx pm card                  Read a pinned card in full under the requesting reader.
   anx pm connect               Register a local PM connection with bounded runner and host labels.
   anx pm context               Read bounded authorized PM context; partial coverage stays explicit.
   anx pm conversations create  Create a durable conversation using request_key, title and optional work_ref.
@@ -952,6 +955,7 @@ Work is an existing card; projects are topics. Scope and identity come from the 
   anx pm decisions list        List durable decisions with principal-bound pagination.
   anx pm disconnect            Reset workspace PM onboarding after explicit uninstall.
   anx pm presence              Read recent PM connection state.
+  anx pm propose               Propose a card status or note for human approval in Inbox.
   anx pm turns claim           Claim the next queued turn with an exclusive runner lease. 204 means none.
   anx pm turns complete        Selected PM agent records response text and evidence_refs; does not complete work.
   anx pm turns context         Read context as the requesting actor; only the selected PM agent may call this.
@@ -4215,6 +4219,8 @@ Inputs:
   - body `target_revision` (string)
   - body `work_ref` (string)
   Optional:
+  - body `payload.evidence_refs` (list<string>)
+  - body `payload.note` (string)
   - body `payload.phase` (string)
   - body `payload.resolution_refs` (list<string>)
   Enum values: payload.phase: backlog, blocked, done, in_progress, ready, review
@@ -4443,6 +4449,8 @@ Inputs:
   - body `cursor` (string)
   - body `limit` (integer)
   - body `query` (string)
+  - body `view` (string)
+  Enum values: view: card, cards
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
@@ -4606,6 +4614,8 @@ Inputs:
   - body `target_revision` (string)
   - body `work_ref` (string)
   Optional:
+  - body `payload.evidence_refs` (list<string>)
+  - body `payload.note` (string)
   - body `payload.phase` (string)
   - body `payload.resolution_refs` (list<string>)
   Enum values: payload.phase: backlog, blocked, done, in_progress, ready, review
@@ -9919,6 +9929,24 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx host discover ... ; anx --json host discover ... ; anx host discover ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `pm card`
+
+Read a pinned card in full under the requesting reader.
+
+```text
+Usage: anx pm card <card-ref>
+Read one pinned card in full inside a claimed PM turn.
+```
+
+## `pm propose`
+
+Propose a card status or note for human approval in Inbox.
+
+```text
+Usage: anx pm propose <card-ref> (--status <backlog|ready|in_progress|blocked|review|done> | --note <text>) --why <reason> [--evidence <ref> ...]
+Proposes for human approval in Inbox. done requires evidence. Identity and conversation come from the runner.
 ```
 
 ## `work context`

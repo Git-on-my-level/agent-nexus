@@ -104,6 +104,15 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 		_, _, err := parseRefResolve(args)
 		return "refs resolve", err
 	}
+	if len(args) >= 2 && args[0] == "pm" {
+		if args[1] == "propose" {
+			_, err := parsePMProposal(args[2:])
+			return "pm propose", err
+		}
+		if args[1] == "card" {
+			return "pm card", validatePMCardArgs(args[2:])
+		}
+	}
 	if isWorkCommandRoot(args[0]) && !isReportLocalCommand(args) {
 		if len(args) >= 2 && args[0] == "pm" && (args[1] == "serve" || args[1] == "ask" || args[1] == "install" || args[1] == "status" || args[1] == "uninstall") {
 			commandName := "pm " + args[1]

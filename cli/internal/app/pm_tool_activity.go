@@ -20,6 +20,20 @@ var pmActivityRef = regexp.MustCompile(`^(card|work|topic|board|doc|document|eve
 // Positional free text, URLs, paths, bodies, search terms and credentials are
 // never inferred as targets. Local/help/transport-management commands are silent.
 func pmToolStep(args []string) (string, string) {
+	if len(args) >= 2 && args[0] == "pm" {
+		if args[1] == "context" && len(args) == 2 {
+			return "anx pm context", ""
+		}
+		if args[1] == "card" && validatePMCardArgs(args[2:]) == nil {
+			return "anx pm card", args[2]
+		}
+		if args[1] == "propose" {
+			if o, err := parsePMProposal(args[2:]); err == nil {
+				return "anx pm propose", o.ref
+			}
+		}
+	}
+
 	name, tail, known := matchPreflightFlagSpec(args)
 	// Commands without flags are absent from the preflight map. Use canonical
 	// command vocabulary too, taking the longest exact prefix only.

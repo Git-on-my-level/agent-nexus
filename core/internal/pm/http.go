@@ -170,7 +170,7 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if in.Limit < 1 || in.Limit > 50 {
 				err = ErrInvalid
 			} else {
-				out, err = s.GetTurnPinnedContextPage(ctx, p, path[1], in.ContextRef, in.Query, in.Cursor, in.Limit, in.LeaseToken)
+				out, err = s.getTurnContextView(ctx, p, path[1], in.ContextRef, in.Query, in.Cursor, in.Limit, in.LeaseToken, in.View)
 			}
 		}
 	case len(path) == 3 && path[0] == "turns" && path[2] == "decisions" && r.Method == http.MethodPost:

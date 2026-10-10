@@ -15,7 +15,7 @@ func commandSideEffectClass(command string) string {
 	if command == "pm install" || command == "pm uninstall" {
 		return "local_operational_write"
 	}
-	if command == "pm status" || command == "pm presence" {
+	if command == "pm card" || command == "pm context" || command == "pm status" || command == "pm presence" {
 		return "read_only"
 	}
 	if command == "refs resolve" {
@@ -427,6 +427,9 @@ func normalizeActorArgs(args []string, cfg config.Resolved) ([]string, error) {
 func deriveErrorActions(command string, err *errnorm.Error) []output.NextAction {
 	if err == nil {
 		return []output.NextAction{}
+	}
+	if command == "pm card" || command == "pm propose" {
+		return []output.NextAction{action("Read pinned cards", "anx", "pm", "context")}
 	}
 	if err.Code == "not_found" || strings.HasSuffix(err.Code, "_not_found") {
 		parts := strings.Fields(command)

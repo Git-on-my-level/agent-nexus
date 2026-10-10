@@ -15,6 +15,26 @@ type ResolutionRef struct {
 }
 
 func (s *Service) validateResolution(ctx context.Context, p Principal, scope string, payload *ActionPayload) error {
+	if payload != nil {
+		if len(payload.EvidenceRefs) > 32 || len(payload.ResolutionRefs) > 32 {
+			return ErrInvalid
+		}
+		for _, ref := range payload.EvidenceRefs {
+			if !validText(ref, 512) || !strings.Contains(ref, ":") {
+				return ErrInvalid
+			}
+			if s.deps.ResolveResolution == nil {
+				return ErrUnavailable
+			}
+			resolved, err := s.deps.ResolveResolution(ctx, p, ref)
+			if err != nil {
+				return err
+			}
+			if !resolved.Exists {
+				return fmt.Errorf("%w: evidence ref unavailable", ErrInvalid)
+			}
+		}
+	}
 	if scope != "work.phase" || payload == nil || payload.Phase != "done" {
 		return nil
 	}
