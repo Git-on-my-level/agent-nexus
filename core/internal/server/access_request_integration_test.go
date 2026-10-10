@@ -471,6 +471,70 @@ func TestAccessRequestAwaitIsOwnerScopedAndWakes(t *testing.T) {
 	hostStatus(t, status, 404, p)
 }
 
+func TestAccessRequestFormsStayRequesterScoped(t *testing.T) {
+	t.Parallel()
+	env, human := accessTestEnv(t)
+	owner := seedAccessTestAgent(t, env, "form.owner")
+	other := seedAccessTestAgent(t, env, "form.other")
+	base := env.server.URL
+
+	status, p := hostHTTP(t, "POST", base+"/auth/access-requests", owner.AccessToken, map[string]any{"grant": "auth-admin", "reason": "Need the grant"})
+	hostStatus(t, status, 200, p)
+	request := p["request"].(map[string]any)
+	id := request["id"].(string)
+	eventID := strings.TrimPrefix(request["request_event_ref"].(string), "event:")
+	var handle string
+	if err := env.workspace.DB().QueryRow(`SELECT handle FROM events WHERE id=?`, eventID).Scan(&handle); err != nil {
+		t.Fatal(err)
+	}
+	if handle == "" || handle == eventID || strings.Contains(handle, "/") {
+		t.Fatalf("public handle: %q", handle)
+	}
+	status, p = hostHTTP(t, "POST", base+"/auth/access-requests/"+id+"/approve", human, map[string]any{})
+	hostStatus(t, status, 200, p)
+
+	forms := []string{
+		"access-request:" + id,
+		eventID,
+		"event:" + eventID,
+		handle,
+		"event:" + handle,
+	}
+	routes := []struct {
+		method string
+		path   func(escaped string) string
+		body   map[string]any
+	}{
+		{http.MethodGet, func(escaped string) string { return "/asks/" + escaped }, nil},
+		{http.MethodGet, func(escaped string) string { return "/stream/asks/" + escaped }, nil},
+		{http.MethodPost, func(escaped string) string { return "/asks/" + escaped + "/subscriptions" }, map[string]any{"kind": "await", "label": "live await"}},
+		{http.MethodPost, func(escaped string) string { return "/asks/" + escaped + "/delivery" }, map[string]any{"subscription_id": "missing", "state": "delivered", "attempts": 1}},
+	}
+	for _, form := range forms {
+		escaped := url.PathEscape(form)
+		for _, route := range routes {
+			rawURL := base + route.path(escaped)
+			status, p = hostHTTP(t, route.method, rawURL, other.AccessToken, route.body)
+			hostStatus(t, status, 404, p)
+			errBody := p["error"].(map[string]any)
+			if errBody["code"] != "not_found" || errBody["message"] != "ask not found" {
+				t.Fatalf("%s %s: %#v", route.method, rawURL, p)
+			}
+		}
+		status, p = hostHTTP(t, http.MethodGet, base+"/asks/"+escaped, owner.AccessToken, nil)
+		hostStatus(t, status, 200, p)
+		if p["status"] != "answered" || p["access_request_ref"] != "access-request:"+id || p["response"].(map[string]any)["outcome"] != "approved" {
+			t.Fatalf("owner %s: %#v", form, p)
+		}
+	}
+	status, p = hostHTTP(t, http.MethodGet, base+"/asks/"+url.PathEscape(handle), human, nil)
+	hostStatus(t, status, 200, p)
+	stream := readAskStreamOutcome(t, base+"/stream/asks/"+url.PathEscape(handle), owner.AccessToken)
+	if stream["status"] != "answered" || stream["access_request_ref"] != "access-request:"+id {
+		t.Fatalf("owner handle stream: %#v", stream)
+	}
+}
+
 func TestStandingAgentInboxSubscribeDoesNotRequireAskRef(t *testing.T) {
 	t.Parallel()
 	env, _ := accessTestEnv(t)

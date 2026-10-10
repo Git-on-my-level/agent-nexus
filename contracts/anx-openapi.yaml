@@ -5774,7 +5774,7 @@ paths:
       x-anx-output-envelope: Returns subscription or receipt.
       x-anx-error-codes: [not_found, auth_required, invalid_request]
       parameters:
-        - {name: ask_id, in: path, required: true, description: "Event id or access-request:<id> for the requesting agent.", schema: {type: string}}
+        - {name: ask_id, in: path, required: true, description: "Event id, event:<id>, public event handle, event:<handle>, or access-request:<id>. An access-request event resolves only for the requesting agent.", schema: {type: string}}
       requestBody:
         required: true
         content:
@@ -5830,7 +5830,7 @@ paths:
       x-anx-output-envelope: Returns subscription or receipt.
       x-anx-error-codes: [not_found, auth_required, invalid_request]
       parameters:
-        - {name: ask_id, in: path, required: true, description: "Event id or access-request:<id> for the requesting agent.", schema: {type: string}}
+        - {name: ask_id, in: path, required: true, description: "Event id, event:<id>, public event handle, event:<handle>, or access-request:<id>. An access-request event resolves only for the requesting agent.", schema: {type: string}}
       requestBody:
         required: true
         content:
@@ -5859,7 +5859,7 @@ paths:
       x-anx-output-envelope: Returns AskOutcome.
       x-anx-error-codes: [not_found, auth_required]
       parameters:
-        - {name: ask_id, in: path, required: true, description: "Event id, event:<id>, or access-request:<id>. An access-request ref resolves only for the requesting agent. Another agent reading that request's event gets not found.", schema: {type: string}}
+        - {name: ask_id, in: path, required: true, description: "Event id, event:<id>, public event handle, event:<handle>, or access-request:<id>. An access-request event resolves only for the requesting agent. Another agent reading that request's event, by id or public handle, gets not found.", schema: {type: string}}
       responses:
         '200':
           description: Current authorized ask state; legacy asks remain readable.
@@ -5883,7 +5883,7 @@ paths:
       x-anx-output-envelope: SSE outcome contains AskOutcome; stream ends on terminal state.
       x-anx-error-codes: [not_found, auth_required]
       parameters:
-        - {name: ask_id, in: path, required: true, description: "Event id, event:<id>, or access-request:<id>. An access-request ref resolves only for the requesting agent.", schema: {type: string}}
+        - {name: ask_id, in: path, required: true, description: "Event id, event:<id>, public event handle, event:<handle>, or access-request:<id>. An access-request event resolves only for the requesting agent.", schema: {type: string}}
       responses:
         '200':
           description: SSE outcome and keepalive messages.
