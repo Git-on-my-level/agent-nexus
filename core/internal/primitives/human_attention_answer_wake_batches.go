@@ -77,6 +77,9 @@ func queueHumanAttentionAnswerWakeBatchTx(ctx context.Context, tx *accessTx, sou
 	if subjectRef := strings.TrimSpace(anyStringValue(notify["subject_ref"])); subjectRef != "" {
 		refs = append(refs, subjectRef)
 	}
+	for _, ref := range notifyStringList(notify["related_refs"]) {
+		refs = append(refs, ref)
+	}
 
 	batch, err := scanHumanAttentionAnswerWakeBatch(tx.QueryRowContext(ctx, `SELECT target_actor_id,target_handle,workspace_id,batch_id,
 		first_answered_at,last_answered_at,debounce_deadline,thread_id,trigger_event_id,trigger_created_at,answer_count,
@@ -297,6 +300,23 @@ func scanHumanAttentionAnswerWakeBatch(row answerWakeBatchScanner) (HumanAttenti
 		return HumanAttentionAnswerWakeBatch{}, decodeErr
 	}
 	return batch, nil
+}
+
+func notifyStringList(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return typed
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if ref := strings.TrimSpace(anyStringValue(item)); ref != "" {
+				out = append(out, ref)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 func appendUnique(values []string, value string) []string {

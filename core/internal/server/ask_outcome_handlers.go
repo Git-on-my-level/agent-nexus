@@ -12,6 +12,32 @@ import (
 	"agent-nexus-core/internal/primitives"
 )
 
+func resolveAwaitableAsk(w http.ResponseWriter, r *http.Request, opts handlerOptions, ref string) (string, string, bool) {
+	store, ok := opts.primitiveStore.(*primitives.Store)
+	if !ok {
+		if strings.HasPrefix(strings.TrimSpace(ref), "access-request:") {
+			writeError(w, 404, "not_found", "ask not found")
+			return "", "", false
+		}
+		return strings.TrimPrefix(strings.TrimSpace(ref), "event:"), "", true
+	}
+	actorID, kind := "", ""
+	if principal, ok := cachedAuthenticatedPrincipal(r); ok && principal != nil {
+		actorID = principal.ActorID
+		kind = principal.PrincipalKind
+	}
+	eventID, accessRef, err := store.ResolveAwaitableAsk(r.Context(), actorID, kind, ref)
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, 404, "not_found", "ask not found")
+		} else {
+			writeError(w, 500, "internal_error", "cannot read ask")
+		}
+		return "", "", false
+	}
+	return eventID, accessRef, true
+}
+
 type askOutcomeStore interface {
 	AskOutcome(context.Context, string) (map[string]any, error)
 }
@@ -26,13 +52,24 @@ func handleAskOutcome(w http.ResponseWriter, r *http.Request, opts handlerOption
 		writeError(w, 404, "not_found", "ask not found")
 		return
 	}
+	id, accessRef, ok := resolveAwaitableAsk(w, r, opts, id)
+	if !ok {
+		return
+	}
 	store, ok := opts.primitiveStore.(askOutcomeStore)
 	if !ok {
 		writeError(w, 503, "primitives_unavailable", "ask outcomes unavailable")
 		return
 	}
 	read := func() (map[string]any, error) {
-		return store.AskOutcome(primitives.WithReadTickSnapshot(r.Context()), id)
+		outcome, err := store.AskOutcome(primitives.WithReadTickSnapshot(r.Context()), id)
+		if err != nil {
+			return nil, err
+		}
+		if accessRef != "" {
+			outcome["access_request_ref"] = accessRef
+		}
+		return outcome, nil
 	}
 	outcome, err := read()
 	if err != nil {

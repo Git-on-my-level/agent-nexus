@@ -1044,7 +1044,7 @@ Daily loop:
   work block <why> [card] Mark blocked; add --ask --recommend <text> to ask (remote_coordination_write)
   work done [card] --evidence <url|ref>  Resolve with evidence (remote_coordination_write)
   ask|review|escalate <title> --recommend <text>  Request operator attention (remote_coordination_write)
-  await <ask-id|card-ref>   Wait on event stream for answer or state (read_only)
+  await <ask-id|card-ref|access-request:<id>>  Wait on the ask stream for an answer or access decision (read_only)
   inbox list                List my open asks; add --status answered for replies (read_only)
 
 Setup: anx host discover; anx host enroll; anx doctor; anx install skill --path ./SKILL.md
@@ -1195,7 +1195,7 @@ func helpTopicTextRaw(topic string) (string, bool) {
 		return "anx bridge run [--max-attempts 5] [--command-timeout 30m]: consume host-signed answer wakes and execute locally registered commands. See docs/ask-delivery.md.\n", true
 	}
 	if topic == "await" {
-		return "anx await <ask-id|card-ref> [--until answered|state=<phase>] [--timeout <dur>]: wait on a single indexed ask stream (records an await subscription); exits 0 answered, 9 rejected, 10 needs_context, 11 withdrawn, 12 expired, 8 timeout.\n  anx await --answers [--timeout <dur>]: wait for a debounced batch of answers to your asks (read_only)\n", true
+		return "anx await <ask-id|card-ref|access-request:<id>> [--until answered|state=<phase>] [--timeout <dur>]: wait on a single indexed ask stream (records an await subscription); exits 0 answered or approved, 9 rejected or denied, 10 needs_context, 11 withdrawn, 12 expired, 8 timeout.\n  anx await --answers [--timeout <dur>]: wait for a debounced batch of answers to your asks (read_only)\n", true
 	}
 	if topic == "ask" || topic == "review" || topic == "escalate" {
 		return humanUsageText() + "\n", true
@@ -2125,7 +2125,7 @@ Every ANX reader is a CEO by default: group execution detail into a small set of
 2. Run anx config workspaces when unsure; set a default with anx config use <alias>. Do not hardcode --base-url in agent prompts. Let agentctl supply adapter context, or select ANX_AS / --as.
 3. Run anx orient. Confirm your handle, host, assigned work and next actions.
 4. Run anx work start card:<slug>, then anx work note "Progress" as you go.
-5. When blocked, use anx ask "Question" --recommend "Answer" and anx await <ask-id>.
+5. When blocked, use anx ask "Question" --recommend "Answer" and anx await <ask-id>. After anx auth access-requests request, run anx await access-request:<id> (exit 0 approved, exit 9 denied).
 6. Run anx work done --evidence <url|ref> when the card is complete.
 7. Label agentctl runs anx.card.<card-slug> to link execution with the card.
 

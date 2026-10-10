@@ -17,7 +17,11 @@ func init() {
 		if verb == "request" {
 			flags = []localHelperFlag{{Name: "--grant <name>", Description: "Named grant; currently auth-admin."}, {Name: "--reason <text>", Description: "Why this agent needs the grant."}}
 		}
-		localHelperTopics = append(localHelperTopics, localHelperTopic{Path: "auth access-requests " + verb, Summary: "Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision.", Flags: flags, Examples: accessRequestsSubcommandSpec.examples})
+		summary := "Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision."
+		if verb == "request" {
+			summary += " A pending request returns `anx await access-request:<id>`. That command exits 0 when approved and 9 when denied, and the decision wakes the requesting agent the same way an ask answer does."
+		}
+		localHelperTopics = append(localHelperTopics, localHelperTopic{Path: "auth access-requests " + verb, Summary: summary, Flags: flags, Examples: accessRequestsSubcommandSpec.examples})
 	}
 }
 

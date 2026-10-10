@@ -231,7 +231,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `docs messages` (local-helper): List messages from a Document conversation.
 - `docs message` (local-helper): Post a message to a Document conversation without hand-authoring event JSON.
 - `docs reply` (local-helper): Reply to an existing Document message.
-- `auth access-requests request` (local-helper): Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision.
+- `auth access-requests request` (local-helper): Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision. A pending request returns `anx await access-request:<id>`. That command exits 0 when approved and 9 when denied, and the decision wakes the requesting agent the same way an ask answer does.
 - `auth access-requests list` (local-helper): Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision.
 - `auth access-requests approve` (local-helper): Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision.
 - `auth access-requests deny` (local-helper): Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision.
@@ -303,7 +303,7 @@ Every ANX reader is a CEO by default: group execution detail into a small set of
 2. Run anx config workspaces when unsure; set a default with anx config use <alias>. Do not hardcode --base-url in agent prompts. Let agentctl supply adapter context, or select ANX_AS / --as.
 3. Run anx orient. Confirm your handle, host, assigned work and next actions.
 4. Run anx work start card:<slug>, then anx work note "Progress" as you go.
-5. When blocked, use anx ask "Question" --recommend "Answer" and anx await <ask-id>.
+5. When blocked, use anx ask "Question" --recommend "Answer" and anx await <ask-id>. After anx auth access-requests request, run anx await access-request:<id> (exit 0 approved, exit 9 denied).
 6. Run anx work done --evidence <url|ref> when the card is complete.
 7. Label agentctl runs anx.card.<card-slug> to link execution with the card.
 
@@ -452,7 +452,7 @@ Daily loop
 2. Read `anx work context card:<slug>` and register participation when doing substantive work. Use `anx work start card:<slug>` only when explicitly taking ownership of a Nexus-native task: it adds an assignee and marks in progress.
 3. Post `anx cards message card:<slug> --body "What changed and why"` after meaningful progress. Include evidence, decisions, blockers, uncertainty and next steps; avoid raw chat copies and repeated unchanged updates. Always name the task explicitly: participation does not change legacy current-card selection.
 4. Report execution blockers on the card. For a consequential human decision, create one recommended ask with `anx ask "Question" --subject-ref card:<slug> --recommend "Preferred answer"`; keep `next_actor` on the agent and do not also block the card for that question. Withdraw an ask that is no longer needed with `anx ask withdraw <event:ask-id> --reason "<short reason>"`. Use `anx work block` only for an authorized Nexus-native task blocked by an execution issue, not as a duplicate of a human ask.
-5. Run `anx await <ask-id>` when one answer gates the next step. For a batch, use `anx await --answers`; `anx orient` and `anx inbox list --status answered` also show replies. Exit 8 means timeout; exit 9 means an individual answer was rejected.
+5. Run `anx await <ask-id>` when one answer gates the next step. After `anx auth access-requests request`, run the returned `anx await access-request:<id>`: exit 0 means approved and exit 9 means denied. The decision uses the same answer notification and wake as an ask. For a batch, use `anx await --answers`; `anx orient` and `anx inbox list --status answered` also show replies. Exit 8 means timeout; exit 9 means an individual answer was rejected.
 6. Hermes, Claude Code, and Codex harnesses consume the same workspace-local agent notification: on wake, read `anx inbox list --unread` or `anx orient`, then mark each processed answer with `anx inbox read event:<ask-id>`. `inbox read` marks that answer only, including before wake delivery; `anx notifications read --wakeup-id <id>` separately marks the wake notification read.
 7. Verify acceptance criteria before changing task completion. For an authorized Nexus-native task, `anx work done card:<slug> --evidence <url|event:ref|artifact:ref>` resolves that explicit task and clears legacy presence. Report source-owned completion as attributed evidence for its authorized source workflow. Closing a session or finishing a run never completes a task.
 
@@ -8378,14 +8378,14 @@ Global flags:
 
 ## `auth access-requests request`
 
-Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision.
+Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision. A pending request returns `anx await access-request:<id>`. That command exits 0 when approved and 9 when denied, and the decision wakes the requesting agent the same way an ask answer does.
 
 ```text
 Local Help: auth access-requests request
 
 - Kind: `local helper`
 - Side effect class: `remote_coordination_write`
-- Summary: Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision.
+- Summary: Agents request their own named grants; only humans list or decide access. Retries preserve the original request and decision. A pending request returns `anx await access-request:<id>`. That command exits 0 when approved and 9 when denied, and the decision wakes the requesting agent the same way an ask answer does.
 - Examples:
   - `anx auth access-requests request --grant auth-admin --reason 'Enroll a build host'`
   - `anx auth access-requests list`

@@ -484,7 +484,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `auth`
 - Error codes: `auth_required`, `invalid_token`, `agent_required`, `human_required`, `invalid_request`, `not_found`, `conflict`
 - Output: Returns `AccessRequestResponse`.
-- Agent notes: Agents request their own grant. Humans alone decide requests and read the Access queue.
+- Agent notes: Agents request their own grant and await access-request:<id> on the existing ask stream. Humans alone decide requests and read the Access queue. Another agent cannot read the request.
 
 ## `auth.access-requests.summary`
 
