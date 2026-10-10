@@ -19,6 +19,25 @@ with subtle borders.
 - Readable over flashy: readable text must pass WCAG AA on dark backgrounds.
 - Linkable over hidden: operator-visible view state that changes which records
   or panels are shown should default to route/query state when practical.
+- Said once: a fact belongs to one element. A badge is not paired with prose
+  repeating it, a page heading is not reprinted by the thing under it, and a
+  panel's eyebrow is dropped when its title already names the kind.
+- No narration: a heading that needs a sentence explaining it is the wrong
+  heading. Subtitles carry computed values — counts, states, times — or
+  nothing.
+
+### Caveats are tips, not folds
+
+A sentence that qualifies what a section means — "a finished run is not
+evidence that the work is done", "participation does not assign a task" — is
+real and load-bearing on the rare visit that needs it. In flow it is most of
+what a quiet section shows; folded into a `<details>` it still spends a
+visible `▶ What evidence means` line to offer itself.
+
+Use `InfoTip` instead: one glyph beside the label it qualifies, opening the
+shared tooltip layer on hover, keyboard focus and touch hold. Keep the text to
+one or two plain sentences; two tips side by side mean one answer split in
+half, so pass the extra sentence into the first rather than adding a second.
 
 ## Runtime Design Contract
 
@@ -506,6 +525,8 @@ names survive only on the diagnostics surfaces §1.8 exempts.
 - No `rounded-xl` unless a local component explicitly requires it.
 - No decorative shadows beyond the shell/menu/modal shadow tokens.
 - No nested interactive elements.
+- No `<details>` used to hide an explanation of the UI; that is an `InfoTip`.
+  Disclosure is for content — filters, raw payloads, related records.
 
 ## Adding New Pages
 
