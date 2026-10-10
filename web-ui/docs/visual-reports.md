@@ -733,14 +733,28 @@ Core materializes a bound `chart` from raw points the only way it can: one
 client applies the panel's own declaration on top, taking nothing from outside
 the panel:
 
-- **Series names.** A declared name is matched against core's full stream name
-  and against the same name with the shared series prefix dropped, so writing
-  `OSS` in the fallback names the stream whose labels reduce to `oss`.
-  Position is the last resort and applies only when no name matched at all and
-  the two lists are the same length: core omits a stream with no points in the
-  window and orders label sets by their JSON, so index is not a stable
-  identity. With no fallback the prefix is dropped and the label values remain
-  (`prs-merged repo=oss` → `oss`); names that would collide keep core's.
+- **Series names.** A declared name is matched on identity, never on order: it
+  must equal the stream's full name, the same name with the shared series
+  prefix dropped, or one of the stream's own label values whole — so writing
+  `OSS` in the fallback names the stream carrying `repo=oss`. Label pairs are
+  split on key boundaries, not on spaces, because a value may contain spaces
+  (`owner=dave saas` is one value and lends no word of it to anyone). The
+  pairing has to be unambiguous both ways: every stream that answers to a
+  declaration is counted as a claimant before any pairing is decided, so two
+  declarations answering to one stream, or two streams answering to one
+  declaration, identify neither. **There is no positional fallback.** Core
+  omits a stream with no points in the window and orders label sets by their
+  JSON, so index is not an identity — and an author who writes names the
+  labels do not contain ("SaaS PRs", "OSS PRs") would have had one series'
+  values drawn under the other's name. A stream whose name cannot be verified
+  keeps the label it has (`prs-merged repo=oss` → `oss`).
+- **Shape is the panel's, not a stream's.** A name claims _which_ stream this
+  is and needs verified identity; a type claims only that the panel is, say, a
+  stacked bar chart. So when every declared series asks for the same drawing,
+  that drawing applies to unverified streams too — otherwise the commonest
+  authored panel, one declared series named something the labels do not
+  contain, silently became a line chart. Declarations that disagree on a shape
+  describe no single panel, and core's own shape stands.
 - **Type and stacking.** `type`, `stack`, `smooth`, `step`, `areaStyle`,
   `barWidth` and `symbolSize` come from the matched fallback series, with
   core's own value as the fallback; `palette` comes from the fallback chart,

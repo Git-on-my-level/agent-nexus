@@ -238,25 +238,201 @@ describe("matching the author's names to the live streams", () => {
     expect(out[1][1]).toEqual([4, 6, 5]);
   });
 
-  it("falls back to position only when the two lists line up", () => {
-    // No label matches at all, and one declaration per stream: the author's
-    // order is the only answer there is, and it is a whole answer.
+  it("matches a declared name to the label value it names", () => {
+    // `team=core` is "Core". Identity, not order: the same answer comes out
+    // whichever way round the author listed them.
+    const out = (declared) =>
+      seriesChartData(
+        panel({
+          streams: [
+            { name: "prs-merged team=core", values: [1, 2] },
+            { name: "prs-merged team=apps", values: [3, 4] },
+          ],
+          fallback: authored(declared),
+        }),
+        { now: NOW },
+      ).option.series.map((entry) => [entry.name, entry.data]);
+    const inOrder = out([
+      { type: "bar", name: "Core", data: [1] },
+      { type: "bar", name: "Apps", data: [1] },
+    ]);
+    const reversed = out([
+      { type: "bar", name: "Apps", data: [1] },
+      { type: "bar", name: "Core", data: [1] },
+    ]);
+    expect(inOrder.map(([name]) => name)).toEqual(["Core", "Apps"]);
+    expect(reversed).toEqual(inOrder);
+  });
+
+  it("never pairs a name with a stream by position", () => {
+    /*
+     * The swap this exists to prevent. Live streams sort `repo=oss` then
+     * `repo=saas`; the author wrote "SaaS PRs" then "OSS PRs". Neither name
+     * is a label value, so nothing is verified — and pairing them by index
+     * would have drawn OSS's numbers under "SaaS PRs" with nothing on
+     * screen to show it. Each stream keeps the label it actually has.
+     */
     const out = seriesChartData(
       panel({
         streams: [
-          { name: "prs-merged team=core", values: [1, 2] },
-          { name: "prs-merged team=apps", values: [3, 4] },
+          { name: "prs-merged repo=oss", values: [7, 7, 7] },
+          { name: "prs-merged repo=saas", values: [1, 1, 1] },
         ],
         fallback: authored([
-          { type: "bar", name: "Core", data: [1] },
-          { type: "bar", name: "Apps", data: [1] },
+          { type: "bar", name: "SaaS PRs", data: [1] },
+          { type: "bar", name: "OSS PRs", data: [1] },
         ]),
       }),
       { now: NOW },
     );
     expect(out.option.series.map((entry) => entry.name)).toEqual([
-      "Core",
-      "Apps",
+      "oss",
+      "saas",
+    ]);
+    /*
+     * The bars still arrive. A name claims *which* stream this is and needs
+     * identity; a type claims only that the panel is a bar chart, which the
+     * author did say and which cannot mislabel anything.
+     */
+    expect(out.option.series.map((entry) => entry.type)).toEqual([
+      "bar",
+      "bar",
+    ]);
+    // Bars rebin onto a category axis, so the values arrive as scalars —
+    // still OSS's own numbers, under OSS's own label.
+    expect(out.option.series[0].data).toEqual([7, 7, 7]);
+    expect(validateReportChart(out)).toEqual([]);
+  });
+
+  it("never lets a word inside one value identify another stream", () => {
+    /*
+     * Core joins label pairs with spaces and a *value* may contain spaces of
+     * its own, so splitting on every space minted `saas` out of
+     * `owner=dave saas` — another stream's whole identity. A lone stream
+     * belonging to Dave would then have been drawn as "SaaS", bars, stack
+     * and all, which is the misattribution this rule exists to prevent.
+     */
+    const out = seriesChartData(
+      panel({
+        streams: [{ name: "prs-merged owner=dave saas", values: [1, 2] }],
+        fallback: authored([
+          { type: "bar", name: "SaaS", stack: "repos", data: [1] },
+        ]),
+      }),
+      { now: NOW },
+    );
+    expect(out.option.series[0].name).toBe("dave saas");
+    // The panel is still the stacked bar chart its author declared; what it
+    // must not do is call Dave's stream SaaS.
+    expect(out.option.series[0].type).toBe("bar");
+    expect(validateReportChart(out)).toEqual([]);
+  });
+
+  it("reads a multi-word value whole, so a real name still matches", () => {
+    // `team=repo` is unambiguously "repo": the neighbour's `repo=my repo`
+    // holds one value, "my repo", and lends no word of it to anyone.
+    const out = seriesChartData(
+      panel({
+        streams: [
+          { name: "prs-merged repo=my repo", values: [1, 2] },
+          { name: "prs-merged team=repo", values: [3, 4] },
+        ],
+        fallback: authored([{ type: "bar", name: "repo", data: [1] }]),
+      }),
+      { now: NOW },
+    );
+    expect(out.option.series.map((entry) => entry.name)).toEqual([
+      "my repo",
+      "repo",
+    ]);
+    expect(validateReportChart(out)).toEqual([]);
+  });
+
+  it("refuses a name two streams both answer to", () => {
+    // `repo=oss` and `env=oss` both identify as "oss": neither is verified,
+    // so both keep core's own name rather than one of them taking "OSS".
+    const out = seriesChartData(
+      panel({
+        streams: [
+          { name: "prs-merged repo=oss", values: [1, 2] },
+          { name: "prs-merged env=oss", values: [3, 4] },
+        ],
+        fallback: authored([{ type: "bar", name: "OSS", data: [1] }]),
+      }),
+      { now: NOW },
+    );
+    expect(out.option.series.map((entry) => entry.name)).toEqual([
+      "prs-merged repo=oss",
+      "prs-merged env=oss",
+    ]);
+  });
+
+  it("refuses a name a second, self-ambiguous stream also answers to", () => {
+    /*
+     * `repo=oss team=saas` answers to both declarations, so it takes
+     * neither — but it is still a claimant, and a declaration two streams
+     * answer to identifies neither of them. Counting claims only among
+     * streams that had already resolved let `env=oss` walk off with "OSS".
+     */
+    const out = seriesChartData(
+      panel({
+        streams: [
+          { name: "prs-merged env=oss", values: [1, 2] },
+          { name: "prs-merged repo=oss team=saas", values: [3, 4] },
+        ],
+        fallback: authored([
+          { type: "bar", name: "OSS", data: [1] },
+          { type: "bar", name: "SaaS", data: [1] },
+        ]),
+      }),
+      { now: NOW },
+    );
+    expect(out.option.series.map((entry) => entry.name)).toEqual([
+      "oss",
+      "oss · saas",
+    ]);
+  });
+
+  it("draws the panel's declared shape even where it cannot name a stream", () => {
+    /*
+     * The commonest authored panel: one declared series, named something the
+     * labels do not contain. Refusing the name is right; refusing the bars
+     * with it meant every such panel silently became a line chart.
+     */
+    const out = seriesChartData(
+      panel({
+        streams: [{ name: "prs-merged repo=oss", values: [1, 2] }],
+        fallback: authored([
+          { type: "bar", name: "Pull requests", barWidth: 20, data: [1] },
+        ]),
+      }),
+      { now: NOW },
+    );
+    expect(out.option.series[0].name).toBe("oss");
+    expect(out.option.series[0].type).toBe("bar");
+    expect(out.option.series[0].barWidth).toBe(20);
+    expect(validateReportChart(out)).toEqual([]);
+  });
+
+  it("takes no shape at all when the declarations disagree on one", () => {
+    // Two different drawings and no verified identity: there is no single
+    // thing the author asked for, so core's own shape stands.
+    const out = seriesChartData(
+      panel({
+        streams: [
+          { name: "prs-merged repo=oss", values: [1, 2] },
+          { name: "prs-merged repo=saas", values: [3, 4] },
+        ],
+        fallback: authored([
+          { type: "bar", name: "Merged", data: [1] },
+          { type: "scatter", name: "Reviewed", data: [1] },
+        ]),
+      }),
+      { now: NOW },
+    );
+    expect(out.option.series.map((entry) => entry.type)).toEqual([
+      "line",
+      "line",
     ]);
   });
 

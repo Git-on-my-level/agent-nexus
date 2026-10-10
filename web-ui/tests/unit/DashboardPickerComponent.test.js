@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
+import {
+  cleanup,
+  createEvent,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { tick } from "svelte";
 
@@ -135,6 +141,165 @@ describe("the dashboard picker", () => {
     const menu = screen.getByRole("menu");
     for (const node of menu.querySelectorAll("ul, li, div"))
       expect(node.getAttribute("role")).toBe("none");
+  });
+});
+
+describe("the dashboard picker's keyboard", () => {
+  /*
+   * `role="menu"` promises the menu-button pattern, and replacing a native
+   * `<select>` means inheriting what a select already did. Tab alone was a
+   * workaround, not the contract.
+   */
+  const render1 = (props = {}) =>
+    render(DashboardPicker, {
+      reports: REPORTS,
+      selected: REPORTS[0],
+      pinnedRef: "",
+      hasMore: false,
+      loading: false,
+      ...props,
+    });
+  const triggerOf = () => screen.getByRole("button", { name: /Today/ });
+  const itemsOf = () =>
+    [...document.querySelectorAll("[data-picker-item]")].filter(Boolean);
+
+  for (const key of ["ArrowDown", "Enter", " "]) {
+    it(`opens on ${key === " " ? "Space" : key} and focuses the first item`, async () => {
+      render1();
+      await fireEvent.keyDown(triggerOf(), { key });
+      await tick();
+      expect(screen.getByRole("menu")).toBeTruthy();
+      expect(document.activeElement).toBe(itemsOf()[0]);
+    });
+  }
+
+  it("opens on ArrowUp and focuses the last item", async () => {
+    render1();
+    await fireEvent.keyDown(triggerOf(), { key: "ArrowUp" });
+    await tick();
+    const list = itemsOf();
+    expect(document.activeElement).toBe(list[list.length - 1]);
+  });
+
+  it("walks the items with the arrows, and wraps", async () => {
+    render1();
+    await fireEvent.keyDown(triggerOf(), { key: "ArrowDown" });
+    await tick();
+    const list = itemsOf();
+    const menu = screen.getByRole("menu");
+    await fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(list[1]);
+    await fireEvent.keyDown(menu, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(list[0]);
+    // Past the top is the bottom, as a menu wraps.
+    await fireEvent.keyDown(menu, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(list[list.length - 1]);
+  });
+
+  it("jumps to the ends with Home and End", async () => {
+    render1();
+    await fireEvent.keyDown(triggerOf(), { key: "ArrowDown" });
+    await tick();
+    const list = itemsOf();
+    const menu = screen.getByRole("menu");
+    await fireEvent.keyDown(menu, { key: "End" });
+    expect(document.activeElement).toBe(list[list.length - 1]);
+    await fireEvent.keyDown(menu, { key: "Home" });
+    expect(document.activeElement).toBe(list[0]);
+  });
+
+  it("chooses the focused report, and the menu does not swallow the key", async () => {
+    const onselect = vi.fn();
+    render1({ onselect });
+    await fireEvent.keyDown(triggerOf(), { key: "ArrowDown" });
+    await tick();
+    await fireEvent.keyDown(screen.getByRole("menu"), { key: "ArrowDown" });
+    const item = document.activeElement;
+    /*
+     * The menu's own handler must leave Enter alone: the items are real
+     * buttons, so the browser turns Enter into their click. jsdom does not,
+     * which is what the e2e keyboard walk is for — here we check only that
+     * nothing cancelled it on the way through.
+     */
+    const enter = createEvent.keyDown(item, {
+      key: "Enter",
+      bubbles: true,
+      cancelable: true,
+    });
+    await fireEvent(item, enter);
+    expect(enter.defaultPrevented).toBe(false);
+    await fireEvent.click(item);
+    expect(onselect).toHaveBeenCalledWith("older");
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("closes on Tab so the reader leaves rather than cycling the menu", async () => {
+    render1();
+    await fireEvent.keyDown(triggerOf(), { key: "ArrowDown" });
+    await tick();
+    await fireEvent.keyDown(screen.getByRole("menu"), { key: "Tab" });
+    await tick();
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("closes on Escape and gives the trigger its focus back", async () => {
+    render1();
+    await fireEvent.keyDown(triggerOf(), { key: "ArrowDown" });
+    await tick();
+    await fireEvent.keyDown(document, { key: "Escape" });
+    await tick();
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(triggerOf());
+  });
+
+  it("every item is reachable only through the menu, never by Tab", async () => {
+    render1();
+    await fireEvent.keyDown(triggerOf(), { key: "ArrowDown" });
+    await tick();
+    for (const item of itemsOf())
+      expect(item.getAttribute("tabindex")).toBe("-1");
+  });
+
+  it("keeps focus in the menu when asking for more choices", async () => {
+    /*
+     * "Load more reports" is replaced by the loading note the moment it is
+     * clicked, so the element holding focus leaves the DOM. Without re-aiming
+     * focus it falls to the body, outside the menu, where the arrow keys no
+     * longer reach it.
+     */
+    const onload = vi.fn();
+    const { rerender } = render1({ hasMore: true, onload });
+    await fireEvent.keyDown(triggerOf(), { key: "ArrowDown" });
+    await tick();
+    const more = screen.getByRole("menuitem", { name: "Load more reports" });
+    // Focus it the way the keyboard would: a dispatched click does not move
+    // focus in jsdom, so without this the test passes however the component
+    // behaves — the first report would still be holding focus at assert time.
+    more.focus();
+    expect(document.activeElement).toBe(more);
+    await fireEvent.click(more);
+    // The parent flips `loading` synchronously, unmounting the focused item.
+    await rerender({
+      reports: REPORTS,
+      selected: REPORTS[0],
+      pinnedRef: "",
+      hasMore: true,
+      loading: true,
+      onload,
+    });
+    await tick();
+    expect(document.body.contains(more)).toBe(false);
+    expect(screen.getByRole("menu").contains(document.activeElement)).toBe(
+      true,
+    );
+  });
+
+  it("asks for the choices once when a key opens it", async () => {
+    const onload = vi.fn();
+    render1({ hasMore: true, onload });
+    await fireEvent.keyDown(triggerOf(), { key: "ArrowDown" });
+    await tick();
+    expect(onload).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -623,4 +623,4 @@ does not already print it; project/freshness filters, panel counts and
 provenance inspection remain in Open document. Archive in the
 secondary navigation contains archived boards, cards, topics and documents.
 Watching aggregates routine agent edits by board and distinct card, prioritizes
-asks/answers and done/blocked transitions, keeps every material clause visible in the digest, and excludes archived subjects including cards on archived project topics. Report choices load when the report control opens, and the list grows in place rather than replacing itself under an open popup.
+asks/answers and done/blocked transitions, keeps every material clause visible in the digest, and excludes archived subjects including cards on archived project topics. Report choices load when the report control opens, and the list grows in place rather than replacing itself under an open popup. That control follows the menu-button keyboard pattern it advertises: Down, Up, Enter and Space open it and take focus into it, the arrows and Home/End move between items, and Escape closes it and gives the trigger its focus back.

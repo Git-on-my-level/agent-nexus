@@ -469,6 +469,89 @@ test("the dashboard menu lists every report and stays open", async ({
   ).toBeVisible();
 });
 
+test("the dashboard menu works from the keyboard alone", async ({ page }) => {
+  test.skip(BEFORE);
+  /*
+   * It replaced a native `<select>`, so it owes the keyboard what a select
+   * already gave: Down and Enter open it, the arrows walk it, Home and End
+   * jump, Escape leaves without choosing. `role="menu"` promises the same
+   * thing. Before this the only key that did anything was Tab.
+   */
+  const state = await installOverview(page);
+  await page.goto(OVERVIEW);
+  await expect(page.locator("[data-overview-report]")).toBeVisible();
+  expect(state.selectorReads).toBe(0);
+
+  const menu = page.getByRole("menu", { name: "Report" });
+  const items = page.locator("[data-picker-item]");
+  // Polled: focus transfer on open happens in an effect, after the flush.
+  const focusedIs = async (what) =>
+    expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            document.activeElement?.getAttribute(
+              "data-overview-report-choice",
+            ) ??
+            document.activeElement?.textContent?.trim() ??
+            "",
+        ),
+      )
+      .toBe(what);
+
+  // Down opens it, focuses the first report, and reads the choices once.
+  await picker(page).focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(menu).toBeVisible();
+  await expect(choices(page)).toHaveCount(2);
+  expect(state.selectorReads).toBe(1);
+  await focusedIs("demo-dashboard");
+
+  // The arrows walk, Home and End jump, and the ends wrap.
+  await page.keyboard.press("ArrowDown");
+  await focusedIs("older-dashboard");
+  await page.keyboard.press("ArrowUp");
+  await focusedIs("demo-dashboard");
+  await page.keyboard.press("End");
+  await focusedIs("Pin as dashboard");
+  await page.keyboard.press("Home");
+  await focusedIs("demo-dashboard");
+  await page.keyboard.press("ArrowUp");
+  await focusedIs("Pin as dashboard");
+
+  // Escape leaves without choosing, and hands focus back.
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(picker(page)).toBeFocused();
+  await expect(
+    page.getByRole("heading", { name: "Demo dashboard", exact: true }),
+  ).toBeVisible();
+
+  // Up opens it at the other end, and Enter on an item chooses it.
+  await page.keyboard.press("ArrowUp");
+  await expect(menu).toBeVisible();
+  await focusedIs("Pin as dashboard");
+  await page.keyboard.press("ArrowDown");
+  await focusedIs("demo-dashboard");
+  await page.keyboard.press("ArrowDown");
+  await focusedIs("older-dashboard");
+  await page.keyboard.press("Enter");
+  await expect(menu).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Earlier dashboard", exact: true }),
+  ).toBeVisible();
+  await expect(picker(page)).toBeFocused();
+
+  // Every item stays out of the tab order: from the closed trigger, Tab
+  // reaches the link beside it rather than walking into the report list.
+  await expect(items).toHaveCount(0);
+  await picker(page).focus();
+  await page.keyboard.press("Tab");
+  await expect(
+    page.getByRole("link", { name: "Open document", exact: true }),
+  ).toBeFocused();
+});
+
 test("dashboard can be pinned and unpinned from the same menu", async ({
   page,
 }) => {

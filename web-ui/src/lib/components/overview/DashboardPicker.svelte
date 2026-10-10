@@ -39,6 +39,12 @@
   let open = $state(false);
   let root = $state();
   let trigger = $state();
+  let menu = $state();
+  /**
+   * Where focus goes when the menu opens: the first item, or the last for
+   * the reader who arrowed up into it. Cleared once it has been honoured.
+   */
+  let focusOnOpen = $state("");
 
   let pinnedSelected = $derived(
     Boolean(selected?.ref) && selected.ref === pinnedRef,
@@ -47,14 +53,128 @@
   function close({ focusTrigger = false } = {}) {
     if (!open) return;
     open = false;
+    focusOnOpen = "";
     if (focusTrigger) trigger?.focus();
   }
 
+  function openMenu(focus = "") {
+    focusOnOpen = focus;
+    if (!open) {
+      open = true;
+      // Lazy, and only while the reader is looking: the read that broke the
+      // native popup is safe here because the list it feeds is ours.
+      onload?.();
+    }
+  }
+
   function toggle() {
-    open = !open;
-    // Lazy, and only while the reader is looking: the read that broke the
-    // native popup is safe here because the list it feeds is ours.
-    if (open) onload?.();
+    if (open) close();
+    else openMenu();
+  }
+
+  /*
+   * The menu-button keyboard pattern, because `role="menu"` promises it.
+   *
+   * Replacing a native `<select>` meant inheriting what a select already
+   * did: Down and Enter open it, the arrows walk it, Home and End jump, and
+   * Escape leaves without choosing. A menu whose only key is Tab is a
+   * control the keyboard reader has to be told about.
+   *
+   * Focus is roving: every item is `tabindex="-1"` and the one in hand is
+   * focused outright, so the arrows move a real focus ring rather than a
+   * highlight the browser knows nothing about.
+   */
+  const items = () => [...(menu?.querySelectorAll("[data-picker-item]") ?? [])];
+
+  function focusItem(index) {
+    const list = items();
+    if (!list.length) return;
+    const wrapped = (index + list.length) % list.length;
+    list[wrapped].focus();
+  }
+
+  function moveFocus(step) {
+    const list = items();
+    const at = list.indexOf(document.activeElement);
+    // Arrowing in from the trigger starts at the end the reader came from.
+    focusItem(at === -1 ? (step > 0 ? 0 : list.length - 1) : at + step);
+  }
+
+  function onTriggerKeydown(event) {
+    if (
+      event.key === "ArrowDown" ||
+      event.key === "Enter" ||
+      event.key === " "
+    ) {
+      event.preventDefault();
+      openMenu("first");
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      openMenu("last");
+    }
+  }
+
+  function onMenuKeydown(event) {
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        moveFocus(1);
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        moveFocus(-1);
+        break;
+      case "Home":
+        event.preventDefault();
+        focusItem(0);
+        break;
+      case "End":
+        event.preventDefault();
+        focusItem(items().length - 1);
+        break;
+      case "Tab":
+        // Tab leaves the menu entirely, as a menu should; `focusout` would
+        // catch it too, but only after the browser has moved on.
+        close();
+        break;
+      default:
+        break;
+    }
+  }
+
+  /*
+   * Hand focus to the menu once it exists. An effect, not a call inside
+   * `openMenu`, because the items are not in the DOM until Svelte has
+   * flushed the `{#if open}`.
+   */
+  $effect(() => {
+    if (!open || !menu || !focusOnOpen) return;
+    const target = focusOnOpen;
+    // Cleared before the list is inspected. Leaving it set on an empty menu
+    // stranded it: `$state` skips an equal write, so a second ArrowDown
+    // asking for the same end would not re-run this and focus never moved.
+    focusOnOpen = "";
+    const list = items();
+    if (!list.length) return;
+    (target === "last" ? list[list.length - 1] : list[0]).focus();
+  });
+
+  /*
+   * Asking for the next page replaces this very button with the loading
+   * note, so the element holding focus leaves the DOM and focus falls to
+   * the body — outside the menu, where the arrow keys no longer reach it.
+   * Re-aim focus at the end of the list once Svelte has flushed.
+   */
+  function loadMore() {
+    // Synchronously, before the parent flips `loading` and unmounts this
+    // very button: the menu is `tabindex="-1"` precisely so it can hold
+    // focus for the instant between. The effect then lands it on a real
+    // item once Svelte has flushed.
+    menu?.focus();
+    focusOnOpen = "last";
+    onload?.();
   }
 
   function choose(entry) {
@@ -110,6 +230,7 @@
     aria-expanded={open}
     data-overview-report-picker
     onclick={toggle}
+    onkeydown={onTriggerKeydown}
   >
     <span class="picker-value"
       >{selected?.title || selected?.id || "Choose a report"}</span
@@ -120,10 +241,20 @@
     <span class="picker-caret" aria-hidden="true">▾</span>
   </button>
   {#if open}
+    <!--
+      `tabindex="-1"` on the menu itself. Focus normally lives on the item
+      in hand — keydown bubbles here from there — but `loadMore` parks it
+      on the menu for the instant its own button is unmounted, and a menu
+      that cannot hold focus would drop the reader on `body`, out of reach
+      of every key below.
+    -->
     <div
       class="picker-menu"
       role="menu"
       aria-label="Report"
+      tabindex="-1"
+      bind:this={menu}
+      onkeydown={onMenuKeydown}
       use:dismissOnEscape={{ onDismiss: () => close({ focusTrigger: true }) }}
     >
       <ul class="picker-list" role="none">
@@ -136,6 +267,8 @@
               class="picker-item"
               class:picker-item--current={entry.id === selected?.id}
               data-overview-report-choice={entry.id}
+              data-picker-item
+              tabindex="-1"
               onclick={() => choose(entry)}
             >
               <span class="picker-check" aria-hidden="true"
@@ -156,7 +289,9 @@
               type="button"
               role="menuitem"
               class="picker-item picker-item--more"
-              onclick={() => onload?.()}>Load more reports</button
+              data-picker-item
+              tabindex="-1"
+              onclick={loadMore}>Load more reports</button
             >
           </li>
         {/if}
@@ -168,6 +303,8 @@
               type="button"
               role="menuitem"
               class="picker-item"
+              data-picker-item
+              tabindex="-1"
               onclick={() => pin(null)}>Use newest report</button
             >
           {:else}
@@ -175,6 +312,8 @@
               type="button"
               role="menuitem"
               class="picker-item"
+              data-picker-item
+              tabindex="-1"
               onclick={() => pin(selected.ref)}>Pin as dashboard</button
             >
           {/if}

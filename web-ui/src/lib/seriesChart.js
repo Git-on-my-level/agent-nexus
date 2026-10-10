@@ -41,6 +41,39 @@ const axisList = (value) =>
   value === undefined ? [] : Array.isArray(value) ? value : [value];
 
 /**
+ * Where one `key=value` ends and the next begins.
+ *
+ * Core writes a stream's name as `<series> k1=v1 k2=v2 …`, joined with
+ * spaces — and a label *value* is arbitrary text up to 128 bytes, so it can
+ * contain spaces of its own (`store.go` constrains the key, not the value).
+ * Splitting on every space therefore chopped `owner=dave saas` into `dave`
+ * and a phantom `saas`, which is another stream's whole identity. Split
+ * before a token that looks like a new key instead; the key's own grammar
+ * (`^[a-z][a-z0-9_.-]{0,79}$`, `series/store.go`) makes that exact.
+ */
+const LABEL_BOUNDARY = / (?=[a-z][a-z0-9_.-]{0,79}=)/;
+
+/**
+ * This stream's label values, in core's order, or `null` when the name is
+ * not one core built from `seriesName`.
+ */
+function streamLabelValues(fullName, seriesName) {
+  const full = String(fullName ?? "").trim();
+  const prefix = String(seriesName ?? "").trim();
+  if (!full || !prefix || full === prefix || !full.startsWith(`${prefix} `))
+    return null;
+  const values = [];
+  for (const pair of full.slice(prefix.length + 1).split(LABEL_BOUNDARY)) {
+    const at = pair.indexOf("=");
+    // A fragment with no `=` is not a pair core wrote; refuse to guess at it.
+    if (at === -1) return null;
+    const value = pair.slice(at + 1).trim();
+    if (value) values.push(value);
+  }
+  return values.length ? values : null;
+}
+
+/**
  * The human name behind `"anx-prs-merged repo=oss"`.
  *
  * Core builds a stream's name by appending its label pairs to the series
@@ -53,18 +86,9 @@ const axisList = (value) =>
  */
 export function seriesStreamLabel(name, seriesName) {
   const full = String(name ?? "").trim();
-  const prefix = String(seriesName ?? "").trim();
   if (!full) return "";
-  if (!prefix || full === prefix || !full.startsWith(`${prefix} `)) return full;
-  const pairs = full
-    .slice(prefix.length + 1)
-    .split(" ")
-    .map((pair) => {
-      const at = pair.indexOf("=");
-      return at === -1 ? pair : pair.slice(at + 1);
-    })
-    .filter(Boolean);
-  return pairs.length ? pairs.join(" · ") : full;
+  const values = streamLabelValues(full, seriesName);
+  return values ? values.join(" · ") : full;
 }
 
 /**
@@ -110,52 +134,106 @@ export function partialBucketStart(series, now) {
   return now >= last && now < last + step ? last : null;
 }
 
+/** Case-folded comparison key for a name. */
+const nameKey = (value) =>
+  String(value ?? "")
+    .trim()
+    .toLocaleLowerCase();
+
+/**
+ * Every name that identifies this stream, for matching an authored one.
+ *
+ * Core builds a stream's name as `<series> key=value …`, so three spellings
+ * identify the same stream: the whole name, the label values with the shared
+ * series prefix dropped, and each label value on its own — which is the one
+ * an author actually writes. `repo=oss` is "OSS".
+ */
+function streamIdentityKeys(fullName, seriesName) {
+  const keys = new Set();
+  const full = String(fullName ?? "").trim();
+  if (!full) return keys;
+  keys.add(nameKey(full));
+  const values = streamLabelValues(full, seriesName);
+  if (!values) return keys;
+  keys.add(nameKey(values.join(" · ")));
+  // Each label value whole — `repo=oss` is "OSS" — never a word inside one.
+  for (const value of values) keys.add(nameKey(value));
+  return keys;
+}
+
 /**
  * The authored declaration behind a bound panel, matched to the live streams.
  *
- * Matched by name, never by position alone. An author writes "OSS" for the
- * stream whose labels reduce to `oss`, so a declared name is compared
- * against both core's full stream name and that reduction.
+ * Matched on identity, never on order. A declared name counts as this
+ * stream's when it is one of the names that identify the stream *and* the
+ * pairing is unambiguous in both directions: exactly one declaration claims
+ * this stream, and no other stream claims that declaration.
  *
- * Position is the last resort, and only when the two lists are the same
- * length — because the live list is not stable. Core drops a stream with no
- * points in the window (`report_series.go`) and orders label sets by their
- * JSON (`series/query.go`), so a quiet week or one new label shifts every
- * later stream up or down. Matching those by index would have put "OSS" on
- * SaaS's numbers, silently, and the author would have no way to see it.
+ * There is deliberately no positional fallback. Ordering the two lists the
+ * same way is not evidence that they describe the same things: core drops a
+ * stream with no points in the window (`report_series.go`) and orders label
+ * sets by their JSON (`series/query.go`), so a quiet week or one new label
+ * shifts every later stream. And an author who writes names the labels do
+ * not contain — "SaaS PRs", "OSS PRs" — gets no match at all, which by index
+ * would have drawn OSS's numbers under SaaS's name with nothing on screen to
+ * show it. A stream whose name cannot be verified keeps the label it
+ * actually has.
  */
 function authoredSeries(panel, liveSeries, seriesName) {
   const option = panel?.fallback?.data?.option;
   if (!record(option) || !Array.isArray(option.series)) return null;
   const declared = option.series.filter(
-    (entry) => record(entry) && SUPPORTED.includes(entry.type),
+    (entry) => record(entry) && SUPPORTED.includes(entry.type) && entry.name,
   );
   if (!declared.length) return null;
-  const key = (value) =>
-    String(value ?? "")
-      .trim()
-      .toLocaleLowerCase();
-  const byName = new Map();
-  for (const entry of declared)
-    if (entry.name) byName.set(key(entry.name), entry);
-  const matched = liveSeries.map(
-    (entry) =>
-      byName.get(key(entry.name)) ??
-      byName.get(key(seriesStreamLabel(entry.name, seriesName))) ??
-      null,
+  const hitsPerStream = liveSeries.map((entry) => {
+    const keys = streamIdentityKeys(entry.name, seriesName);
+    return declared.filter((item) => keys.has(nameKey(item.name)));
+  });
+  /*
+   * Every stream that answers to a declaration is a claimant on it, counted
+   * before any pairing is decided — including a stream that is too ambiguous
+   * to take it. Counting only the streams that had already resolved was not
+   * symmetric: with `env=oss` answering to "OSS" alone and
+   * `repo=oss team=saas` answering to both, the second was discarded for its
+   * own ambiguity and the first then walked off with "OSS" unopposed.
+   */
+  const claims = new Map();
+  for (const hits of hitsPerStream)
+    for (const item of hits) claims.set(item, (claims.get(item) ?? 0) + 1);
+  // One declaration for this stream, and this stream for that declaration.
+  const matched = hitsPerStream.map((hits) =>
+    hits.length === 1 && claims.get(hits[0]) === 1 ? hits[0] : null,
   );
-  // All or nothing on position: a partial positional guess is the
-  // misattribution with extra steps.
-  if (
-    matched.every((entry) => entry === null) &&
-    declared.length === liveSeries.length
-  )
-    return { option, matched: [...declared], complete: true };
   return {
     option,
     matched,
+    /*
+     * The shape the whole panel is in, when every declaration agrees on it.
+     *
+     * A name is a claim about *which* stream this is, and may only be made
+     * on verified identity. A type is not: "this panel is a stacked bar
+     * chart" says nothing about which stream is which, so a stream whose
+     * name could not be verified can still be drawn the way the author drew
+     * every other one. Without this, the commonest authored panel — one
+     * declared series, named something the labels do not contain — silently
+     * lost its bars.
+     */
+    shared: declared.every(
+      (entry) =>
+        entry.type === declared[0].type && sameShape(entry, declared[0]),
+    )
+      ? declared[0]
+      : null,
     complete: matched.every((entry) => entry !== null),
   };
+}
+
+/** Do two declarations ask for the same drawing, apart from their names? */
+function sameShape(a, b) {
+  return (CARRIED[a.type] ?? []).every(
+    (key) => JSON.stringify(a[key] ?? null) === JSON.stringify(b[key] ?? null),
+  );
 }
 
 /**
@@ -178,16 +256,17 @@ export function seriesChartData(panel, { now = Date.now() } = {}) {
   const authored = authoredSeries(panel, live.series, seriesName);
 
   let series = live.series.map((entry, index) => {
-    const declared = authored?.matched[index] ?? null;
+    const named = authored?.matched[index] ?? null;
+    // Identity buys the name; the panel's own shape is the fallback for a
+    // stream whose identity could not be verified.
+    const declared = named ?? authored?.shared ?? null;
     const type = declared?.type ?? entry.type;
     const next = {
       type,
       // The author's word for this stream, then the stream's own labels, then
       // whatever core called it.
       name:
-        declared?.name ||
-        seriesStreamLabel(entry.name, seriesName) ||
-        entry.name,
+        named?.name || seriesStreamLabel(entry.name, seriesName) || entry.name,
       data: entry.data,
     };
     /*
