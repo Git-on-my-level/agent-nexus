@@ -210,7 +210,19 @@ export function seriesChartData(panel, { now = Date.now() } = {}) {
     const affordable =
       stamps.length <= REPORT_CHART_LIMITS.points &&
       series.length * stamps.length <= REPORT_CHART_LIMITS.totalPoints;
-    const labels = affordable ? bucketLabels(stamps) : null;
+    /*
+     * One value per bucket per stream, or no conversion. Core bins, so a
+     * stream never reports the same instant twice — but if one did, folding
+     * it onto a bucket would quietly keep the last of the two and the chart
+     * would be missing a point nobody could see was gone.
+     */
+    const oneEach = series.every((entry) => {
+      const points = (Array.isArray(entry.data) ? entry.data : []).filter(
+        (point) => Array.isArray(point),
+      );
+      return new Set(points.map((point) => point[0])).size === points.length;
+    });
+    const labels = affordable && oneEach ? bucketLabels(stamps) : null;
     if (labels) {
       // The bucket still filling, said in the axis rather than drawn: a
       // category axis takes no reference line.

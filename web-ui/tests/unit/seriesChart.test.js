@@ -265,6 +265,20 @@ describe("what it refuses to restyle", () => {
     expect(validateReportChart(out)).toEqual([]);
   });
 
+  it("keeps the time axis rather than folding two points onto one bucket", () => {
+    // Core bins, so a stream never reports one instant twice — but folding
+    // it would keep the last of the two and lose a point invisibly.
+    const twice = panel({
+      streams: [{ name: "prs-merged repo=oss", values: [1, 2, 3] }],
+      fallback: authored([{ type: "bar", name: "OSS", data: [1] }]),
+    });
+    twice.data.option.series[0].data.push([START + DAY, 9]);
+    const out = seriesChartData(twice, { now: START });
+    expect(out.option.xAxis.type).toBe("time");
+    expect(out.option.series[0].data).toHaveLength(4);
+    expect(validateReportChart(out)).toEqual([]);
+  });
+
   it("labels daily buckets without repeating the year on every one", () => {
     const data = seriesChartData(
       panel({

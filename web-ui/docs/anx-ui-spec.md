@@ -589,10 +589,12 @@ brief, what is waiting on you, work counts, freshness and agent presence). The
 cross-workspace ask read behind that fold runs when the fold is opened, not on
 every visit. Initiatives use the same live-initiatives renderer and projection
 as document reports (`progress.done/total`, `needs[]`). Rows show the first summary line, Markdown checklist
-progress, priority and all human asks outside fenced examples. A report can be pinned as the persistent
-workspace dashboard or reset to newest-report selection. Inline reports show
-the title and panels; project/freshness filters, panel counts and provenance
-inspection remain in Open document. Archive in the
+progress, priority and all human asks outside fenced examples. One control chooses the
+report, pins it as the persistent workspace dashboard and resets to
+newest-report selection; beside it, one link opens the document. Inline
+reports show the panels, and the report title only where the surrounding page
+does not already print it; project/freshness filters, panel counts and
+provenance inspection remain in Open document. Archive in the
 secondary navigation contains archived boards, cards, topics and documents.
 Watching aggregates routine agent edits by board and distinct card, prioritizes
-asks/answers and done/blocked transitions, keeps every material clause visible in the digest, and excludes archived subjects including cards on archived project topics. Report choices load when the selector opens.
+asks/answers and done/blocked transitions, keeps every material clause visible in the digest, and excludes archived subjects including cards on archived project topics. Report choices load when the report control opens, and the list grows in place rather than replacing itself under an open popup.
