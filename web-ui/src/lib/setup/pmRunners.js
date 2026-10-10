@@ -1,7 +1,7 @@
 /**
  * The agent harnesses a PM service can run under, and the argv each one needs.
  *
- * These strings are the same ones `anx pm install`'s interactive wizard offers
+ * These strings are the same ones `anx --as pm pm install`'s interactive wizard offers
  * (`cli/internal/app/pm_wizard.go`). The CLI owns them; this is a copy, because
  * the web UI cannot read Go at runtime and the picker has to produce a runner
  * the CLI will accept without the reader answering a prompt they cannot see.

@@ -262,19 +262,41 @@ describe("PM commands", () => {
   it("names the workspace when the deployment knows its API origin", () => {
     const options = { cliBaseUrl: "https://anx.example.test/o/local/w/ops" };
     expect(pmInstallCommand(options)).toBe(
-      "anx --base-url 'https://anx.example.test/o/local/w/ops' pm install",
+      "anx --base-url 'https://anx.example.test/o/local/w/ops' --as 'pm' pm install",
     );
     expect(pmStatusCommand(options)).toBe(
-      "anx --base-url 'https://anx.example.test/o/local/w/ops' pm status",
+      "anx --base-url 'https://anx.example.test/o/local/w/ops' --as 'pm' pm status",
     );
     expect(pmUninstallCommand(options)).toBe(
-      "anx --base-url 'https://anx.example.test/o/local/w/ops' pm uninstall",
+      "anx --base-url 'https://anx.example.test/o/local/w/ops' --as 'pm' pm uninstall",
     );
   });
 
   it("omits --base-url rather than printing an empty flag", () => {
-    expect(pmInstallCommand()).toBe("anx pm install");
-    expect(pmInstallCommand({ cliBaseUrl: "   " })).toBe("anx pm install");
+    expect(pmInstallCommand()).toBe("anx --as 'pm' pm install");
+    expect(pmInstallCommand({ cliBaseUrl: "   " })).toBe(
+      "anx --as 'pm' pm install",
+    );
+  });
+
+  it("targets the PM profile even when ANX_AS names another agent", () => {
+    const prior = process.env.ANX_AS;
+    process.env.ANX_AS = "codex";
+    try {
+      const options = {
+        cliBaseUrl: "https://anx.example.test/o/local/w/ops",
+      };
+      expect(pmStatusCommand(options)).toBe(
+        "anx --base-url 'https://anx.example.test/o/local/w/ops' --as 'pm' pm status",
+      );
+      expect(pmUninstallCommand(options)).toBe(
+        "anx --base-url 'https://anx.example.test/o/local/w/ops' --as 'pm' pm uninstall",
+      );
+      expect(pmInstallCommand(options)).toContain("--as 'pm' pm install");
+    } finally {
+      if (prior === undefined) delete process.env.ANX_AS;
+      else process.env.ANX_AS = prior;
+    }
   });
 });
 
@@ -283,16 +305,15 @@ describe("PM commands", () => {
  * install wizard, or they get `runner_required` and a dead end.
  *
  * `anx` detects the wizard from the argv shape: the subcommand is `pm
- * install` and no runner flag was given. Global options come before the
- * subcommand, so they shift its position — which is exactly how the first
- * version of this broke (`app.go` matched `len(args) == 2`, true only for a
- * bare `anx pm install`). These assertions pin the shape rather than the
- * position, so the copied command keeps reaching the wizard whatever global
- * options the workspace needs.
+ * install` and no runner flag was given. Global options such as `--as pm`
+ * come before the subcommand, so they shift its position — which is exactly
+ * how the first version of this broke (`app.go` matched `len(args) == 2`).
+ * These assertions pin the shape rather than the position, so the copied
+ * command keeps reaching the wizard whatever global options the workspace needs.
  */
 describe("the setup command reaches the install wizard", () => {
   /** Global options this UI can emit, and whether they take a value. */
-  const GLOBAL_OPTIONS_WITH_VALUES = new Set(["--base-url"]);
+  const GLOBAL_OPTIONS_WITH_VALUES = new Set(["--base-url", "--as"]);
 
   /** The subcommand, the way a CLI reads it: global options, then the verb. */
   function subcommandOf(command) {
@@ -340,7 +361,7 @@ describe("the setup command reaches the install wizard", () => {
       cliBaseUrl: "https://anx.example.test/o/local/w/ops",
     });
     expect(command).toBe(
-      "anx --base-url 'https://anx.example.test/o/local/w/ops' pm install",
+      "anx --base-url 'https://anx.example.test/o/local/w/ops' --as 'pm' pm install",
     );
     // `pm install` is last, so a parser that reads the verb from the tail
     // and one that skips global options both land on the wizard.

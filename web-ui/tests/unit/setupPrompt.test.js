@@ -357,8 +357,8 @@ describe("PM prompt", () => {
     expect(pm).toContain("--as 'pm' pm install --runner 'hermes");
     expect(pm).toContain("--as 'pm' pm status");
     expect(pm).toContain("--as 'pm' --json pm status");
-    expect(pmStatusCommand(options)).toContain(" pm status");
-    expect(pmUninstallCommand(options)).toContain(" pm uninstall");
+    expect(pmStatusCommand(options)).toContain("--as 'pm' pm status");
+    expect(pmUninstallCommand(options)).toContain("--as 'pm' pm uninstall");
     expect(pmStatusCommand(options)).not.toContain("--as 'hermes'");
     expect(pmUninstallCommand(options)).not.toContain("--as 'hermes'");
     expect(pm).not.toContain("--as 'hermes' pm status");

@@ -917,6 +917,23 @@ func TestAgentHelpExamplesUseConfiguredDestinationsAndCallerIdentity(t *testing.
 	if strings.Contains(channels, "127.0.0.1:8000") || !strings.Contains(channels, "ANX_TELEGRAM_WEBHOOK_URL") || !strings.Contains(channels, "ANX_DISCORD_WEBHOOK_URL") {
 		t.Fatalf("PM channel help assumes a local core URL: %s", channels)
 	}
+
+	for _, verb := range []string{"install", "status", "uninstall"} {
+		topic, ok := localHelperTopicByPath("pm " + verb)
+		if !ok {
+			t.Fatalf("missing PM service help topic %q", verb)
+		}
+		help := formatLocalHelperHelp(topic, true)
+		if !strings.Contains(help, "anx --as pm pm "+verb) || strings.Contains(help, "Examples: anx pm "+verb) {
+			t.Fatalf("PM %s help does not select the dedicated PM profile: %s", verb, help)
+		}
+		if verb == "status" || verb == "uninstall" {
+			globalFlags := formatGlobalFlagUsage("pm " + verb)
+			if !strings.Contains(globalFlags, "Examples: anx --as pm pm "+verb) || strings.Contains(globalFlags, "Examples: anx pm "+verb) {
+				t.Fatalf("PM %s global flag help does not select the dedicated PM profile: %s", verb, globalFlags)
+			}
+		}
+	}
 }
 
 func TestRunMetaHelpMentionsOpinionatedSkill(t *testing.T) {

@@ -461,7 +461,7 @@ export function buildPmPrompt({
     "",
     ...enrollStep(2, { base, token, expiry, agentName: PM_AGENT_NAME }),
     "",
-    "3. Install the PM service. `anx pm install` with no --runner opens an",
+    "3. Install the PM service. `anx --as pm pm install` with no --runner opens an",
     "   interactive wizard you cannot answer, so pass the runner explicitly.",
     `   This workspace is set to run the PM with ${runner.label}:`,
     "",

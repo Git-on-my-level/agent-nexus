@@ -1,4 +1,4 @@
-import { anxCommand } from "$lib/setup/setupPrompt.js";
+import { anxCommand, shellQuote } from "$lib/setup/setupPrompt.js";
 
 /**
  * Whether this workspace has a PM agent, and what the UI may therefore show.
@@ -68,6 +68,12 @@ export const UNKNOWN_PM_PRESENCE = Object.freeze({
 
 function text(value) {
   return String(value ?? "").trim();
+}
+
+const PM_AGENT_NAME = "pm";
+
+function pmProfileCommand(cliBaseUrl, rest) {
+  return anxCommand(cliBaseUrl, `--as ${shellQuote(PM_AGENT_NAME)} ${rest}`);
 }
 
 /**
@@ -221,17 +227,17 @@ export function pmOffline(presence) {
  * @param {{ cliBaseUrl?: string }} [options]
  */
 export function pmInstallCommand({ cliBaseUrl = "" } = {}) {
-  return anxCommand(cliBaseUrl, "pm install");
+  return pmProfileCommand(cliBaseUrl, "pm install");
 }
 
 /** The command that reports a PM's local service state. */
 export function pmStatusCommand({ cliBaseUrl = "" } = {}) {
-  return anxCommand(cliBaseUrl, "pm status");
+  return pmProfileCommand(cliBaseUrl, "pm status");
 }
 
 /** The command that removes a PM's local service. */
 export function pmUninstallCommand({ cliBaseUrl = "" } = {}) {
-  return anxCommand(cliBaseUrl, "pm uninstall");
+  return pmProfileCommand(cliBaseUrl, "pm uninstall");
 }
 
 /**

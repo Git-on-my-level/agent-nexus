@@ -595,7 +595,7 @@ and select the workspace with `anx config use <alias>` (or `--workspace <alias>`
 The default `pm` host profile is registered and selected automatically when its
 local runner first connects. An explicitly selected workspace PM remains authoritative.
 
-Run `anx pm install` without a `--runner` flag in a terminal for the onboarding wizard.
+Run `anx --as pm pm install` without a `--runner` flag in a terminal for the onboarding wizard.
 Global flags such as `--base-url`, `--workspace` and `--as` still enter the wizard;
 an explicitly selected workspace is retained. Pick
 a workspace and Hermes, Claude Code, or a custom command. The wizard tests the
@@ -608,13 +608,13 @@ connection; `--json` remains non-interactive. These are optional runner examples
 
 ```sh
 # Claude Code reads the private prompt file through stdin.
-anx pm install --runner "sh -c 'exec claude -p < \"\$1\"' sh {prompt_file}"
+anx --as pm pm install --runner "sh -c 'exec claude -p < \"\$1\"' sh {prompt_file}"
 # Hermes supports a query file; no question text appears in its argv.
-anx pm install --runner 'hermes chat --query-file {prompt_file} -Q'
-anx pm status
-anx pm install --json           # idempotent repair using saved runner config
-anx pm uninstall               # remove locally and reset workspace PM setup
-anx pm uninstall --keep-registration # move machines; preserve expected PM return
+anx --as pm pm install --runner 'hermes chat --query-file {prompt_file} -Q'
+anx --as pm pm status
+anx --as pm pm install --json           # idempotent repair using saved runner config
+anx --as pm pm uninstall               # remove locally and reset workspace PM setup
+anx --as pm pm uninstall --keep-registration # move machines; preserve expected PM return
 ```
 
 The default service profile is `pm`; `--as <name>` chooses another profile.

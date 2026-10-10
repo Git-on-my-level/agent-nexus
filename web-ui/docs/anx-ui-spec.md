@@ -478,17 +478,17 @@ read as "install a PM", which would throw away the reader's draft.
 - **Setup:** exactly one calm entry point, in the slot Ask PM occupies, leading
   to `/pm/setup`. That page says in two sentences that the PM runs on the
   reader's computer through their own agent, gives the copyable
-  `anx pm install` command for this workspace, and shows a live "Waiting for
+  `anx --as 'pm' pm install` command for this workspace, and shows a live "Waiting for
   your PM to connect…" state that flips to "Connected" in place on the first
   heartbeat. PM surfaces appear without a reload. The live watch is bounded:
-  after a few minutes it stops and names the `anx pm status` check instead of
+  after a few minutes it stops and names the `anx --as 'pm' pm status` check instead of
   waiting silently forever, and it spends no requests while the tab is hidden.
 - **`offline`:** PM features stay visible with a quiet "PM offline, last seen
-  X" status and the `anx pm status` hint. Sending stays open; the answer waits
+  X" status and the `anx --as 'pm' pm status` hint. Sending stays open; the answer waits
   for the machine to come back.
 - **Manage:** `/pm/setup` doubles as the status page once a PM exists (state,
   last seen, and the runner and host the PM registered with, plus the
-  `anx pm status` and `anx pm uninstall` commands), reached from the "Manage"
+  `anx --as 'pm' pm status` and `anx --as 'pm' pm uninstall` commands), reached from the "Manage"
   link beside the PM status.
 - **An unknown state shows nothing.** Before the first read returns, after a
   read fails, and against a core with no `/pm/presence` at all, no PM

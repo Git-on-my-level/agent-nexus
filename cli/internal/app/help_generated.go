@@ -1742,6 +1742,12 @@ func formatGlobalFlagUsage(topic string) string {
 	if path == "" {
 		path = "<command>"
 	}
+	if path == "pm install" || path == "pm status" || path == "pm uninstall" {
+		return strings.TrimSpace(fmt.Sprintf(`Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx --as pm %s ... ; anx --as pm --json %s ... ; anx --as pm %s ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>`, path, path, path))
+	}
 	return strings.TrimSpace(fmt.Sprintf(`Global flags:
   Global flags can appear before or after the command path.
   Examples: anx %s ... ; anx --json %s ... ; anx %s ... --json (last two: JSON envelope on stdout)

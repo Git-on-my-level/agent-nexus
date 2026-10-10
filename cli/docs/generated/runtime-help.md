@@ -9682,7 +9682,7 @@ Local Help: pm install
 - Composition: Per-user launchd on macOS or systemd --user on Linux. Uses the selected workspace and profile; stores no credentials in the service definition.
 - JSON body: installed, running, workspace, agent, service, logs, last_claim_at
 - Examples:
-  - `anx pm install`
+  - `anx --as pm pm install`
 
 Flags:
   --wait                       Wait for an accepted connection after install.
@@ -9692,7 +9692,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx pm install ... ; anx --json pm install ... ; anx pm install ... --json (last two: JSON envelope on stdout)
+  Examples: anx --as pm pm install ... ; anx --as pm --json pm install ... ; anx --as pm pm install ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -9709,12 +9709,12 @@ Local Help: pm status
 - Composition: Per-user launchd on macOS or systemd --user on Linux. Uses the selected workspace and profile; stores no credentials in the service definition.
 - JSON body: installed, running, workspace, agent, service, logs, last_claim_at
 - Examples:
-  - `anx pm status`
+  - `anx --as pm pm status`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx pm status ... ; anx --json pm status ... ; anx pm status ... --json (last two: JSON envelope on stdout)
+  Examples: anx --as pm pm status ... ; anx --as pm --json pm status ... ; anx --as pm pm status ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -9731,7 +9731,7 @@ Local Help: pm uninstall
 - Composition: Per-user launchd on macOS or systemd --user on Linux. Uses the selected workspace and profile; stores no credentials in the service definition.
 - JSON body: installed, running, workspace, agent, service, logs, last_claim_at
 - Examples:
-  - `anx pm uninstall`
+  - `anx --as pm pm uninstall`
 
 Flags:
   --keep-registration          Keep workspace onboarding when moving the PM to another computer.
@@ -9739,7 +9739,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx pm uninstall ... ; anx --json pm uninstall ... ; anx pm uninstall ... --json (last two: JSON envelope on stdout)
+  Examples: anx --as pm pm uninstall ... ; anx --as pm --json pm uninstall ... ; anx --as pm pm uninstall ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 

@@ -51,7 +51,7 @@ type pmServiceStatus struct {
 
 func init() {
 	for _, verb := range []string{"install", "status", "uninstall"} {
-		topic := localHelperTopic{Path: "pm " + verb, Summary: map[string]string{"install": "Install or update the PM service on this computer.", "status": "Read the local PM service and last accepted claim.", "uninstall": "Remove the local PM service and reset workspace onboarding."}[verb], JSONShape: "installed, running, workspace, agent, service, logs, last_claim_at", Composition: "Per-user launchd on macOS or systemd --user on Linux. Uses the selected workspace and profile; stores no credentials in the service definition.", Examples: []string{"anx pm " + verb}}
+		topic := localHelperTopic{Path: "pm " + verb, Summary: map[string]string{"install": "Install or update the PM service on this computer.", "status": "Read the local PM service and last accepted claim.", "uninstall": "Remove the local PM service and reset workspace onboarding."}[verb], JSONShape: "installed, running, workspace, agent, service, logs, last_claim_at", Composition: "Per-user launchd on macOS or systemd --user on Linux. Uses the selected workspace and profile; stores no credentials in the service definition.", Examples: []string{"anx --as pm pm " + verb}}
 		if verb == "install" {
 			topic.Flags = []localHelperFlag{{Name: "--wait", Description: "Wait for an accepted connection after install."}, {Name: "--wait-timeout <duration>", Description: "Bound the connection wait (default 90s, maximum 5m)."}, {Name: "--runner <argv>", Description: "Runner command; saved locally for subsequent installs. Use {prompt_file} for a private prompt file, or omit a placeholder to use agentctl's file transport."}}
 		}
@@ -170,7 +170,7 @@ func (a *App) runPMService(ctx context.Context, verb string, args []string, cfg 
 		settings.Runner = firstNonEmpty(runner.value, settings.Runner)
 		argv, e := splitRunnerArgv(settings.Runner)
 		if e != nil || len(argv) == 0 {
-			return nil, errnorm.Usage("runner_required", "set --runner once, or run anx pm install in an interactive terminal for the setup wizard; subsequent non-interactive installs reuse settings.json")
+			return nil, errnorm.Usage("runner_required", "set --runner once, or run anx --as pm pm install in an interactive terminal for the setup wizard; subsequent non-interactive installs reuse settings.json")
 		}
 		binary, e := os.Executable()
 		if e != nil {
