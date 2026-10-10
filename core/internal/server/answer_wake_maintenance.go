@@ -170,7 +170,7 @@ func (m *AnswerWakeMaintainer) dispatch(ctx context.Context, batch primitives.Hu
 	wakeupID := router.WakeupArtifactID(m.workspaceID, batch.ThreadID, batch.BatchID, batch.TargetActorID)
 	refs := append([]string(nil), batch.Refs...)
 	refs = append(refs, "artifact:"+wakeupID)
-	triggerText := fmt.Sprintf("%d answers to your asks are ready. Run `anx await --answers`.", batch.AnswerCount)
+	triggerText := answerWakeTriggerText(batch)
 	artifact := map[string]any{
 		"id":              wakeupID,
 		"kind":            router.WakeArtifactKind,
@@ -212,6 +212,22 @@ func (m *AnswerWakeMaintainer) dispatch(ctx context.Context, batch primitives.Hu
 		return fmt.Errorf("atomically deliver answer batch wake: %w", err)
 	}
 	return nil
+}
+
+func answerWakeTriggerText(batch primitives.HumanAttentionAnswerWakeBatch) string {
+	var accessRefs []string
+	for _, ref := range batch.Refs {
+		if strings.HasPrefix(strings.TrimSpace(ref), "access-request:") {
+			accessRefs = append(accessRefs, strings.TrimSpace(ref))
+		}
+	}
+	if len(accessRefs) == 1 && batch.AnswerCount == 1 {
+		return "Your access request was decided. Run `anx await " + accessRefs[0] + "`."
+	}
+	if len(accessRefs) > 0 {
+		return fmt.Sprintf("%d answers are ready, including %s. Run `anx await --answers`.", batch.AnswerCount, strings.Join(accessRefs, ", "))
+	}
+	return fmt.Sprintf("%d answers to your asks are ready. Run `anx await --answers`.", batch.AnswerCount)
 }
 
 func eventRefs(ids []string) []string {
