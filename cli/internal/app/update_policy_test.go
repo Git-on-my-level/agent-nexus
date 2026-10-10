@@ -48,19 +48,21 @@ func managedUpdateFixture(t *testing.T) (*App, config.Resolved, string) {
 	return a, cfg, path
 }
 
-func TestUpdateReadOnlyAndDryRunExemptions(t *testing.T) {
-	for _, command := range []string{"orient", "help", "inbox list", "await", "doctor", "update status", "version", "work list", "work context", "bridge status", "skills status", "update --check"} {
+func TestUpdateSchedulerRunsAfterBoundedReadsAndWrites(t *testing.T) {
+	for _, command := range []string{"orient", "inbox list", "doctor", "version", "work list", "work context", "bridge status", "skills status", "cards create", "work start"} {
+		if !updateInvocationEligible(command, strings.Fields(command)) {
+			t.Errorf("eligible command did not trigger update check: %s", command)
+		}
+	}
+	for _, command := range []string{"await", "update status", "update --check", "api call", "pm install"} {
 		if updateInvocationEligible(command, strings.Fields(command)) {
-			t.Errorf("read-only command triggers update: %s", command)
+			t.Errorf("ineligible command triggered update: %s", command)
 		}
 	}
 	for _, args := range [][]string{{"cards", "create", "--dry-run"}, {"cards", "create", "--dry-run=true"}, {"host", "enroll", "--plan"}} {
 		if updateInvocationEligible(strings.Join(args[:2], " "), args) {
 			t.Errorf("dry run triggers: %v", args)
 		}
-	}
-	if !updateInvocationEligible("work start", []string{"work", "start", "card:task"}) {
-		t.Fatal("work write is exempt")
 	}
 }
 
@@ -71,7 +73,7 @@ func TestUpdatePolicyAndConcurrentDailyClaim(t *testing.T) {
 	var group sync.WaitGroup
 	for i := 0; i < 30; i++ {
 		group.Add(1)
-		go func() { defer group.Done(); a.maybeScheduleUpdate("cards create", nil, cfg) }()
+		go func() { defer group.Done(); a.maybeScheduleUpdate("orient", nil, cfg) }()
 	}
 	group.Wait()
 	if starts.Load() != 1 {
@@ -85,9 +87,9 @@ func TestUpdatePolicyAndConcurrentDailyClaim(t *testing.T) {
 		t.Fatal("second config bypassed daily claim")
 	}
 	a.now = func() time.Time { return time.Date(2026, 10, 6, 0, 0, 0, 0, time.UTC) }
-	a.maybeScheduleUpdate("cards create", nil, cfg)
+	a.maybeScheduleUpdate("version", []string{"version"}, cfg)
 	if starts.Load() != 2 {
-		t.Fatal("next UTC day did not trigger")
+		t.Fatal("read on next UTC day did not trigger")
 	}
 	a.Getenv = func(key string) string {
 		if key == "ANX_UPDATE_POLICY" {

@@ -111,6 +111,53 @@ func doctorStatus(checks []any, name, status string) bool {
 	return false
 }
 
+func TestDoctorSuggestsUniqueRuntimeAdapterForIdentity(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/readyz":
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		case "/meta/handshake":
+			_, _ = w.Write([]byte(`{"min_cli_version":"0.1.0"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	cli := newTestApp(t)
+	stdout := &strings.Builder{}
+	cli.Stdout = stdout
+	cli.Stderr = &strings.Builder{}
+	cli.Getenv = func(string) string { return "" }
+	cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cli.runtimeIdentity = func() (*runtimeIdentityReport, error) {
+		executionID := "exec-123"
+		return &runtimeIdentityReport{
+			Execution: runtimeIdentityEvidence{ID: &executionID, Confidence: "observed"},
+			Harnesses: []runtimeHarness{{ProviderID: "hermes", Availability: "available"}},
+		}, nil
+	}
+	if code := cli.Run([]string{"--json", "--base-url", server.URL, "doctor"}); code != 0 {
+		t.Fatalf("doctor failed: %d %s", code, stdout.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(stdout.String()), &payload); err != nil {
+		t.Fatal(err)
+	}
+	checks := asSlice(asMap(payload["result"])["checks"])
+	var message string
+	for _, raw := range checks {
+		check := asMap(raw)
+		if anyString(check["name"]) == "identity_resolution" {
+			message = anyString(check["message"])
+		}
+	}
+	if !strings.Contains(message, "anx --as hermes doctor") || !strings.Contains(message, "ANX_AS=hermes") {
+		t.Fatalf("identity check lacks a concrete repair: %s", message)
+	}
+}
+
 func TestBareInvocationUsesSingleEnrolledHostBaseURL(t *testing.T) {
 	home := t.TempDir()
 	_, key, err := ed25519.GenerateKey(rand.Reader)

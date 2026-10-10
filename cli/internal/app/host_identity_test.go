@@ -188,3 +188,42 @@ func TestHostEnrollmentAdoptsOrExcludesLocalProfile(t *testing.T) {
 		})
 	}
 }
+
+func TestFirstHostEnrollmentSetsWorkspaceDefault(t *testing.T) {
+	home := t.TempDir()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/meta/handshake":
+			fmt.Fprint(w, `{"workspace_id":"ws_test","workspace_slug":"personal"}`)
+		case "/auth/hosts/enrollments/headless":
+			w.WriteHeader(http.StatusCreated)
+			fmt.Fprint(w, `{"host":{"id":"host-1","key_id":"key-1","slug":"testhost"}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	a := newTestApp(t)
+	a.UserHomeDir = func() (string, error) { return home, nil }
+	cfg := config.Resolved{BaseURL: server.URL, Timeout: 10_000_000_000}
+	enrolled, err := a.hostEnroll(context.Background(), []string{"--name", "testhost", "--token", "headless"}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !asBool(asMap(enrolled.Data)["workspace_defaulted"]) {
+		t.Fatalf("enrollment did not report the new default: %#v", enrolled.Data)
+	}
+	prefs, err := workspaceconfig.Load(filepath.Join(home, ".config", "anx"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prefs.File.Default != server.URL {
+		t.Fatalf("first enrolled workspace is not the default: %#v", prefs.File)
+	}
+	for _, next := range deriveNextActions("host enroll", nil, enrolled.Data) {
+		if strings.Contains(strings.Join(next.Argv, " "), "config use") {
+			t.Fatalf("already-selected workspace offered as a repair: %#v", next)
+		}
+	}
+}

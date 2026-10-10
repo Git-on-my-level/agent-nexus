@@ -414,14 +414,14 @@ Options:
   --version <tag>         install a specific release tag instead of the recommended/latest version
 
 Behavior:
-  - auto (default) checks on the first successful work write per UTC day in a detached two-minute worker
+  - auto (default) checks after the first successful read or coordination write per UTC day in a detached two-minute worker
   - notify checks without installing and emits one daily warning when a newer release is known
   - off disables automatic checks; ANX_UPDATE_POLICY overrides the saved policy
   - status is offline and separates the observed binary from its installer receipt
   - updates only digest-matching ANX installer-managed releases; rerun scripts/install-anx.sh for old installs
   - verifies the release checksum and executable version; rolls back on replacement verification failure
   - runs the new binary's managed skills sync after replacement
-  - read-only commands, help, local maintenance and dry runs never trigger binary updates
+  - update status stays offline; help, local maintenance and dry runs do not trigger binary updates
   - resolves the latest GitHub release, falling back to its public redirect when the API is rate-limited
   - downloads the matching release archive for the current OS/arch and replaces the current binary
   - reminds managed bridge users to rerun anx bridge install

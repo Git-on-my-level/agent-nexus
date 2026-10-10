@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
 )
 
 func runtimeIdentityFixture() string {
@@ -73,6 +74,26 @@ func TestRuntimeIdentityIsOptionalAndUsesProviderEvidence(t *testing.T) {
 	name, source, err = a.identityName(config.Resolved{})
 	if err != nil || name != "codex" || source != "harness:codex" {
 		t.Fatalf("direct fallback lost: %q %q %v", name, source, err)
+	}
+}
+
+func TestUnresolvedIdentitySuggestsTheOnlyDetectedAdapter(t *testing.T) {
+	a := newTestApp(t)
+	a.Getenv = func(string) string { return "" }
+	a.runtimeIdentity = func() (*runtimeIdentityReport, error) {
+		return &runtimeIdentityReport{Harnesses: []runtimeHarness{{ProviderID: "hermes", Availability: "available"}}}, nil
+	}
+	_, _, err := a.identityName(config.Resolved{})
+	if err == nil {
+		t.Fatal("expected active identity to remain unresolved")
+	}
+	message := err.Error()
+	if !strings.Contains(message, "anx --as hermes doctor") || !strings.Contains(message, "ANX_AS=hermes") {
+		t.Fatalf("missing concrete identity repair: %s", message)
+	}
+	normalized := errnorm.Normalize(err)
+	if got := strings.Join(stringList(asMap(normalized.Details)["next_argv"]), " "); got != "anx --as hermes auth whoami" {
+		t.Fatalf("next action=%q", got)
 	}
 }
 

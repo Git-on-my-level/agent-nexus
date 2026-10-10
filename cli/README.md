@@ -12,7 +12,7 @@ anx --as codex auth whoami
 anx --as codex orient
 ```
 
-Enrollment prints a user code and verification URL for human approval. For CI, use a one-time headless token: `anx host enroll --token <token>`. Enrollment prints `anx config use <alias>` to select that workspace without changing your default. Run `anx config workspaces` when unsure, and use `anx config map "~/work/project/**" <alias>` for directory rules. Preferences are user-global in `~/.config/anx/workspaces.json`; never hardcode `--base-url` in agent prompts. Multiple enrolled workspaces without a selection fail with repair commands. The host key is stored owner-only under `~/.config/anx/hosts/<workspace-key>/`.
+Enrollment prints a user code and verification URL for human approval. For CI, use a one-time headless token: `anx host enroll --token <token>`. The first enrolled workspace becomes the default if none is set; later enrollments preserve that choice and print `anx config use <alias>` to select the new workspace. Run `anx config workspaces` when unsure, and use `anx config map "~/work/project/**" <alias>` for directory rules. Preferences are user-global in `~/.config/anx/workspaces.json`; never hardcode `--base-url` in agent prompts. Multiple enrolled workspaces without a selection fail with repair commands. The host key is stored owner-only under `~/.config/anx/hosts/<workspace-key>/`.
 
 Inside `agentctl run`, the CLI resolves the adapter and run attribution automatically. Use `--as` or `ANX_AS` for a persona or when no harness context is available. See [host and runs runbook](docs/runbook.md) for token scripting and the agentctl subscription recipe.
 
@@ -48,8 +48,9 @@ are excluded along with cards on archived boards.
 ## Release updates
 
 `anx update status|now|policy auto|notify|off` manages installer-owned CLI releases.
-The default `auto` starts a short-lived daily worker on successful coordination
-writes; reads and dry runs remain exempt. `ANX_UPDATE_POLICY=off` disables automatic
-checks in CI. Existing installs need one rerun of `scripts/install-anx.sh` to obtain
+The default `auto` starts a short-lived daily worker after the first successful
+read or coordination write; `anx update status`, help, local maintenance, and dry
+runs remain offline. `ANX_UPDATE_POLICY=off` disables automatic checks in CI.
+Existing installs need one rerun of `scripts/install-anx.sh` to obtain
 a digest-bound ownership receipt. See [self-update policy](docs/self-update.md) for
 rollback, skill sync, compatibility, and the agentctl ergonomics audit.

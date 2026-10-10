@@ -195,7 +195,9 @@ func deriveNextActions(command string, argv []string, value any) []output.NextAc
 			prefix = append(prefix, "--config-dir", dir)
 		}
 		if alias := anyString(root["workspace_alias"]); alias != "" {
-			actions = append(actions, action("Make workspace default", append(append([]string{}, prefix...), "config", "use", alias)...))
+			if !asBool(root["workspace_defaulted"]) {
+				actions = append(actions, action("Make workspace default", append(append([]string{}, prefix...), "config", "use", alias)...))
+			}
 			actions = append(actions, action("Check host", append(append([]string{}, prefix...), "--workspace", alias, "host", "status")...))
 		} else {
 			actions = append(actions, action("Check host", append(append([]string{}, prefix...), "host", "status")...))

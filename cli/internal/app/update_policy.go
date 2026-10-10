@@ -245,8 +245,9 @@ func (a *App) runUpdateStatus(cfg config.Resolved) (*commandResult, error) {
 	}}, nil
 }
 
-// This is deliberately bounded to classified work writes. Local maintenance,
-// reads, streaming waits, dry runs and help cannot trigger binary maintenance.
+// This is deliberately bounded to successful classified reads and writes.
+// Local maintenance, update commands, streaming waits, dry runs and help
+// cannot trigger binary maintenance.
 func updateInvocationEligible(command string, args []string, results ...*commandResult) bool {
 	for _, result := range results {
 		if result != nil {
@@ -256,13 +257,11 @@ func updateInvocationEligible(command string, args []string, results ...*command
 			}
 		}
 	}
-	for _, verb := range strings.Fields(command) {
-		// Await writes delivery receipts but must retain its no-update waiting behavior.
-		if verb == "doctor" || verb == "status" || verb == "await" {
-			return false
-		}
+	if strings.HasPrefix(strings.TrimSpace(command), "update") || strings.TrimSpace(command) == "await" {
+		return false
 	}
-	if commandSideEffectClass(command) != "remote_coordination_write" {
+	sideEffect := commandSideEffectClass(command)
+	if sideEffect != "read_only" && sideEffect != "remote_coordination_write" {
 		return false
 	}
 	// Use the same bool parser as trackedBool; account for all spellings and

@@ -383,13 +383,18 @@ func (a *App) hostEnroll(ctx context.Context, args []string, cfg config.Resolved
 		}
 	}
 	alias := ""
+	workspaceDefaulted := false
 	if err := workspaceconfig.Update(configDir, func(c *workspaceconfig.Catalog) error {
 		alias = c.File.AddAlias(workspaceconfig.DerivedAlias(host), cfg.BaseURL)
+		if strings.TrimSpace(c.File.Default) == "" {
+			c.File.Default = cfg.BaseURL
+			workspaceDefaulted = true
+		}
 		return nil
 	}); err != nil {
 		return nil, errnorm.Wrap(errnorm.KindLocal, "workspace_alias_persist_failed", "host enrolled; workspace alias could not be saved (inspect anx config workspaces)", err)
 	}
-	data := map[string]any{"host": hostData, "adopted": names, "excluded": excludes.values, "workspace_alias": alias, "base_url": cfg.BaseURL}
+	data := map[string]any{"host": hostData, "adopted": names, "excluded": excludes.values, "workspace_alias": alias, "base_url": cfg.BaseURL, "workspace_defaulted": workspaceDefaulted}
 	if cfg.ConfigDir != "" {
 		data["config_dir"] = cfg.ConfigDir
 	}

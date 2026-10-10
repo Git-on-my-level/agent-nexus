@@ -41,8 +41,10 @@ func (a *App) identityName(cfg config.Resolved) (string, string, error) {
 	// Explicit --as/ANX_AS above always wins; missing/old providers keep the direct path.
 	managedRuntimeEvidence := false
 	runtimeReportAvailable := false
+	var report *runtimeIdentityReport
 	if a.runtimeIdentity != nil {
-		if report, err := a.runtimeIdentity(); err == nil && report != nil {
+		if observed, err := a.runtimeIdentity(); err == nil && observed != nil {
+			report = observed
 			runtimeReportAvailable = true
 			managedRuntimeEvidence = report.Execution.ID != nil
 			if report.Provider.ID != nil {
@@ -60,7 +62,7 @@ func (a *App) identityName(cfg config.Resolved) (string, string, error) {
 	if runtimeReportAvailable && managedContext {
 		// A supported provider may intentionally suppress inherited or conflicting
 		// context. Do not resurrect its rejected evidence through the legacy path.
-		return "", "", errnorm.Usage("identity_unresolved", "runtime could not establish the current managed identity; pass --as <name> or set ANX_AS")
+		return "", "", unresolvedIdentityError(report, "runtime could not establish the current managed identity")
 	}
 	// Verified with installed agentctl v0.11.1 on 2026-09-27 by running
 	// `agentctl run -- /bin/sh -c 'env'`: children receive ADAPTER,
@@ -102,7 +104,18 @@ func (a *App) identityName(cfg config.Resolved) (string, string, error) {
 	if a.Getenv("AGENT") == "1" && a.hasOMPAncestor != nil && a.hasOMPAncestor() {
 		return "omp", "harness:omp", nil
 	}
-	return "", "", errnorm.WithDetails(errnorm.Usage("identity_unresolved", "cannot resolve agent identity; pass --as <name> or set ANX_AS"), map[string]any{"next_argv": []string{"anx", "--as", "codex", "auth", "whoami"}})
+	return "", "", unresolvedIdentityError(report, "cannot resolve agent identity")
+}
+
+func unresolvedIdentityError(report *runtimeIdentityReport, reason string) error {
+	message := reason + "; pass --as <registered-agent-name> or set ANX_AS=<registered-agent-name>"
+	details := map[string]any{}
+	if adapters := availableRuntimeAdapters(report); len(adapters) == 1 {
+		name := adapters[0]
+		message = fmt.Sprintf("%s; only detected runtime adapter is %s; try `anx --as %s doctor` or set `ANX_AS=%s`", reason, name, name, name)
+		details["next_argv"] = []string{"anx", "--as", name, "auth", "whoami"}
+	}
+	return errnorm.WithDetails(errnorm.Usage("identity_unresolved", message), details)
 }
 
 func (a *App) ambiguousNativeHarness() bool {

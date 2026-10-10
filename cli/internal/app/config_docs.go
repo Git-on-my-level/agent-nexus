@@ -26,7 +26,7 @@ func envDocText() string {
 
 ANX_AS selects a derived agent. --as wins over ANX_AS. When neither is set, anx checks agentctl run context, then verified harness markers.
 ANX_BASE_URL selects the core workspace. ANX_CONFIG_DIR or --config-dir selects the absolute host config directory when HOME is unavailable, including agentctl command callbacks. ANX_TIMEOUT, ANX_JSON and ANX_NO_COLOR control request and output behavior.
-ANX_UPDATE_POLICY overrides the saved CLI release policy: auto (default), notify, or off. Read-only commands never trigger binary maintenance. Inspect anx update status or anx help update.
+ANX_UPDATE_POLICY overrides the saved CLI release policy: auto (default), notify, or off. Auto checks after the first successful read or coordination write per UTC day in a quiet detached worker; anx update status stays offline. Inspect anx update status or anx help update.
 ANX_ACCESS_TOKEN supplies an explicit bearer for controlled human or test contexts. It does not use the host assertion grant.
 
 Run anx config workspaces when unsure which workspace applies. Use anx config use <alias|url> to set a user-global default, or anx config map "~/work/project/**" <alias|url> for a directory rule. anx config unmap "~/work/project/**" removes a rule. Quote globs so the shell does not expand them.
@@ -40,7 +40,7 @@ func hostIdentityDocText() string {
 Enroll once per workspace with anx host enroll. The owner-only host key lives below ~/.config/anx/hosts/<workspace-key>/.
 For fleet hosts, a granted auth-admin agent runs anx --json host tokens create --label host-b --expires-in 1h and pipes .result.token securely to anx host enroll --token-stdin on host B. Configure the workspace base URL on both hosts; never log the token.
 Only a human can anx auth admins grant|revoke <principal>. Granted agents can anx host enrollments list|approve|deny, host tokens create|list|revoke, and host revoke <host>. An agent cannot revoke its own host.
-Enrollment stores that workspace core in host.json, persists a workspace alias and prints anx config use <alias> to make it default. Enrollment never changes the configured default.
+Enrollment stores that workspace core in host.json and persists a workspace alias. The first enrolled workspace becomes the default when none is configured; later enrollments preserve the current default and print anx config use <alias> to select the new workspace.
 Run anx config workspaces to inspect aliases, enrolled workspaces and the directory rule for cwd. Selection follows --base-url or --workspace, ANX_BASE_URL, directory rule, configured default, then a single enrolled host (source bridge:auto-single). With several enrolled workspaces and no selection, commands fail with repair instructions.
 Use --as <name> or ANX_AS to select a derived agent; agentctl run context and verified harness detection are automatic. anx auth whoami reports the selected host, agent and resolution source.
 

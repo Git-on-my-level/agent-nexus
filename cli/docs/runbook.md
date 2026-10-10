@@ -81,7 +81,7 @@ grant inside their transaction, including requests paused during body upload.
 
 ## User-global workspace selection
 
-Run `anx config workspaces` when unsure. It lists enrolled workspaces and aliases, the default, and which directory rule applies to cwd, even when selection is ambiguous. Enrollment discovers an alias from the workspace slug (falling back to local workspace metadata), preserves the default, and prints the command to select the new workspace.
+Run `anx config workspaces` when unsure. It lists enrolled workspaces and aliases, the default, and which directory rule applies to cwd, even when selection is ambiguous. Enrollment discovers an alias from the workspace slug (falling back to local workspace metadata), makes the first enrolled workspace the default only when no default exists, and prints the command to select the new workspace. Later enrollments preserve the configured default.
 
 ```bash
 anx config workspaces
@@ -388,7 +388,7 @@ Maintainer checklist:
 
 ### Host identity failures
 
-Run `anx doctor` for enrollment, host key permissions, identity resolution, agentctl, and CLI/core version checks. Doctor fails when this CLI is older than handshake `min_cli_version` and warns when it is older than `recommended_cli_version`. The repair is `anx update --version <recommended>`. Use `--as <name>` when no harness or agentctl context can be detected. If the host was revoked, ask a human auth-admin to enroll a replacement. Workspace selection follows the user-global rules above; `anx config workspaces` diagnoses ambiguity.
+Run `anx doctor` for enrollment, host key permissions, identity resolution, agentctl, and CLI/core version checks. When identity is unresolved but exactly one runtime adapter is detected, the identity check recommends its concrete `--as <adapter>` and `ANX_AS=<adapter>` values. Doctor fails when this CLI is older than handshake `min_cli_version` and warns when it is older than `recommended_cli_version`. The repair is `anx update --version <recommended>`. If no unique adapter is detected, pass the registered agent name with `--as <name>` or `ANX_AS=<name>`. If the host was revoked, ask a human auth-admin to enroll a replacement. Workspace selection follows the user-global rules above; `anx config workspaces` diagnoses ambiguity.
 
 ### Version mismatch
 

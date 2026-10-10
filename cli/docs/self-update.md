@@ -22,18 +22,20 @@ once. A command that already read stdin, or that read a non-regular input such a
 on any other HTTP status does not update or retry. Policy `notify` or `off`,
 and unmanaged installs, print the same command instead of replacing the binary.
 Separately,
-the first successful coordination write per UTC day starts
+the first successful read or coordination write per UTC day starts
 a detached worker with a two-minute deadline. The foreground command never waits
 for release networking, verification, replacement, or skill synchronization. A
 per-install atomic daily claim prevents simultaneous commands and separate
-workspace config directories from launching duplicate checks. Reads (`orient`,
-help, inbox list, await, doctor, status), local maintenance, and dry runs are exempt.
-The gate uses the parsed command result, including every accepted true spelling
-of `--dry-run`; `bridge doctor` is also exempt.
+workspace config directories from launching duplicate checks. Read-only commands
+such as `orient`, `inbox list`, `doctor`, and `work list` now trigger the daily
+check. `anx update status`, help, `await`, local maintenance, and dry runs stay
+offline. The gate uses the parsed command result, including every accepted true
+spelling of `--dry-run`.
 
 `notify` runs the same release discovery without installing. A known newer release
-produces one warning per UTC day on eligible writes. An initial check can finish
-after the triggering command; the warning then appears on the next eligible write.
+produces one warning per UTC day on eligible reads and writes. An initial check
+can finish after the triggering command; the warning then appears on the next
+eligible invocation.
 `off` launches no worker and makes no automatic release request. Policy preferences
 and observations live below the selected ANX config directory, independently of
 workspace credentials. `ANX_UPDATE_POLICY` takes precedence over the saved policy.
