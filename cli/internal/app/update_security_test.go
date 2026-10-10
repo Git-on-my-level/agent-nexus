@@ -103,7 +103,7 @@ func TestAssetRedirectAllowlistRequiresHTTPSAndOriginalRepositoryPath(t *testing
 	}
 }
 
-func TestParsedDryRunsAndDiagnosticsNeverTriggerUpdates(t *testing.T) {
+func TestParsedDryRunsStayOfflineAndReadsTriggerUpdates(t *testing.T) {
 	a, cfg, _ := managedUpdateFixture(t)
 	a.startUpdateWorker = func(string, string) error { t.Fatal("dry run started update worker"); return nil }
 	home, _ := a.UserHomeDir()
@@ -128,9 +128,9 @@ func TestParsedDryRunsAndDiagnosticsNeverTriggerUpdates(t *testing.T) {
 			t.Fatalf("parsed dry-run=%s did not return a preview: %s", value, stdout.String())
 		}
 	}
-	for _, command := range []string{"bridge doctor", "doctor", "host status", "orient"} {
-		if updateInvocationEligible(command, strings.Fields(command)) {
-			t.Errorf("eligible diagnostic=%s", command)
+	for _, command := range []string{"doctor", "host status", "orient", "work list"} {
+		if !updateInvocationEligible(command, strings.Fields(command)) {
+			t.Errorf("read did not trigger daily check: %s", command)
 		}
 	}
 	// Repeated flag values follow the parser, and an actual preview result wins

@@ -43,24 +43,28 @@ func managedUpdateFixture(t *testing.T) (*App, config.Resolved, string) {
 	a := newTestApp(t)
 	a.UserHomeDir = func() (string, error) { return home, nil }
 	a.Getenv = func(string) string { return "" }
+	a.StdinIsTTY = func() bool { return true }
+	a.StdoutIsTTY = func() bool { return true }
 	a.now = func() time.Time { return time.Date(2026, 10, 5, 23, 59, 0, 0, time.FixedZone("east", 3600)) }
 	cfg := config.Resolved{ConfigDir: filepath.Join(home, "config"), Timeout: time.Second}
 	return a, cfg, path
 }
 
-func TestUpdateReadOnlyAndDryRunExemptions(t *testing.T) {
-	for _, command := range []string{"orient", "help", "inbox list", "await", "doctor", "update status", "version", "work list", "work context", "bridge status", "skills status", "update --check"} {
+func TestUpdateSchedulerRunsAfterBoundedReadsAndWrites(t *testing.T) {
+	for _, command := range []string{"orient", "inbox list", "doctor", "version", "work list", "work context", "bridge status", "skills status", "cards create", "work start"} {
+		if !updateInvocationEligible(command, strings.Fields(command)) {
+			t.Errorf("eligible command did not trigger update check: %s", command)
+		}
+	}
+	for _, command := range []string{"await", "help", "update status", "update --check", "api call", "pm install"} {
 		if updateInvocationEligible(command, strings.Fields(command)) {
-			t.Errorf("read-only command triggers update: %s", command)
+			t.Errorf("ineligible command triggered update: %s", command)
 		}
 	}
 	for _, args := range [][]string{{"cards", "create", "--dry-run"}, {"cards", "create", "--dry-run=true"}, {"host", "enroll", "--plan"}} {
 		if updateInvocationEligible(strings.Join(args[:2], " "), args) {
 			t.Errorf("dry run triggers: %v", args)
 		}
-	}
-	if !updateInvocationEligible("work start", []string{"work", "start", "card:task"}) {
-		t.Fatal("work write is exempt")
 	}
 }
 
@@ -71,7 +75,7 @@ func TestUpdatePolicyAndConcurrentDailyClaim(t *testing.T) {
 	var group sync.WaitGroup
 	for i := 0; i < 30; i++ {
 		group.Add(1)
-		go func() { defer group.Done(); a.maybeScheduleUpdate("cards create", nil, cfg) }()
+		go func() { defer group.Done(); a.maybeScheduleUpdate("orient", nil, cfg) }()
 	}
 	group.Wait()
 	if starts.Load() != 1 {
@@ -85,9 +89,9 @@ func TestUpdatePolicyAndConcurrentDailyClaim(t *testing.T) {
 		t.Fatal("second config bypassed daily claim")
 	}
 	a.now = func() time.Time { return time.Date(2026, 10, 6, 0, 0, 0, 0, time.UTC) }
-	a.maybeScheduleUpdate("cards create", nil, cfg)
+	a.maybeScheduleUpdate("version", []string{"version"}, cfg)
 	if starts.Load() != 2 {
-		t.Fatal("next UTC day did not trigger")
+		t.Fatal("read on next UTC day did not trigger")
 	}
 	a.Getenv = func(key string) string {
 		if key == "ANX_UPDATE_POLICY" {
@@ -99,6 +103,53 @@ func TestUpdatePolicyAndConcurrentDailyClaim(t *testing.T) {
 	a.maybeScheduleUpdate("cards create", nil, cfg)
 	if starts.Load() != 2 {
 		t.Fatal("off triggered worker")
+	}
+}
+
+func TestUpdateSchedulerSkipsAutomationNonTTYAndPMContexts(t *testing.T) {
+	cases := []struct {
+		name      string
+		ci        string
+		stdinTTY  bool
+		stdoutTTY bool
+		as        string
+		agent     string
+		pmEnv     string
+		pmTurnID  string
+	}{
+		{name: "CI", ci: "true", stdinTTY: true, stdoutTTY: true},
+		{name: "stdin redirected", stdinTTY: false, stdoutTTY: true},
+		{name: "stdout redirected", stdinTTY: true, stdoutTTY: false},
+		{name: "PM profile", stdinTTY: true, stdoutTTY: true, as: "pm"},
+		{name: "resolved PM agent", stdinTTY: true, stdoutTTY: true, agent: "pm"},
+		{name: "PM service environment", stdinTTY: true, stdoutTTY: true, pmEnv: "pm"},
+		{name: "PM turn environment", stdinTTY: true, stdoutTTY: true, pmTurnID: "turn-1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a, cfg, _ := managedUpdateFixture(t)
+			var started atomic.Bool
+			a.startUpdateWorker = func(string, string) error { started.Store(true); return nil }
+			a.StdinIsTTY = func() bool { return tc.stdinTTY }
+			a.StdoutIsTTY = func() bool { return tc.stdoutTTY }
+			a.Getenv = func(key string) string {
+				switch key {
+				case "CI":
+					return tc.ci
+				case "ANX_PM_AGENT":
+					return tc.pmEnv
+				case "ANX_PM_TURN_ID":
+					return tc.pmTurnID
+				}
+				return ""
+			}
+			cfg.As = tc.as
+			cfg.Agent = tc.agent
+			a.maybeScheduleUpdate("work list", []string{"work", "list"}, cfg)
+			if started.Load() {
+				t.Fatal("automatic update started outside an attended non-PM terminal")
+			}
+		})
 	}
 }
 

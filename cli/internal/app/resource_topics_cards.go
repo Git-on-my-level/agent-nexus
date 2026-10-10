@@ -40,7 +40,7 @@ var cardsSubcommandSpec = subcommandSpec{
 		"anx cards reply card:implement-login --to <message-id> --body-file reply.md",
 		"anx cards revise card:implement-login --body-file card.md",
 		"anx cards history card:implement-login",
-		"anx cards assign card:implement-login --assignee-ref actor:agent-alpha",
+		"anx cards assign card:implement-login --assignee-ref \"${ANX_ASSIGNEE_REF:?set this to the intended actor ref}\"",
 		"anx cards resolve card:implement-login --reason \"ok\" --body \"Validated in staging\"",
 		"anx cards move card:implement-login --column review",
 		"anx cards archive card:implement-login --reason \"blocked external\"",

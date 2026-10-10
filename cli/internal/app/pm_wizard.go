@@ -38,7 +38,7 @@ func (a *App) pmInstallWizard(ctx context.Context, cfg config.Resolved) (config.
 	}
 	explicitWorkspace := cfg.Sources["base_url"] == "flag:--base-url" || cfg.Sources["base_url"] == "flag:--workspace"
 	if !explicitWorkspace && len(catalog.Workspaces) == 0 {
-		return cfg, "", errnorm.Usage("workspace_required", "Enroll this computer first with anx host enroll; then run anx pm install")
+		return cfg, "", errnorm.Usage("workspace_required", "Enroll this computer first with anx host enroll; then run anx --as pm pm install")
 	}
 	var n int
 	if !explicitWorkspace {
@@ -142,13 +142,13 @@ func (a *App) waitPMConnection(ctx context.Context, cfg config.Resolved, budget 
 			return nil
 		}
 		if ctx.Err() != nil {
-			return errnorm.New(errnorm.KindNetwork, "timeout", "Local service installed, but no PM connection was confirmed. Inspect anx pm status and its logs; do not reinstall blindly")
+			return errnorm.New(errnorm.KindNetwork, "timeout", "Local service installed, but no PM connection was confirmed. Inspect anx --as pm pm status and its logs; do not reinstall blindly")
 		}
 		if err != nil {
 			return err
 		}
 		if err = sleepCtx(ctx, time.Second); err != nil {
-			return errnorm.New(errnorm.KindNetwork, "timeout", "Local service installed, but no PM connection was confirmed. Inspect anx pm status and its logs")
+			return errnorm.New(errnorm.KindNetwork, "timeout", "Local service installed, but no PM connection was confirmed. Inspect anx --as pm pm status and its logs")
 		}
 	}
 }

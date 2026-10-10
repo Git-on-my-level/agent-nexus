@@ -18,5 +18,8 @@ func TestConfiguredPMActorWarnsWhenMissing(t *testing.T) {
 		if warned != (got == "") {
 			t.Fatalf("warning %q for %q", stderr.String(), got)
 		}
+		if warned && (!strings.Contains(stderr.String(), "anx --as pm pm install") || strings.Contains(stderr.String(), "anx pm install")) {
+			t.Fatalf("warning does not select the PM profile: %q", stderr.String())
+		}
 	}
 }

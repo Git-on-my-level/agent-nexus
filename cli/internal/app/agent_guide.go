@@ -13,7 +13,7 @@ const agentGuideSkillName = "anx-participant"
 
 const agentGuideSkillDescription = "Participate in Agent Nexus work with source authority, scoped session identity, meaningful updates, and evidence-backed completion."
 
-const agentGuideSkillVersion = "anx.participant.v15"
+const agentGuideSkillVersion = "anx.participant.v18"
 
 type guideSection struct {
 	Title string
@@ -29,9 +29,10 @@ func agentGuideSections() []guideSection {
 		{Title: "Setup and identity", Lines: []string{
 			"- Enroll a host once per workspace and machine with `anx host enroll`. A human or explicitly granted auth-admin agent approves the enrollment. Other agents on that host use the same host enrollment.",
 			"- Granting an agent on host X trusts every process that can read X's shared host key and request that agent name. Protect that key as an administration credential. Human invitations and human identity creation remain human-only.",
-			"- For fleet hosts, use an explicitly granted auth-admin agent: `anx --json host tokens create --label host-b --expires-in 1h | jq -er '.result.token' | ssh host-b 'anx host enroll --name host-b --token-stdin'`. Set the workspace base URL on both hosts, disable shell tracing, and never log the secret. Only a human can use `anx auth admins grant|revoke <principal>`; revocation applies on the next request. Agents cannot revoke their own host.",
+			"- For fleet hosts, an explicitly granted auth-admin agent creates a one-time token with `anx host tokens create --label <destination-label>`. Deliver it over an authenticated channel, then pipe it to `anx host enroll --name <destination-slug> --token-stdin` on the destination machine. Replace both placeholders with the real destination values; set the workspace base URL on both machines, disable shell tracing, and never log the secret. Only a human can use `anx auth admins grant|revoke <principal>`; revocation applies on the next request. Agents cannot revoke their own host.",
 			"- Run `anx config workspaces` when unsure which workspace applies. Set a user-global default with `anx config use <alias>` or map a directory with `anx config map \"~/work/project/**\" <alias>`. Use `--workspace <alias>` for an explicit invocation; never hardcode `--base-url` in agent prompts. Preferences live outside git repositories.",
-			"- Set `ANX_AS=<name>` or pass `--as <name>` to select an explicit stable principal. Optional `agentctl identity` evidence can suggest a harness name; check the resolved handle and host in `anx orient`.",
+			"- Set `ANX_AS=<name>` or pass `--as <name>` to select an explicit stable principal. Active `agentctl identity` evidence can resolve the current caller; installed harness availability alone is not caller identity. Check the resolved handle and host in `anx orient`.",
+			"- Run `anx doctor` before authenticated work. If `identity_resolution` fails, pass `--as <agent-name>` or set `ANX_AS=<agent-name>` to the lowercase name of the agent tool you are running in. Its first authenticated call registers that name on this host if it is new. Stop only if you cannot tell which agent tool you are running in; otherwise rerun doctor with that identity.",
 			"- `anx host discover` inspects optional local runtime evidence without uploading it. An installed harness is not proof of a live conversation, history access, or resume support. Generic registration does not require agentctl.",
 		}},
 		{Title: "Participation and source authority", Lines: []string{
@@ -66,7 +67,7 @@ func agentGuideSections() []guideSection {
 			"3. Post `anx cards message card:<slug> --body \"What changed and why\"` after meaningful progress. Include evidence, decisions, blockers, uncertainty and next steps; avoid raw chat copies and repeated unchanged updates. Always name the task explicitly: participation does not change legacy current-card selection.",
 			"4. Report execution blockers on the card. For a consequential human decision, create one recommended ask with `anx ask \"Question\" --subject-ref card:<slug> --recommend \"Preferred answer\"`; keep `next_actor` on the agent and do not also block the card for that question. Withdraw an ask that is no longer needed with `anx ask withdraw <event:ask-id> --reason \"<short reason>\"`. Use `anx work block` only for an authorized Nexus-native task blocked by an execution issue, not as a duplicate of a human ask.",
 			"5. Run `anx await <ask-id>` when one answer gates the next step. For a batch, use `anx await --answers`; `anx orient` and `anx inbox list --status answered` also show replies. Exit 8 means timeout; exit 9 means an individual answer was rejected.",
-			"6. Hermes, Claude Code, and Codex harnesses consume the same workspace-local agent notification: on wake, read `anx inbox list --unread` or `anx orient`, then mark each processed answer with `anx inbox read event:<ask-id>`. `inbox read` marks that answer only, including before wake delivery; `anx notifications read --wakeup-id <id>` separately marks the wake notification read.",
+			"6. Agent wakeups use the same workspace-local notification across supported harnesses: on wake, read `anx inbox list --unread` or `anx orient`, then mark each processed answer with `anx inbox read event:<ask-id>`. `inbox read` marks that answer only, including before wake delivery; `anx notifications read --wakeup-id <id>` separately marks the wake notification read.",
 			"7. Verify acceptance criteria before changing task completion. For an authorized Nexus-native task, `anx work done card:<slug> --evidence <url|event:ref|artifact:ref>` resolves that explicit task and clears legacy presence. Report source-owned completion as attributed evidence for its authorized source workflow. Closing a session or finishing a run never completes a task.",
 		}},
 		{Title: "Runs and output", Lines: []string{
@@ -121,7 +122,7 @@ func init() {
 		Examples: []string{
 			"anx meta skill anx",
 			"anx meta skill anx --write-file ./SKILL.md",
-			"anx meta skill --target cursor --write-file ./SKILL.md",
+			"anx meta skill --target participant --write-file ./SKILL.md",
 		},
 		Flags: []localHelperFlag{
 			{Name: "<target>", Description: "Skill target to render. Use `participant` or `pm`; `anx` and legacy `cursor` export the participant skill."},

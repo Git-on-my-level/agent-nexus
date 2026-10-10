@@ -406,9 +406,10 @@ Setup and identity
 
 - Enroll a host once per workspace and machine with `anx host enroll`. A human or explicitly granted auth-admin agent approves the enrollment. Other agents on that host use the same host enrollment.
 - Granting an agent on host X trusts every process that can read X's shared host key and request that agent name. Protect that key as an administration credential. Human invitations and human identity creation remain human-only.
-- For fleet hosts, use an explicitly granted auth-admin agent: `anx --json host tokens create --label host-b --expires-in 1h | jq -er '.result.token' | ssh host-b 'anx host enroll --name host-b --token-stdin'`. Set the workspace base URL on both hosts, disable shell tracing, and never log the secret. Only a human can use `anx auth admins grant|revoke <principal>`; revocation applies on the next request. Agents cannot revoke their own host.
+- For fleet hosts, an explicitly granted auth-admin agent creates a one-time token with `anx host tokens create --label <destination-label>`. Deliver it over an authenticated channel, then pipe it to `anx host enroll --name <destination-slug> --token-stdin` on the destination machine. Replace both placeholders with the real destination values; set the workspace base URL on both machines, disable shell tracing, and never log the secret. Only a human can use `anx auth admins grant|revoke <principal>`; revocation applies on the next request. Agents cannot revoke their own host.
 - Run `anx config workspaces` when unsure which workspace applies. Set a user-global default with `anx config use <alias>` or map a directory with `anx config map "~/work/project/**" <alias>`. Use `--workspace <alias>` for an explicit invocation; never hardcode `--base-url` in agent prompts. Preferences live outside git repositories.
-- Set `ANX_AS=<name>` or pass `--as <name>` to select an explicit stable principal. Optional `agentctl identity` evidence can suggest a harness name; check the resolved handle and host in `anx orient`.
+- Set `ANX_AS=<name>` or pass `--as <name>` to select an explicit stable principal. Active `agentctl identity` evidence can resolve the current caller; installed harness availability alone is not caller identity. Check the resolved handle and host in `anx orient`.
+- Run `anx doctor` before authenticated work. If `identity_resolution` fails, pass `--as <agent-name>` or set `ANX_AS=<agent-name>` to the lowercase name of the agent tool you are running in. Its first authenticated call registers that name on this host if it is new. Stop only if you cannot tell which agent tool you are running in; otherwise rerun doctor with that identity.
 - `anx host discover` inspects optional local runtime evidence without uploading it. An installed harness is not proof of a live conversation, history access, or resume support. Generic registration does not require agentctl.
 
 
@@ -453,7 +454,7 @@ Daily loop
 3. Post `anx cards message card:<slug> --body "What changed and why"` after meaningful progress. Include evidence, decisions, blockers, uncertainty and next steps; avoid raw chat copies and repeated unchanged updates. Always name the task explicitly: participation does not change legacy current-card selection.
 4. Report execution blockers on the card. For a consequential human decision, create one recommended ask with `anx ask "Question" --subject-ref card:<slug> --recommend "Preferred answer"`; keep `next_actor` on the agent and do not also block the card for that question. Withdraw an ask that is no longer needed with `anx ask withdraw <event:ask-id> --reason "<short reason>"`. Use `anx work block` only for an authorized Nexus-native task blocked by an execution issue, not as a duplicate of a human ask.
 5. Run `anx await <ask-id>` when one answer gates the next step. For a batch, use `anx await --answers`; `anx orient` and `anx inbox list --status answered` also show replies. Exit 8 means timeout; exit 9 means an individual answer was rejected.
-6. Hermes, Claude Code, and Codex harnesses consume the same workspace-local agent notification: on wake, read `anx inbox list --unread` or `anx orient`, then mark each processed answer with `anx inbox read event:<ask-id>`. `inbox read` marks that answer only, including before wake delivery; `anx notifications read --wakeup-id <id>` separately marks the wake notification read.
+6. Agent wakeups use the same workspace-local notification across supported harnesses: on wake, read `anx inbox list --unread` or `anx orient`, then mark each processed answer with `anx inbox read event:<ask-id>`. `inbox read` marks that answer only, including before wake delivery; `anx notifications read --wakeup-id <id>` separately marks the wake notification read.
 7. Verify acceptance criteria before changing task completion. For an authorized Nexus-native task, `anx work done card:<slug> --evidence <url|event:ref|artifact:ref>` resolves that explicit task and clears legacy presence. Report source-owned completion as attributed evidence for its authorized source workflow. Closing a session or finishing a run never completes a task.
 
 
@@ -475,9 +476,9 @@ Host enrollment and derived-agent identity resolution.
 Host identity
 
 Enroll once per workspace with anx host enroll. The owner-only host key lives below ~/.config/anx/hosts/<workspace-key>/.
-For fleet hosts, a granted auth-admin agent runs anx --json host tokens create --label host-b --expires-in 1h and pipes .result.token securely to anx host enroll --token-stdin on host B. Configure the workspace base URL on both hosts; never log the token.
+For fleet hosts, a granted auth-admin agent creates a one-time token with anx host tokens create --label <destination-label> and pipes it to anx host enroll --name <destination-slug> --token-stdin on the destination machine. Replace both placeholders with the actual destination values. Configure the selected workspace URL on both machines; never log the token.
 Only a human can anx auth admins grant|revoke <principal>. Granted agents can anx host enrollments list|approve|deny, host tokens create|list|revoke, and host revoke <host>. An agent cannot revoke its own host.
-Enrollment stores that workspace core in host.json, persists a workspace alias and prints anx config use <alias> to make it default. Enrollment never changes the configured default.
+Enrollment stores that workspace core in host.json and persists a workspace alias. The first enrolled workspace becomes the default when none is configured; later enrollments preserve the current default and print anx config use <alias> to select the new workspace.
 Run anx config workspaces to inspect aliases, enrolled workspaces and the directory rule for cwd. Selection follows --base-url or --workspace, ANX_BASE_URL, directory rule, configured default, then a single enrolled host (source bridge:auto-single). With several enrolled workspaces and no selection, commands fail with repair instructions.
 Use --as <name> or ANX_AS to select a derived agent; agentctl run context and verified harness detection are automatic. anx auth whoami reports the selected host, agent and resolution source.
 
@@ -493,7 +494,7 @@ ANX environment variables
 
 ANX_AS selects a derived agent. --as wins over ANX_AS. When neither is set, anx checks agentctl run context, then verified harness markers.
 ANX_BASE_URL selects the core workspace. ANX_CONFIG_DIR or --config-dir selects the absolute host config directory when HOME is unavailable, including agentctl command callbacks. ANX_TIMEOUT, ANX_JSON and ANX_NO_COLOR control request and output behavior.
-ANX_UPDATE_POLICY overrides the saved CLI release policy: auto (default), notify, or off. Read-only commands never trigger binary maintenance. Inspect anx update status or anx help update.
+ANX_UPDATE_POLICY overrides the saved CLI release policy: auto (default), notify, or off. Auto checks after the first successful read or coordination write per UTC day only from an interactive terminal when CI is unset and the caller is not a PM turn; checks run in a quiet detached worker. anx update status stays offline. Inspect anx update status or anx help update.
 ANX_ACCESS_TOKEN supplies an explicit bearer for controlled human or test contexts. It does not use the host assertion grant.
 
 Run anx config workspaces when unsure which workspace applies. Use anx config use <alias|url> to set a user-global default, or anx config map "~/work/project/**" <alias|url> for a directory rule. anx config unmap "~/work/project/**" removes a rule. Quote globs so the shell does not expand them.
@@ -708,7 +709,7 @@ Usage:
   anx config use <alias|url>
 
 Examples:
-  anx config use personal
+  anx config use "${ANX_WORKSPACE_ALIAS:?set this to an enrolled workspace alias}"
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -729,7 +730,7 @@ Usage:
   anx config map <path-glob> <alias|url>
 
 Examples:
-  anx config map "~/work/demo/**" demo
+  anx config map "${ANX_PROJECT_GLOB:?set this to an absolute project glob}" "${ANX_WORKSPACE_ALIAS:?set this to an enrolled workspace alias}"
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -750,7 +751,7 @@ Usage:
   anx config unmap <path-glob>
 
 Examples:
-  anx config unmap "~/work/demo/**"
+  anx config unmap "${ANX_PROJECT_GLOB:?set this to the existing directory glob}"
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -785,7 +786,7 @@ Global flags:
 Report workspace resolution and local/network preconditions.
 
 ```text
-Doctor: report the resolved workspace and source, enrollment, host key permissions, identity, agentctl and CLI/core version checks. Ambiguous workspace selection fails before networking.
+Doctor: report the resolved workspace and source, enrollment, host key permissions, identity, agentctl and CLI/core version checks. An unresolved identity is a failed check. Pass --as <agent-name> or set ANX_AS=<agent-name> to the lowercase name of the agent tool you are running in; its first authenticated call registers that name on this host if it is new. Stop only if you cannot tell which agent tool you are running in; otherwise rerun doctor with that identity. Missing agentctl is an optional warning for direct anx commands. Ambiguous workspace selection fails before networking.
 
 Usage:
   anx doctor
@@ -5500,14 +5501,14 @@ Options:
   --version <tag>         install a specific release tag instead of the recommended/latest version
 
 Behavior:
-  - auto (default) checks on the first successful work write per UTC day in a detached two-minute worker
+  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal (CI, redirected streams and PM turns are skipped)
   - notify checks without installing and emits one daily warning when a newer release is known
   - off disables automatic checks; ANX_UPDATE_POLICY overrides the saved policy
   - status is offline and separates the observed binary from its installer receipt
   - updates only digest-matching ANX installer-managed releases; rerun scripts/install-anx.sh for old installs
   - verifies the release checksum and executable version; rolls back on replacement verification failure
   - runs the new binary's managed skills sync after replacement
-  - read-only commands, help, local maintenance and dry runs never trigger binary updates
+  - update status stays offline; help, local maintenance and dry runs do not trigger binary updates
   - resolves the latest GitHub release, falling back to its public redirect when the API is rate-limited
   - downloads the matching release archive for the current OS/arch and replaces the current binary
   - reminds managed bridge users to rerun anx bridge install
@@ -5535,14 +5536,14 @@ Options:
   --version <tag>         install a specific release tag instead of the recommended/latest version
 
 Behavior:
-  - auto (default) checks on the first successful work write per UTC day in a detached two-minute worker
+  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal (CI, redirected streams and PM turns are skipped)
   - notify checks without installing and emits one daily warning when a newer release is known
   - off disables automatic checks; ANX_UPDATE_POLICY overrides the saved policy
   - status is offline and separates the observed binary from its installer receipt
   - updates only digest-matching ANX installer-managed releases; rerun scripts/install-anx.sh for old installs
   - verifies the release checksum and executable version; rolls back on replacement verification failure
   - runs the new binary's managed skills sync after replacement
-  - read-only commands, help, local maintenance and dry runs never trigger binary updates
+  - update status stays offline; help, local maintenance and dry runs do not trigger binary updates
   - resolves the latest GitHub release, falling back to its public redirect when the API is rate-limited
   - downloads the matching release archive for the current OS/arch and replaces the current binary
   - reminds managed bridge users to rerun anx bridge install
@@ -5570,14 +5571,14 @@ Options:
   --version <tag>         install a specific release tag instead of the recommended/latest version
 
 Behavior:
-  - auto (default) checks on the first successful work write per UTC day in a detached two-minute worker
+  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal (CI, redirected streams and PM turns are skipped)
   - notify checks without installing and emits one daily warning when a newer release is known
   - off disables automatic checks; ANX_UPDATE_POLICY overrides the saved policy
   - status is offline and separates the observed binary from its installer receipt
   - updates only digest-matching ANX installer-managed releases; rerun scripts/install-anx.sh for old installs
   - verifies the release checksum and executable version; rolls back on replacement verification failure
   - runs the new binary's managed skills sync after replacement
-  - read-only commands, help, local maintenance and dry runs never trigger binary updates
+  - update status stays offline; help, local maintenance and dry runs do not trigger binary updates
   - resolves the latest GitHub release, falling back to its public redirect when the API is rate-limited
   - downloads the matching release archive for the current OS/arch and replaces the current binary
   - reminds managed bridge users to rerun anx bridge install
@@ -6132,7 +6133,7 @@ Local Help: lifecycle verbs
 - Examples:
   - `anx artifacts archive artifact:notes --reason "obsolete"`
   - `anx boards trash board:launch --reason "merged elsewhere" --dry-run --json`
-  - `anx cards archive card:foo --from-file lifecycle.json --actor-id actor:agent-beta`
+  - `anx cards archive card:foo --from-file lifecycle.json --actor-id "${ANX_ACTOR_ID:?set the intended actor id}" --dry-run --json`
 
 Flags:
   --reason <text>              Short audit string stamped on the lifecycle event.
@@ -6688,8 +6689,8 @@ Local Help: docs search
 - Composition: SQLite FTS5 over title, body, summary, source, tags, and comments. Use `--knowledge` for agent-facing docs tagged `knowledge`. `--host` filters knowledge facts that apply to that machine.
 - JSON body: GET `/docs/search?q=` returning `{ documents, next_cursor? }` with optional `search_rank`.
 - Examples:
-  - `anx docs search "runbook" --knowledge --host laptop-a`
-  - `anx docs search "alphawhiz" --knowledge --host laptop-a --limit 20`
+  - `anx docs search "runbook" --knowledge`
+  - `anx docs search "alphawhiz" --knowledge --limit 20`
 
 Flags:
   <q>                          Search query; also accepted as `--q`.
@@ -6736,7 +6737,7 @@ Local Help: docs put
 - Composition: Idempotent by handle: missing handles create, existing handles append a revision and update title/source/tags/hosts/verified_at.
 - JSON body: PUT `/docs/{document_id}` with `{ document, content, content_type }`. Handle is `--handle`, filename stem, or title slug.
 - Examples:
-  - `anx docs put runbook.md --title "Runbook" --tags knowledge --source https://example.invalid/runbook.md --hosts laptop-a --verified-at 2026-09-08T12:00:00Z`
+  - `anx docs put runbook.md --title "Runbook" --tags knowledge --source https://example.invalid/runbook.md`
   - `anx docs put - --handle kb-shared --title "Note" --tags knowledge`
 
 Flags:
@@ -6766,7 +6767,7 @@ Generated Help: docs put
 - Agent notes: Path `{document_id}` is the public handle (or `document:<handle>`). If that handle exists, a new revision is appended and metadata (`title`, `source`, `tags`, `hosts`, `verified_at`) is updated. If it does not exist, the document is created with that handle. Visibility/lifecycle is unchanged. CLI `anx docs put -` reads the body from stdin.
 - Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
 - Examples:
-  - Publish from stdin: `anx docs put - --handle kb-shared --title "Note" --tags knowledge --source https://example.invalid/note.md --hosts laptop-a --verified-at 2026-09-08T12:00:00Z`
+  - Publish from stdin: `anx docs put - --handle kb-shared --title "Note" --tags knowledge --source https://example.invalid/note.md`
 
 Inputs:
   Required:
@@ -7567,7 +7568,7 @@ Local Help: cards assign
 - Composition: Builds a focused `cards.patch` request for the Card ownership field.
 - JSON body: `{ patch: { assignee_refs }, if_updated_at, actor_id? }`; discovers `if_updated_at` from `cards get` when omitted.
 - Examples:
-  - `anx cards assign card:implement-login --assignee-ref actor:agent-alpha`
+  - `anx cards assign card:implement-login --assignee-ref "${ANX_ASSIGNEE_REF:?set this to the intended actor ref}"`
   - `anx cards assign card:implement-login --clear`
 
 Flags:
@@ -8501,8 +8502,7 @@ Local Help: host enroll
 - Side effect class: `remote_coordination_write`
 - Summary: Enroll this machine with interactive approval or a one-time fleet token.
 - Examples:
-  - `anx host enroll --name host-b`
-  - `anx --json host tokens create --label host-b --expires-in 1h | jq -er '.result.token' | ssh host-b 'anx host enroll --name host-b --token-stdin'`
+  - `anx host enroll --name "$(hostname -s | tr A-Z a-z)"`
 
 Flags:
   --name <slug>                Workspace-local host slug.
@@ -8545,8 +8545,8 @@ Local Help: auth admins list
 - Summary: Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
 - Examples:
   - `anx auth admins list`
-  - `anx auth admins grant codex.host-a`
-  - `anx auth admins revoke codex.host-a`
+  - `anx auth admins grant "${ANX_PRINCIPAL:?set this to the intended principal}"`
+  - `anx auth admins revoke "${ANX_PRINCIPAL:?set this to the intended principal}"`
 
 Flags:
   --limit <1..200>             Page size; default 50.
@@ -8589,8 +8589,8 @@ Local Help: auth admins grant
 - Summary: Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents. Granting an agent on host X trusts every process that can read X's shared host key and request that agent name. Agents cannot issue or revoke human invitations, revoke principals, or use the human lockout override.
 - Examples:
   - `anx auth admins list`
-  - `anx auth admins grant codex.host-a`
-  - `anx auth admins revoke codex.host-a`
+  - `anx auth admins grant "${ANX_PRINCIPAL:?set this to the intended principal}"`
+  - `anx auth admins revoke "${ANX_PRINCIPAL:?set this to the intended principal}"`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -8629,8 +8629,8 @@ Local Help: auth admins revoke
 - Summary: Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
 - Examples:
   - `anx auth admins list`
-  - `anx auth admins grant codex.host-a`
-  - `anx auth admins revoke codex.host-a`
+  - `anx auth admins grant "${ANX_PRINCIPAL:?set this to the intended principal}"`
+  - `anx auth admins revoke "${ANX_PRINCIPAL:?set this to the intended principal}"`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -8907,7 +8907,7 @@ Local Help: host revoke
 - Side effect class: `remote_coordination_write`
 - Summary: Revoke a host by ID or slug. Agents cannot revoke their own host.
 - Examples:
-  - `anx host revoke host-b`
+  - `anx host revoke "${ANX_HOST:?set this to the intended host ID or slug}"`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -8930,7 +8930,7 @@ Local Help: meta skill
 - Examples:
   - `anx debug meta skill anx`
   - `anx debug meta skill anx --write-file ./SKILL.md`
-  - `anx debug meta skill --target cursor --write-file ./SKILL.md`
+  - `anx debug meta skill --target participant --write-file ./SKILL.md`
 
 Flags:
   <target>                     Skill target to render. Use `participant` or `pm`; `anx` and legacy `cursor` export the participant skill.
@@ -9111,9 +9111,9 @@ Local Help: host token
 - Side effect class: `local_operational_write`
 - Summary: Print a short-lived derived-agent bearer from the enrolled host.
 - Composition: Host assertion grant; text mode prints only the token.
-- JSON body: `token`, `expires_at`, `agent: {id, handle}`
+- JSON body: `token`, `expires_at`, `agent: {id, handle}
 - Examples:
-  - `anx --json host token --as codex`
+  - `anx --json host token`
 
 
 Global flags:
@@ -9259,7 +9259,7 @@ Local Help: runs ingest
 - Composition: agentctl command appends an owner-only JSON event path. Its child has only PATH and LANG; pass --config-dir and --base-url explicitly. Failures are logged without secrets under <config-dir>/logs/runs-ingest.log.
 - JSON body: Idempotent run upsert result
 - Examples:
-  - `anx --config-dir /absolute/anx --base-url https://anx.example.com runs ingest /absolute/event.json`
+  - `anx --config-dir "${ANX_CONFIG_DIR:?set ANX_CONFIG_DIR to your CLI config directory}" --base-url "${ANX_BASE_URL:?set ANX_BASE_URL to this workspace's core URL}" runs ingest "${ANX_EVENT_FILE:?set ANX_EVENT_FILE to the event file path}"`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -9367,7 +9367,7 @@ Local Help: import apply
 - JSON body: `plan`, `execute`, `results`, `refs`
 - Examples:
   - `anx import apply --plan ./.anx-import/workspace/plan.json`
-  - `anx --as importer import apply --plan ./.anx-import/workspace/plan.json --execute`
+  - `anx import apply --plan ./.anx-import/workspace/plan.json --execute`
 
 Flags:
   --plan <path>                Plan produced by `anx import plan`. Positional form also supported.
@@ -9596,8 +9596,8 @@ Local Help: pm serve
 - Composition: Local runner. Claims one leased turn, writes a small prompt file, launches the configured harness through agentctl, then completes or fails the turn. Does not call a model in-process.
 - JSON body: `turn_id`, `execution_id`, `status`, `provider`, `model`
 - Examples:
-  - `anx --as pm pm serve --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'`
-  - `anx --as pm pm serve --runner 'hermes chat --query-file {prompt_file} -Q'`
+  - `anx pm serve --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'`
+  - `anx pm serve --runner 'hermes chat --query-file {prompt_file} -Q'`
 
 Flags:
   --runner <argv>              Harness argv. Without {prompt}, this is passed to `agentctl run --`. With {prompt_file} (or legacy {prompt}), argv is executed directly after substituting the prompt file path. Evidence refs come from a trailing ---evidence--- block or a JSON evidence_refs array on the reply object (the same object assistant text is read from), never from prose or nested tool output. Topic and document refs are verified like card/work/artifact/event/decision. Replies over the turn's max_output_bytes (default 64000, core's turn-text ceiling) are stored with a visible truncation marker.
@@ -9625,8 +9625,8 @@ Local Help: pm ask
 - Composition: Local helper over `pm conversations create` and `pm conversations message`. A queued turn is not an assistant reply; run `anx pm serve` for that.
 - JSON body: `conversation`, `turn`
 - Examples:
-  - `anx --as maya pm ask "What needs my decision?"`
-  - `anx --as maya pm ask --wait "What needs my decision?"`
+  - `anx pm ask "What needs my decision?"`
+  - `anx pm ask --wait "What needs my decision?"`
 
 Flags:
   --wait                       Poll until the turn has a response, fails, or the deadline passes.
@@ -9656,7 +9656,7 @@ Local Help: pm channels doctor
 - JSON body: `checks`, `ok`
 - Examples:
   - `anx pm channels doctor`
-  - `anx pm channels doctor --telegram-webhook-url http://127.0.0.1:8000/pm/ingress/telegram --discord-webhook-url http://127.0.0.1:8000/pm/ingress/discord`
+  - `anx pm channels doctor --telegram-webhook-url "${ANX_TELEGRAM_WEBHOOK_URL:?set the intended URL to probe}" --discord-webhook-url "${ANX_DISCORD_WEBHOOK_URL:?set the intended URL to probe}"`
 
 Flags:
   --telegram-webhook-url <url> Telegram ingress URL to probe with GET (fake or core). Does not POST an update.
@@ -9682,7 +9682,7 @@ Local Help: pm install
 - Composition: Per-user launchd on macOS or systemd --user on Linux. Uses the selected workspace and profile; stores no credentials in the service definition.
 - JSON body: installed, running, workspace, agent, service, logs, last_claim_at
 - Examples:
-  - `anx pm install`
+  - `anx --as pm pm install`
 
 Flags:
   --wait                       Wait for an accepted connection after install.
@@ -9692,7 +9692,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx pm install ... ; anx --json pm install ... ; anx pm install ... --json (last two: JSON envelope on stdout)
+  Examples: anx --as pm pm install ... ; anx --as pm --json pm install ... ; anx --as pm pm install ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -9709,12 +9709,12 @@ Local Help: pm status
 - Composition: Per-user launchd on macOS or systemd --user on Linux. Uses the selected workspace and profile; stores no credentials in the service definition.
 - JSON body: installed, running, workspace, agent, service, logs, last_claim_at
 - Examples:
-  - `anx pm status`
+  - `anx --as pm pm status`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx pm status ... ; anx --json pm status ... ; anx pm status ... --json (last two: JSON envelope on stdout)
+  Examples: anx --as pm pm status ... ; anx --as pm --json pm status ... ; anx --as pm pm status ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -9731,7 +9731,7 @@ Local Help: pm uninstall
 - Composition: Per-user launchd on macOS or systemd --user on Linux. Uses the selected workspace and profile; stores no credentials in the service definition.
 - JSON body: installed, running, workspace, agent, service, logs, last_claim_at
 - Examples:
-  - `anx pm uninstall`
+  - `anx --as pm pm uninstall`
 
 Flags:
   --keep-registration          Keep workspace onboarding when moving the PM to another computer.
@@ -9739,7 +9739,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx pm uninstall ... ; anx --json pm uninstall ... ; anx pm uninstall ... --json (last two: JSON envelope on stdout)
+  Examples: anx --as pm pm uninstall ... ; anx --as pm --json pm uninstall ... ; anx --as pm pm uninstall ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 

@@ -12,7 +12,7 @@ import (
 	"agent-nexus-cli/internal/errnorm"
 )
 
-var authAdminsSubcommandSpec = subcommandSpec{command: "auth admins", valid: []string{"list", "grant", "revoke"}, examples: []string{"anx auth admins list", "anx auth admins grant codex.host-a", "anx auth admins revoke codex.host-a"}}
+var authAdminsSubcommandSpec = subcommandSpec{command: "auth admins", valid: []string{"list", "grant", "revoke"}, examples: []string{"anx auth admins list", "anx auth admins grant \"${ANX_PRINCIPAL:?set this to the intended principal}\"", "anx auth admins revoke \"${ANX_PRINCIPAL:?set this to the intended principal}\""}}
 var hostEnrollmentsSubcommandSpec = subcommandSpec{command: "host enrollments", valid: []string{"list", "approve", "deny"}, examples: []string{"anx host enrollments list", "anx host enrollments approve ABCD-EFGH", "anx host enrollments deny ABCD-EFGH"}}
 var hostTokensSubcommandSpec = subcommandSpec{command: "host tokens", valid: []string{"create", "list", "revoke"}, examples: []string{"anx host tokens create --label fleet --expires-in 1h", "anx host tokens list", "anx host tokens revoke <token-id>"}}
 
@@ -23,7 +23,7 @@ func init() {
 		{Name: "--token <secret>", Description: "Headless token (prefer --token-stdin to keep secrets out of argv)."},
 		{Name: "--exclude <name>", Description: "Leave this legacy profile standalone; repeatable."},
 		{Name: "--plan", Description: "Show the adoption plan without enrolling."},
-	}, Examples: []string{"anx host enroll --name host-b", "anx --json host tokens create --label host-b --expires-in 1h | jq -er '.result.token' | ssh host-b 'anx host enroll --name host-b --token-stdin'"}})
+	}, Examples: []string{"anx host enroll --name \"$(hostname -s | tr A-Z a-z)\""}})
 
 	for _, spec := range []subcommandSpec{authAdminsSubcommandSpec, hostEnrollmentsSubcommandSpec, hostTokensSubcommandSpec} {
 		for _, verb := range spec.valid {
@@ -44,7 +44,7 @@ func init() {
 			localHelperTopics = append(localHelperTopics, localHelperTopic{Path: spec.command + " " + verb, Summary: summary, Flags: flags, Examples: spec.examples})
 		}
 	}
-	localHelperTopics = append(localHelperTopics, localHelperTopic{Path: "host revoke", Summary: "Revoke a host by ID or slug. Agents cannot revoke their own host.", Examples: []string{"anx host revoke host-b"}})
+	localHelperTopics = append(localHelperTopics, localHelperTopic{Path: "host revoke", Summary: "Revoke a host by ID or slug. Agents cannot revoke their own host.", Examples: []string{"anx host revoke \"${ANX_HOST:?set this to the intended host ID or slug}\""}})
 }
 
 func adminTarget(args []string) (string, error) {

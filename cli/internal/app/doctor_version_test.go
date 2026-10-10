@@ -4,12 +4,14 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/hostidentity"
 )
 
@@ -109,6 +111,80 @@ func doctorStatus(checks []any, name, status string) bool {
 		}
 	}
 	return false
+}
+
+func TestDoctorDoesNotGuessFromOneInstalledAdapter(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/readyz":
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		case "/meta/handshake":
+			_, _ = w.Write([]byte(`{"min_cli_version":"0.1.0"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	cli := newTestApp(t)
+	stdout := &strings.Builder{}
+	cli.Stdout = stdout
+	cli.Stderr = &strings.Builder{}
+	cli.Getenv = func(string) string { return "" }
+	cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cli.runtimeIdentity = func() (*runtimeIdentityReport, error) {
+		executionID := "exec-123"
+		return &runtimeIdentityReport{
+			Execution: runtimeIdentityEvidence{ID: &executionID, Confidence: "observed"},
+			Harnesses: []runtimeHarness{{ProviderID: "hermes", Availability: "available"}},
+		}, nil
+	}
+	if code := cli.Run([]string{"--json", "--base-url", server.URL, "doctor"}); code != 0 {
+		t.Fatalf("doctor failed: %d %s", code, stdout.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(stdout.String()), &payload); err != nil {
+		t.Fatal(err)
+	}
+	checks := asSlice(asMap(payload["result"])["checks"])
+	var identityCheck map[string]any
+	for _, raw := range checks {
+		check := asMap(raw)
+		if anyString(check["name"]) == "identity_resolution" {
+			identityCheck = check
+		}
+	}
+	message := anyString(identityCheck["message"])
+	if anyString(identityCheck["status"]) != "fail" || asBool(identityCheck["ok"]) {
+		t.Fatalf("installed adapter must not resolve caller identity: %#v", identityCheck)
+	}
+	if !strings.Contains(message, "--as <agent-name>") || !strings.Contains(message, "ANX_AS=<agent-name>") || !strings.Contains(message, "lowercase name of the agent tool you are running in") || !strings.Contains(message, "first authenticated call registers that name on this host if it is new") || !strings.Contains(message, "Stop only if you cannot tell which agent tool you are running in") {
+		t.Fatalf("identity check lacks a safe repair: %s", message)
+	}
+	if strings.Contains(message, "hermes") {
+		t.Fatalf("doctor guessed the installed adapter as the caller: %s", message)
+	}
+	for _, raw := range checks {
+		check := asMap(raw)
+		if anyString(check["name"]) == "agentctl_presence" && !asBool(check["ok"]) {
+			t.Fatalf("agentctl absence must not be a failed check: %#v", check)
+		}
+	}
+}
+
+func TestDoctorIdentityFailureNamesTheRequiredSelection(t *testing.T) {
+	check := identityResolutionDoctorCheck("", "", errnorm.Usage("identity_unresolved", "pass --as <agent-name> or set ANX_AS"))
+	if check.OK || check.Status != "fail" || !strings.Contains(check.Message, "--as <agent-name>") || !strings.Contains(check.Message, "ANX_AS=<agent-name>") || !strings.Contains(check.Message, "first authenticated call registers that name on this host if it is new") || !strings.Contains(check.Message, "Stop only if you cannot tell which agent tool you are running in") {
+		t.Fatalf("identity failure should name the exact repair shape: %+v", check)
+	}
+}
+
+func TestDoctorAgentctlAbsenceIsAnOptionalWarning(t *testing.T) {
+	check := agentctlPresenceDoctorCheck(errors.New("agentctl not found"))
+	if !check.OK || check.Status != "warn" || !strings.Contains(check.Message, "optional") {
+		t.Fatalf("agentctl absence should be an optional warning: %+v", check)
+	}
 }
 
 func TestBareInvocationUsesSingleEnrolledHostBaseURL(t *testing.T) {

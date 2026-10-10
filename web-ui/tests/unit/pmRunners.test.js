@@ -13,7 +13,7 @@ import {
 /**
  * The PM runner picker produces a `--runner` the CLI has to accept without a
  * human answering the wizard. The argv strings therefore have to be the same
- * ones `anx pm install`'s wizard offers, and they live in two languages.
+ * ones `anx --as pm pm install`'s wizard offers, and they live in two languages.
  *
  * This reads the wizard source and fails when either side moves, which is the
  * whole reason the duplication is allowed to exist.

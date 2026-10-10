@@ -41,8 +41,10 @@ func (a *App) identityName(cfg config.Resolved) (string, string, error) {
 	// Explicit --as/ANX_AS above always wins; missing/old providers keep the direct path.
 	managedRuntimeEvidence := false
 	runtimeReportAvailable := false
+	var report *runtimeIdentityReport
 	if a.runtimeIdentity != nil {
-		if report, err := a.runtimeIdentity(); err == nil && report != nil {
+		if observed, err := a.runtimeIdentity(); err == nil && observed != nil {
+			report = observed
 			runtimeReportAvailable = true
 			managedRuntimeEvidence = report.Execution.ID != nil
 			if report.Provider.ID != nil {
@@ -60,7 +62,7 @@ func (a *App) identityName(cfg config.Resolved) (string, string, error) {
 	if runtimeReportAvailable && managedContext {
 		// A supported provider may intentionally suppress inherited or conflicting
 		// context. Do not resurrect its rejected evidence through the legacy path.
-		return "", "", errnorm.Usage("identity_unresolved", "runtime could not establish the current managed identity; pass --as <name> or set ANX_AS")
+		return "", "", unresolvedIdentityError("runtime could not establish the current managed identity")
 	}
 	// Verified with installed agentctl v0.11.1 on 2026-09-27 by running
 	// `agentctl run -- /bin/sh -c 'env'`: children receive ADAPTER,
@@ -102,7 +104,14 @@ func (a *App) identityName(cfg config.Resolved) (string, string, error) {
 	if a.Getenv("AGENT") == "1" && a.hasOMPAncestor != nil && a.hasOMPAncestor() {
 		return "omp", "harness:omp", nil
 	}
-	return "", "", errnorm.WithDetails(errnorm.Usage("identity_unresolved", "cannot resolve agent identity; pass --as <name> or set ANX_AS"), map[string]any{"next_argv": []string{"anx", "--as", "codex", "auth", "whoami"}})
+	return "", "", unresolvedIdentityError("cannot resolve agent identity")
+}
+
+const unresolvedIdentityRepair = "pass --as <agent-name> or set ANX_AS=<agent-name> to the lowercase name of the agent tool you are running in; its first authenticated call registers that name on this host if it is new. Stop only if you cannot tell which agent tool you are running in"
+
+func unresolvedIdentityError(reason string) error {
+	message := reason + "; " + unresolvedIdentityRepair
+	return errnorm.Usage("identity_unresolved", message)
 }
 
 func (a *App) ambiguousNativeHarness() bool {

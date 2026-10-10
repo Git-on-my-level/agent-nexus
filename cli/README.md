@@ -2,19 +2,19 @@
 
 ## Quickstart
 
-A human auth-admin bootstraps the workspace, then enrolls each machine once:
+For a local development core, a human auth-admin bootstraps the workspace, then enrolls each machine once:
 
 ```bash
-export ANX_BASE_URL=http://127.0.0.1:8091
+: "${ANX_BASE_URL:?Set to this workspace's reachable core API URL}"
 anx host enroll --plan
-anx host enroll --name my-mac
-anx --as codex auth whoami
-anx --as codex orient
+anx host enroll --name "$(hostname -s | tr A-Z a-z)"
+anx auth whoami
+anx orient
 ```
 
-Enrollment prints a user code and verification URL for human approval. For CI, use a one-time headless token: `anx host enroll --token <token>`. Enrollment prints `anx config use <alias>` to select that workspace without changing your default. Run `anx config workspaces` when unsure, and use `anx config map "~/work/project/**" <alias>` for directory rules. Preferences are user-global in `~/.config/anx/workspaces.json`; never hardcode `--base-url` in agent prompts. Multiple enrolled workspaces without a selection fail with repair commands. The host key is stored owner-only under `~/.config/anx/hosts/<workspace-key>/`.
+Enrollment prints a user code and verification URL for human approval. For a shared deployment, set `ANX_BASE_URL` to its reachable core URL first. For CI, pipe a one-time headless token to `anx host enroll --token-stdin`. The first enrolled workspace becomes the default if none is set; later enrollments preserve that choice and print `anx config use <alias>` to select the new workspace. Run `anx config workspaces` when unsure, and use `anx config map "~/work/project/**" <alias>` for directory rules. Preferences are user-global in `~/.config/anx/workspaces.json`; never hardcode `--base-url` in agent prompts. Multiple enrolled workspaces without a selection fail with repair commands. The host key is stored owner-only under `~/.config/anx/hosts/<workspace-key>/`.
 
-Inside `agentctl run`, the CLI resolves the adapter and run attribution automatically. Use `--as` or `ANX_AS` for a persona or when no harness context is available. See [host and runs runbook](docs/runbook.md) for token scripting and the agentctl subscription recipe.
+Inside `agentctl run`, or where anx sees an unambiguous active harness marker, the CLI may resolve identity automatically. Otherwise, pass `--as <agent-name>` or set `ANX_AS=<agent-name>` to the lowercase name of the agent tool you are running in. Its first authenticated call registers that name on this host if it is new. Doctor gives this repair when `identity_resolution` fails. Stop only if you cannot tell which agent tool you are running in; otherwise rerun doctor with that identity. See [host and runs runbook](docs/runbook.md) for token scripting and the agentctl subscription recipe.
 
 ## Workspace secrets (`anx secret`)
 
@@ -48,8 +48,9 @@ are excluded along with cards on archived boards.
 ## Release updates
 
 `anx update status|now|policy auto|notify|off` manages installer-owned CLI releases.
-The default `auto` starts a short-lived daily worker on successful coordination
-writes; reads and dry runs remain exempt. `ANX_UPDATE_POLICY=off` disables automatic
-checks in CI. Existing installs need one rerun of `scripts/install-anx.sh` to obtain
+The default `auto` starts a short-lived daily worker after the first successful
+read or coordination write; `anx update status`, help, local maintenance, and dry
+runs remain offline. `ANX_UPDATE_POLICY=off` disables automatic checks in CI.
+Existing installs need one rerun of `scripts/install-anx.sh` to obtain
 a digest-bound ownership receipt. See [self-update policy](docs/self-update.md) for
 rollback, skill sync, compatibility, and the agentctl ergonomics audit.
