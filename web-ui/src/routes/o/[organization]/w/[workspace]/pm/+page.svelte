@@ -664,10 +664,7 @@
 <WorkspacePageShell class="pm-page">
   <div class="pm-head">
     <WorkspacePageHeader title="Ask PM">
-      {#snippet subtitle()}<span class="block"
-          >Ask about your tasks. If the PM proposes a change, you approve it in
-          Inbox.</span
-        ><PmStatusBadge
+      {#snippet subtitle()}<PmStatusBadge
           presence={pmState}
           {now}
           manageHref={workspaceHref("/pm/setup")}

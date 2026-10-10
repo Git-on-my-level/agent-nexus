@@ -5,6 +5,14 @@ import { expectPerf } from "../helpers/e2ePerf.js";
 import { holdOpenStream } from "../helpers/openStream.js";
 import { nextPaint } from "../helpers/pageReady.js";
 
+/**
+ * The "+" on a mailbox count says the number is a lower bound; this is
+ * the glyph that explains it. It replaced a sentence printed in the
+ * middle of the mailbox row.
+ */
+const lowerBoundTip = (page) =>
+  page.getByRole("button", { name: /Why the counts end in \+/ });
+
 const ROOT = "/o/local/w/local";
 const LATENCY_MS = 400;
 const ASK = {
@@ -351,9 +359,7 @@ test("Inbox paints first pages without waiting for eight scale-work pages", asyn
   await expect
     .poll(() => calls.filter((call) => call.path === "/work").length)
     .toBe(8);
-  await expect(
-    page.getByText("Not everything is loaded; the counts are lower bounds."),
-  ).toBeVisible();
+  await expect(lowerBoundTip(page)).toBeVisible();
   expect(calls.filter((call) => call.path === "/home/unread")).toHaveLength(1);
   expect(calls.filter((call) => call.path === "/pm/decisions")).toHaveLength(1);
 });
@@ -460,9 +466,7 @@ test("partial archive refresh preserves a validated task, detail, and ordering",
   await page.goto(`${ROOT}/inbox?item=task:card:survivor`);
   const selected = page.getByTestId("inbox-row-task:card:survivor");
   await expect(selected).toHaveAttribute("aria-current", "page");
-  await expect(
-    page.getByText("Not everything is loaded; the counts are lower bounds."),
-  ).toHaveCount(0);
+  await expect(lowerBoundTip(page)).toHaveCount(0);
   const before = await page
     .locator("[data-inbox-row]")
     .evaluateAll((rows) => rows.map((row) => row.dataset.inboxRow));
@@ -472,17 +476,13 @@ test("partial archive refresh preserves a validated task, detail, and ordering",
   await page
     .getByRole("button", { name: "Archive Blocked stale", exact: true })
     .click();
-  await expect(
-    page.getByText("Not everything is loaded; the counts are lower bounds."),
-  ).toBeVisible();
+  await expect(lowerBoundTip(page)).toBeVisible();
   await expect(selected).toHaveAttribute("aria-current", "page");
   await expect(
     page.getByRole("heading", { name: "Blocked survivor", exact: true }),
   ).toBeVisible();
   gates["/inbox:completed:"].resolve();
-  await expect(
-    page.getByText("Not everything is loaded; the counts are lower bounds."),
-  ).toHaveCount(0);
+  await expect(lowerBoundTip(page)).toHaveCount(0);
   await expect(selected).toHaveAttribute("aria-current", "page");
   expect(
     await page
@@ -600,9 +600,7 @@ for (const completedStillPartial of [true, false]) {
       page.getByRole("button", { name: "Stale (1)", exact: true }),
     ).toBeVisible();
     await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toHaveCount(0);
-    await expect(
-      page.getByText("Not everything is loaded; the counts are lower bounds."),
-    ).toHaveCount(0);
+    await expect(lowerBoundTip(page)).toHaveCount(0);
     gates["/inbox:open:"] = deferred();
     if (completedStillPartial) gates["/inbox:completed:next"] = deferred();
     else
@@ -615,9 +613,7 @@ for (const completedStillPartial of [true, false]) {
     await page
       .getByRole("button", { name: "Archive Blocked stale", exact: true })
       .click();
-    await expect(
-      page.getByText("Not everything is loaded; the counts are lower bounds."),
-    ).toBeVisible();
+    await expect(lowerBoundTip(page)).toBeVisible();
     await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toHaveCount(0);
     await expect(page.getByTestId("inbox-row-task:card:scale-0")).toHaveCount(
       0,
@@ -634,9 +630,7 @@ for (const completedStillPartial of [true, false]) {
       ),
     ).toBe(true);
     gates["/inbox:open:"].resolve();
-    await expect(
-      page.getByText("Not everything is loaded; the counts are lower bounds."),
-    ).toHaveCount(0);
+    await expect(lowerBoundTip(page)).toHaveCount(0);
     await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toHaveCount(0);
     if (!completedStillPartial)
       await expect(
@@ -764,9 +758,7 @@ test("a never-resolving unread feed cannot hold asks or revive an answered task"
   await page.clock.fastForward(5_200);
   await expect(page.getByTestId(`inbox-row-${ASK.id}`)).toBeVisible();
   await expect(page.getByTestId("inbox-row-task:card:answered")).toHaveCount(0);
-  await expect(
-    page.getByText("Not everything is loaded; the counts are lower bounds."),
-  ).toBeVisible();
+  await expect(lowerBoundTip(page)).toBeVisible();
 });
 
 test("stalled completed history keeps work suppressed even after the final deadline", async ({

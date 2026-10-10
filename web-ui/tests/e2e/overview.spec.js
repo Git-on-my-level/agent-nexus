@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { deferred, installWorkspaceApi } from "../helpers/workspaceApiMock.js";
@@ -343,8 +344,12 @@ test("seeded CEO Overview screenshot and section order", async ({ page }) => {
     await expect(
       inlineReport.getByRole("button", { name: "Inspect evidence" }),
     ).toHaveCount(0);
-    await expect(inlineReport.locator(".report-footnote")).toHaveCount(0);
     await expect(inlineReport.locator(".report-toolbar")).toHaveCount(0);
+    // One provenance claim per panel. The report used to add its own on top,
+    // in a different shape, saying the same thing less precisely.
+    await expect(
+      inlineReport.locator("> .report-heading [data-anx-provenance]"),
+    ).toHaveCount(0);
     await expect(
       page.getByRole("link", { name: "Open document", exact: true }),
     ).toBeVisible();
@@ -424,40 +429,74 @@ test("work details stay collapsed until requested and exclude archived counts", 
   );
 });
 
-test("dashboard can be pinned and unpinned", async ({ page }) => {
+/** The one dashboard control: a trigger, and the menu it opens. */
+const picker = (page) => page.locator("[data-overview-report-picker]");
+const choices = (page) => page.locator("[data-overview-report-choice]");
+
+test("the dashboard menu lists every report and stays open", async ({
+  page,
+}) => {
   test.skip(BEFORE);
-  const state = await installOverview(page);
+  /*
+   * The bug this replaces: the control was a native `<select>` whose
+   * `pointerdown` fired the lazy read for the rest of the reports. The read
+   * replaced the `<option>` list under the open popup, Chromium closed a
+   * popup whose options had changed, and the reader saw one item and then
+   * nothing. The list is ordinary DOM now, so it grows where it stands.
+   */
+  await installOverview(page);
   await page.goto(OVERVIEW);
-  await page.getByRole("button", { name: "Pin as dashboard" }).click();
+  await expect(page.locator("[data-overview-report]")).toBeVisible();
+  await picker(page).click();
+  await expect(choices(page)).toHaveCount(2);
+  await expect(page.getByRole("menu", { name: "Report" })).toBeVisible();
+
+  const open = await new AxeBuilder({ page })
+    .include('[data-overview-section="reports"]')
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  expect(open.violations).toEqual([]);
+
+  // Escape closes it and gives the trigger back the focus it took.
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu", { name: "Report" })).toHaveCount(0);
+  await expect(picker(page)).toBeFocused();
+
+  await picker(page).click();
+  await choices(page).nth(1).click();
   await expect(
-    page.getByRole("button", { name: "Pinned dashboard" }),
-  ).toBeDisabled();
-  expect(state.writes[0].document_ref).toBe("document:demo-dashboard");
-  await page.getByRole("button", { name: "Use newest report" }).click();
-  await expect(
-    page.getByRole("button", { name: "Pin as dashboard" }),
-  ).toBeEnabled();
-  expect(state.writes[1].document_ref).toBeNull();
+    page.getByRole("heading", { name: "Earlier dashboard", exact: true }),
+  ).toBeVisible();
 });
 
-test("dashboard choices load only when the selector opens", async ({
+test("dashboard can be pinned and unpinned from the same menu", async ({
   page,
 }) => {
   test.skip(BEFORE);
   const state = await installOverview(page);
   await page.goto(OVERVIEW);
+  await picker(page).click();
+  await page.getByRole("menuitem", { name: "Pin as dashboard" }).click();
+  expect(state.writes[0].document_ref).toBe("document:demo-dashboard");
+  await expect(page.locator("[data-overview-report-pinned]")).toBeVisible();
+  await picker(page).click();
+  await page.getByRole("menuitem", { name: "Use newest report" }).click();
+  expect(state.writes[1].document_ref).toBeNull();
+  await expect(page.locator("[data-overview-report-pinned]")).toHaveCount(0);
+});
+
+test("dashboard choices load only when the menu opens", async ({ page }) => {
+  test.skip(BEFORE);
+  const state = await installOverview(page);
+  await page.goto(OVERVIEW);
   await expect(page.locator("[data-overview-report]")).toBeVisible();
   expect(state.selectorReads).toBe(0);
-  await page.getByRole("combobox", { name: "Report", exact: true }).focus();
-  await expect(
-    page
-      .getByRole("combobox", { name: "Report", exact: true })
-      .locator("option"),
-  ).toHaveCount(2);
+  await picker(page).click();
+  await expect(choices(page)).toHaveCount(2);
   expect(state.selectorReads).toBe(1);
 });
 
-test("bookmarked dashboard loads without focusing the selector", async ({
+test("bookmarked dashboard loads without opening the menu", async ({
   page,
 }) => {
   const state = await installOverview(page);
@@ -465,9 +504,8 @@ test("bookmarked dashboard loads without focusing the selector", async ({
   await expect(
     page.getByRole("heading", { name: "Earlier dashboard", exact: true }),
   ).toBeVisible();
-  const selector = page.getByRole("combobox", { name: "Report", exact: true });
-  await expect(selector).toHaveValue("older-dashboard");
-  await expect(selector).not.toBeFocused();
+  await expect(picker(page)).toContainText("Earlier dashboard");
+  await expect(page.getByRole("menu", { name: "Report" })).toHaveCount(0);
   await expect(
     page.getByRole("link", { name: "Open document", exact: true }),
   ).toHaveAttribute(
@@ -482,11 +520,6 @@ test("unknown bookmarked dashboard falls back without repeated selector reads", 
 }) => {
   const state = await installOverview(page);
   await page.goto(`${OVERVIEW}?dashboard=missing-dashboard`);
-  await expect(
-    page
-      .getByRole("combobox", { name: "Report", exact: true })
-      .locator("option"),
-  ).toHaveCount(2);
   await expect(
     page.getByRole("heading", { name: "Demo dashboard", exact: true }),
   ).toBeVisible();
@@ -543,13 +576,13 @@ test("bookmarked report follows cursors and retains earlier choices", async ({
   await expect(
     page.getByRole("heading", { name: "Earlier dashboard", exact: true }),
   ).toBeVisible();
-  const selector = page.getByRole("combobox", { name: "Report" });
-  await expect(selector).toHaveValue("older-dashboard");
+  await expect(picker(page)).toContainText("Earlier dashboard");
   expect(state.cursors).toEqual(["", "page-two"]);
-  await expect(selector.locator("option[value='demo-dashboard']")).toHaveCount(
-    1,
-  );
-  await selector.selectOption("demo-dashboard");
+  await picker(page).click();
+  await expect(
+    page.locator("[data-overview-report-choice='demo-dashboard']"),
+  ).toHaveCount(1);
+  await page.locator("[data-overview-report-choice='demo-dashboard']").click();
   await expect(
     page.getByRole("heading", { name: "Demo dashboard", exact: true }),
   ).toBeVisible();

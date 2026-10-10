@@ -18,6 +18,7 @@
     mergeDashboardReports,
     loadOverview,
   } from "$lib/overview.js";
+  import DashboardPicker from "$lib/components/overview/DashboardPicker.svelte";
   import RecentChanges from "$lib/components/overview/RecentChanges.svelte";
   import { workSummaryCards } from "$lib/workSummaryCards.js";
   import {
@@ -407,10 +408,12 @@
 <svelte:head><title>Overview · Agent Nexus</title></svelte:head>
 
 <WorkspacePageShell>
+  <!--
+    No subtitle. "Every initiative worst first, what changed, then your
+    dashboard" narrated the three sections directly below it, which the reader
+    can see. A heading that needs a sentence is the wrong heading.
+  -->
   <WorkspacePageHeader title="Overview">
-    {#snippet subtitle()}
-      Every initiative worst first, what changed, then your dashboard.
-    {/snippet}
     {#snippet actions()}
       <!--
         The walkthrough was one-shot: "Maybe later" removed the only guided
@@ -522,50 +525,24 @@
       >
         <h2 id="overview-reports" class="text-subtitle text-fg">Dashboard</h2>
         {#if model.reports.status === "ok" && selectedReport}
-          <div class="flex flex-wrap items-center gap-2">
-            {#if reports.length > 1 || model.reports.has_more}
-              <label class="flex items-center gap-2 text-micro text-fg-muted">
-                Report
-                <select
-                  class="ui-input w-auto"
-                  aria-label="Report"
-                  value={selectedReport.id}
-                  onfocus={() => void loadMoreReports()}
-                  onpointerdown={() => void loadMoreReports()}
-                  onchange={(event) => selectReport(event.currentTarget.value)}
-                >
-                  {#each reports as entry (entry.id)}
-                    <option value={entry.id}>{entry.title || entry.id}</option>
-                  {/each}
-                  {#if model.reports.has_more}
-                    <option disabled value="">
-                      {loadingMoreReports
-                        ? "Loading reports…"
-                        : "Other reports"}
-                    </option>
-                  {/if}
-                </select>
-              </label>
-            {/if}
-            <button
-              class="ui-button"
-              disabled={pinning ||
-                model.reports.pinned_ref === selectedReport.ref}
-              onclick={() => pinDashboard(selectedReport.ref)}
-            >
-              {pinning
-                ? "Pinning dashboard…"
-                : model.reports.pinned_ref === selectedReport.ref
-                  ? "Pinned dashboard"
-                  : "Pin as dashboard"}
-            </button>
-            {#if model.reports.pinned_ref}
-              <button
-                class="ui-button"
-                disabled={pinning}
-                onclick={() => pinDashboard(null)}>Use newest report</button
-              >
-            {/if}
+          <!--
+            One control and one link. The row carried a report select, "Pin as
+            dashboard", "Use newest report" and "Open document", plus a "More
+            reports" button below the header — four ways to say "which report".
+            Choosing and pinning are the same decision, so they share the menu.
+          -->
+          <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+            <DashboardPicker
+              {reports}
+              selected={selectedReport}
+              pinnedRef={model.reports.pinned_ref ?? ""}
+              hasMore={model.reports.has_more}
+              loading={loadingMoreReports}
+              {pinning}
+              onload={() => void loadMoreReports()}
+              onselect={selectReport}
+              onpin={(ref) => void pinDashboard(ref)}
+            />
             <a
               class="text-meta text-accent-text hover:underline"
               href={workspaceHref(
@@ -576,15 +553,6 @@
           </div>
         {/if}
       </header>
-      {#if model.reports.status === "ok" && model.reports.has_more}
-        <button
-          class="ui-button m-3"
-          disabled={loadingMoreReports}
-          onclick={() => void loadMoreReports()}
-        >
-          {loadingMoreReports ? "Loading reports…" : "More reports"}
-        </button>
-      {/if}
       {#if pinError}<p
           class="px-3 py-2 text-meta text-danger-text"
           role="alert"
@@ -611,9 +579,12 @@
           </p>
         {/if}
         <div class="px-1 py-2" data-overview-report={selectedReport.id}>
+          <!-- The picker above names the report; the embed does not name it
+               again directly under it. -->
           <VisualReport
             compact
             report={selectedReport.report}
+            documentTitle={selectedReport.title || ""}
             documentId={selectedReport.id}
             revisionRef={selectedReport.revision_ref ?? ""}
           />

@@ -315,7 +315,21 @@ describe("the digest's decision items", () => {
     });
     expect(strip).not.toBeNull();
     expect(strip.items[0].kind).toBe("decision_created");
-    expect(strip.summary).toBe("1 new decision");
+    // One change needs no count above it: the row is the summary, and
+    // "1 new decision" over a single decision row said it twice.
+    expect(strip.summary).toBe("");
+    expect(strip.counts.decision_created).toBe(1);
+  });
+
+  it("summarizes once there is more than one change to read", () => {
+    const strip = sinceYouLastLookedStrip({
+      since: "2026-10-04T12:00:00Z",
+      items: [
+        { kind: "decision_created", ref: "decision:launch", title: "Launch" },
+        { kind: "decision_created", ref: "decision:pricing", title: "Pricing" },
+      ],
+    });
+    expect(strip.summary).toBe("2 new decisions");
   });
 
   it("matches the kinds the OpenAPI enum declares", () => {

@@ -80,13 +80,45 @@ export function sinceYouLastLookedStrip(digest, { limit = 6 } = {}) {
 
   return {
     since: asText(digest.since),
-    items: shown,
+    items: shown.map((item) => ({
+      ...item,
+      /*
+       * The label is dropped when the title already carries it. An ask
+       * titled "Ask answered" rendered as "Ask answered answered"; the row
+       * only needs the word the title does not already say.
+       */
+      label: titleSays(item.title, item.label) ? "" : item.label,
+    })),
     // Both the server's cap and this strip's own cap are "there is more".
     overflow: Math.max(0, items.length - shown.length),
     truncated: digest.truncated === true,
     counts,
-    summary: summarize(counts),
+    /*
+     * The one-line reading, when there is more than one change to read.
+     * A single change already has a row of its own, and "1 ask answered"
+     * above "Ask answered" is the same fact twice.
+     */
+    summary: items.length > 1 ? summarize(counts) : "",
   };
+}
+
+/**
+ * Does the row's own title already say what the label would?
+ *
+ * Word-wise rather than by substring, so "answered" matches a title ending
+ * in "answered" but not one about "unanswered questions".
+ */
+function titleSays(title, label) {
+  const words = (value) =>
+    String(value ?? "")
+      .toLocaleLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .trim()
+      .split(" ")
+      .filter(Boolean);
+  const inTitle = new Set(words(title));
+  const wanted = words(label);
+  return wanted.length > 0 && wanted.every((word) => inTitle.has(word));
 }
 
 /** A one-line reading of the whole digest, for the strip's heading. */

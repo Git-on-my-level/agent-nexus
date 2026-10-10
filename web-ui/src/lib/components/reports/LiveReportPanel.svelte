@@ -26,6 +26,14 @@
   );
   let live = $derived(panel.live);
   let items = $derived(live?.data?.items ?? []);
+  /*
+   * Does this asks panel hold both answered and open items? Only then does
+   * each row need to say which it is.
+   */
+  let asksMixState = $derived(
+    items.some((item) => item.status === "answered") &&
+      items.some((item) => item.status !== "answered"),
+  );
   let buckets = $derived(live?.data?.buckets ?? []);
   let fleetHosts = $derived(live?.data?.hosts ?? []);
   let fleetEnrollments = $derived(live?.data?.enrollments ?? []);
@@ -79,10 +87,13 @@
                 )}>{item.title}</a
               >{:else}<strong>{item.title}</strong>{/if}
             <p class="muted">
-              {item.status === "answered" ? "Answered" : "Needs an answer"} · {formatLiveAge(
-                item.age_seconds,
-                now,
-              )}
+              <!-- The state word only where the panel holds both kinds. A
+                   view of open asks says "Needs an answer" in its own
+                   heading; repeating it on every row said it N+1 times. -->
+              {#if asksMixState}{item.status === "answered"
+                  ? "Answered"
+                  : "Needs an answer"} ·
+              {/if}{formatLiveAge(item.age_seconds, now)}
             </p>
             {#if item.response_text}<p>{item.response_text}</p>{/if}
           </li>

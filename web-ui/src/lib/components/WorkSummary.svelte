@@ -65,6 +65,10 @@
    * The computed reason, as the badge's accessible name and tooltip. At header
    * density it is also on screen: a page has room for the sentence, and
    * "Blocked" without "waiting on review" sends the reader looking for it.
+   *
+   * No tooltip where there is no reason. `workSummary.js` drops a reason that
+   * only restates the label, and a tip reading "Backlog" over a badge reading
+   * `Backlog` is a hover that costs a reader a second to learn nothing.
    */
   let statusTitle = $derived(
     [status?.label, status?.reason].filter(Boolean).join(" — "),
@@ -123,7 +127,7 @@
         class="ui-badge ui-badge--{status.tone} summary__badge"
         data-health={status.state}
         aria-label={statusTitle}
-        use:tooltip={statusTitle}
+        use:tooltip={status.reason ? statusTitle : ""}
       >
         <span class="summary__glyph" aria-hidden="true">{status.glyph}</span>
         <span class="summary__label">{status.label}</span>
@@ -268,7 +272,15 @@
                     >
                   {/if}
                   {#if step.at}
-                    <Time value={step.at} {now} verb="moved" class="step-age" />
+                    <!--
+                      The span, not the `class` prop: a class handed to a
+                      child component never picks up this file's scope, so
+                      `.step-age` matched nothing and the date wrapped onto
+                      its own line inside a 17rem card.
+                    -->
+                    <span class="step-age">
+                      <Time value={step.at} {now} verb="moved" />
+                    </span>
                   {/if}
                 </span>
               {/each}
@@ -466,23 +478,33 @@
     white-space: nowrap;
   }
   /*
-   * The three lists: a short label, then its rows beside it. One grid, so the
-   * labels line up down the card and the rows share one left edge — on a
-   * phone as well, where a stacked label per group would cost three lines to
-   * say three words.
+   * The three lists: a small label over its rows.
+   *
+   * This was a two-column grid, which sized its label column to "Recently
+   * completed" and left the titles and dates sharing what was left of a 17rem
+   * card — enough to wrap "Oct 7" onto two lines. A label is three words read
+   * once; the rows are what the card is for, so the rows get the width.
    */
   .summary__steps {
     display: grid;
-    grid-template-columns: max-content minmax(0, 1fr);
-    gap: 4px 10px;
-    align-items: baseline;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
     font-size: 12.5px;
   }
   .step-label {
     color: var(--fg-subtle, var(--fg-muted));
-    font-size: 11px;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
     line-height: 1.5;
     white-space: nowrap;
+  }
+  /* Air between groups, never above the first one. */
+  .step-label + .step-rows {
+    margin-bottom: 4px;
+  }
+  .step-rows + .step-label {
+    margin-top: 4px;
   }
   .step-rows {
     display: grid;
@@ -515,6 +537,8 @@
     color: var(--fg-subtle, var(--fg-muted));
     font-size: 11px;
     font-variant-numeric: tabular-nums;
+    /* "Oct 7" is one token to a reader; it must never break across lines. */
+    white-space: nowrap;
   }
   .step-more {
     color: var(--fg-subtle, var(--fg-muted));

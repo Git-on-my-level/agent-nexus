@@ -706,10 +706,17 @@ Work reads apply board/project scope and a 2,000 candidate cap in SQL before
 materialization; equal scopes share one read per request. A capped read is marked
 truncated, so it does not claim complete coverage.
 
-The Overview uses compact rendering: report title and panels. Project filters,
-counts, freshness controls and provenance details are available through its
-**Open document** link. The reusable `LiveInitiatives.svelte` expects the shared
+The Overview uses compact rendering: panels, and the report title only when the
+surrounding page does not already print it. Project filters, counts, freshness
+controls and provenance details are available through its **Open document**
+link. One control chooses, pins and unpins the dashboard — a menu listing every
+report, loaded the first time it opens — and a report's choices are never read
+before then. The reusable `LiveInitiatives.svelte` expects the shared
 `progress.done/total` and `needs[]` projection for the Overview initiatives section.
+
+Freshness is stated once per panel, on its provenance chip. Neither the report
+nor the embedding page adds a second claim of its own, and a panel's eyebrow is
+dropped when the panel title already says what kind it is.
 
 ## Live first and review deadlines
 
@@ -718,6 +725,30 @@ Dashboards default to live asks, initiatives and activity. Use `live-cards` with
 and roles are optional bounded work annotations set on create or annotate;
 status matches the card phase, including closed work. Query results remain
 permission-filtered and expose truncation when the candidate cap is reached.
+
+### A bound chart's presentation
+
+Core materializes a bound `chart` from raw points the only way it can: one
+`line` series per label set, named `"<series> key=value"`, on a time axis. The
+client applies the panel's own declaration on top, taking nothing from outside
+the panel:
+
+- **Series names.** The authored `fallback` snapshot's series names are used in
+  order, matched by name first and by position second — so `OSS` and `SaaS`
+  replace `prs-merged repo=oss` and `prs-merged repo=saas`. With no fallback,
+  the shared series-name prefix is dropped and the label values remain
+  (`repo=oss` → `oss`). Names that would collide fall back to core's.
+- **Type and stacking.** `type`, `stack`, `smooth`, `step`, `areaStyle`,
+  `barWidth` and `symbolSize` come from the fallback's series; `palette`,
+  `caption` and `legend.show` come from its chart. Bars and stacks need a
+  category axis, so the live points are rebinned onto the buckets core already
+  returned — one entry per bucket, `null` where a stream had no point. Where
+  the buckets cannot be given distinct labels the panel keeps its time axis and
+  drops only the stack.
+- **The partial bucket.** The last bin ends in the future, so a daily count
+  read at 09:00 plots two hours against whole days and appears to crash to
+  zero. On a time axis it carries a silent `Partial` reference line; on a
+  category axis its label ends `(so far)`.
 
 A `live-timeline` binds an adapter-fed series through `source` like other series
 panels, with `data: {}`. It returns the newest individual observations as

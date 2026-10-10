@@ -31,23 +31,23 @@ Do **not** introduce the older `--ui-*` or `gray-*` style-guide vocabulary in ne
 code. Those names described an abandoned documentation draft and are not exposed
 by the current Tailwind theme.
 
-| Purpose | CSS variable | Tailwind key | Value |
-| --- | --- | --- | --- |
-| Page background | `--bg` | `bg-bg` | `#0b0d12` |
-| Muted page/inset surface | `--bg-soft` | `bg-bg-soft` | `#11141b` |
-| Panel/card surface | `--panel` | `bg-panel` | `#161922` |
-| Hovered panel surface | `--panel-hover` | `bg-panel-hover` | `#1b1f2a` |
-| Subtle divider | `--line-subtle` | `border-line-subtle` | `#1e2230` |
-| Standard divider | `--line` | `border-line` | `#2a2f3d` |
-| Strong divider | `--line-strong` | `border-line-strong` | `#3a4050` |
-| Primary text | `--fg` | `text-fg` | `#e8ebf1` |
-| Muted readable text | `--fg-muted` | `text-fg-muted` | `#a1a7b4` |
-| Subtle/decorative text | `--fg-subtle` | `text-fg-subtle` | `#7b8494` |
-| Accent/focus | `--accent` | `text-accent` / `border-accent` | `#22d3ee` |
-| Accent hover | `--accent-hover` | `text-accent-hover` | `#67e8f9` |
-| Accent solid surface | `--accent-solid` | `bg-accent-solid` | `#155e75` |
-| Accent link text | `--accent-text` | `text-accent-text` | `#5eead4` |
-| Accent soft surface | `--accent-soft` | `bg-accent-soft` | `rgba(34, 211, 238, 0.12)` |
+| Purpose                  | CSS variable     | Tailwind key                    | Value                      |
+| ------------------------ | ---------------- | ------------------------------- | -------------------------- |
+| Page background          | `--bg`           | `bg-bg`                         | `#0b0d12`                  |
+| Muted page/inset surface | `--bg-soft`      | `bg-bg-soft`                    | `#11141b`                  |
+| Panel/card surface       | `--panel`        | `bg-panel`                      | `#161922`                  |
+| Hovered panel surface    | `--panel-hover`  | `bg-panel-hover`                | `#1b1f2a`                  |
+| Subtle divider           | `--line-subtle`  | `border-line-subtle`            | `#1e2230`                  |
+| Standard divider         | `--line`         | `border-line`                   | `#2a2f3d`                  |
+| Strong divider           | `--line-strong`  | `border-line-strong`            | `#3a4050`                  |
+| Primary text             | `--fg`           | `text-fg`                       | `#e8ebf1`                  |
+| Muted readable text      | `--fg-muted`     | `text-fg-muted`                 | `#a1a7b4`                  |
+| Subtle/decorative text   | `--fg-subtle`    | `text-fg-subtle`                | `#7b8494`                  |
+| Accent/focus             | `--accent`       | `text-accent` / `border-accent` | `#22d3ee`                  |
+| Accent hover             | `--accent-hover` | `text-accent-hover`             | `#67e8f9`                  |
+| Accent solid surface     | `--accent-solid` | `bg-accent-solid`               | `#155e75`                  |
+| Accent link text         | `--accent-text`  | `text-accent-text`              | `#5eead4`                  |
+| Accent soft surface      | `--accent-soft`  | `bg-accent-soft`                | `rgba(34, 211, 238, 0.12)` |
 
 ### Authoring Rule
 
@@ -71,7 +71,10 @@ building the class with string concatenation:
 
 ```js
 // Good — both literals are scannable
-const HOVER = { row: "group-hover/row:opacity-100", msg: "group-hover/msg:opacity-100" };
+const HOVER = {
+  row: "group-hover/row:opacity-100",
+  msg: "group-hover/msg:opacity-100",
+};
 let cls = HOVER[name] ?? HOVER.row;
 
 // Bad — interpolated variant never compiles
@@ -121,18 +124,18 @@ Use these decisions for the UI/UX unification rollout:
 
 Readable text must meet **WCAG 2 AA** contrast thresholds against its surface.
 
-| Text kind | Minimum ratio |
-| --- | --- |
-| Normal text (< 18px / < 14px bold) | 4.5 : 1 |
-| Large text (>= 18px / >= 14px bold) | 3 : 1 |
+| Text kind                           | Minimum ratio |
+| ----------------------------------- | ------------- |
+| Normal text (< 18px / < 14px bold)  | 4.5 : 1       |
+| Large text (>= 18px / >= 14px bold) | 3 : 1         |
 
 Measured contrast against the two common surfaces:
 
-| Token | on `--panel` (`#161922`) | on `--bg-soft` (`#11141b`) | Use |
-| --- | ---: | ---: | --- |
-| `--fg-subtle` (`#7b8494`) | 4.4 : 1 | 4.8 : 1 | Borderline; disabled/decorative or larger text |
-| `--fg-muted` (`#a1a7b4`) | 7.0 : 1 | 7.6 : 1 | Minimum preferred readable secondary text |
-| `--fg` (`#e8ebf1`) | 13.2 : 1 | 14.4 : 1 | Primary text/headings |
+| Token                     | on `--panel` (`#161922`) | on `--bg-soft` (`#11141b`) | Use                                            |
+| ------------------------- | -----------------------: | -------------------------: | ---------------------------------------------- |
+| `--fg-subtle` (`#7b8494`) |                  4.4 : 1 |                    4.8 : 1 | Borderline; disabled/decorative or larger text |
+| `--fg-muted` (`#a1a7b4`)  |                  7.0 : 1 |                    7.6 : 1 | Minimum preferred readable secondary text      |
+| `--fg` (`#e8ebf1`)        |                 13.2 : 1 |                   14.4 : 1 | Primary text/headings                          |
 
 **Rules:**
 
@@ -150,14 +153,14 @@ Measured contrast against the two common surfaces:
 
 Tailwind font-size keys are defined in `tailwind.config.cjs`:
 
-| Role | Preferred class |
-| --- | --- |
-| Display | `text-display` |
-| Page title | `text-title` or `text-subtitle` depending on density |
-| Section heading | `text-meta font-semibold` |
-| Body | `text-meta` |
-| Compact label / timestamp | `text-micro` |
-| Monospace IDs | `font-mono text-micro` |
+| Role                      | Preferred class                                      |
+| ------------------------- | ---------------------------------------------------- |
+| Display                   | `text-display`                                       |
+| Page title                | `text-title` or `text-subtitle` depending on density |
+| Section heading           | `text-meta font-semibold`                            |
+| Body                      | `text-meta`                                          |
+| Compact label / timestamp | `text-micro`                                         |
+| Monospace IDs             | `font-mono text-micro`                               |
 
 Prefer the project font-size keys (`text-micro`, `text-meta`, `text-body`,
 `text-subtitle`, `text-title`, `text-display`) over Tailwind defaults such as
@@ -185,12 +188,12 @@ surrounding files until a shared primitive exists.
 > specific shades to `theme.colors` first (and document them here), then use
 > them. Do not assume the default Tailwind palette is available.
 
-| Purpose | Preferred classes |
-| --- | --- |
+| Purpose      | Preferred classes                                  |
+| ------------ | -------------------------------------------------- |
 | Error/danger | `bg-danger-soft text-danger-text border-danger/30` |
-| Warning | `bg-warn-soft text-warn-text border-warn/30` |
-| Success | `bg-ok-soft text-ok-text` |
-| Accent/info | `bg-accent-soft text-accent-text` |
+| Warning      | `bg-warn-soft text-warn-text border-warn/30`       |
+| Success      | `bg-ok-soft text-ok-text`                          |
+| Accent/info  | `bg-accent-soft text-accent-text`                  |
 
 ### Signal Rules
 
@@ -225,7 +228,11 @@ item:
 ```svelte
 <div class="space-y-px overflow-hidden rounded-md border border-line bg-panel">
   {#each items as item, i}
-    <div class="px-3 py-2.5 hover:bg-panel-hover {i > 0 ? 'border-t border-line' : ''}">
+    <div
+      class="px-3 py-2.5 hover:bg-panel-hover {i > 0
+        ? 'border-t border-line'
+        : ''}"
+    >
       ...
     </div>
   {/each}
@@ -253,12 +260,12 @@ item:
 
 ### Buttons
 
-| Style | Classes |
-| --- | --- |
-| Primary | `rounded-md bg-panel px-3 py-1.5 text-micro font-medium text-fg hover:bg-line` |
-| Accent | `rounded-md bg-accent-solid px-3 py-1.5 text-micro font-medium text-white hover:bg-accent` |
+| Style     | Classes                                                                                                          |
+| --------- | ---------------------------------------------------------------------------------------------------------------- |
+| Primary   | `rounded-md bg-panel px-3 py-1.5 text-micro font-medium text-fg hover:bg-line`                                   |
+| Accent    | `rounded-md bg-accent-solid px-3 py-1.5 text-micro font-medium text-white hover:bg-accent`                       |
 | Secondary | `rounded-md border border-line bg-bg-soft px-3 py-1.5 text-micro font-medium text-fg-muted hover:bg-line-subtle` |
-| Ghost | `rounded-md px-3 py-1.5 text-micro font-medium text-fg-muted hover:bg-line-subtle` |
+| Ghost     | `rounded-md px-3 py-1.5 text-micro font-medium text-fg-muted hover:bg-line-subtle`                               |
 
 Use accent for save/submit/create actions. Use secondary or ghost for
 cancel/reset/filter toggles. Destructive actions use danger text and must be
@@ -267,7 +274,9 @@ gated appropriately.
 ### Badges and Tags
 
 ```svelte
-<span class="rounded bg-line px-1.5 py-0.5 text-micro font-medium text-fg-muted">
+<span
+  class="rounded bg-line px-1.5 py-0.5 text-micro font-medium text-fg-muted"
+>
   tag-name
 </span>
 ```
@@ -298,9 +307,7 @@ Until a shared `InlineAlert`/`Banner` primitive exists, prefer these shapes:
   ...
 </div>
 
-<div class="rounded-md bg-ok-soft px-3 py-2 text-micro text-ok-text">
-  ...
-</div>
+<div class="rounded-md bg-ok-soft px-3 py-2 text-micro text-ok-text">...</div>
 ```
 
 ### Hover States
@@ -359,11 +366,11 @@ Long identifiers are common in Agent Nexus data.
 
 Destructive operations follow escalating prominence:
 
-| Action type | Style | Safeguard |
-| --- | --- | --- |
-| Single-item delete/archive | Ghost or secondary button with `text-danger-text` when destructive | Inline confirmation or undo toast |
-| Single-item permanent delete | `bg-danger-soft text-danger-text border border-danger/30` | Inline confirmation |
-| Batch destructive | Same as permanent delete, but disabled until valid | Confirmation modal naming count and action |
+| Action type                  | Style                                                              | Safeguard                                  |
+| ---------------------------- | ------------------------------------------------------------------ | ------------------------------------------ |
+| Single-item delete/archive   | Ghost or secondary button with `text-danger-text` when destructive | Inline confirmation or undo toast          |
+| Single-item permanent delete | `bg-danger-soft text-danger-text border border-danger/30`          | Inline confirmation                        |
+| Batch destructive            | Same as permanent delete, but disabled until valid                 | Confirmation modal naming count and action |
 
 Batch destructive actions that affect multiple resources must never execute on a
 single click.
@@ -380,11 +387,11 @@ event delegation with `stopPropagation` on nested controls.
 
 The UI uses a **mobile-first responsive shell**.
 
-| Breakpoint | Value | Notes |
-| --- | --- | --- |
-| Mobile | `< 640px` | Bottom nav only, no sidebar |
-| Tablet | `640px-1023px` | Bottom nav only, no sidebar |
-| Desktop | `>= 1024px` | Sidebar visible, bottom nav hidden |
+| Breakpoint | Value          | Notes                              |
+| ---------- | -------------- | ---------------------------------- |
+| Mobile     | `< 640px`      | Bottom nav only, no sidebar        |
+| Tablet     | `640px-1023px` | Bottom nav only, no sidebar        |
+| Desktop    | `>= 1024px`    | Sidebar visible, bottom nav hidden |
 
 ### Bottom Navigation Bar
 
@@ -412,7 +419,9 @@ Mobile is for triage. Show work first, chrome second, explanatory copy last.
   Primary organizational surface...
 </p>
 
-<span class="hidden items-center gap-1 rounded border border-line sm:inline-flex">
+<span
+  class="hidden items-center gap-1 rounded border border-line sm:inline-flex"
+>
   <kbd>⌘K</kbd>
 </span>
 ```
@@ -470,14 +479,14 @@ Labels follow the operator vocabulary in `anx-ui-spec.md` §1.8: a topic reads a
 **Project** and a card reads as **Task** on any operator-facing surface. Core
 names survive only on the diagnostics surfaces §1.8 exempts.
 
-| Relationship | Label | Where |
-| --- | --- | --- |
-| Document -> topic | `Project` | Document header |
-| List item -> topic | `Project: {title or id}` | List row metadata |
-| List item -> card | `Task: {title or id}` | List row metadata |
-| Board -> topic | `Topic` | Board header context line (diagnostics) |
-| Artifact -> topic | `Topic` | Artifact header (diagnostics) |
-| Diagnostic / `thread:` target | `Backing thread` or `Thread` | Explicitly thread-scoped surfaces |
+| Relationship                  | Label                        | Where                                   |
+| ----------------------------- | ---------------------------- | --------------------------------------- |
+| Document -> topic             | `Project`                    | Document header                         |
+| List item -> topic            | `Project: {title or id}`     | List row metadata                       |
+| List item -> card             | `Task: {title or id}`        | List row metadata                       |
+| Board -> topic                | `Topic`                      | Board header context line (diagnostics) |
+| Artifact -> topic             | `Topic`                      | Artifact header (diagnostics)           |
+| Diagnostic / `thread:` target | `Backing thread` or `Thread` | Explicitly thread-scoped surfaces       |
 
 ## Anti-Patterns
 

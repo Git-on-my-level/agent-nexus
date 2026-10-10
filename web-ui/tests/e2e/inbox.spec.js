@@ -1,5 +1,13 @@
 import { expect, test } from "@playwright/test";
 
+/**
+ * The "+" on a mailbox count says the number is a lower bound; this is
+ * the glyph that explains it. It replaced a sentence printed in the
+ * middle of the mailbox row.
+ */
+const lowerBoundTip = (page) =>
+  page.getByRole("button", { name: /Why the counts end in \+/ });
+
 /** Browser GET inbox.list calls resolve to pathname `/inbox` on the proxied core path (never the workspace SPA route `.../inbox`). */
 function isInboxListProjectionUrl(urlLike) {
   const url =
@@ -158,9 +166,7 @@ test("inbox qualifies partial stream state and resumes before clearing it", asyn
     });
   });
   await page.goto("/o/local/w/local/inbox");
-  const qualification = page.getByText(
-    "Not everything is loaded; the counts are lower bounds.",
-  );
+  const qualification = lowerBoundTip(page);
   try {
     await expect(qualification).toBeVisible();
     await expect.poll(() => connections).toBeGreaterThan(1);

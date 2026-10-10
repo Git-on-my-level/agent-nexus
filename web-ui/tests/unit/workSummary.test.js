@@ -1028,6 +1028,56 @@ describe("stepListsModel", () => {
   });
 });
 
+describe("a reason that only restates the badge", () => {
+  /*
+   * Core answers "why is this card in this state" for every card. For a card
+   * with no plan the only honest answer is the state itself — it sends "The
+   * card is marked Backlog." beside a badge reading `Backlog` — and a task
+   * header printed both, once as a badge and once as a sentence about the
+   * badge.
+   */
+  const reasonOf = (status) =>
+    workSummaryModel({ ref: "card:x", work_summary: { status } }, { now: NOW })
+      .status.reason;
+
+  it("drops a reason built from the label and filler alone", () => {
+    expect(
+      reasonOf({
+        state: "backlog",
+        label: "Backlog",
+        reason: "The card is marked Backlog.",
+      }),
+    ).toBe("");
+    expect(
+      reasonOf({
+        state: "in_progress",
+        label: "In progress",
+        reason: "The card is marked In progress.",
+      }),
+    ).toBe("");
+  });
+
+  it("keeps a reason that names a cause", () => {
+    expect(
+      reasonOf({
+        state: "blocked",
+        label: "Blocked",
+        reason: "Blocked waiting on review.",
+      }),
+    ).toBe("Blocked waiting on review.");
+    expect(
+      reasonOf({ state: "at_risk", label: "At risk", reason: "Overdue." }),
+    ).toBe("Overdue.");
+  });
+
+  it("judges the words, not core's exact sentence", () => {
+    // A reworded reason that still says only the label reads the same way.
+    expect(
+      reasonOf({ state: "done", label: "Done", reason: "This card is done" }),
+    ).toBe("");
+  });
+});
+
 describe("summaryFromStatus", () => {
   it("builds the same model from a state and a reason alone", () => {
     const model = summaryFromStatus(
