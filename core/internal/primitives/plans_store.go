@@ -113,7 +113,7 @@ func (s *Store) readRefFacts(ctx context.Context, refs []string, visible func(st
  COALESCE(json_extract(m.metadata_json,'$.priority'),'none'),
  COALESCE(NULLIF(b.handle,''),b.id,''),COALESCE(b.title,''),COALESCE(b.thread_id,''),COALESCE(json_extract(bt.body_json,'$.pm_actor_id'),''),
  COALESCE((SELECT display_name FROM actors WHERE id=CASE WHEN COALESCE(m.authority,'nexus')='nexus' THEN replace(c.assignee,'actor:','') ELSE replace(COALESCE(json_extract(o.body_json,'$.facts.owner'),json_extract(m.metadata_json,'$.owner'),''),'actor:','') END),'')
-			 , c.created_at, ` + effectiveCardDueSQL + `, COALESCE((SELECT e.ts FROM events e WHERE e.thread_id=COALESCE(NULLIF(trim(c.thread_id),''),trim(c.parent_thread_id)) AND e.type='message_posted' AND e.trashed_at IS NULL AND e.archived_at IS NULL ORDER BY e.ts DESC LIMIT 1),''),COALESCE((SELECT p.updated_at FROM card_plans p WHERE p.card_id=c.id),''),COALESCE(c.trashed_at,''),COALESCE(b.trashed_at,'')
+			 , c.created_at, ` + effectiveCardDueSQL + `, ` + cardMessageTimeSQL(ctx) + `,COALESCE((SELECT p.updated_at FROM card_plans p WHERE p.card_id=c.id),''),COALESCE(c.trashed_at,''),COALESCE(b.trashed_at,'')
  FROM requested_cards r JOIN cards c ON c.id=r.id LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id
  LEFT JOIN boards b ON b.id=c.board_id
  LEFT JOIN threads bt ON bt.id=b.thread_id
@@ -263,7 +263,7 @@ func (s *Store) loadPlansBatch(ctx context.Context, ids []string) (map[string]pl
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(p.body_json,''),`+effectiveCardActivitySQL+`,COALESCE(p.updated_at,''),COALESCE((SELECT e.ts FROM events e WHERE e.thread_id=COALESCE(NULLIF(trim(c.thread_id),''),trim(c.parent_thread_id)) AND e.type='message_posted' AND e.trashed_at IS NULL AND e.archived_at IS NULL ORDER BY e.ts DESC LIMIT 1),''),COALESCE(json_extract(m.metadata_json,'$.source_refs'),'[]'),c.created_at,`+effectiveCardDueSQL+`,COALESCE(c.handle,''),COALESCE(m.metadata_json,'{}'),COALESCE(o.body_json,'{}'),c.column_key,COALESCE(c.assignee,'') FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN card_plans p ON p.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id WHERE c.id IN (SELECT value FROM json_each(?))`, string(encoded))
+	rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(p.body_json,''),`+effectiveCardActivitySQL+`,COALESCE(p.updated_at,''),`+cardMessageTimeSQL(ctx)+`,COALESCE(json_extract(m.metadata_json,'$.source_refs'),'[]'),c.created_at,`+effectiveCardDueSQL+`,COALESCE(c.handle,''),COALESCE(m.metadata_json,'{}'),COALESCE(o.body_json,'{}'),c.column_key,COALESCE(c.assignee,'') FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id LEFT JOIN card_plans p ON p.card_id=c.id LEFT JOIN work_observations o ON o.id=m.latest_observation_id WHERE c.id IN (SELECT value FROM json_each(?))`, string(encoded))
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -636,3 +636,13 @@ func planRefsTruncated(p plans.Plan, facts map[string]plans.Fact) bool {
 
 // SetCardPlan commits the graph and its event together. A stale editor cannot
 // overwrite another edit. Identical retries do not create misleading movement.
+
+// PM previews use a fixed routing window before canonical event authorization.
+// A dense hidden prefix yields no message movement, never a refill through history.
+// Other callers retain their existing full-history movement projection.
+func cardMessageTimeSQL(ctx context.Context) string {
+	if bounded, _ := ctx.Value(pmBoundedReadKey{}).(bool); bounded {
+		return `COALESCE((SELECT max(e.ts) FROM (SELECT id FROM pm_card_event_positions WHERE thread_id=COALESCE(NULLIF(trim(c.thread_id),''),trim(c.parent_thread_id)) ORDER BY ts DESC,id DESC LIMIT 6) candidates JOIN events e ON e.id=candidates.id WHERE e.type='message_posted' AND e.trashed_at IS NULL AND e.archived_at IS NULL),'')`
+	}
+	return `COALESCE((SELECT e.ts FROM events e WHERE e.thread_id=COALESCE(NULLIF(trim(c.thread_id),''),trim(c.parent_thread_id)) AND e.type='message_posted' AND e.trashed_at IS NULL AND e.archived_at IS NULL ORDER BY e.ts DESC LIMIT 1),'')`
+}

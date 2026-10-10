@@ -1,0 +1,71 @@
+package pm
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+)
+
+// Each branch admits at most six rows using pm_records_card_awaiting before
+// hydration. No workspace-wide decision list or per-card SQL round trip.
+func (s *Service) attachPinnedDecisions(ctx context.Context, p Principal, page ContextPage) (ContextPage, error) {
+	branches := []string{}
+	args := []any{}
+	cards := map[string]map[string]any{}
+	for _, item := range page.Items {
+		card, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		ref, _ := card["ref"].(string)
+		if ref == "" {
+			continue
+		}
+		card["decisions"] = []any{}
+		cards[ref] = card
+		branches = append(branches, `SELECT * FROM (SELECT r.body FROM (SELECT id FROM pm_card_decision_positions WHERE kind='decision' AND workspace_id=? AND card_ref=? AND status='awaiting_answer' ORDER BY id LIMIT 6) candidates JOIN pm_records r ON r.kind='decision' AND r.id=candidates.id)`)
+		args = append(args, p.WorkspaceID, ref)
+	}
+	if len(branches) == 0 {
+		return page, nil
+	}
+	rows, err := s.store.database().QueryContext(ctx, strings.Join(branches, " UNION ALL "), args...)
+	if err != nil {
+		return ContextPage{}, err
+	}
+	ds := []Decision{}
+	for rows.Next() {
+		var raw []byte
+		if err = rows.Scan(&raw); err != nil {
+			rows.Close()
+			return ContextPage{}, err
+		}
+		var d Decision
+		if err = json.Unmarshal(raw, &d); err != nil {
+			rows.Close()
+			return ContextPage{}, err
+		}
+		ds = append(ds, d)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return ContextPage{}, err
+	}
+	// The pm_records shadow authorizes the complete decision (including private
+	// evidence) under the pinned requesting-reader snapshot, before hydration.
+	for _, d := range ds {
+		card := cards[d.WorkRef]
+		items := card["decisions"].([]any)
+		if len(items) == 5 {
+			card["decisions_partial"] = true
+			continue
+		}
+		card["decisions"] = append(items, map[string]any{"ref": "decision:" + d.ID, "reason": d.Instruction, "scope": d.Scope, "status": d.Status, "requester": d.ActorID})
+	}
+	raw, err := json.Marshal(page)
+	if err != nil || len(raw) > 128*1024 {
+		return ContextPage{}, ErrInvalid
+	}
+	return page, nil
+}

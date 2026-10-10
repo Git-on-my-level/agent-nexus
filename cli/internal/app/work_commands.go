@@ -26,6 +26,8 @@ type workCommandSpec struct {
 }
 
 var workCommands = map[string]workCommandSpec{
+	"pm card":                    {method: "POST", summary: "Read a pinned card in full under the requesting reader."},
+	"pm propose":                 {method: "POST", summary: "Propose a card status or note for human approval in Inbox."},
 	"pm disconnect":              {path: "/pm/disconnect", method: "POST", summary: "Reset workspace PM onboarding after explicit uninstall."},
 	"pm connect":                 {path: "/pm/connect", method: "POST", body: true, summary: "Register a local PM connection with bounded runner and host labels."},
 	"pm presence":                {path: "/pm/presence", method: "GET", summary: "Read recent PM connection state."},
@@ -204,6 +206,30 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) >= 2 && args[0] == "pm" {
 		switch args[1] {
+		case "propose":
+			r, err := a.runPMPropose(ctx, args[2:], cfg)
+			return r, "pm propose", err
+		case "card":
+			if err := validatePMCardArgs(args[2:]); err != nil {
+				return nil, "pm card", err
+			}
+			r, err := a.runPMCardRead(ctx, args[2:], cfg)
+			if err == nil {
+				finishPMCardRead(r)
+			}
+			return r, "pm card", err
+		case "context":
+			if len(args) == 2 && a.Getenv("ANX_PM_TURN_ID") != "" {
+				r, err := a.runPMCardRead(ctx, nil, cfg)
+				if err == nil {
+					finishPMCardRead(r)
+				}
+				return r, "pm context", err
+			}
+		}
+	}
+	if len(args) >= 2 && args[0] == "pm" {
+		switch args[1] {
 		case "install", "status", "uninstall":
 			result, err := a.runPMService(ctx, args[1], args[2:], cfg)
 			return result, "pm " + args[1], err
@@ -337,6 +363,13 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 }
 
 func workHelpText(topic string) (string, bool) {
+	if topic == "pm card" {
+		return "Usage: anx pm card <card-ref>\nRead one pinned card in full inside a claimed PM turn.", true
+	}
+	if topic == "pm propose" {
+		return "Usage: anx pm propose <card-ref> (--status <backlog|ready|in_progress|blocked|review|done> | --note <text>) --why <reason> [--evidence <ref> ...]\nProposes for human approval in Inbox. done requires evidence. Identity and conversation come from the runner.", true
+	}
+
 	spec, exact := workCommands[topic]
 	if !exact && !isWorkCommandGroup(topic) {
 		return "", false

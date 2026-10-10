@@ -698,7 +698,7 @@ paths:
                 $ref: '#/components/schemas/PMDecisionListResponse'
     post:
       operationId: pmDecisionsCreate
-      description: Proposals require live work; missing, trashed, or archived work returns 404 not_found after principal authorization. For work.annotate, instruction must be a nonempty JSON object containing only labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form <type>:<handle-or-id> (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Labels and roles accept arrays of at most 16 nonempty strings of at most 128 characters (or null to clear). Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values.
+      description: Proposals require live work; missing, trashed, or archived work returns 404 not_found after principal authorization. For work.note, payload.note is required and instruction carries the rationale; approval posts a Nexus card message with atomic revision fencing and action-key readback. For work.annotate, instruction must be a nonempty JSON object containing only labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form <type>:<handle-or-id> (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Labels and roles accept arrays of at most 16 nonempty strings of at most 128 characters (or null to clear). Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values.
       summary: Propose a scoped PM decision
       tags:
       - pm
@@ -1522,7 +1522,7 @@ paths:
   /pm/turns/{turn_id}/decisions:
     post:
       operationId: pmTurnsDecisionsCreate
-      description: For work.annotate, instruction must be a nonempty JSON object containing only labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form <type>:<handle-or-id> (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Labels and roles accept arrays of at most 16 nonempty strings of at most 128 characters (or null to clear). Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values. Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.
+      description: For work.note, payload.note is required and instruction carries the rationale; approval posts a Nexus card message with atomic revision fencing and action-key readback. For work.annotate, instruction must be a nonempty JSON object containing only labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form <type>:<handle-or-id> (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Labels and roles accept arrays of at most 16 nonempty strings of at most 128 characters (or null to clear). Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values. Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.
       summary: Record a selected PM agent proposal
       tags:
       - pm
@@ -9407,11 +9407,23 @@ components:
       additionalProperties: false
       description: Mutation inputs only. payload.resolution is read-only; send payload.resolution_refs.
       properties:
+        evidence_refs:
+          type: array
+          maxItems: 32
+          items:
+            type: string
+          description: Supporting evidence for a status or note proposal. Refs must exist and be visible to the requester; participate in intent equality and inherited resource ownership.
+        note:
+          type: string
+          minLength: 1
+          maxLength: 16000
+          description: Required only for work.note. Human-approved Nexus card message; instruction carries the reason. External source notes require a configured executor.
         phase:
           type: string
           enum: [backlog, ready, in_progress, blocked, review, done]
         resolution_refs:
           type: array
+          maxItems: 32
           items:
             type: string
     PMTurnContextRequest:
@@ -9419,6 +9431,10 @@ components:
       additionalProperties: false
       required: [lease_token]
       properties:
+        view:
+          type: string
+          enum: [cards, card]
+          description: Optional PM card view. cards returns only pinned cards (at most 8), bounded open asks, awaiting decisions and recent activity. card requires context_ref and returns that pinned card in full. No pins returns an empty page, never a workspace listing. Requester permissions apply. Query and cursor are not supported with a view.
         lease_token:
           type: string
           minLength: 1
@@ -9460,7 +9476,7 @@ components:
       - scope
       - target_revision
     PMTurnProposeRequest:
-      description: Selected PM agents must supply the current lease token; stale tokens return 409. Request keys bind immutable intent. Conflicting reuse (including a different target_revision) returns 409 with error.details.existing_decision_id. Identical awaiting intent (same approver, work, scope, instruction, payload, and target revision) returns the existing decision with 200 regardless of proposer or origin, preserving original authorship and origin without a new decision. A different non-human proposal is rejected with 409 human_proposal_pending while a human-origin decision awaits an answer on that same approver actor, work, and scope in the workspace; error.details.pending_decision_id identifies it, and a human must decline or answer it first. Human proposals may atomically supersede changed human or PM proposals for the same approver, work, and scope.
+      description: Selected PM agents must supply the current lease token; stale tokens return 409. With pinned conversation refs, work_ref must be one of those exact refs (including the legacy primary work_ref); another card returns 403. Legacy unpinned conversations retain requester-authorized proposal behavior. work.note requires a nonempty payload.note and no phase or resolution_refs; instruction is the reason, separate from note content. Request keys bind immutable intent. Conflicting reuse (including a different target_revision) returns 409 with error.details.existing_decision_id. Identical awaiting intent (same approver, work, scope, instruction, payload, and target revision) returns the existing decision with 200 regardless of proposer or origin, preserving original authorship and origin without a new decision. A different non-human proposal is rejected with 409 human_proposal_pending while a human-origin decision awaits an answer on that same approver actor, work, and scope in the workspace; error.details.pending_decision_id identifies it, and a human must decline or answer it first. Human proposals may atomically supersede changed human or PM proposals for the same approver, work, and scope.
       type: object
       additionalProperties: false
       properties:

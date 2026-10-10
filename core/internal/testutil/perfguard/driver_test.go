@@ -664,3 +664,19 @@ func TestViewPlanFingerprintFollowsSchemaResolutionAndRecursion(t *testing.T) {
 		}
 	}
 }
+
+func TestPointPlanHashNormalizesOnlyCompilerEpoch(t *testing.T) {
+	prefix := "WITH RECURSIVE _anx_point_snapshot(token) AS MATERIALIZED (SELECT ? WHERE COALESCE((SELECT version FROM main.resource_access_epoch WHERE singleton=1),-1)=123), cards AS (SELECT * FROM main.cards) "
+	q := prefix + "SELECT * FROM cards WHERE version=123 AND title='epoch=123'"
+	if PlanSQLHash(q) != SQLHash(q) {
+		t.Fatal("changed existing baseline fingerprints")
+	}
+	if PointPlanSQLHash(q) != PointPlanSQLHash(strings.Replace(q, "-1)=123", "-1)=456", 1)) {
+		t.Fatal("compiler epoch changed shape")
+	}
+	for _, changed := range []string{strings.Replace(q, "version=123", "version=456", 1), strings.Replace(q, "epoch=123", "epoch=456", 1), strings.Replace(q, "SELECT ? WHERE", "SELECT 1 WHERE", 1)} {
+		if PointPlanSQLHash(q) == PointPlanSQLHash(changed) {
+			t.Fatal("business/unsupported compiler shape normalized")
+		}
+	}
+}

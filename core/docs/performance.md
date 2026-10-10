@@ -51,6 +51,30 @@ reported explicitly. The deterministic regression requires zero page reads on
 idle ticks, one shared page for five matching readers after a non-event commit,
 and complete delivery after a mutation to an earlier page during a sweep.
 
+## PM pinned card views
+
+`pm context` / `pm card` admit at most eight exact conversation pins. Alias
+routing includes only indexed identities; canonical bodies are requester scoped.
+One immutable read snapshot covers authorization, batched card/plan hydration,
+six activity/ask candidates per card and six pending-decision candidates per pin.
+Private candidate prefixes remain partial and never refill from older history.
+
+`TestPerformancePMCardContext` checks the new selectors and complete HTTP reads
+with dense private prefixes on the shared 4,096-card fixture. The checked-in
+`pm_card_context_budget.json` limits full reads to 30 SQL calls and 256 returned
+rows, 20,000 warm VM steps and 2,000,000 cold VM steps. Cold means a fresh runtime
+and a missed inherited denial cache; the immediately repeated read is warm.
+The inherited once-per-epoch denial admission still grows with workspace size
+and retains exact SCA-665 baselines; these exceptions do not permit repeated
+closure rebuilding or a new candidate scan. Point-snapshot exceptions permit
+only the reviewed indexed probes and constant-time denial membership.
+
+```sh
+cd core
+ANX_PERFORMANCE_TEST=1 go test -p=1 -parallel=1 ./internal/server \
+  -run '^TestPerformancePMCardContext$' -count=1 -v -timeout=10m
+```
+
 ## Running the gates
 
 Agent detail's `summary=1` recent-card preview admits at most 51 current/recent-run
