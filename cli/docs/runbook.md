@@ -11,9 +11,10 @@ anx auth whoami
 anx doctor
 ```
 
-If automatic identity resolution does not match your intended ANX identity,
-use the exact adapter suggestion from `anx doctor` or set your own `ANX_AS`.
-Do not copy another agent's name from an example.
+If `identity_resolution` fails, set `--as <registered-agent-name>` or
+`ANX_AS=<registered-agent-name>` to your own registered ANX identity and rerun
+`anx doctor`. Installed harnesses do not establish who is running the command;
+do not copy another agent's name from an example.
 
 Interactive enrollment prints a user code and, when core has `ANX_PUBLIC_WEB_UI_WORKSPACE_URL` configured, the full workspace-scoped verification URL. Set that config to this deployment's public web UI workspace path. The core API base URL and web UI path must target the same organization and workspace. Without it, open Access → Hosts in the workspace web UI and approve the printed code. The CLI polls at the server interval. For unattended fleet hosts, use the auth-admin agent flow below. `anx host enroll --token-stdin` keeps the secret out of process arguments. A host key and record are stored under `~/.config/anx/hosts/<workspace-key>/` with owner-only permissions.
 
@@ -406,7 +407,7 @@ Maintainer checklist:
 
 ### Host identity failures
 
-Run `anx doctor` for enrollment, host key permissions, identity resolution, agentctl, and CLI/core version checks. When identity is unresolved but exactly one runtime adapter is detected, the identity check recommends its concrete `--as <adapter>` and `ANX_AS=<adapter>` values. Doctor fails when this CLI is older than handshake `min_cli_version` and warns when it is older than `recommended_cli_version`. The repair is `anx update --version <recommended>`. If no unique adapter is detected, pass the registered agent name with `--as <name>` or `ANX_AS=<name>`. If the host was revoked, ask a human auth-admin to enroll a replacement. Workspace selection follows the user-global rules above; `anx config workspaces` diagnoses ambiguity.
+Run `anx doctor` for enrollment, host key permissions, identity resolution, agentctl, and CLI/core version checks. Active runtime evidence can resolve the current caller; an installed adapter by itself cannot. If identity remains unresolved, doctor shows the required `--as <registered-agent-name>` / `ANX_AS=<registered-agent-name>` form. Choose your own registered identity, not another harness just because it is installed, then rerun doctor. Missing `agentctl` is an optional warning for direct `anx` commands. Doctor fails when this CLI is older than handshake `min_cli_version` and warns when it is older than `recommended_cli_version`. The repair is `anx update --version <recommended>`. If the host was revoked, ask a human auth-admin to enroll a replacement. Workspace selection follows the user-global rules above; `anx config workspaces` diagnoses ambiguity.
 
 ### Version mismatch
 
@@ -565,13 +566,15 @@ The selected PM agent can use `pm turns claim`, `pm turns context <turn-id>`,
 --from-file ...`, and `pm turns fail <turn-id> --from-file ...`. Other agents
 cannot impersonate it. Claim is lease-based and idempotent for the same
 `runner_id`; HTTP 204 means no claimable turn. `--runner-id` defaults to the
-authenticated actor id. Text output prints `runner_id` and `lease_token` so
+authenticated actor id. These commands use the caller resolved by `anx`; if
+identity resolution fails, select your own registered PM identity with `--as`
+or `ANX_AS` and rerun `anx doctor`. Text output prints `runner_id` and `lease_token` so
 the same runner can release later:
 
 ```sh
-anx --as pm pm turns claim --runner-id "$RUNNER_ID"
+anx pm turns claim --runner-id "$RUNNER_ID"
 # turn-1  status=in progress  runner_id=runner-1  lease_token=...
-anx --as pm pm turns release turn-1 --from-file - <<'EOF'
+anx pm turns release turn-1 --from-file - <<'EOF'
 {"runner_id":"runner-1","lease_token":"<lease_token from claim>"}
 EOF
 ```
@@ -660,7 +663,8 @@ a connection signal, not a model health guarantee.
 
 The PM is an external agent. Do not call a model in-process. `make serve` seeds
 persona `pm` (`actor-gds-pm` / `dev.pm`) for the default game-dev-studio
-scenario. Enroll a host and select `--as pm` before starting the PM runner.
+scenario. Enroll a host and use the registered identity selected for the PM;
+the seeded scenario's identity is `pm`.
 Wake routing and
 `ANX_PM_BRIDGE_ENABLED` are not required.
 
@@ -672,7 +676,9 @@ and that variable is unset, the turn fails with a sentence that names
 The harness child receives the **full parent environment**, then `HOME` is
 reset to the login account home from passwd (`user.Current().HomeDir`). That
 is where harness config lives (omp `models.yml`, Hermes, Codex). Isolated
-`ANX_AS=pm` applies to the `anx` process identity, not to the child harness. After a successful claim the runner also
+`ANX_AS` applies to the `anx` process identity, not to the child harness. Set
+`ANX_PM_AGENT` to the PM's actual registered identity before running these
+examples; the seeded local scenario uses `pm`. After a successful claim the runner also
 sets `ANX_PM_LEASE_TOKEN` for that turn. `anx pm turns propose` and
 `anx pm turns context` send it when `--lease-token` is omitted, so the harness
 does not have to copy the token into `--from-file`. The lease token is in the
@@ -693,19 +699,19 @@ of that one turn until the deadline. Example, separate uid:
 
 ```sh
 sudo -u pm-runner env ZAI_API_KEY="$ZAI_API_KEY" \
-  ANX_AS=pm ./cli/anx --as pm pm serve \
+  ANX_AS="${ANX_PM_AGENT:?Set the registered PM identity}" ./cli/anx --as "$ANX_PM_AGENT" pm serve \
   --work-dir .tmp/pm-runner \
   --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'
 ```
 
 Example, separate host: start core locally, then on the runner machine
-`ANX_BASE_URL=http://core-host:8000 ZAI_API_KEY=... ./cli/anx --as pm pm serve ...`.
+run `ANX_BASE_URL="${ANX_CORE_BASE_URL:?Set the runner-reachable core URL}" ZAI_API_KEY="$ZAI_API_KEY" ANX_AS="${ANX_PM_AGENT:?Set the registered PM identity}" ./cli/anx --as "$ANX_PM_AGENT" pm serve ...`.
 
 ```sh
 make cli-build
 export ZAI_API_KEY
 ANX_DEV_BLOB_BACKEND=filesystem make serve
-ANX_AS=pm ./cli/anx --as pm pm serve \
+ANX_AS="${ANX_PM_AGENT:?Set the registered PM identity}" ./cli/anx --as "$ANX_PM_AGENT" pm serve \
   --work-dir .tmp/pm-runner \
   --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'
 ./cli/anx pm ask --wait \
@@ -805,17 +811,17 @@ Hermes and Codex can also run directly with a private prompt file:
 
 ```sh
 # Hermes (direct)
-ANX_AS=pm ./cli/anx --as pm pm serve \
+ANX_AS="${ANX_PM_AGENT:?Set the registered PM identity}" ./cli/anx --as "$ANX_PM_AGENT" pm serve \
   --work-dir .tmp/pm-runner \
   --runner 'hermes chat --query-file {prompt_file} -Q'
 
 # Codex (direct)
-ANX_AS=pm ./cli/anx --as pm pm serve \
+ANX_AS="${ANX_PM_AGENT:?Set the registered PM identity}" ./cli/anx --as "$ANX_PM_AGENT" pm serve \
   --work-dir .tmp/pm-runner \
   --runner "sh -c 'exec codex exec --skip-git-repo-check - < \"\$1\"' sh {prompt_file}"
 
 # Same harnesses through agentctl (no {prompt} placeholder)
-ANX_AS=pm ./cli/anx --as pm pm serve \
+ANX_AS="${ANX_PM_AGENT:?Set the registered PM identity}" ./cli/anx --as "$ANX_PM_AGENT" pm serve \
   --work-dir .tmp/pm-runner \
   --runner 'hermes -p --provider zai --model glm-5.3'
 ```

@@ -43,9 +43,6 @@ export const SETUP_TOKEN_LIFETIME_SECONDS = SETUP_TOKEN_LIFETIME_MS / 1000;
 /** Label recorded on tokens issued for a copyable prompt. */
 export const SETUP_TOKEN_LABEL = "Setup prompt";
 
-/** The CLI's dedicated identity for its installed PM service profile. */
-const PM_SERVICE_AGENT = "pm";
-
 function text(value) {
   return String(value ?? "").trim();
 }
@@ -281,14 +278,20 @@ function enrollStep(index, { base, token, expiry }) {
     "",
     `     ${anxCommand(base, "--json doctor")}`,
     "",
-    "   `doctor` exits 0 whether or not its checks pass, so read the checks, not",
+    "   `doctor` exits 0 whether or not its checks pass, so read every check, not",
     "   the exit status. Find the one named `host_enrollment`. If it is ok, this",
     "   computer is already in the workspace: skip the rest of this step and leave",
     "   the token unspent.",
     "",
-    "   The other red checks in that output are expected. `identity_resolution`",
-    "   and `agentctl_presence` describe the shell you are in, not the workspace;",
-    "   ignore them here and do not report them as failures.",
+    "   `identity_resolution` must be pass before continuing; do not dismiss it",
+    "   as shell-related. If it fails, rerun doctor with your own current",
+    "   harness's registered name as `--as <name>` or prefix doctor with",
+    "   `ANX_AS=<name>`. Do not select another installed harness. If you cannot",
+    "   identify your registered name, stop and report that identity could not",
+    "   be resolved.",
+    "   `agentctl_presence` is optional; doctor marks its absence as a warning.",
+    "   Do not dismiss another failed check as expected: follow its exact repair",
+    "   or stop and report it. Enrollment below fixes the host enrollment checks.",
     "",
     "   Only if `host_enrollment` is not ok, run this. The token below is",
     `   single-use${expiry ? ` and expires at ${expiry}` : ""}.`,
@@ -309,11 +312,11 @@ function enrollStep(index, { base, token, expiry }) {
  * `doctor`'s `host_enrollment` check reads the host identity on disk, so a
  * machine whose access the workspace has revoked still passes it. These two
  * calls are the only thing in either prompt that asks the server. Machine
- * setup lets the CLI resolve the caller; PM setup uses the CLI's dedicated
- * `pm` service identity, independent of the runner selected in the UI.
+ * setup lets the CLI resolve the caller; PM setup uses the runner identity
+ * selected in the UI.
  *
  * @param {string} base
- * @param {string} [agentName] explicit identity; absent for machine setup
+ * @param {string} [agentName] selected PM identity; absent for machine setup
  */
 function serverCheckLines(base, agentName) {
   const identityFlag =
@@ -321,17 +324,23 @@ function serverCheckLines(base, agentName) {
   return [
     "   `host_enrollment` must be ok. That check reads this machine's local host",
     "   identity, so it cannot tell you the server still accepts it — finish with",
-    "   two authenticated calls using your intended Agent Nexus identity:",
+    "   two authenticated calls using your intended Agent Nexus identity.",
+    ...(agentName == null
+      ? [
+          "   Before running them, use your own current harness's registered name:",
+          "   add `--as <name>` to each call, or prefix each with `ANX_AS=<name>`.",
+          "   Do not select another installed harness. If you cannot identify your",
+          "   own registered name, stop and report that.",
+        ]
+      : [
+          `   These calls use the selected PM identity, ${agentName}; that is the`,
+          "   runner chosen above, not an identity inferred from this shell.",
+        ]),
+    "   Then run:",
     "",
     `     ${anxCommand(base, `${identityFlag}--json auth whoami`)}`,
     `     ${anxCommand(base, `${identityFlag}--json host list`)}`,
     "",
-    agentName == null
-      ? "   These commands let anx resolve your caller identity. If it cannot, use only the exact unique identity suggestion from `doctor`; if there is none, stop and report that identity could not be resolved."
-      : `   These commands use the selected PM identity, ${agentName}.`,
-    agentName == null
-      ? "   Do not guess or substitute another agent's name."
-      : "   The runner selection above supplies this identity; it is not inferred from this shell.",
     "   If either call is",
     "   refused — 401, 403, or a message about the host being unknown or revoked —",
     "   stop and tell me: this machine's access has been taken away.",
@@ -442,7 +451,7 @@ export function buildPmPrompt({
     "   interactive wizard you cannot answer, so pass the runner explicitly.",
     `   This workspace is set to run the PM with ${runner.label}:`,
     "",
-    `     ${anxCommand(base, `--as ${shellQuote(PM_SERVICE_AGENT)} pm install --runner ${shellQuote(runner.argv)} --wait`)}`,
+    `     ${anxCommand(base, `--as ${shellQuote(runner.key)} pm install --runner ${shellQuote(runner.argv)} --wait`)}`,
     "",
     "   --wait blocks until the PM's first connection is accepted (90s by",
     "   default). If it times out, say so: this machine's access to the",
@@ -451,11 +460,11 @@ export function buildPmPrompt({
     "",
     "4. Verify, locally and with the server:",
     "",
-    `     ${anxCommand(base, `--as ${shellQuote(PM_SERVICE_AGENT)} --json pm status`)}`,
-    `     ${anxCommand(base, "--json doctor")}`,
+    `     ${anxCommand(base, `--as ${shellQuote(runner.key)} --json pm status`)}`,
+    `     ${anxCommand(base, `--as ${shellQuote(runner.key)} --json doctor`)}`,
     "",
     "   `pm status` reads the local service profile selected above; it does not authenticate with the server.",
-    ...serverCheckLines(base, PM_SERVICE_AGENT),
+    ...serverCheckLines(base, runner.key),
     "",
     ...skillStep(5, { pm: true }),
     "",
@@ -464,7 +473,7 @@ export function buildPmPrompt({
     "   last 20 lines of stderr.log from that log directory.",
     "",
     "The PM service runs on this computer through the selected runner and uses this machine's enrolled host identity.",
-    "Its Agent Nexus identity is the CLI's dedicated `pm` service profile, independent of the selected runner.",
+    `Its Agent Nexus identity is the selected runner identity, ${runner.label}.`,
     "It has no separate workspace credential of its own.",
     ...HUMAN_ONLY,
   ].join("\n");

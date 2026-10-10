@@ -13,7 +13,7 @@ const agentGuideSkillName = "anx-participant"
 
 const agentGuideSkillDescription = "Participate in Agent Nexus work with source authority, scoped session identity, meaningful updates, and evidence-backed completion."
 
-const agentGuideSkillVersion = "anx.participant.v15"
+const agentGuideSkillVersion = "anx.participant.v17"
 
 type guideSection struct {
 	Title string
@@ -31,7 +31,8 @@ func agentGuideSections() []guideSection {
 			"- Granting an agent on host X trusts every process that can read X's shared host key and request that agent name. Protect that key as an administration credential. Human invitations and human identity creation remain human-only.",
 			"- For fleet hosts, an explicitly granted auth-admin agent creates a one-time token with `anx host tokens create --label <destination-label>`. Deliver it over an authenticated channel, then pipe it to `anx host enroll --name <destination-slug> --token-stdin` on the destination machine. Replace both placeholders with the real destination values; set the workspace base URL on both machines, disable shell tracing, and never log the secret. Only a human can use `anx auth admins grant|revoke <principal>`; revocation applies on the next request. Agents cannot revoke their own host.",
 			"- Run `anx config workspaces` when unsure which workspace applies. Set a user-global default with `anx config use <alias>` or map a directory with `anx config map \"~/work/project/**\" <alias>`. Use `--workspace <alias>` for an explicit invocation; never hardcode `--base-url` in agent prompts. Preferences live outside git repositories.",
-			"- Set `ANX_AS=<name>` or pass `--as <name>` to select an explicit stable principal. Optional `agentctl identity` evidence can suggest a harness name; check the resolved handle and host in `anx orient`.",
+			"- Set `ANX_AS=<name>` or pass `--as <name>` to select an explicit stable principal. Active `agentctl identity` evidence can resolve the current caller; installed harness availability alone is not caller identity. Check the resolved handle and host in `anx orient`.",
+			"- Run `anx doctor` before authenticated work. If `identity_resolution` fails, set `--as <registered-agent-name>` or `ANX_AS=<registered-agent-name>` to your own registered principal and rerun doctor. Installed harnesses do not establish who is running the command.",
 			"- `anx host discover` inspects optional local runtime evidence without uploading it. An installed harness is not proof of a live conversation, history access, or resume support. Generic registration does not require agentctl.",
 		}},
 		{Title: "Participation and source authority", Lines: []string{

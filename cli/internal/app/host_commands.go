@@ -524,19 +524,9 @@ func (a *App) runHostDoctor(ctx context.Context, cfg config.Resolved) (*commandR
 		add("host_key_permissions", false, "enroll host first")
 	}
 	name, source, identityErr := a.identityName(cfg)
-	add("identity_resolution", identityErr == nil, func() string {
-		if identityErr != nil {
-			return identityErr.Error()
-		}
-		return name + " via " + source
-	}())
+	checks = append(checks, identityResolutionDoctorCheck(name, source, identityErr))
 	_, agentctlErr := exec.LookPath("agentctl")
-	add("agentctl_presence", agentctlErr == nil, func() string {
-		if agentctlErr != nil {
-			return "agentctl not on PATH"
-		}
-		return "agentctl on PATH"
-	}())
+	checks = append(checks, agentctlPresenceDoctorCheck(agentctlErr))
 	if home, homeErr := a.skillHome(""); homeErr == nil {
 		if skillsConfigDir, dirErr := resolveSkillsConfigDir(home, cfg.ConfigDir); dirErr == nil {
 			preferences, _, prefErr := readSkillsSyncConfig(skillsConfigDir)
@@ -605,6 +595,20 @@ func (a *App) runHostDoctor(ctx context.Context, cfg config.Resolved) (*commandR
 		return nil, versionErr
 	}
 	return &commandResult{Data: data}, nil
+}
+
+func identityResolutionDoctorCheck(name, source string, identityErr error) doctorCheck {
+	if identityErr == nil {
+		return doctorCheck{Name: "identity_resolution", OK: true, Status: "pass", Message: name + " via " + source}
+	}
+	return doctorCheck{Name: "identity_resolution", OK: false, Status: "fail", Message: "Identity could not be resolved. Use your own registered Agent Nexus identity with --as <registered-agent-name> or ANX_AS=<registered-agent-name>, then rerun doctor; do not infer it from installed harnesses."}
+}
+
+func agentctlPresenceDoctorCheck(lookErr error) doctorCheck {
+	if lookErr != nil {
+		return doctorCheck{Name: "agentctl_presence", OK: true, Status: "warn", Message: "agentctl is unavailable; it is optional for direct anx commands"}
+	}
+	return doctorCheck{Name: "agentctl_presence", OK: true, Status: "pass", Message: "agentctl on PATH"}
 }
 
 // cliVersionDoctorCheck fails when this CLI is below handshake min_cli_version

@@ -38,8 +38,8 @@ func init() {
 			JSONShape:   "`turn_id`, `execution_id`, `status`, `provider`, `model`",
 			Composition: "Local runner. Claims one leased turn, writes a small prompt file, launches the configured harness through agentctl, then completes or fails the turn. Does not call a model in-process.",
 			Examples: []string{
-				"anx --as pm pm serve --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'",
-				"anx --as pm pm serve --runner 'hermes chat --query-file {prompt_file} -Q'",
+				"anx pm serve --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'",
+				"anx pm serve --runner 'hermes chat --query-file {prompt_file} -Q'",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--runner <argv>", Description: "Harness argv. Without {prompt}, this is passed to `agentctl run --`. With {prompt_file} (or legacy {prompt}), argv is executed directly after substituting the prompt file path. Evidence refs come from a trailing ---evidence--- block or a JSON evidence_refs array on the reply object (the same object assistant text is read from), never from prose or nested tool output. Topic and document refs are verified like card/work/artifact/event/decision. Replies over the turn's max_output_bytes (default 64000, core's turn-text ceiling) are stored with a visible truncation marker."},

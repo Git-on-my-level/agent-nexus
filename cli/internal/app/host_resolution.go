@@ -62,7 +62,7 @@ func (a *App) identityName(cfg config.Resolved) (string, string, error) {
 	if runtimeReportAvailable && managedContext {
 		// A supported provider may intentionally suppress inherited or conflicting
 		// context. Do not resurrect its rejected evidence through the legacy path.
-		return "", "", unresolvedIdentityError(report, "runtime could not establish the current managed identity")
+		return "", "", unresolvedIdentityError("runtime could not establish the current managed identity")
 	}
 	// Verified with installed agentctl v0.11.1 on 2026-09-27 by running
 	// `agentctl run -- /bin/sh -c 'env'`: children receive ADAPTER,
@@ -104,18 +104,12 @@ func (a *App) identityName(cfg config.Resolved) (string, string, error) {
 	if a.Getenv("AGENT") == "1" && a.hasOMPAncestor != nil && a.hasOMPAncestor() {
 		return "omp", "harness:omp", nil
 	}
-	return "", "", unresolvedIdentityError(report, "cannot resolve agent identity")
+	return "", "", unresolvedIdentityError("cannot resolve agent identity")
 }
 
-func unresolvedIdentityError(report *runtimeIdentityReport, reason string) error {
-	message := reason + "; pass --as <registered-agent-name> or set ANX_AS=<registered-agent-name>"
-	details := map[string]any{}
-	if adapters := availableRuntimeAdapters(report); len(adapters) == 1 {
-		name := adapters[0]
-		message = fmt.Sprintf("%s; only detected runtime adapter is %s; try `anx --as %s doctor` or set `ANX_AS=%s`", reason, name, name, name)
-		details["next_argv"] = []string{"anx", "--as", name, "auth", "whoami"}
-	}
-	return errnorm.WithDetails(errnorm.Usage("identity_unresolved", message), details)
+func unresolvedIdentityError(reason string) error {
+	message := reason + "; use your own registered Agent Nexus identity with --as <registered-agent-name> or ANX_AS=<registered-agent-name>; do not infer it from installed harnesses"
+	return errnorm.Usage("identity_unresolved", message)
 }
 
 func (a *App) ambiguousNativeHarness() bool {

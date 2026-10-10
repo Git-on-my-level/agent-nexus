@@ -77,7 +77,7 @@ func TestRuntimeIdentityIsOptionalAndUsesProviderEvidence(t *testing.T) {
 	}
 }
 
-func TestUnresolvedIdentitySuggestsTheOnlyDetectedAdapter(t *testing.T) {
+func TestUnresolvedIdentityDoesNotGuessTheOnlyInstalledAdapter(t *testing.T) {
 	a := newTestApp(t)
 	a.Getenv = func(string) string { return "" }
 	a.runtimeIdentity = func() (*runtimeIdentityReport, error) {
@@ -88,16 +88,16 @@ func TestUnresolvedIdentitySuggestsTheOnlyDetectedAdapter(t *testing.T) {
 		t.Fatal("expected active identity to remain unresolved")
 	}
 	message := err.Error()
-	if !strings.Contains(message, "anx --as hermes doctor") || !strings.Contains(message, "ANX_AS=hermes") {
-		t.Fatalf("missing concrete identity repair: %s", message)
+	if !strings.Contains(message, "--as <registered-agent-name>") || !strings.Contains(message, "ANX_AS=<registered-agent-name>") || strings.Contains(message, "hermes") {
+		t.Fatalf("identity repair guessed an installed adapter: %s", message)
 	}
 	normalized := errnorm.Normalize(err)
-	if got := strings.Join(stringList(asMap(normalized.Details)["next_argv"]), " "); got != "anx --as hermes auth whoami" {
-		t.Fatalf("next action=%q", got)
+	if got := asMap(normalized.Details)["next_argv"]; got != nil {
+		t.Fatalf("guessed next action=%#v", got)
 	}
 	actions := deriveErrorActions("auth whoami", normalized)
-	if len(actions) != 1 || strings.Join(actions[0].Argv, " ") != "anx --as hermes auth whoami" {
-		t.Fatalf("envelope next action=%#v", actions)
+	if len(actions) != 0 {
+		t.Fatalf("envelope contains guessed identity action: %#v", actions)
 	}
 }
 

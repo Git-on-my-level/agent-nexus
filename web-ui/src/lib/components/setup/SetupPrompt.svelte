@@ -44,6 +44,8 @@
     workspaceLabel = "",
     /** Chosen PM harness; bindable so the page can remember it. */
     runnerKey = $bindable(DEFAULT_PM_RUNNER_KEY),
+    /** The PM has connected; retire its setup token. */
+    completed = false,
     heading = "",
     lede = "",
     /** Rendered under the prompt: the page's live "has it arrived yet" line. */
@@ -84,6 +86,9 @@
   const issued = { key: "" };
   /** A token this panel issued ran out while the reader watched. */
   let tokenExpired = $state(false);
+  /** Outcome of retiring a copied PM setup token after it connects. */
+  let completionNotice = $state("");
+  const completedToken = { id: "" };
   /** Set once this panel is gone, so a late response strands nothing. */
   let destroyed = false;
   /**
@@ -148,6 +153,28 @@
     void coreClient.revokeHostEnrollmentToken(id).catch(() => {});
   }
 
+  async function retireAfterPMConnect(id) {
+    if (!id || completedToken.id === id) return;
+    completedToken.id = id;
+    token = null;
+    handedOver = false;
+    try {
+      const result = await coreClient.revokeHostEnrollmentToken(id);
+      const record = result?.enrollment_token ?? result;
+      if (record?.revoked_at && !record?.consumed_at) {
+        completionNotice = "PM connected. The unused setup token was revoked.";
+      } else if (record?.consumed_at) {
+        completionNotice = "PM connected. The setup token was already used.";
+      } else {
+        completionNotice =
+          "PM connected. Check Access → Hosts to confirm the setup token's status.";
+      }
+    } catch {
+      completionNotice =
+        "PM connected. The setup token may already have been used; check Access → Hosts for its status.";
+    }
+  }
+
   function describe(error, fallback) {
     return (
       error?.details ||
@@ -164,7 +191,7 @@
    * reader has already given up on.
    */
   async function issueToken({ replacing = false } = {}) {
-    if (issuing) return;
+    if (issuing || (kind === "pm" && completed)) return;
     issuing = true;
     issueError = "";
     refused = false;
@@ -196,6 +223,10 @@
         retire(issuedToken.id);
         return;
       }
+      if (kind === "pm" && completed) {
+        await retireAfterPMConnect(issuedToken.id);
+        return;
+      }
       token = issuedToken;
       handedOver = false;
       tokenExpired = false;
@@ -219,11 +250,17 @@
    * so switching workspaces re-issues and a re-render does not.
    */
   $effect(() => {
-    if (blockedReason) return;
+    if (blockedReason || (kind === "pm" && completed)) return;
     const key = `${kind}|${cliBaseUrl}`;
     if (issued.key === key) return;
     issued.key = key;
     void issueToken();
+  });
+
+  /* A PM first claim completes setup and may leave this token unused. */
+  $effect(() => {
+    if (kind !== "pm" || !completed || !token?.id) return;
+    void retireAfterPMConnect(token.id);
   });
 
   /** Only the countdown ages on screen, and only while a token is live. */
@@ -298,7 +335,18 @@
     {/each}
   </div>
 
-  {#if activeTab === "agent" && refused}
+  {#if activeTab === "agent" && kind === "pm" && completed}
+    <p
+      class="rounded-md border border-ok bg-ok-soft px-3 py-2 text-micro text-ok-text"
+      role="status"
+      data-setup-pm-complete
+    >
+      {completionNotice ||
+        (completedToken.id
+          ? "PM connected. Retiring the setup token."
+          : "PM connected. No setup token is needed.")}
+    </p>
+  {:else if activeTab === "agent" && refused}
     <p
       class="max-w-prose rounded-md border border-line bg-bg-soft px-3 py-2 text-micro text-fg-muted"
       data-setup-prompt-refused

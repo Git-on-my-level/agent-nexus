@@ -15,6 +15,16 @@ import {
 } from "../../src/lib/setup/setupPrompt.js";
 import { PM_RUNNERS, pmRunnerFor } from "../../src/lib/setup/pmRunners.js";
 
+const KNOWN_HARNESS_NAMES = [
+  "claude",
+  "codex",
+  "hermes",
+  "cursor",
+  "omp",
+  "pi",
+  "openclaw",
+];
+
 const BASE = {
   workspaceLabel: "Acme Ops",
   cliBaseUrl: "https://anx.example.test/o/acme/w/ops",
@@ -153,12 +163,17 @@ describe("machine prompt", () => {
     expect(prompt).toContain("host_enrollment");
   });
 
-  it("resolves the caller identity without guessing an agent name", () => {
-    expect(prompt).toContain("let anx resolve your caller identity");
-    expect(prompt).toContain("identity suggestion from `doctor`");
+  it("lets doctor guide caller identity without guessing an agent name", () => {
+    expect(prompt).toContain("your own current harness's registered name");
+    expect(prompt).toContain("Do not select another installed harness.");
+    expect(prompt).toContain("If you cannot");
     expect(prompt).toContain(
-      "Do not guess or substitute another agent's name.",
+      "registered name, stop and report that identity could not",
     );
+    expect(prompt).toContain("be resolved.");
+    expect(
+      prompt.indexOf("your own current harness's registered name"),
+    ).toBeLessThan(prompt.indexOf("auth whoami"));
     expect(prompt).not.toMatch(
       /--as\s+['"]?(claude|codex|hermes|cursor|omp)\b/i,
     );
@@ -230,47 +245,105 @@ describe("PM prompt", () => {
     expect(prompt).toContain("--json pm status");
   });
 
-  it("sets the dedicated PM service identity separately from the runner", () => {
-    expect(prompt).toContain("--as 'pm' pm install --runner ");
+  it("uses the selected runner as the PM service identity", () => {
+    expect(prompt).toContain("--as 'claude' pm install --runner ");
     const hermes = buildPmPrompt({ ...BASE, runnerKey: "hermes" });
-    expect(prompt).toContain("--as 'pm' --json auth whoami");
-    expect(hermes).toContain("--as 'pm' --json auth whoami");
+    expect(prompt).toContain("--as 'claude' --json auth whoami");
+    expect(hermes).toContain("--as 'hermes' --json auth whoami");
     expect(hermes).toContain(shellQuote(pmRunnerFor("hermes").argv));
-    expect(prompt).not.toContain(`--as ${shellQuote("claude")}`);
-    expect(hermes).not.toContain(`--as ${shellQuote("hermes")}`);
+    expect(hermes).toContain("--as 'hermes' --json doctor");
+    expect(hermes).not.toContain("--as 'claude'");
   });
 
-  it("keeps the PM identity separate from the runner selected by the UI", () => {
-    for (const key of ["claude", "hermes"]) {
-      const selected = buildPmPrompt({ ...BASE, runnerKey: key });
-      expect(selected).toContain("selected PM identity, pm");
-      expect(selected.match(/--as\s+'[^']+'/g)).toEqual([
-        `--as 'pm'`,
-        `--as 'pm'`,
-        `--as 'pm'`,
-        `--as 'pm'`,
-      ]);
-      expect(selected).toContain(shellQuote(pmRunnerFor(key).argv));
-    }
-  });
-
-  it("does not guess the machine identity or conflate PM runner and service identity", () => {
+  it("keeps identity caller-owned or tied to the selected PM runner", () => {
     const machine = buildMachinePrompt(BASE);
-    expect(machine.match(/--as\s+[^\s]+/g) ?? []).toEqual([]);
+    const machineCommands = machine
+      .split("\n")
+      .filter((line) => line.trimStart().startsWith("anx "));
+    expect(machineCommands.filter((line) => line.includes("--as"))).toEqual([]);
+    for (const runner of PM_RUNNERS) {
+      expect(machine).not.toContain(runner.label);
+      expect(machine).not.toContain(runner.key);
+    }
 
     for (const runner of PM_RUNNERS) {
       const pm = buildPmPrompt({ ...BASE, runnerKey: runner.key });
       expect(pm.match(/--as\s+'([^']+)'/g)).toEqual([
-        `--as 'pm'`,
-        `--as 'pm'`,
-        `--as 'pm'`,
-        `--as 'pm'`,
+        `--as '${runner.key}'`,
+        `--as '${runner.key}'`,
+        `--as '${runner.key}'`,
+        `--as '${runner.key}'`,
+        `--as '${runner.key}'`,
       ]);
       for (const otherRunner of PM_RUNNERS) {
-        expect(pm).not.toContain(`--as '${otherRunner.key}'`);
+        if (otherRunner.key !== runner.key) {
+          expect(pm).not.toContain(`--as '${otherRunner.key}'`);
+          expect(pm).not.toContain(otherRunner.label);
+        }
       }
+      expect(pm).toContain(runner.label);
       expect(pm).toContain(shellQuote(runner.argv));
     }
+  });
+
+  it("never hard-codes an agent identity in the machine or PM prompt", () => {
+    const fixedIdentity = new RegExp(
+      `(?:--as\\s+['"]?|ANX_AS=)(?:${PM_RUNNERS.map((runner) => runner.key).join("|")})\\b`,
+      "i",
+    );
+    const machine = buildMachinePrompt(BASE);
+    expect(machine).not.toMatch(fixedIdentity);
+    for (const name of KNOWN_HARNESS_NAMES) {
+      expect(machine).not.toMatch(new RegExp(`\\b${name}\\b`, "i"));
+    }
+
+    for (const runner of PM_RUNNERS) {
+      const pm = buildPmPrompt({ ...BASE, runnerKey: runner.key });
+      const asNames = [...pm.matchAll(/--as\s+['"]?([^\s'"]+)/g)].map(
+        (match) => match[1],
+      );
+      expect(asNames.length).toBeGreaterThan(0);
+      expect(new Set(asNames.filter((name) => name !== "<name>`"))).toEqual(
+        new Set([runner.key]),
+      );
+      for (const name of KNOWN_HARNESS_NAMES.filter(
+        (candidate) => candidate !== runner.key,
+      )) {
+        expect(pm).not.toMatch(new RegExp(`\\b${name}\\b`, "i"));
+      }
+      expect(pm).not.toMatch(
+        new RegExp(
+          `ANX_AS=(?:${PM_RUNNERS.filter((other) => other.key !== runner.key)
+            .map((other) => other.key)
+            .join("|")})\\b`,
+          "i",
+        ),
+      );
+    }
+  });
+
+  it("never tells an agent to ignore a failed doctor check", () => {
+    for (const value of [prompt, buildPmPrompt(BASE)]) {
+      expect(value).toContain(
+        "`identity_resolution` must be pass before continuing",
+      );
+      expect(value).toContain(
+        "Do not dismiss another failed check as expected",
+      );
+      expect(value).not.toContain("ignore them here");
+      expect(value).not.toContain(
+        "other red checks in that output are expected",
+      );
+    }
+  });
+
+  it("identifies the caller-owned identity before machine verification", () => {
+    const machine = buildMachinePrompt(BASE);
+    expect(machine).toContain("your own current harness's registered name");
+    expect(machine).toContain("Do not select another installed harness.");
+    expect(
+      machine.indexOf("your own current harness's registered name"),
+    ).toBeLessThan(machine.indexOf("auth whoami"));
   });
 });
 

@@ -4,12 +4,14 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/hostidentity"
 )
 
@@ -111,7 +113,7 @@ func doctorStatus(checks []any, name, status string) bool {
 	return false
 }
 
-func TestDoctorSuggestsUniqueRuntimeAdapterForIdentity(t *testing.T) {
+func TestDoctorDoesNotGuessFromOneInstalledAdapter(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -146,15 +148,42 @@ func TestDoctorSuggestsUniqueRuntimeAdapterForIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	checks := asSlice(asMap(payload["result"])["checks"])
-	var message string
+	var identityCheck map[string]any
 	for _, raw := range checks {
 		check := asMap(raw)
 		if anyString(check["name"]) == "identity_resolution" {
-			message = anyString(check["message"])
+			identityCheck = check
 		}
 	}
-	if !strings.Contains(message, "anx --as hermes doctor") || !strings.Contains(message, "ANX_AS=hermes") {
-		t.Fatalf("identity check lacks a concrete repair: %s", message)
+	message := anyString(identityCheck["message"])
+	if anyString(identityCheck["status"]) != "fail" || asBool(identityCheck["ok"]) {
+		t.Fatalf("installed adapter must not resolve caller identity: %#v", identityCheck)
+	}
+	if !strings.Contains(message, "--as <registered-agent-name>") || !strings.Contains(message, "ANX_AS=<registered-agent-name>") || !strings.Contains(message, "do not infer it from installed harnesses") {
+		t.Fatalf("identity check lacks a safe repair: %s", message)
+	}
+	if strings.Contains(message, "hermes") {
+		t.Fatalf("doctor guessed the installed adapter as the caller: %s", message)
+	}
+	for _, raw := range checks {
+		check := asMap(raw)
+		if anyString(check["name"]) == "agentctl_presence" && !asBool(check["ok"]) {
+			t.Fatalf("agentctl absence must not be a failed check: %#v", check)
+		}
+	}
+}
+
+func TestDoctorIdentityFailureNamesTheRequiredSelection(t *testing.T) {
+	check := identityResolutionDoctorCheck("", "", errnorm.Usage("identity_unresolved", "pass --as <registered-agent-name> or set ANX_AS"))
+	if check.OK || check.Status != "fail" || !strings.Contains(check.Message, "--as <registered-agent-name>") || !strings.Contains(check.Message, "ANX_AS=<registered-agent-name>") || !strings.Contains(check.Message, "do not infer it from installed harnesses") {
+		t.Fatalf("identity failure should name the exact repair shape: %+v", check)
+	}
+}
+
+func TestDoctorAgentctlAbsenceIsAnOptionalWarning(t *testing.T) {
+	check := agentctlPresenceDoctorCheck(errors.New("agentctl not found"))
+	if !check.OK || check.Status != "warn" || !strings.Contains(check.Message, "optional") {
+		t.Fatalf("agentctl absence should be an optional warning: %+v", check)
 	}
 }
 

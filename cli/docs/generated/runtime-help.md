@@ -408,7 +408,8 @@ Setup and identity
 - Granting an agent on host X trusts every process that can read X's shared host key and request that agent name. Protect that key as an administration credential. Human invitations and human identity creation remain human-only.
 - For fleet hosts, an explicitly granted auth-admin agent creates a one-time token with `anx host tokens create --label <destination-label>`. Deliver it over an authenticated channel, then pipe it to `anx host enroll --name <destination-slug> --token-stdin` on the destination machine. Replace both placeholders with the real destination values; set the workspace base URL on both machines, disable shell tracing, and never log the secret. Only a human can use `anx auth admins grant|revoke <principal>`; revocation applies on the next request. Agents cannot revoke their own host.
 - Run `anx config workspaces` when unsure which workspace applies. Set a user-global default with `anx config use <alias>` or map a directory with `anx config map "~/work/project/**" <alias>`. Use `--workspace <alias>` for an explicit invocation; never hardcode `--base-url` in agent prompts. Preferences live outside git repositories.
-- Set `ANX_AS=<name>` or pass `--as <name>` to select an explicit stable principal. Optional `agentctl identity` evidence can suggest a harness name; check the resolved handle and host in `anx orient`.
+- Set `ANX_AS=<name>` or pass `--as <name>` to select an explicit stable principal. Active `agentctl identity` evidence can resolve the current caller; installed harness availability alone is not caller identity. Check the resolved handle and host in `anx orient`.
+- Run `anx doctor` before authenticated work. If `identity_resolution` fails, set `--as <registered-agent-name>` or `ANX_AS=<registered-agent-name>` to your own registered principal and rerun doctor. Installed harnesses do not establish who is running the command.
 - `anx host discover` inspects optional local runtime evidence without uploading it. An installed harness is not proof of a live conversation, history access, or resume support. Generic registration does not require agentctl.
 
 
@@ -785,7 +786,7 @@ Global flags:
 Report workspace resolution and local/network preconditions.
 
 ```text
-Doctor: report the resolved workspace and source, enrollment, host key permissions, identity, agentctl and CLI/core version checks. When identity is unresolved and one runtime adapter is detected, doctor recommends its exact --as and ANX_AS values. Ambiguous workspace selection fails before networking.
+Doctor: report the resolved workspace and source, enrollment, host key permissions, identity, agentctl and CLI/core version checks. An unresolved identity is a failed check with the required --as <registered-agent-name> or ANX_AS=<registered-agent-name> form. Use the caller's own registered identity; installed harnesses do not establish who is running this command. Rerun doctor after applying the fix. Missing agentctl is an optional warning for direct anx commands. Ambiguous workspace selection fails before networking.
 
 Usage:
   anx doctor
@@ -9258,7 +9259,7 @@ Local Help: runs ingest
 - Composition: agentctl command appends an owner-only JSON event path. Its child has only PATH and LANG; pass --config-dir and --base-url explicitly. Failures are logged without secrets under <config-dir>/logs/runs-ingest.log.
 - JSON body: Idempotent run upsert result
 - Examples:
-  - `anx --config-dir /absolute/anx --base-url https://anx.example.com runs ingest /absolute/event.json`
+  - `anx --config-dir "${ANX_CONFIG_DIR:?set ANX_CONFIG_DIR to your CLI config directory}" --base-url "${ANX_BASE_URL:?set ANX_BASE_URL to this workspace's core URL}" runs ingest "${ANX_EVENT_FILE:?set ANX_EVENT_FILE to the event file path}"`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -9366,7 +9367,7 @@ Local Help: import apply
 - JSON body: `plan`, `execute`, `results`, `refs`
 - Examples:
   - `anx import apply --plan ./.anx-import/workspace/plan.json`
-  - `anx --as importer import apply --plan ./.anx-import/workspace/plan.json --execute`
+  - `anx import apply --plan ./.anx-import/workspace/plan.json --execute`
 
 Flags:
   --plan <path>                Plan produced by `anx import plan`. Positional form also supported.
@@ -9595,8 +9596,8 @@ Local Help: pm serve
 - Composition: Local runner. Claims one leased turn, writes a small prompt file, launches the configured harness through agentctl, then completes or fails the turn. Does not call a model in-process.
 - JSON body: `turn_id`, `execution_id`, `status`, `provider`, `model`
 - Examples:
-  - `anx --as pm pm serve --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'`
-  - `anx --as pm pm serve --runner 'hermes chat --query-file {prompt_file} -Q'`
+  - `anx pm serve --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'`
+  - `anx pm serve --runner 'hermes chat --query-file {prompt_file} -Q'`
 
 Flags:
   --runner <argv>              Harness argv. Without {prompt}, this is passed to `agentctl run --`. With {prompt_file} (or legacy {prompt}), argv is executed directly after substituting the prompt file path. Evidence refs come from a trailing ---evidence--- block or a JSON evidence_refs array on the reply object (the same object assistant text is read from), never from prose or nested tool output. Topic and document refs are verified like card/work/artifact/event/decision. Replies over the turn's max_output_bytes (default 64000, core's turn-text ceiling) are stored with a visible truncation marker.

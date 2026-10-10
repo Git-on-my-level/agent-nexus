@@ -14,7 +14,7 @@ anx orient
 
 Enrollment prints a user code and verification URL for human approval. For a shared deployment, set `ANX_BASE_URL` to its reachable core URL first. For CI, pipe a one-time headless token to `anx host enroll --token-stdin`. The first enrolled workspace becomes the default if none is set; later enrollments preserve that choice and print `anx config use <alias>` to select the new workspace. Run `anx config workspaces` when unsure, and use `anx config map "~/work/project/**" <alias>` for directory rules. Preferences are user-global in `~/.config/anx/workspaces.json`; never hardcode `--base-url` in agent prompts. Multiple enrolled workspaces without a selection fail with repair commands. The host key is stored owner-only under `~/.config/anx/hosts/<workspace-key>/`.
 
-Inside `agentctl run` or a verified harness, the CLI may resolve identity automatically. Otherwise, use the identity you intend for your own ANX activity with `--as` or `ANX_AS`; `anx doctor` gives a specific suggestion only when one adapter is detected. See [host and runs runbook](docs/runbook.md) for token scripting and the agentctl subscription recipe.
+Inside `agentctl run` or a verified harness, the CLI may resolve identity automatically. Otherwise, use your own registered ANX identity with `--as <registered-agent-name>` or `ANX_AS=<registered-agent-name>`. If `anx doctor` reports `identity_resolution` as failed, follow that exact form and rerun doctor; installed harnesses do not establish who is running the command. See [host and runs runbook](docs/runbook.md) for token scripting and the agentctl subscription recipe.
 
 ## Workspace secrets (`anx secret`)
 

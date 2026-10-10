@@ -1227,7 +1227,7 @@ func helpTopicTextRaw(topic string) (string, bool) {
 		return envDocText() + "\n", true
 	}
 	if topic == "doctor" {
-		return "Doctor: report the resolved workspace and source, enrollment, host key permissions, identity, agentctl and CLI/core version checks. When identity is unresolved and one runtime adapter is detected, doctor recommends its exact --as and ANX_AS values. Ambiguous workspace selection fails before networking.\n\nUsage:\n  anx doctor\n\n" + formatGlobalFlagUsage(topic), true
+		return "Doctor: report the resolved workspace and source, enrollment, host key permissions, identity, agentctl and CLI/core version checks. An unresolved identity is a failed check with the required --as <registered-agent-name> or ANX_AS=<registered-agent-name> form. Use the caller's own registered identity; installed harnesses do not establish who is running this command. Rerun doctor after applying the fix. Missing agentctl is an optional warning for direct anx commands. Ambiguous workspace selection fails before networking.\n\nUsage:\n  anx doctor\n\n" + formatGlobalFlagUsage(topic), true
 	}
 	if topic == "config" {
 		return "Config: anx config workspaces lists aliases and the cwd rule; anx config use <alias|url> sets a user-global default. Use anx config map <path-glob> <alias|url> and anx config unmap <path-glob> for directory rules. anx config show prints the resolved workspace and sources (secrets redacted).\n", true
