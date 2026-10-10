@@ -207,8 +207,13 @@ test.describe("an onboarded PM that is not running", () => {
     await expect(page.locator("[data-pm-offline-note]")).toContainText(
       "anx pm status",
     );
-    // The runner and host core reported, in the unobtrusive status line.
-    await expect(page.locator("[data-pm-status]")).toContainText("Hermes");
+    // The badge keeps the state; the runner and host core reported are its
+    // tooltip, because a header has room for a word and not for a sentence
+    // about where a process is running.
+    await expect(page.locator("[data-pm-status]")).toContainText("Offline");
+    await expect(
+      page.locator("[data-pm-status] [data-tooltip]"),
+    ).toHaveAttribute("data-tooltip", /Hermes on studio/);
     // Asking stays possible: the answer waits for the machine to come back.
     await expect(page.locator("#pm-message")).toBeEnabled();
     await expectCleanLayout(page, "ask pm offline");

@@ -20,8 +20,15 @@ with subtle borders.
 - Linkable over hidden: operator-visible view state that changes which records
   or panels are shown should default to route/query state when practical.
 - Said once: a fact belongs to one element. A badge is not paired with prose
-  repeating it, a page heading is not reprinted by the thing under it, and a
-  panel's eyebrow is dropped when its title already names the kind.
+  repeating it, a page heading is not reprinted by the thing under it, a
+  panel's eyebrow is dropped when its title already names the kind, and a
+  timestamp belongs to the group header or to the row, never to both.
+- A derived title is not a title. Where a name is cut from content — a
+  conversation named from its first message — showing it beside that content
+  is the content twice, truncated. Show it only where the content is not.
+- A live state is a line, not a stack. One row says what is happening and how
+  long it has been happening; its detail collapses behind it, and a note
+  about an unusual wait waits until the wait is unusual.
 - No narration: a heading that needs a sentence explaining it is the wrong
   heading, and a subtitle that names the sections below it is those sections
   read twice. A subtitle earns its line by carrying a computed value — counts,

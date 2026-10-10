@@ -602,9 +602,86 @@ const INBOX_ITEMS = [
   },
 ];
 
-async function installFixture(page) {
+/**
+ * Ask PM, in the three states the header and the thread read differently in:
+ * nothing asked yet, a turn still running, and a turn answered with its
+ * sources and its run log.
+ */
+const PM_CONVERSATION = {
+  id: "pm-conversation",
+  // Core names a conversation from its first question, so this is what most
+  // conversations carry: the first bubble again, cut at 100 characters.
+  title:
+    "Which agents are blocked, and what do you need from me before the release goes",
+  created_at: iso(-0.4),
+};
+
+const PM_RUNNING_TURNS = [
+  {
+    id: "pm-turn-running",
+    text: "Which agents are blocked, and what do you need from me before the release goes out on Friday?",
+    created_at: iso(-0.0128),
+    status: "sending",
+    claimed: true,
+    activity: [
+      { sequence: 1, label: "Claimed" },
+      { sequence: 2, label: "Preparing runtime" },
+      { sequence: 3, label: "Running", target: "anx pm answer" },
+    ],
+  },
+];
+
+/** A conversation somebody named: the heading path, with "Ask PM" above it. */
+const PM_NAMED_CONVERSATION = {
+  id: "pm-named",
+  title: "Friday release readiness",
+  created_at: iso(-0.4),
+};
+
+const PM_ANSWERED_TURNS = [
+  {
+    id: "pm-turn-answered",
+    text: "Which agents are blocked, and what do you need from me before the release goes out on Friday?",
+    created_at: iso(-0.4),
+    status: "delivered",
+    response: [
+      "Two agents are blocked and one needs you.",
+      "",
+      "- `card:release-b` is waiting on the overview decision — that one is yours.",
+      "- The access request from `agent-builder` has nobody to approve it.",
+      "",
+      "Nothing else is stuck.",
+    ].join("\n"),
+    evidence_refs: [
+      "card:release-b",
+      "card:agents-cannot-wait-on-their-own-access-request",
+      "document:release-runbook",
+      "card:dashboards",
+      "card:onboarding",
+    ],
+    activity: [
+      { sequence: 1, label: "Claimed" },
+      { sequence: 2, label: "Preparing runtime" },
+      { sequence: 3, label: "Reading the workspace" },
+      { sequence: 4, label: "Finished" },
+    ],
+  },
+];
+
+async function installFixture(
+  page,
+  { pmTurns = null, pmConversation = null } = {},
+) {
   await page.clock.setFixedTime(new Date(NOW));
-  await installWorkspaceApi(page, { documents: [DASHBOARD_DOCUMENT] });
+  await installWorkspaceApi(page, {
+    documents: [DASHBOARD_DOCUMENT],
+    ...(pmTurns
+      ? {
+          conversations: [pmConversation ?? PM_CONVERSATION],
+          turns: pmTurns,
+        }
+      : { conversations: [], turns: [] }),
+  });
   await page.route("**/*", async (route) => {
     const request = route.request();
     if (!["fetch", "xhr"].includes(request.resourceType())) {
@@ -788,6 +865,61 @@ for (const { label, width, height } of WIDTHS) {
       contentType: "image/png",
     });
   });
+
+  for (const pm of [
+    { name: "pm-empty", turns: null, settle: "Nothing asked yet" },
+    { name: "pm-running", turns: PM_RUNNING_TURNS, settle: "Working" },
+    {
+      name: "pm-answered",
+      turns: PM_ANSWERED_TURNS,
+      settle: "Two agents are blocked",
+    },
+    // A conversation with a name of its own: the heading is the name, with
+    // "Ask PM" as the eyebrow. The three above take the common path, where
+    // the title only echoes the first question and the page stays "Ask PM".
+    {
+      name: "pm-named",
+      turns: PM_ANSWERED_TURNS,
+      conversation: PM_NAMED_CONVERSATION,
+      settle: "Two agents are blocked",
+    },
+  ]) {
+    test(`capture ${pm.name} @ ${label}`, async ({ page }, testInfo) => {
+      test.skip(!LABEL, "set REVIEW_CAPTURES=before|after to capture");
+      test.setTimeout(120_000);
+      await installFixture(page, {
+        pmTurns: pm.turns,
+        pmConversation: pm.conversation ?? null,
+      });
+      await page.setViewportSize({ width, height });
+      await page.goto(
+        pm.turns
+          ? `${WORKSPACE}/pm?conversation=${(pm.conversation ?? PM_CONVERSATION).id}`
+          : `${WORKSPACE}/pm`,
+      );
+      // Scoped to the thread: the sidebar carries its own "Who is working".
+      await expect(
+        page
+          .getByRole("region", { name: "PM conversation" })
+          .getByText(pm.settle, { exact: false })
+          .first(),
+      ).toBeVisible({ timeout: 60_000 });
+      await waitForAppReady(page);
+      await nextPaint(page);
+      await page.evaluate(() => document.fonts?.ready);
+      await mkdir(OUT, { recursive: true });
+      const file = `${OUT}/${LABEL}-${pm.name}-${label}.png`;
+      await page.screenshot({
+        path: file,
+        animations: "disabled",
+        fullPage: true,
+      });
+      await testInfo.attach(`${LABEL}-${pm.name}-${label}`, {
+        path: file,
+        contentType: "image/png",
+      });
+    });
+  }
 
   test(`capture initiative page @ ${label}`, async ({ page }, testInfo) => {
     test.skip(!LABEL, "set REVIEW_CAPTURES=before|after to capture");
