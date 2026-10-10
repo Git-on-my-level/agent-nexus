@@ -307,10 +307,13 @@ export function seriesChartData(panel, { now = Date.now() } = {}) {
         }),
       };
     }
-  } else if (partialAt !== null && axisList(live.xAxis)[0]?.type === "time") {
+  }
+  if (partialAt !== null && axisList(option.xAxis)[0]?.type === "time") {
     /*
      * One reference line on the first series, not one per series: they would
-     * land on the same instant and draw the same line N times.
+     * land on the same instant and draw the same line N times. Applied after
+     * the category attempt so a refused rebin still marks today's unfinished
+     * bucket on the time axis it kept.
      */
     const first = option.series[0];
     const lines = [{ name: "Partial", xAxis: partialAt }];

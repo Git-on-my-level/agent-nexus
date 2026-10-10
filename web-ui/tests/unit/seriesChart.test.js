@@ -367,6 +367,22 @@ describe("what it refuses to restyle", () => {
     expect(validateReportChart(out)).toEqual([]);
   });
 
+  it("marks the partial bucket when it cannot convert to categories", () => {
+    // A declared-bar panel that keeps its time axis still has today's
+    // unfinished bucket; without the line, that last point reads as a crash.
+    const twice = panel({
+      streams: [{ name: "prs-merged repo=oss", values: [1, 2, 3] }],
+      fallback: authored([{ type: "bar", name: "OSS", data: [1] }]),
+    });
+    twice.data.option.series[0].data.push([START + DAY, 9]);
+    const out = seriesChartData(twice, { now: START + 2 * DAY + 3_600_000 });
+    expect(out.option.xAxis.type).toBe("time");
+    expect(out.option.series[0].markLine.data).toEqual([
+      { name: "Partial", xAxis: START + 2 * DAY },
+    ]);
+    expect(validateReportChart(out)).toEqual([]);
+  });
+
   it("keeps the axis a live series was plotted against", () => {
     /*
      * Core sends one y-axis today, but a core that sends two would have a
