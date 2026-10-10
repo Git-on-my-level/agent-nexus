@@ -447,6 +447,14 @@ func deriveErrorActions(command string, err *errnorm.Error) []output.NextAction 
 		}
 	}
 	switch err.Code {
+	case "outcome_unknown":
+		family := strings.Fields(command)
+		if len(family) > 0 {
+			switch family[0] {
+			case "cards", "boards", "topics", "docs", "work":
+				return []output.NextAction{action("Check current state", "anx", family[0], "list")}
+			}
+		}
 	case "workspace_ambiguous":
 		prefix := []string{"anx"}
 		if details, ok := err.Details.(map[string]any); ok {

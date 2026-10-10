@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"agent-nexus-core/internal/sqliteutil"
 	"agent-nexus-core/internal/workprojection"
 	"context"
 	"database/sql"
@@ -53,11 +54,13 @@ func installAskSubjects(ctx context.Context, tx *sql.Tx) error {
 }
 
 func (w *Workspace) MaintainAskSubjectsBatch(ctx context.Context) (bool, error) {
-	tx, err := w.db.BeginTx(ctx, nil)
+	ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+	tx, cleanup, err := sqliteutil.BeginMaintenanceChunk(ctx, w.db)
 	if err != nil {
 		return false, err
 	}
-	defer tx.Rollback()
+	defer cleanup()
 	var cursor string
 	var done bool
 	if err = tx.QueryRowContext(ctx, `SELECT cursor,done FROM ask_subjects_job WHERE singleton=1`).Scan(&cursor, &done); err != nil || done {

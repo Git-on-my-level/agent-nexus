@@ -3,10 +3,13 @@ package app
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"io"
 	"mime"
 	"mime/multipart"
@@ -181,7 +184,7 @@ func (a *App) invokeRawJSON(ctx context.Context, cfg config.Resolved, commandNam
 		Body:    requestBody,
 	})
 	if invokeErr != nil {
-		return nil, errnorm.Wrap(errnorm.KindNetwork, "request_failed", fmt.Sprintf("%s request failed", commandName), invokeErr)
+		return nil, mutationTransportError(commandName, method, body, invokeErr)
 	}
 	responseBody := resp.Body
 	if resp.StatusCode >= http.StatusBadRequest {
@@ -199,6 +202,19 @@ func (a *App) invokeRawJSON(ctx context.Context, cfg config.Resolved, commandNam
 }
 
 func (a *App) invokeTypedJSON(ctx context.Context, cfg config.Resolved, commandName string, commandID string, pathParams map[string]string, query []queryParam, body any) (*commandResult, error) {
+	// Allocate once on the payload itself, before normalization or transport retries.
+	// An explicitly supplied key always wins; identical intentional creates get new keys.
+	switch commandID {
+	case "cards.create", "boards.create", "topics.create", "docs.create", "boards.cards.add", "boards.cards.batch_add":
+		if payload, ok := body.(map[string]any); ok && strings.TrimSpace(anyString(payload["request_key"])) == "" {
+			key := make([]byte, 16)
+			if _, err := rand.Read(key); err != nil {
+				return nil, errnorm.Local("request_key_failed", "failed to allocate request key")
+			}
+			payload["request_key"] = hex.EncodeToString(key)
+		}
+	}
+
 	if body != nil {
 		normalizedBody, err := a.normalizeMutationBodyIDs(ctx, cfg, commandID, pathParams, body)
 		if err != nil {
@@ -229,7 +245,7 @@ func (a *App) invokeTypedJSON(ctx context.Context, cfg config.Resolved, commandN
 		return nil, errnorm.FromHTTPFailure(resp.StatusCode, responseBody)
 	}
 	if invokeErr != nil {
-		return nil, errnorm.Wrap(errnorm.KindNetwork, "request_failed", fmt.Sprintf("%s request failed", commandName), invokeErr)
+		return nil, mutationTransportError(commandName, resolveCommandMethod(commandID), body, invokeErr)
 	}
 
 	headersSorted := normalizedHeaders(resp.Header)

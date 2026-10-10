@@ -10747,6 +10747,11 @@ components:
         card_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
+        card_refs_truncated:
+          type: boolean
+          description: >
+            The membership preview is partial. Single-card create responses echo only the
+            created card; list board cards to read memberships. Omitted on full board reads.
         pinned_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
@@ -11564,7 +11569,13 @@ components:
       type: object
       properties:
         actor_id: { type: string }
-        request_key: { type: string }
+        request_key:
+          type: string
+          description: >
+            Stable actor-scoped idempotency key. The card and replay result commit atomically.
+            Reuse the same key and original body after an unknown outcome; a different body
+            with the same key is a conflict. The CLI generates a key when omitted and prints
+            it on transport errors. Replays remain subject to current resource authorization.
         board_id:
           type: string
           deprecated: true

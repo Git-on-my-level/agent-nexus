@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"agent-nexus-core/internal/sqliteutil"
 	"context"
 	"database/sql"
 	"fmt"
@@ -179,11 +180,13 @@ func (w *Workspace) MaintainInboxLifecycleBatch(ctx context.Context, limit int) 
 	if limit < 1 || limit > 200 {
 		limit = 200
 	}
-	tx, err := w.db.BeginTx(ctx, nil)
+	ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+	tx, cleanup, err := sqliteutil.BeginMaintenanceChunk(ctx, w.db)
 	if err != nil {
 		return false, err
 	}
-	defer tx.Rollback()
+	defer cleanup()
 	var phase, done int
 	var cursor string
 	if err = tx.QueryRowContext(ctx, `SELECT phase,cursor,done FROM inbox_lifecycle_job WHERE singleton=1`).Scan(&phase, &cursor, &done); err != nil {
