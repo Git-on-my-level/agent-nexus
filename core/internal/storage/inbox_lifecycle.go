@@ -180,8 +180,10 @@ func (w *Workspace) MaintainInboxLifecycleBatch(ctx context.Context, limit int) 
 	if limit < 1 || limit > 200 {
 		limit = 200
 	}
-	ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
-	defer cancel()
+	return w.inboxLifecycleBatch.run(ctx, limit, w.maintainInboxLifecycleChunk)
+}
+
+func (w *Workspace) maintainInboxLifecycleChunk(ctx context.Context, limit int) (bool, error) {
 	tx, cleanup, err := sqliteutil.BeginMaintenanceChunk(ctx, w.db)
 	if err != nil {
 		return false, err

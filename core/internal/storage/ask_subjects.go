@@ -54,8 +54,10 @@ func installAskSubjects(ctx context.Context, tx *sql.Tx) error {
 }
 
 func (w *Workspace) MaintainAskSubjectsBatch(ctx context.Context) (bool, error) {
-	ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
-	defer cancel()
+	return w.askSubjectsBatch.run(ctx, 200, w.maintainAskSubjectsChunk)
+}
+
+func (w *Workspace) maintainAskSubjectsChunk(ctx context.Context, limit int) (bool, error) {
 	tx, cleanup, err := sqliteutil.BeginMaintenanceChunk(ctx, w.db)
 	if err != nil {
 		return false, err
@@ -66,7 +68,7 @@ func (w *Workspace) MaintainAskSubjectsBatch(ctx context.Context) (bool, error) 
 	if err = tx.QueryRowContext(ctx, `SELECT cursor,done FROM ask_subjects_job WHERE singleton=1`).Scan(&cursor, &done); err != nil || done {
 		return done, err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT id FROM events WHERE id>? ORDER BY id LIMIT 200`, cursor)
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM events WHERE id>? ORDER BY id LIMIT ?`, cursor, limit)
 	if err != nil {
 		return false, err
 	}
@@ -95,7 +97,7 @@ func (w *Workspace) MaintainAskSubjectsBatch(ctx context.Context) (bool, error) 
 		}
 		cursor = id
 	}
-	done = len(ids) < 200
+	done = len(ids) < limit
 	if _, err = tx.ExecContext(ctx, `UPDATE ask_subjects_job SET cursor=?,done=? WHERE singleton=1`, cursor, done); err != nil {
 		return false, err
 	}
