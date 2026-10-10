@@ -2,6 +2,7 @@ package pm
 
 import (
 	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/schema"
 	"context"
 	"encoding/json"
 	"errors"
@@ -461,10 +462,17 @@ func (s *Service) getTurnContextView(ctx context.Context, p Principal, turnID, c
 	if view != "" && view != "cards" && view != "card" {
 		return ContextPage{}, ErrInvalid
 	}
+	if view == "card" {
+		validated, err := conversationRefs(contextRef, nil)
+		kind, _, refErr := schema.SplitTypedRef(contextRef)
+		if err != nil || len(validated) != 1 || refErr != nil || kind != "card" {
+			return ContextPage{}, ErrInvalid
+		}
+	}
 	if view != "" && (query != "" || cursor != "" || (view == "card" && contextRef == "")) {
 		return ContextPage{}, ErrInvalid
 	}
-	if contextRef != "" {
+	if contextRef != "" && view != "card" {
 		found := false
 		for _, ref := range refs {
 			if ref == contextRef {
@@ -502,6 +510,16 @@ func (s *Service) getTurnContextView(ctx context.Context, p Principal, turnID, c
 		}
 		if err := s.authorize(ctx, reader, "pm.read", ""); err != nil {
 			return ContextPage{}, err
+		}
+		if view == "cards" && len(refs) == 0 {
+			if s.deps.ReadWorkspaceOverview == nil {
+				return ContextPage{}, ErrUnavailable
+			}
+			page, err := s.deps.ReadWorkspaceOverview(ctx, reader)
+			if err != nil {
+				return ContextPage{}, err
+			}
+			return s.attachReaderDecisions(ctx, reader, page)
 		}
 		page, err := s.deps.ReadPinnedCards(ctx, reader, refs, view == "card")
 		if err != nil {

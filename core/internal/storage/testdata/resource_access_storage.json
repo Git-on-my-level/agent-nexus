@@ -641,6 +641,13 @@
       "signal": "scope:presence",
       "workspace_id": "scope:presence"
     },
+    "pm_reader_decision_positions": {
+      "actor_id": "internal:reader-cursor",
+      "id": "internal:reader-cursor",
+      "kind": "internal:reader-cursor",
+      "status": "internal:reader-cursor",
+      "workspace_id": "internal:reader-cursor"
+    },
     "pm_records": {
       "actor_id": "scope:pm-closure",
       "body": "scope:pm-closure",
@@ -655,6 +662,21 @@
       "host": "scope:presence",
       "runner": "scope:presence",
       "workspace_id": "scope:presence"
+    },
+    "pm_workspace_ask_positions": {
+      "category": "internal:reader-cursor",
+      "id": "internal:reader-cursor",
+      "recipient": "internal:reader-cursor",
+      "trigger_at": "internal:reader-cursor"
+    },
+    "pm_workspace_card_positions": {
+      "attention": "internal:reader-cursor",
+      "id": "internal:reader-cursor",
+      "updated_at": "internal:reader-cursor"
+    },
+    "pm_workspace_event_positions": {
+      "id": "internal:reader-cursor",
+      "ts": "internal:reader-cursor"
     },
     "receipt_access_epoch": {
       "singleton": "internal:reader-snapshot",
@@ -1316,6 +1338,7 @@
     "../pm/bridge.go:NexusBridge:Dispatch": "42fd81e5c8f527140ebf13fdd4ba0b6cbba514d7ad1e2bd02d67dce4c29fd4f1",
     "../pm/bridge.go:NexusBridge:EnsureThread": "77131534d315f7027049b18d6ab5195a3875a15366ac764f44e803e745e9f7de",
     "../pm/card_context.go:*Service:attachPinnedDecisions": "8ad4d012056e691ee8421e9a8d5dd839d097d4d45f69179b4e35f5553539d131",
+    "../pm/card_context.go:*Service:attachReaderDecisions": "40fe267ac4eb62d3f85294b39ff647a3b38c7cfa506df132f735d50327a5b0b7",
     "../pm/channels.go:*Service:AnswerFromChannel": "5e230e228649d6c543158dd21c6aa45c261e04f59b895de4317dd93a2ffa8a52",
     "../pm/channels.go:*Service:BindChannel": "b8e3313097cf50b0041bb956f7b83cb29cc8b57abc188bebf940bb72e9c42085",
     "../pm/channels.go:*Service:QueueDecisionCard": "d5cdc72d694fd7545a42da3a76aebb84bb006063f8ee9cc11d210abbac7819e1",
@@ -1342,7 +1365,7 @@
     "../pm/decisions.go:*Service:decisionsForReader": "9ddb9d93be98475dccdd5282ed2ac91d34190c1f78d7964d92285fcfb0564092",
     "../pm/decisions.go:*Service:failBeforeSend": "caf965e739cb1849d3d2fba53b7b449ea94c9535e7bd1ceedd31b9a273b8f6d0",
     "../pm/decisions.go:*Service:failMissingWorkBeforeSend": "8143cb86e956f2c49abaca8a3408ec062c949c244b27036cfef43881692c7f61",
-    "../pm/decisions.go:*Service:getTurnContextView": "a8bf6853c627aee80f5309b21e419fb546b3b5d32dba49fa4f2732848d431ba2",
+    "../pm/decisions.go:*Service:getTurnContextView": "997db7de09343eb29c77d533589f46d36a1f4ddac58d2b01a42bba05592ea229",
     "../pm/decisions.go:*Service:proposeDecision": "8f64b5abe8b120a20db7c8878e1f66f67711c119ebf42415b8ac3acd452caae1",
     "../pm/http.go:Handler:ServeHTTP": "8db51d272815b1251602d996e5836fe880737def9589f8547f1195143e98b766",
     "../pm/http.go:decodeBody": "013bac259f1df3619fe9407e05fd3ae587874fcafadad0bc8e67fd7797eec65e",
@@ -1404,7 +1427,7 @@
     "../pm/store.go:*Store:insert": "d78061da553762033f2f00b1107b63f2450b07cb05d4c10b165820f0a757cad6",
     "../pm/store.go:*Store:insertTurn": "a5f6e6be92e97b8dda3b857e0f4adeab1c7d212e6d60e1b0247df4127586c9af",
     "../pm/store.go:*Store:proposeDecision": "1c579f6d79820a12cdc4550dd8a9c9ffa3d5e17901728c85554917b208764fea",
-    "../pm/store.go:NewStore": "5cafa3c302ab5c8301cb8365b318c18378dd06308c2ca7265a6b281b043fdee0",
+    "../pm/store.go:NewStore": "36cb5c359f6494cc7b702cfbd9b8ab0fcce03e018c8058b9d880501ffb22e41b",
     "../pm/store.go:listOpenTurns": "f27dfd82b2097fa171a8b66fd7c425f55a855ed1d9eb2bc44abc27d2b3613017",
     "../pm/store.go:listRecords": "6d0fa2a61732229d0e65d79acb25d4a892fdd9782c30e58f62f5464638646f4e",
     "../pm/store.go:rejectPendingHumanProposal": "9f8770d4330c9d2bb56f761d9f8787b3aefd82ace8d676aa273dff00a3654f38",
@@ -1429,7 +1452,7 @@
     "../pm/types.go:type:Binding": "89672f01c34a91634c84f1b5960d5db590a2d7116894b2e97de5d5bf2615ef73",
     "../pm/types.go:type:BusyError": "d8ba3205b0dfaeedbfcad45fb6f9f5b8257ce7ec68ebc74d2df52a4faa381ead",
     "../pm/types.go:type:ClaimInput": "4cf82b237c03dba011897779af1f8cdd5bac6b14bb5c5e7e8a8bfcf9bb5df84a",
-    "../pm/types.go:type:ContextPage": "4b56ddf7c5b0553c27d1e9365ec37006171fa9c17638220774a6bad26d082180",
+    "../pm/types.go:type:ContextPage": "346f4ae60dcd85acd1b440cce011d7c7cbd28167c372c7030aa6b83d789cd0fb",
     "../pm/types.go:type:Conversation": "ed524f1c654f4d41357375ca93493b8577391b64c8b341afacfd09fe2efaded3",
     "../pm/types.go:type:ConversationDetail": "afee687cd1f43bae9532109a39105fc572feab675065b4518b7b26baa0ef5937",
     "../pm/types.go:type:CreateConversation": "b6565aef968ebea7fad1da30d5aca8164b25593d5a2922d2e3ffb16df69259d1",
@@ -1690,8 +1713,9 @@
     "../primitives/plans_store.go:type:RefPreview": "b1810e6ba604f0b29cbe8305faa1af3e019cda1e2c5d438e7a5adeb4e7a42345",
     "../primitives/pm_card_context.go:*Store:AppendApprovedCardNote": "fa70fb7b7a5df9a699058578c30097b71222f2155ea31fa089b2d9953caebecb",
     "../primitives/pm_card_context.go:*Store:BeginPMCardRead": "2c858a368f9d7740ba1da19bb43b87715324243655324a5f2e6bbf9058e41d9c",
-    "../primitives/pm_card_context.go:*Store:PMCardActivity": "7346e029aec8fd519d0e3a91d46158a07369545ed134cfc9ad5a235078d9103b",
-    "../primitives/pm_card_context.go:*Store:PMCardSnapshots": "8b160bbbe118f8353d1e1a15109dadf241b9234466dd638ba950ef884e949028",
+    "../primitives/pm_card_context.go:*Store:PMCardActivity": "0a3415dbac32f1b72b455a452eae52c2cdd3423d50ff008ae0f06d0f359232e9",
+    "../primitives/pm_card_context.go:*Store:PMCardSnapshots": "0e9a4a4f11e8235a706efc1870696ad3403df67e120b04c79c234b027f9612c6",
+    "../primitives/pm_workspace_context.go:*Store:PMWorkspaceContext": "1dd5872ceb580bcea6e53cfa27b032c6ec8c72da585f329a5d5fe9977c4b24e4",
     "../primitives/quota.go:*Store:GetWorkspaceUsageSummary": "9fbad49f1c0f711fc723e261592714ca6a88b33a8802d0d8b96a5a34e6a4f10b",
     "../primitives/quota.go:*Store:GetWorkspaceUsageV1Summary": "af5aa1a86e45889998646ff0b7b78cbf3e0df03a62984a7e6d6097f1fbf13efb",
     "../primitives/quota.go:*Store:checkWorkspaceWriteQuota": "efe4db237ece3fc2540ba9d1a094e34c914e0a1ba4868578ce58183720b9d242",
@@ -2364,7 +2388,7 @@
     "../server/pm_runtime.go:*PMRuntime:ServeHTTP": "dc67e3629c06f11c44afe8339450739db2b28afba629429765eef3f78e5a3799",
     "../server/pm_runtime.go:*PMRuntime:SyncBridgeReply": "941bca75b5b6f6caebc95d856d0ccddf4f4c3ec7c06cf19b97374da0377aa44f",
     "../server/pm_runtime.go:*PMRuntime:Tick": "49d36256eb937c3de9d2479c407205238cd4d97b96e4d34441b294a1317ffd19",
-    "../server/pm_runtime.go:NewPMRuntime": "31d5d3818e98febfe47b9b8fb84e2d4c02a627c3fc6a46728e440c7b64f0a5c7",
+    "../server/pm_runtime.go:NewPMRuntime": "9e8a3d50bc643e4344039db42cf363b8efe78ebf7beaf19ce7a6f4e684a1902a",
     "../server/pm_runtime.go:currentWorkDecisionRevision": "c599b51aa77929f321dfb9e6e53b1c897a6f250edffb6920e9ad469ffaf30ce2",
     "../server/pm_runtime.go:executeNativeAnnotation": "dc6ab90d210d6f0b9a2ab6891b00cd8531c95563baaf350efac2145a483a8cef",
     "../server/pm_runtime.go:executeWorkPhase": "272e1a4444110b11f5de2610f102702292796aa80da927fcbe2e973f5e95fd1b",
@@ -2587,7 +2611,7 @@
     "../storage/migrations.go:migration25BackfillHandles": "0b1a8866c4541f58041168cea6b043ee880a43a3afe56eca68a658ffe31fa3b6",
     "../storage/migrations.go:migration25HandleExpressions": "8981e5f9b2e01ce392b77c0763fa38a47b68b5ca20d4cadcf0d7795952dc84c8",
     "../storage/migrations.go:migration25UniqueHandle": "6bed0b1e2baf92af71deb2b6a7f9e281bd75894a80f37d4bbbb09e632befe7d3",
-    "../storage/migrations.go:migrations": "7a6c1de2dbcd53f5024974e9f650b4e824ef93de8220fff6e44368a07311979a",
+    "../storage/migrations.go:migrations": "5492b310c3bff55a46165b42f11529f9399cc6097f5617a3290510b865846256",
     "../storage/migrations.go:repairLegacyReferenceAccess": "03b66e0fb21f24a185a0127b607c51d9760f17b8abfbe904451d093c732ac5ab",
     "../storage/migrations.go:repairNULReferenceAccess": "7579edda9e055e69a0e88914fcd02f919d26c1f02a5b456a6ac3bf25f422fed9",
     "../storage/migrations.go:sqliteTableExists": "c0fa57bdf9800dd6002c1c4dcfcb6ab9f2a889101a7f21b61f434439a39a3ac4",

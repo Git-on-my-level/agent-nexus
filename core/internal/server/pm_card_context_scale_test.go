@@ -20,17 +20,26 @@ import (
 func TestPerformancePMCardContext(t *testing.T) {
 	requirePerformanceTest(t)
 	env := newPerformanceEnv(t)
-	var budget struct {
+	type contextBudget struct {
 		MaxQueries int    `json:"max_queries"`
 		MaxRows    int    `json:"max_rows"`
 		WarmVM     uint64 `json:"max_warm_vm_steps"`
 		ColdVM     uint64 `json:"max_cold_vm_steps"`
 	}
+	var budget contextBudget
 	budgetJSON, e := os.ReadFile("testdata/pm_card_context_budget.json")
 	if e != nil {
 		t.Fatal(e)
 	}
 	if e = json.Unmarshal(budgetJSON, &budget); e != nil {
+		t.Fatal(e)
+	}
+	var workspaceBudget contextBudget
+	workspaceJSON, e := os.ReadFile("testdata/pm_workspace_context_budget.json")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = json.Unmarshal(workspaceJSON, &workspaceBudget); e != nil {
 		t.Fatal(e)
 	}
 	allowed := performancePlanExceptions(t)
@@ -166,10 +175,19 @@ INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) SELECT 
 			t.Logf("actor=%s size=%d SQL=%d rows=%d VM=%d", principal.ActorID, size, queries, rows, work.VMSteps)
 		}
 	}
+	// Fill the no-pin overview with the maximum fifteen public initiatives.
+	for i := 1; i <= 15; i++ {
+		if _, e := env.db.Exec(`INSERT INTO card_plans(card_id,body_json,updated_at) VALUES(?,?,'2026-10-10T00:00:00Z') ON CONFLICT(card_id) DO UPDATE SET body_json=excluded.body_json`, fmt.Sprintf("scale-card-%d", i), planJSON); e != nil {
+			t.Fatal(e)
+		}
+		if _, e := env.db.Exec(`UPDATE cards SET column_key='blocked',updated_at='2040-01-01T00:00:00Z' WHERE id=?`, fmt.Sprintf("scale-card-%d", i)); e != nil {
+			t.Fatal(e)
+		}
+	}
 	// Capture the complete HTTP operation separately: auth, lease/pin lookup,
 	// cold/warm denial admission, projection, and pending decision attachment.
 	for _, principal := range env.principals {
-		for _, size := range []int{1, 8} {
+		for _, size := range []int{1, 8, 0} {
 			refs := []string{}
 			for i := 1; i <= size; i++ {
 				refs = append(refs, fmt.Sprintf("card:scale-card-%d", i))
@@ -177,7 +195,11 @@ INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) SELECT 
 			cid := fmt.Sprintf("pm-cards-%s-%d", principal.ActorID, size)
 			tid := cid + "-turn"
 			now := time.Now().UTC()
-			c := pm.Conversation{ID: cid, WorkspaceID: "ws_main", ActorID: principal.ActorID, WorkRef: refs[0], ContextRefs: refs, ThreadID: "scale-thread-1", CreatedAt: now}
+			primary := ""
+			if len(refs) > 0 {
+				primary = refs[0]
+			}
+			c := pm.Conversation{ID: cid, WorkspaceID: "ws_main", ActorID: principal.ActorID, WorkRef: primary, ContextRefs: refs, ThreadID: "scale-thread-1", CreatedAt: now}
 			turn := pm.Turn{ID: tid, ConversationID: cid, WorkspaceID: "ws_main", ActorID: principal.ActorID, AgentActorID: env.agent.ActorID, Status: pm.Pending, Deadline: now.Add(time.Hour), LeaseToken: "synthetic-lease", LeaseOwner: env.agent.ActorID, LeaseExpiresAt: now.Add(time.Hour)}
 			for kind, record := range map[string]any{"conversation": c, "turn": turn} {
 				raw, _ := json.Marshal(record)
@@ -216,11 +238,19 @@ INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) SELECT 
 				}
 				t.Logf("complete actor=%s size=%d sample=%d SQL=%d rows=%d VM=%d", principal.ActorID, size, sample, queries, rows, work.VMSteps)
 				checkPlans(statements)
-				vmLimit := budget.ColdVM // cold, existing denial snapshot admission on this 4096-card corpus
+				maxQueries, maxRows, warmVM, coldVM := budget.MaxQueries, budget.MaxRows, budget.WarmVM, budget.ColdVM
+				if size == 0 {
+					maxQueries, maxRows, warmVM, coldVM = workspaceBudget.MaxQueries, workspaceBudget.MaxRows, workspaceBudget.WarmVM, workspaceBudget.ColdVM
+					var page pm.ContextPage
+					if json.Unmarshal(w.Body.Bytes(), &page) != nil || len(page.Items) != 15 {
+						t.Fatalf("full overview: %s", w.Body)
+					}
+				}
+				vmLimit := coldVM // cold, existing denial snapshot admission on this 4096-card corpus
 				if sample > 0 {
-					vmLimit = budget.WarmVM
+					vmLimit = warmVM
 				} // warm, no per-statement closure rebuild
-				if queries > budget.MaxQueries || rows > budget.MaxRows || work.VMSteps > vmLimit {
+				if queries > maxQueries || rows > maxRows || work.VMSteps > vmLimit {
 					t.Error("complete HTTP view budget exceeded")
 				}
 			}

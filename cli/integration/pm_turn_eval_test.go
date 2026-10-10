@@ -4,6 +4,7 @@ package integration
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -73,6 +74,49 @@ func TestPMTurnEval(t *testing.T) {
 		t.Fatalf("want one done and one note: %s", decisions.Stdout)
 	}
 	t.Log("dedupe=one awaiting done decision across separate turns")
+
+	// A general Ask PM request has no pins. Discovery must still surface its
+	// reader's pending decisions, and a plan's unpinned card ref can be opened.
+	child := h.runCLIExpectOK(t, "pm", map[string]any{"title": "Unpinned plan step"}, "work", "create", "--from-file", "-")
+	childRef := mustStringPath(t, child.Payload, "result.work.ref")
+	h.runCLIExpectOK(t, "pm", map[string]any{"steps": []any{map[string]any{"id": "follow", "title": "Follow the card", "ref": childRef}}}, "plan", "set", ref, "--from-file", "-")
+	c := h.runCLIExpectOK(t, "reader", map[string]any{"request_key": "general", "title": "General question"}, "pm", "conversations", "create", "--from-file", "-")
+	m := h.runCLIExpectOK(t, "reader", map[string]any{"request_key": "general", "text": "What needs my decision?"}, "pm", "conversations", "message", mustStringPath(t, c.Payload, "result.id"), "--from-file", "-")
+	claimed := h.runCLIExpectOK(t, "pm", nil, "pm", "turns", "claim")
+	t.Setenv("ANX_PM_TURN_ID", mustStringPath(t, m.Payload, "result.id"))
+	t.Setenv("ANX_PM_LEASE_TOKEN", mustStringPath(t, claimed.Payload, "result.lease_token"))
+	// The selected PM can see another principal's private card through its
+	// legacy direct context. Claimed-turn flags must reject, never route there.
+	secret := h.runCLIExpectOK(t, "pm", map[string]any{"title": "OtherOwnerEvalPrivateSecret"}, "work", "create", "--from-file", "-")
+	secretRef := mustStringPath(t, secret.Payload, "result.work.ref")
+	statement := fmt.Sprintf(`UPDATE threads SET body_json=json_set(body_json,'$.pm_actor_id','other-owner') WHERE id=(SELECT thread_id FROM cards WHERE handle='%s');`, strings.TrimPrefix(secretRef, "card:"))
+	if output, err := runLegacySQLFixture(t, h, statement); err != nil {
+		t.Fatalf("private fixture: %v %s", err, output)
+	}
+	for _, args := range [][]string{{"--limit", "8"}, {"--work-ref", secretRef}, {"--query", "secret"}, {"--cursor", "opaque"}} {
+		got := h.runCLI(t, "pm", nil, append([]string{"pm", "context"}, args...)...)
+		if got.ExitCode != 2 || !strings.Contains(got.Stdout, "anx pm context") || strings.Contains(got.Stdout, "OtherOwnerEvalPrivateSecret") {
+			t.Fatalf("flagged invocation: %v %s", args, got.Stdout)
+		}
+	}
+	overview := h.runCLIExpectOK(t, "pm", nil, "pm", "context")
+	if !strings.Contains(overview.Stdout, doneID) || !strings.Contains(overview.Stdout, "Eval card") || strings.Contains(overview.Stdout, "OtherOwnerEvalPrivateSecret") {
+		t.Fatal(overview.Stdout)
+	}
+	privateRead := h.runCLI(t, "pm", nil, "pm", "card", secretRef)
+	if strings.Contains(privateRead.Stdout, "OtherOwnerEvalPrivateSecret") {
+		t.Fatal(privateRead.Stdout)
+	}
+	full := h.runCLIExpectOK(t, "pm", nil, "pm", "card", ref)
+	linked := evalFirstItem(t, full.Payload)["plan"].(map[string]any)["steps"].([]any)[0].(map[string]any)["ref"].(string)
+	if linked != childRef {
+		t.Fatal(full.Stdout)
+	}
+	follow := h.runCLIExpectOK(t, "pm", nil, "pm", "card", linked)
+	if evalFirstItem(t, follow.Payload)["title"] != "Unpinned plan step" {
+		t.Fatal(follow.Stdout)
+	}
+	t.Log("no-pin decision=visible; plan-step follow-through=visible; tool_calls=3 http_calls=3")
 }
 
 func evalFirstItem(t *testing.T, p map[string]any) map[string]any {

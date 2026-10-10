@@ -392,11 +392,37 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 			page.Items = append(page.Items, out)
 		}
 		if len(refs) != len(cardRefs) {
-			page.Limitations = append(page.Limitations, "Only pinned cards are shown; other pinned evidence remains available through the legacy context command")
+			page.Limitations = append(page.Limitations, "This preview contains cards; other pinned evidence is not shown")
 		}
 		if len(cardRefs) == 0 {
 			page.Limitations = append(page.Limitations, "No cards pinned")
 		}
+		return page, nil
+	}
+	deps.ReadWorkspaceOverview = func(ctx context.Context, p pm.Principal) (pm.ContextPage, error) {
+		refs, asks, activity, err := store.PMWorkspaceContext(ctx, p.ActorID)
+		if err != nil {
+			return pm.ContextPage{}, err
+		}
+		page, err := deps.ReadPinnedCards(ctx, p, refs, false)
+		if err != nil {
+			return page, err
+		}
+		items := page.Items[:0]
+		for _, item := range page.Items {
+			card := item.(map[string]any)
+			// Overview asks/activity have their own reader-wide capped sections.
+			// Keep initiative rows compact rather than duplicating per-card feeds.
+			for _, key := range []string{"asks", "activity", "asks_partial", "activity_partial"} {
+				delete(card, key)
+			}
+			if card["phase"] != "done" && card["phase"] != "cancelled" {
+				items = append(items, item)
+			}
+		}
+		page.Items = items
+		page.Asks, page.Activity = asks, activity
+		page.Limitations = []string{"Workspace overview is a bounded preview: up to 15 initiatives, asks, decisions and recent events; more may exist. Open a visible card with anx pm card <card-ref>."}
 		return page, nil
 	}
 	deps.CurrentRevision = func(ctx context.Context, p pm.Principal, ref string) (string, error) {

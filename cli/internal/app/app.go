@@ -154,6 +154,9 @@ func (a *App) Run(args []string) int {
 		isWorkCommandGroup(strings.Join(remaining, " "))
 
 	preflightCommandName, usageErr := preflightConfigIndependentUsage(remaining)
+	if len(remaining) >= 2 && remaining[0] == "pm" && remaining[1] == "context" && (a.Getenv("ANX_PM_TURN_ID") != "" || a.Getenv("ANX_PM_LEASE_TOKEN") != "") && !isTrailingHelpOnlyInvocation(remaining) {
+		preflightCommandName, usageErr = "pm context", validatePMContextArgs(remaining[2:])
+	}
 	if usageErr != nil {
 		return a.renderError(resolveMachineCommandIdentity(preflightCommandName), jsonMode, usageErr)
 	}

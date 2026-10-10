@@ -37,6 +37,8 @@ func NewStore(db *sql.DB) (*Store, error) {
  parent_id TEXT NOT NULL DEFAULT '', revision INTEGER NOT NULL, body BLOB NOT NULL,
  PRIMARY KEY(kind,id));
  CREATE VIEW IF NOT EXISTS pm_card_decision_positions AS SELECT kind,workspace_id,id,json_extract(body,'$.work_ref') AS card_ref,json_extract(body,'$.status') AS status FROM pm_records;
+ CREATE VIEW IF NOT EXISTS pm_reader_decision_positions AS SELECT kind,workspace_id,actor_id,id,json_extract(body,'$.status') AS status FROM pm_records;
+ CREATE INDEX IF NOT EXISTS pm_records_reader_awaiting ON pm_records(kind,workspace_id,actor_id,json_extract(body,'$.status'),id);
  CREATE INDEX IF NOT EXISTS pm_records_card_awaiting ON pm_records(kind,workspace_id,json_extract(body,'$.work_ref'),json_extract(body,'$.status'),id);
  CREATE INDEX IF NOT EXISTS pm_records_scope ON pm_records(kind,workspace_id,actor_id,parent_id);
  CREATE INDEX IF NOT EXISTS pm_records_page ON pm_records(kind,workspace_id,rtrim(COALESCE(json_extract(body,'$.created_at'),''),'Z'));

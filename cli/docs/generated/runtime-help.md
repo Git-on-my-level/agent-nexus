@@ -118,7 +118,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `meta concepts` (command): List concept index
 - `meta concept` (command): Get commands grouped by concept
 - `pm connect` (command): Register a local PM connection with bounded runner and host labels.
-- `pm context` (command): Read bounded authorized PM context; partial coverage stays explicit.
+- `pm context` (command): Read bounded authorized PM context. Inside a claimed turn use no flags; open a specific card with anx pm card <card-ref>. Outside turns, legacy filters remain supported.
 - `pm disconnect` (command): Reset workspace PM onboarding after explicit uninstall.
 - `pm presence` (command): Read recent PM connection state.
 - `pm actions acknowledge` (command): Acknowledge a failed or unresolvable action.
@@ -286,7 +286,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `report validate` (local-helper): Validate a visual report file or stdin against the renderer's schema.
 - `report publish` (local-helper): Validate, publish, read back, and revalidate a visual report document.
 - `host discover` (local-helper): Inspect optional local runtime identity and installed harness evidence without registration or network requests.
-- `pm card` (command): Read a pinned card in full under the requesting reader.
+- `pm card` (command): Read any visible card in full under the requesting reader.
 - `pm propose` (command): Propose a card status or note for human approval in Inbox.
 - `work context` (command): Compose work, a bounded observation page and refresh status using read-only requests.
 - `work freshness` (command): Inspect last observed, source activity and meaningful progress independently.
@@ -941,9 +941,9 @@ Work is an existing card; projects are topics. Scope and identity come from the 
   anx pm actions reconcile     Request authoritative read-back of an action receipt; does not resend the action.
   anx pm bindings create       Bind an exact channel identity (transport, tenant, channel, user) to a workspace principal; humans only.
   anx pm bindings list         List channel identity bindings for this workspace; an operator check, never a send.
-  anx pm card                  Read a pinned card in full under the requesting reader.
+  anx pm card                  Read any visible card in full under the requesting reader.
   anx pm connect               Register a local PM connection with bounded runner and host labels.
-  anx pm context               Read bounded authorized PM context; partial coverage stays explicit.
+  anx pm context               Read bounded authorized PM context. Inside a claimed turn use no flags; open a specific card with anx pm card <card-ref>. Outside turns, legacy filters remain supported.
   anx pm conversations create  Create a durable conversation using request_key, title and optional work_ref.
   anx pm conversations get     Read a conversation and its durable turns.
   anx pm conversations list    List durable PM conversations with principal-bound pagination.
@@ -3688,7 +3688,7 @@ Use --json for one machine-readable envelope.
 
 ## `pm context`
 
-Read bounded authorized PM context; partial coverage stays explicit.
+Read bounded authorized PM context. Inside a claimed turn use no flags; open a specific card with anx pm card <card-ref>. Outside turns, legacy filters remain supported.
 
 ```text
 Generated Help: pm context
@@ -3708,7 +3708,7 @@ Generated Help: pm context
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
-Read bounded authorized PM context; partial coverage stays explicit.
+Read bounded authorized PM context. Inside a claimed turn use no flags; open a specific card with anx pm card <card-ref>. Outside turns, legacy filters remain supported.
 
 Usage: anx pm context
   --work-ref <value>
@@ -9933,11 +9933,11 @@ Global flags:
 
 ## `pm card`
 
-Read a pinned card in full under the requesting reader.
+Read any visible card in full under the requesting reader.
 
 ```text
 Usage: anx pm card <card-ref>
-Read one pinned card in full inside a claimed PM turn.
+Read any visible card in full inside a claimed PM turn.
 ```
 
 ## `pm propose`

@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// PMCardSnapshots hydrates only explicitly pinned refs. The full projection
+// PMCardSnapshots hydrates only explicitly selected refs. The full projection
 // batches card bodies, metadata, observations, plans and their evidence.
 type pmBoundedReadKey struct{}
 
@@ -22,7 +22,7 @@ func (s *Store) BeginPMCardRead(ctx context.Context) (context.Context, func(), e
 }
 
 func (s *Store) PMCardSnapshots(ctx context.Context, refs []string) (map[string]map[string]any, error) {
-	if len(refs) > 8 {
+	if len(refs) > 15 {
 		return nil, ErrInvalidWorkRequest
 	}
 	ctx, closeRead, err := s.BeginPMCardRead(ctx)
@@ -172,7 +172,7 @@ func (s *Store) PMCardActivity(ctx context.Context, cards []map[string]any, asks
 	if len(cards) == 0 {
 		return out, nil
 	}
-	if len(cards) > 8 {
+	if len(cards) > 15 {
 		return nil, ErrInvalidWorkRequest
 	}
 	branches := []string{}
