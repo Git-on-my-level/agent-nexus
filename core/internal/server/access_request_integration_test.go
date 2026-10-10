@@ -471,6 +471,17 @@ func TestAccessRequestAwaitIsOwnerScopedAndWakes(t *testing.T) {
 	hostStatus(t, status, 404, p)
 }
 
+func TestStandingAgentInboxSubscribeDoesNotRequireAskRef(t *testing.T) {
+	t.Parallel()
+	env, _ := accessTestEnv(t)
+	agent := seedAccessTestAgent(t, env, "standing.subscriber")
+	status, p := hostHTTP(t, "POST", env.server.URL+"/agent-inbox/subscriptions", agent.AccessToken, map[string]any{"kind": "await", "label": "standing"})
+	hostStatus(t, status, 400, p)
+	if p["error"].(map[string]any)["code"] != "invalid_request" {
+		t.Fatalf("standing subscribe treated empty ask as missing: %#v", p)
+	}
+}
+
 func TestAnswerWakeTriggerTextNamesAccessRequest(t *testing.T) {
 	got := answerWakeTriggerText(primitives.HumanAttentionAnswerWakeBatch{AnswerCount: 1, Refs: []string{"event:a", "access-request:req-1"}})
 	if got != "Your access request was decided. Run `anx await access-request:req-1`." {
