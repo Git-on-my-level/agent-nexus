@@ -41,6 +41,7 @@
   import { pinnedRefs, activityLabel } from "$lib/pm/context.js";
   import RefChip from "$lib/components/RefChip.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
+  import InfoTip from "$lib/components/InfoTip.svelte";
   import PmStatusBadge from "$lib/components/pm/PmStatusBadge.svelte";
   import {
     PM_STATES,
@@ -664,11 +665,20 @@
 <WorkspacePageShell class="pm-page">
   <div class="pm-head">
     <WorkspacePageHeader title="Ask PM">
-      {#snippet subtitle()}<PmStatusBadge
-          presence={pmState}
-          {now}
-          manageHref={workspaceHref("/pm/setup")}
-        />{/snippet}
+      {#snippet subtitle()}<span class="inline-flex items-center gap-1.5"
+          ><PmStatusBadge
+            presence={pmState}
+            {now}
+            manageHref={workspaceHref("/pm/setup")}
+          /><!--
+            The one thing the page says nowhere else: a proposal does not
+            land here, it lands in Inbox for you to approve. It was a
+            sentence under the heading on every visit; it is a glyph now.
+          --><InfoTip
+            label="What happens to a proposal"
+            text="The PM answers here. A change it proposes goes to your Inbox for you to approve."
+          /></span
+        >{/snippet}
       {#snippet actions()}
         <details
           class="pm-history"

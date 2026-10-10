@@ -538,7 +538,6 @@
               pinnedRef={model.reports.pinned_ref ?? ""}
               hasMore={model.reports.has_more}
               loading={loadingMoreReports}
-              {pinning}
               onload={() => void loadMoreReports()}
               onselect={selectReport}
               onpin={(ref) => void pinDashboard(ref)}
@@ -550,6 +549,11 @@
               )}
               data-overview-report-link>Open document</a
             >
+            <!-- The menu closes on the click, so the write reports itself
+                 here rather than inside a popover nobody is looking at. -->
+            {#if pinning}<span class="text-micro text-fg-muted" role="status"
+                >Pinning dashboard…</span
+              >{/if}
           </div>
         {/if}
       </header>

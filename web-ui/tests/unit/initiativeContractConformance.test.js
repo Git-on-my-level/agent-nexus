@@ -321,6 +321,36 @@ describe("the digest's decision items", () => {
     expect(strip.counts.decision_created).toBe(1);
   });
 
+  it("drops a label the title already ends with, and only then", () => {
+    const labels = (items) =>
+      sinceYouLastLookedStrip({
+        since: "2026-10-04T12:00:00Z",
+        items,
+      }).items.map((item) => item.label);
+    // "Ask answered answered" was the row this fixes.
+    expect(
+      labels([{ kind: "ask_answered", ref: "event:a", title: "Ask answered" }]),
+    ).toEqual([""]);
+    // A title that merely contains the word keeps its label: without it the
+    // kind survives only in a decorative dot.
+    expect(
+      labels([
+        {
+          kind: "initiative_blocked",
+          ref: "card:q",
+          title: "Fix the blocked queue",
+        },
+        { kind: "step_completed", ref: "card:s", title: "Step 3 done" },
+        {
+          kind: "decision_created",
+          ref: "decision:p",
+          title: "New pricing decision",
+        },
+      ]),
+      // Worst first, as the strip orders every digest.
+    ).toEqual(["blocked", "new decision", "step done"]);
+  });
+
   it("summarizes once there is more than one change to read", () => {
     const strip = sinceYouLastLookedStrip({
       since: "2026-10-04T12:00:00Z",

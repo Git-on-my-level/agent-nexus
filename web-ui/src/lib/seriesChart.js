@@ -113,19 +113,49 @@ export function partialBucketStart(series, now) {
 /**
  * The authored declaration behind a bound panel, matched to the live streams.
  *
- * Matching is by name first and by position second: an author who named the
- * series exactly as core does gets an exact match, and one who wrote "OSS"
- * and "SaaS" in the order the labels sort gets them in that order. Order is
- * stable — core sorts its label sets — so position is a real answer here
- * rather than a guess.
+ * Matched by name, never by position alone. An author writes "OSS" for the
+ * stream whose labels reduce to `oss`, so a declared name is compared
+ * against both core's full stream name and that reduction.
+ *
+ * Position is the last resort, and only when the two lists are the same
+ * length — because the live list is not stable. Core drops a stream with no
+ * points in the window (`report_series.go`) and orders label sets by their
+ * JSON (`series/query.go`), so a quiet week or one new label shifts every
+ * later stream up or down. Matching those by index would have put "OSS" on
+ * SaaS's numbers, silently, and the author would have no way to see it.
  */
-function authoredSeries(panel) {
+function authoredSeries(panel, liveSeries, seriesName) {
   const option = panel?.fallback?.data?.option;
   if (!record(option) || !Array.isArray(option.series)) return null;
   const declared = option.series.filter(
     (entry) => record(entry) && SUPPORTED.includes(entry.type),
   );
-  return declared.length ? { option, declared } : null;
+  if (!declared.length) return null;
+  const key = (value) =>
+    String(value ?? "")
+      .trim()
+      .toLocaleLowerCase();
+  const byName = new Map();
+  for (const entry of declared)
+    if (entry.name) byName.set(key(entry.name), entry);
+  const matched = liveSeries.map(
+    (entry) =>
+      byName.get(key(entry.name)) ??
+      byName.get(key(seriesStreamLabel(entry.name, seriesName))) ??
+      null,
+  );
+  // All or nothing on position: a partial positional guess is the
+  // misattribution with extra steps.
+  if (
+    matched.every((entry) => entry === null) &&
+    declared.length === liveSeries.length
+  )
+    return { option, matched: [...declared], complete: true };
+  return {
+    option,
+    matched,
+    complete: matched.every((entry) => entry !== null),
+  };
 }
 
 /**
@@ -145,16 +175,10 @@ export function seriesChartData(panel, { now = Date.now() } = {}) {
   if (!Array.isArray(live.series) || !live.series.length) return data;
 
   const seriesName = String(panel?.source?.series ?? "").trim();
-  const authored = authoredSeries(panel);
-  const declaredFor = (index, name) =>
-    authored
-      ? (authored.declared.find((entry) => entry.name === name) ??
-        authored.declared[index] ??
-        null)
-      : null;
+  const authored = authoredSeries(panel, live.series, seriesName);
 
   let series = live.series.map((entry, index) => {
-    const declared = declaredFor(index, entry.name);
+    const declared = authored?.matched[index] ?? null;
     const type = declared?.type ?? entry.type;
     const next = {
       type,
@@ -166,8 +190,19 @@ export function seriesChartData(panel, { now = Date.now() } = {}) {
         entry.name,
       data: entry.data,
     };
+    /*
+     * Which axis a stream's values belong to is the live read's answer, not
+     * the snapshot's: core owns these axes. Rebuilding the series from a
+     * whitelist without them would silently re-scale a percentage onto a
+     * count axis, which is worse than an unrendered chart. Presentation —
+     * the stack, the smoothing — is the author's, with core's own value as
+     * the fallback.
+     */
+    for (const key of ["xAxisIndex", "yAxisIndex"])
+      if (entry[key] !== undefined) next[key] = entry[key];
     for (const key of CARRIED[type] ?? [])
       if (declared?.[key] !== undefined) next[key] = declared[key];
+      else if (entry[key] !== undefined) next[key] = entry[key];
     return next;
   });
   // Two streams whose labels reduce to the same word would be one series to
@@ -292,15 +327,23 @@ export function seriesChartData(panel, { now = Date.now() } = {}) {
       };
   }
 
-  // The author's palette, caption and legend choice belong to the panel, not
-  // to the snapshot that happened to carry them.
+  /*
+   * The palette is the author's and travels; the caption does not. A caption
+   * is a claim about numbers — "OSS merged 28 of 34 PRs" — and the snapshot
+   * it was written for is not on screen, so under a live read it would
+   * describe this week's chart with last month's sentence.
+   *
+   * The legend choice travels only when every live stream was matched: a
+   * `show: false` written for a one-series snapshot would otherwise leave
+   * three live streams unlabelled, which is the thing this file exists to
+   * fix.
+   */
   const snapshot = panel?.fallback?.data;
   return {
     ...data,
     ...(snapshot?.palette ? { palette: snapshot.palette } : {}),
-    ...(snapshot?.caption ? { caption: snapshot.caption } : {}),
     option:
-      authored?.option.legend !== undefined
+      authored?.complete && authored.option.legend !== undefined
         ? { ...option, legend: authored.option.legend }
         : option,
   };

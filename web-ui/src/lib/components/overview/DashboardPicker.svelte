@@ -28,8 +28,6 @@
     hasMore = false,
     /** A choices page is in flight. */
     loading = false,
-    /** A pin write is in flight. */
-    pinning = false,
     /** Ask for the next page of choices. Called once per open. */
     onload = null,
     /** Show this report. */
@@ -64,6 +62,11 @@
     if (entry.id !== selected?.id) onselect?.(entry.id);
   }
 
+  /*
+   * The menu closes on the click; the header beside it reports the write.
+   * Holding the menu open until `pinning` goes false again would hang it
+   * open for good against a caller that never reports the write at all.
+   */
   function pin(ref) {
     close({ focusTrigger: true });
     onpin?.(ref);
@@ -75,9 +78,26 @@
       if (event.target instanceof Node && root?.contains(event.target)) return;
       close();
     };
+    /*
+     * Focus leaving closes it too. Without this, tabbing past the last item
+     * left the menu open over the page — and an open menu owns Escape
+     * through `dismissOnEscape`, so it would then swallow the Escape meant
+     * for whatever the reader had actually moved into.
+     */
+    const onFocusOut = (event) => {
+      const next = event.relatedTarget;
+      if (next instanceof Node && root?.contains(next)) return;
+      // A focus loss with nowhere to go (a click on the page chrome) is the
+      // pointerdown handler's business, not this one's.
+      if (next === null) return;
+      close();
+    };
     document.addEventListener("pointerdown", onPointerDown, true);
-    return () =>
+    root?.addEventListener("focusout", onFocusOut);
+    return () => {
       document.removeEventListener("pointerdown", onPointerDown, true);
+      root?.removeEventListener("focusout", onFocusOut);
+    };
   });
 </script>
 
@@ -148,7 +168,6 @@
               type="button"
               role="menuitem"
               class="picker-item"
-              disabled={pinning}
               onclick={() => pin(null)}>Use newest report</button
             >
           {:else}
@@ -156,7 +175,6 @@
               type="button"
               role="menuitem"
               class="picker-item"
-              disabled={pinning}
               onclick={() => pin(selected.ref)}>Pin as dashboard</button
             >
           {/if}
@@ -269,6 +287,7 @@
     font-size: 11px;
   }
   .picker-note {
+    display: block;
     padding: 5px 8px;
   }
   .picker-check {

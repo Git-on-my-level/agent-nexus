@@ -733,18 +733,26 @@ Core materializes a bound `chart` from raw points the only way it can: one
 client applies the panel's own declaration on top, taking nothing from outside
 the panel:
 
-- **Series names.** The authored `fallback` snapshot's series names are used in
-  order, matched by name first and by position second — so `OSS` and `SaaS`
-  replace `prs-merged repo=oss` and `prs-merged repo=saas`. With no fallback,
-  the shared series-name prefix is dropped and the label values remain
-  (`repo=oss` → `oss`). Names that would collide fall back to core's.
+- **Series names.** A declared name is matched against core's full stream name
+  and against the same name with the shared series prefix dropped, so writing
+  `OSS` in the fallback names the stream whose labels reduce to `oss`.
+  Position is the last resort and applies only when no name matched at all and
+  the two lists are the same length: core omits a stream with no points in the
+  window and orders label sets by their JSON, so index is not a stable
+  identity. With no fallback the prefix is dropped and the label values remain
+  (`prs-merged repo=oss` → `oss`); names that would collide keep core's.
 - **Type and stacking.** `type`, `stack`, `smooth`, `step`, `areaStyle`,
-  `barWidth` and `symbolSize` come from the fallback's series; `palette`,
-  `caption` and `legend.show` come from its chart. Bars and stacks need a
-  category axis, so the live points are rebinned onto the buckets core already
-  returned — one entry per bucket, `null` where a stream had no point. Where
-  the buckets cannot be given distinct labels the panel keeps its time axis and
-  drops only the stack.
+  `barWidth` and `symbolSize` come from the matched fallback series, with
+  core's own value as the fallback; `palette` comes from the fallback chart,
+  and `legend.show` only when every live stream matched a declaration. A
+  stream's `xAxisIndex`/`yAxisIndex` always stay the live read's. The authored
+  `caption` does not travel: it is a claim about the snapshot's numbers, not
+  presentation. Bars and stacks need a category axis, so the live points are
+  rebinned onto the buckets core already returned — one entry per bucket,
+  `null` where a stream had no point. The panel keeps its time axis and drops
+  only the stack when the buckets cannot be given distinct labels, when a
+  stream reports one instant twice, or when `streams × buckets` would pass the
+  chart point limits.
 - **The partial bucket.** The last bin ends in the future, so a daily count
   read at 09:00 plots two hours against whole days and appears to crash to
   zero. On a time axis it carries a silent `Partial` reference line; on a

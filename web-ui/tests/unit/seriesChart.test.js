@@ -156,7 +156,12 @@ describe("a bound chart whose author declared bars", () => {
       "SaaS",
     ]);
     expect(data.palette).toBe("forest");
-    expect(data.caption).toBe("Merged per day");
+  });
+
+  it("leaves the snapshot's caption on the snapshot", () => {
+    // A caption is a claim about numbers. The snapshot it was written for is
+    // not on screen, so it must not sit under this week's chart.
+    expect(data.caption).toBeUndefined();
   });
 
   it("rebins onto the buckets core returned, losing no value", () => {
@@ -192,6 +197,89 @@ describe("a bound chart whose author declared bars", () => {
     });
     const out = seriesChartData(sparse, { now: START + 2 * DAY + 3600_000 });
     expect(out.option.series[1].data).toEqual([null, 5, 6]);
+  });
+});
+
+describe("matching the author's names to the live streams", () => {
+  /*
+   * The live list is not stable. Core drops a stream with no points in the
+   * window and orders label sets by their JSON, so a quiet week or one new
+   * label shifts every later stream. Matching by index would put "OSS" on
+   * SaaS's numbers, with nothing on screen to show it had happened.
+   */
+  const withNames = (streams) =>
+    seriesChartData(
+      panel({
+        streams,
+        fallback: authored([
+          { type: "bar", name: "OSS", data: [1] },
+          { type: "bar", name: "SaaS", data: [1] },
+        ]),
+      }),
+      { now: NOW },
+    ).option.series.map((entry) => [entry.name, entry.data]);
+
+  it("follows the labels when a quiet stream drops out", () => {
+    expect(
+      withNames([{ name: "prs-merged repo=saas", values: [1, 2, 1] }]),
+    ).toEqual([["SaaS", [1, 2, 1]]]);
+  });
+
+  it("follows the labels when a new one sorts in front", () => {
+    const out = withNames([
+      { name: "prs-merged repo=internal", values: [9, 9, 9] },
+      { name: "prs-merged repo=oss", values: [4, 6, 5] },
+      { name: "prs-merged repo=saas", values: [1, 2, 1] },
+    ]);
+    expect(out.map(([name]) => name)).toEqual(["internal", "OSS", "SaaS"]);
+    // The unmatched stream keeps its own values and its own label; only the
+    // two the author named take the author's names.
+    expect(out[0][1]).toEqual([9, 9, 9]);
+    expect(out[1][1]).toEqual([4, 6, 5]);
+  });
+
+  it("falls back to position only when the two lists line up", () => {
+    // No label matches at all, and one declaration per stream: the author's
+    // order is the only answer there is, and it is a whole answer.
+    const out = seriesChartData(
+      panel({
+        streams: [
+          { name: "prs-merged team=core", values: [1, 2] },
+          { name: "prs-merged team=apps", values: [3, 4] },
+        ],
+        fallback: authored([
+          { type: "bar", name: "Core", data: [1] },
+          { type: "bar", name: "Apps", data: [1] },
+        ]),
+      }),
+      { now: NOW },
+    );
+    expect(out.option.series.map((entry) => entry.name)).toEqual([
+      "Core",
+      "Apps",
+    ]);
+  });
+
+  it("keeps a legend hidden by the author only once every stream is named", () => {
+    const hidden = (streams) => {
+      const p = panel({
+        streams,
+        fallback: authored([{ type: "bar", name: "OSS", data: [1] }]),
+      });
+      p.fallback.data.option.legend = { show: false };
+      return seriesChartData(p, { now: NOW }).option.legend;
+    };
+    expect(hidden([{ name: "prs-merged repo=oss", values: [1] }])).toEqual({
+      show: false,
+    });
+    // Two live streams, one declared: hiding the legend here would leave the
+    // second one unlabelled, which is the thing this file exists to fix.
+    expect(
+      hidden([
+        { name: "prs-merged repo=oss", values: [1] },
+        { name: "prs-merged repo=saas", values: [2] },
+      ]),
+    ).toBeUndefined();
   });
 });
 
@@ -276,6 +364,36 @@ describe("what it refuses to restyle", () => {
     const out = seriesChartData(twice, { now: START });
     expect(out.option.xAxis.type).toBe("time");
     expect(out.option.series[0].data).toHaveLength(4);
+    expect(validateReportChart(out)).toEqual([]);
+  });
+
+  it("keeps the axis a live series was plotted against", () => {
+    /*
+     * Core sends one y-axis today, but a core that sends two would have a
+     * percentage series re-scaled onto a count axis if the index were
+     * dropped — a silently wrong chart, which is worse than an unstyled one.
+     */
+    const paired = panel({
+      streams: [{ name: "prs-merged repo=oss", values: [1, 2] }],
+      fallback: authored([{ type: "line", name: "OSS", data: [1] }]),
+    });
+    paired.data.option.yAxis = [
+      { type: "value", name: "PRs" },
+      { type: "value", name: "%" },
+    ];
+    paired.data.option.series.push({
+      name: "prs-merged repo=share",
+      type: "line",
+      yAxisIndex: 1,
+      smooth: true,
+      data: [
+        [START, 40],
+        [START + DAY, 60],
+      ],
+    });
+    const out = seriesChartData(paired, { now: NOW });
+    expect(out.option.series[1].yAxisIndex).toBe(1);
+    expect(out.option.series[1].smooth).toBe(true);
     expect(validateReportChart(out)).toEqual([]);
   });
 

@@ -23,8 +23,10 @@ with subtle borders.
   repeating it, a page heading is not reprinted by the thing under it, and a
   panel's eyebrow is dropped when its title already names the kind.
 - No narration: a heading that needs a sentence explaining it is the wrong
-  heading. Subtitles carry computed values — counts, states, times — or
-  nothing.
+  heading, and a subtitle that names the sections below it is those sections
+  read twice. A subtitle earns its line by carrying a computed value — counts,
+  states, times — or a fact the surface states nowhere else; a fact a reader
+  needs once is an `InfoTip`, not a line.
 
 ### Caveats are tips, not folds
 

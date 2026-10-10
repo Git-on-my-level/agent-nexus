@@ -103,10 +103,13 @@ export function sinceYouLastLookedStrip(digest, { limit = 6 } = {}) {
 }
 
 /**
- * Does the row's own title already say what the label would?
+ * Does the row's own title already end with what the label would say?
  *
- * Word-wise rather than by substring, so "answered" matches a title ending
- * in "answered" but not one about "unanswered questions".
+ * A suffix, not a bag of words. "Ask answered" ends with "answered", so the
+ * label is the title again. "Fix the blocked queue" merely contains
+ * "blocked", and dropping the label there would leave the kind visible only
+ * in a decorative dot — nothing a screen reader reads, and nothing
+ * separating one kind from the next in a wrapped row.
  */
 function titleSays(title, label) {
   const words = (value) =>
@@ -116,9 +119,11 @@ function titleSays(title, label) {
       .trim()
       .split(" ")
       .filter(Boolean);
-  const inTitle = new Set(words(title));
+  const inTitle = words(title);
   const wanted = words(label);
-  return wanted.length > 0 && wanted.every((word) => inTitle.has(word));
+  if (!wanted.length || wanted.length > inTitle.length) return false;
+  const tail = inTitle.slice(inTitle.length - wanted.length);
+  return tail.every((word, index) => word === wanted[index]);
 }
 
 /** A one-line reading of the whole digest, for the strip's heading. */
