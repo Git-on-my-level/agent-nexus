@@ -95,6 +95,10 @@ func TestUnresolvedIdentitySuggestsTheOnlyDetectedAdapter(t *testing.T) {
 	if got := strings.Join(stringList(asMap(normalized.Details)["next_argv"]), " "); got != "anx --as hermes auth whoami" {
 		t.Fatalf("next action=%q", got)
 	}
+	actions := deriveErrorActions("auth whoami", normalized)
+	if len(actions) != 1 || strings.Join(actions[0].Argv, " ") != "anx --as hermes auth whoami" {
+		t.Fatalf("envelope next action=%#v", actions)
+	}
 }
 
 func TestHostDiscoverIsLocalAndNeverRegisters(t *testing.T) {

@@ -257,7 +257,8 @@ func updateInvocationEligible(command string, args []string, results ...*command
 			}
 		}
 	}
-	if strings.HasPrefix(strings.TrimSpace(command), "update") || strings.TrimSpace(command) == "await" {
+	command = strings.TrimSpace(command)
+	if strings.HasPrefix(command, "update") || command == "await" || command == "help" {
 		return false
 	}
 	sideEffect := commandSideEffectClass(command)

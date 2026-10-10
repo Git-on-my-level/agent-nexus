@@ -476,6 +476,11 @@ func deriveErrorActions(command string, err *errnorm.Error) []output.NextAction 
 			}
 		}
 	case "identity_unresolved":
+		if details, ok := err.Details.(map[string]any); ok {
+			if argv := stringList(details["next_argv"]); len(argv) >= 2 && argv[0] == "anx" {
+				return []output.NextAction{action("Select agent", argv...)}
+			}
+		}
 		return []output.NextAction{action("Select agent", "anx", "--as", "codex", "auth", "whoami")}
 	case "host_not_enrolled":
 		return []output.NextAction{action("Enroll host", "anx", "host", "enroll")}

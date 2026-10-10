@@ -54,7 +54,7 @@ func TestUpdateSchedulerRunsAfterBoundedReadsAndWrites(t *testing.T) {
 			t.Errorf("eligible command did not trigger update check: %s", command)
 		}
 	}
-	for _, command := range []string{"await", "update status", "update --check", "api call", "pm install"} {
+	for _, command := range []string{"await", "help", "update status", "update --check", "api call", "pm install"} {
 		if updateInvocationEligible(command, strings.Fields(command)) {
 			t.Errorf("ineligible command triggered update: %s", command)
 		}
