@@ -121,9 +121,10 @@
 
 <svelte:head><title>Integrations · Agent Nexus</title></svelte:head>
 <WorkspacePageShell>
+  <!-- No subtitle. The rows already carry each tool's last read, and the
+       empty state says what to do when a tool has nothing here yet. -->
   <WorkspacePageHeader title="Integrations"
-    >{#snippet subtitle()}How recently we read each connected tool. Tools with
-      no tasks yet aren't listed.{/snippet}{#snippet actions()}<button
+    >{#snippet actions()}<button
         class="ui-btn-secondary"
         onclick={() => load()}
         disabled={loading}

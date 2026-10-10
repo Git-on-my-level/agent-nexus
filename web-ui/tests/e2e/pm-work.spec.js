@@ -646,9 +646,11 @@ test("PM retains failed draft and retries the same message intent without claimi
   );
   await expect(page.getByRole("alert")).toContainText("PM bridge unavailable");
   await page.getByRole("button", { name: "Send message", exact: true }).click();
-  // A queued turn is a transient state, so it reads as a live "Thinking · <elapsed>"
-  // row rather than the durable badge this page used to show.
-  await expect(page.getByText(/^Thinking/)).toBeVisible();
+  // A queued turn is a transient state, so it reads as one live
+  // "Working · <elapsed>" row rather than the durable badge this page used to
+  // show — and rather than the last step's own label, which repeated a word
+  // the step list below it already carried.
+  await expect(page.getByText(/^Working/)).toBeVisible();
   const sends = calls.filter((call) => call.path.endsWith("/messages"));
   expect(sends).toHaveLength(2);
   expect(sends[0].body.request_key).toBe(sends[1].body.request_key);
@@ -853,7 +855,15 @@ test("PM pins multiple refs in history and resolves answer chips with streamed a
   );
   await expect(page.getByLabel("Conversation context")).toContainText("review");
   await expect(page.getByText("Draft answer", { exact: true })).toBeVisible();
-  await page.getByText("Reading the task · 1 steps").click();
+  // One line, with the steps behind it: the summary says "Working", not the
+  // last step's own label, and the step list is closed until it is asked for.
+  const run = page.locator('[data-pm-run="pending"]');
+  await expect(run.locator("> summary")).toContainText("Working");
+  await expect(page.getByLabel("Turn activity")).toBeHidden();
+  await run.locator("> summary").click();
+  await expect(page.getByLabel("Turn activity")).toContainText(
+    "Reading the task",
+  );
   await expect(page.getByLabel("Turn activity")).toContainText("card:release");
   turns[0].status = "delivered";
   turns[0].response = "Read card:release and topic:sample.";

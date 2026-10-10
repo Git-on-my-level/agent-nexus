@@ -193,8 +193,6 @@
             >
           {/if}
         </span>
-      {:else if !loading}
-        What each agent is doing, on which machine, and for how long
       {/if}
     {/snippet}
   </WorkspacePageHeader>

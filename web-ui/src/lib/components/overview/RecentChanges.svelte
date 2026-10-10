@@ -69,7 +69,8 @@
               {:else}
                 <span>{item.title}</span>
               {/if}
-              <span class="changes-label">{item.label}</span>
+              {#if item.label}<span class="changes-label">{item.label}</span
+                >{/if}
             </li>
           {/each}
           {#if strip.overflow || strip.truncated}

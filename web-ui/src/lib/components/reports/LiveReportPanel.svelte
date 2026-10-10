@@ -26,6 +26,18 @@
   );
   let live = $derived(panel.live);
   let items = $derived(live?.data?.items ?? []);
+  /*
+   * Does a row need to say which state it is in?
+   *
+   * Not for a panel of open asks: its own heading says "Needs an answer" and
+   * repeating it on every row said it N+1 times. But a panel may be queried
+   * with `include_answered` or `answered_only`, and a row that has been
+   * answered must say so — including when every row has, where "no row says
+   * anything" would read as a pile of work still waiting.
+   */
+  let asksShowState = $derived(
+    items.some((item) => item.status === "answered"),
+  );
   let buckets = $derived(live?.data?.buckets ?? []);
   let fleetHosts = $derived(live?.data?.hosts ?? []);
   let fleetEnrollments = $derived(live?.data?.enrollments ?? []);
@@ -79,10 +91,13 @@
                 )}>{item.title}</a
               >{:else}<strong>{item.title}</strong>{/if}
             <p class="muted">
-              {item.status === "answered" ? "Answered" : "Needs an answer"} · {formatLiveAge(
-                item.age_seconds,
-                now,
-              )}
+              <!-- The state word only where the panel holds both kinds. A
+                   view of open asks says "Needs an answer" in its own
+                   heading; repeating it on every row said it N+1 times. -->
+              {#if asksShowState}{item.status === "answered"
+                  ? "Answered"
+                  : "Needs an answer"} ·
+              {/if}{formatLiveAge(item.age_seconds, now)}
             </p>
             {#if item.response_text}<p>{item.response_text}</p>{/if}
           </li>

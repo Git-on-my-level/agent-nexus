@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { retainClock, TIME_TICK_MS } from "../../src/lib/time/clock.svelte.js";
 import {
+  bucketLabels,
   formatAgeSeconds,
   formatElapsed,
   formatTime,
@@ -101,5 +102,39 @@ describe("shared clock", () => {
   it("ticks on a low frequency", () => {
     expect(TIME_TICK_MS).toBeGreaterThanOrEqual(15_000);
     expect(TIME_TICK_MS).toBeLessThanOrEqual(60_000);
+  });
+});
+
+describe("bucketLabels", () => {
+  const DAY = 86_400_000;
+  const run = (count, step, start = Date.parse("2026-10-01T00:00:00Z")) =>
+    Array.from({ length: count }, (_, index) => start + index * step);
+
+  it("drops the year a run of days all shares", () => {
+    const labels = bucketLabels(run(4, DAY), { locale: "en-US" });
+    expect(labels).toEqual(["Oct 1", "Oct 2", "Oct 3", "Oct 4"]);
+  });
+
+  it("adds the year only once two buckets need it to differ", () => {
+    const labels = bucketLabels(
+      [Date.parse("2025-10-01T00:00:00Z"), Date.parse("2026-10-01T00:00:00Z")],
+      { locale: "en-US" },
+    );
+    expect(labels).toEqual(["Oct 1, 2025", "Oct 1, 2026"]);
+  });
+
+  it("adds the clock for buckets inside one day", () => {
+    const labels = bucketLabels(run(3, 3_600_000), { locale: "en-US" });
+    expect(new Set(labels).size).toBe(3);
+    expect(labels.every((label) => /\d:\d\d/.test(label))).toBe(true);
+  });
+
+  it("gives up rather than repeating a label", () => {
+    const same = Date.parse("2026-10-01T00:00:00Z");
+    expect(bucketLabels([same, same + 1], { locale: "en-US" })).toBeNull();
+  });
+
+  it("gives up on anything that is not an instant", () => {
+    expect(bucketLabels([Date.now(), "not a time"])).toBeNull();
   });
 });

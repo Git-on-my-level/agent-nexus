@@ -15,6 +15,7 @@ import {
   pmStateFromPresenceResponse,
   pmStateKnown,
   pmStatusCommand,
+  pmStatusLabel,
   pmStatusSummary,
   pmUninstallCommand,
 } from "../../src/lib/pm/onboardingState.js";
@@ -451,5 +452,30 @@ describe("core's refusal when a workspace has no PM onboarded", () => {
     ).toBe(false);
     expect(isPmNotOnboardedRefusal({ status: 500 })).toBe(false);
     expect(isPmNotOnboardedRefusal(undefined)).toBe(false);
+  });
+});
+
+describe("pmStatusLabel", () => {
+  /*
+   * The header has room for a state, not for a sentence about where a
+   * process is running: the badge wears the word and `pmStatusSummary`
+   * becomes its tooltip.
+   */
+  it("is one word, with no runner or host in it", () => {
+    expect(
+      pmStatusLabel({
+        state: PM_STATES.CONNECTED,
+        runner: "Hermes",
+        host: "studio",
+      }),
+    ).toBe("Connected");
+    expect(pmStatusLabel({ state: PM_STATES.OFFLINE, host: "studio" })).toBe(
+      "Offline",
+    );
+  });
+
+  it("says nothing for a state core has not reported", () => {
+    expect(pmStatusLabel(null)).toBe("");
+    expect(pmStatusLabel({ state: PM_STATES.NOT_ONBOARDED })).toBe("");
   });
 });

@@ -15,7 +15,7 @@
     participationTasks,
   } from "$lib/taskParticipation.js";
   import ActorLabel from "$lib/components/ActorLabel.svelte";
-  import FinePrint from "$lib/components/FinePrint.svelte";
+  import InfoTip from "$lib/components/InfoTip.svelte";
 
   let {
     tasks = [],
@@ -101,6 +101,17 @@
       clearInterval(refreshTimer);
     };
   });
+
+  /*
+   * The caveat, as one sentence on the heading rather than a paragraph under
+   * it and a fold under that. The agent page adds its own bound: it samples
+   * recent tasks rather than listing every one.
+   */
+  let participationTip = $derived(
+    agentId
+      ? "Shared activity on up to 8 recent tasks, counted per task; private sessions are not included. Working on a task is not the same as owning or finishing it."
+      : "An agent working on a task is not the same as owning it or finishing it. Silence does not mean the agent is offline.",
+  );
 </script>
 
 {#if quietWhenEmpty && empty}
@@ -119,7 +130,12 @@
 {:else}
   <section aria-label={scope} data-participation>
     <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-      <h2 class="ui-label mb-0">{scope}</h2>
+      <h2 class="ui-label mb-0 flex items-center gap-1.5">
+        {scope}<InfoTip
+          label="What participation means"
+          text={participationTip}
+        />
+      </h2>
       <button
         class="ui-prose-link text-micro"
         disabled={loading || !selected.length}
@@ -128,12 +144,6 @@
         {loading ? "Checking activity…" : "Refresh activity"}
       </button>
     </div>
-    {#if agentId}
-      <p class="mb-2 text-micro text-fg-muted">
-        Shared activity on up to 8 recent or current tasks. Other tasks and
-        private sessions are not included. Sessions are counted per task.
-      </p>
-    {/if}
     {#if loading && !groups.length}
       <p class="text-meta text-fg-muted" role="status">
         Loading shared participation…
@@ -231,10 +241,6 @@
           </div>
         {/each}
       </div>
-      <FinePrint label="What participation means">
-        Participation does not assign or complete a task. Stale activity does
-        not establish whether an agent is offline.
-      </FinePrint>
     {/if}
   </section>
 {/if}

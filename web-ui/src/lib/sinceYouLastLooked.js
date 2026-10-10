@@ -80,13 +80,50 @@ export function sinceYouLastLookedStrip(digest, { limit = 6 } = {}) {
 
   return {
     since: asText(digest.since),
-    items: shown,
+    items: shown.map((item) => ({
+      ...item,
+      /*
+       * The label is dropped when the title already carries it. An ask
+       * titled "Ask answered" rendered as "Ask answered answered"; the row
+       * only needs the word the title does not already say.
+       */
+      label: titleSays(item.title, item.label) ? "" : item.label,
+    })),
     // Both the server's cap and this strip's own cap are "there is more".
     overflow: Math.max(0, items.length - shown.length),
     truncated: digest.truncated === true,
     counts,
-    summary: summarize(counts),
+    /*
+     * The one-line reading, when there is more than one change to read.
+     * A single change already has a row of its own, and "1 ask answered"
+     * above "Ask answered" is the same fact twice.
+     */
+    summary: items.length > 1 ? summarize(counts) : "",
   };
+}
+
+/**
+ * Does the row's own title already end with what the label would say?
+ *
+ * A suffix, not a bag of words. "Ask answered" ends with "answered", so the
+ * label is the title again. "Fix the blocked queue" merely contains
+ * "blocked", and dropping the label there would leave the kind visible only
+ * in a decorative dot — nothing a screen reader reads, and nothing
+ * separating one kind from the next in a wrapped row.
+ */
+function titleSays(title, label) {
+  const words = (value) =>
+    String(value ?? "")
+      .toLocaleLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .trim()
+      .split(" ")
+      .filter(Boolean);
+  const inTitle = words(title);
+  const wanted = words(label);
+  if (!wanted.length || wanted.length > inTitle.length) return false;
+  const tail = inTitle.slice(inTitle.length - wanted.length);
+  return tail.every((word, index) => word === wanted[index]);
 }
 
 /** A one-line reading of the whole digest, for the strip's heading. */

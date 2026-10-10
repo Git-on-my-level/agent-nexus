@@ -241,6 +241,20 @@ export function pmUninstallCommand({ cliBaseUrl = "" } = {}) {
  * @param {{ state?: string, lastSeen?: string, runner?: string, host?: string } | null} presence
  * @param {number} now
  */
+/**
+ * The badge's own word: `Connected` / `Offline`, or "" when core has not
+ * said. The runner and the host are the tooltip's job — a header has room
+ * for a state, not for a sentence about where a process is running.
+ *
+ * @param {{ state?: string } | null} presence
+ */
+export function pmStatusLabel(presence) {
+  const state = text(presence?.state);
+  if (state === PM_STATES.CONNECTED) return "Connected";
+  if (state === PM_STATES.OFFLINE) return "Offline";
+  return "";
+}
+
 export function pmStatusSummary(presence, now = Date.now()) {
   const state = text(presence?.state);
   if (state === PM_STATES.CONNECTED) {

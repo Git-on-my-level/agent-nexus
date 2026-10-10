@@ -1,6 +1,6 @@
 <script>
   import ActorLabel from "$lib/components/ActorLabel.svelte";
-  import FinePrint from "$lib/components/FinePrint.svelte";
+  import InfoTip from "$lib/components/InfoTip.svelte";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
   import {
     actorDisplayLabel,
@@ -13,11 +13,29 @@
     observationStatusTone,
     distinctEvidenceLinks,
   } from "$lib/pm/evidence.js";
-  let { observations = [], unavailable = false } = $props();
+  let {
+    observations = [],
+    unavailable = false,
+    /**
+     * One more sentence for the "What evidence means" tip, when the page
+     * knows something this component does not — "created here, so there is
+     * nothing to read back from". A second glyph beside the first would be
+     * two tips a thumb apart saying halves of one answer.
+     */
+    note = "",
+  } = $props();
   let latest = $derived(observations[0]);
   let report = $derived(observations.find((entry) => entry.status !== "error"));
   let uncertaintyCount = $derived(
     Array.isArray(report?.uncertainty) ? report.uncertainty.length : 0,
+  );
+  let quietTip = $derived(
+    [
+      "Nobody has shared a report on this task yet. A run finishing is not evidence that the work is done.",
+      String(note ?? "").trim(),
+    ]
+      .filter(Boolean)
+      .join(" "),
   );
   let links = $derived(
     report ? distinctEvidenceLinks([report]).filter((entry) => entry.href) : [],
@@ -63,11 +81,9 @@
         The latest read failed. This is an earlier report.
       </p>{/if}
   {:else}
-    <!-- One line for an absence, and the caveat behind a toggle. -->
-    <p data-evidence-quiet>No activity</p>
-    <FinePrint label="What evidence means">
-      No shared evidence report for handoff yet. Participation and completed
-      runs do not establish task completion.
-    </FinePrint>
+    <!-- One line for an absence, with the caveat on the line itself. -->
+    <p class="flex items-center gap-1.5" data-evidence-quiet>
+      No activity<InfoTip label="What evidence means" text={quietTip} />
+    </p>
   {/if}
 </div>

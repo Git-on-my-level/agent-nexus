@@ -434,6 +434,32 @@ Waiting rows read everything from the roster: `waiting_ask` carries the ask's ti
 
 ---
 
+### 3.8a Ask PM
+
+The heading is the conversation when the conversation has a name of its own,
+with "Ask PM" as the eyebrow above it. Core names a conversation
+`text.slice(0, 100)` of its first question, so a title the first question
+already starts with is an echo, not a title: the page stays named "Ask PM"
+and the first bubble is the question. A title that is the heading is clamped
+to two lines, with the whole of it in the tooltip.
+
+PM presence is a dot and one word on the heading's baseline — Connected or
+Offline — with the runner, the host and the last-seen age in its tooltip, and
+Manage as a small link beside it. The sentence about a proposal going to Inbox
+for approval appears only on a new, empty conversation.
+
+A turn's run reads as one line. While it is working that line is
+`Working · <elapsed>` (never the last step's own label, which the steps below
+it already carry) and the steps are collapsed behind it; once it is answered
+the line is `Finished · N steps`, below the answer and quieter than it. The
+wait note appears only past ninety seconds, when the wait is genuinely
+unusual. A turn's time is the group header's; a bubble does not repeat it.
+
+Evidence under an answer is a bounded "Sources" row: three chips and the rest
+behind a `+N`. The thread re-pins to the bottom when it grows under a reader
+who is already there, so a row that wraps late cannot end up behind the
+composer.
+
 ### 3.9 PM onboarding and gating
 
 A PM agent runs on the reader's own computer, never on the server, so a
@@ -589,10 +615,12 @@ brief, what is waiting on you, work counts, freshness and agent presence). The
 cross-workspace ask read behind that fold runs when the fold is opened, not on
 every visit. Initiatives use the same live-initiatives renderer and projection
 as document reports (`progress.done/total`, `needs[]`). Rows show the first summary line, Markdown checklist
-progress, priority and all human asks outside fenced examples. A report can be pinned as the persistent
-workspace dashboard or reset to newest-report selection. Inline reports show
-the title and panels; project/freshness filters, panel counts and provenance
-inspection remain in Open document. Archive in the
+progress, priority and all human asks outside fenced examples. One control chooses the
+report, pins it as the persistent workspace dashboard and resets to
+newest-report selection; beside it, one link opens the document. Inline
+reports show the panels, and the report title only where the surrounding page
+does not already print it; project/freshness filters, panel counts and
+provenance inspection remain in Open document. Archive in the
 secondary navigation contains archived boards, cards, topics and documents.
 Watching aggregates routine agent edits by board and distinct card, prioritizes
-asks/answers and done/blocked transitions, keeps every material clause visible in the digest, and excludes archived subjects including cards on archived project topics. Report choices load when the selector opens.
+asks/answers and done/blocked transitions, keeps every material clause visible in the digest, and excludes archived subjects including cards on archived project topics. Report choices load when the report control opens, and the list grows in place rather than replacing itself under an open popup. That control follows the menu-button keyboard pattern it advertises: Down, Up, Enter and Space open it and take focus into it, the arrows and Home/End move between items, and Escape closes it and gives the trigger its focus back.

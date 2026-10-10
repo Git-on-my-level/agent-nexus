@@ -18,6 +18,7 @@
   import {
     candidateDecisionIdsFromTurn,
     clockTime,
+    conversationHeading,
     evidenceRefsForTurn,
     hasPendingTurn,
     isNearBottom,
@@ -26,7 +27,9 @@
     startsTimeGroup,
     turnState,
     EXPECTED_WAIT_LABEL,
+    QUEUED_LABEL,
     UNCLAIMED_LABEL,
+    WORKING_LABEL,
   } from "$lib/pm/chatModel.js";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
@@ -75,7 +78,10 @@
   let now = $state(Date.now());
   let reducedMotion = $state(false);
   let atBottom = $state(true);
+  /** Stricter than `atBottom`; see `isParkedAtBottom`. */
+  let pinnedToBottom = $state(false);
   let threadElement = $state(null);
+  let threadInnerElement = $state(null);
   let composerElement = $state(null);
   let olderLoaded = false;
   let creationKey, requestKey, requestText, createdConversationId;
@@ -187,6 +193,35 @@
     return resolvedRefs.get(String(ref ?? ""))?.title || "";
   }
   let showJump = $derived(Boolean(turns.length) && !atBottom);
+  /*
+   * The heading. Core names a conversation from its first question, so for
+   * most conversations the "title" is that question cut at 100 characters —
+   * printed under the header it read as stray repeated text. `chatModel`
+   * decides which titles are real; the rest leave the page named "Ask PM"
+   * and let the first bubble be the question.
+   */
+  let heading = $derived(
+    conversationHeading(conversation, turns, {
+      // A non-empty cursor means older turns are unloaded, so `turns[0]` is
+      // not the first question and the echo cannot be detected.
+      hasOlderTurns: Boolean(turnsCursor),
+    }),
+  );
+  let headingTitle = $derived(heading || "Ask PM");
+  /** Nothing asked yet: the one screen with room for the explainer. */
+  let isNewConversation = $derived(!loading && !turns.length);
+  /**
+   * How many source chips a reply shows before the rest go behind a `+N`.
+   * Three fits one line at 390px, which is what keeps the row from wrapping
+   * into the composer.
+   */
+  const SOURCE_PREVIEW = 3;
+  // Reassigned rather than mutated, the way `unsentConversations` is: a
+  // plain `$state` Set does not notify on `add`.
+  let expandedSources = $state(new Set());
+  function showAllSources(turnId) {
+    expandedSources = new Set([...expandedSources, turnId]);
+  }
 
   beforeNavigate(({ cancel, type }) => {
     if (sending) {
@@ -291,6 +326,45 @@
     });
   });
 
+  /*
+   * Re-pin when the thread grows under the reader.
+   *
+   * The effect above keys on turn ids, answers and proposal counts, so it
+   * does not fire when a turn that is already on screen gets *taller* — and
+   * the last turn does get taller: its source chips are `RefChip`s whose
+   * labels arrive with `resolveRefs`, a round trip after the turn rendered.
+   * A row that wraps at that moment lands under the composer, and because
+   * the page still believes it is at the bottom it does not even offer
+   * "Jump to latest". This is the growth nobody asked for, taken care of.
+   */
+  $effect(() => {
+    const inner = threadInnerElement;
+    if (!inner || typeof ResizeObserver === "undefined") return;
+    let last = inner.getBoundingClientRect().height;
+    const observer = new ResizeObserver(() => {
+      const height = inner.getBoundingClientRect().height;
+      const grew = height > last + 1;
+      last = height;
+      /*
+       * Only downward, only for a reader genuinely parked at the end of a
+       * thread that already scrolled, and never mid-prepend — `olderTurns`
+       * restores its own position.
+       *
+       * `atBottom` is too loose to use here: `isNearBottom` tolerates 64px
+       * and calls a thread that does not scroll at all "at the bottom". On
+       * both of those, opening a run log on a short conversation would have
+       * scrolled the thing the reader just opened off the top.
+       */
+      if (!grew) return;
+      untrack(() => {
+        if (!pinnedToBottom || loadingOlder) return;
+        scrollToLatest("auto");
+      });
+    });
+    observer.observe(inner);
+    return () => observer.disconnect();
+  });
+
   function scrollToLatest(behavior = "auto") {
     const element = threadElement;
     if (!element) return;
@@ -298,9 +372,23 @@
       element.scrollTo({ top: element.scrollHeight, behavior });
     else element.scrollTop = element.scrollHeight;
     atBottom = true;
+    // `scrollTo` with `behavior: "smooth"` lands later, so read the state
+    // the caller just asked for rather than the one on screen.
+    pinnedToBottom = true;
   }
   function onThreadScroll() {
     atBottom = isNearBottom(threadElement);
+    pinnedToBottom = isParkedAtBottom(threadElement);
+  }
+  /**
+   * Parked at the very end of a thread that actually scrolls — the only
+   * state in which growing the thread should move the reader.
+   */
+  function isParkedAtBottom(element) {
+    if (!element) return false;
+    const slack = element.scrollHeight - element.clientHeight;
+    if (slack <= 1) return false;
+    return slack - element.scrollTop <= 2;
   }
 
   async function loadList(append = false) {
@@ -652,6 +740,41 @@
   });
 </script>
 
+{#snippet runningLine(view, turn)}
+  <!--
+    Inline, so a `<summary>` keeps its disclosure marker: the steps are
+    behind this line, and a reader has to be able to see that they are.
+  -->
+  <span class="pm-status-line">
+    {#if reducedMotion}
+      <span>{view.claimed ? WORKING_LABEL : `${QUEUED_LABEL}…`}</span>
+    {:else}
+      <span class="pm-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+      <!--
+        "Working", not the last step's own label. The steps are listed inside
+        this fold, so borrowing one of their names for the summary printed
+        the same word twice on one answer.
+      -->
+      <span>{view.claimed ? WORKING_LABEL : QUEUED_LABEL}</span>
+      {#if view.elapsed}<span aria-hidden="true">· {view.elapsed}</span>{/if}
+    {/if}
+    {#if turn.activity?.length}<span class="sr-only"
+        >{turn.activity.length} steps</span
+      >{/if}
+  </span>
+{/snippet}
+
+{#snippet runSteps(turn)}
+  <ol class="pm-run-steps" aria-label="Turn activity">
+    {#each turn.activity as event (event.sequence)}
+      <li>
+        {event.label}{#if event.target}
+          · {event.target}{/if}
+      </li>
+    {/each}
+  </ol>
+{/snippet}
+
 <svelte:window
   onbeforeunload={(event) => {
     if (draft.trim()) {
@@ -663,15 +786,23 @@
 <svelte:head><title>PM · Agent Nexus</title></svelte:head>
 <WorkspacePageShell class="pm-page">
   <div class="pm-head">
-    <WorkspacePageHeader title="Ask PM">
-      {#snippet subtitle()}<span class="block"
-          >Ask about your tasks. If the PM proposes a change, you approve it in
-          Inbox.</span
-        ><PmStatusBadge
+    <!--
+      Three lines of meta became one. The heading is the conversation when
+      the conversation has a name of its own, with "Ask PM" as the eyebrow
+      above it; the status is a dot and a word on the heading's baseline,
+      with the runner and host in its tooltip; and the sentence about where
+      a proposal lands is kept for the one screen that has room for it and
+      a reader who has not seen it — a new, empty conversation.
+    -->
+    <WorkspacePageHeader title={headingTitle} clamp={Boolean(heading)}>
+      {#snippet eyebrow()}{#if heading}Ask PM{/if}{/snippet}
+      {#snippet meta()}<PmStatusBadge
           presence={pmState}
           {now}
           manageHref={workspaceHref("/pm/setup")}
         />{/snippet}
+      {#snippet subtitle()}{#if isNewConversation}Ask about your tasks. If the
+          PM proposes a change, you approve it in Inbox.{/if}{/snippet}
       {#snippet actions()}
         <details
           class="pm-history"
@@ -683,61 +814,70 @@
                 class="ml-1 text-fg-muted">{conversations.length}</span
               >{/if}</summary
           >
-          <div class="pm-history-panel" role="presentation">
-            <nav aria-label="Conversation history">
-              {#each conversations.filter((item) => item.id === selectedId || !unsentConversations.has(item.id)) as item (item.id)}
-                <a
-                  class="pm-history-item {item.id === selectedId
-                    ? 'pm-history-item--active'
-                    : ''}"
-                  href={workspaceHref(
-                    `/pm?conversation=${encodeURIComponent(item.id)}`,
-                  )}
-                  aria-current={item.id === selectedId ? "page" : undefined}
-                >
-                  <span class="line-clamp-1 break-words">{item.title}</span>
-                  <span class="text-micro text-fg-subtle">
-                    {#each pinnedRefs(item) as ref (ref)}
-                      <span class="block"
-                        >{workTitle(ref) || ref}
-                        {#if resolvedRefs.get(ref)?.status}
-                          · {resolvedRefs
-                            .get(ref)
-                            .status.replaceAll("_", " ")}{/if}
-                        {#if resolvedRefs.get(ref)?.lastMovedAt}
-                          · <Time
-                            value={resolvedRefs.get(ref).lastMovedAt}
-                            {now}
-                          />{/if}
-                      </span>
-                    {/each}
-                    <Time value={item.created_at} {now} /></span
+          <!--
+            Only while it is open. A closed `<details>` still lays its
+            contents out — every conversation row, every live clock in them —
+            and they are measured by anything that walks the page, which is
+            how a popover nobody opened started reporting itself as clipped
+            off the side of the screen.
+          -->
+          {#if historyOpen}
+            <div class="pm-history-panel" role="presentation">
+              <nav aria-label="Conversation history">
+                {#each conversations.filter((item) => item.id === selectedId || !unsentConversations.has(item.id)) as item (item.id)}
+                  <a
+                    class="pm-history-item {item.id === selectedId
+                      ? 'pm-history-item--active'
+                      : ''}"
+                    href={workspaceHref(
+                      `/pm?conversation=${encodeURIComponent(item.id)}`,
+                    )}
+                    aria-current={item.id === selectedId ? "page" : undefined}
                   >
-                </a>
-              {:else}
-                <p class="px-3 py-3 text-micro text-fg-muted">
-                  No conversations yet.
-                </p>
-              {/each}
-            </nav>
-            {#if partial || conversationsCursor}
-              <div class="border-t border-line px-3 py-2 text-micro">
-                {#if conversationsCursor}
-                  <button
-                    class="ui-prose-link"
-                    onclick={moreConversations}
-                    disabled={loadingConversations}
-                    type="button"
-                    >{loadingConversations
-                      ? "Loading…"
-                      : "More conversations"}</button
-                  >
-                {:else if partial}
-                  <span class="text-warn-text">Partial history</span>
-                {/if}
-              </div>
-            {/if}
-          </div>
+                    <span class="line-clamp-1 break-words">{item.title}</span>
+                    <span class="text-micro text-fg-subtle">
+                      {#each pinnedRefs(item) as ref (ref)}
+                        <span class="block"
+                          >{workTitle(ref) || ref}
+                          {#if resolvedRefs.get(ref)?.status}
+                            · {resolvedRefs
+                              .get(ref)
+                              .status.replaceAll("_", " ")}{/if}
+                          {#if resolvedRefs.get(ref)?.lastMovedAt}
+                            · <Time
+                              value={resolvedRefs.get(ref).lastMovedAt}
+                              {now}
+                            />{/if}
+                        </span>
+                      {/each}
+                      <Time value={item.created_at} {now} /></span
+                    >
+                  </a>
+                {:else}
+                  <p class="px-3 py-3 text-micro text-fg-muted">
+                    No conversations yet.
+                  </p>
+                {/each}
+              </nav>
+              {#if partial || conversationsCursor}
+                <div class="border-t border-line px-3 py-2 text-micro">
+                  {#if conversationsCursor}
+                    <button
+                      class="ui-prose-link"
+                      onclick={moreConversations}
+                      disabled={loadingConversations}
+                      type="button"
+                      >{loadingConversations
+                        ? "Loading…"
+                        : "More conversations"}</button
+                    >
+                  {:else if partial}
+                    <span class="text-warn-text">Partial history</span>
+                  {/if}
+                </div>
+              {/if}
+            </div>
+          {/if}
         </details>
         <a class="ui-btn-secondary" href={workspaceHref("/pm?new=1")}>New</a>
       {/snippet}
@@ -754,9 +894,6 @@
           >anx pm status</code
         > on your computer.
       </p>
-    {/if}
-    {#if conversation?.title && conversation.title !== turns[0]?.text}
-      <p class="pm-context">{conversation.title}</p>
     {/if}
     {#if contextRefs.length}
       <!-- TODO(SCA-694): use WorkSummary when the shared component lands. -->
@@ -794,7 +931,7 @@
     role="region"
     tabindex="0"
   >
-    <div class="pm-thread-inner">
+    <div class="pm-thread-inner" bind:this={threadInnerElement}>
       {#if loading}
         <p class="text-meta text-fg-muted" role="status">Loading…</p>
       {:else if !turns.length}
@@ -832,30 +969,14 @@
                 <Time value={turn.created_at} style="clock" {now} />
               </p>
             {/if}
+            <!--
+              One time per group, in the header above it. The bubble carried
+              a second copy of the same "4:11 PM" directly under the first.
+            -->
             <div class="pm-you">
               <p class="pm-bubble">{turn.text}</p>
-              {#if clock}
-                <span class="pm-bubble-time">
-                  <Time value={turn.created_at} style="clock" {now} />
-                </span>
-              {/if}
             </div>
             <div class="pm-answer">
-              {#if turn.activity?.length}
-                <details class="mb-2 text-micro text-fg-muted">
-                  <summary
-                    >{activityLabel(turn)} · {turn.activity.length} steps</summary
-                  >
-                  <ol aria-label="Turn activity">
-                    {#each turn.activity as event (event.sequence)}
-                      <li>
-                        {event.label}{#if event.target}
-                          · {event.target}{/if}
-                      </li>
-                    {/each}
-                  </ol>
-                </details>
-              {/if}
               {#if view.kind === "answered"}
                 <MarkdownRenderer
                   source={answerBody(turn.response, proposed)}
@@ -875,20 +996,25 @@
                     class="pm-response text-meta text-fg"
                   />
                 {/if}
-                <p class="pm-status" role="status">
-                  {#if reducedMotion}
-                    <span>{view.claimed ? activityLabel(turn) : "Queued…"}</span
-                    >
-                  {:else}
-                    <span class="pm-dots" aria-hidden="true"
-                      ><i></i><i></i><i></i></span
-                    >
-                    <span>{view.claimed ? activityLabel(turn) : "Queued"}</span
-                    >{#if view.elapsed}<span aria-hidden="true"
-                        >&nbsp;· {view.elapsed}</span
-                      >{/if}
-                  {/if}
-                </p>
+                <!--
+                  One line. This was three: a "Running · 3 steps" fold, then
+                  "••• Running · 46s", then a sentence about the PM being a
+                  separate agent — all saying the turn is running. The line
+                  is now the fold's own summary, so the steps are one click
+                  under the words they belong to.
+                -->
+                {#if turn.activity?.length}
+                  <details class="pm-run" data-pm-run="pending">
+                    <summary class="pm-status">
+                      {@render runningLine(view, turn)}
+                    </summary>
+                    {@render runSteps(turn)}
+                  </details>
+                {:else}
+                  <p class="pm-status" role="status" data-pm-run="pending">
+                    {@render runningLine(view, turn)}
+                  </p>
+                {/if}
                 {#if !view.claimed}
                   <p class="pm-status-note">{UNCLAIMED_LABEL}</p>
                 {:else if view.longWait}
@@ -919,21 +1045,58 @@
                   >
                 </p>
               {/if}
+              <!--
+                The run log, under the answer rather than over it. Collapsed
+                it is one quiet line; above the answer it was the first thing
+                the eye landed on, which is not what a reader opened the
+                conversation for.
+              -->
+              {#if view.kind !== "pending" && turn.activity?.length}
+                <details class="pm-run pm-run--done" data-pm-run="done">
+                  <summary
+                    >{activityLabel(turn)} · {turn.activity.length} steps</summary
+                  >
+                  {@render runSteps(turn)}
+                </details>
+              {/if}
               {#if evidence.length}
-                <ul class="pm-evidence" aria-label="Evidence for this reply">
-                  {#each evidence as ref (ref)}
-                    {@const link = evidenceLink(ref)}
-                    <li class="flex min-w-0">
-                      <RefChip
-                        href={link.href}
-                        external={link.isExternal}
-                        title={link.raw}
-                        ><span class="min-w-0 truncate">{link.label}</span
-                        ></RefChip
-                      >
-                    </li>
-                  {/each}
-                </ul>
+                {@const shown = expandedSources.has(turn.id)
+                  ? evidence
+                  : evidence.slice(0, SOURCE_PREVIEW)}
+                {@const rest = evidence.length - shown.length}
+                <!--
+                  A quiet labelled row, bounded. Five refs under a reply wrapped
+                  to three lines of chips, and the last one sat under the
+                  composer where nobody could read it.
+                -->
+                <div class="pm-sources">
+                  <span class="pm-sources-label">Sources</span>
+                  <ul class="pm-evidence" aria-label="Evidence for this reply">
+                    {#each shown as ref (ref)}
+                      {@const link = evidenceLink(ref)}
+                      <li class="flex min-w-0">
+                        <RefChip
+                          href={link.href}
+                          external={link.isExternal}
+                          title={link.raw}
+                          ><span class="min-w-0 truncate">{link.label}</span
+                          ></RefChip
+                        >
+                      </li>
+                    {/each}
+                    {#if rest > 0}
+                      <li class="flex min-w-0">
+                        <button
+                          class="pm-sources-more"
+                          type="button"
+                          onclick={() => showAllSources(turn.id)}
+                          aria-label={`Show ${rest} more source${rest === 1 ? "" : "s"}`}
+                          >+{rest}</button
+                        >
+                      </li>
+                    {/if}
+                  </ul>
+                </div>
               {/if}
               {#if proposed.length}
                 <div class="mt-3 border-t border-line-subtle pt-2">
@@ -1162,7 +1325,12 @@
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: 16px 0 24px;
+    /*
+     * The last line of an answer needs air between it and the composer.
+     * With 24px a wrapped row of source chips finished flush against the
+     * composer's top edge and read as cut off even when it was scrollable.
+     */
+    padding: 16px 0 40px;
   }
   .pm-thread-inner {
     display: flex;
@@ -1210,22 +1378,6 @@
     line-height: 18px;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
-  }
-  .pm-bubble-time {
-    font-size: 11px;
-    color: var(--fg-subtle);
-    font-variant-numeric: tabular-nums;
-    opacity: 0;
-    transition: opacity var(--motion-fast);
-  }
-  .pm-pair:hover .pm-bubble-time,
-  .pm-pair:focus-within .pm-bubble-time {
-    opacity: 1;
-  }
-  @media (hover: none) {
-    .pm-bubble-time {
-      opacity: 1;
-    }
   }
 
   .pm-answer {
@@ -1283,13 +1435,16 @@
   }
 
   .pm-status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
     min-height: 18px;
     font-size: 11px;
     color: var(--fg-subtle);
     font-variant-numeric: tabular-nums;
+  }
+  /* Inline, so a `<summary>` keeps its disclosure marker. */
+  .pm-status-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
   .pm-status-note {
     margin-top: 4px;
@@ -1329,12 +1484,71 @@
     }
   }
 
+  /*
+   * The run log. Quieter than the answer in both states: the answer is 13px
+   * `--fg`, this is 11px `--fg-subtle`, so the eye reaches the answer first
+   * whether the turn is still working or finished.
+   */
+  .pm-run {
+    font-size: 11px;
+    color: var(--fg-subtle);
+  }
+  .pm-run--done {
+    margin-top: 6px;
+  }
+  .pm-run > summary {
+    cursor: pointer;
+    width: fit-content;
+    font-variant-numeric: tabular-nums;
+  }
+  .pm-run > summary:hover {
+    color: var(--fg-muted);
+  }
+  .pm-run-steps {
+    margin-top: 4px;
+    padding-left: 14px;
+    color: var(--fg-muted);
+    list-style: disc;
+  }
+
+  /*
+   * Sources: a labelled, bounded row. Five refs wrapped to three lines of
+   * chips under a reply, and the last line sat behind the composer.
+   */
+  .pm-sources {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    min-width: 0;
+  }
+  .pm-sources-label {
+    flex: none;
+    font-size: 11px;
+    color: var(--fg-subtle);
+  }
   .pm-evidence {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    margin-top: 8px;
     min-width: 0;
+  }
+  .pm-sources-more {
+    flex: none;
+    height: 22px;
+    padding: 0 7px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--fg-muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+  }
+  .pm-sources-more:hover {
+    color: var(--fg);
+    border-color: var(--line-strong);
   }
 
   .pm-foot {
@@ -1491,14 +1705,17 @@
   }
   /* Narrow screens wrap the header actions to the left edge, where a panel
      anchored to the trigger's right edge hangs off-screen. Span the page
-     gutters instead; the static position keeps it under the trigger. */
+     gutter instead; the trigger is at the gutter too, so the panel still
+     opens under it. Above this width the actions stay on the title's row —
+     see the flex basis in `WorkspacePageHeader` — so the panel stays
+     anchored to the trigger, which is where a reader looks for it. */
   @media (max-width: 639px) {
     .pm-history-panel {
       position: fixed;
       top: auto;
       left: 0.75rem;
-      right: 0.75rem;
-      width: auto;
+      right: auto;
+      width: min(22rem, calc(100vw - 1.5rem));
       margin-top: 0.375rem;
       max-height: min(24rem, 60vh);
     }

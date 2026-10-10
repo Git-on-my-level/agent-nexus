@@ -36,6 +36,7 @@ const LABEL = process.env.REVIEW_CAPTURES || "";
 const OUT = ".screenshots/review";
 const WORKSPACE = "/o/local/w/local";
 const CARD_REF = "card:release-b";
+const DOC_ID = "dashboard";
 const NOW = "2026-10-05T12:00:00Z";
 const PR_URL = "https://github.com/Git-on-my-level/agent-nexus/pull/246";
 
@@ -319,7 +320,12 @@ const SNAPSHOT = {
     ],
     truncated: false,
   },
-  dashboard: { status: "ok", pinned_ref: "", has_more: false, reports: [] },
+  dashboard: {
+    status: "ok",
+    pinned_ref: `document:${DOC_ID}`,
+    has_more: false,
+    reports: [],
+  },
   agents: { status: "ok", items: [] },
   work: { status: "ok", total: 5, human_count: 1, items: [] },
 };
@@ -399,9 +405,283 @@ const RESOLVED = {
   ],
 };
 
-async function installFixture(page) {
+/**
+ * The pinned dashboard, as the Overview embeds it and the Docs page renders
+ * it. One panel per thing this pass changed: a bound chart whose author
+ * declared stacked bars (core materializes bound charts as lines on a time
+ * axis, so this is the panel that used to ignore the declaration and print
+ * `anx-prs-merged repo=oss` in its legend), and a live panel beside it.
+ */
+const SERIES_START = Date.parse(NOW) - 6 * 86_400_000;
+const seriesPoints = (values) =>
+  values.map((value, index) => [SERIES_START + index * 86_400_000, value]);
+
+const REPORT = {
+  kind: "anx.visual-report",
+  schema_version: 1,
+  title: "Dashboard",
+  summary: "How fast this workspace is shipping, and what is waiting on you.",
+  generated_at: NOW,
+  projects: [
+    {
+      id: "delivery",
+      title: "Delivery",
+      outcome: "On track",
+      summary: "Shipping daily.",
+    },
+  ],
+  sources: [],
+  panels: [
+    {
+      id: "asks",
+      project_id: "delivery",
+      type: "live-asks",
+      title: "Needs an answer",
+      author: "actor-operator",
+      provenance: "reported",
+      observed_at: NOW,
+      freshness: "current",
+      source_ids: [],
+      data: { limit: 5 },
+    },
+    {
+      id: "merged",
+      project_id: "delivery",
+      type: "chart",
+      title: "PRs merged per day",
+      author: "actor-operator",
+      provenance: "reported",
+      observed_at: NOW,
+      freshness: "current",
+      source_ids: [],
+      source: { series: "prs-merged", range: "7d", agg: "sum" },
+      data: {},
+      fallback: {
+        as_of: "2026-10-01T00:00:00Z",
+        data: {
+          palette: "ocean",
+          option: {
+            xAxis: { type: "category", data: ["Mon", "Tue"] },
+            yAxis: { type: "value", name: "PRs" },
+            series: [
+              { type: "bar", name: "OSS", stack: "repos", data: [4, 6] },
+              { type: "bar", name: "SaaS", stack: "repos", data: [1, 2] },
+            ],
+          },
+        },
+      },
+    },
+  ],
+};
+
+const DASHBOARD_DOCUMENT = {
+  id: DOC_ID,
+  handle: DOC_ID,
+  ref: `document:${DOC_ID}`,
+  segment: DOC_ID,
+  title: "Dashboard",
+  state: "active",
+  head_revision_id: "dashboard-revision-1",
+  head_revision_number: 1,
+  updated_at: NOW,
+  updated_by: "actor-operator",
+  created_at: NOW,
+  created_by: "actor-operator",
+};
+
+const DASHBOARD_REVISION = {
+  document_id: DOC_ID,
+  revision_id: DASHBOARD_DOCUMENT.head_revision_id,
+  ref: "document_revision:dashboard-r1",
+  revision_number: 1,
+  content_type: "text",
+  content_hash: "dashboard-content-hash",
+  revision_hash: "dashboard-revision-hash",
+  created_at: NOW,
+  created_by: "actor-operator",
+  content: JSON.stringify(REPORT),
+};
+
+/** What `report.render` answers: every panel, with the live ones resolved. */
+const RENDERED_REPORT = {
+  revision_ref: DASHBOARD_REVISION.ref,
+  panels: [
+    {
+      id: "asks",
+      type: "live-asks",
+      status: "ok",
+      observed_at: NOW,
+      truncated: false,
+      data: {
+        items: [
+          {
+            ref: "event:ask-wording",
+            title: "Approve the rollback wording",
+            asked_by: "Codex Sol",
+            age_seconds: 3.2 * 3600,
+            ts: iso(-3.2),
+            href: "/inbox?mailbox=needs-you&item=inbox%3Arollback",
+          },
+        ],
+      },
+    },
+    {
+      id: "merged",
+      type: "chart",
+      status: "ok",
+      observed_at: NOW,
+      truncated: false,
+      provenance: {
+        adapter: "anx-dev",
+        host: "workstation-a",
+        last_push: NOW,
+        expected_interval_seconds: 3600,
+        resolution: "daily",
+        series: "prs-merged",
+        labels: {},
+      },
+      data: {
+        option: {
+          xAxis: { type: "time" },
+          yAxis: { type: "value", name: "PRs" },
+          series: [
+            {
+              name: "prs-merged repo=oss",
+              type: "line",
+              data: seriesPoints([1, 4, 7, 5, 6, 4, 2]),
+            },
+            {
+              name: "prs-merged repo=saas",
+              type: "line",
+              data: seriesPoints([0, 2, 3, 2, 1, 2, 1]),
+            },
+          ],
+        },
+      },
+    },
+  ],
+};
+
+/** Two asks and an update: enough for the Inbox to have a shape. */
+const INBOX_ITEMS = [
+  {
+    id: "inbox:rollback",
+    kind: "ask",
+    mailbox: "needs-you",
+    title: "Approve the rollback wording",
+    body: "Should the banner name the release, or just the date?",
+    severity: "high",
+    state: "open",
+    created_at: iso(-3.2),
+    requester: { id: "actor-codex", name: "Codex Sol" },
+    related_refs: [CARD_REF],
+    subject: { ref: CARD_REF, title: "Release B" },
+  },
+  {
+    id: "inbox:renderer",
+    kind: "ask",
+    mailbox: "needs-you",
+    title: "Confirm the renderer vocabulary",
+    body: "One word for a card's state everywhere, or per surface?",
+    severity: "normal",
+    state: "open",
+    created_at: iso(-20),
+    requester: { id: "actor-claude", name: "Claude" },
+    related_refs: [CARD_REF],
+    subject: { ref: CARD_REF, title: "Release B" },
+  },
+  {
+    id: "inbox:merged",
+    kind: "update",
+    mailbox: "watching",
+    title: "One shared markdown renderer merged",
+    state: "open",
+    created_at: iso(-6),
+    requester: { id: "actor-luna", name: "Codex Luna" },
+    related_refs: [CARD_REF],
+  },
+];
+
+/**
+ * Ask PM, in the three states the header and the thread read differently in:
+ * nothing asked yet, a turn still running, and a turn answered with its
+ * sources and its run log.
+ */
+const PM_CONVERSATION = {
+  id: "pm-conversation",
+  // Core names a conversation from its first question, so this is what most
+  // conversations carry: the first bubble again, cut at 100 characters.
+  title:
+    "Which agents are blocked, and what do you need from me before the release goes",
+  created_at: iso(-0.4),
+};
+
+const PM_RUNNING_TURNS = [
+  {
+    id: "pm-turn-running",
+    text: "Which agents are blocked, and what do you need from me before the release goes out on Friday?",
+    created_at: iso(-0.0128),
+    status: "sending",
+    claimed: true,
+    activity: [
+      { sequence: 1, label: "Claimed" },
+      { sequence: 2, label: "Preparing runtime" },
+      { sequence: 3, label: "Running", target: "anx pm answer" },
+    ],
+  },
+];
+
+/** A conversation somebody named: the heading path, with "Ask PM" above it. */
+const PM_NAMED_CONVERSATION = {
+  id: "pm-named",
+  title: "Friday release readiness",
+  created_at: iso(-0.4),
+};
+
+const PM_ANSWERED_TURNS = [
+  {
+    id: "pm-turn-answered",
+    text: "Which agents are blocked, and what do you need from me before the release goes out on Friday?",
+    created_at: iso(-0.4),
+    status: "delivered",
+    response: [
+      "Two agents are blocked and one needs you.",
+      "",
+      "- `card:release-b` is waiting on the overview decision — that one is yours.",
+      "- The access request from `agent-builder` has nobody to approve it.",
+      "",
+      "Nothing else is stuck.",
+    ].join("\n"),
+    evidence_refs: [
+      "card:release-b",
+      "card:agents-cannot-wait-on-their-own-access-request",
+      "document:release-runbook",
+      "card:dashboards",
+      "card:onboarding",
+    ],
+    activity: [
+      { sequence: 1, label: "Claimed" },
+      { sequence: 2, label: "Preparing runtime" },
+      { sequence: 3, label: "Reading the workspace" },
+      { sequence: 4, label: "Finished" },
+    ],
+  },
+];
+
+async function installFixture(
+  page,
+  { pmTurns = null, pmConversation = null } = {},
+) {
   await page.clock.setFixedTime(new Date(NOW));
-  await installWorkspaceApi(page, {});
+  await installWorkspaceApi(page, {
+    documents: [DASHBOARD_DOCUMENT],
+    ...(pmTurns
+      ? {
+          conversations: [pmConversation ?? PM_CONVERSATION],
+          turns: pmTurns,
+        }
+      : { conversations: [], turns: [] }),
+  });
   await page.route("**/*", async (route) => {
     const request = route.request();
     if (!["fetch", "xhr"].includes(request.resourceType())) {
@@ -416,7 +696,30 @@ async function installFixture(page) {
       });
 
     if (path === "/overview" || path === "/workspace/dashboard") {
-      return json({ ...SNAPSHOT, agents: { status: "ok", items: ROSTER } });
+      return json({
+        ...SNAPSHOT,
+        agents: { status: "ok", items: ROSTER },
+        dashboard: {
+          ...SNAPSHOT.dashboard,
+          reports: [{ ...DASHBOARD_DOCUMENT, report: REPORT }],
+        },
+      });
+    }
+    if (path === "/workspace/dashboard/reports") {
+      return json({
+        ...SNAPSHOT.dashboard,
+        reports: [{ ...DASHBOARD_DOCUMENT, report: REPORT }],
+      });
+    }
+    if (path === `/docs/${DOC_ID}/report`) return json(RENDERED_REPORT);
+    if (path === `/docs/${DOC_ID}` && request.method() === "GET") {
+      return json({
+        document: DASHBOARD_DOCUMENT,
+        revision: DASHBOARD_REVISION,
+      });
+    }
+    if (path === "/inbox") {
+      return json({ items: INBOX_ITEMS, total: INBOX_ITEMS.length });
     }
     if (path === "/agents" && request.method() === "GET") {
       return json({ agents: ROSTER });
@@ -512,6 +815,111 @@ for (const { label, width, height } of WIDTHS) {
       contentType: "image/png",
     });
   });
+
+  test(`capture dashboard document @ ${label}`, async ({ page }, testInfo) => {
+    test.skip(!LABEL, "set REVIEW_CAPTURES=before|after to capture");
+    test.setTimeout(120_000);
+    await installFixture(page);
+    await page.setViewportSize({ width, height });
+    await page.goto(`${WORKSPACE}/docs/${DOC_ID}`);
+    await expect(
+      page.getByRole("heading", { name: "PRs merged per day" }),
+    ).toBeVisible({ timeout: 60_000 });
+    await waitForAppReady(page);
+    await nextPaint(page);
+    await page.evaluate(() => document.fonts?.ready);
+    await mkdir(OUT, { recursive: true });
+    const file = `${OUT}/${LABEL}-dashboard-${label}.png`;
+    await page.screenshot({
+      path: file,
+      animations: "disabled",
+      fullPage: true,
+    });
+    await testInfo.attach(`${LABEL}-dashboard-${label}`, {
+      path: file,
+      contentType: "image/png",
+    });
+  });
+
+  test(`capture inbox @ ${label}`, async ({ page }, testInfo) => {
+    test.skip(!LABEL, "set REVIEW_CAPTURES=before|after to capture");
+    test.setTimeout(120_000);
+    await installFixture(page);
+    await page.setViewportSize({ width, height });
+    await page.goto(`${WORKSPACE}/inbox`);
+    await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible({
+      timeout: 60_000,
+    });
+    await waitForAppReady(page);
+    await nextPaint(page);
+    await page.evaluate(() => document.fonts?.ready);
+    await mkdir(OUT, { recursive: true });
+    const file = `${OUT}/${LABEL}-inbox-${label}.png`;
+    await page.screenshot({
+      path: file,
+      animations: "disabled",
+      fullPage: true,
+    });
+    await testInfo.attach(`${LABEL}-inbox-${label}`, {
+      path: file,
+      contentType: "image/png",
+    });
+  });
+
+  for (const pm of [
+    { name: "pm-empty", turns: null, settle: "Nothing asked yet" },
+    { name: "pm-running", turns: PM_RUNNING_TURNS, settle: "Working" },
+    {
+      name: "pm-answered",
+      turns: PM_ANSWERED_TURNS,
+      settle: "Two agents are blocked",
+    },
+    // A conversation with a name of its own: the heading is the name, with
+    // "Ask PM" as the eyebrow. The three above take the common path, where
+    // the title only echoes the first question and the page stays "Ask PM".
+    {
+      name: "pm-named",
+      turns: PM_ANSWERED_TURNS,
+      conversation: PM_NAMED_CONVERSATION,
+      settle: "Two agents are blocked",
+    },
+  ]) {
+    test(`capture ${pm.name} @ ${label}`, async ({ page }, testInfo) => {
+      test.skip(!LABEL, "set REVIEW_CAPTURES=before|after to capture");
+      test.setTimeout(120_000);
+      await installFixture(page, {
+        pmTurns: pm.turns,
+        pmConversation: pm.conversation ?? null,
+      });
+      await page.setViewportSize({ width, height });
+      await page.goto(
+        pm.turns
+          ? `${WORKSPACE}/pm?conversation=${(pm.conversation ?? PM_CONVERSATION).id}`
+          : `${WORKSPACE}/pm`,
+      );
+      // Scoped to the thread: the sidebar carries its own "Who is working".
+      await expect(
+        page
+          .getByRole("region", { name: "PM conversation" })
+          .getByText(pm.settle, { exact: false })
+          .first(),
+      ).toBeVisible({ timeout: 60_000 });
+      await waitForAppReady(page);
+      await nextPaint(page);
+      await page.evaluate(() => document.fonts?.ready);
+      await mkdir(OUT, { recursive: true });
+      const file = `${OUT}/${LABEL}-${pm.name}-${label}.png`;
+      await page.screenshot({
+        path: file,
+        animations: "disabled",
+        fullPage: true,
+      });
+      await testInfo.attach(`${LABEL}-${pm.name}-${label}`, {
+        path: file,
+        contentType: "image/png",
+      });
+    });
+  }
 
   test(`capture initiative page @ ${label}`, async ({ page }, testInfo) => {
     test.skip(!LABEL, "set REVIEW_CAPTURES=before|after to capture");

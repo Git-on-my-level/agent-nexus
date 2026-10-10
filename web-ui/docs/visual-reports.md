@@ -706,10 +706,17 @@ Work reads apply board/project scope and a 2,000 candidate cap in SQL before
 materialization; equal scopes share one read per request. A capped read is marked
 truncated, so it does not claim complete coverage.
 
-The Overview uses compact rendering: report title and panels. Project filters,
-counts, freshness controls and provenance details are available through its
-**Open document** link. The reusable `LiveInitiatives.svelte` expects the shared
+The Overview uses compact rendering: panels, and the report title only when the
+surrounding page does not already print it. Project filters, counts, freshness
+controls and provenance details are available through its **Open document**
+link. One control chooses, pins and unpins the dashboard — a menu listing every
+report, loaded the first time it opens — and a report's choices are never read
+before then. The reusable `LiveInitiatives.svelte` expects the shared
 `progress.done/total` and `needs[]` projection for the Overview initiatives section.
+
+Freshness is stated once per panel, on its provenance chip. Neither the report
+nor the embedding page adds a second claim of its own, and a panel's eyebrow is
+dropped when the panel title already says what kind it is.
 
 ## Live first and review deadlines
 
@@ -718,6 +725,52 @@ Dashboards default to live asks, initiatives and activity. Use `live-cards` with
 and roles are optional bounded work annotations set on create or annotate;
 status matches the card phase, including closed work. Query results remain
 permission-filtered and expose truncation when the candidate cap is reached.
+
+### A bound chart's presentation
+
+Core materializes a bound `chart` from raw points the only way it can: one
+`line` series per label set, named `"<series> key=value"`, on a time axis. The
+client applies the panel's own declaration on top, taking nothing from outside
+the panel:
+
+- **Series names.** A declared name is matched on identity, never on order: it
+  must equal the stream's full name, the same name with the shared series
+  prefix dropped, or one of the stream's own label values whole — so writing
+  `OSS` in the fallback names the stream carrying `repo=oss`. Label pairs are
+  split on key boundaries, not on spaces, because a value may contain spaces
+  (`owner=dave saas` is one value and lends no word of it to anyone). The
+  pairing has to be unambiguous both ways: every stream that answers to a
+  declaration is counted as a claimant before any pairing is decided, so two
+  declarations answering to one stream, or two streams answering to one
+  declaration, identify neither. **There is no positional fallback.** Core
+  omits a stream with no points in the window and orders label sets by their
+  JSON, so index is not an identity — and an author who writes names the
+  labels do not contain ("SaaS PRs", "OSS PRs") would have had one series'
+  values drawn under the other's name. A stream whose name cannot be verified
+  keeps the label it has (`prs-merged repo=oss` → `oss`).
+- **Shape is the panel's, not a stream's.** A name claims _which_ stream this
+  is and needs verified identity; a type claims only that the panel is, say, a
+  stacked bar chart. So when every declared series asks for the same drawing,
+  that drawing applies to unverified streams too — otherwise the commonest
+  authored panel, one declared series named something the labels do not
+  contain, silently became a line chart. Declarations that disagree on a shape
+  describe no single panel, and core's own shape stands.
+- **Type and stacking.** `type`, `stack`, `smooth`, `step`, `areaStyle`,
+  `barWidth` and `symbolSize` come from the matched fallback series, with
+  core's own value as the fallback; `palette` comes from the fallback chart,
+  and `legend.show` only when every live stream matched a declaration. A
+  stream's `xAxisIndex`/`yAxisIndex` always stay the live read's. The authored
+  `caption` does not travel: it is a claim about the snapshot's numbers, not
+  presentation. Bars and stacks need a category axis, so the live points are
+  rebinned onto the buckets core already returned — one entry per bucket,
+  `null` where a stream had no point. The panel keeps its time axis and drops
+  only the stack when the buckets cannot be given distinct labels, when a
+  stream reports one instant twice, or when `streams × buckets` would pass the
+  chart point limits.
+- **The partial bucket.** The last bin ends in the future, so a daily count
+  read at 09:00 plots two hours against whole days and appears to crash to
+  zero. On a time axis it carries a silent `Partial` reference line; on a
+  category axis its label ends `(so far)`.
 
 A `live-timeline` binds an adapter-fed series through `source` like other series
 panels, with `data: {}`. It returns the newest individual observations as

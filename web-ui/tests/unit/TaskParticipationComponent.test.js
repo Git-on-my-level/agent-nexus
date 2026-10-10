@@ -87,9 +87,13 @@ describe("participation panel", () => {
     await screen.findByText(
       "No shared participation reported for this agent on this task.",
     );
+    // The coverage bound is a tooltip on the heading now, not a paragraph
+    // under it: a reader meets it on every visit and needs it on almost none.
     expect(
-      screen.getByText(/Other tasks and private sessions are not included/),
-    ).toBeTruthy();
+      screen
+        .getByRole("button", { name: /What participation means/ })
+        .getAttribute("data-tooltip"),
+    ).toMatch(/private sessions are not included/);
     expect(
       screen.getByRole("link", { name: "One task" }).getAttribute("href"),
     ).toBe("/tasks/card%3Aone");
@@ -208,7 +212,11 @@ describe("participation panel", () => {
       agentId: "agent-one",
     });
     await screen.findByText("2 task participations · 2 currently active");
-    expect(screen.getByText(/Sessions are counted per task/)).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: /What participation means/ })
+        .getAttribute("data-tooltip"),
+    ).toMatch(/counted per task/);
   });
   it("coalesces repeated refresh clicks and recovers after an unavailable read", async () => {
     const client = {
@@ -265,10 +273,12 @@ describe("evidence for handoff", () => {
   });
   it("does not treat an empty evidence history as a completed handoff", () => {
     render(EvidenceHandoff);
+    expect(screen.getByText("No activity")).toBeTruthy();
+    // The caveat it must not lose: a finished run is not a finished task.
     expect(
-      screen.getByText(
-        /Participation and completed runs do not establish task completion/,
-      ),
-    ).toBeTruthy();
+      screen
+        .getByRole("button", { name: /What evidence means/ })
+        .getAttribute("data-tooltip"),
+    ).toMatch(/not evidence that the work is done/);
   });
 });

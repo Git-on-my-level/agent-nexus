@@ -12,9 +12,7 @@
           {
             "agent_count": 1,
             "agents": [],
-            "discovered_adapters": [
-              "fleet-monitor"
-            ],
+            "discovered_adapters": ["fleet-monitor"],
             "display_name": "Collector",
             "hostname": "collector-01",
             "ref": "host:collector",

@@ -722,11 +722,17 @@ export function buildReportChartOption(data, appearance = {}) {
     // one has to pin and highlight a series instead of hiding it. None of
     // those are things the built-in legend does.
     legend: { show: false },
+    /*
+     * Padding for what is actually drawn. These were fixed at the size a
+     * named-and-rotated axis label needs on both sides, so a chart with no
+     * axis names — which is every series-bound one — spent 80px of a 280px
+     * box on empty margin, and on a phone that left a line in a letterbox.
+     */
     grid: {
-      top: 28,
-      right: 44,
-      bottom: 52,
-      left: 52,
+      top: 16,
+      right: 20,
+      bottom: axes(input.xAxis)[0]?.name ? 52 : 30,
+      left: axes(input.yAxis)[0]?.name ? 52 : 44,
       outerBoundsMode: "same",
       outerBoundsContain: "all",
     },
