@@ -79,7 +79,11 @@ func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target strin
 					out["outcome"] = response["outcome"]
 					out["responder"] = response["responding_actor_id"]
 					if response["outcome"] == "rejected" {
-						return nil, errnorm.WithDetails(errnorm.New(errnorm.KindRemote, "rejected", "ask rejected"), out)
+						message := "ask rejected"
+						if strings.HasPrefix(target, "access-request:") || anyString(out["access_request_ref"]) != "" {
+							message = "access request denied"
+						}
+						return nil, errnorm.WithDetails(errnorm.New(errnorm.KindRemote, "rejected", message), out)
 					}
 					return &commandResult{Data: out}, nil
 				case "needs_context", "withdrawn", "expired":

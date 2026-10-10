@@ -393,10 +393,10 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 		return a.runAwaitAnswers(ctx, cfg, wait)
 	}
 	if len(refs) != 1 {
-		return nil, errnorm.Usage("invalid_args", "usage: anx await <ask-id|card-ref> [--until answered|state=<phase>] [--timeout <dur>]")
+		return nil, errnorm.Usage("invalid_args", "usage: anx await <ask-id|card-ref|access-request:<id>> [--until answered|state=<phase>] [--timeout <dur>]")
 	}
 	target := refs[0]
-	if !strings.HasPrefix(target, "card:") && !strings.HasPrefix(target, "event:") {
+	if !strings.HasPrefix(target, "card:") && !strings.HasPrefix(target, "event:") && !strings.HasPrefix(target, "access-request:") {
 		target = "event:" + target
 	}
 	wait := 30 * time.Minute

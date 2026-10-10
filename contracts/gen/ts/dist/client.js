@@ -1733,7 +1733,7 @@ export const commandRegistry = [
         ],
         "stability": "beta",
         "surface": "utility",
-        "agent_notes": "Agents request their own grant. Humans alone decide requests and read the Access queue.",
+        "agent_notes": "Agents request their own grant and await access-request:\u003cid\u003e on the existing ask stream. Humans alone decide requests and read the Access queue. Another agent cannot read the request.",
         "body_schema": {
             "required": [
                 {

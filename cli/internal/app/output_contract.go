@@ -216,6 +216,12 @@ func deriveNextActions(command string, argv []string, value any) []output.NextAc
 	if (command == "ask" || command == "review" || command == "escalate" || command == "work block") && anyString(root["ask_id"]) != "" {
 		actions = append(actions, action("Wait for answer", "anx", "await", anyString(root["ask_id"])))
 	}
+	if command == "auth access-requests request" {
+		request := asMap(root["request"])
+		if id := anyString(request["id"]); id != "" && anyString(request["status"]) == "pending" {
+			actions = append(actions, action("Wait for decision", "anx", "await", "access-request:"+id))
+		}
+	}
 	if command == "await" {
 		subject := anyString(root["subject_ref"])
 		if strings.HasPrefix(subject, "card:") {

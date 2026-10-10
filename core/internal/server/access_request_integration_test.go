@@ -1,10 +1,14 @@
 package server
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 
@@ -388,4 +392,132 @@ func TestInboxSummaryRanksProjectedAskSeverity(t *testing.T) {
 	if p["open_ask_count"] != float64(4) || len(asks) != 2 || asks[0].(map[string]any)["source_event_id"] != ids[1] || asks[1].(map[string]any)["source_event_id"] != ids[2] {
 		t.Fatalf("severity rank, oldest tie, or unbounded count incorrect: %#v", p)
 	}
+}
+
+func TestAccessRequestAwaitIsOwnerScopedAndWakes(t *testing.T) {
+	t.Parallel()
+	env, human := accessTestEnv(t)
+	owner := seedAccessTestAgent(t, env, "await.owner")
+	other := seedAccessTestAgent(t, env, "await.other")
+	base := env.server.URL
+
+	status, p := hostHTTP(t, "POST", base+"/auth/access-requests", owner.AccessToken, map[string]any{"grant": "auth-admin", "reason": "Need the grant"})
+	hostStatus(t, status, 200, p)
+	request := p["request"].(map[string]any)
+	id := request["id"].(string)
+	ref := "access-request:" + id
+	eventID := strings.TrimPrefix(request["request_event_ref"].(string), "event:")
+	askURL := base + "/asks/" + url.PathEscape(ref)
+	eventURL := base + "/asks/" + url.PathEscape(eventID)
+
+	status, p = hostHTTP(t, "GET", askURL, owner.AccessToken, nil)
+	hostStatus(t, status, 200, p)
+	if p["status"] != "open" || p["access_request_ref"] != ref {
+		t.Fatalf("owner open outcome: %#v", p)
+	}
+	status, p = hostHTTP(t, "GET", askURL, other.AccessToken, nil)
+	hostStatus(t, status, 404, p)
+	status, p = hostHTTP(t, "GET", askURL, human, nil)
+	hostStatus(t, status, 404, p)
+	status, p = hostHTTP(t, "GET", eventURL, other.AccessToken, nil)
+	hostStatus(t, status, 404, p)
+	status, p = hostHTTP(t, "GET", eventURL, human, nil)
+	hostStatus(t, status, 200, p)
+	if p["access_request_ref"] != ref {
+		t.Fatalf("human event outcome: %#v", p)
+	}
+	status, p = hostHTTP(t, "GET", base+"/auth/access-requests", other.AccessToken, nil)
+	hostStatus(t, status, 403, p)
+	status, p = hostHTTP(t, "GET", base+"/asks/"+url.PathEscape("event:missing-ask"), owner.AccessToken, nil)
+	hostStatus(t, status, 404, p)
+
+	status, p = hostHTTP(t, "POST", base+"/asks/"+url.PathEscape(ref)+"/subscriptions", owner.AccessToken, map[string]any{"kind": "await", "label": "live await"})
+	hostStatus(t, status, 201, p)
+	status, p = hostHTTP(t, "POST", base+"/asks/"+url.PathEscape(ref)+"/subscriptions", other.AccessToken, map[string]any{"kind": "await", "label": "live await"})
+	hostStatus(t, status, 404, p)
+
+	status, p = hostHTTP(t, "POST", base+"/auth/access-requests/"+id+"/approve", human, map[string]any{})
+	hostStatus(t, status, 200, p)
+	status, p = hostHTTP(t, "GET", askURL, owner.AccessToken, nil)
+	hostStatus(t, status, 200, p)
+	response := p["response"].(map[string]any)
+	if p["status"] != "answered" || response["outcome"] != "approved" || p["access_request_ref"] != ref {
+		t.Fatalf("approved outcome: %#v", p)
+	}
+	stream := readAskStreamOutcome(t, base+"/stream/asks/"+url.PathEscape(ref), owner.AccessToken)
+	if stream["status"] != "answered" || stream["access_request_ref"] != ref {
+		t.Fatalf("approved stream: %#v", stream)
+	}
+	var trigger string
+	if err := env.workspace.DB().QueryRow(`SELECT trigger_text FROM agent_wakeups WHERE target_actor_id=? AND trigger_text LIKE '%access request%'`, owner.ActorID).Scan(&trigger); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(trigger, "anx await "+ref) {
+		t.Fatalf("wake text: %s", trigger)
+	}
+
+	status, p = hostHTTP(t, "POST", base+"/auth/access-requests", other.AccessToken, map[string]any{"grant": "auth-admin", "reason": "Other grant"})
+	hostStatus(t, status, 200, p)
+	otherID := p["request"].(map[string]any)["id"].(string)
+	otherRef := "access-request:" + otherID
+	status, p = hostHTTP(t, "POST", base+"/auth/access-requests/"+otherID+"/deny", human, map[string]any{})
+	hostStatus(t, status, 200, p)
+	status, p = hostHTTP(t, "GET", base+"/asks/"+url.PathEscape(otherRef), other.AccessToken, nil)
+	hostStatus(t, status, 200, p)
+	if p["status"] != "answered" || p["response"].(map[string]any)["outcome"] != "rejected" {
+		t.Fatalf("denied outcome: %#v", p)
+	}
+	status, p = hostHTTP(t, "GET", base+"/asks/"+url.PathEscape(otherRef), owner.AccessToken, nil)
+	hostStatus(t, status, 404, p)
+}
+
+func TestAnswerWakeTriggerTextNamesAccessRequest(t *testing.T) {
+	got := answerWakeTriggerText(primitives.HumanAttentionAnswerWakeBatch{AnswerCount: 1, Refs: []string{"event:a", "access-request:req-1"}})
+	if got != "Your access request was decided. Run `anx await access-request:req-1`." {
+		t.Fatal(got)
+	}
+	mixed := answerWakeTriggerText(primitives.HumanAttentionAnswerWakeBatch{AnswerCount: 2, Refs: []string{"access-request:req-1"}})
+	if !strings.Contains(mixed, "access-request:req-1") || !strings.Contains(mixed, "anx await --answers") {
+		t.Fatal(mixed)
+	}
+	asks := answerWakeTriggerText(primitives.HumanAttentionAnswerWakeBatch{AnswerCount: 3, Refs: []string{"event:a"}})
+	if asks != "3 answers to your asks are ready. Run `anx await --answers`." {
+		t.Fatal(asks)
+	}
+}
+
+func readAskStreamOutcome(t *testing.T, rawURL, bearer string) map[string]any {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	req.Header.Set("Accept", "text/event-stream")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("stream status %d: %s", resp.StatusCode, body)
+	}
+	scanner := bufio.NewScanner(resp.Body)
+	var data string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "data: ") {
+			data = strings.TrimPrefix(line, "data: ")
+			break
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(data), &out); err != nil {
+		t.Fatalf("stream data %q: %v", data, err)
+	}
+	return out
 }
