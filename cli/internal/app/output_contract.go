@@ -481,7 +481,7 @@ func deriveErrorActions(command string, err *errnorm.Error) []output.NextAction 
 				return []output.NextAction{action("Select agent", argv...)}
 			}
 		}
-		return []output.NextAction{action("Select agent", "anx", "--as", "codex", "auth", "whoami")}
+		return nil
 	case "host_not_enrolled":
 		return []output.NextAction{action("Enroll host", "anx", "host", "enroll")}
 	case "no_current_task":

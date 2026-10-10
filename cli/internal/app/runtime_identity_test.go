@@ -101,6 +101,13 @@ func TestUnresolvedIdentitySuggestsTheOnlyDetectedAdapter(t *testing.T) {
 	}
 }
 
+func TestUnresolvedIdentityWithoutUniqueAdapterHasNoGuessedNextAction(t *testing.T) {
+	err := errnorm.Normalize(errnorm.Usage("identity_unresolved", "pass --as <registered-agent-name> or set ANX_AS"))
+	if actions := deriveErrorActions("auth whoami", err); len(actions) != 0 {
+		t.Fatalf("generic unresolved identity suggested a guessed principal: %#v", actions)
+	}
+}
+
 func TestHostDiscoverIsLocalAndNeverRegisters(t *testing.T) {
 	for _, available := range []bool{true, false} {
 		a := newTestApp(t)

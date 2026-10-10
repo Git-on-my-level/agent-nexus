@@ -49,7 +49,7 @@ func agentDomainSurfaces() []domainSurface {
 				{Path: "cards reply", Target: "<ref>", Examples: []string{"anx cards reply card:implement-login --to <message-id> --body \"Confirmed\""}, ForbidHelp: []string{"anx cards reply --card-id <card-id>", "--card-id <card-id>"}},
 				{Path: "cards revise", Target: "<ref>", Examples: []string{"anx cards revise card:implement-login --body-file card.md"}, ForbidHelp: []string{"anx cards revise --card-id <card-id>", "--card-id <card-id>"}},
 				{Path: "cards move", Target: "<ref>", Examples: []string{"anx cards move card:implement-login --column review"}, ForbidHelp: []string{"anx cards move --card-id <card-id>", "--card-id <card-id>"}},
-				{Path: "cards assign", Target: "<ref>", Examples: []string{"anx cards assign card:implement-login --assignee-ref actor:agent-alpha"}, ForbidHelp: []string{"anx cards assign --card-id <card-id>", "--card-id <card-id>"}},
+				{Path: "cards assign", Target: "<ref>", Examples: []string{"anx cards assign card:implement-login --assignee-ref \"${ANX_ASSIGNEE_REF:?set this to the intended actor ref}\""}, ForbidHelp: []string{"anx cards assign --card-id <card-id>", "--card-id <card-id>"}},
 				{Path: "cards resolve", Target: "<ref>", Examples: []string{"anx cards resolve card:implement-login --reason \"ok\" --body \"Validated in staging\"", "anx cards resolve card:implement-login --resolution-ref event:<event-id>"}, ForbidHelp: []string{"anx cards resolve --card-id <card-id>", "--card-id <card-id>"}},
 				{Path: "cards reopen", Target: "<ref>", Examples: []string{"anx cards reopen card:implement-login"}, ForbidHelp: []string{"anx cards reopen --card-id <card-id>", "--card-id <card-id>"}},
 			},

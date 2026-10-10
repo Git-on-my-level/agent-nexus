@@ -11,9 +11,9 @@ type cliEnvironmentVariable struct {
 
 func cliEnvironmentVariables() []cliEnvironmentVariable {
 	return []cliEnvironmentVariable{
-		{Name: "ANX_AS", Overrides: "derived agent name", Summary: "Select an adapter or persona for this process.", Example: "ANX_AS=reviewer"},
-		{Name: "ANX_BASE_URL", Overrides: "core API base URL", Summary: "Select the enrolled workspace core.", Example: "ANX_BASE_URL=https://anx.example.com"},
-		{Name: "ANX_CONFIG_DIR", Overrides: "local host config root", Summary: "Absolute directory containing workspace preferences, enrolled hosts and callback logs.", Example: "ANX_CONFIG_DIR=/opt/example/anx-config"},
+		{Name: "ANX_AS", Overrides: "derived agent name", Summary: "Select an adapter or persona for this process.", Example: "ANX_AS=<your-agent-name>"},
+		{Name: "ANX_BASE_URL", Overrides: "core API base URL", Summary: "Select the enrolled workspace core.", Example: "ANX_BASE_URL=<workspace-core-url>"},
+		{Name: "ANX_CONFIG_DIR", Overrides: "local host config root", Summary: "Absolute directory containing workspace preferences, enrolled hosts and callback logs.", Example: "ANX_CONFIG_DIR=<absolute-config-directory>"},
 		{Name: "ANX_TIMEOUT", Overrides: "request timeout", Summary: "Set request timeout as a Go duration.", Example: "ANX_TIMEOUT=30s"},
 		{Name: "ANX_UPDATE_POLICY", Overrides: "automatic CLI release policy", Summary: "Override saved update policy with auto, notify, or off.", Example: "ANX_UPDATE_POLICY=off"},
 		{Name: "ANX_JSON", Overrides: "JSON output mode", Summary: "Emit JSON envelopes.", Example: "ANX_JSON=true"},
@@ -38,7 +38,7 @@ func hostIdentityDocText() string {
 	return strings.TrimSpace(`Host identity
 
 Enroll once per workspace with anx host enroll. The owner-only host key lives below ~/.config/anx/hosts/<workspace-key>/.
-For fleet hosts, a granted auth-admin agent runs anx --json host tokens create --label host-b --expires-in 1h and pipes .result.token securely to anx host enroll --token-stdin on host B. Configure the workspace base URL on both hosts; never log the token.
+For fleet hosts, a granted auth-admin agent creates a one-time token with anx host tokens create --label <destination-label> and pipes it to anx host enroll --name <destination-slug> --token-stdin on the destination machine. Replace both placeholders with the actual destination values. Configure the selected workspace URL on both machines; never log the token.
 Only a human can anx auth admins grant|revoke <principal>. Granted agents can anx host enrollments list|approve|deny, host tokens create|list|revoke, and host revoke <host>. An agent cannot revoke its own host.
 Enrollment stores that workspace core in host.json and persists a workspace alias. The first enrolled workspace becomes the default when none is configured; later enrollments preserve the current default and print anx config use <alias> to select the new workspace.
 Run anx config workspaces to inspect aliases, enrolled workspaces and the directory rule for cwd. Selection follows --base-url or --workspace, ANX_BASE_URL, directory rule, configured default, then a single enrolled host (source bridge:auto-single). With several enrolled workspaces and no selection, commands fail with repair instructions.

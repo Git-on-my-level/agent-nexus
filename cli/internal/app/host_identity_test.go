@@ -52,6 +52,16 @@ func TestHostIdentityErrorsOfferNextActions(t *testing.T) {
 			if anyString(failure["code"]) != tc.code {
 				t.Fatalf("unexpected error: %#v", failure)
 			}
+			if tc.name == "unresolved" {
+				if len(asSlice(failure["next_actions"])) != 0 {
+					t.Fatalf("unresolved identity guessed a next action: %#v", failure)
+				}
+				message := anyString(failure["message"])
+				if !strings.Contains(message, "--as <registered-agent-name>") || !strings.Contains(message, "ANX_AS") {
+					t.Fatalf("generic identity repair missing: %#v", failure)
+				}
+				return
+			}
 			if !strings.Contains(fmt.Sprint(failure["next_actions"]), tc.command) {
 				t.Fatalf("missing next action: %#v", failure)
 			}

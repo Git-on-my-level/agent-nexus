@@ -6,12 +6,16 @@ Set `ANX_BASE_URL` to the workspace core URL. A human auth-admin must bootstrap 
 
 ```bash
 anx host enroll --plan
-anx host enroll --name my-mac
-anx --as codex auth whoami
+anx host enroll --name "$(hostname -s | tr A-Z a-z)"
+anx auth whoami
 anx doctor
 ```
 
-Interactive enrollment prints a user code and, when core has `ANX_PUBLIC_WEB_UI_WORKSPACE_URL` configured, the full workspace-scoped verification URL. Set that config to the public web UI workspace path, such as `http://127.0.0.1:5291/o/local/w/local`. In hosted deployments, a core API at `https://example.com/ws/acme/main` uses `https://example.com/o/acme/w/main` as its web UI workspace URL. Without it, open Access → Hosts in the workspace web UI and approve the printed code. The CLI polls at the server interval. For unattended fleet hosts, use the auth-admin agent flow below. `anx host enroll --token-stdin` keeps the secret out of process arguments. A host key and record are stored under `~/.config/anx/hosts/<workspace-key>/` with owner-only permissions.
+If automatic identity resolution does not match your intended ANX identity,
+use the exact adapter suggestion from `anx doctor` or set your own `ANX_AS`.
+Do not copy another agent's name from an example.
+
+Interactive enrollment prints a user code and, when core has `ANX_PUBLIC_WEB_UI_WORKSPACE_URL` configured, the full workspace-scoped verification URL. Set that config to this deployment's public web UI workspace path. The core API base URL and web UI path must target the same organization and workspace. Without it, open Access → Hosts in the workspace web UI and approve the printed code. The CLI polls at the server interval. For unattended fleet hosts, use the auth-admin agent flow below. `anx host enroll --token-stdin` keeps the secret out of process arguments. A host key and record are stored under `~/.config/anx/hosts/<workspace-key>/` with owner-only permissions.
 
 Existing standalone agent profiles for the same workspace are adopted by default. `--plan` shows which profiles; repeat `--exclude <profile>` to leave one standalone. Successfully adopted local profile and key files are deleted.
 
@@ -44,9 +48,12 @@ machines, disable shell tracing, and pipe the secret directly to the remote CLI:
 
 ```bash
 set +x
-anx --as fleet --json host tokens create --label host-b --expires-in 1h \
+: "${ANX_BASE_URL:?Set to this workspace's core URL on this machine}"
+: "${ANX_AS:?Set to your explicitly granted auth-admin identity}"
+: "${DESTINATION_HOST:?Set to the destination machine's SSH name}"
+anx --json host tokens create --label "$DESTINATION_HOST" --expires-in 1h \
   | jq -er '.result.token' \
-  | ssh host-b 'ANX_BASE_URL=https://nexus.example/ws/team/main anx host enroll --name host-b --token-stdin'
+  | ssh "$DESTINATION_HOST" 'anx host enroll --name "$(hostname -s | tr A-Z a-z)" --token-stdin'
 ```
 
 The token appears only in its create response; never save that response in run
@@ -85,11 +92,13 @@ Run `anx config workspaces` when unsure. It lists enrolled workspaces and aliase
 
 ```bash
 anx config workspaces
-anx config use personal
-anx config map "~/workspace/demo/**" demo
+: "${ANX_WORKSPACE_ALIAS:?Choose an enrolled alias from the list above}"
+: "${ANX_PROJECT_GLOB:?Set to an absolute glob for the project to map}"
+anx config use "$ANX_WORKSPACE_ALIAS"
+anx config map "$ANX_PROJECT_GLOB" "$ANX_WORKSPACE_ALIAS"
 anx config show
-anx --workspace personal orient
-anx config unmap "~/workspace/demo/**"
+anx --workspace "$ANX_WORKSPACE_ALIAS" orient
+anx config unmap "$ANX_PROJECT_GLOB"
 ```
 
 Preferences live in `~/.config/anx/workspaces.json`, alongside the JSON host records, or under `ANX_CONFIG_DIR` / `--config-dir`. No repository metadata is read or written. `config use` and `config map` accept aliases or absolute HTTP(S) base URLs; saved choices use URLs so alias changes cannot reroute them. Discovered aliases are persisted by enrollment and preference writes; reads remain read-only. Collisions receive stable numeric suffixes without rebinding existing aliases.
@@ -98,17 +107,17 @@ Selection order is `--base-url` or `--workspace` > `ANX_BASE_URL` > directory ru
 
 Directory globs must be absolute or begin with `~/`; quote them against shell expansion. `**` matches zero or more complete components; `*`, `?`, and character classes match within a component. Matching follows the cwd volume's case sensitivity for every component, including literals after wildcards. Rules rank by longest literal prefix, then most literal characters, with lexical order breaking ties. Existing symlink prefixes are resolved when matching against cwd, so logical home/work paths also match physical directories. A rule wins over the configured default. `sources.base_url` names the winning rule as `config:directory-rule:<glob>`, the default as `config:default`, or an explicit alias as `flag:--workspace`. Use either URL flag or alias flag, not both.
 
-An example file:
+This JSON shows the file shape only. Replace every placeholder with values for
+the enrolled workspace and project before using it:
 
 ```json
 {
-  "default": "https://anx.example.com/ws/personal/main",
+  "default": "<workspace-core-url>",
   "aliases": {
-    "personal": "https://anx.example.com/ws/personal/main",
-    "demo": "https://anx.example.com/ws/demo/main"
+    "<workspace-alias>": "<workspace-core-url>"
   },
   "directory_rules": {
-    "/opt/example/workspace/demo/**": "https://anx.example.com/ws/demo/main"
+    "<absolute-project-glob>": "<workspace-core-url>"
   }
 }
 ```
@@ -146,8 +155,9 @@ identifier. Reuse it for the same conversation and use a new one for fresh conte
 ```
 
 ```bash
-anx --as reviewer sessions register --from-file session.json
-anx --as reviewer sessions get <session-id>
+: "${ANX_AS:?Set this to the identity you intend to use with Agent Nexus}"
+anx sessions register --from-file session.json
+anx sessions get <session-id>
 ```
 
 Enrolled agents get a server-bound host namespace; do not put a machine pathname
@@ -164,8 +174,9 @@ Then prepare `participation.json` with the returned `session_id`:
 ```
 
 ```bash
-anx --as reviewer work participants register card:launch --from-file participation.json
-anx --as reviewer work participants list card:launch --limit 50
+: "${ANX_AS:?Set this to the identity you intend to use with Agent Nexus}"
+anx work participants register card:launch --from-file participation.json
+anx work participants list card:launch --limit 50
 ```
 
 Participation never changes assignees, phase, rank, source ownership, or task
@@ -266,43 +277,50 @@ The runner:
 
 ## Typed Command Smoke
 
-```bash
-printf '{"topic":{"title":"Incident #42","summary":"Investigate #42","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["event:example"]}}}\n' | anx --as agent-a topics create
-anx --as agent-a topics list --state active
+The work and resource refs below are demonstration values. Replace them with
+refs from this workspace before running the commands. The commands use the
+current ANX identity; set it explicitly only when automatic resolution is not
+available.
 
-anx --as agent-a events stream --max-events 1
-anx --as agent-a inbox stream --max-events 1
-anx --as agent-a events stream --follow
+```bash
+: "${ANX_AS:?Set this to the identity you intend to use with Agent Nexus}"
+printf '{"topic":{"title":"Incident #42","summary":"Investigate #42","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["event:example"]}}}\n' | anx topics create
+anx topics list --state active
+
+anx events stream --max-events 1
+anx inbox stream --max-events 1
+anx events stream --follow
 # Diagnostic/local helper over backing-thread timelines; prefer topics/cards/boards for primary coordination reads.
-anx --as agent-a events list --thread-id thread_123 --thread-id thread_456 --type message_posted --mine --max-events 20
-anx --as agent-a provenance walk --from event:incident-42 --depth 2
-anx --as agent-a topics get incident-42
-anx --as agent-a topics create --title "Launch" --summary "Coordinate launch work"
-anx --as agent-a topics message incident-42 --body-file message.md
-anx --as agent-a topics messages incident-42 --max-events 10
-anx --as agent-a topics workspace incident-42
+anx events list --thread-id thread_123 --thread-id thread_456 --type message_posted --mine --max-events 20
+anx provenance walk --from event:incident-42 --depth 2
+anx topics get incident-42
+anx topics create --title "Launch" --summary "Coordinate launch work"
+anx topics message incident-42 --body-file message.md
+anx topics messages incident-42 --max-events 10
+anx topics workspace incident-42
 # Backing-thread reads (tooling/diagnostics; prefer topics workspace for operator triage)
-anx --as agent-a threads inspect thread_123 --max-events 50
-anx --as agent-a threads context --state active
-anx --as agent-a threads workspace thread_123
-anx --as agent-a docs content product-constitution
-anx --as agent-a docs message product-constitution --body-file note.md
-anx --as agent-a docs messages product-constitution --max-events 10
-anx --as agent-a artifacts inspect --artifact-id incident-42-log
-anx --as agent-a workspace summary
-anx --as agent-a boards list --state active
-anx --as agent-a boards create --topic incident-42 --title "Launch board"
-anx --as agent-a boards workspace product-launch
+anx threads inspect thread_123 --max-events 50
+anx threads context --state active
+anx threads workspace thread_123
+anx docs content product-constitution
+anx docs message product-constitution --body-file note.md
+anx docs messages product-constitution --max-events 10
+anx artifacts inspect --artifact-id incident-42-log
+anx workspace summary
+anx boards list --state active
+anx boards create --topic incident-42 --title "Launch board"
+anx boards workspace product-launch
 # Cards: draft prose locally, then use domain verbs for active work.
-anx --as agent-a cards list --board product-launch
-anx --as agent-a cards create --board product-launch --topic incident-42 --title "Rescue digest" --body-file card.md
-anx --as agent-a cards revise rescue-digest --body-file card.md
-anx --as agent-a cards assign rescue-digest --assignee-ref actor:agent-a
-anx --as agent-a cards move rescue-digest --column review
-anx --as agent-a cards resolve rescue-digest --body-file evidence.md
+anx cards list --board product-launch
+anx cards create --board product-launch --topic incident-42 --title "Rescue digest" --body-file card.md
+anx cards revise rescue-digest --body-file card.md
+: "${ANX_ASSIGNEE_REF:?Set this to the intended typed actor ref}"
+anx cards assign card:rescue-digest --assignee-ref "$ANX_ASSIGNEE_REF"
+anx cards move rescue-digest --column review
+anx cards resolve rescue-digest --body-file evidence.md
 # Packet APIs are subject-based: `packet.subject_ref` must be `card:<card-handle>`.
-anx --as agent-a receipts create --from-file receipt.json
-anx --as agent-a reviews create --from-file review.json
+anx receipts create --from-file receipt.json
+anx reviews create --from-file review.json
 ```
 
 Board activity uses `board:<board-handle>` typed refs on emitted events. When
@@ -321,10 +339,10 @@ or unusual integrations.
 Draft/commit flow:
 
 ```bash
-printf '%s\n' '{"topic":{"title":"Drafted incident","summary":"Staged via draft","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["event:example"]}}}' | anx --as agent-a draft create --command topics.create
-anx --as agent-a draft list
-anx --as agent-a draft commit <draft-id>
-anx --as agent-a draft discard <draft-id>
+printf '%s\n' '{"topic":{"title":"Drafted incident","summary":"Staged via draft","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["event:example"]}}}' | anx draft create --command topics.create
+anx draft list
+anx draft commit <draft-id>
+anx draft discard <draft-id>
 ```
 
 Use `draft` for reviewable JSON writes, broad/risky mutations, or changes delegated by a human where an inspectable checkpoint is useful. Prefer direct domain verbs for narrow, already-verified changes.
@@ -332,7 +350,7 @@ Use `draft` for reviewable JSON writes, broad/risky mutations, or changes delega
 The raw fallback remains available:
 
 ```bash
-anx --base-url http://127.0.0.1:8000 --as agent-a api call --path /meta/handshake
+anx api call --path /meta/handshake
 ```
 
 ## Generated help sync
@@ -690,7 +708,7 @@ ANX_DEV_BLOB_BACKEND=filesystem make serve
 ANX_AS=pm ./cli/anx --as pm pm serve \
   --work-dir .tmp/pm-runner \
   --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'
-ANX_AS=maya ./cli/anx --as maya pm ask --wait \
+./cli/anx pm ask --wait \
   "What needs my decision?"
 ```
 

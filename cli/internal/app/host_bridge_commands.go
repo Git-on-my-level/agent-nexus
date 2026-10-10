@@ -17,7 +17,7 @@ import (
 
 func init() {
 	localHelperTopics = append(localHelperTopics,
-		localHelperTopic{Path: "host token", Summary: "Print a short-lived derived-agent bearer from the enrolled host.", JSONShape: "`token`, `expires_at`, `agent: {id, handle}`", Composition: "Host assertion grant; text mode prints only the token.", Examples: []string{"anx --json host token --as codex"}},
+		localHelperTopic{Path: "host token", Summary: "Print a short-lived derived-agent bearer from the enrolled host.", JSONShape: "`token`, `expires_at`, `agent: {id, handle}", Composition: "Host assertion grant; text mode prints only the token.", Examples: []string{"anx --json host token"}},
 		localHelperTopic{Path: "host bridge check-in", Summary: "Publish an enrolled host bridge check-in.", JSONShape: "Core bridge check-in result", Composition: "Signs the exact request body with the owner-only host key.", Examples: []string{"anx host bridge check-in --host-id <id> --instance-id <id> --ttl-seconds 180"}},
 		localHelperTopic{Path: "host bridge wake claim", Summary: "Claim a durable wake for this host.", JSONShape: "Core wake mutation result", Composition: "Uses a host-signed proof; complete or fail after handling.", Examples: []string{"anx host bridge wake claim --host-id <id> --wakeup-id <id> --instance-id <id>"}},
 		localHelperTopic{Path: "host bridge wake complete", Summary: "Complete a claimed wake for this host.", JSONShape: "Core wake mutation result", Composition: "Uses a host-signed proof.", Examples: []string{"anx host bridge wake complete --host-id <id> --wakeup-id <id> --instance-id <id>"}},

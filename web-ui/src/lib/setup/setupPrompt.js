@@ -43,6 +43,9 @@ export const SETUP_TOKEN_LIFETIME_SECONDS = SETUP_TOKEN_LIFETIME_MS / 1000;
 /** Label recorded on tokens issued for a copyable prompt. */
 export const SETUP_TOKEN_LABEL = "Setup prompt";
 
+/** The CLI's dedicated identity for its installed PM service profile. */
+const PM_SERVICE_AGENT = "pm";
+
 function text(value) {
   return String(value ?? "").trim();
 }
@@ -305,42 +308,43 @@ function enrollStep(index, { base, token, expiry }) {
  *
  * `doctor`'s `host_enrollment` check reads the host identity on disk, so a
  * machine whose access the workspace has revoked still passes it. These two
- * calls are the only thing in either prompt that asks the server, and they
- * need `--as` because this shell may carry no harness marker at all — which is
- * also why they are not used for branching: a refusal has to be read as "the
- * server said no", and `--as` is what makes that unambiguous.
- *
- * `--as` must be a real lowercase agent name, never a `<placeholder>`: these
- * lines sit in the command block the prompt says to run unread, and angle
- * brackets are shell redirections.
+ * calls are the only thing in either prompt that asks the server. Machine
+ * setup lets the CLI resolve the caller; PM setup uses the CLI's dedicated
+ * `pm` service identity, independent of the runner selected in the UI.
  *
  * @param {string} base
- * @param {string} asName
+ * @param {string} [agentName] explicit identity; absent for machine setup
  */
-function serverCheckLines(base, asName) {
-  const asFlag = `--as ${shellQuote(asName)}`;
+function serverCheckLines(base, agentName) {
+  const identityFlag =
+    agentName == null ? "" : `--as ${shellQuote(agentName)} `;
   return [
     "   `host_enrollment` must be ok. That check reads this machine's local host",
     "   identity, so it cannot tell you the server still accepts it — finish with",
-    "   two authenticated calls, naming the harness you are:",
+    "   two authenticated calls using your intended Agent Nexus identity:",
     "",
-    `     ${anxCommand(base, `${asFlag} --json auth whoami`)}`,
-    `     ${anxCommand(base, `${asFlag} --json host list`)}`,
+    `     ${anxCommand(base, `${identityFlag}--json auth whoami`)}`,
+    `     ${anxCommand(base, `${identityFlag}--json host list`)}`,
     "",
-    "   `--as` names the agent identity you register on this machine, which is",
-    "   what your first use of anx here would create anyway. If either call is",
+    agentName == null
+      ? "   These commands let anx resolve your caller identity. If it cannot, use only the exact unique identity suggestion from `doctor`; if there is none, stop and report that identity could not be resolved."
+      : `   These commands use the selected PM identity, ${agentName}.`,
+    agentName == null
+      ? "   Do not guess or substitute another agent's name."
+      : "   The runner selection above supplies this identity; it is not inferred from this shell.",
+    "   If either call is",
     "   refused — 401, 403, or a message about the host being unknown or revoked —",
     "   stop and tell me: this machine's access has been taken away.",
   ];
 }
 
-function verifyStep(index, { base, asName }) {
+function verifyStep(index, { base, agentName }) {
   return [
     `${index}. Confirm the result with the server, not just locally:`,
     "",
     `     ${anxCommand(base, "--json doctor")}`,
     "",
-    ...serverCheckLines(base, asName),
+    ...serverCheckLines(base, agentName),
   ];
 }
 
@@ -383,8 +387,7 @@ export function buildMachinePrompt({
     "",
     ...enrollStep(2, { base, token, expiry }),
     "",
-    // A real `--as`, never a <placeholder>: this block is run unread.
-    ...verifyStep(3, { base, asName: "claude" }),
+    ...verifyStep(3, { base }),
     "",
     ...skillStep(4),
     "",
@@ -439,7 +442,7 @@ export function buildPmPrompt({
     "   interactive wizard you cannot answer, so pass the runner explicitly.",
     `   This workspace is set to run the PM with ${runner.label}:`,
     "",
-    `     ${anxCommand(base, `pm install --runner ${shellQuote(runner.argv)} --wait`)}`,
+    `     ${anxCommand(base, `--as ${shellQuote(PM_SERVICE_AGENT)} pm install --runner ${shellQuote(runner.argv)} --wait`)}`,
     "",
     "   --wait blocks until the PM's first connection is accepted (90s by",
     "   default). If it times out, say so: this machine's access to the",
@@ -448,11 +451,11 @@ export function buildPmPrompt({
     "",
     "4. Verify, locally and with the server:",
     "",
-    `     ${anxCommand(base, "--json pm status")}`,
+    `     ${anxCommand(base, `--as ${shellQuote(PM_SERVICE_AGENT)} --json pm status`)}`,
     `     ${anxCommand(base, "--json doctor")}`,
     "",
-    "   `pm status` reads the local service and needs no agent identity.",
-    ...serverCheckLines(base, runner.key),
+    "   `pm status` reads the local service profile selected above; it does not authenticate with the server.",
+    ...serverCheckLines(base, PM_SERVICE_AGENT),
     "",
     ...skillStep(5, { pm: true }),
     "",
@@ -460,8 +463,9 @@ export function buildPmPrompt({
     "   whether the first connection was accepted. If it was not, send me the",
     "   last 20 lines of stderr.log from that log directory.",
     "",
-    "The PM runs as you, on this computer. It holds no workspace secret of its own:",
-    "it authenticates through this machine's host identity.",
+    "The PM service runs on this computer through the selected runner and uses this machine's enrolled host identity.",
+    "Its Agent Nexus identity is the CLI's dedicated `pm` service profile, independent of the selected runner.",
+    "It has no separate workspace credential of its own.",
     ...HUMAN_ONLY,
   ].join("\n");
 }

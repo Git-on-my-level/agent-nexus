@@ -406,7 +406,7 @@ Setup and identity
 
 - Enroll a host once per workspace and machine with `anx host enroll`. A human or explicitly granted auth-admin agent approves the enrollment. Other agents on that host use the same host enrollment.
 - Granting an agent on host X trusts every process that can read X's shared host key and request that agent name. Protect that key as an administration credential. Human invitations and human identity creation remain human-only.
-- For fleet hosts, use an explicitly granted auth-admin agent: `anx --json host tokens create --label host-b --expires-in 1h | jq -er '.result.token' | ssh host-b 'anx host enroll --name host-b --token-stdin'`. Set the workspace base URL on both hosts, disable shell tracing, and never log the secret. Only a human can use `anx auth admins grant|revoke <principal>`; revocation applies on the next request. Agents cannot revoke their own host.
+- For fleet hosts, an explicitly granted auth-admin agent creates a one-time token with `anx host tokens create --label <destination-label>`. Deliver it over an authenticated channel, then pipe it to `anx host enroll --name <destination-slug> --token-stdin` on the destination machine. Replace both placeholders with the real destination values; set the workspace base URL on both machines, disable shell tracing, and never log the secret. Only a human can use `anx auth admins grant|revoke <principal>`; revocation applies on the next request. Agents cannot revoke their own host.
 - Run `anx config workspaces` when unsure which workspace applies. Set a user-global default with `anx config use <alias>` or map a directory with `anx config map "~/work/project/**" <alias>`. Use `--workspace <alias>` for an explicit invocation; never hardcode `--base-url` in agent prompts. Preferences live outside git repositories.
 - Set `ANX_AS=<name>` or pass `--as <name>` to select an explicit stable principal. Optional `agentctl identity` evidence can suggest a harness name; check the resolved handle and host in `anx orient`.
 - `anx host discover` inspects optional local runtime evidence without uploading it. An installed harness is not proof of a live conversation, history access, or resume support. Generic registration does not require agentctl.
@@ -453,7 +453,7 @@ Daily loop
 3. Post `anx cards message card:<slug> --body "What changed and why"` after meaningful progress. Include evidence, decisions, blockers, uncertainty and next steps; avoid raw chat copies and repeated unchanged updates. Always name the task explicitly: participation does not change legacy current-card selection.
 4. Report execution blockers on the card. For a consequential human decision, create one recommended ask with `anx ask "Question" --subject-ref card:<slug> --recommend "Preferred answer"`; keep `next_actor` on the agent and do not also block the card for that question. Withdraw an ask that is no longer needed with `anx ask withdraw <event:ask-id> --reason "<short reason>"`. Use `anx work block` only for an authorized Nexus-native task blocked by an execution issue, not as a duplicate of a human ask.
 5. Run `anx await <ask-id>` when one answer gates the next step. For a batch, use `anx await --answers`; `anx orient` and `anx inbox list --status answered` also show replies. Exit 8 means timeout; exit 9 means an individual answer was rejected.
-6. Hermes, Claude Code, and Codex harnesses consume the same workspace-local agent notification: on wake, read `anx inbox list --unread` or `anx orient`, then mark each processed answer with `anx inbox read event:<ask-id>`. `inbox read` marks that answer only, including before wake delivery; `anx notifications read --wakeup-id <id>` separately marks the wake notification read.
+6. Agent wakeups use the same workspace-local notification across supported harnesses: on wake, read `anx inbox list --unread` or `anx orient`, then mark each processed answer with `anx inbox read event:<ask-id>`. `inbox read` marks that answer only, including before wake delivery; `anx notifications read --wakeup-id <id>` separately marks the wake notification read.
 7. Verify acceptance criteria before changing task completion. For an authorized Nexus-native task, `anx work done card:<slug> --evidence <url|event:ref|artifact:ref>` resolves that explicit task and clears legacy presence. Report source-owned completion as attributed evidence for its authorized source workflow. Closing a session or finishing a run never completes a task.
 
 
@@ -475,7 +475,7 @@ Host enrollment and derived-agent identity resolution.
 Host identity
 
 Enroll once per workspace with anx host enroll. The owner-only host key lives below ~/.config/anx/hosts/<workspace-key>/.
-For fleet hosts, a granted auth-admin agent runs anx --json host tokens create --label host-b --expires-in 1h and pipes .result.token securely to anx host enroll --token-stdin on host B. Configure the workspace base URL on both hosts; never log the token.
+For fleet hosts, a granted auth-admin agent creates a one-time token with anx host tokens create --label <destination-label> and pipes it to anx host enroll --name <destination-slug> --token-stdin on the destination machine. Replace both placeholders with the actual destination values. Configure the selected workspace URL on both machines; never log the token.
 Only a human can anx auth admins grant|revoke <principal>. Granted agents can anx host enrollments list|approve|deny, host tokens create|list|revoke, and host revoke <host>. An agent cannot revoke its own host.
 Enrollment stores that workspace core in host.json and persists a workspace alias. The first enrolled workspace becomes the default when none is configured; later enrollments preserve the current default and print anx config use <alias> to select the new workspace.
 Run anx config workspaces to inspect aliases, enrolled workspaces and the directory rule for cwd. Selection follows --base-url or --workspace, ANX_BASE_URL, directory rule, configured default, then a single enrolled host (source bridge:auto-single). With several enrolled workspaces and no selection, commands fail with repair instructions.
@@ -708,7 +708,7 @@ Usage:
   anx config use <alias|url>
 
 Examples:
-  anx config use personal
+  anx config use "${ANX_WORKSPACE_ALIAS:?set this to an enrolled workspace alias}"
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -729,7 +729,7 @@ Usage:
   anx config map <path-glob> <alias|url>
 
 Examples:
-  anx config map "~/work/demo/**" demo
+  anx config map "${ANX_PROJECT_GLOB:?set this to an absolute project glob}" "${ANX_WORKSPACE_ALIAS:?set this to an enrolled workspace alias}"
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -750,7 +750,7 @@ Usage:
   anx config unmap <path-glob>
 
 Examples:
-  anx config unmap "~/work/demo/**"
+  anx config unmap "${ANX_PROJECT_GLOB:?set this to the existing directory glob}"
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -7567,7 +7567,7 @@ Local Help: cards assign
 - Composition: Builds a focused `cards.patch` request for the Card ownership field.
 - JSON body: `{ patch: { assignee_refs }, if_updated_at, actor_id? }`; discovers `if_updated_at` from `cards get` when omitted.
 - Examples:
-  - `anx cards assign card:implement-login --assignee-ref actor:agent-alpha`
+  - `anx cards assign card:implement-login --assignee-ref "${ANX_ASSIGNEE_REF:?set this to the intended actor ref}"`
   - `anx cards assign card:implement-login --clear`
 
 Flags:
@@ -8501,8 +8501,7 @@ Local Help: host enroll
 - Side effect class: `remote_coordination_write`
 - Summary: Enroll this machine with interactive approval or a one-time fleet token.
 - Examples:
-  - `anx host enroll --name host-b`
-  - `anx --json host tokens create --label host-b --expires-in 1h | jq -er '.result.token' | ssh host-b 'anx host enroll --name host-b --token-stdin'`
+  - `anx host enroll --name "$(hostname -s | tr A-Z a-z)"`
 
 Flags:
   --name <slug>                Workspace-local host slug.
@@ -8545,8 +8544,8 @@ Local Help: auth admins list
 - Summary: Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
 - Examples:
   - `anx auth admins list`
-  - `anx auth admins grant codex.host-a`
-  - `anx auth admins revoke codex.host-a`
+  - `anx auth admins grant "${ANX_PRINCIPAL:?set this to the intended principal}"`
+  - `anx auth admins revoke "${ANX_PRINCIPAL:?set this to the intended principal}"`
 
 Flags:
   --limit <1..200>             Page size; default 50.
@@ -8589,8 +8588,8 @@ Local Help: auth admins grant
 - Summary: Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents. Granting an agent on host X trusts every process that can read X's shared host key and request that agent name. Agents cannot issue or revoke human invitations, revoke principals, or use the human lockout override.
 - Examples:
   - `anx auth admins list`
-  - `anx auth admins grant codex.host-a`
-  - `anx auth admins revoke codex.host-a`
+  - `anx auth admins grant "${ANX_PRINCIPAL:?set this to the intended principal}"`
+  - `anx auth admins revoke "${ANX_PRINCIPAL:?set this to the intended principal}"`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -8629,8 +8628,8 @@ Local Help: auth admins revoke
 - Summary: Explicit workspace administration. Grants and revocations of auth-admin require a human; host administration accepts granted agents.
 - Examples:
   - `anx auth admins list`
-  - `anx auth admins grant codex.host-a`
-  - `anx auth admins revoke codex.host-a`
+  - `anx auth admins grant "${ANX_PRINCIPAL:?set this to the intended principal}"`
+  - `anx auth admins revoke "${ANX_PRINCIPAL:?set this to the intended principal}"`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -8907,7 +8906,7 @@ Local Help: host revoke
 - Side effect class: `remote_coordination_write`
 - Summary: Revoke a host by ID or slug. Agents cannot revoke their own host.
 - Examples:
-  - `anx host revoke host-b`
+  - `anx host revoke "${ANX_HOST:?set this to the intended host ID or slug}"`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -9111,9 +9110,9 @@ Local Help: host token
 - Side effect class: `local_operational_write`
 - Summary: Print a short-lived derived-agent bearer from the enrolled host.
 - Composition: Host assertion grant; text mode prints only the token.
-- JSON body: `token`, `expires_at`, `agent: {id, handle}`
+- JSON body: `token`, `expires_at`, `agent: {id, handle}
 - Examples:
-  - `anx --json host token --as codex`
+  - `anx --json host token`
 
 
 Global flags:
@@ -9625,8 +9624,8 @@ Local Help: pm ask
 - Composition: Local helper over `pm conversations create` and `pm conversations message`. A queued turn is not an assistant reply; run `anx pm serve` for that.
 - JSON body: `conversation`, `turn`
 - Examples:
-  - `anx --as maya pm ask "What needs my decision?"`
-  - `anx --as maya pm ask --wait "What needs my decision?"`
+  - `anx pm ask "What needs my decision?"`
+  - `anx pm ask --wait "What needs my decision?"`
 
 Flags:
   --wait                       Poll until the turn has a response, fails, or the deadline passes.

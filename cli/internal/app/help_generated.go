@@ -664,7 +664,7 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "`{ patch: { assignee_refs }, if_updated_at, actor_id? }`; discovers `if_updated_at` from `cards get` when omitted.",
 		Composition: "Builds a focused `cards.patch` request for the Card ownership field.",
 		Examples: []string{
-			"anx cards assign card:implement-login --assignee-ref actor:agent-alpha",
+			"anx cards assign card:implement-login --assignee-ref \"${ANX_ASSIGNEE_REF:?set this to the intended actor ref}\"",
 			"anx cards assign card:implement-login --clear",
 		},
 		Flags: []localHelperFlag{
@@ -2231,17 +2231,17 @@ func configLocalHelpText(topic string) (string, bool) {
 		"config use": {
 			summary:  "Set the user-global default workspace by alias or absolute http(s) base URL. Directory rules still take precedence.",
 			usage:    "anx config use <alias|url>",
-			examples: []string{"anx config use personal"},
+			examples: []string{`anx config use "${ANX_WORKSPACE_ALIAS:?set this to an enrolled workspace alias}"`},
 		},
 		"config map": {
 			summary:  "Map an absolute or ~/ directory glob to a workspace. Quote globs. ** matches zero or more path components; longest literal prefix wins, then most literal characters, then lexical order.",
 			usage:    "anx config map <path-glob> <alias|url>",
-			examples: []string{`anx config map "~/work/demo/**" demo`},
+			examples: []string{`anx config map "${ANX_PROJECT_GLOB:?set this to an absolute project glob}" "${ANX_WORKSPACE_ALIAS:?set this to an enrolled workspace alias}"`},
 		},
 		"config unmap": {
 			summary:  "Remove a directory rule by its path glob (idempotent).",
 			usage:    "anx config unmap <path-glob>",
-			examples: []string{`anx config unmap "~/work/demo/**"`},
+			examples: []string{`anx config unmap "${ANX_PROJECT_GLOB:?set this to the existing directory glob}"`},
 		},
 		"config show": {
 			summary:  "Print effective CLI settings and the source of each field (access tokens are redacted).",

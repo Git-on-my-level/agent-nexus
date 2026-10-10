@@ -24,6 +24,8 @@ export const PM_RUNNERS = Object.freeze([
   }),
 ]);
 
+// This is a visible picker default, not an assumption about the reader. The
+// generated PM prompt names and uses whichever runner the picker selects.
 export const DEFAULT_PM_RUNNER_KEY = "claude";
 
 /**

@@ -54,8 +54,8 @@ func init() {
 			JSONShape:   "`conversation`, `turn`",
 			Composition: "Local helper over `pm conversations create` and `pm conversations message`. A queued turn is not an assistant reply; run `anx pm serve` for that.",
 			Examples: []string{
-				"anx --as maya pm ask \"What needs my decision?\"",
-				"anx --as maya pm ask --wait \"What needs my decision?\"",
+				"anx pm ask \"What needs my decision?\"",
+				"anx pm ask --wait \"What needs my decision?\"",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--wait", Description: "Poll until the turn has a response, fails, or the deadline passes."},

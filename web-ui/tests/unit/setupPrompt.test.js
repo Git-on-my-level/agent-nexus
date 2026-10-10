@@ -153,9 +153,15 @@ describe("machine prompt", () => {
     expect(prompt).toContain("host_enrollment");
   });
 
-  it("asks the server with a runnable --as, not a <placeholder>", () => {
-    expect(prompt).toContain(`--as ${shellQuote("claude")}`);
-    expect(prompt).not.toMatch(/--as\s+</);
+  it("resolves the caller identity without guessing an agent name", () => {
+    expect(prompt).toContain("let anx resolve your caller identity");
+    expect(prompt).toContain("identity suggestion from `doctor`");
+    expect(prompt).toContain(
+      "Do not guess or substitute another agent's name.",
+    );
+    expect(prompt).not.toMatch(
+      /--as\s+['"]?(claude|codex|hermes|cursor|omp)\b/i,
+    );
     expect(prompt).toContain("auth whoami");
     expect(prompt).toContain("host list");
   });
@@ -224,12 +230,47 @@ describe("PM prompt", () => {
     expect(prompt).toContain("--json pm status");
   });
 
-  it("uses the chosen runner as --as, not a documentation placeholder", () => {
-    expect(prompt).toContain(`--as ${shellQuote("claude")}`);
-    expect(prompt).not.toMatch(/--as\s+</);
+  it("sets the dedicated PM service identity separately from the runner", () => {
+    expect(prompt).toContain("--as 'pm' pm install --runner ");
     const hermes = buildPmPrompt({ ...BASE, runnerKey: "hermes" });
-    expect(hermes).toContain(`--as ${shellQuote("hermes")}`);
-    expect(hermes).not.toMatch(/--as\s+</);
+    expect(prompt).toContain("--as 'pm' --json auth whoami");
+    expect(hermes).toContain("--as 'pm' --json auth whoami");
+    expect(hermes).toContain(shellQuote(pmRunnerFor("hermes").argv));
+    expect(prompt).not.toContain(`--as ${shellQuote("claude")}`);
+    expect(hermes).not.toContain(`--as ${shellQuote("hermes")}`);
+  });
+
+  it("keeps the PM identity separate from the runner selected by the UI", () => {
+    for (const key of ["claude", "hermes"]) {
+      const selected = buildPmPrompt({ ...BASE, runnerKey: key });
+      expect(selected).toContain("selected PM identity, pm");
+      expect(selected.match(/--as\s+'[^']+'/g)).toEqual([
+        `--as 'pm'`,
+        `--as 'pm'`,
+        `--as 'pm'`,
+        `--as 'pm'`,
+      ]);
+      expect(selected).toContain(shellQuote(pmRunnerFor(key).argv));
+    }
+  });
+
+  it("does not guess the machine identity or conflate PM runner and service identity", () => {
+    const machine = buildMachinePrompt(BASE);
+    expect(machine.match(/--as\s+[^\s]+/g) ?? []).toEqual([]);
+
+    for (const runner of PM_RUNNERS) {
+      const pm = buildPmPrompt({ ...BASE, runnerKey: runner.key });
+      expect(pm.match(/--as\s+'([^']+)'/g)).toEqual([
+        `--as 'pm'`,
+        `--as 'pm'`,
+        `--as 'pm'`,
+        `--as 'pm'`,
+      ]);
+      for (const otherRunner of PM_RUNNERS) {
+        expect(pm).not.toContain(`--as '${otherRunner.key}'`);
+      }
+      expect(pm).toContain(shellQuote(runner.argv));
+    }
   });
 });
 
