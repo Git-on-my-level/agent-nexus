@@ -47,6 +47,8 @@ function text(value) {
   return String(value ?? "").trim();
 }
 
+const PM_AGENT_NAME = "pm";
+
 /** How much of a display name a prompt will carry. */
 export const PROMPT_LABEL_MAX = 80;
 
@@ -271,24 +273,35 @@ function installStep(index, installCommand) {
  * both reachable from a machine that is already enrolled, where an
  * unconditional enroll just fails.
  */
-function enrollStep(index, { base, token, expiry }) {
+function enrollStep(index, { base, token, expiry, agentName }) {
+  const identityFlag =
+    agentName == null ? "" : `--as ${shellQuote(agentName)} `;
   return [
     `${index}. Join this computer to the workspace, but only if it is not in it already.`,
     "   Check first:",
     "",
-    `     ${anxCommand(base, "--json doctor")}`,
+    `     ${anxCommand(base, `${identityFlag}--json doctor`)}`,
     "",
     "   `doctor` exits 0 whether or not its checks pass, so read every check, not",
     "   the exit status. Find the one named `host_enrollment`. If it is ok, this",
     "   computer is already in the workspace: skip the rest of this step and leave",
     "   the token unspent.",
     "",
-    "   `identity_resolution` must be pass before continuing; do not dismiss it",
-    "   as shell-related. If it fails, rerun doctor with your own current",
-    "   harness's registered name as `--as <name>` or prefix doctor with",
-    "   `ANX_AS=<name>`. Do not select another installed harness. If you cannot",
-    "   identify your registered name, stop and report that identity could not",
-    "   be resolved.",
+    "   `identity_resolution` must pass before continuing; do not dismiss it",
+    "   as shell-related.",
+    ...(agentName == null
+      ? [
+          "   If it fails, set `--as <name>` or `ANX_AS=<name>` to the lowercase",
+          "   name of the agent tool you are running in. Its first authenticated",
+          "   call registers that name on this host if it is new.",
+          "   Stop only if you cannot tell which agent tool you are running in;",
+          "   otherwise rerun doctor with that identity.",
+        ]
+      : [
+          `   This check uses the dedicated PM identity, ${agentName}; its first`,
+          "   authenticated call registers that name on this host if it is new.",
+          "   Keep the PM identity separate from the runner selected below.",
+        ]),
     "   `agentctl_presence` is optional; doctor marks its absence as a warning.",
     "   Do not dismiss another failed check as expected: follow its exact repair",
     "   or stop and report it. Enrollment below fixes the host enrollment checks.",
@@ -312,8 +325,8 @@ function enrollStep(index, { base, token, expiry }) {
  * `doctor`'s `host_enrollment` check reads the host identity on disk, so a
  * machine whose access the workspace has revoked still passes it. These two
  * calls are the only thing in either prompt that asks the server. Machine
- * setup lets the CLI resolve the caller; PM setup uses the runner identity
- * selected in the UI.
+ * setup lets the CLI resolve the caller; PM setup uses its dedicated service
+ * identity independently of the runner selected in the UI.
  *
  * @param {string} base
  * @param {string} [agentName] selected PM identity; absent for machine setup
@@ -327,14 +340,15 @@ function serverCheckLines(base, agentName) {
     "   two authenticated calls using your intended Agent Nexus identity.",
     ...(agentName == null
       ? [
-          "   Before running them, use your own current harness's registered name:",
-          "   add `--as <name>` to each call, or prefix each with `ANX_AS=<name>`.",
-          "   Do not select another installed harness. If you cannot identify your",
-          "   own registered name, stop and report that.",
+          "   Before running them, add `--as <your tool name>` to both commands, or",
+          "   prefix each with `ANX_AS=<your tool name>` using the lowercase name of",
+          "   the agent tool you are running in. Its first authenticated call",
+          "   registers that name on this host if it is new. Stop only if you",
+          "   cannot tell which agent tool you are running in.",
         ]
       : [
-          `   These calls use the selected PM identity, ${agentName}; that is the`,
-          "   runner chosen above, not an identity inferred from this shell.",
+          `   These calls use the dedicated PM service identity, ${agentName}; the`,
+          "   runner chosen above only selects which agent tool executes PM turns.",
         ]),
     "   Then run:",
     "",
@@ -445,26 +459,27 @@ export function buildPmPrompt({
     "",
     ...installStep(1, install),
     "",
-    ...enrollStep(2, { base, token, expiry }),
+    ...enrollStep(2, { base, token, expiry, agentName: PM_AGENT_NAME }),
     "",
     "3. Install the PM service. `anx pm install` with no --runner opens an",
     "   interactive wizard you cannot answer, so pass the runner explicitly.",
     `   This workspace is set to run the PM with ${runner.label}:`,
     "",
-    `     ${anxCommand(base, `--as ${shellQuote(runner.key)} pm install --runner ${shellQuote(runner.argv)} --wait`)}`,
+    `     ${anxCommand(base, `--as ${shellQuote(PM_AGENT_NAME)} pm install --runner ${shellQuote(runner.argv)} --wait`)}`,
     "",
     "   --wait blocks until the PM's first connection is accepted (90s by",
-    "   default). If it times out, say so: this machine's access to the",
-    "   workspace may have been revoked since it was enrolled, which the",
-    "   `host_enrollment` check above cannot see.",
+    "   default). If it times out, check the installed `pm` profile with:",
+    `     ${anxCommand(base, `--as ${shellQuote(PM_AGENT_NAME)} pm status`)}`,
+    "   Then report what it shows. This machine's access may have been revoked",
+    "   since it was enrolled, which `host_enrollment` cannot tell you.",
     "",
     "4. Verify, locally and with the server:",
     "",
-    `     ${anxCommand(base, `--as ${shellQuote(runner.key)} --json pm status`)}`,
-    `     ${anxCommand(base, `--as ${shellQuote(runner.key)} --json doctor`)}`,
+    `     ${anxCommand(base, `--as ${shellQuote(PM_AGENT_NAME)} --json pm status`)}`,
+    `     ${anxCommand(base, `--as ${shellQuote(PM_AGENT_NAME)} --json doctor`)}`,
     "",
     "   `pm status` reads the local service profile selected above; it does not authenticate with the server.",
-    ...serverCheckLines(base, runner.key),
+    ...serverCheckLines(base, PM_AGENT_NAME),
     "",
     ...skillStep(5, { pm: true }),
     "",
@@ -473,8 +488,7 @@ export function buildPmPrompt({
     "   last 20 lines of stderr.log from that log directory.",
     "",
     "The PM service runs on this computer through the selected runner and uses this machine's enrolled host identity.",
-    `Its Agent Nexus identity is the selected runner identity, ${runner.label}.`,
-    "It has no separate workspace credential of its own.",
+    "`--runner` selects which agent tool executes PM turns; the PM's Agent Nexus identity is `pm`.",
     ...HUMAN_ONLY,
   ].join("\n");
 }

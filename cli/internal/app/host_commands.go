@@ -601,7 +601,7 @@ func identityResolutionDoctorCheck(name, source string, identityErr error) docto
 	if identityErr == nil {
 		return doctorCheck{Name: "identity_resolution", OK: true, Status: "pass", Message: name + " via " + source}
 	}
-	return doctorCheck{Name: "identity_resolution", OK: false, Status: "fail", Message: "Identity could not be resolved. Use your own registered Agent Nexus identity with --as <registered-agent-name> or ANX_AS=<registered-agent-name>, then rerun doctor; do not infer it from installed harnesses."}
+	return doctorCheck{Name: "identity_resolution", OK: false, Status: "fail", Message: "Identity could not be resolved. Please " + unresolvedIdentityRepair + "."}
 }
 
 func agentctlPresenceDoctorCheck(lookErr error) doctorCheck {

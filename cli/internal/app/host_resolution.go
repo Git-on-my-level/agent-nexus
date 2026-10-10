@@ -107,8 +107,10 @@ func (a *App) identityName(cfg config.Resolved) (string, string, error) {
 	return "", "", unresolvedIdentityError("cannot resolve agent identity")
 }
 
+const unresolvedIdentityRepair = "pass --as <agent-name> or set ANX_AS=<agent-name> to the lowercase name of the agent tool you are running in; its first authenticated call registers that name on this host if it is new. Stop only if you cannot tell which agent tool you are running in"
+
 func unresolvedIdentityError(reason string) error {
-	message := reason + "; use your own registered Agent Nexus identity with --as <registered-agent-name> or ANX_AS=<registered-agent-name>; do not infer it from installed harnesses"
+	message := reason + "; " + unresolvedIdentityRepair
 	return errnorm.Usage("identity_unresolved", message)
 }
 

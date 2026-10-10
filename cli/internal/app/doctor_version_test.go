@@ -159,7 +159,7 @@ func TestDoctorDoesNotGuessFromOneInstalledAdapter(t *testing.T) {
 	if anyString(identityCheck["status"]) != "fail" || asBool(identityCheck["ok"]) {
 		t.Fatalf("installed adapter must not resolve caller identity: %#v", identityCheck)
 	}
-	if !strings.Contains(message, "--as <registered-agent-name>") || !strings.Contains(message, "ANX_AS=<registered-agent-name>") || !strings.Contains(message, "do not infer it from installed harnesses") {
+	if !strings.Contains(message, "--as <agent-name>") || !strings.Contains(message, "ANX_AS=<agent-name>") || !strings.Contains(message, "lowercase name of the agent tool you are running in") || !strings.Contains(message, "first authenticated call registers that name on this host if it is new") || !strings.Contains(message, "Stop only if you cannot tell which agent tool you are running in") {
 		t.Fatalf("identity check lacks a safe repair: %s", message)
 	}
 	if strings.Contains(message, "hermes") {
@@ -174,8 +174,8 @@ func TestDoctorDoesNotGuessFromOneInstalledAdapter(t *testing.T) {
 }
 
 func TestDoctorIdentityFailureNamesTheRequiredSelection(t *testing.T) {
-	check := identityResolutionDoctorCheck("", "", errnorm.Usage("identity_unresolved", "pass --as <registered-agent-name> or set ANX_AS"))
-	if check.OK || check.Status != "fail" || !strings.Contains(check.Message, "--as <registered-agent-name>") || !strings.Contains(check.Message, "ANX_AS=<registered-agent-name>") || !strings.Contains(check.Message, "do not infer it from installed harnesses") {
+	check := identityResolutionDoctorCheck("", "", errnorm.Usage("identity_unresolved", "pass --as <agent-name> or set ANX_AS"))
+	if check.OK || check.Status != "fail" || !strings.Contains(check.Message, "--as <agent-name>") || !strings.Contains(check.Message, "ANX_AS=<agent-name>") || !strings.Contains(check.Message, "first authenticated call registers that name on this host if it is new") || !strings.Contains(check.Message, "Stop only if you cannot tell which agent tool you are running in") {
 		t.Fatalf("identity failure should name the exact repair shape: %+v", check)
 	}
 }

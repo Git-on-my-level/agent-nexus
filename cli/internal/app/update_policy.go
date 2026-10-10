@@ -291,7 +291,7 @@ func updateInvocationEligible(command string, args []string, results ...*command
 	return true
 }
 func (a *App) maybeScheduleUpdate(command string, args []string, cfg config.Resolved, results ...*commandResult) []output.Warning {
-	if !updateInvocationEligible(command, args, results...) {
+	if !a.updateSchedulingInteractive(cfg) || !updateInvocationEligible(command, args, results...) {
 		return nil
 	}
 	dir, err := a.updateDirectory(cfg)
@@ -340,6 +340,27 @@ func (a *App) maybeScheduleUpdate(command string, args []string, cfg config.Reso
 	}
 	return warnings
 }
+
+// An automatic binary replacement is only safe from an attended interactive
+// invocation. CI, redirected/piped invocations and PM turns must not have the
+// installed binary replaced underneath the work currently using it.
+func (a *App) updateSchedulingInteractive(cfg config.Resolved) bool {
+	if a.Getenv != nil && strings.TrimSpace(a.Getenv("CI")) != "" {
+		return false
+	}
+	if strings.EqualFold(cfg.As, "pm") || strings.EqualFold(cfg.Agent, "pm") {
+		return false
+	}
+	if a.Getenv != nil {
+		pmAgent := strings.TrimSpace(a.Getenv("ANX_PM_AGENT")) != ""
+		pmTurn := strings.TrimSpace(a.Getenv("ANX_PM_TURN_ID")) != ""
+		if pmAgent || pmTurn {
+			return false
+		}
+	}
+	return a.StdinIsTTY != nil && a.StdinIsTTY() && a.StdoutIsTTY != nil && a.StdoutIsTTY()
+}
+
 func startDetachedUpdateWorker(path, configDir string) error {
 	args := []string{"update", "now", "--scheduled"}
 	if configDir != "" {

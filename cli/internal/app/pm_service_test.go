@@ -50,6 +50,13 @@ func TestPMServiceLifecycleAndIsolation(t *testing.T) {
 				t.Fatalf("installed %+v", installed)
 			}
 			run("install") // saved config; no runner flag required on repair
+			defaultStatus := run("status")
+			cfg.As = "pm"
+			explicitPMStatus := run("status")
+			if !defaultStatus.Installed || explicitPMStatus.Service != defaultStatus.Service || explicitPMStatus.Agent != "pm" {
+				t.Fatalf("default and explicit pm status selected different profiles: default=%+v explicit=%+v", defaultStatus, explicitPMStatus)
+			}
+			cfg.As = ""
 			if err := filepath.Walk(home, func(path string, info os.FileInfo, err error) error {
 				if err != nil {
 					return err
@@ -93,6 +100,11 @@ func TestPMServiceLifecycleAndIsolation(t *testing.T) {
 			if s := run("uninstall"); s.Installed || s.Running {
 				t.Fatalf("uninstall %+v", s)
 			}
+			cfg.As = "pm"
+			if s := run("status"); s.Installed || s.Running {
+				t.Fatalf("explicit pm still sees an installed service after default uninstall: %+v", s)
+			}
+			cfg.As = ""
 			run("uninstall")
 			if len(calls) == 0 {
 				t.Fatal("no native service operations")

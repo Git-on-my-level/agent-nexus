@@ -294,8 +294,9 @@ describe("a deployment agents can reach", () => {
     );
     await waitFor(() => expect(clipboard.text).toContain("pm install"));
     expect(clipboard.text).toContain("hermes chat --query-file");
-    expect(clipboard.text).toContain("--as 'hermes' pm install");
-    expect(clipboard.text).toContain("--as 'hermes' --json doctor");
+    expect(clipboard.text).toContain("--as 'pm' pm install");
+    expect(clipboard.text).toContain("--as 'pm' --json doctor");
+    expect(clipboard.text).not.toContain("--as 'hermes'");
     // The machine about to run a PM needs the PM skill, not just participant.
     expect(clipboard.text).toContain("anx skills sync --pm");
     // One-shot: it joins the machine to the workspace when it has to.

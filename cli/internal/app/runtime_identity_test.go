@@ -88,7 +88,7 @@ func TestUnresolvedIdentityDoesNotGuessTheOnlyInstalledAdapter(t *testing.T) {
 		t.Fatal("expected active identity to remain unresolved")
 	}
 	message := err.Error()
-	if !strings.Contains(message, "--as <registered-agent-name>") || !strings.Contains(message, "ANX_AS=<registered-agent-name>") || strings.Contains(message, "hermes") {
+	if !strings.Contains(message, "--as <agent-name>") || !strings.Contains(message, "ANX_AS=<agent-name>") || !strings.Contains(message, "first authenticated call registers that name on this host if it is new") || strings.Contains(message, "hermes") {
 		t.Fatalf("identity repair guessed an installed adapter: %s", message)
 	}
 	normalized := errnorm.Normalize(err)
@@ -102,7 +102,7 @@ func TestUnresolvedIdentityDoesNotGuessTheOnlyInstalledAdapter(t *testing.T) {
 }
 
 func TestUnresolvedIdentityWithoutUniqueAdapterHasNoGuessedNextAction(t *testing.T) {
-	err := errnorm.Normalize(errnorm.Usage("identity_unresolved", "pass --as <registered-agent-name> or set ANX_AS"))
+	err := errnorm.Normalize(errnorm.Usage("identity_unresolved", "pass --as <agent-name> or set ANX_AS"))
 	if actions := deriveErrorActions("auth whoami", err); len(actions) != 0 {
 		t.Fatalf("generic unresolved identity suggested a guessed principal: %#v", actions)
 	}

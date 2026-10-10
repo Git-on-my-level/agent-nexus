@@ -875,6 +875,50 @@ func TestRunOnboardingHelpTopic(t *testing.T) {
 	}
 }
 
+func TestDoctorHelpExplainsFirstUseIdentityRepair(t *testing.T) {
+	t.Parallel()
+
+	output := runHelpCommand(t, "help", "doctor")
+	for _, phrase := range []string{
+		"--as <agent-name>",
+		"ANX_AS=<agent-name>",
+		"lowercase name of the agent tool you are running in",
+		"first authenticated call registers that name on this host if it is new",
+		"Stop only if you cannot tell which agent tool you are running in",
+	} {
+		if !strings.Contains(output, phrase) {
+			t.Fatalf("doctor help is missing first-use identity repair %q:\n%s", phrase, output)
+		}
+	}
+}
+
+func TestAgentHelpExamplesUseConfiguredDestinationsAndCallerIdentity(t *testing.T) {
+	t.Parallel()
+	render := func(path string) string {
+		t.Helper()
+		topic, ok := localHelperTopicByPath(path)
+		if !ok {
+			t.Fatalf("missing local help topic %q", path)
+		}
+		return formatLocalHelperHelp(topic, false)
+	}
+
+	move := render("move")
+	if strings.Contains(move, "--to archive") || !strings.Contains(move, "ANX_DESTINATION_WORKSPACE") || !strings.Contains(move, "--dry-run") {
+		t.Fatalf("move help assumes a destination or omits the preview: %s", move)
+	}
+
+	lifecycle := render("lifecycle verbs")
+	if strings.Contains(lifecycle, "actor:agent-beta") || !strings.Contains(lifecycle, "ANX_ACTOR_ID") || !strings.Contains(lifecycle, "--dry-run") {
+		t.Fatalf("lifecycle help assumes an actor identity or omits the preview: %s", lifecycle)
+	}
+
+	channels := render("pm channels doctor")
+	if strings.Contains(channels, "127.0.0.1:8000") || !strings.Contains(channels, "ANX_TELEGRAM_WEBHOOK_URL") || !strings.Contains(channels, "ANX_DISCORD_WEBHOOK_URL") {
+		t.Fatalf("PM channel help assumes a local core URL: %s", channels)
+	}
+}
+
 func TestRunMetaHelpMentionsOpinionatedSkill(t *testing.T) {
 	t.Parallel()
 

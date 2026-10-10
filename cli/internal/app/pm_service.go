@@ -525,10 +525,10 @@ func claimConfirmedSince(lastClaim string, since time.Time) bool {
 }
 
 // stopPriorDefaultPMService migrates an installed default-profile service when
-// a setup prompt now installs the PM under the selected runner identity. The
-// service id includes the profile, so without this one-time cleanup the former
-// `pm` process would keep running and claiming work alongside the new service.
-// Its state directory is kept so the old logs and last claim remain available.
+// an explicitly selected non-pm profile is installed. The service id includes
+// the profile, so without this one-time cleanup the former `pm` process would
+// keep running and claiming work alongside the new service. Its state directory
+// is kept so the old logs and last claim remain available.
 func stopPriorDefaultPMService(ctx context.Context, platform, domain, stateRoot, unitDir, unitSuffix, workspace, configDir string) error {
 	legacyID := pmServiceID(workspace, configDir, "pm")
 	legacyUnit := priorDefaultPMServiceUnit(unitDir, unitSuffix, workspace, configDir)

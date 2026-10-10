@@ -72,7 +72,7 @@ func init() {
 			Composition: "Local diagnostic. Reads env, probes webhook URLs with GET, and lists bindings. Does not send Telegram or Discord messages.",
 			Examples: []string{
 				"anx pm channels doctor",
-				"anx pm channels doctor --telegram-webhook-url http://127.0.0.1:8000/pm/ingress/telegram --discord-webhook-url http://127.0.0.1:8000/pm/ingress/discord",
+				"anx pm channels doctor --telegram-webhook-url \"${ANX_TELEGRAM_WEBHOOK_URL:?set the intended URL to probe}\" --discord-webhook-url \"${ANX_DISCORD_WEBHOOK_URL:?set the intended URL to probe}\"",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--telegram-webhook-url <url>", Description: "Telegram ingress URL to probe with GET (fake or core). Does not POST an update."},

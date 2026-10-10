@@ -13,6 +13,10 @@ import {
   setupPromptBlockedReason,
   shellQuote,
 } from "../../src/lib/setup/setupPrompt.js";
+import {
+  pmStatusCommand,
+  pmUninstallCommand,
+} from "../../src/lib/pm/onboardingState.js";
 import { PM_RUNNERS, pmRunnerFor } from "../../src/lib/setup/pmRunners.js";
 
 const KNOWN_HARNESS_NAMES = [
@@ -164,16 +168,16 @@ describe("machine prompt", () => {
   });
 
   it("lets doctor guide caller identity without guessing an agent name", () => {
-    expect(prompt).toContain("your own current harness's registered name");
-    expect(prompt).toContain("Do not select another installed harness.");
-    expect(prompt).toContain("If you cannot");
-    expect(prompt).toContain(
-      "registered name, stop and report that identity could not",
+    expect(prompt).toMatch(
+      /lowercase\s+name of the agent tool you are running in/,
     );
-    expect(prompt).toContain("be resolved.");
-    expect(
-      prompt.indexOf("your own current harness's registered name"),
-    ).toBeLessThan(prompt.indexOf("auth whoami"));
+    expect(prompt).toMatch(/first authenticated\s+call registers that name/);
+    expect(prompt).toMatch(
+      /Stop only if you cannot tell which agent tool you are running in/,
+    );
+    expect(prompt).toContain(
+      "identity_resolution` must pass before continuing",
+    );
     expect(prompt).not.toMatch(
       /--as\s+['"]?(claude|codex|hermes|cursor|omp)\b/i,
     );
@@ -245,17 +249,20 @@ describe("PM prompt", () => {
     expect(prompt).toContain("--json pm status");
   });
 
-  it("uses the selected runner as the PM service identity", () => {
-    expect(prompt).toContain("--as 'claude' pm install --runner ");
-    const hermes = buildPmPrompt({ ...BASE, runnerKey: "hermes" });
-    expect(prompt).toContain("--as 'claude' --json auth whoami");
-    expect(hermes).toContain("--as 'hermes' --json auth whoami");
-    expect(hermes).toContain(shellQuote(pmRunnerFor("hermes").argv));
-    expect(hermes).toContain("--as 'hermes' --json doctor");
-    expect(hermes).not.toContain("--as 'claude'");
+  it("keeps the dedicated PM identity independent of the selected runner", () => {
+    expect(prompt).toContain("--as 'pm' pm install --runner ");
+    expect(prompt).toContain("--as 'pm' --json auth whoami");
+    expect(prompt).toContain("--as 'pm' --json doctor");
+    const doctors = prompt
+      .split("\n")
+      .filter((line) => line.includes("--json doctor"));
+    expect(doctors).toHaveLength(2);
+    expect(doctors.every((line) => line.includes("--as 'pm'"))).toBe(true);
+    expect(prompt).toContain(shellQuote(pmRunnerFor("claude").argv));
+    expect(prompt).toContain("the PM's Agent Nexus identity is `pm`");
   });
 
-  it("keeps identity caller-owned or tied to the selected PM runner", () => {
+  it("keeps machine identity caller-owned and PM identity fixed to pm", () => {
     const machine = buildMachinePrompt(BASE);
     const machineCommands = machine
       .split("\n")
@@ -268,16 +275,12 @@ describe("PM prompt", () => {
 
     for (const runner of PM_RUNNERS) {
       const pm = buildPmPrompt({ ...BASE, runnerKey: runner.key });
-      expect(pm.match(/--as\s+'([^']+)'/g)).toEqual([
-        `--as '${runner.key}'`,
-        `--as '${runner.key}'`,
-        `--as '${runner.key}'`,
-        `--as '${runner.key}'`,
-        `--as '${runner.key}'`,
-      ]);
+      expect(new Set(pm.match(/--as\s+'([^']+)'/g))).toEqual(
+        new Set(["--as 'pm'"]),
+      );
+      expect(pm).not.toContain(`--as '${runner.key}'`);
       for (const otherRunner of PM_RUNNERS) {
         if (otherRunner.key !== runner.key) {
-          expect(pm).not.toContain(`--as '${otherRunner.key}'`);
           expect(pm).not.toContain(otherRunner.label);
         }
       }
@@ -304,7 +307,7 @@ describe("PM prompt", () => {
       );
       expect(asNames.length).toBeGreaterThan(0);
       expect(new Set(asNames.filter((name) => name !== "<name>`"))).toEqual(
-        new Set([runner.key]),
+        new Set(["pm"]),
       );
       for (const name of KNOWN_HARNESS_NAMES.filter(
         (candidate) => candidate !== runner.key,
@@ -325,7 +328,7 @@ describe("PM prompt", () => {
   it("never tells an agent to ignore a failed doctor check", () => {
     for (const value of [prompt, buildPmPrompt(BASE)]) {
       expect(value).toContain(
-        "`identity_resolution` must be pass before continuing",
+        "`identity_resolution` must pass before continuing",
       );
       expect(value).toContain(
         "Do not dismiss another failed check as expected",
@@ -339,11 +342,27 @@ describe("PM prompt", () => {
 
   it("identifies the caller-owned identity before machine verification", () => {
     const machine = buildMachinePrompt(BASE);
-    expect(machine).toContain("your own current harness's registered name");
-    expect(machine).toContain("Do not select another installed harness.");
+    expect(machine).toMatch(
+      /lowercase\s+name of the agent tool you are running in/,
+    );
+    expect(machine).toMatch(/first authenticated\s+call registers that name/);
     expect(
-      machine.indexOf("your own current harness's registered name"),
+      machine.indexOf("lowercase name of the agent tool you are running in"),
     ).toBeLessThan(machine.indexOf("auth whoami"));
+  });
+
+  it("keeps timeout and manage-page commands on the installed pm profile", () => {
+    const pm = buildPmPrompt({ ...BASE, runnerKey: "hermes" });
+    const options = { cliBaseUrl: BASE.cliBaseUrl };
+    expect(pm).toContain("--as 'pm' pm install --runner 'hermes");
+    expect(pm).toContain("--as 'pm' pm status");
+    expect(pm).toContain("--as 'pm' --json pm status");
+    expect(pmStatusCommand(options)).toContain(" pm status");
+    expect(pmUninstallCommand(options)).toContain(" pm uninstall");
+    expect(pmStatusCommand(options)).not.toContain("--as 'hermes'");
+    expect(pmUninstallCommand(options)).not.toContain("--as 'hermes'");
+    expect(pm).not.toContain("--as 'hermes' pm status");
+    expect(pm).not.toContain("--as 'hermes' pm uninstall");
   });
 });
 

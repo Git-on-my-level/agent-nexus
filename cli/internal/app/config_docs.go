@@ -26,7 +26,7 @@ func envDocText() string {
 
 ANX_AS selects a derived agent. --as wins over ANX_AS. When neither is set, anx checks agentctl run context, then verified harness markers.
 ANX_BASE_URL selects the core workspace. ANX_CONFIG_DIR or --config-dir selects the absolute host config directory when HOME is unavailable, including agentctl command callbacks. ANX_TIMEOUT, ANX_JSON and ANX_NO_COLOR control request and output behavior.
-ANX_UPDATE_POLICY overrides the saved CLI release policy: auto (default), notify, or off. Auto checks after the first successful read or coordination write per UTC day in a quiet detached worker; anx update status stays offline. Inspect anx update status or anx help update.
+ANX_UPDATE_POLICY overrides the saved CLI release policy: auto (default), notify, or off. Auto checks after the first successful read or coordination write per UTC day only from an interactive terminal when CI is unset and the caller is not a PM turn; checks run in a quiet detached worker. anx update status stays offline. Inspect anx update status or anx help update.
 ANX_ACCESS_TOKEN supplies an explicit bearer for controlled human or test contexts. It does not use the host assertion grant.
 
 Run anx config workspaces when unsure which workspace applies. Use anx config use <alias|url> to set a user-global default, or anx config map "~/work/project/**" <alias|url> for a directory rule. anx config unmap "~/work/project/**" removes a rule. Quote globs so the shell does not expand them.

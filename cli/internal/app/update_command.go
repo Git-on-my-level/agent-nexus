@@ -414,7 +414,7 @@ Options:
   --version <tag>         install a specific release tag instead of the recommended/latest version
 
 Behavior:
-  - auto (default) checks after the first successful read or coordination write per UTC day in a detached two-minute worker
+  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal (CI, redirected streams and PM turns are skipped)
   - notify checks without installing and emits one daily warning when a newer release is known
   - off disables automatic checks; ANX_UPDATE_POLICY overrides the saved policy
   - status is offline and separates the observed binary from its installer receipt

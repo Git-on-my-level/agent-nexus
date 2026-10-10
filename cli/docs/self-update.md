@@ -21,9 +21,10 @@ once. A command that already read stdin, or that read a non-regular input such a
 `anx update --version <recommended>` instead of retrying. A `cli_outdated` body
 on any other HTTP status does not update or retry. Policy `notify` or `off`,
 and unmanaged installs, print the same command instead of replacing the binary.
-Separately,
-the first successful read or coordination write per UTC day starts
-a detached worker with a two-minute deadline. The foreground command never waits
+Separately, the first successful read or coordination write per UTC day starts
+a detached worker with a two-minute deadline only when stdin and stdout are
+terminals, `CI` is unset, and the invocation is outside a PM turn. Piped commands,
+CI jobs and PM service turns never schedule this daily replacement. The foreground command never waits
 for release networking, verification, replacement, or skill synchronization. A
 per-install atomic daily claim prevents simultaneous commands and separate
 workspace config directories from launching duplicate checks. Read-only commands
@@ -166,8 +167,9 @@ output contract, registry, mutation parsers, doctor, and managed skill code.
 
 - Default automatic release updates apply only to installer-owned binaries; an
   old/manual installation needs explicit installer enrollment once.
-- Successful coordination writes trigger daily maintenance; reads and local
-  maintenance remain exempt. Explicit updates ignore the automatic off policy.
+- Successful classified reads and coordination writes trigger daily maintenance
+  only in an attended terminal session outside CI and PM turns. Local maintenance
+  remains exempt. Explicit updates ignore the automatic off policy.
 - Skill conflicts are visible and preserved; a skill sync failure does not roll
   back an independently verified binary update.
 - Keep universal idempotency, a composed recent-work surface, action preconditions,

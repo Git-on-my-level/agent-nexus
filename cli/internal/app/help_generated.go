@@ -104,8 +104,8 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "Returns a stable move id, source/destination refs, and the exact planned or completed resource actions.",
 		Composition: "Uses user-global workspace aliases and separate workspace-local host credentials. A source revision journal fences resumable moves until the complete destination set is verified.",
 		Examples: []string{
-			"anx move card card:launch-checklist --to archive",
-			"anx move topic topic:launch --to archive --dry-run",
+			"anx move card card:launch-checklist --to \"${ANX_DESTINATION_WORKSPACE:?set the intended destination alias}\" --dry-run",
+			"anx move topic topic:launch --to \"${ANX_DESTINATION_WORKSPACE:?set the intended destination alias}\" --dry-run",
 		},
 		Flags: []localHelperFlag{
 			{Name: "<ref>", Description: "Source card or topic ref, handle, or id."},
@@ -122,7 +122,7 @@ var localHelperTopics = []localHelperTopic{
 		Examples: []string{
 			"anx artifacts archive artifact:notes --reason \"obsolete\"",
 			"anx boards trash board:launch --reason \"merged elsewhere\" --dry-run --json",
-			"anx cards archive card:foo --from-file lifecycle.json --actor-id actor:agent-beta",
+			"anx cards archive card:foo --from-file lifecycle.json --actor-id \"${ANX_ACTOR_ID:?set the intended actor id}\" --dry-run --json",
 		},
 		Flags: []localHelperFlag{
 			{Name: "--reason <text>", Description: "Short audit string stamped on the lifecycle event."},
@@ -336,8 +336,8 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "GET `/docs/search?q=` returning `{ documents, next_cursor? }` with optional `search_rank`.",
 		Composition: "SQLite FTS5 over title, body, summary, source, tags, and comments. Use `--knowledge` for agent-facing docs tagged `knowledge`. `--host` filters knowledge facts that apply to that machine.",
 		Examples: []string{
-			"anx docs search \"runbook\" --knowledge --host laptop-a",
-			"anx docs search \"alphawhiz\" --knowledge --host laptop-a --limit 20",
+			"anx docs search \"runbook\" --knowledge",
+			"anx docs search \"alphawhiz\" --knowledge --limit 20",
 		},
 		Flags: []localHelperFlag{
 			{Name: "<q>", Description: "Search query; also accepted as `--q`."},
@@ -355,7 +355,7 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "PUT `/docs/{document_id}` with `{ document, content, content_type }`. Handle is `--handle`, filename stem, or title slug.",
 		Composition: "Idempotent by handle: missing handles create, existing handles append a revision and update title/source/tags/hosts/verified_at.",
 		Examples: []string{
-			"anx docs put runbook.md --title \"Runbook\" --tags knowledge --source https://example.invalid/runbook.md --hosts laptop-a --verified-at 2026-09-08T12:00:00Z",
+			"anx docs put runbook.md --title \"Runbook\" --tags knowledge --source https://example.invalid/runbook.md",
 			"anx docs put - --handle kb-shared --title \"Note\" --tags knowledge",
 		},
 		Flags: []localHelperFlag{
@@ -1227,7 +1227,7 @@ func helpTopicTextRaw(topic string) (string, bool) {
 		return envDocText() + "\n", true
 	}
 	if topic == "doctor" {
-		return "Doctor: report the resolved workspace and source, enrollment, host key permissions, identity, agentctl and CLI/core version checks. An unresolved identity is a failed check with the required --as <registered-agent-name> or ANX_AS=<registered-agent-name> form. Use the caller's own registered identity; installed harnesses do not establish who is running this command. Rerun doctor after applying the fix. Missing agentctl is an optional warning for direct anx commands. Ambiguous workspace selection fails before networking.\n\nUsage:\n  anx doctor\n\n" + formatGlobalFlagUsage(topic), true
+		return "Doctor: report the resolved workspace and source, enrollment, host key permissions, identity, agentctl and CLI/core version checks. An unresolved identity is a failed check. Pass --as <agent-name> or set ANX_AS=<agent-name> to the lowercase name of the agent tool you are running in; its first authenticated call registers that name on this host if it is new. Stop only if you cannot tell which agent tool you are running in; otherwise rerun doctor with that identity. Missing agentctl is an optional warning for direct anx commands. Ambiguous workspace selection fails before networking.\n\nUsage:\n  anx doctor\n\n" + formatGlobalFlagUsage(topic), true
 	}
 	if topic == "config" {
 		return "Config: anx config workspaces lists aliases and the cwd rule; anx config use <alias|url> sets a user-global default. Use anx config map <path-glob> <alias|url> and anx config unmap <path-glob> for directory rules. anx config show prints the resolved workspace and sources (secrets redacted).\n", true

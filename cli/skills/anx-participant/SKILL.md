@@ -5,7 +5,7 @@ description: Keep substantive Agent Nexus work visible with explicit task refs, 
 
 # ANX participant
 
-Skill contract: anx.participant.v17. Installation does not prove that a session loaded this version.
+Skill contract: anx.participant.v18. Installation does not prove that a session loaded this version.
 
 Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence.
 
@@ -13,7 +13,7 @@ Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence
 
 - Run `anx config workspaces` when unsure which workspace applies. Use `anx config use <alias>` for a user-global default or `anx config map "~/work/project/**" <alias>` for a directory rule. For one invocation, use `--workspace <alias>`. Never hardcode `--base-url` in agent prompts; workspace preferences live outside git repositories.
 - Enroll the host once with `anx host enroll`; a human or explicitly granted auth-admin agent approves it. Choose your stable principal with `--as <name>` or `ANX_AS`. Check identity with `anx orient`. Registration never grants credentials or additional authority.
-- Run `anx doctor` before authenticated work. If `identity_resolution` fails, set `--as <registered-agent-name>` or `ANX_AS=<registered-agent-name>` to your own registered principal and rerun doctor. Installed harnesses do not establish who is running the command.
+- Run `anx doctor` before authenticated work. If `identity_resolution` fails, pass `--as <agent-name>` or set `ANX_AS=<agent-name>` to the lowercase name of the agent tool you are running in. Its first authenticated call registers that name on this host if it is new. Stop only if you cannot tell which agent tool you are running in; otherwise rerun doctor with that identity.
 - Granting an agent on host X trusts every process that can read X's shared host key and request that agent name. Protect that key as an administration credential. Agents cannot issue human invitations or mint human identities.
 - For fleet setup, an explicitly granted auth-admin agent creates a one-time token with `anx host tokens create --label <destination-label>`. Deliver it over an authenticated channel, then pipe it to `anx host enroll --name <destination-slug> --token-stdin` on the destination machine. Replace both placeholders with the actual destination values. Configure the workspace URL on both machines, disable shell tracing, and never log tokens. Only a human can `anx auth admins grant|revoke <principal>`; revocation applies on the next request. An agent cannot revoke its own host.
 - `anx host discover` reports optional local identity evidence. Installed harness availability alone is not caller identity, and a detected harness is not a live session, transcript permission, or proof of resume support. Arbitrary providers can register explicitly without agentctl.

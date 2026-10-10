@@ -409,7 +409,7 @@ Setup and identity
 - For fleet hosts, an explicitly granted auth-admin agent creates a one-time token with `anx host tokens create --label <destination-label>`. Deliver it over an authenticated channel, then pipe it to `anx host enroll --name <destination-slug> --token-stdin` on the destination machine. Replace both placeholders with the real destination values; set the workspace base URL on both machines, disable shell tracing, and never log the secret. Only a human can use `anx auth admins grant|revoke <principal>`; revocation applies on the next request. Agents cannot revoke their own host.
 - Run `anx config workspaces` when unsure which workspace applies. Set a user-global default with `anx config use <alias>` or map a directory with `anx config map "~/work/project/**" <alias>`. Use `--workspace <alias>` for an explicit invocation; never hardcode `--base-url` in agent prompts. Preferences live outside git repositories.
 - Set `ANX_AS=<name>` or pass `--as <name>` to select an explicit stable principal. Active `agentctl identity` evidence can resolve the current caller; installed harness availability alone is not caller identity. Check the resolved handle and host in `anx orient`.
-- Run `anx doctor` before authenticated work. If `identity_resolution` fails, set `--as <registered-agent-name>` or `ANX_AS=<registered-agent-name>` to your own registered principal and rerun doctor. Installed harnesses do not establish who is running the command.
+- Run `anx doctor` before authenticated work. If `identity_resolution` fails, pass `--as <agent-name>` or set `ANX_AS=<agent-name>` to the lowercase name of the agent tool you are running in. Its first authenticated call registers that name on this host if it is new. Stop only if you cannot tell which agent tool you are running in; otherwise rerun doctor with that identity.
 - `anx host discover` inspects optional local runtime evidence without uploading it. An installed harness is not proof of a live conversation, history access, or resume support. Generic registration does not require agentctl.
 
 
@@ -494,7 +494,7 @@ ANX environment variables
 
 ANX_AS selects a derived agent. --as wins over ANX_AS. When neither is set, anx checks agentctl run context, then verified harness markers.
 ANX_BASE_URL selects the core workspace. ANX_CONFIG_DIR or --config-dir selects the absolute host config directory when HOME is unavailable, including agentctl command callbacks. ANX_TIMEOUT, ANX_JSON and ANX_NO_COLOR control request and output behavior.
-ANX_UPDATE_POLICY overrides the saved CLI release policy: auto (default), notify, or off. Auto checks after the first successful read or coordination write per UTC day in a quiet detached worker; anx update status stays offline. Inspect anx update status or anx help update.
+ANX_UPDATE_POLICY overrides the saved CLI release policy: auto (default), notify, or off. Auto checks after the first successful read or coordination write per UTC day only from an interactive terminal when CI is unset and the caller is not a PM turn; checks run in a quiet detached worker. anx update status stays offline. Inspect anx update status or anx help update.
 ANX_ACCESS_TOKEN supplies an explicit bearer for controlled human or test contexts. It does not use the host assertion grant.
 
 Run anx config workspaces when unsure which workspace applies. Use anx config use <alias|url> to set a user-global default, or anx config map "~/work/project/**" <alias|url> for a directory rule. anx config unmap "~/work/project/**" removes a rule. Quote globs so the shell does not expand them.
@@ -786,7 +786,7 @@ Global flags:
 Report workspace resolution and local/network preconditions.
 
 ```text
-Doctor: report the resolved workspace and source, enrollment, host key permissions, identity, agentctl and CLI/core version checks. An unresolved identity is a failed check with the required --as <registered-agent-name> or ANX_AS=<registered-agent-name> form. Use the caller's own registered identity; installed harnesses do not establish who is running this command. Rerun doctor after applying the fix. Missing agentctl is an optional warning for direct anx commands. Ambiguous workspace selection fails before networking.
+Doctor: report the resolved workspace and source, enrollment, host key permissions, identity, agentctl and CLI/core version checks. An unresolved identity is a failed check. Pass --as <agent-name> or set ANX_AS=<agent-name> to the lowercase name of the agent tool you are running in; its first authenticated call registers that name on this host if it is new. Stop only if you cannot tell which agent tool you are running in; otherwise rerun doctor with that identity. Missing agentctl is an optional warning for direct anx commands. Ambiguous workspace selection fails before networking.
 
 Usage:
   anx doctor
@@ -5501,7 +5501,7 @@ Options:
   --version <tag>         install a specific release tag instead of the recommended/latest version
 
 Behavior:
-  - auto (default) checks after the first successful read or coordination write per UTC day in a detached two-minute worker
+  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal (CI, redirected streams and PM turns are skipped)
   - notify checks without installing and emits one daily warning when a newer release is known
   - off disables automatic checks; ANX_UPDATE_POLICY overrides the saved policy
   - status is offline and separates the observed binary from its installer receipt
@@ -5536,7 +5536,7 @@ Options:
   --version <tag>         install a specific release tag instead of the recommended/latest version
 
 Behavior:
-  - auto (default) checks after the first successful read or coordination write per UTC day in a detached two-minute worker
+  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal (CI, redirected streams and PM turns are skipped)
   - notify checks without installing and emits one daily warning when a newer release is known
   - off disables automatic checks; ANX_UPDATE_POLICY overrides the saved policy
   - status is offline and separates the observed binary from its installer receipt
@@ -5571,7 +5571,7 @@ Options:
   --version <tag>         install a specific release tag instead of the recommended/latest version
 
 Behavior:
-  - auto (default) checks after the first successful read or coordination write per UTC day in a detached two-minute worker
+  - auto (default) checks after the first successful read or coordination write per UTC day from an interactive terminal (CI, redirected streams and PM turns are skipped)
   - notify checks without installing and emits one daily warning when a newer release is known
   - off disables automatic checks; ANX_UPDATE_POLICY overrides the saved policy
   - status is offline and separates the observed binary from its installer receipt
@@ -6133,7 +6133,7 @@ Local Help: lifecycle verbs
 - Examples:
   - `anx artifacts archive artifact:notes --reason "obsolete"`
   - `anx boards trash board:launch --reason "merged elsewhere" --dry-run --json`
-  - `anx cards archive card:foo --from-file lifecycle.json --actor-id actor:agent-beta`
+  - `anx cards archive card:foo --from-file lifecycle.json --actor-id "${ANX_ACTOR_ID:?set the intended actor id}" --dry-run --json`
 
 Flags:
   --reason <text>              Short audit string stamped on the lifecycle event.
@@ -6689,8 +6689,8 @@ Local Help: docs search
 - Composition: SQLite FTS5 over title, body, summary, source, tags, and comments. Use `--knowledge` for agent-facing docs tagged `knowledge`. `--host` filters knowledge facts that apply to that machine.
 - JSON body: GET `/docs/search?q=` returning `{ documents, next_cursor? }` with optional `search_rank`.
 - Examples:
-  - `anx docs search "runbook" --knowledge --host laptop-a`
-  - `anx docs search "alphawhiz" --knowledge --host laptop-a --limit 20`
+  - `anx docs search "runbook" --knowledge`
+  - `anx docs search "alphawhiz" --knowledge --limit 20`
 
 Flags:
   <q>                          Search query; also accepted as `--q`.
@@ -6737,7 +6737,7 @@ Local Help: docs put
 - Composition: Idempotent by handle: missing handles create, existing handles append a revision and update title/source/tags/hosts/verified_at.
 - JSON body: PUT `/docs/{document_id}` with `{ document, content, content_type }`. Handle is `--handle`, filename stem, or title slug.
 - Examples:
-  - `anx docs put runbook.md --title "Runbook" --tags knowledge --source https://example.invalid/runbook.md --hosts laptop-a --verified-at 2026-09-08T12:00:00Z`
+  - `anx docs put runbook.md --title "Runbook" --tags knowledge --source https://example.invalid/runbook.md`
   - `anx docs put - --handle kb-shared --title "Note" --tags knowledge`
 
 Flags:
@@ -6767,7 +6767,7 @@ Generated Help: docs put
 - Agent notes: Path `{document_id}` is the public handle (or `document:<handle>`). If that handle exists, a new revision is appended and metadata (`title`, `source`, `tags`, `hosts`, `verified_at`) is updated. If it does not exist, the document is created with that handle. Visibility/lifecycle is unchanged. CLI `anx docs put -` reads the body from stdin.
 - Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
 - Examples:
-  - Publish from stdin: `anx docs put - --handle kb-shared --title "Note" --tags knowledge --source https://example.invalid/note.md --hosts laptop-a --verified-at 2026-09-08T12:00:00Z`
+  - Publish from stdin: `anx docs put - --handle kb-shared --title "Note" --tags knowledge --source https://example.invalid/note.md`
 
 Inputs:
   Required:
@@ -8930,7 +8930,7 @@ Local Help: meta skill
 - Examples:
   - `anx debug meta skill anx`
   - `anx debug meta skill anx --write-file ./SKILL.md`
-  - `anx debug meta skill --target cursor --write-file ./SKILL.md`
+  - `anx debug meta skill --target participant --write-file ./SKILL.md`
 
 Flags:
   <target>                     Skill target to render. Use `participant` or `pm`; `anx` and legacy `cursor` export the participant skill.
@@ -9656,7 +9656,7 @@ Local Help: pm channels doctor
 - JSON body: `checks`, `ok`
 - Examples:
   - `anx pm channels doctor`
-  - `anx pm channels doctor --telegram-webhook-url http://127.0.0.1:8000/pm/ingress/telegram --discord-webhook-url http://127.0.0.1:8000/pm/ingress/discord`
+  - `anx pm channels doctor --telegram-webhook-url "${ANX_TELEGRAM_WEBHOOK_URL:?set the intended URL to probe}" --discord-webhook-url "${ANX_DISCORD_WEBHOOK_URL:?set the intended URL to probe}"`
 
 Flags:
   --telegram-webhook-url <url> Telegram ingress URL to probe with GET (fake or core). Does not POST an update.

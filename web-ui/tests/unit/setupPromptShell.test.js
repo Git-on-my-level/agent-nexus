@@ -97,7 +97,7 @@ describe("every generated snippet parses", () => {
      * block stops being covered by everything below, and a floor would keep
      * passing while it did.
      */
-    expect(parts).toHaveLength(_kind === "pm" ? 8 : 7);
+    expect(parts).toHaveLength(_kind === "pm" ? 9 : 7);
     for (const part of parts) {
       // `sh -n` parses without running: a broken line continuation or an
       // unbalanced quote fails here.
@@ -287,7 +287,7 @@ describe("branching is local, confirmation is not", () => {
    * `host_enrollment` reads a local file, so it cannot prove the server still
    * accepts the machine. The prompts branch on the first and finish on the
    * second. Machine setup lets the CLI resolve its caller; PM setup uses the
-   * runner identity selected in the UI.
+   * dedicated `pm` identity regardless of the runner selected in the UI.
    */
   it.each([
     ["machine", buildMachinePrompt(BASE)],
@@ -301,7 +301,7 @@ describe("branching is local, confirmation is not", () => {
     expect(branch).not.toContain("host list");
 
     // Both prompts ask the server. Machine identity resolution comes from the
-    // caller; PM identity is the runner selected in the UI.
+    // caller; PM server checks use the dedicated PM actor.
     const authed = commands
       .join("\n")
       .split("\n")
@@ -315,14 +315,14 @@ describe("branching is local, confirmation is not", () => {
     expect(authed.some((line) => line.includes("host list"))).toBe(true);
     for (const line of authed) {
       if (kind === "machine") expect(line).not.toContain("--as");
-      else expect(line).toContain("--as 'claude'");
+      else expect(line).toContain("--as 'pm'");
     }
     expect(prompt).toContain("this machine's access has been taken away");
     // The local check is explicitly described as insufficient.
     expect(prompt).toContain("it cannot tell you the server still accepts it");
   });
 
-  it("passes the selected runner as the PM service identity", () => {
+  it("passes the selected runner only to execution and keeps PM actor as pm", () => {
     for (const runnerKey of ["claude", "hermes"]) {
       const prompt = buildPmPrompt({ ...BASE, runnerKey });
       const commands = snippets(prompt);
@@ -331,10 +331,12 @@ describe("branching is local, confirmation is not", () => {
       );
       expect(install).toBeTruthy();
       const argv = runSnippet(install, stubAnx())[0];
-      expect(argv[argv.indexOf("--as") + 1]).toBe(runnerKey);
+      expect(argv[argv.indexOf("--as") + 1]).toBe("pm");
+      expect(install).not.toContain(`--as '${runnerKey}'`);
       expect(install).toContain(shellQuote(pmRunnerFor(runnerKey).argv));
       const status = commands.find((line) => line.includes("pm status"));
-      expect(status).toContain(`--as '${runnerKey}'`);
+      expect(status).toContain("--as 'pm'");
+      expect(status).not.toContain(`--as '${runnerKey}'`);
     }
   });
 
@@ -350,10 +352,10 @@ describe("branching is local, confirmation is not", () => {
     expect(calls).toHaveLength(2);
     expect(calls[0]).toContain("auth");
     expect(calls[0]).toContain("whoami");
-    expect(calls[0][calls[0].indexOf("--as") + 1]).toBe("hermes");
+    expect(calls[0][calls[0].indexOf("--as") + 1]).toBe("pm");
     expect(calls[1]).toContain("host");
     expect(calls[1]).toContain("list");
-    expect(calls[1][calls[1].indexOf("--as") + 1]).toBe("hermes");
+    expect(calls[1][calls[1].indexOf("--as") + 1]).toBe("pm");
   });
 
   it("tells the PM prompt to skip enrollment when doctor says it is enrolled", () => {

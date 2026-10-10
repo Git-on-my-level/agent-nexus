@@ -57,7 +57,7 @@ func TestHostIdentityErrorsOfferNextActions(t *testing.T) {
 					t.Fatalf("unresolved identity guessed a next action: %#v", failure)
 				}
 				message := anyString(failure["message"])
-				if !strings.Contains(message, "--as <registered-agent-name>") || !strings.Contains(message, "ANX_AS") {
+				if !strings.Contains(message, "--as <agent-name>") || !strings.Contains(message, "ANX_AS=<agent-name>") || !strings.Contains(message, "first authenticated call registers") {
 					t.Fatalf("generic identity repair missing: %#v", failure)
 				}
 				return

@@ -43,6 +43,8 @@ func managedUpdateFixture(t *testing.T) (*App, config.Resolved, string) {
 	a := newTestApp(t)
 	a.UserHomeDir = func() (string, error) { return home, nil }
 	a.Getenv = func(string) string { return "" }
+	a.StdinIsTTY = func() bool { return true }
+	a.StdoutIsTTY = func() bool { return true }
 	a.now = func() time.Time { return time.Date(2026, 10, 5, 23, 59, 0, 0, time.FixedZone("east", 3600)) }
 	cfg := config.Resolved{ConfigDir: filepath.Join(home, "config"), Timeout: time.Second}
 	return a, cfg, path
@@ -101,6 +103,53 @@ func TestUpdatePolicyAndConcurrentDailyClaim(t *testing.T) {
 	a.maybeScheduleUpdate("cards create", nil, cfg)
 	if starts.Load() != 2 {
 		t.Fatal("off triggered worker")
+	}
+}
+
+func TestUpdateSchedulerSkipsAutomationNonTTYAndPMContexts(t *testing.T) {
+	cases := []struct {
+		name      string
+		ci        string
+		stdinTTY  bool
+		stdoutTTY bool
+		as        string
+		agent     string
+		pmEnv     string
+		pmTurnID  string
+	}{
+		{name: "CI", ci: "true", stdinTTY: true, stdoutTTY: true},
+		{name: "stdin redirected", stdinTTY: false, stdoutTTY: true},
+		{name: "stdout redirected", stdinTTY: true, stdoutTTY: false},
+		{name: "PM profile", stdinTTY: true, stdoutTTY: true, as: "pm"},
+		{name: "resolved PM agent", stdinTTY: true, stdoutTTY: true, agent: "pm"},
+		{name: "PM service environment", stdinTTY: true, stdoutTTY: true, pmEnv: "pm"},
+		{name: "PM turn environment", stdinTTY: true, stdoutTTY: true, pmTurnID: "turn-1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a, cfg, _ := managedUpdateFixture(t)
+			var started atomic.Bool
+			a.startUpdateWorker = func(string, string) error { started.Store(true); return nil }
+			a.StdinIsTTY = func() bool { return tc.stdinTTY }
+			a.StdoutIsTTY = func() bool { return tc.stdoutTTY }
+			a.Getenv = func(key string) string {
+				switch key {
+				case "CI":
+					return tc.ci
+				case "ANX_PM_AGENT":
+					return tc.pmEnv
+				case "ANX_PM_TURN_ID":
+					return tc.pmTurnID
+				}
+				return ""
+			}
+			cfg.As = tc.as
+			cfg.Agent = tc.agent
+			a.maybeScheduleUpdate("work list", []string{"work", "list"}, cfg)
+			if started.Load() {
+				t.Fatal("automatic update started outside an attended non-PM terminal")
+			}
+		})
 	}
 }
 

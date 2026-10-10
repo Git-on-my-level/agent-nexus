@@ -11,10 +11,11 @@ anx auth whoami
 anx doctor
 ```
 
-If `identity_resolution` fails, set `--as <registered-agent-name>` or
-`ANX_AS=<registered-agent-name>` to your own registered ANX identity and rerun
-`anx doctor`. Installed harnesses do not establish who is running the command;
-do not copy another agent's name from an example.
+If `identity_resolution` fails, pass `--as <agent-name>` or set
+`ANX_AS=<agent-name>` to the lowercase name of the agent tool you are running
+in. Its first authenticated call registers that name on this host if it is new.
+Stop only if you cannot tell which agent tool you are running in; otherwise
+rerun `anx doctor` with that identity.
 
 Interactive enrollment prints a user code and, when core has `ANX_PUBLIC_WEB_UI_WORKSPACE_URL` configured, the full workspace-scoped verification URL. Set that config to this deployment's public web UI workspace path. The core API base URL and web UI path must target the same organization and workspace. Without it, open Access → Hosts in the workspace web UI and approve the printed code. The CLI polls at the server interval. For unattended fleet hosts, use the auth-admin agent flow below. `anx host enroll --token-stdin` keeps the secret out of process arguments. A host key and record are stored under `~/.config/anx/hosts/<workspace-key>/` with owner-only permissions.
 
@@ -407,7 +408,7 @@ Maintainer checklist:
 
 ### Host identity failures
 
-Run `anx doctor` for enrollment, host key permissions, identity resolution, agentctl, and CLI/core version checks. Active runtime evidence can resolve the current caller; an installed adapter by itself cannot. If identity remains unresolved, doctor shows the required `--as <registered-agent-name>` / `ANX_AS=<registered-agent-name>` form. Choose your own registered identity, not another harness just because it is installed, then rerun doctor. Missing `agentctl` is an optional warning for direct `anx` commands. Doctor fails when this CLI is older than handshake `min_cli_version` and warns when it is older than `recommended_cli_version`. The repair is `anx update --version <recommended>`. If the host was revoked, ask a human auth-admin to enroll a replacement. Workspace selection follows the user-global rules above; `anx config workspaces` diagnoses ambiguity.
+Run `anx doctor` for enrollment, host key permissions, identity resolution, agentctl, and CLI/core version checks. Active runtime evidence can resolve the current caller; an installed adapter by itself cannot. If identity remains unresolved, doctor shows the required `--as <agent-name>` / `ANX_AS=<agent-name>` form. Use the lowercase name of the agent tool you are running in; its first authenticated call registers that name on this host if it is new. Stop only if you cannot tell which agent tool you are running in; otherwise rerun doctor with that identity. Missing `agentctl` is an optional warning for direct `anx` commands. Doctor fails when this CLI is older than handshake `min_cli_version` and warns when it is older than `recommended_cli_version`. The repair is `anx update --version <recommended>`. If the host was revoked, ask a human auth-admin to enroll a replacement. Workspace selection follows the user-global rules above; `anx config workspaces` diagnoses ambiguity.
 
 ### Version mismatch
 
@@ -448,8 +449,9 @@ Actions:
 1. Validate core stream endpoints directly:
 
 ```bash
-curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/stream/events
-curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/stream/inbox
+core_url="${ANX_BASE_URL:?set the reachable core URL}"
+curl -N -H 'Accept: text/event-stream' "${core_url%/}/stream/events"
+curl -N -H 'Accept: text/event-stream' "${core_url%/}/stream/inbox"
 ```
 
 1. Use explicit cursor controls:
@@ -567,8 +569,9 @@ The selected PM agent can use `pm turns claim`, `pm turns context <turn-id>`,
 cannot impersonate it. Claim is lease-based and idempotent for the same
 `runner_id`; HTTP 204 means no claimable turn. `--runner-id` defaults to the
 authenticated actor id. These commands use the caller resolved by `anx`; if
-identity resolution fails, select your own registered PM identity with `--as`
-or `ANX_AS` and rerun `anx doctor`. Text output prints `runner_id` and `lease_token` so
+identity resolution fails in the PM service, select its dedicated `pm` identity
+with `--as pm` or `ANX_AS=pm`; its first authenticated call registers that name
+on this host if it is new. Rerun `anx doctor` after applying the repair. Text output prints `runner_id` and `lease_token` so
 the same runner can release later:
 
 ```sh
@@ -845,8 +848,8 @@ identity before the PM will accept messages:
 ```sh
 anx pm bindings create --from-file binding.json
 anx pm channels doctor \
-  --telegram-webhook-url http://127.0.0.1:8000/pm/ingress/telegram \
-  --discord-webhook-url http://127.0.0.1:8000/pm/ingress/discord
+  --telegram-webhook-url "${ANX_TELEGRAM_WEBHOOK_URL:?set the intended URL to probe}" \
+  --discord-webhook-url "${ANX_DISCORD_WEBHOOK_URL:?set the intended URL to probe}"
 ```
 
 Doctor reads env (never prints token values), probes those URLs with GET, and
