@@ -11,6 +11,13 @@ import (
 	"time"
 )
 
+func TestNotOnboardedGuidanceSelectsPMProfile(t *testing.T) {
+	message := ErrNotOnboarded.Error()
+	if !strings.Contains(message, "anx --as pm pm install") || strings.Contains(message, "anx pm install") {
+		t.Fatalf("onboarding guidance does not select the PM profile: %q", message)
+	}
+}
+
 func TestOnboardingGatesBeforeConnectionAndKeepsOffline(t *testing.T) {
 	s, st, human, _ := fixture(t)
 	ctx := context.Background()

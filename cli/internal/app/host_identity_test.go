@@ -52,6 +52,16 @@ func TestHostIdentityErrorsOfferNextActions(t *testing.T) {
 			if anyString(failure["code"]) != tc.code {
 				t.Fatalf("unexpected error: %#v", failure)
 			}
+			if tc.name == "unresolved" {
+				if len(asSlice(failure["next_actions"])) != 0 {
+					t.Fatalf("unresolved identity guessed a next action: %#v", failure)
+				}
+				message := anyString(failure["message"])
+				if !strings.Contains(message, "--as <agent-name>") || !strings.Contains(message, "ANX_AS=<agent-name>") || !strings.Contains(message, "first authenticated call registers") {
+					t.Fatalf("generic identity repair missing: %#v", failure)
+				}
+				return
+			}
 			if !strings.Contains(fmt.Sprint(failure["next_actions"]), tc.command) {
 				t.Fatalf("missing next action: %#v", failure)
 			}
@@ -186,5 +196,44 @@ func TestHostEnrollmentAdoptsOrExcludesLocalProfile(t *testing.T) {
 				t.Fatalf("host key permissions: %v %v", st, err)
 			}
 		})
+	}
+}
+
+func TestFirstHostEnrollmentSetsWorkspaceDefault(t *testing.T) {
+	home := t.TempDir()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/meta/handshake":
+			fmt.Fprint(w, `{"workspace_id":"ws_test","workspace_slug":"personal"}`)
+		case "/auth/hosts/enrollments/headless":
+			w.WriteHeader(http.StatusCreated)
+			fmt.Fprint(w, `{"host":{"id":"host-1","key_id":"key-1","slug":"testhost"}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	a := newTestApp(t)
+	a.UserHomeDir = func() (string, error) { return home, nil }
+	cfg := config.Resolved{BaseURL: server.URL, Timeout: 10_000_000_000}
+	enrolled, err := a.hostEnroll(context.Background(), []string{"--name", "testhost", "--token", "headless"}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !asBool(asMap(enrolled.Data)["workspace_defaulted"]) {
+		t.Fatalf("enrollment did not report the new default: %#v", enrolled.Data)
+	}
+	prefs, err := workspaceconfig.Load(filepath.Join(home, ".config", "anx"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prefs.File.Default != server.URL {
+		t.Fatalf("first enrolled workspace is not the default: %#v", prefs.File)
+	}
+	for _, next := range deriveNextActions("host enroll", nil, enrolled.Data) {
+		if strings.Contains(strings.Join(next.Argv, " "), "config use") {
+			t.Fatalf("already-selected workspace offered as a repair: %#v", next)
+		}
 	}
 }

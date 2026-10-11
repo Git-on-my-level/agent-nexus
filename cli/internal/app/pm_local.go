@@ -38,8 +38,8 @@ func init() {
 			JSONShape:   "`turn_id`, `execution_id`, `status`, `provider`, `model`",
 			Composition: "Local runner. Claims one leased turn, writes a small prompt file, launches the configured harness through agentctl, then completes or fails the turn. Does not call a model in-process.",
 			Examples: []string{
-				"anx --as pm pm serve --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'",
-				"anx --as pm pm serve --runner 'hermes chat --query-file {prompt_file} -Q'",
+				"anx pm serve --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'",
+				"anx pm serve --runner 'hermes chat --query-file {prompt_file} -Q'",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--runner <argv>", Description: "Harness argv. Without {prompt}, this is passed to `agentctl run --`. With {prompt_file} (or legacy {prompt}), argv is executed directly after substituting the prompt file path. Evidence refs come from a trailing ---evidence--- block or a JSON evidence_refs array on the reply object (the same object assistant text is read from), never from prose or nested tool output. Topic and document refs are verified like card/work/artifact/event/decision. Replies over the turn's max_output_bytes (default 64000, core's turn-text ceiling) are stored with a visible truncation marker."},
@@ -54,8 +54,8 @@ func init() {
 			JSONShape:   "`conversation`, `turn`",
 			Composition: "Local helper over `pm conversations create` and `pm conversations message`. A queued turn is not an assistant reply; run `anx pm serve` for that.",
 			Examples: []string{
-				"anx --as maya pm ask \"What needs my decision?\"",
-				"anx --as maya pm ask --wait \"What needs my decision?\"",
+				"anx pm ask \"What needs my decision?\"",
+				"anx pm ask --wait \"What needs my decision?\"",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--wait", Description: "Poll until the turn has a response, fails, or the deadline passes."},
@@ -72,7 +72,7 @@ func init() {
 			Composition: "Local diagnostic. Reads env, probes webhook URLs with GET, and lists bindings. Does not send Telegram or Discord messages.",
 			Examples: []string{
 				"anx pm channels doctor",
-				"anx pm channels doctor --telegram-webhook-url http://127.0.0.1:8000/pm/ingress/telegram --discord-webhook-url http://127.0.0.1:8000/pm/ingress/discord",
+				"anx pm channels doctor --telegram-webhook-url \"${ANX_TELEGRAM_WEBHOOK_URL:?set the intended URL to probe}\" --discord-webhook-url \"${ANX_DISCORD_WEBHOOK_URL:?set the intended URL to probe}\"",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--telegram-webhook-url <url>", Description: "Telegram ingress URL to probe with GET (fake or core). Does not POST an update."},

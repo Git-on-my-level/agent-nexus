@@ -4310,7 +4310,7 @@ func TestAgentGuideDocumentsDailyIdentity(t *testing.T) {
 	t.Parallel()
 
 	guide := agentGuideText()
-	if !strings.Contains(guide, "host enroll") || !strings.Contains(guide, "ANX_AS") || !strings.Contains(guide, "anx orient") {
+	if !strings.Contains(guide, "host enroll") || !strings.Contains(guide, "ANX_AS") || !strings.Contains(guide, "anx orient") || !strings.Contains(guide, "first authenticated call registers that name on this host if it is new") || !strings.Contains(guide, "Stop only if you cannot tell which agent tool you are running in") {
 		t.Fatalf("agent guide must document host and daily identity: %s", guide)
 	}
 }

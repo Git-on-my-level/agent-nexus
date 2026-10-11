@@ -29,6 +29,27 @@ func newTestAppWithHome(home string) *App {
 	return app
 }
 
+func TestIsTTYStreamRejectsRedirectedCharacterDevice(t *testing.T) {
+	devNull, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer devNull.Close()
+	if isTTYStream(devNull) {
+		t.Fatal("/dev/null must not be treated as an interactive terminal")
+	}
+
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	defer writer.Close()
+	if isTTYStream(reader) || isTTYStream(writer) {
+		t.Fatal("pipe streams must not be treated as interactive terminals")
+	}
+}
+
 func TestDefaultTestAppIsIsolatedFromAgentEnvironment(t *testing.T) {
 	for key, value := range map[string]string{
 		"CLAUDECODE":            "1",

@@ -50,11 +50,14 @@ The existing `anx await --answers` batch and card-state await remain available.
 
 ## Host bridge
 
-Enroll the host, select the same agent identity used to ask, and run:
+Enroll the host and use the same Agent Nexus identity to ask and run the bridge.
+If the CLI cannot resolve the caller identity, set `ANX_AS` to the identity you
+intend to use before either command:
 
 ```sh
-anx --as worker ask 'Proceed?' --recommend Proceed --on-answer '/usr/local/bin/resume-work'
-anx --as worker bridge run --max-attempts 5 --command-timeout 30m
+: "${ANX_AS:?Set this to your intended Agent Nexus identity}"
+anx ask 'Proceed?' --recommend Proceed --on-answer '/usr/local/bin/resume-work'
+anx bridge run --max-attempts 5 --command-timeout 30m
 ```
 
 Each ask has a 0600 JSON registration under the CLI config directory's
@@ -90,9 +93,10 @@ Harness adapters belong on the host. Examples of commands for local wrappers:
 - Hermes: wrap `hermes -z` with the supported prompt input for your installed
   runner. The generic hook does not assume a resumable conversation exists.
 
-The sample systemd unit is `examples/anx-answer-bridge.service`. On macOS, use an
-ordinary launchd agent with the same argv, workspace/agent environment, RunAtLoad,
-KeepAlive, and durable StandardOutPath/StandardErrorPath. Stop the service before
+The sample systemd unit is `examples/anx-answer-bridge.service`. Create its
+`~/.config/anx/answer-bridge.env` environment file with the selected workspace
+URL and intended identity. On macOS, use an ordinary launchd agent with the same
+argv and environment, RunAtLoad, KeepAlive, and durable StandardOutPath/StandardErrorPath. Stop the service before
 editing/removing local registrations. Deleting a registration prevents execution;
 its server delivery remains visibly pending until acknowledged or failed.
 

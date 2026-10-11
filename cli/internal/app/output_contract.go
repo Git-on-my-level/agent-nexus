@@ -195,7 +195,9 @@ func deriveNextActions(command string, argv []string, value any) []output.NextAc
 			prefix = append(prefix, "--config-dir", dir)
 		}
 		if alias := anyString(root["workspace_alias"]); alias != "" {
-			actions = append(actions, action("Make workspace default", append(append([]string{}, prefix...), "config", "use", alias)...))
+			if !asBool(root["workspace_defaulted"]) {
+				actions = append(actions, action("Make workspace default", append(append([]string{}, prefix...), "config", "use", alias)...))
+			}
 			actions = append(actions, action("Check host", append(append([]string{}, prefix...), "--workspace", alias, "host", "status")...))
 		} else {
 			actions = append(actions, action("Check host", append(append([]string{}, prefix...), "host", "status")...))
@@ -482,7 +484,12 @@ func deriveErrorActions(command string, err *errnorm.Error) []output.NextAction 
 			}
 		}
 	case "identity_unresolved":
-		return []output.NextAction{action("Select agent", "anx", "--as", "codex", "auth", "whoami")}
+		if details, ok := err.Details.(map[string]any); ok {
+			if argv := stringList(details["next_argv"]); len(argv) >= 2 && argv[0] == "anx" {
+				return []output.NextAction{action("Select agent", argv...)}
+			}
+		}
+		return nil
 	case "host_not_enrolled":
 		return []output.NextAction{action("Enroll host", "anx", "host", "enroll")}
 	case "no_current_task":

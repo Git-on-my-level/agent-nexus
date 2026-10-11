@@ -14,6 +14,8 @@ import (
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/output"
+
+	"golang.org/x/term"
 )
 
 type App struct {
@@ -25,6 +27,7 @@ type App struct {
 	Getwd              func() (string, error)
 	ReadFile           func(string) ([]byte, error)
 	StdinIsTTY         func() bool
+	StdoutIsTTY        func() bool
 	hasOMPAncestor     func() bool
 	now                func() time.Time
 	pmTurns            *pmTurnMemory
@@ -93,18 +96,23 @@ func New() *App {
 		skillLookPath:      exec.LookPath,
 	}
 	app.StdinIsTTY = func() bool {
-		file, ok := app.Stdin.(*os.File)
-		if !ok {
-			return false
-		}
-		info, err := file.Stat()
-		if err != nil {
-			return false
-		}
-		return (info.Mode() & os.ModeCharDevice) != 0
+		stream := app.Stdin
+		return isTTYStream(stream)
+	}
+	app.StdoutIsTTY = func() bool {
+		stream := app.Stdout
+		return isTTYStream(stream)
 	}
 	app.runtimeIdentity = func() (*runtimeIdentityReport, error) { return loadRuntimeIdentity(app.Getenv) }
 	return app
+}
+
+func isTTYStream(stream any) bool {
+	file, ok := stream.(*os.File)
+	if !ok {
+		return false
+	}
+	return term.IsTerminal(int(file.Fd()))
 }
 
 // writeOutput writes s to w, logging a warning to stderr if the write fails.

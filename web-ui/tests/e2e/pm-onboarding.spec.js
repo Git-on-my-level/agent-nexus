@@ -205,7 +205,7 @@ test.describe("an onboarded PM that is not running", () => {
       "offline",
     );
     await expect(page.locator("[data-pm-offline-note]")).toContainText(
-      "anx pm status",
+      "anx --as 'pm' pm status",
     );
     // The runner and host core reported, in the unobtrusive status line.
     await expect(page.locator("[data-pm-status]")).toContainText("Hermes");
@@ -222,10 +222,10 @@ test.describe("an onboarded PM that is not running", () => {
     );
     await expect(
       page.locator('[data-pm-command="pm-status-command"]'),
-    ).toContainText("pm status");
+    ).toContainText("--as 'pm' pm status");
     await expect(
       page.locator('[data-pm-command="pm-uninstall-command"]'),
-    ).toContainText("pm uninstall");
+    ).toContainText("--as 'pm' pm uninstall");
     await expect(page.getByText("Hermes · studio")).toBeVisible();
     await expectCleanLayout(page, "pm manage offline");
   });

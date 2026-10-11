@@ -21,6 +21,7 @@ import {
   setupPromptBlockedReason,
   shellQuote,
 } from "../../src/lib/setup/setupPrompt.js";
+import { pmRunnerFor } from "../../src/lib/setup/pmRunners.js";
 
 /**
  * The prompts are run by an agent, unread, on someone else's computer. Asserting
@@ -96,7 +97,7 @@ describe("every generated snippet parses", () => {
      * block stops being covered by everything below, and a floor would keep
      * passing while it did.
      */
-    expect(parts).toHaveLength(_kind === "pm" ? 8 : 7);
+    expect(parts).toHaveLength(_kind === "pm" ? 9 : 7);
     for (const part of parts) {
       // `sh -n` parses without running: a broken line continuation or an
       // unbalanced quote fails here.
@@ -285,12 +286,13 @@ describe("branching is local, confirmation is not", () => {
    * no harness marker, so it cannot decide whether to enrol — but `doctor`'s
    * `host_enrollment` reads a local file, so it cannot prove the server still
    * accepts the machine. The prompts branch on the first and finish on the
-   * second, with an explicit `--as` so a refusal means what it says.
+   * second. Machine setup lets the CLI resolve its caller; PM setup uses the
+   * dedicated `pm` identity regardless of the runner selected in the UI.
    */
   it.each([
     ["machine", buildMachinePrompt(BASE)],
     ["pm", buildPmPrompt(BASE)],
-  ])("%s prompt", (_kind, prompt) => {
+  ])("%s prompt", (kind, prompt) => {
     const commands = snippets(prompt);
     const branch = prompt.slice(0, prompt.indexOf("host enroll --token-stdin"));
     expect(branch).toContain("--json doctor");
@@ -298,34 +300,43 @@ describe("branching is local, confirmation is not", () => {
     expect(branch).not.toContain("auth whoami");
     expect(branch).not.toContain("host list");
 
-    // And the prompt always ends up asking the server, with a real `--as`
-    // so a literal run is not eaten by shell redirections.
+    // Both prompts ask the server. Machine identity resolution comes from the
+    // caller; PM server checks use the dedicated PM actor.
     const authed = commands
       .join("\n")
       .split("\n")
-      .filter((line) => line.includes("anx ") && line.includes(" --as "));
+      .filter(
+        (line) =>
+          line.includes("anx ") &&
+          (line.includes("auth whoami") || line.includes("host list")),
+      );
     expect(authed).toHaveLength(2);
     expect(authed.some((line) => line.includes("auth whoami"))).toBe(true);
     expect(authed.some((line) => line.includes("host list"))).toBe(true);
     for (const line of authed) {
-      expect(line).not.toMatch(/--as\s+</);
+      if (kind === "machine") expect(line).not.toContain("--as");
+      else expect(line).toContain("--as 'pm'");
     }
     expect(prompt).toContain("this machine's access has been taken away");
     // The local check is explicitly described as insufficient.
     expect(prompt).toContain("it cannot tell you the server still accepts it");
   });
 
-  it("bakes the PM runner into --as so the verify lines run unread", () => {
+  it("passes the selected runner only to execution and keeps PM actor as pm", () => {
     for (const runnerKey of ["claude", "hermes"]) {
       const prompt = buildPmPrompt({ ...BASE, runnerKey });
-      const authed = snippets(prompt)
-        .join("\n")
-        .split("\n")
-        .filter((line) => line.includes(" --as "));
-      expect(authed).toHaveLength(2);
-      for (const line of authed) {
-        expect(line).toContain(`--as ${shellQuote(runnerKey)}`);
-      }
+      const commands = snippets(prompt);
+      const install = commands.find((line) =>
+        line.includes("pm install --runner"),
+      );
+      expect(install).toBeTruthy();
+      const argv = runSnippet(install, stubAnx())[0];
+      expect(argv[argv.indexOf("--as") + 1]).toBe("pm");
+      expect(install).not.toContain(`--as '${runnerKey}'`);
+      expect(install).toContain(shellQuote(pmRunnerFor(runnerKey).argv));
+      const status = commands.find((line) => line.includes("pm status"));
+      expect(status).toContain("--as 'pm'");
+      expect(status).not.toContain(`--as '${runnerKey}'`);
     }
   });
 
@@ -341,10 +352,10 @@ describe("branching is local, confirmation is not", () => {
     expect(calls).toHaveLength(2);
     expect(calls[0]).toContain("auth");
     expect(calls[0]).toContain("whoami");
-    expect(calls[0][calls[0].indexOf("--as") + 1]).toBe("hermes");
+    expect(calls[0][calls[0].indexOf("--as") + 1]).toBe("pm");
     expect(calls[1]).toContain("host");
     expect(calls[1]).toContain("list");
-    expect(calls[1][calls[1].indexOf("--as") + 1]).toBe("hermes");
+    expect(calls[1][calls[1].indexOf("--as") + 1]).toBe("pm");
   });
 
   it("tells the PM prompt to skip enrollment when doctor says it is enrolled", () => {

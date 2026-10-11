@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	ErrNotOnboarded     = errors.New("PM is not onboarded. Run anx pm install on your computer to connect a PM agent.")
+	ErrNotOnboarded     = errors.New("PM is not onboarded. Run anx --as pm pm install on your computer to connect a PM agent.")
 	ErrForbidden        = errors.New("PM permission denied")
 	ErrInvalid          = errors.New("invalid PM request")
 	ErrConflict         = errors.New("PM revision or state conflict")

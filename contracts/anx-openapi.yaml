@@ -3231,7 +3231,7 @@ paths:
       x-anx-stability: beta
       x-anx-examples:
         - title: Publish from stdin
-          command: anx docs put - --handle kb-shared --title "Note" --tags knowledge --source https://example.invalid/note.md --hosts laptop-a --verified-at 2026-09-08T12:00:00Z
+          command: anx docs put - --handle kb-shared --title "Note" --tags knowledge --source https://example.invalid/note.md
       x-anx-agent-notes: >
         Path `{document_id}` is the public handle (or `document:<handle>`). If that handle exists,
         a new revision is appended and metadata (`title`, `source`, `tags`, `hosts`, `verified_at`) is updated. If it does

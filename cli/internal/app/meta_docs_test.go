@@ -175,6 +175,25 @@ func TestRuntimeHelpDocMarkdownCoversCatalogTopics(t *testing.T) {
 	}
 }
 
+func TestRunsIngestExampleRequiresCallerConfiguredValues(t *testing.T) {
+	t.Parallel()
+
+	markdown, err := RuntimeHelpDocMarkdown("runs ingest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{"ANX_CONFIG_DIR:?", "ANX_BASE_URL:?", "ANX_EVENT_FILE:?"} {
+		if !strings.Contains(markdown, required) {
+			t.Fatalf("runs ingest example is missing caller-provided %q:\n%s", required, markdown)
+		}
+	}
+	for _, guessed := range []string{"anx.example.com", "/absolute/anx", "/absolute/event.json"} {
+		if strings.Contains(markdown, guessed) {
+			t.Fatalf("runs ingest example contains guessed value %q:\n%s", guessed, markdown)
+		}
+	}
+}
+
 func TestRuntimeHelpCatalogCoversGeneratedRuntimePaths(t *testing.T) {
 	t.Parallel()
 

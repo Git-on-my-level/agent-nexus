@@ -751,7 +751,7 @@
       <p class="text-micro text-fg-muted" data-pm-offline-note>
         Your PM is not running right now, so answers wait until it is back.
         Check it with <code class="font-mono text-micro text-fg"
-          >anx pm status</code
+          >anx --as 'pm' pm status</code
         > on your computer.
       </p>
     {/if}

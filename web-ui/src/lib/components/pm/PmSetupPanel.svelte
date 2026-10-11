@@ -51,6 +51,7 @@
     {cliInstallCommand}
     {workspaceLabel}
     bind:runnerKey
+    completed={connected}
   >
     {#snippet status()}
       <div

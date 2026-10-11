@@ -245,8 +245,9 @@ func (a *App) runUpdateStatus(cfg config.Resolved) (*commandResult, error) {
 	}}, nil
 }
 
-// This is deliberately bounded to classified work writes. Local maintenance,
-// reads, streaming waits, dry runs and help cannot trigger binary maintenance.
+// This is deliberately bounded to successful classified reads and writes.
+// Local maintenance, update commands, streaming waits, dry runs and help
+// cannot trigger binary maintenance.
 func updateInvocationEligible(command string, args []string, results ...*commandResult) bool {
 	for _, result := range results {
 		if result != nil {
@@ -256,13 +257,12 @@ func updateInvocationEligible(command string, args []string, results ...*command
 			}
 		}
 	}
-	for _, verb := range strings.Fields(command) {
-		// Await writes delivery receipts but must retain its no-update waiting behavior.
-		if verb == "doctor" || verb == "status" || verb == "await" {
-			return false
-		}
+	command = strings.TrimSpace(command)
+	if strings.HasPrefix(command, "update") || command == "await" || command == "help" {
+		return false
 	}
-	if commandSideEffectClass(command) != "remote_coordination_write" {
+	sideEffect := commandSideEffectClass(command)
+	if sideEffect != "read_only" && sideEffect != "remote_coordination_write" {
 		return false
 	}
 	// Use the same bool parser as trackedBool; account for all spellings and
@@ -291,7 +291,7 @@ func updateInvocationEligible(command string, args []string, results ...*command
 	return true
 }
 func (a *App) maybeScheduleUpdate(command string, args []string, cfg config.Resolved, results ...*commandResult) []output.Warning {
-	if !updateInvocationEligible(command, args, results...) {
+	if !a.updateSchedulingInteractive(cfg) || !updateInvocationEligible(command, args, results...) {
 		return nil
 	}
 	dir, err := a.updateDirectory(cfg)
@@ -340,6 +340,27 @@ func (a *App) maybeScheduleUpdate(command string, args []string, cfg config.Reso
 	}
 	return warnings
 }
+
+// An automatic binary replacement is only safe from an attended interactive
+// invocation. CI, redirected/piped invocations and PM turns must not have the
+// installed binary replaced underneath the work currently using it.
+func (a *App) updateSchedulingInteractive(cfg config.Resolved) bool {
+	if a.Getenv != nil && strings.TrimSpace(a.Getenv("CI")) != "" {
+		return false
+	}
+	if strings.EqualFold(cfg.As, "pm") || strings.EqualFold(cfg.Agent, "pm") {
+		return false
+	}
+	if a.Getenv != nil {
+		pmAgent := strings.TrimSpace(a.Getenv("ANX_PM_AGENT")) != ""
+		pmTurn := strings.TrimSpace(a.Getenv("ANX_PM_TURN_ID")) != ""
+		if pmAgent || pmTurn {
+			return false
+		}
+	}
+	return a.StdinIsTTY != nil && a.StdinIsTTY() && a.StdoutIsTTY != nil && a.StdoutIsTTY()
+}
+
 func startDetachedUpdateWorker(path, configDir string) error {
 	args := []string{"update", "now", "--scheduled"}
 	if configDir != "" {
