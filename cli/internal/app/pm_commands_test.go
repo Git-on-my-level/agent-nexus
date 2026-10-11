@@ -2,8 +2,10 @@ package app
 
 import (
 	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -49,6 +51,59 @@ func TestPMContextOutsideTurnKeepsLegacyFlags(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestInTurnPM403ExplainsIdentityMismatch(t *testing.T) {
+	for _, command := range []string{"context", "card", "propose"} {
+		t.Run(command, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if command == "propose" && strings.HasSuffix(r.URL.Path, "/context") {
+					_, _ = w.Write([]byte(`{"items":[{"ref":"card:x","decision_revision":"1.2"}]}`))
+					return
+				}
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(`{"error":{"code":"forbidden","message":"PM permission denied"}}`))
+			}))
+			defer srv.Close()
+
+			a := New()
+			a.Getenv = func(key string) string {
+				switch key {
+				case "ANX_PM_TURN_ID":
+					return "turn"
+				case "ANX_PM_LEASE_TOKEN":
+					return "lease"
+				case "ANX_PM_AGENT":
+					return "pm"
+				default:
+					return ""
+				}
+			}
+			cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "token", Agent: "hermes"}
+
+			var err error
+			switch command {
+			case "context":
+				_, err = a.runPMCardRead(context.Background(), nil, cfg)
+			case "card":
+				_, err = a.runPMCardRead(context.Background(), []string{"card:x"}, cfg)
+			case "propose":
+				_, err = a.runPMPropose(context.Background(), []string{"card:x", "--status", "ready", "--why", "Move it"}, cfg)
+			}
+			if err == nil {
+				t.Fatal("expected forbidden response")
+			}
+			var typed *errnorm.Error
+			if !errors.As(err, &typed) {
+				t.Fatalf("error type %T: %v", err, err)
+			}
+			want := "Acting as `hermes`, but this turn belongs to `pm`; run the anx CLI the runner started."
+			if typed.Hint != want {
+				t.Fatalf("hint %q, want %q", typed.Hint, want)
+			}
+		})
+	}
+}
+
 func TestPMProposeBuildsPayloadAndHidesPlumbing(t *testing.T) {
 	calls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

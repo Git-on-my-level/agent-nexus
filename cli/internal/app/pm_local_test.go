@@ -629,6 +629,42 @@ func TestHarnessChildEnvDoesNotInjectZAIAPIKey(t *testing.T) {
 	}
 }
 
+func TestPMRunnerChildEnvPrependsResolvedExecutableDirectory(t *testing.T) {
+	root := t.TempDir()
+	targetDir := filepath.Join(root, "installed", "bin")
+	if err := os.MkdirAll(targetDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(targetDir, "anx")
+	if err := os.WriteFile(target, []byte("anx"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	linkDir := filepath.Join(root, "current")
+	if err := os.MkdirAll(linkDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(linkDir, "anx")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	env, err := pmRunnerChildEnv(config.Resolved{Agent: "pm", BaseURL: "http://localhost:8000"}, []string{"PATH=/other/bin:/usr/bin"}, link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolvedTargetDir, err := filepath.EvalSymlinks(targetDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPath := resolvedTargetDir + string(os.PathListSeparator) + "/other/bin:/usr/bin"
+	if got := envValue(env, "PATH"); got != wantPath {
+		t.Fatalf("PATH=%q, want %q", got, wantPath)
+	}
+	if got := envValue(env, "ANX_AS"); got != "pm" {
+		t.Fatalf("ANX_AS=%q, want pm", got)
+	}
+}
+
 func envValue(env []string, key string) string {
 	prefix := key + "="
 	for _, item := range env {

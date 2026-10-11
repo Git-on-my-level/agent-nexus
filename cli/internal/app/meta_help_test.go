@@ -1206,6 +1206,9 @@ func TestGeneratedHelpResolvesAllRegistryBackedRuntimePaths(t *testing.T) {
 
 		output := runHelpCommand(t, append([]string{"help"}, strings.Fields(runtimePath)...)...)
 		header := "Generated Help: " + runtimePath
+		if cmd.CommandID == "pm.context" {
+			header = "Usage: anx pm context"
+		}
 		if _, ok := localHelperTopicByPath(runtimePath); ok {
 			header = "Local Help: " + runtimePath
 		}

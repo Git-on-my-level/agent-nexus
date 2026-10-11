@@ -547,7 +547,14 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 	if err != nil {
 		return nil, err
 	}
-	env := harnessChildEnv(cfg, os.Environ())
+	executable, err := os.Executable()
+	if err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "runner_path_failed", "failed to resolve the anx executable for the PM runner", err)
+	}
+	env, err := pmRunnerChildEnv(cfg, os.Environ(), executable)
+	if err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "runner_path_failed", "failed to prepare PATH for the PM runner", err)
+	}
 	if !writerIsTTY(a.Stderr) {
 		prev := harnessLogWriter
 		harnessLogWriter = a.Stderr
@@ -908,11 +915,11 @@ func (a *App) runClaimedTurn(ctx, shutdownCtx context.Context, cfg config.Resolv
 	a.turnMem().noteHarnessRun(turnID)
 	env = overlayEnv(env, "ANX_PM_LEASE_TOKEN", leaseToken)
 	env = overlayEnv(env, "ANX_PM_TURN_ID", turnID)
+	env = overlayEnv(env, "ANX_PM_AGENT", cfg.Agent)
 	if progress != nil {
 		env = overlayEnv(env, "ANX_PM_TURN_ID", turnID)
 		env = overlayEnv(env, "ANX_PM_ACTIVITY_ENABLED", "1")
 		env = overlayEnv(env, "ANX_PM_BASE_URL", cfg.BaseURL)
-		env = overlayEnv(env, "ANX_PM_AGENT", cfg.Agent)
 	}
 	base := harnessBase
 	if base == nil {
@@ -2368,6 +2375,33 @@ func harnessChildEnv(cfg config.Resolved, base []string) []string {
 	setEnv("ANX_AS", cfg.Agent)
 	setEnv("ANX_BASE_URL", cfg.BaseURL)
 	return env
+}
+
+func pmRunnerChildEnv(cfg config.Resolved, base []string, executable string) ([]string, error) {
+	env := harnessChildEnv(cfg, base)
+	resolved, err := filepath.EvalSymlinks(executable)
+	if err != nil {
+		return nil, fmt.Errorf("resolve anx executable symlinks: %w", err)
+	}
+	abs, err := filepath.Abs(resolved)
+	if err != nil {
+		return nil, fmt.Errorf("resolve anx executable path: %w", err)
+	}
+	path := filepath.Dir(abs)
+	if existing := lookupEnvValue(env, "PATH"); existing != "" {
+		path += string(os.PathListSeparator) + existing
+	}
+	return overlayEnv(env, "PATH", path), nil
+}
+
+func lookupEnvValue(env []string, key string) string {
+	prefix := key + "="
+	for _, item := range env {
+		if strings.HasPrefix(item, prefix) {
+			return strings.TrimPrefix(item, prefix)
+		}
+	}
+	return ""
 }
 
 func passwdHome() string {

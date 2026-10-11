@@ -48,7 +48,7 @@ var workCommands = map[string]workCommandSpec{
 	"work capabilities":          {path: "/work/capabilities", method: "GET", summary: "Read capabilities actually advertised by the authenticated central API."},
 	"work observations list":     {path: "/work/{id}/observations", method: "GET", idFlag: "work-id", summary: "Read append-only evidence for a work card, preserving pagination and uncertainty.", filters: []string{"limit", "cursor"}},
 	"work observations submit":   {path: "/work/{id}/observations", method: "POST", idFlag: "work-id", body: true, summary: "Submit an authenticated remote observation; preserve its idempotency key on retry."},
-	"pm context":                 {path: "/pm/context", method: "GET", summary: "Read bounded authorized PM context. Inside a claimed turn use no flags; open a specific card with anx pm card <card-ref>. Outside turns, legacy filters remain supported.", filters: []string{"work-ref", "query", "limit", "cursor"}},
+	"pm context":                 {path: "/pm/context", method: "GET", summary: "Read PM context. Inside a claimed turn use no flags; legacy filters apply only outside turns.", filters: []string{"work-ref", "query", "limit", "cursor"}},
 	"pm conversations list":      {path: "/pm/conversations", method: "GET", summary: "List durable PM conversations with principal-bound pagination.", filters: []string{"limit", "cursor"}},
 	"pm conversations create":    {path: "/pm/conversations", method: "POST", body: true, summary: "Create a durable conversation using request_key, title and optional work_ref."},
 	"pm conversations get":       {path: "/pm/conversations/{id}", method: "GET", idFlag: "conversation-id", summary: "Read a conversation and its durable turns."},
@@ -371,6 +371,19 @@ func workHelpText(topic string) (string, bool) {
 	}
 	if topic == "pm propose" {
 		return "Usage: anx pm propose <card-ref> (--status <backlog|ready|in_progress|blocked|review|done> | --note <text>) --why <reason> [--evidence <ref> ...]\nProposes for human approval in Inbox. done requires evidence. Identity and conversation come from the runner.", true
+	}
+	if topic == "pm context" {
+		meta, _ := registry.LoadEmbedded()
+		var adjacent []string
+		if cmd, found := commandByCLIPath(meta.Commands, mapRuntimePathToRegistryPath(topic)); found {
+			for _, item := range cmd.Adjacent {
+				adjacent = append(adjacent, runtimePathFromRegistryPath(commandIDToCLIPath(item)))
+			}
+		}
+		if len(adjacent) == 0 {
+			adjacent = []string{"pm card", "pm propose"}
+		}
+		return fmt.Sprintf("Usage: anx pm context\n\nInside a claimed turn, run with no flags. Open a card with `anx pm card <card-ref>`; propose with `anx pm propose`.\n\nAdjacent commands: `%s`\n\nOutside a claimed turn\nLegacy filters: `--work-ref`, `--query`, `--limit`, `--cursor`. Pass `next_cursor` unchanged as `--cursor`; cursors are bound to the workspace, principal and record kind. Context limits are 1..50.\n\nUse `--json` for one machine-readable envelope.\n", strings.Join(adjacent, "`, `")), true
 	}
 
 	spec, exact := workCommands[topic]

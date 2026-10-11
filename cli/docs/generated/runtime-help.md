@@ -118,7 +118,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `meta concepts` (command): List concept index
 - `meta concept` (command): Get commands grouped by concept
 - `pm connect` (command): Register a local PM connection with bounded runner and host labels.
-- `pm context` (command): Read bounded authorized PM context. Inside a claimed turn use no flags; open a specific card with anx pm card <card-ref>. Outside turns, legacy filters remain supported.
+- `pm context` (command): Read PM context. Inside a claimed turn use no flags; legacy filters apply only outside turns.
 - `pm disconnect` (command): Reset workspace PM onboarding after explicit uninstall.
 - `pm presence` (command): Read recent PM connection state.
 - `pm actions acknowledge` (command): Acknowledge a failed or unresolvable action.
@@ -944,7 +944,7 @@ Work is an existing card; projects are topics. Scope and identity come from the 
   anx pm bindings list         List channel identity bindings for this workspace; an operator check, never a send.
   anx pm card                  Read any visible card in full under the requesting reader.
   anx pm connect               Register a local PM connection with bounded runner and host labels.
-  anx pm context               Read bounded authorized PM context. Inside a claimed turn use no flags; open a specific card with anx pm card <card-ref>. Outside turns, legacy filters remain supported.
+  anx pm context               Read PM context. Inside a claimed turn use no flags; legacy filters apply only outside turns.
   anx pm conversations create  Create a durable conversation using request_key, title and optional work_ref.
   anx pm conversations get     Read a conversation and its durable turns.
   anx pm conversations list    List durable PM conversations with principal-bound pagination.
@@ -3689,37 +3689,19 @@ Use --json for one machine-readable envelope.
 
 ## `pm context`
 
-Read bounded authorized PM context. Inside a claimed turn use no flags; open a specific card with anx pm card <card-ref>. Outside turns, legacy filters remain supported.
+Read PM context. Inside a claimed turn use no flags; legacy filters apply only outside turns.
 
 ```text
-Generated Help: pm context
-
-- Command ID: `pm.context`
-- CLI path: `pm context`
-- HTTP: `GET /pm/context`
-- Side effect class: `read_only`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Read bounded authorized PM context.
-- Output: Returns `PMContextResponse`.
-- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
-- Concepts: `cards`, `evidence`
-- Agent notes: Direct reads use ordinary principal visibility; PM designation grants no private access. Inside a claimed turn use requester-scoped context with its lease.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-Read bounded authorized PM context. Inside a claimed turn use no flags; open a specific card with anx pm card <card-ref>. Outside turns, legacy filters remain supported.
-
 Usage: anx pm context
-  --work-ref <value>
-  --query <value>
-  --limit <value>
-  --cursor <value>
 
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+Inside a claimed turn, run with no flags. Open a card with `anx pm card <card-ref>`; propose with `anx pm propose`.
 
-Use --json for one machine-readable envelope.
+Adjacent commands: `pm card`, `pm propose`
+
+Outside a claimed turn
+Legacy filters: `--work-ref`, `--query`, `--limit`, `--cursor`. Pass `next_cursor` unchanged as `--cursor`; cursors are bound to the workspace, principal and record kind. Context limits are 1..50.
+
+Use `--json` for one machine-readable envelope.
 ```
 
 ## `pm disconnect`

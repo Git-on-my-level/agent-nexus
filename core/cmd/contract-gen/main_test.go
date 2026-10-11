@@ -145,6 +145,34 @@ func TestCollectCommandsUsesCLIInputAffordance(t *testing.T) {
 	}
 }
 
+func TestCollectCommandsUsesAdjacentCommandMetadataOverride(t *testing.T) {
+	doc := openAPIDocument{
+		Paths: map[string]pathItem{
+			"/pm/context": {
+				Get: &operation{
+					CommandID: "pm.context",
+					CLIPath:   "pm context",
+					Adjacent:  []string{"pm card", "pm propose"},
+				},
+			},
+			"/pm/connect": {
+				Post: &operation{CommandID: "pm.connect", CLIPath: "pm connect"},
+			},
+		},
+	}
+
+	commands := collectCommands(doc, anxSchemaDocument{})
+	for _, cmd := range commands {
+		if cmd.CommandID == "pm.context" {
+			if strings.Join(cmd.Adjacent, "|") != "pm card|pm propose" {
+				t.Fatalf("adjacent commands = %v, want pm card and pm propose", cmd.Adjacent)
+			}
+			return
+		}
+	}
+	t.Fatal("pm.context command missing")
+}
+
 func TestValidateXAnxAuthoringFailsScalarStreamingMetadata(t *testing.T) {
 	doc := openAPIDocument{
 		Paths: map[string]pathItem{
