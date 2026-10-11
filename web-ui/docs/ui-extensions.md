@@ -13,7 +13,11 @@ The composition uses the existing workspace shell, routes and build configuratio
 The supported replacement seams are `src/lib/server/extensions/provider.js`
 (the existing out-of-workspace provider contract), `src/lib/extensions/accountSession.js`
 (optional profile state), `src/lib/extensions/launchFlow.js` (external sign-in
-destination) and `src/lib/extensions/supportLink.js` (contact policy).
+destination) and `src/lib/extensions/supportLink.js` (contact and troubleshooting policy).
+Its `technicalTroubleshootingEnabled` export defaults to `true` for self-hosted
+operators, including production builds. Extensions serving users without backend
+access can replace it with `false`. The error page uses this static setting even
+when failed layout loading leaves shell capability data unavailable.
 External routes and components are additive. Shell capability fields supply
 account, chooser, recovery and people destinations/labels; the workspace shell owns layout and
 workspace authentication. Extensions must preserve that ownership and keep core

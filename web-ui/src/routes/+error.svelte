@@ -2,6 +2,8 @@
   import { dev } from "$app/environment";
   import { page } from "$app/stores";
 
+  import { technicalTroubleshootingEnabled } from "$lib/extensions/supportLink.js";
+
   import Button from "$lib/components/Button.svelte";
   import {
     CALLBACK_COPY,
@@ -45,7 +47,9 @@
     },
     ssr_unhandled_error: {
       heading: "Unexpected server error",
-      body: "An unhandled exception occurred while rendering the page. Check the dev terminal logs for a structured trace.",
+      body: dev
+        ? "An unhandled exception occurred while rendering the page. Check the dev terminal logs for a structured trace."
+        : "We couldn’t load this page. Please try again in a moment.",
     },
   };
 
@@ -236,7 +240,7 @@
       </details>
     {/if}
 
-    {#if !isCallbackSurface && !friendly}
+    {#if technicalTroubleshootingEnabled && !isCallbackSurface && !friendly}
       <details
         class="mt-6 rounded-md border border-line bg-bg-soft p-4 text-left"
       >
