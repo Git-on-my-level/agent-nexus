@@ -2354,14 +2354,14 @@ func overlayEnv(env []string, key, value string) []string {
 		return env
 	}
 	out := append([]string{}, env...)
-	prefix := key + "="
 	for i, item := range out {
-		if strings.HasPrefix(item, prefix) {
-			out[i] = prefix + value
+		itemKey, _, ok := splitEnvItem(item)
+		if ok && envKeyEqual(itemKey, key) {
+			out[i] = itemKey + "=" + value
 			return out
 		}
 	}
-	return append(out, prefix+value)
+	return append(out, key+"="+value)
 }
 
 func harnessChildEnv(cfg config.Resolved, base []string) []string {
@@ -2395,13 +2395,26 @@ func pmRunnerChildEnv(cfg config.Resolved, base []string, executable string) ([]
 }
 
 func lookupEnvValue(env []string, key string) string {
-	prefix := key + "="
 	for _, item := range env {
-		if strings.HasPrefix(item, prefix) {
-			return strings.TrimPrefix(item, prefix)
+		itemKey, value, ok := splitEnvItem(item)
+		if ok && envKeyEqual(itemKey, key) {
+			return value
 		}
 	}
 	return ""
+}
+
+func splitEnvItem(item string) (key, value string, ok bool) {
+	eq := strings.IndexByte(item, '=')
+	if eq < 0 {
+		return "", "", false
+	}
+	return item[:eq], item[eq+1:], true
+}
+
+func envKeyEqual(a, b string) bool {
+	// Windows process environments are case-insensitive (PATH vs Path).
+	return strings.EqualFold(a, b)
 }
 
 func passwdHome() string {

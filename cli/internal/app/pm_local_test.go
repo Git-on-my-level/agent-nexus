@@ -665,6 +665,55 @@ func TestPMRunnerChildEnvPrependsResolvedExecutableDirectory(t *testing.T) {
 	}
 }
 
+func TestPMRunnerChildEnvPrependsInheritedWindowsPath(t *testing.T) {
+	root := t.TempDir()
+	targetDir := filepath.Join(root, "installed", "bin")
+	if err := os.MkdirAll(targetDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(targetDir, "anx")
+	if err := os.WriteFile(target, []byte("anx"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	env, err := pmRunnerChildEnv(config.Resolved{Agent: "pm", BaseURL: "http://localhost:8000"}, []string{`Path=C:\Windows\system32`, "FOO=bar"}, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolvedTargetDir, err := filepath.EvalSymlinks(targetDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPath := resolvedTargetDir + string(os.PathListSeparator) + `C:\Windows\system32`
+	if got := lookupEnvValue(env, "PATH"); got != wantPath {
+		t.Fatalf("PATH=%q, want %q", got, wantPath)
+	}
+	pathEntries := 0
+	for _, item := range env {
+		key, _, ok := splitEnvItem(item)
+		if !ok || !envKeyEqual(key, "PATH") {
+			continue
+		}
+		pathEntries++
+		if key != "Path" {
+			t.Fatalf("rewrote Path key to %q", key)
+		}
+	}
+	if pathEntries != 1 {
+		t.Fatalf("path entries=%d env=%v", pathEntries, env)
+	}
+}
+
+func TestOverlayEnvReplacesWindowsPathInPlace(t *testing.T) {
+	got := overlayEnv([]string{"FOO=bar", `Path=C:\Windows\system32`}, "PATH", `C:\anx\bin;C:\Windows\system32`)
+	if lookupEnvValue(got, "PATH") != `C:\anx\bin;C:\Windows\system32` {
+		t.Fatalf("PATH=%q env=%v", lookupEnvValue(got, "PATH"), got)
+	}
+	if got[1] != `Path=C:\anx\bin;C:\Windows\system32` {
+		t.Fatalf("did not replace Path in place: %v", got)
+	}
+}
+
 func envValue(env []string, key string) string {
 	prefix := key + "="
 	for _, item := range env {
