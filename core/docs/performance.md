@@ -499,3 +499,36 @@ heuristic: page-value normalization and O(1) pinned denial membership occur only
 on indexed candidate lookups. It permits no scans or budget increases; the
 200-subject owner/stranger probes measured one SQL execution and at most 8,685 VM
 instructions.
+
+## Claimed PM card and workspace reads (SCA-733)
+
+`POST /pm/turns/{id}/context` validates the selected PM and lease, then binds
+the conversation requester and pins one epoch-validated read snapshot. Pinned
+reads admit at most eight refs; a full card read admits one requester-visible ref,
+including an unpinned plan step. Batches cover aliases, card bodies, metadata,
+plans, and six candidates each for asks, activity and awaiting decisions per card.
+Hidden candidates do not refill.
+
+Without pins, the same route returns a workspace overview: up to 15 open
+initiative cards, ordered by blocked/review/active/ready/backlog attention then
+recency, plus up to 15 requesting-reader asks, awaiting decisions and recent
+events. Routing indexes admit 64 card IDs, two 16-ID recipient ask windows,
+16 reader decision IDs and 32 event IDs before canonical scoped hydration.
+All partial markers are unconditional; no hidden candidate counts are serialized.
+Selection and projection cost depends on these fixed windows and bounded plan
+fanout, not a workspace scan. The shared denial snapshot has the inherited
+SCA-665 cold admission cost and retains epoch fallback.
+
+`TestPerformancePMCardContext` certifies full HTTP reads on 4096 cards with
+owner/stranger, one/eight pins and all fifteen overview slots filled, dense
+private messages/asks and private decision evidence. The card and workspace
+budgets are separate checked-in JSON files: pinned reads allow 30 SQL calls,
+256 rows and 20,000 warm VM steps; the fifteen-card workspace overview allows
+30 SQL calls, 512 rows and 40,000 warm VM steps. Both keep the inherited
+2,000,000 cold VM admission ceiling. Exact indexed-window query plans
+are recorded under SCA-733. Run:
+
+```sh
+GOMAXPROCS=2 GOFLAGS=-p=1 ANX_PERFORMANCE_TEST=1 go test ./internal/server \
+  -run '^TestPerformancePMCardContext$' -count=1 -timeout=4m -v
+```

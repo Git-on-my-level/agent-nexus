@@ -29,6 +29,22 @@ func SQLHash(q string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.TrimSpace(q))))
 }
 
+// PointPlanSQLHash explicitly opts a new gate into point-snapshot epoch
+// normalization. Existing PlanSQLHash baselines retain their fingerprints.
+func PointPlanSQLHash(q string) string {
+	// The pinned point compiler emits one epoch guard. Normalize only that
+	// prefix literal; token is already bound and all business SQL stays exact.
+	if strings.HasPrefix(strings.TrimSpace(q), "WITH RECURSIVE _anx_point_snapshot(token) AS MATERIALIZED (") {
+		mask := unquotedSQL(q)
+		re := regexp.MustCompile(`^\s*WITH RECURSIVE _anx_point_snapshot\(token\) AS MATERIALIZED \(SELECT \? WHERE COALESCE\(\(SELECT version FROM main\.resource_access_epoch WHERE singleton=1\),-1\)=([0-9]+)\),`)
+		if m := re.FindSubmatchIndex(mask); m != nil {
+			return SQLHash(q[:m[2]] + "?" + q[m[3]:])
+		}
+		return SQLHash(q)
+	}
+	return PlanSQLHash(q)
+}
+
 // PlanSQLHash preserves the submitted SQL exactly except for the two epoch
 // values emitted by the authorization compiler. Those values are snapshot data,
 // not query structure, and change with fixture writes. Business literals and

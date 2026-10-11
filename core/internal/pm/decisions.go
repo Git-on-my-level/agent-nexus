@@ -1,6 +1,8 @@
 package pm
 
 import (
+	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/schema"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,8 +10,6 @@ import (
 	"reflect"
 	"strings"
 	"time"
-
-	"agent-nexus-core/internal/primitives"
 )
 
 func (s *Service) ProposeDecision(ctx context.Context, p Principal, in DecisionInput) (Decision, error) {
@@ -432,6 +432,9 @@ func (s *Service) GetTurnContextPage(ctx context.Context, p Principal, turnID, q
 	return s.GetTurnPinnedContextPage(ctx, p, turnID, "", query, cursor, limit, leaseToken)
 }
 func (s *Service) GetTurnPinnedContextPage(ctx context.Context, p Principal, turnID, contextRef, query, cursor string, limit int, leaseToken string) (ContextPage, error) {
+	return s.getTurnContextView(ctx, p, turnID, contextRef, query, cursor, limit, leaseToken, "")
+}
+func (s *Service) getTurnContextView(ctx context.Context, p Principal, turnID, contextRef, query, cursor string, limit int, leaseToken, view string) (ContextPage, error) {
 	if err := s.authorize(ctx, p, "pm.respond", ""); err != nil {
 		return ContextPage{}, err
 	}
@@ -456,7 +459,20 @@ func (s *Service) GetTurnPinnedContextPage(ctx context.Context, p Principal, tur
 	if err != nil {
 		return ContextPage{}, err
 	}
-	if contextRef != "" {
+	if view != "" && view != "cards" && view != "card" {
+		return ContextPage{}, ErrInvalid
+	}
+	if view == "card" {
+		validated, err := conversationRefs(contextRef, nil)
+		kind, _, refErr := schema.SplitTypedRef(contextRef)
+		if err != nil || len(validated) != 1 || refErr != nil || kind != "card" {
+			return ContextPage{}, ErrInvalid
+		}
+	}
+	if view != "" && (query != "" || cursor != "" || (view == "card" && contextRef == "")) {
+		return ContextPage{}, ErrInvalid
+	}
+	if contextRef != "" && view != "card" {
 		found := false
 		for _, ref := range refs {
 			if ref == contextRef {
@@ -467,10 +483,51 @@ func (s *Service) GetTurnPinnedContextPage(ctx context.Context, p Principal, tur
 		if !found {
 			return ContextPage{}, ErrInvalid
 		}
-	} else if len(refs) > 0 {
+	} else if view == "" && len(refs) > 0 {
 		contextRef = refs[0]
 	}
-	return s.QueryContextPage(ctx, Principal{WorkspaceID: c.WorkspaceID, ActorID: c.ActorID}, contextRef, query, cursor, limit)
+	reader := Principal{WorkspaceID: c.WorkspaceID, ActorID: c.ActorID}
+	if view != "" {
+		if s.deps.BindRequesterContext != nil {
+			ctx = s.deps.BindRequesterContext(ctx, reader)
+		}
+		if s.deps.BeginCardRead != nil {
+			var closeRead func()
+			ctx, closeRead, err = s.deps.BeginCardRead(ctx, reader)
+			if err != nil {
+				return ContextPage{}, err
+			}
+			defer closeRead()
+		}
+		if err := s.RequireOnboarded(ctx); err != nil {
+			return ContextPage{}, err
+		}
+		if s.deps.ReadPinnedCards == nil {
+			return ContextPage{}, ErrUnavailable
+		}
+		if contextRef != "" {
+			refs = []string{contextRef}
+		}
+		if err := s.authorize(ctx, reader, "pm.read", ""); err != nil {
+			return ContextPage{}, err
+		}
+		if view == "cards" && len(refs) == 0 {
+			if s.deps.ReadWorkspaceOverview == nil {
+				return ContextPage{}, ErrUnavailable
+			}
+			page, err := s.deps.ReadWorkspaceOverview(ctx, reader)
+			if err != nil {
+				return ContextPage{}, err
+			}
+			return s.attachReaderDecisions(ctx, reader, page)
+		}
+		page, err := s.deps.ReadPinnedCards(ctx, reader, refs, view == "card")
+		if err != nil {
+			return ContextPage{}, err
+		}
+		return s.attachPinnedDecisions(ctx, reader, page)
+	}
+	return s.QueryContextPage(ctx, reader, contextRef, query, cursor, limit)
 }
 
 // ProposeForTurn records a proposal under the requesting actor so that it is
@@ -496,10 +553,29 @@ func (s *Service) ProposeForTurn(ctx context.Context, p Principal, turnID string
 	if err := s.store.get(ctx, "conversation", t.ConversationID, &c); err != nil {
 		return Decision{}, err
 	}
-	if c.WorkRef != "" && in.WorkRef != c.WorkRef {
-		return Decision{}, ErrForbidden
+	refs, err := conversationRefs(c.WorkRef, c.ContextRefs)
+	if err != nil {
+		return Decision{}, err
 	}
+	if len(refs) > 0 {
+		found := false
+		for _, ref := range refs {
+			if in.WorkRef == ref {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return Decision{}, ErrForbidden
+		}
+	}
+
 	in.Origin = c.Origin
+	// Evidence, card authority and persisted intent must share the requesting
+	// reader scope, never the selected PM's ambient access.
+	if s.deps.BindRequesterContext != nil {
+		ctx = s.deps.BindRequesterContext(ctx, Principal{WorkspaceID: c.WorkspaceID, ActorID: c.ActorID, Human: true})
+	}
 	return s.proposeDecision(ctx, Principal{WorkspaceID: c.WorkspaceID, ActorID: c.ActorID, Human: true}, in, turnID, p.ActorID, leaseToken)
 }
 
@@ -523,10 +599,13 @@ const invalidActionPayloadMessage = "Invalid work.phase payload: phase must be s
 
 // Prose never supplies mutation parameters, including for legacy decisions.
 func validActionPayload(scope string, p *ActionPayload) bool {
+	if scope == "work.note" {
+		return p != nil && validText(p.Note, 16000) && p.Phase == "" && len(p.ResolutionRefs) == 0
+	}
 	if scope != "work.phase" {
 		return true
 	}
-	if p == nil {
+	if p == nil || p.Note != "" {
 		return false
 	}
 	switch p.Phase {

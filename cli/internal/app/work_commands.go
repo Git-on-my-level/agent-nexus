@@ -26,6 +26,8 @@ type workCommandSpec struct {
 }
 
 var workCommands = map[string]workCommandSpec{
+	"pm card":                    {method: "POST", summary: "Read any visible card in full under the requesting reader."},
+	"pm propose":                 {method: "POST", summary: "Propose a card status or note for human approval in Inbox."},
 	"pm disconnect":              {path: "/pm/disconnect", method: "POST", summary: "Reset workspace PM onboarding after explicit uninstall."},
 	"pm connect":                 {path: "/pm/connect", method: "POST", body: true, summary: "Register a local PM connection with bounded runner and host labels."},
 	"pm presence":                {path: "/pm/presence", method: "GET", summary: "Read recent PM connection state."},
@@ -46,7 +48,7 @@ var workCommands = map[string]workCommandSpec{
 	"work capabilities":          {path: "/work/capabilities", method: "GET", summary: "Read capabilities actually advertised by the authenticated central API."},
 	"work observations list":     {path: "/work/{id}/observations", method: "GET", idFlag: "work-id", summary: "Read append-only evidence for a work card, preserving pagination and uncertainty.", filters: []string{"limit", "cursor"}},
 	"work observations submit":   {path: "/work/{id}/observations", method: "POST", idFlag: "work-id", body: true, summary: "Submit an authenticated remote observation; preserve its idempotency key on retry."},
-	"pm context":                 {path: "/pm/context", method: "GET", summary: "Read bounded authorized PM context; partial coverage stays explicit.", filters: []string{"work-ref", "query", "limit", "cursor"}},
+	"pm context":                 {path: "/pm/context", method: "GET", summary: "Read bounded authorized PM context. Inside a claimed turn use no flags; open a specific card with anx pm card <card-ref>. Outside turns, legacy filters remain supported.", filters: []string{"work-ref", "query", "limit", "cursor"}},
 	"pm conversations list":      {path: "/pm/conversations", method: "GET", summary: "List durable PM conversations with principal-bound pagination.", filters: []string{"limit", "cursor"}},
 	"pm conversations create":    {path: "/pm/conversations", method: "POST", body: true, summary: "Create a durable conversation using request_key, title and optional work_ref."},
 	"pm conversations get":       {path: "/pm/conversations/{id}", method: "GET", idFlag: "conversation-id", summary: "Read a conversation and its durable turns."},
@@ -204,6 +206,33 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) >= 2 && args[0] == "pm" {
 		switch args[1] {
+		case "propose":
+			r, err := a.runPMPropose(ctx, args[2:], cfg)
+			return r, "pm propose", err
+		case "card":
+			if err := validatePMCardArgs(args[2:]); err != nil {
+				return nil, "pm card", err
+			}
+			r, err := a.runPMCardRead(ctx, args[2:], cfg)
+			if err == nil {
+				finishPMCardRead(r)
+			}
+			return r, "pm card", err
+		case "context":
+			if a.Getenv("ANX_PM_TURN_ID") != "" || a.Getenv("ANX_PM_LEASE_TOKEN") != "" {
+				if err := validatePMContextArgs(args[2:]); err != nil {
+					return nil, "pm context", err
+				}
+				r, err := a.runPMCardRead(ctx, nil, cfg)
+				if err == nil {
+					finishPMCardRead(r)
+				}
+				return r, "pm context", err
+			}
+		}
+	}
+	if len(args) >= 2 && args[0] == "pm" {
+		switch args[1] {
 		case "install", "status", "uninstall":
 			result, err := a.runPMService(ctx, args[1], args[2:], cfg)
 			return result, "pm " + args[1], err
@@ -337,6 +366,13 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 }
 
 func workHelpText(topic string) (string, bool) {
+	if topic == "pm card" {
+		return "Usage: anx pm card <card-ref>\nRead any visible card in full inside a claimed PM turn.", true
+	}
+	if topic == "pm propose" {
+		return "Usage: anx pm propose <card-ref> (--status <backlog|ready|in_progress|blocked|review|done> | --note <text>) --why <reason> [--evidence <ref> ...]\nProposes for human approval in Inbox. done requires evidence. Identity and conversation come from the runner.", true
+	}
+
 	spec, exact := workCommands[topic]
 	if !exact && !isWorkCommandGroup(topic) {
 		return "", false
