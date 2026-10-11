@@ -30,7 +30,8 @@ func TestResourceAccessLargeDenialPrepareAndPMRoutes(t *testing.T) {
 	if _, err := db.Exec(`INSERT INTO hosts(id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at) VALUES('prepare-host','prepare-host','Public host','user','machine','[]','now'); INSERT INTO host_keys VALUES('prepare-key','prepare-host','public','now',NULL); INSERT INTO host_agents VALUES('prepare-host','reader',?,'adopted')`, reader.AgentID); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := newOnboardedPMRuntime(t, db, store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	agent := seedMachinePrincipalForLockoutTest(t, ctx, db, "prepare-pm", "prepare-pm-actor", "prepare-pm", "prepare-pm-token")
+	rt, err := newOnboardedPMRuntime(t, db, store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: agent.ActorID}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,17 +128,21 @@ func TestResourceAccessLargeDenialPrepareAndPMRoutes(t *testing.T) {
 		}
 	}
 	client := &http.Client{Timeout: 5 * time.Second}
-	for _, tc := range []struct{ base, path string }{
-		{env.server.URL, "/overview"},
-		{pmServer.URL, "/pm/context?work_ref=" + anyString(work["ref"])},
-		{pmServer.URL, "/pm/decisions?limit=20"},
+	for _, tc := range []struct{ base, path, token, actor string }{
+		{env.server.URL, "/overview", reader.AccessToken, reader.ActorID},
+		{pmServer.URL, "/pm/context?work_ref=" + anyString(work["ref"]), reader.AccessToken, reader.ActorID},
+		{pmServer.URL, "/pm/decisions?limit=20", reader.AccessToken, reader.ActorID},
+		// The designated PM must use the same bounded denial policy as humans.
+		{pmServer.URL, "/pm/context?limit=8", agent.AccessToken, agent.ActorID},
+		{pmServer.URL, "/pm/decisions?limit=8", agent.AccessToken, agent.ActorID},
+		{pmServer.URL, "/pm/actions?limit=8", agent.AccessToken, agent.ActorID},
 	} {
 		t.Run(tc.path, func(t *testing.T) {
 			var samples, denialSamples []time.Duration
 			for i := 0; i < 27; i++ {
 				// Pair with one fresh denial construction: large private graphs
 				// have legitimate root/closure cost under concurrent CI load.
-				fresh := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: reader.ActorID})
+				fresh := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: tc.actor})
 				baselineStart := time.Now()
 				if err := store.CheckResourceValues(fresh, []string{anyString(work["ref"])}); err != nil {
 					t.Fatal(err)
@@ -146,7 +151,7 @@ func TestResourceAccessLargeDenialPrepareAndPMRoutes(t *testing.T) {
 					denialSamples = append(denialSamples, time.Since(baselineStart))
 				}
 				req, _ := http.NewRequest("GET", tc.base+tc.path, nil)
-				req.Header.Set("Authorization", "Bearer "+reader.AccessToken)
+				req.Header.Set("Authorization", "Bearer "+tc.token)
 				start := time.Now()
 				resp, err := client.Do(req)
 				if err != nil {

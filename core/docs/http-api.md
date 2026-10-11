@@ -589,3 +589,34 @@ candidate rows; lifecycle filtering can leave a page empty while a cursor still
 continues. Cursors belong to the authenticated principal and inbox status.
 Workspace projection freshness retains the complete status and `thread_count`,
 with at most 100 thread details and `truncated` for additional threads.
+
+### PM read authority inventory
+
+Designation grants no new private-resource permissions. Direct PM reads use the
+same owner/inherited-reference policy as an ordinary agent, including generic
+card, thread, event, artifact, inbox and overview routes. Hidden records are
+filtered in SQL before pagination; point reads fail closed. These rules also
+apply when a client supplies a lease header to a non-turn route.
+
+| Routes (all methods unless specified)                                                                                    | Read authority                                                                                                                                                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /pm/context`                                                                                                        | Authenticated principal, ordinary visibility; 1–50 results.                                                                                                                                                                                                                |
+| `/pm/decisions`, `/pm/decisions/{id}`, `/pm/actions`, `/pm/actions/{id}`                                                 | Ordinary visibility, including inherited private evidence, receipts and live resolution summaries; collections cap at 200.                                                                                                                                                 |
+| `/pm/decisions/{id}/answer`, `/pm/decisions/{id}/dispatch`, `/pm/actions/{id}/reconcile`, `/pm/actions/{id}/acknowledge` | Ordinary resource visibility plus existing human approval/action checks, including returned records.                                                                                                                                                                       |
+| `/pm/conversations`, `/pm/conversations/{id}`, `/pm/conversations/{id}/messages`                                         | Conversation owner only, with ordinary resource visibility; history caps at 200.                                                                                                                                                                                           |
+| `GET /pm/turns/{id}`                                                                                                     | Owner with ordinary visibility, or selected responder presenting `X-ANX-PM-Lease-Token` for this live lease (matching finishing token for delivered/failed replays). Invalid or expired read credentials return not found without status disclosure. No token is returned. |
+| `POST /pm/turns/claim`                                                                                                   | Selected responder obtains one explicitly queued requester turn and its lease; not general resource access.                                                                                                                                                                |
+| `POST /pm/turns/{id}/context`, `POST /pm/turns/{id}/decisions`                                                           | Selected responder and live lease, then requester-bound context, asks, decisions, evidence and proposal writes. Both legacy context and card views retain this boundary.                                                                                                   |
+| `POST /pm/turns/{id}/heartbeat`, `/release`, `/complete`, `/fail`                                                        | Selected responder and matching lease before any turn content is returned; terminal replay requires the finishing token.                                                                                                                                                   |
+| `/pm/bindings`                                                                                                           | Existing human-only permission and ordinary resource visibility; collections cap at 200.                                                                                                                                                                                   |
+| `/pm/presence`, `/pm/connect`, `/pm/disconnect`                                                                          | Connection metadata only; connect/disconnect retain selected/candidate identity checks and return no card or conversation content.                                                                                                                                         |
+| `/pm/ingress/telegram`, `/pm/ingress/discord`                                                                            | Verified transport ingress, bound conversation owner; no general reader API.                                                                                                                                                                                               |
+
+Only the exact runner routes above may use the internal turn-envelope scope.
+A new route does not inherit that scope. The local runner includes its lease
+header on recovery reads; direct `pm turns get` without one is an owner read.
+No new database queries, workspace scans or ownership rebuilds are added by the
+route/lease checks: route dispatch is constant work, token checks examine one
+indexed turn, and existing scoped SQL, epoch-validated denial caches and page
+indexes remain responsible for resource visibility. Cold denial closure cost
+retains the existing authorization baseline documented in `performance.md`.

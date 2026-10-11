@@ -1970,7 +1970,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `cards`, `evidence`
 - Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMContextResponse`.
-- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Agent notes: Direct reads use ordinary principal visibility; PM designation grants no private access. Inside a claimed turn use requester-scoped context with its lease.
 
 ## `pm.conversations.create`
 
@@ -2191,7 +2191,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `cards`, `evidence`
 - Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMTurn`.
-- Agent notes: Only the requesting conversation actor can read this turn. Past-deadline open turns are failed before returning.
+- Agent notes: The conversation owner can read this turn. PM runners must send X-ANX-PM-Lease-Token; designation alone grants no private reads. Past-deadline open turns are failed before returning.
 
 ## `pm.turns.heartbeat`
 

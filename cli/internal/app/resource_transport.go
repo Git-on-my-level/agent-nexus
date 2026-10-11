@@ -159,7 +159,7 @@ func cleanArtifactOutputFilename(filename string) string {
 	return filename
 }
 
-func (a *App) invokeRawJSON(ctx context.Context, cfg config.Resolved, commandName string, method string, path string, body any) (*commandResult, error) {
+func (a *App) invokeRawJSON(ctx context.Context, cfg config.Resolved, commandName string, method string, path string, body any, extraHeaders ...map[string]string) (*commandResult, error) {
 	authCfg, err := a.cfgWithResolvedAuthToken(ctx, cfg)
 	if err != nil {
 		return nil, err
@@ -177,10 +177,16 @@ func (a *App) invokeRawJSON(ctx context.Context, cfg config.Resolved, commandNam
 	}
 	callCtx, cancel := httpclient.WithTimeout(ctx, authCfg.Timeout)
 	defer cancel()
+	headers := generatedHeaders(authCfg)
+	for _, extra := range extraHeaders {
+		for key, value := range extra {
+			headers[key] = value
+		}
+	}
 	resp, invokeErr := client.RawCall(callCtx, httpclient.RawRequest{
 		Method:  method,
 		Path:    path,
-		Headers: generatedHeaders(authCfg),
+		Headers: headers,
 		Body:    requestBody,
 	})
 	if invokeErr != nil {

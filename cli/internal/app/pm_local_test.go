@@ -3126,6 +3126,9 @@ func TestHandleClaimedTurnHeartbeat409CancelsHarness(t *testing.T) {
 			w.WriteHeader(http.StatusConflict)
 			io.WriteString(w, `{"error":{"code":"lease_mismatch","message":"lease token does not match"}}`)
 		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/pm/turns/"):
+			if got := r.Header.Get("X-ANX-PM-Lease-Token"); got != anyString(claimedTurn()["lease_token"]) {
+				t.Errorf("recovery lease header = %q", got)
+			}
 			mu.Lock()
 			gets++
 			mu.Unlock()

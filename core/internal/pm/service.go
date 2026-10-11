@@ -599,8 +599,12 @@ func newLeaseToken() string {
 	return hex.EncodeToString(b[:])
 }
 
-// GetTurn permits the conversation owner or configured workspace PM responder.
+// GetTurn permits the conversation owner. Runner reads require a lease.
 func (s *Service) GetTurn(ctx context.Context, p Principal, id string) (Turn, error) {
+	return s.GetTurnWithLease(ctx, p, id, "")
+}
+
+func (s *Service) GetTurnWithLease(ctx context.Context, p Principal, id, token string) (Turn, error) {
 	var t Turn
 	if err := s.store.get(ctx, "turn", id, &t); err != nil {
 		return Turn{}, err
@@ -608,9 +612,20 @@ func (s *Service) GetTurn(ctx context.Context, p Principal, id string) (Turn, er
 	if p.WorkspaceID != t.WorkspaceID {
 		return Turn{}, ErrForbidden
 	}
-	if p.ActorID == s.AgentActorID() {
+	if p.ActorID == s.AgentActorID() && p.ActorID != t.ActorID {
 		if err := s.authorize(ctx, p, "pm.respond", t.ConversationID); err != nil {
 			return Turn{}, err
+		}
+		if p.ActorID != t.AgentActorID {
+			return Turn{}, ErrForbidden
+		}
+		// A failed read credential must not reveal even terminal status.
+		if t.Status == Delivered || t.Status == Failed {
+			if err := terminalLeaseGuard(t, token); err != nil {
+				return Turn{}, ErrNotFound
+			}
+		} else if err := leaseGuard(t, token); err != nil {
+			return Turn{}, ErrNotFound
 		}
 	} else if _, err := s.conversation(ctx, p, t.ConversationID); err != nil {
 		return Turn{}, err
