@@ -11,20 +11,13 @@ import (
 
 // PM conversation history lives on canonical threads, events, and wake
 // artifacts. Protecting only /pm/ is insufficient: generic native routes must
-// hide those records from anyone who is not the conversation owner or the
-// selected PM agent. Missing identity fails closed (the resource looks absent).
+// hide those records from anyone who is not the conversation owner. Runner
+// access is confined to lease-validated PM routes. Missing identity fails closed.
 func pmThreadOwner(thread map[string]any) string {
 	if thread == nil {
 		return ""
 	}
 	return strings.TrimSpace(anyString(thread["pm_actor_id"]))
-}
-
-func pmAgentActorID(opts handlerOptions) string {
-	if opts.pmRuntime == nil {
-		return ""
-	}
-	return strings.TrimSpace(opts.pmRuntime.AgentActorID())
 }
 
 func canAccessPMThread(r *http.Request, opts handlerOptions, thread map[string]any) bool {
@@ -39,8 +32,7 @@ func canAccessPMThread(r *http.Request, opts handlerOptions, thread map[string]a
 	if principal.ActorID == owner {
 		return true
 	}
-	agent := pmAgentActorID(opts)
-	return agent != "" && principal.ActorID == agent
+	return false
 }
 
 func denyPMNotFound(w http.ResponseWriter, resource string) {

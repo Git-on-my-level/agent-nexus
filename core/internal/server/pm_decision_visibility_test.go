@@ -154,10 +154,14 @@ func TestPMDecisionRefSummariesRespectRequesterVisibility(t *testing.T) {
 		}
 	}
 
-	// The selected PM agent keeps its conversation access.
-	agentGot := summaryByRef(t, call("GET", "/pm/decisions/"+decision.ID, agent.AccessToken).Body.Bytes(), 3)
-	expect(t, agentGot, privateEventRef, "private instruction", true)
-	expect(t, agentGot, privateArtifactRef, "PM wake", true)
+	// PM designation does not grant private evidence access.
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/pm/decisions/"+decision.ID, nil)
+	req.Header.Set("Authorization", "Bearer "+agent.AccessToken)
+	rt.ServeHTTP(rr, req)
+	if rr.Code != 404 {
+		t.Fatalf("PM private decision: %d %s", rr.Code, rr.Body)
+	}
 
 	// Handle-addressed public evidence must not be falsely redacted.
 	live, err := store.GetArtifact(ctx, asString(publicArtifact["id"]))

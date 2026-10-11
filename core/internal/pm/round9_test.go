@@ -288,15 +288,17 @@ func TestRound9TurnReadAuthorizationAndRunner(t *testing.T) {
 		t.Fatal(err)
 	}
 	agent := Principal{WorkspaceID: p.WorkspaceID, ActorID: s.cfg.AgentActorID}
-	// PM can inspect any workspace turn, even before claiming it.
-	if _, err := s.GetTurn(ctx, agent, turn.ID); err != nil {
+	// PM designation cannot inspect a turn without its lease.
+	if _, err := s.GetTurn(ctx, agent, turn.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatal(err)
 	}
 	claimed := claimTestTurn(t, s, ctx, agent, turn.ID)
 	for _, caller := range []Principal{p, agent, {WorkspaceID: p.WorkspaceID, ActorID: "another-human", Human: true}, {WorkspaceID: p.WorkspaceID, ActorID: "another-agent"}, {WorkspaceID: "elsewhere", ActorID: agent.ActorID}} {
 		h := Handler{Service: s, Authenticate: func(*http.Request) (Principal, error) { return caller, nil }}
 		rr := httptest.NewRecorder()
-		h.ServeHTTP(rr, httptest.NewRequest("GET", "/pm/turns/"+turn.ID, nil))
+		req := httptest.NewRequest("GET", "/pm/turns/"+turn.ID, nil)
+		req.Header.Set("X-ANX-PM-Lease-Token", claimed.LeaseToken)
+		h.ServeHTTP(rr, req)
 		if caller != p && caller != agent {
 			if rr.Code != 403 {
 				t.Fatalf("unauthorized %d %s", rr.Code, rr.Body)
@@ -320,6 +322,9 @@ func TestRound9TurnReadAuthorizationAndRunner(t *testing.T) {
 	claimed.Revision++
 	if err := st.cas(ctx, "turn", turn.ID, claimed.Revision-1, claimed); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := s.GetTurnWithLease(ctx, agent, turn.ID, claimed.LeaseToken); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expired lease read: %v", err)
 	}
 	raw, err := json.Marshal(turnResponse(claimed, false))
 	if err != nil || strings.Contains(string(raw), "lease_owner") {

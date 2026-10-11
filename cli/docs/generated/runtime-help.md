@@ -3704,7 +3704,7 @@ Generated Help: pm context
 - Output: Returns `PMContextResponse`.
 - Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
-- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Agent notes: Direct reads use ordinary principal visibility; PM designation grants no private access. Inside a claimed turn use requester-scoped context with its lease.
 - Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
@@ -4524,7 +4524,7 @@ Generated Help: pm turns get
 - Output: Returns `PMTurn`.
 - Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
-- Agent notes: Only the requesting conversation actor can read this turn. Past-deadline open turns are failed before returning.
+- Agent notes: The conversation owner can read this turn. PM runners must send X-ANX-PM-Lease-Token; designation alone grants no private reads. Past-deadline open turns are failed before returning.
 - Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns heartbeat`, `pm turns release`
 
 Inputs:

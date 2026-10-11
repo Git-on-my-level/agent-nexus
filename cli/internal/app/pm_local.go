@@ -1319,7 +1319,7 @@ func (a *App) releaseTurnBestEffort(ctx context.Context, cfg config.Resolved, tu
 func (a *App) recoverLostLease(ctx, shutdownCtx context.Context, cfg config.Resolved, workDir string, turn map[string]any, lost error) (settled bool, retryHarness bool) {
 	turnID := anyString(turn["id"])
 	a.pmLog("pm serve: turn %s lease lost (%v); reading turn\n", turnID, lost)
-	got, err := a.invokeRawJSON(ctx, cfg, "pm turns get", "GET", "/pm/turns/"+url.PathEscape(turnID), nil)
+	got, err := a.invokeRawJSON(ctx, cfg, "pm turns get", "GET", "/pm/turns/"+url.PathEscape(turnID), nil, map[string]string{"X-ANX-PM-Lease-Token": anyString(turn["lease_token"])})
 	if err != nil {
 		a.pmLog("pm serve: turn %s get after lease loss failed: %v; releasing lease\n", turnID, err)
 		a.releaseTurnBestEffort(ctx, cfg, turn, workDir, "lease loss recovery failed")
@@ -1426,7 +1426,7 @@ func (a *App) handleFailedComplete(ctx, shutdownCtx context.Context, cfg config.
 		return a.failUndeliverableReply(ctx, shutdownCtx, cfg, workDir, turn, err), false
 	}
 	if terminalLeaseLost(err) {
-		got, getErr := a.invokeRawJSON(ctx, cfg, "pm turns get", "GET", "/pm/turns/"+url.PathEscape(turnID), nil)
+		got, getErr := a.invokeRawJSON(ctx, cfg, "pm turns get", "GET", "/pm/turns/"+url.PathEscape(turnID), nil, map[string]string{"X-ANX-PM-Lease-Token": anyString(turn["lease_token"])})
 		if getErr == nil {
 			current := commandResultBody(got)
 			if current != nil && turnIsTerminal(current) {

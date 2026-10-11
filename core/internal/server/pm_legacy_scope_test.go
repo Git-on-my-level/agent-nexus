@@ -11,7 +11,7 @@ import (
 )
 
 // This uses only pre-PR APIs so it can also be run against origin/main.
-// Direct selected-PM reads have PM authority; legacy turn context has reader authority.
+// Direct selected-PM reads have ordinary authority; leased turns use the requester.
 func TestPMLegacyAgentAndTurnReaderScopes(t *testing.T) {
 	ctx := context.Background()
 	env := newPMStoreTestEnv(t)
@@ -54,8 +54,8 @@ func TestPMLegacyAgentAndTurnReaderScopes(t *testing.T) {
 		}
 		return rr.Body.String()
 	}
-	if !strings.Contains(request("GET", "/pm/context?limit=8", nil), "OtherPrincipalPrivateSecret") {
-		t.Fatal("expected selected PM authority on direct legacy context")
+	if strings.Contains(request("GET", "/pm/context?limit=8", nil), "OtherPrincipalPrivateSecret") {
+		t.Fatal("direct PM context escaped ordinary authority")
 	}
 	if strings.Contains(request("POST", "/pm/turns/"+turn.ID+"/context", map[string]any{"lease_token": claim.LeaseToken, "limit": 8}), "OtherPrincipalPrivateSecret") {
 		t.Fatal("legacy turn context escaped reader authority")

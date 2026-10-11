@@ -245,8 +245,10 @@ GitHub/Multica/SSH source writes stay unavailable until a dedicated authorized
 executor is supplied.
 
 Native `/threads`, `/events`, `/artifacts`, and inbox routes hide PM conversation
-records from anyone who is not the conversation owner or the selected PM agent.
-Missing identity fails closed (the resource looks absent).
+records from anyone who is not the conversation owner. PM designation grants
+no extra read authority. Runner context requires a claimed turn lease and uses
+the requesting owner's resource visibility. Missing identity fails closed
+(the resource looks absent).
 
 Channel ingress is webhook/interaction only: `POST /pm/ingress/telegram` and
 `POST /pm/ingress/discord`. Configure `ANX_PM_TELEGRAM_WEBHOOK_SECRET` (at least

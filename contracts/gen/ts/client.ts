@@ -8772,6 +8772,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/pm/context",
     "operation_id": "pmContext",
     "summary": "Read bounded authorized PM context",
+    "description": "Direct reads use the authenticated principal's ordinary resource visibility. PM designation grants no additional access to private cards, asks, decisions or evidence. Use a claimed turn and its lease for requester-scoped context.",
     "why": "Read bounded authorized PM context.",
     "input_mode": "none",
     "streaming": {
@@ -8796,7 +8797,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+    "agent_notes": "Direct reads use ordinary principal visibility; PM designation grants no private access. Inside a claimed turn use requester-scoped context with its lease.",
     "adjacent_commands": [
       "pm.actions.acknowledge",
       "pm.actions.get",
@@ -10118,7 +10119,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/pm/turns/{turn_id}",
     "operation_id": "pmTurnsGet",
     "summary": "Read a PM conversation turn",
-    "description": "The requesting actor with conversation read permission or the configured PM actor with pm.respond permission may read the turn in its workspace. Active lease_owner is the runner ID; lease_token is returned only by claim.",
+    "description": "The requesting actor with conversation read permission may read the turn. The configured PM actor must supply X-ANX-PM-Lease-Token with its live turn lease or the matching finishing lease for a terminal replay. Missing, invalid or expired read leases make the turn appear not found, without exposing its status. PM designation alone grants no conversation read authority. Active lease_owner is the runner ID; lease_token is returned only by claim.",
     "why": "Read a PM conversation turn.",
     "input_mode": "none",
     "streaming": {
@@ -10143,7 +10144,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Only the requesting conversation actor can read this turn. Past-deadline open turns are failed before returning.",
+    "agent_notes": "The conversation owner can read this turn. PM runners must send X-ANX-PM-Lease-Token; designation alone grants no private reads. Past-deadline open turns are failed before returning.",
     "path_params": [
       "turn_id"
     ],

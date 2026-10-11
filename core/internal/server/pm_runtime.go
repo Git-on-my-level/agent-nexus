@@ -294,7 +294,7 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		deps.Dispatch = bridge.Dispatch
 	}
 	deps.ReadContextPage = func(ctx context.Context, p pm.Principal, ref, query, cursor string, limit int) (pm.ContextPage, error) {
-		ctx = primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: p.ActorID, PMActorID: selectedActor()})
+		ctx = primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: p.ActorID})
 		if ref != "" {
 			if cursor != "" {
 				return pm.ContextPage{}, pm.ErrContextWorkCursor
@@ -330,7 +330,7 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		return pm.ContextPage{Items: items, NextCursor: page.NextCursor}, nil
 	}
 	deps.BindRequesterContext = func(ctx context.Context, p pm.Principal) context.Context {
-		return primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: p.ActorID, PMActorID: selectedActor()})
+		return primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: p.ActorID})
 	}
 	deps.BeginCardRead = func(ctx context.Context, _ pm.Principal) (context.Context, func(), error) {
 		return store.BeginPMCardRead(ctx)
@@ -520,7 +520,7 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		// Decision summaries inherit the requesting actor's resource
 		// visibility. Decisions are workspace-readable while the conversations
 		// behind their evidence may not be; see pm_decision_visibility.go.
-		resolved.TitleOrSummary = redactedDecisionSummary(ctx, store, selectedActor(), resolved)
+		resolved.TitleOrSummary = redactedDecisionSummary(ctx, store, p.ActorID, resolved)
 		return pm.ResolutionRef{Ref: resolved.Ref, Kind: resolved.Kind, TitleOrSummary: resolved.TitleOrSummary, Exists: resolved.Exists}, err
 	}
 	service, err = pm.NewService(ps, cfg.PM, deps)
@@ -539,7 +539,17 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		if _, ok := authenticatePrincipalFromHeader(w, r, handlerOptions{authStore: authStore}, true); !ok {
 			return
 		}
-		attachResourceAccessScope(r, handlerOptions{primitiveStore: store, pmRuntime: &PMRuntime{cfg: cfg, Service: service}})
+		attachResourceAccessScope(r, handlerOptions{primitiveStore: store})
+		// Only runner operations may load another owner's turn envelope. Their
+		// service methods validate the selected actor and lease before returning
+		// content; context and proposals then rebind to the requesting principal.
+		// Ordinary /pm reads and all generic resource routes keep ordinary scope.
+		if pmRunnerRequest(r) {
+			p, _ := cachedAuthenticatedPrincipal(r)
+			if p != nil && p.ActorID == selectedActor() {
+				*r = *r.WithContext(primitives.WithAccessScope(r.Context(), primitives.AccessScope{ActorID: p.ActorID, PMActorID: selectedActor()}))
+			}
+		}
 		if !authorizeResourceSelectors(w, r) {
 			return
 		}

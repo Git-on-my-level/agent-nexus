@@ -91,8 +91,10 @@ HTTP authentication installs an immutable principal scope for both regular and
 stream routes. `primitives.WithAccessScope` and `CanAccessResource` define one
 record-visibility policy: backing threads inherit their canonical owner, cards
 inherit their board, and evidence inherits every referenced private resource.
-The selected PM agent and the private owner retain access; unrelated humans,
-agents, and anonymous development readers do not.
+Only the private owner retains ordinary access; PM designation grants no extra
+read authority. Runner endpoints may load turn envelopes solely to validate a
+claim/lease, then bind business reads and proposals to the requesting owner.
+Unrelated humans, agents, and anonymous development readers remain excluded.
 
 Canonical text/JSON, event payloads, notification triggers, plans, work metadata,
 observations/evidence and runs participate in inherited ownership. Metadata and

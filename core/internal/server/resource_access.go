@@ -12,7 +12,7 @@ import (
 type resourceAccessCheckKey struct{}
 
 func attachResourceAccessScope(r *http.Request, opts handlerOptions) {
-	scope := primitives.AccessScope{PMActorID: pmAgentActorID(opts)}
+	scope := primitives.AccessScope{}
 	if principal, ok := cachedAuthenticatedPrincipal(r); ok {
 		scope.ActorID = principal.ActorID
 	}

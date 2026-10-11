@@ -163,7 +163,7 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			out, err = s.BindChannel(ctx, p, in)
 		}
 	case len(path) == 2 && path[0] == "turns" && r.Method == http.MethodGet:
-		out, err = s.GetTurn(ctx, p, path[1])
+		out, err = s.GetTurnWithLease(ctx, p, path[1], r.Header.Get("X-ANX-PM-Lease-Token"))
 	case len(path) == 3 && path[0] == "turns" && path[2] == "context" && r.Method == http.MethodPost:
 		in := TurnContextInput{Limit: 20}
 		if err = decode(&in); err == nil {
@@ -225,6 +225,14 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// idempotent message replays. Only the runner claim returns credentials.
 	switch value := out.(type) {
 	case Decision:
+		if len(path) == 3 && path[0] == "turns" && path[2] == "decisions" {
+			// Proposal validation already established this conversation owner.
+			// Keep live response evidence inside that same requester boundary.
+			p = Principal{WorkspaceID: value.WorkspaceID, ActorID: value.ActorID, Human: true}
+			if s.deps.BindRequesterContext != nil {
+				ctx = s.deps.BindRequesterContext(ctx, p)
+			}
+		}
 		out = s.decisionResponse(ctx, p, value)
 	case Page[Decision]:
 		items := make([]any, 0, len(value.Items))
