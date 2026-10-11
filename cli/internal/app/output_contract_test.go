@@ -187,6 +187,17 @@ func TestOutdatedRepairAndExitCode(t *testing.T) {
 	}
 }
 
+func TestAccessRequestNextActionAwaitsPendingRequest(t *testing.T) {
+	pending := deriveNextActions("auth access-requests request", nil, map[string]any{"request": map[string]any{"id": "req-1", "status": "pending"}})
+	if len(pending) != 1 || strings.Join(pending[0].Argv, " ") != "anx await access-request:req-1" || pending[0].Label != "Wait for decision" {
+		t.Fatalf("pending next action: %#v", pending)
+	}
+	decided := deriveNextActions("auth access-requests request", nil, map[string]any{"request": map[string]any{"id": "req-1", "status": "approved"}})
+	if len(decided) != 0 {
+		t.Fatalf("decided request should not await: %#v", decided)
+	}
+}
+
 func TestUnknownDiagnosticSubcommandRepair(t *testing.T) {
 	t.Parallel()
 	actions := deriveErrorActions("debug events", errnorm.Usage("unknown_subcommand", `unknown events subcommand "lsit"`))

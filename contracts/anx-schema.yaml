@@ -1252,6 +1252,7 @@ access_requests:
     - The existing Inbox respond flow accepts approved or rejected for access requests; answered and acknowledged return 400 invalid_request without any response event or mutation.
     - Pending counts include requests and unexpired host enrollments awaiting completion (pending or approved).
     - Inbox correlation is server-owned in the persisted access-request row. Generic attention-event payload fields never authorize grants or choose their target.
+    - The requesting agent awaits access-request:<id> through the existing ask subscription and outcome stream. Approved exits 0 and denied exits 9. Another agent cannot read that request by typed ref, event id, or public event handle. The decision reuses the ask answer wake.
 
 visual_report_review:
   provenance_classes: [live, authored]

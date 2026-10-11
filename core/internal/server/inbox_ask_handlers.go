@@ -299,6 +299,11 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 		"mode":            target.Mode,
 		"quiet_window_ns": int64(opts.answerWakeQuietWindow),
 	}
+	if accessStore, ok := opts.primitiveStore.(*primitives.Store); ok && notifyRequested {
+		if request, err := accessStore.AccessRequestForEvent(r.Context(), sourceEventID); err == nil {
+			initialNotify["related_refs"] = []string{"access-request:" + request.ID}
+		}
+	}
 	storedResponse, replayed, err := responseStore.AppendHumanAttentionResponse(r.Context(), actorID, sourceEventID, inboxItemID, req.IdempotencyKey, requestHash, responseEvent, initialNotify)
 	if err != nil {
 		if errors.Is(err, primitives.ErrInvalidAccessDecision) || errors.Is(err, auth.ErrInvalidRequest) || errors.Is(err, auth.ErrAgentNotFound) {

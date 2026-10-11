@@ -47,6 +47,56 @@ func (s *Store) GetAccessRequest(ctx context.Context, id string) (AccessRequest,
 	return scanAccessRequest(s.db.QueryRowContext(ctx, `SELECT `+accessRequestColumns+` FROM access_requests WHERE id=?`, id))
 }
 
+// ResolveAwaitableAsk maps an await target onto its human-attention event.
+// access-request:<id> is readable only by the requesting agent. Every other
+// form — raw event id, event:<id>, public handle, event:<handle> — is resolved
+// to the canonical event id before the access-request check. That event is
+// readable by the requesting agent or a human; any other agent gets not found.
+// Ordinary asks are unchanged.
+// Lookups are point reads: events.handle (unique index) or events.id, then the
+// access_requests primary key or the unique request_event_id index.
+func (s *Store) ResolveAwaitableAsk(ctx context.Context, actorID, principalKind, ref string) (eventID, accessRequestRef string, err error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" || strings.Contains(ref, "/") {
+		return "", "", ErrNotFound
+	}
+	if strings.HasPrefix(ref, "access-request:") {
+		id := strings.TrimPrefix(ref, "access-request:")
+		if id == "" || strings.Contains(id, ":") {
+			return "", "", ErrNotFound
+		}
+		request, err := s.GetAccessRequest(ctx, id)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return "", "", ErrNotFound
+			}
+			return "", "", err
+		}
+		if principalKind != string(auth.PrincipalKindAgent) || actorID == "" || actorID != request.ActorID {
+			return "", "", ErrNotFound
+		}
+		return strings.TrimPrefix(request.RequestEventRef, "event:"), "access-request:" + request.ID, nil
+	}
+	resolved, err := resolveResourceRef(ctx, s.db, ResourceRefInput{Type: "event", Ref: ref})
+	if err != nil {
+		if errors.Is(err, ErrNotFound) || errors.Is(err, ErrInvalidResourceRef) {
+			return "", "", ErrNotFound
+		}
+		return "", "", err
+	}
+	request, err := s.AccessRequestForEvent(ctx, resolved.ID)
+	if errors.Is(err, ErrNotFound) {
+		return resolved.ID, "", nil
+	}
+	if err != nil {
+		return "", "", err
+	}
+	if principalKind == string(auth.PrincipalKindHuman) || (actorID != "" && actorID == request.ActorID) {
+		return strings.TrimPrefix(request.RequestEventRef, "event:"), "access-request:" + request.ID, nil
+	}
+	return "", "", ErrNotFound
+}
+
 func (s *Store) ListPendingAccessRequests(ctx context.Context) ([]AccessRequest, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT `+accessRequestColumns+` FROM access_requests WHERE status='pending' ORDER BY created_at,id`)
 	if err != nil {

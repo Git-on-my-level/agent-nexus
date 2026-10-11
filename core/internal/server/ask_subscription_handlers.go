@@ -27,6 +27,12 @@ func handleAskSubscription(w http.ResponseWriter, r *http.Request, opts handlerO
 		writeError(w, 503, "primitives_unavailable", "subscriptions unavailable")
 		return
 	}
+	if strings.TrimSpace(askRef) != "" {
+		askRef, _, ok = resolveAwaitableAsk(w, r, opts, askRef)
+		if !ok {
+			return
+		}
+	}
 	var in primitives.AskSubscriptionInput
 	if !decodeJSONBody(w, r, &in) {
 		return
@@ -53,6 +59,10 @@ func handleAskDeliveryReceipt(w http.ResponseWriter, r *http.Request, opts handl
 	store, ok := opts.primitiveStore.(askSubscriptionStore)
 	if !ok {
 		writeError(w, 503, "primitives_unavailable", "subscriptions unavailable")
+		return
+	}
+	askRef, _, ok = resolveAwaitableAsk(w, r, opts, askRef)
+	if !ok {
 		return
 	}
 	var in struct {

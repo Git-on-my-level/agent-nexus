@@ -151,6 +151,55 @@ func TestAwaitOutcomesTimeoutAndReconnect(t *testing.T) {
 	}
 }
 
+func TestAwaitAccessRequestUsesTypedRefAndExitCodes(t *testing.T) {
+	for _, tc := range []struct {
+		name, outcome string
+		wantExit      int
+	}{
+		{"approved", "approved", 0},
+		{"denied", "rejected", 9},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var subscribed, streamed string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch {
+				case r.URL.Path == "/asks/access-request:req-1/subscriptions" || r.URL.Path == "/asks/access-request:req-1/delivery":
+					subscribed = r.URL.Path
+					fmt.Fprint(w, `{"id":"sub-1"}`)
+				case r.URL.Path == "/stream/asks/access-request:req-1":
+					streamed = r.URL.Path
+					w.Header().Set("Content-Type", "text/event-stream")
+					payload := fmt.Sprintf(`{"status":"answered","access_request_ref":"access-request:req-1","response":{"response_text":"Access request %s","outcome":%q,"responding_actor_id":"human-1"}}`, tc.name, tc.outcome)
+					fmt.Fprintf(w, "event: outcome\ndata: %s\n\n", payload)
+				default:
+					t.Errorf("unexpected path %s", r.URL.Path)
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+			a, out := dailyTestApp(t, server.URL)
+			exit := a.Run([]string{"--json", "--as", "worker", "await", "access-request:req-1", "--timeout", "2s"})
+			if exit != tc.wantExit {
+				t.Fatalf("exit=%d want=%d output=%s", exit, tc.wantExit, out.String())
+			}
+			if subscribed == "" || streamed == "" {
+				t.Fatalf("typed ref was rewritten: subscribed=%q streamed=%q", subscribed, streamed)
+			}
+			doc := dailyJSON(t, out)
+			if tc.wantExit == 0 && anyString(asMap(doc["result"])["outcome"]) != "approved" {
+				t.Fatalf("approved result: %s", out.String())
+			}
+			if tc.wantExit == 9 {
+				errDoc := asMap(doc["error"])
+				if anyString(errDoc["message"]) != "access request denied" {
+					t.Fatalf("denied message: %s", out.String())
+				}
+			}
+		})
+	}
+}
+
 func TestAwaitAnswersReturnsUnreadAnswerBatch(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
