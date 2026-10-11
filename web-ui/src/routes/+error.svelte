@@ -2,6 +2,8 @@
   import { dev } from "$app/environment";
   import { page } from "$app/stores";
 
+  import { technicalTroubleshootingEnabled } from "$lib/extensions/supportLink.js";
+
   import Button from "$lib/components/Button.svelte";
   import {
     CALLBACK_COPY,
@@ -238,7 +240,7 @@
       </details>
     {/if}
 
-    {#if dev && !isCallbackSurface && !friendly}
+    {#if technicalTroubleshootingEnabled && !isCallbackSurface && !friendly}
       <details
         class="mt-6 rounded-md border border-line bg-bg-soft p-4 text-left"
       >

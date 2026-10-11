@@ -1,3 +1,6 @@
+// Self-host operators can troubleshoot their own backend in any build.
+export const technicalTroubleshootingEnabled = true;
+
 export function resolveHostedSupportUrl(configured) {
   try {
     const parsed = new URL(String(configured ?? "").trim());
