@@ -4,3 +4,7 @@ build
 coverage
 playwright-report
 test-results
+
+# Generated mirrors. The commit hook byte-compares these against a fresh
+# `contract-gen` run, so reflowing them is drift.
+src/lib/generated

@@ -234,6 +234,46 @@ function stateLabel(state) {
 }
 
 /**
+ * Does the reason say anything the badge does not?
+ *
+ * Core answers "why is this card in this state" for every card, and for a
+ * card with no plan the only honest answer is the state itself: it sends
+ * "The card is marked Backlog." beside a badge reading `Backlog`. At header
+ * density that printed the same word twice, once as a badge and once as a
+ * sentence about the badge. A reason that adds a cause — "waiting on review",
+ * "overdue" — still earns its line.
+ *
+ * Compared on words rather than on core's exact sentence, so the same
+ * judgement survives a reworded reason and a translated label.
+ */
+function reasonAddsToLabel(reason, label) {
+  const words = (value) =>
+    String(value ?? "")
+      .toLocaleLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .trim()
+      .split(" ")
+      .filter(Boolean);
+  const body = words(reason);
+  if (!body.length) return false;
+  const name = new Set(words(label));
+  // "the", "card", "is", "marked" carry nothing on their own; a reason built
+  // only from those and the label's own words is the label again.
+  const filler = new Set([
+    "the",
+    "a",
+    "an",
+    "this",
+    "card",
+    "is",
+    "was",
+    "marked",
+    "currently",
+  ]);
+  return body.some((word) => !filler.has(word) && !name.has(word));
+}
+
+/**
  * @param {object|null|undefined} raw the `status` or `set_status` part
  * @param {string} [sourceStatus] the source's own word for this state
  *
@@ -258,10 +298,11 @@ function statusPart(raw, sourceStatus = "") {
     given ||
     stateLabel(state);
   if (!state && !label) return null;
+  const reason = asText(raw?.reason);
   return {
     state,
     label,
-    reason: asText(raw?.reason),
+    reason: reasonAddsToLabel(reason, label) ? reason : "",
     since: asText(raw?.since),
     rank: statusRank(state),
     ...(STATUS_PRESENTATION[state] ?? NEUTRAL),

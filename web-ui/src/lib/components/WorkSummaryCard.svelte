@@ -124,6 +124,21 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
+  /*
+   * Phone density: 18px of padding and 12px of gap on a 17rem card spends
+   * about a fifth of its height on air, and a column of them is most of a
+   * scroll. The card keeps its shape and loses the margin.
+   */
+  @media (max-width: 640px) {
+    .card {
+      gap: 9px;
+      padding: 13px 14px;
+      border-radius: 10px;
+    }
+    .card-title {
+      font-size: 14.5px;
+    }
+  }
   .card-needs {
     justify-self: start;
     padding: 1px 7px;

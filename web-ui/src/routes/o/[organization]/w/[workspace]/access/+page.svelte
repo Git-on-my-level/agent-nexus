@@ -737,10 +737,9 @@
 {#if !canManageAccess}
   <div class="space-y-4">
     <div>
+      <!-- No subtitle: "Machines, people and invitations for this
+           workspace" names the sections directly under it. -->
       <h1 class="text-title text-fg">Access</h1>
-      <p class="mt-0.5 hidden text-meta text-fg-muted sm:block">
-        Machines, people and invitations for this workspace
-      </p>
     </div>
     <div
       class="rounded-md border border-line bg-bg-soft px-4 py-10 text-center text-meta text-fg-muted"
@@ -759,10 +758,9 @@
 {:else}
   <div class="space-y-6 sm:space-y-8">
     <div>
+      <!-- No subtitle: "Machines, people and invitations for this
+           workspace" names the sections directly under it. -->
       <h1 class="text-title text-fg">Access</h1>
-      <p class="mt-0.5 hidden text-meta text-fg-muted sm:block">
-        Machines, people and invitations for this workspace
-      </p>
     </div>
 
     {#if pageError}

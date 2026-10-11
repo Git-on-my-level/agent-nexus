@@ -11,7 +11,6 @@
     withReportDefaults,
   } from "$lib/reportProvenance.js";
   import { getPanelFreshness } from "$lib/visualReports.js";
-  import Time from "$lib/time/Time.svelte";
   import AnxRefPreview from "$lib/components/AnxRefPreview.svelte";
   import {
     collectPageRefs,
@@ -29,10 +28,24 @@
     documentId = "",
     revisionRef = "",
     compact = false,
+    /**
+     * The heading the surrounding page already prints, when it prints one.
+     * A report whose title matches it does not print it again.
+     */
+    documentTitle = "",
     previewObservations = null,
   } = $props();
+  const plain = (value) =>
+    String(value ?? "")
+      .trim()
+      .toLocaleLowerCase();
+  let titleShown = $derived(
+    Boolean(report.title) && plain(report.title) !== plain(documentTitle),
+  );
+  let headingShown = $derived(
+    titleShown || (!compact && Boolean(report.summary)),
+  );
   let liveObservations = $state(new Map());
-  let hasLive = $derived(report.panels.some(isLivePanel));
   let observedPanels = $derived(
     report.panels.map((panel) =>
       withLiveObservation(
@@ -370,21 +383,35 @@
 </script>
 
 <section class="visual-report" aria-label="Visual report">
-  <header class="report-heading">
-    <div>
-      {#if !compact}<p class="report-kicker">
-          Visual report <span>· v{report.schema_version}</span>
-        </p>{/if}
-      <h2>{report.title}</h2>
-      {#if !compact}<p class="report-summary">{report.summary}</p>{/if}
-    </div>
-    {#if !compact}<div class="report-snapshot">
-        <span class="report-snapshot-dot" aria-hidden="true"></span><span
-          >{hasLive ? "Live workspace + snapshots" : "Snapshot, not live"}<br
-          /><Time value={report.generated_at} /></span
-        >
-      </div>{/if}
-  </header>
+  <!--
+    What this header dropped, and why.
+
+    The kicker read "VISUAL REPORT · V1" — a schema version, above a document
+    whose reader is a CEO. The corner carried "Live workspace + snapshots"
+    over "1 h ago", which is the whole report claiming a freshness that every
+    panel below already states for itself, in a one-line badge, more
+    accurately. And on a document page the title was printed twice: once as
+    the page's own `h1` and again here, directly under it.
+  -->
+  {#if headingShown}
+    <header class="report-heading">
+      <div>
+        {#if titleShown}<h2>{report.title}</h2>{/if}
+        {#if !compact && report.summary}<p class="report-summary">
+            {report.summary}
+          </p>{/if}
+      </div>
+    </header>
+  {/if}
+  {#if !titleShown && report.title}
+    <!--
+      The outline still needs the level the panels hang off: without an `h2`
+      between the page's `h1` and each panel's `h3`, a screen reader jumps two
+      levels and the heading order is wrong. Printing it twice was the visual
+      problem, not the semantic one.
+    -->
+    <h2 class="sr-only">{report.title}</h2>
+  {/if}
 
   {#if !compact && (!report.layout || report.projects.length > 1)}
     <div class="report-projects" aria-label="Project overview">
@@ -483,11 +510,11 @@
       >
     </div>
   {/if}
-  {#if !compact}<p class="report-footnote">
-      {hasLive
-        ? "Live panels refresh from workspace data · Authored snapshots retain their observation time"
-        : "Agent-assembled report · Source-linked claims · No automatic source refresh"}
-    </p>{/if}
+  <!--
+    No footnote. "Live panels refresh from workspace data · Authored snapshots
+    retain their observation time" was a sentence about how panels work,
+    printed under every report; each panel says which it is on its own chip.
+  -->
 </section>
 
 <!-- One preview layer for every chip in this report. -->
@@ -506,28 +533,17 @@
     justify-content: space-between;
     align-items: flex-start;
     gap: 20px;
-    padding-bottom: 24px;
+    padding-bottom: 16px;
   }
   .report-heading > div:first-child {
     flex: 1;
     min-width: min(100%, 240px);
-  }
-  .report-kicker {
-    color: var(--accent-text);
-    text-transform: uppercase;
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.14em;
-  }
-  .report-kicker span {
-    color: var(--fg-muted);
   }
   .report-heading h2 {
     font-size: 25px;
     font-weight: 600;
     line-height: 1.25;
     letter-spacing: -0.04em;
-    margin-top: 10px;
     overflow-wrap: anywhere;
   }
   .report-summary {
@@ -535,22 +551,9 @@
     font-size: 12px;
     line-height: 1.7;
     max-width: 650px;
+  }
+  .report-heading h2 + .report-summary {
     margin-top: 10px;
-  }
-  .report-snapshot {
-    display: flex;
-    gap: 8px;
-    color: var(--fg-muted);
-    font-size: 10px;
-    line-height: 1.8;
-    padding-top: 2px;
-  }
-  .report-snapshot-dot {
-    width: 6px;
-    height: 6px;
-    border: 1px solid var(--fg-muted);
-    border-radius: 50%;
-    margin-top: 6px;
   }
   .report-projects {
     display: grid;
@@ -633,12 +636,6 @@
   }
   .report-layout-remainder {
     margin-top: 24px;
-  }
-  .report-footnote {
-    text-align: center;
-    color: var(--fg-muted);
-    font-size: 10px;
-    padding: 20px 0 4px;
   }
   .report-empty {
     padding: 40px 16px;

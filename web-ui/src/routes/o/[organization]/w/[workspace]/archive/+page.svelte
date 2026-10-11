@@ -75,9 +75,9 @@
 
 <svelte:head><title>Archive · Agent Nexus</title></svelte:head>
 <WorkspacePageShell>
-  <WorkspacePageHeader title="Archive"
-    >{#snippet subtitle()}Archived work and context remain available here.{/snippet}</WorkspacePageHeader
-  >
+  <!-- No subtitle: "Archived work and context remain available here" under a
+       heading reading "Archive" is the heading again. -->
+  <WorkspacePageHeader title="Archive" />
   {#if error}<StateError
       title="Archive is unavailable"
       message={error}

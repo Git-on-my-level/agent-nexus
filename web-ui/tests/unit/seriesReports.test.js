@@ -33,7 +33,13 @@ describe("series observations", () => {
     const panel = withLiveObservation(definition(), observation());
     render(SeriesReportPanel, { panel, freshness: "current" });
     expect(screen.getByText(/^20$/)).toBeTruthy();
-    expect(screen.getByText(/Adapter: github/)).toBeTruthy();
+    // Adapter, host and resolution are one tooltip on the series name now,
+    // not a four-line fold under every panel.
+    expect(
+      screen
+        .getByRole("button", { name: /Where this number comes from/ })
+        .getAttribute("data-tooltip"),
+    ).toMatch(/Pushed by github on fleet/);
     expect(screen.queryByText(/As of/)).toBeNull();
   });
   it.each(["stale", "unavailable", "loading"])(

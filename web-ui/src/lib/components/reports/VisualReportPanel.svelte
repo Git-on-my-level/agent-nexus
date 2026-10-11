@@ -83,6 +83,14 @@
     illustrative: "Illustrative example",
   };
   let provenance = $derived(panelProvenance(panel, freshness, now));
+  let eyebrow = $derived.by(() => {
+    const label = typeLabels[panel.type] ?? "Panel";
+    const same = (value) =>
+      String(value ?? "")
+        .trim()
+        .toLocaleLowerCase();
+    return same(label) === same(panel.title) ? "" : label;
+  });
   let linkedSources = $derived(
     sources.filter((source) => panel.source_ids.includes(source.id)),
   );
@@ -118,8 +126,15 @@
 >
   <header class="report-panel-header">
     <div class="min-w-0">
-      <p class="report-eyebrow">{typeLabels[panel.type] ?? "Panel"}</p>
-      <h3 class="mt-1 text-meta font-semibold text-fg">{panel.title}</h3>
+      <!--
+        The eyebrow names the kind of panel; it is dropped when the title
+        already does. "NEEDS AN ANSWER" over a panel called "Needs an answer"
+        is the heading in small caps.
+      -->
+      {#if eyebrow}<p class="report-eyebrow">{eyebrow}</p>{/if}
+      <h3 class="text-meta font-semibold text-fg" class:mt-1={eyebrow}>
+        {panel.title}
+      </h3>
     </div>
     <div class="report-panel-marks">
       <!--
@@ -690,6 +705,30 @@
     background: var(--accent-solid);
     height: 100%;
     border-right: 2px solid var(--accent-text);
+  }
+  /*
+   * Phone density. A panel on a 390px screen spent 32px of vertical padding
+   * on its header and another 32px on its body before a single value, and
+   * three of those stacked put one chart on a screen. The frame recedes; the
+   * chart keeps its size.
+   */
+  @media (max-width: 640px) {
+    .report-panel-header,
+    .report-panel-body,
+    .report-evidence-detail {
+      padding: 10px 12px;
+    }
+    .report-panel-footer {
+      padding: 8px 12px;
+    }
+    .report-panel[data-density="compact"] .report-panel-header,
+    .report-panel[data-density="compact"] .report-panel-body,
+    .report-panel[data-density="compact"] .report-panel-footer {
+      padding: 8px 10px;
+    }
+    .report-unavailable {
+      padding: 14px 10px;
+    }
   }
   .report-artifact-excerpt {
     margin: 16px 0;

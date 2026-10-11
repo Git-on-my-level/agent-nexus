@@ -125,9 +125,7 @@
     class="w-fit text-micro text-accent-text hover:underline"
     href={workspaceHref("/tasks")}>← Tasks</a
   >
-  <WorkspacePageHeader title="New task"
-    >{#snippet subtitle()}Say what must be true when it is done.{/snippet}</WorkspacePageHeader
-  >
+  <WorkspacePageHeader title="New task" />
   {#if error}<StateError message={error} />{/if}
   {#if loading}<p role="status" class="text-fg-muted">Loading…</p>{:else}
     <form

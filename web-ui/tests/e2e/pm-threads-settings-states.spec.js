@@ -333,6 +333,18 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(
         page.getByText("Two commitments are blocked", { exact: false }),
       ).toBeVisible();
+      /*
+       * This fixture has older turns behind a cursor, so the loaded
+       * `turns[0]` is not the first question and an echo cannot be ruled
+       * out. The page stays "Ask PM" rather than promoting what may be a
+       * truncated copy of a question nobody can see — and it is certainly
+       * not printed a second time under the header, which is what it used
+       * to do.
+       */
+      await expect(page.getByRole("heading", { name: "Ask PM" })).toBeVisible();
+      await expect(page.locator(".pm-head")).not.toContainText(
+        "Vendor reconciliation",
+      );
       await expect(
         page.getByRole("list", { name: "Decisions proposed in this reply" }),
       ).toBeVisible();
@@ -756,6 +768,135 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(page.getByText(/anx topics restore/)).toBeVisible();
       await expectCleanLayout(page, "trashed thread notice", bothEnds);
       await expectNoClippedContent(page, "trashed thread notice");
+    });
+  });
+}
+
+/**
+ * The reply's sources must stay above the composer.
+ *
+ * Five refs under an answer wrapped to three rows of chips, and the last row
+ * sat behind the composer — the thread had scrolled to what was then its
+ * bottom, so it did not even offer "Jump to latest": the last source was
+ * simply gone. Two things keep it readable now. The row is bounded, so it
+ * does not wrap in the first place; and opening the `+N` grows the thread
+ * under a reader who is already at the bottom, which re-pins it.
+ */
+const SOURCE_REFS = [
+  "card:release",
+  "card:a-very-long-card-handle-that-keeps-going-and-going-0123456789",
+  "document:release-runbook",
+  "card:agents-cannot-wait-on-their-own-access-request",
+  "card:the-composer-must-not-eat-the-last-row-of-chips",
+];
+
+/** Where the thread can actually be read: above the composer, inside its box. */
+async function readableBottom(page) {
+  return page.evaluate(() => {
+    const thread = document.querySelector(".pm-thread");
+    const composer = document.querySelector(".pm-composer");
+    return Math.min(
+      thread.getBoundingClientRect().bottom,
+      composer.getBoundingClientRect().top,
+    );
+  });
+}
+
+async function lastSourceBottom(page) {
+  return page.evaluate(() => {
+    const last = [...document.querySelectorAll(".pm-sources li")].at(-1);
+    return last ? last.getBoundingClientRect().bottom : Number.NaN;
+  });
+}
+
+test("a named conversation is the heading, with Ask PM above it", async ({
+  page,
+}) => {
+  /*
+   * A conversation is created here named `text.slice(0, 100)` of its first
+   * question, so for most conversations the title *is* the first bubble and
+   * the page keeps its own name. One somebody named is the heading instead,
+   * said once, with "Ask PM" as the eyebrow.
+   */
+  await installWorkspaceApi(page, {
+    conversations: [conversation(1, "Friday release readiness")],
+    turns: [
+      {
+        id: "turn-named",
+        text: "Which agents are blocked before the release goes out?",
+        created_at: minutesAgo(5),
+        status: "delivered",
+        response: "Two are blocked.",
+      },
+    ],
+  });
+  await page.goto(`${ROOT}/pm?conversation=conversation-1`);
+  await expect(page.getByText("Two are blocked.")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Friday release readiness" }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ask PM" })).toHaveCount(0);
+  await expect(page.locator(".pm-head")).toContainText("Ask PM");
+  // Said once: the title is the heading, not a line under it as well.
+  await expect(
+    page.getByText("Friday release readiness", { exact: true }),
+  ).toHaveCount(1);
+  await expectCleanLayout(page, "named conversation", bothEnds);
+});
+
+for (const viewport of [
+  { name: "desktop", width: 1440, height: 900 },
+  { name: "phone", width: 390, height: 844 },
+]) {
+  test.describe(`ask pm sources @ ${viewport.name}`, () => {
+    test.use({
+      viewport: { width: viewport.width, height: viewport.height },
+    });
+
+    test("a reply's sources stay above the composer", async ({ page }) => {
+      await installWorkspaceApi(page, {
+        conversations: [conversation(1, "Sources")],
+        turns: [
+          // Enough history that the thread scrolls and starts pinned to the
+          // bottom, which is the state the last row used to disappear in.
+          ...Array.from({ length: 6 }, (_, index) => ({
+            id: `turn-filler-${index}`,
+            text: `Filler question ${index}. ${LONG_SENTENCE}`,
+            created_at: minutesAgo(180 - index * 10),
+            status: "delivered",
+            response: `Filler answer ${index}. ${LONG_SENTENCE}`,
+          })),
+          {
+            id: "turn-sources",
+            text: "Which agents are blocked?",
+            created_at: minutesAgo(5),
+            status: "delivered",
+            response: "Two are blocked and one needs you.",
+            evidence_refs: SOURCE_REFS,
+          },
+        ],
+      });
+      await page.goto(`${ROOT}/pm?conversation=conversation-1`);
+      await expect(page.getByText("Two are blocked")).toBeVisible();
+      await nextPaint(page);
+
+      // Bounded by default: three chips and the rest behind a count.
+      const chips = page.locator(".pm-sources li");
+      await expect(chips).toHaveCount(4);
+      expect(await lastSourceBottom(page)).toBeLessThanOrEqual(
+        await readableBottom(page),
+      );
+
+      // Opening the overflow grows the thread under a reader already at the
+      // bottom. Without the re-pin the new rows land behind the composer.
+      await page.getByRole("button", { name: "Show 2 more sources" }).click();
+      await expect(chips).toHaveCount(5);
+      await nextPaint(page);
+      expect(await lastSourceBottom(page)).toBeLessThanOrEqual(
+        await readableBottom(page),
+      );
+      await expectCleanLayout(page, "sources expanded", bothEnds);
+      await expectNoClippedContent(page, "sources expanded");
     });
   });
 }

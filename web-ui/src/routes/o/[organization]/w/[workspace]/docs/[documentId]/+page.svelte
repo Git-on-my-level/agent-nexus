@@ -1722,9 +1722,15 @@
                 >
                   {#if visualReport.recognized}
                     {#if visualReport.report}
+                      <!-- The page prints the document's title above; a
+                           report of the same name does not print it again. -->
                       <VisualReport
                         report={visualReport.report}
                         {documentId}
+                        documentTitle={resourceDisplayLabel(
+                          document,
+                          documentId,
+                        )}
                         revisionRef={displayedRevision?.ref ?? ""}
                       />
                     {:else}

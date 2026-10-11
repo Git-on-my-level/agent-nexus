@@ -3,6 +3,7 @@ import {
   bareDecisionIds,
   candidateDecisionIdsFromTurn,
   clockTime,
+  conversationHeading,
   decisionChipLabel,
   elapsedLabel,
   evidenceRefsForTurn,
@@ -15,6 +16,93 @@ import {
   startsTimeGroup,
   turnState,
 } from "../../src/lib/pm/chatModel.js";
+
+describe("the conversation's heading", () => {
+  /*
+   * A conversation is created by this app, named `text.slice(0, 100)` of its
+   * first question — so for most conversations the "title" is the first
+   * bubble again, cut off mid-sentence.
+   */
+  const first = (text) => [{ text }];
+  const LONG =
+    "Why is the vendor reconciliation still blocked, and who has to act next before Friday? I need to know who to chase.";
+
+  it("is nothing when the title is the first question", () => {
+    expect(
+      conversationHeading(
+        { title: "What needs my decision?" },
+        first("What needs my decision?"),
+      ),
+    ).toBe("");
+  });
+
+  it("is nothing when the title is that question's first hundred characters", () => {
+    expect(
+      conversationHeading({ title: LONG.slice(0, 100) }, first(LONG)),
+    ).toBe("");
+  });
+
+  it("keeps a name somebody chose, even one the question starts with", () => {
+    // A prefix test swallowed this: "Release" is a name, not an echo.
+    expect(
+      conversationHeading(
+        { title: "Release" },
+        first("Release 1.9 — what is blocked?"),
+      ),
+    ).toBe("Release");
+    expect(
+      conversationHeading(
+        { title: "Vendor reconciliation" },
+        first("Why is the vendor handoff still blocked?"),
+      ),
+    ).toBe("Vendor reconciliation");
+  });
+
+  it("does not depend on the reader's locale", () => {
+    /*
+     * Folding case to compare made the heading host-dependent: Greek
+     * word-final sigma and Turkish dotless i both fold differently, so the
+     * same conversation read differently on two machines.
+     */
+    const greek = `${"Α".repeat(99)}ΣΤΡΩΜΑ ρεστ`;
+    expect(
+      conversationHeading({ title: greek.slice(0, 100) }, first(greek)),
+    ).toBe("");
+  });
+
+  it("keeps a title when the thread it named is no longer loaded", () => {
+    expect(conversationHeading({ title: "Launch readiness" }, [])).toBe(
+      "Launch readiness",
+    );
+  });
+
+  it("says nothing when the first question is not the first turn loaded", () => {
+    /*
+     * Core returns the *newest* page first, so on a long conversation
+     * `turns[0]` is a turn from the middle and the echo cannot be seen at
+     * all. Promoting the title there would print a truncated question as
+     * the heading on exactly the conversations where it is longest.
+     */
+    expect(
+      conversationHeading(
+        { title: LONG.slice(0, 100) },
+        first("And what about the docs?"),
+        { hasOlderTurns: true },
+      ),
+    ).toBe("");
+    // The same conversation, fully loaded, keeps the same answer.
+    expect(
+      conversationHeading({ title: LONG.slice(0, 100) }, first(LONG), {
+        hasOlderTurns: false,
+      }),
+    ).toBe("");
+  });
+
+  it("is nothing without a title", () => {
+    expect(conversationHeading(null, first("Anything"))).toBe("");
+    expect(conversationHeading({ title: "   " }, first("Anything"))).toBe("");
+  });
+});
 
 describe("PM chat presentation model", () => {
   it("finds typed refs named in the reply body and strips sentence punctuation", () => {
@@ -101,7 +189,7 @@ describe("PM chat presentation model", () => {
     ).toMatchObject({ kind: "pending", claimed: true });
   });
 
-  it("names the usual wait after 20s and a stall only after 8 minutes", () => {
+  it("names the wait only once it is unusual, and a stall after 8 minutes", () => {
     const now = Date.parse("2026-09-09T10:01:00Z");
     const fresh = turnState(
       { status: "sending", created_at: "2026-09-09T10:00:50Z" },
@@ -113,15 +201,27 @@ describe("PM chat presentation model", () => {
       longWait: false,
     });
     expect(fresh.elapsed).toBe("10s");
-    // A minute in is a normal wait for a 4–7 minute answer: say so, do not
-    // accuse the runner of being off.
+    /*
+     * A minute in is still ordinary. The note used to appear at twenty
+     * seconds, which put it on screen for almost every turn beside a live
+     * elapsed counter already saying the same thing; it is a note about an
+     * unusual wait, so it waits until ninety seconds.
+     */
     expect(
       turnState({ status: "sending", created_at: "2026-09-09T10:00:00Z" }, now),
     ).toMatchObject({
       kind: "pending",
       stalled: false,
-      longWait: true,
+      longWait: false,
       elapsed: "1m 00s",
+    });
+    expect(
+      turnState({ status: "sending", created_at: "2026-09-09T09:59:20Z" }, now),
+    ).toMatchObject({
+      kind: "pending",
+      stalled: false,
+      longWait: true,
+      elapsed: "1m 40s",
     });
     expect(
       turnState({ status: "sending", created_at: "2026-09-09T09:48:00Z" }, now),

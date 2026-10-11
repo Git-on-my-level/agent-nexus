@@ -114,6 +114,21 @@ function formatClock(then, locale) {
   }).format(then);
 }
 
+/** Increasing precision, for {@link bucketLabels}. */
+const BUCKET_FORMATS = [
+  { month: "short", day: "numeric" },
+  { month: "short", day: "numeric", year: "numeric" },
+  { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" },
+  {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  },
+];
+
 function formatDateOnly(then, locale) {
   return new Intl.DateTimeFormat(locale, {
     month: "short",
@@ -143,6 +158,40 @@ export function formatTime(value, options = {}) {
   if (style === "clock") return formatClock(date, locale);
   if (style === "date") return formatDateOnly(date, locale);
   return formatRelative(then, Number(now), locale);
+}
+
+/**
+ * Axis labels for a run of time buckets, or `null` when no format tells them
+ * apart.
+ *
+ * Shortest first. A week of daily buckets wants "Oct 5", not "Oct 5, 2026" —
+ * seven of those is a wall of text on an axis, and the year is the same in
+ * every one. The year and the clock are added only once the buckets actually
+ * need them to be distinguishable, because a chart axis whose labels repeat
+ * is a chart that cannot be read.
+ *
+ * @param {Array<number|string|Date>} stamps bucket starts, in order
+ * @param {{locale?: string}} [options]
+ * @returns {string[]|null}
+ */
+export function bucketLabels(stamps, { locale } = {}) {
+  const dates = stamps.map((stamp) => {
+    const at = instantMs(stamp);
+    return at == null ? null : new Date(at);
+  });
+  if (dates.some((date) => date === null)) return null;
+  for (const parts of BUCKET_FORMATS) {
+    let format;
+    try {
+      format = new Intl.DateTimeFormat(locale, parts);
+    } catch {
+      return null;
+    }
+    const labels = dates.map((date) => format.format(date));
+    if (labels.some((label) => !label)) return null;
+    if (new Set(labels).size === labels.length) return labels;
+  }
+  return null;
 }
 
 /**

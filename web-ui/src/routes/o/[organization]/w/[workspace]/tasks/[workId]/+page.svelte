@@ -29,7 +29,7 @@
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
   import AnxRefPreview from "$lib/components/AnxRefPreview.svelte";
   import AnxRefChip from "$lib/components/AnxRefChip.svelte";
-  import FinePrint from "$lib/components/FinePrint.svelte";
+  import InfoTip from "$lib/components/InfoTip.svelte";
   import WorkSummary from "$lib/components/WorkSummary.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import PanelToggle from "$lib/components/layout/PanelToggle.svelte";
@@ -605,16 +605,19 @@
               >Reading the card…</span
             >
           {/if}
-          <button
-            class="ui-prose-link text-micro"
-            type="button"
-            title={work.ref}
-            onclick={() => navigator.clipboard?.writeText(work.ref)}
-            >Copy ref</button
-          >
         </span>
       {/snippet}
-      {#snippet actions()}<button
+      {#snippet actions()}<!--
+          Actions on the right, metadata under the title. "Copy ref" used to
+          float in the middle of the badge row, between a warning badge and
+          nothing, which made the row read as neither state nor controls.
+        --><button
+          class="ui-btn-secondary"
+          type="button"
+          title={work.ref}
+          onclick={() => navigator.clipboard?.writeText(work.ref)}
+          >Copy ref</button
+        ><button
           class="ui-btn-secondary"
           onclick={() => load()}
           disabled={loading}>{loading ? "Reloading…" : "Reload"}</button
@@ -762,12 +765,13 @@
           <EvidenceHandoff
             {observations}
             unavailable={Boolean(evidenceError) && !observations.length}
+            note={nexusOwned && !lastCheckedAt && !observations.length
+              ? "This task was created here, so there is no outside tracker to read back from."
+              : ""}
           />
           {#if nexusOwned && !lastCheckedAt && !observations.length}
-            <FinePrint label="Why there is nothing to check">
-              This task was created here, so there is no outside source to read
-              back from.
-            </FinePrint>
+            <!-- Nothing to say: the heading's tip already explains why a task
+                 created here has no outside source to read back from. -->
           {:else}
             <!--
               One line per source, not one block per read. A reader reports
@@ -1163,7 +1167,12 @@
         aria-label="Source and follow-through"
       >
         <div class="flex items-center justify-between gap-2">
-          <h2 class="ui-label mb-0">Source</h2>
+          <h2 class="ui-label mb-0 flex items-center gap-1.5">
+            Source{#if !sourceDetailsWorthShowing}<InfoTip
+                label="Where this task came from"
+                text="This task was created here and nobody is assigned, so there is no outside tracker or owner to name."
+              />{/if}
+          </h2>
           <PanelToggle
             label="details"
             side="right"
@@ -1243,12 +1252,6 @@
                   A change there has to be requested and approved here first.
                 {/if}
               </p>
-            {/if}
-            {#if !sourceDetailsWorthShowing}
-              <FinePrint label="Where this task came from">
-                Created here, with nobody assigned, so there is no outside
-                authority or owner to name.
-              </FinePrint>
             {/if}
           </section>
           <section>

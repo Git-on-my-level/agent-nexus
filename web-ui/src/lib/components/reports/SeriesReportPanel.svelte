@@ -1,5 +1,8 @@
 <script>
+  import InfoTip from "$lib/components/InfoTip.svelte";
   import Time from "$lib/time/Time.svelte";
+  import { formatTime } from "$lib/time/format.js";
+  import { seriesChartData } from "$lib/seriesChart.js";
   import ReportChart from "./ReportChart.svelte";
   import ReportDetails from "./ReportDetails.svelte";
   let { panel, freshness, now = Date.now() } = $props();
@@ -16,6 +19,16 @@
   let observation = $derived(panel.seriesObservation);
   let showData = $derived(panel.seriesFallback || observation?.status === "ok");
   let provenance = $derived(observation?.provenance);
+  let chartData = $derived(seriesChartData(panel, { now }));
+  /*
+   * One sentence, not four lines: which adapter pushes this series, from
+   * where, how often, and when it last arrived.
+   */
+  let sourceTip = $derived(
+    provenance
+      ? `Pushed by ${provenance.adapter || "an adapter"} on ${provenance.host || "an unnamed host"}, ${provenance.resolution || "raw"} resolution. Last point ${formatTime(provenance.last_push, { now, style: "exact" }) || "not received yet"}.`
+      : "This panel reads a published series. Its adapter and host appear after the first successful read.",
+  );
   let timeline = $derived(
     observation?.status === "stale"
       ? (observation.data?.items ?? [])
@@ -72,7 +85,12 @@
       <p class="text-fg-muted">No observations in this range.</p>
     {/if}
   {:else if panel.type === "chart"}
-    <ReportChart data={panel.data} title={panel.title} />
+    <!--
+      Core can only materialize one line per label set on a time axis. The
+      panel's own declaration — bars, a stack, readable series names — lives
+      in its authored fallback, and this applies it to the live read.
+    -->
+    <ReportChart data={chartData} title={panel.title} />
   {:else if panel.type === "metric"}
     <p class="text-title font-semibold">
       {panel.data.value}
@@ -112,17 +130,17 @@
     </ul>
   {/if}
 {/if}
-<details class="mt-3 text-micro text-fg-muted">
-  <summary>Where this number comes from</summary>
-  <p>Series: {panel.source.series}</p>
-  {#if provenance}
-    <p>Adapter: {provenance.adapter} · Host: {provenance.host}</p>
-    <p>Last push: {provenance.last_push ?? "No points yet"}</p>
-    <p>Resolution: {provenance.resolution}</p>
-  {:else}<p>
-      Provenance will be available after a successful series read.
-    </p>{/if}
-</details>
+<!--
+  Where the numbers come from, as a glyph rather than a fold. The reader
+  needs the adapter and the host about once; the fold spent a line on
+  `▶ Where this number comes from` under every panel to offer it.
+-->
+<p class="mt-2 flex items-center gap-1.5 text-micro text-fg-subtle">
+  {panel.source.series}<InfoTip
+    label="Where this number comes from"
+    text={sourceTip}
+  />
+</p>
 {#if observation?.truncated}<p class="text-micro text-fg-muted">
     Showing a bounded selection. Narrow the labels or range for more detail.
   </p>{/if}

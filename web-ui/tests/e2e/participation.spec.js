@@ -187,12 +187,11 @@ for (const viewport of [
     await expect(
       agentPanel.getByText("2 task participations · 2 currently active"),
     ).toBeVisible();
+    // The coverage bound is on the heading's tip now, not a paragraph under
+    // it: a sentence a reader needs once should not be on screen every visit.
     await expect(
-      agentPanel.getByText(
-        "Other tasks and private sessions are not included.",
-        { exact: false },
-      ),
-    ).toBeVisible();
+      agentPanel.getByRole("button", { name: /What participation means/ }),
+    ).toHaveAttribute("data-tooltip", /private sessions are not included/);
     await expect(
       agentPanel.getByRole("link", { name: workTitle() }),
     ).toBeVisible();

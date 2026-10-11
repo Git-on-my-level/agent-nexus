@@ -136,9 +136,6 @@
 
 <WorkspacePageShell>
   <WorkspacePageHeader title={setupOffered ? "Set up your PM" : "Your PM"}>
-    {#snippet subtitle()}
-      A PM agent runs on your computer and answers from this workspace.
-    {/snippet}
     {#snippet actions()}
       {#if showManage}
         <a class="ui-btn-secondary" href={workspaceHref("/pm")}>Ask PM</a>

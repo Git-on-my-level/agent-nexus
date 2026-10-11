@@ -100,6 +100,7 @@
     otherDialogOpen,
   } from "$lib/inboxShortcuts.js";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
+  import InfoTip from "$lib/components/InfoTip.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import SkeletonInboxRow from "$lib/components/state/SkeletonInboxRow.svelte";
@@ -1659,9 +1660,13 @@
       </span>
     {/if}
     {#if truncated || streamPartial}
-      <span class="ml-2 text-micro text-fg-subtle"
-        >Not everything is loaded; the counts are lower bounds.</span
-      >
+      <!-- The "+" on each count is the badge; this is what it means, on the
+           glyph rather than as a sentence beside it. -->
+      <InfoTip
+        class="ml-2"
+        label="Why the counts end in +"
+        text="Not everything is loaded yet, so each count is a lower bound."
+      />
     {/if}
     <span class="ml-auto text-micro text-fg-muted" role="status">
       {reconnecting ? "Reconnecting…" : loading && ready ? "Refreshing…" : ""}

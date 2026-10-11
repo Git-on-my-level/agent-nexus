@@ -290,8 +290,26 @@
   .chart-surface {
     width: 100%;
     min-width: 0;
-    height: clamp(280px, 28vw, 360px);
+    /*
+     * The plot is `grid.top/bottom` inside this box, so a tall box on a
+     * narrow screen is empty margin above and below the line rather than a
+     * bigger chart. Scaled to the viewport's shorter side so a phone gets a
+     * chart it can see at a glance and a desktop keeps the same height it
+     * had.
+     */
+    height: clamp(190px, 28vw + 90px, 360px);
     overflow: hidden;
+  }
+  @media (max-width: 640px) {
+    .chart-surface {
+      height: 210px;
+    }
+    .chart-data {
+      margin-top: 8px;
+    }
+    summary {
+      padding: 7px 0;
+    }
   }
   .chart-unavailable {
     display: none;

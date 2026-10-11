@@ -197,15 +197,22 @@ export const TIME_GROUP_GAP_MS = 5 * 60 * 1000;
 
 /**
  * A normal answer takes minutes (the PM is an external harness running the
- * anx CLI). Past this the reader is told how long it usually takes; past
- * STALLED_AFTER_MS the runner may genuinely be off.
+ * anx CLI). Past this the reader is told so; past STALLED_AFTER_MS the runner
+ * may genuinely be off.
+ *
+ * Ninety seconds, not twenty. At twenty the note was on screen for almost
+ * every turn, beside a live elapsed counter that already said the same thing
+ * — three ways of saying "running" stacked on one answer. It is a note about
+ * an *unusual* wait, so it waits until the wait is unusual.
  */
-export const EXPECTED_WAIT_NOTE_AFTER_MS = 20_000;
+export const EXPECTED_WAIT_NOTE_AFTER_MS = 90_000;
 export const EXPECTED_WAIT_LABEL =
-  "The PM is a separate agent working through the CLI; answers take a few minutes.";
-export const UNCLAIMED_LABEL =
-  "Waiting for a PM runner to claim this. Nothing is thinking yet.";
+  "Still working. This can take a few minutes.";
+export const UNCLAIMED_LABEL = "No PM runner has picked this up yet.";
 export const STALLED_AFTER_MS = 8 * 60 * 1000;
+/** The live half of the one status line: never the last step's own label. */
+export const WORKING_LABEL = "Working";
+export const QUEUED_LABEL = "Queued";
 
 /**
  * Whether `turn` opens a new time group. Unparseable timestamps never open a
@@ -298,6 +305,56 @@ export function turnState(turn, now = Date.now()) {
       waited < STALLED_AFTER_MS,
     stalled: Number.isFinite(waited) && waited >= STALLED_AFTER_MS,
   };
+}
+
+/**
+ * How long a conversation's machine-written name is. `+page.svelte` creates
+ * a conversation with `title: text.slice(0, 100)` of the first question, so
+ * a title of exactly that shape is not a name — it is the first bubble.
+ */
+export const CONVERSATION_TITLE_SLICE = 100;
+
+/**
+ * The conversation's own title, when it is one.
+ *
+ * A conversation is created here, named from its first question by
+ * `text.slice(0, 100)` — so for most conversations the "title" is the first
+ * bubble again, cut off mid-sentence. Printed under the heading it read as
+ * stray repeated text, and promoting it to the heading would only move the
+ * repetition.
+ *
+ * So the test is exact rather than fuzzy: a title that *is* that slice of
+ * the first question is an echo; anything else is a name somebody chose and
+ * stands. A prefix test would have swallowed real names — a conversation
+ * called "Release" that opens "Release 1.9 — what is blocked?" is named, not
+ * echoing — and folding case to compare would have made the heading depend
+ * on the reader's host locale.
+ *
+ * `hasOlderTurns` is the other half. The first page core returns is the
+ * *newest* hundred turns, so on a long conversation `turns[0]` is some turn
+ * from the middle and the echo cannot be detected at all. Rather than
+ * promote a truncated question to a heading on exactly the conversations
+ * where it is longest, an unknown first turn counts as an echo.
+ *
+ * @param {{ title?: string } | null} conversation
+ * @param {Array<{ text?: string }>} turns
+ * @param {{ hasOlderTurns?: boolean }} [options]
+ * @returns {string} the heading, or "" when the title only echoes the thread
+ */
+export function conversationHeading(
+  conversation,
+  turns = [],
+  { hasOlderTurns = false } = {},
+) {
+  const title = String(conversation?.title ?? "").trim();
+  if (!title) return "";
+  if (hasOlderTurns) return "";
+  const first = String(turns?.[0]?.text ?? "").trim();
+  if (!first) return title;
+  return title === first.slice(0, CONVERSATION_TITLE_SLICE).trim() ||
+    title === first
+    ? ""
+    : title;
 }
 
 /**

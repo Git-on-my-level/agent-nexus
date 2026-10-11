@@ -206,6 +206,20 @@ describe("buildReportChartOption palette and legend wiring", () => {
 
   it("no longer reserves in-canvas space for a legend", () => {
     const option = buildReportChartOption(chart(), { bg: DARK_BG });
+    // Room for the axis labels and nothing else: the legend is Svelte's.
+    expect(option.grid.bottom).toBe(30);
+    expect(option.grid.left).toBe(44);
+  });
+
+  it("reserves axis-name room only for an axis that has a name", () => {
+    const named = chart();
+    named.option.xAxis = { ...named.option.xAxis, name: "Day" };
+    named.option.yAxis = { type: "value", name: "cards" };
+    const option = buildReportChartOption(named, { bg: DARK_BG });
+    // A rotated axis name needs the wider gutter; a chart with no names —
+    // which is every series-bound one — spent it on empty margin, and on a
+    // phone that left the plot in a letterbox.
     expect(option.grid.bottom).toBe(52);
+    expect(option.grid.left).toBe(52);
   });
 });

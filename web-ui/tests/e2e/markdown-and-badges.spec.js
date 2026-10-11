@@ -355,21 +355,26 @@ test("the task page is quiet where there is nothing to say", async ({
   await expect(page.locator("[data-participation-quiet]")).toContainText(
     "No activity",
   );
-  await expect(page.locator("[data-evidence-quiet]")).toHaveText("No activity");
+  await expect(page.locator("[data-evidence-quiet]")).toContainText(
+    "No activity",
+  );
 
-  // The developer disclaimers are still reachable, behind a toggle.
-  const caveat = page.getByText("No shared evidence report for handoff yet", {
-    exact: false,
+  /*
+   * The disclaimers are still reachable, as tooltips rather than folds. Each
+   * used to cost a visible `▶ What evidence means` line under a section that
+   * had nothing else in it, which is most of what a quiet task page showed.
+   */
+  const evidenceTip = page.getByRole("button", {
+    name: /What evidence means/,
   });
-  await expect(caveat).toBeHidden();
-  const toggle = page.getByText("What evidence means", { exact: true });
-  await expect(toggle).toBeVisible();
-  await toggle.click();
-  await expect(caveat).toBeVisible();
-
-  // "Created here — nothing to check" is a disclaimer too, and is folded.
-  await expect(page.getByText("Why there is nothing to check")).toBeVisible();
-  await expect(
-    page.getByText("This task was created here, so there is no outside source"),
-  ).toBeHidden();
+  await expect(evidenceTip).toBeVisible();
+  await expect(page.locator("[data-anx-tooltip]")).toHaveCount(0);
+  await evidenceTip.hover();
+  const tipText = page.locator("[data-anx-tooltip]");
+  await expect(tipText).toContainText("not evidence that the work is done");
+  // "Created here, so there is nothing to read back from" is the second half
+  // of the same answer, so it is the same tip rather than a second glyph a
+  // thumb away from the first.
+  await expect(tipText).toContainText("no outside tracker to read back from");
+  await page.mouse.move(0, 0);
 });

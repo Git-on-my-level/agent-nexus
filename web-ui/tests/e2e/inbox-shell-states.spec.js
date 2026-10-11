@@ -4,6 +4,14 @@ import { AUDIT_VIEWPORTS, expectCleanLayout } from "../helpers/layoutAudit.js";
 import { holdOpenStream } from "../helpers/openStream.js";
 
 /**
+ * The "+" on a mailbox count says the number is a lower bound; this is
+ * the glyph that explains it. It replaced a sentence printed in the
+ * middle of the mailbox row.
+ */
+const lowerBoundTip = (page) =>
+  page.getByRole("button", { name: /Why the counts end in \+/ });
+
+/**
  * Walks the workspace shell (sidebar, account menu, command palette, first-run
  * tour, actor gate, session overlays) and the Inbox surfaces (list, detail
  * pane, standalone item route, login) through every state they can reach, at
@@ -1174,11 +1182,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expectCleanLayout(page, "pinned row not fully loaded", bothEnds);
 
       // has_more: counts become lower bounds and say so.
-      await expect(
-        page.getByText(
-          "Not everything is loaded; the counts are lower bounds.",
-        ),
-      ).toBeVisible();
+      await expect(lowerBoundTip(page)).toBeVisible();
       await expectCleanLayout(page, "truncated counts", bothEnds);
 
       // A replaced proposal names its replacement.
