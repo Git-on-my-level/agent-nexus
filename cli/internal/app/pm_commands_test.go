@@ -104,6 +104,113 @@ func TestInTurnPM403ExplainsIdentityMismatch(t *testing.T) {
 	}
 }
 
+func TestPMTurnLeaseIdentityOverridesExplicitIdentityForInTurnCommands(t *testing.T) {
+	for _, command := range []string{"context", "card", "propose"} {
+		t.Run(command, func(t *testing.T) {
+			a := New()
+			a.Getenv = func(key string) string {
+				switch key {
+				case "ANX_PM_TURN_ID":
+					return "turn"
+				case "ANX_PM_LEASE_TOKEN":
+					return "lease"
+				case "ANX_PM_AGENT":
+					return "pm"
+				}
+				return ""
+			}
+			got, warning := a.resolvePMTurnLeaseIdentity([]string{"pm", command}, config.Resolved{As: "hermes", Agent: "hermes"})
+			if got.As != "pm" || got.Agent != "pm" {
+				t.Fatalf("resolved identity As=%q Agent=%q", got.As, got.Agent)
+			}
+			want := "warning: ignoring explicit identity `hermes`; this PM turn lease is bound to `pm`, so acting as `pm`."
+			if warning != want {
+				t.Fatalf("warning %q, want %q", warning, want)
+			}
+		})
+	}
+}
+
+func TestPMTurnLeaseIdentityDoesNotChangeOtherCommandsOrIncompleteLease(t *testing.T) {
+	a := New()
+	a.Getenv = func(key string) string {
+		switch key {
+		case "ANX_PM_TURN_ID":
+			return "turn"
+		case "ANX_PM_LEASE_TOKEN":
+			return "lease"
+		case "ANX_PM_AGENT":
+			return "pm"
+		}
+		return ""
+	}
+	for _, args := range [][]string{{"pm", "turns", "context"}, {"pm", "status"}, {"cards", "get", "card:x"}} {
+		got, warning := a.resolvePMTurnLeaseIdentity(args, config.Resolved{As: "hermes", Agent: "hermes"})
+		if got.As != "hermes" || got.Agent != "hermes" || warning != "" {
+			t.Fatalf("%v changed identity to As=%q Agent=%q warning=%q", args, got.As, got.Agent, warning)
+		}
+	}
+	a.Getenv = func(key string) string {
+		if key == "ANX_PM_TURN_ID" {
+			return "turn"
+		}
+		return ""
+	}
+	got, warning := a.resolvePMTurnLeaseIdentity([]string{"pm", "context"}, config.Resolved{As: "hermes", Agent: "hermes"})
+	if got.As != "hermes" || got.Agent != "hermes" || warning != "" {
+		t.Fatalf("incomplete lease changed identity to As=%q Agent=%q warning=%q", got.As, got.Agent, warning)
+	}
+}
+
+func TestPMContextUsesLeaseAgentWhenANXASIsDifferent(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		args  []string
+		envAs string
+	}{
+		{name: "ANX_AS", args: []string{"pm", "context"}, envAs: "hermes"},
+		{name: "flag", args: []string{"--as", "hermes", "pm", "context"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var requestAgent string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost || r.URL.Path != "/pm/turns/turn/context" {
+					t.Errorf("request %s %s", r.Method, r.URL.Path)
+				}
+				requestAgent = r.Header.Get("X-ANX-Agent")
+				_, _ = w.Write([]byte(`{"items":[]}`))
+			}))
+			defer srv.Close()
+
+			env := map[string]string{
+				"ANX_BASE_URL":       srv.URL,
+				"ANX_ACCESS_TOKEN":   "fixture",
+				"ANX_PM_TURN_ID":     "turn",
+				"ANX_PM_LEASE_TOKEN": "lease",
+				"ANX_PM_AGENT":       "pm",
+			}
+			if tc.envAs != "" {
+				env["ANX_AS"] = tc.envAs
+			}
+			a := New()
+			a.Getenv = func(key string) string { return env[key] }
+			var stdout, stderr strings.Builder
+			a.Stdout = &stdout
+			a.Stderr = &stderr
+			if code := a.Run(tc.args); code != 0 {
+				t.Fatalf("exit %d; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+			}
+			if requestAgent != "pm" {
+				t.Fatalf("request acted as %q, want pm", requestAgent)
+			}
+			wantWarning := "warning: ignoring explicit identity `hermes`; this PM turn lease is bound to `pm`, so acting as `pm`.\n"
+			if stderr.String() != wantWarning {
+				t.Fatalf("warning %q, want one line %q", stderr.String(), wantWarning)
+			}
+		})
+	}
+}
+
 func TestPMProposeBuildsPayloadAndHidesPlumbing(t *testing.T) {
 	calls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

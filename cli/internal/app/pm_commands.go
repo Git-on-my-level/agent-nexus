@@ -21,6 +21,37 @@ type pmProposalOptions struct {
 	evidence               trackedStrings
 }
 
+func (a *App) resolvePMTurnLeaseIdentity(args []string, cfg config.Resolved) (config.Resolved, string) {
+	if len(args) < 2 || args[0] != "pm" {
+		return cfg, ""
+	}
+	switch args[1] {
+	case "context", "card", "propose":
+	default:
+		return cfg, ""
+	}
+
+	turnID := strings.TrimSpace(a.Getenv("ANX_PM_TURN_ID"))
+	leaseToken := strings.TrimSpace(a.Getenv("ANX_PM_LEASE_TOKEN"))
+	turnAgent := strings.TrimSpace(a.Getenv("ANX_PM_AGENT"))
+	if turnID == "" || leaseToken == "" || turnAgent == "" {
+		return cfg, ""
+	}
+
+	explicitAgent := strings.TrimSpace(cfg.As)
+	cfg.As = turnAgent
+	cfg.Agent = turnAgent
+	cfg.IdentitySource = "pm:turn-lease"
+	if cfg.Sources == nil {
+		cfg.Sources = map[string]string{}
+	}
+	cfg.Sources["agent"] = cfg.IdentitySource
+	if explicitAgent != "" && explicitAgent != turnAgent {
+		return cfg, fmt.Sprintf("warning: ignoring explicit identity `%s`; this PM turn lease is bound to `%s`, so acting as `%s`.", explicitAgent, turnAgent, turnAgent)
+	}
+	return cfg, ""
+}
+
 func parsePMProposal(args []string) (pmProposalOptions, error) {
 	o := pmProposalOptions{}
 	repair := "usage: anx pm propose <card-ref> (--status <backlog|ready|in_progress|blocked|review|done> | --note <text>) --why <reason> [--evidence <ref> ...]"
