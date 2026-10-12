@@ -523,13 +523,19 @@ func writeQuotaViolationError(w http.ResponseWriter, violation primitives.QuotaV
 	case "upload_bytes":
 		label = "upload byte"
 	}
-	delta := violation.Projected - violation.Current
-	message := fmt.Sprintf("Workspace %s limit reached (%d/%d). This operation needs %d more. Remove content or raise the configured workspace limit.", label, violation.Current, violation.Limit, delta)
+	quota := map[string]any{"metric": metric, "limit": violation.Limit}
+	message := fmt.Sprintf("Workspace %s limit reached (limit %d). Remove content or raise the configured workspace limit.", label, violation.Limit)
+	// Enforcement uses canonical totals, but these totals are reader-visible.
+	// Include them only when they explain why the write was rejected.
+	if violation.Projected > violation.Limit {
+		delta := violation.Projected - violation.Current
+		quota["current"] = violation.Current
+		quota["delta"] = delta
+		quota["projected"] = violation.Projected
+		message = fmt.Sprintf("Workspace %s limit reached (%d/%d). This operation needs %d more. Remove content or raise the configured workspace limit.", label, violation.Current, violation.Limit, delta)
+	}
 	writeDetailedError(w, http.StatusConflict, "quota_exceeded", message, map[string]any{
-		"quota": map[string]any{
-			"metric": metric, "limit": violation.Limit, "current": violation.Current,
-			"delta": delta, "projected": violation.Projected,
-		},
+		"quota": quota,
 	})
 }
 

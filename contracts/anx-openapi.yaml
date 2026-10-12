@@ -8277,8 +8277,10 @@ components:
         Error payload. Every write may return HTTP 409 quota_exceeded when a configured
         workspace or upload limit would be exceeded. This error is not retryable
         (error.recoverable=false). The top-level quota object contains metric
-        (artifacts, documents, revisions, blob_bytes, upload_bytes), current, limit,
-        delta (attempted growth), and projected. Limits are deployment configuration;
+        (artifacts, documents, revisions, blob_bytes, upload_bytes) and limit.
+        Reader-visible current, delta (attempted growth), and projected are included
+        only when projected exceeds limit; otherwise error.message reports the limit alone.
+        Limits are deployment configuration;
         blob_bytes includes canonical content as well as blobs. Clients display
         error.message. Reclaim content or change the configured limit before resubmitting.
       content:

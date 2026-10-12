@@ -2460,7 +2460,7 @@
     "../server/request_controls.go:routeRateLimitScopeForRequest": "8aca5851d891a39f1cce48866564a0f3c2897ca13e9960e1a2c550ef09016f9e",
     "../server/request_controls.go:writeDetailedError": "0f83f9bfe30c82a15d1d4684312fd0b36228e3476d7fb9d6e8df349a6bb34221",
     "../server/request_controls.go:writePrimitiveQuotaViolationError": "0cf090203435c6e003d8aa25d944c121eae3cc717503365fbcabf2961a0dbd55",
-    "../server/request_controls.go:writeQuotaViolationError": "ed872df6c8de279911f147a0cec8bc8f86f2bb5368707ad9f4a10ba2a4fdf8e1",
+    "../server/request_controls.go:writeQuotaViolationError": "4d4d45deaa67e633390da730cb3e924bc6e0d24678d2849da326c164576c4355",
     "../server/request_controls.go:writeRateLimitedError": "dc3972841d3cf6b797343975b1846917a6ce42636069e691744ca39fa05e51e6",
     "../server/request_controls.go:writeRequestTooLargeError": "30996ad7ea14e051e38ab91d7a945baa8c6b7728f33bf93b0136f676938e4a9e",
     "../server/resource_access.go:attachResourceAccessScope": "27b467f148e0ab8a02aa349c4a35f8bfec84bc371b3958d80b433df365b5135a",

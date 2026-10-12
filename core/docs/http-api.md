@@ -627,7 +627,10 @@ Every write path maps a store quota violation to HTTP `409`, code
 `quota_exceeded`, with `error.recoverable: false`. Display `error.message`;
 do not retry an unchanged request. The top-level `quota` object provides
 `metric` (`artifacts`, `documents`, `revisions`, `blob_bytes`, or `upload_bytes`),
-`current`, `limit`, `delta` (attempted growth), and `projected`. `blob_bytes`
+and `limit`. Reader-visible `current`, `delta` (attempted growth), and `projected`
+are included only when `projected` exceeds `limit`. Otherwise the message reports
+the limit alone, since enforcement uses canonical totals that may include hidden
+content. `blob_bytes`
 represents the configured storage budget, including canonical content and blobs.
 Usage retains the store's principal visibility policy. Remove content or raise
 the configured limit before resubmitting; archiving alone need not reclaim quota.
