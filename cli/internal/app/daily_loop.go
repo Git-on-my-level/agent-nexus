@@ -202,12 +202,17 @@ func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved)
 
 func (a *App) runDailyWork(ctx context.Context, verb string, args []string, cfg config.Resolved) (*commandResult, error) {
 	fs := newSilentFlagSet("work " + verb)
-	var askFlag trackedBool
+	var askFlag, force trackedBool
+	var body, bodyFile, reason trackedString
 	var recommend trackedString
 	var alts, evidence trackedStrings
 	fs.Var(&askFlag, "ask", "Open an operator ask when blocking")
 	fs.Var(&recommend, "recommend", "Recommended answer for the optional ask")
 	fs.Var(&alts, "alt", "Alternative answer for the optional ask (repeatable)")
+	fs.Var(&body, "body", "Markdown body for the optional ask")
+	fs.Var(&bodyFile, "body-file", "Read optional ask body from file or stdin (-)")
+	fs.Var(&force, "force", "Override ask authoring lint with --reason")
+	fs.Var(&reason, "reason", "Recorded ask authoring override reason")
 	fs.Var(&evidence, "evidence", "Evidence URL or typed ref (repeatable)")
 	leading, rest := splitLeadingPositionals(args)
 	if err := fs.Parse(rest); err != nil {
@@ -237,8 +242,8 @@ func (a *App) runDailyWork(ctx context.Context, verb string, args []string, cfg 
 			return nil, err
 		}
 	}
-	if verb != "block" && (askFlag.set || recommend.set || len(alts.values) > 0) {
-		return nil, errnorm.Usage("invalid_flags", "--ask, --recommend and --alt belong to work block")
+	if verb != "block" && (askFlag.set || recommend.set || len(alts.values) > 0 || body.set || bodyFile.set || force.set || reason.set) {
+		return nil, errnorm.Usage("invalid_flags", "ask flags belong to work block")
 	}
 	if verb != "done" && len(evidence.values) > 0 {
 		return nil, errnorm.Usage("invalid_flags", "--evidence belongs to work done")
@@ -249,8 +254,8 @@ func (a *App) runDailyWork(ctx context.Context, verb string, args []string, cfg 
 	if verb == "block" && askFlag.value && strings.TrimSpace(recommend.value) == "" {
 		return nil, errnorm.Usage("invalid_request", "work block --ask requires --recommend")
 	}
-	if verb == "block" && !askFlag.value && (recommend.set || len(alts.values) > 0) {
-		return nil, errnorm.Usage("invalid_flags", "--recommend and --alt require --ask")
+	if verb == "block" && !askFlag.value && (recommend.set || len(alts.values) > 0 || body.set || bodyFile.set || force.set || reason.set) {
+		return nil, errnorm.Usage("invalid_flags", "--recommend, --alt, --body, --body-file, --force and --reason require --ask")
 	}
 	card, err := a.fetchCardBody(ctx, cfg, cardRef)
 	if err != nil {
@@ -259,6 +264,33 @@ func (a *App) runDailyWork(ctx context.Context, verb string, args []string, cfg 
 	cardRef = firstNonEmpty(anyString(card["ref"]), cardRef)
 	if !strings.HasPrefix(cardRef, "card:") {
 		cardRef = "card:" + cardRef
+	}
+	var askArgs []string
+	if askFlag.value {
+		askBody := body.value
+		if strings.TrimSpace(bodyFile.value) != "" {
+			content, err := a.readBodyInput(bodyFile.value)
+			if err != nil {
+				return nil, err
+			}
+			askBody = string(content)
+		}
+		askArgs = []string{text, "--subject-ref", cardRef, "--recommend", recommend.value, "--body", askBody}
+		for _, alt := range alts.values {
+			askArgs = append(askArgs, "--alt", alt)
+		}
+		if force.value {
+			askArgs = append(askArgs, "--force")
+		}
+		if reason.set {
+			askArgs = append(askArgs, "--reason", reason.value)
+		}
+		// Validate the complete ask before moving the card or posting its blocker.
+		// Read body files once so stdin and file contents match the validated ask.
+		previewArgs := append(append([]string(nil), askArgs...), "--dry-run")
+		if _, err := a.runHumanAttentionCommand(ctx, "ask", previewArgs, cfg); err != nil {
+			return nil, err
+		}
 	}
 	switch verb {
 	case "start":
@@ -311,15 +343,11 @@ func (a *App) runDailyWork(ctx context.Context, verb string, args []string, cfg 
 			return nil, err
 		}
 		if askFlag.value {
-			askArgs := []string{text, "--subject-ref", cardRef, "--recommend", recommend.value}
-			for _, alt := range alts.values {
-				askArgs = append(askArgs, "--alt", alt)
-			}
 			askResult, err := a.runHumanAttentionCommand(ctx, "ask", askArgs, cfg)
 			if err != nil {
 				return nil, err
 			}
-			result := &commandResult{Data: map[string]any{"card_ref": cardRef, "phase": "blocked", "ask_id": commandResultBody(askResult)["ask_id"]}}
+			result := &commandResult{Data: map[string]any{"card_ref": cardRef, "phase": "blocked", "ask_id": commandResultBody(askResult)["ask_id"]}, Warnings: askResult.Warnings}
 			return result, nil
 		}
 	case "done":

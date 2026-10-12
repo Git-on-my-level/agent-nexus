@@ -941,7 +941,7 @@ Tip: `anx help <command path>` for full command-level generated details.
 Query commitments, evidence, freshness and refresh state
 
 ```text
-Daily work: anx work start [card]; anx work note <text> [card]; anx work block <why> [card] [--ask --recommend <answer>]; anx work done [card] --evidence <url|ref>. Omitted cards use presence. For inventory use anx work list.
+Daily work: anx work start [card]; anx work note <text> [card]; anx work block <why> [card] [--ask --recommend <answer> [--body <markdown> | --body-file <path|->] [--force --reason <text>]]; anx work done [card] --evidence <url|ref>. Omitted cards use presence. For inventory use anx work list.
 ```
 
 ## `pm`
