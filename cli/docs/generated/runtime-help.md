@@ -1869,7 +1869,7 @@ Generated Help: topics archive
 - Input mode: `none`
 - Why: Soft-archive a topic and derive its lifecycle state from archived_at.
 - Output: Returns `{ topic }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `topics`, `write`
 - Adjacent commands: `topics create`, `topics get`, `topics list`, `topics patch`, `topics restore`, `topics timeline`, `topics trash`, `topics unarchive`, `topics workspace`
 
@@ -1904,7 +1904,7 @@ Generated Help: topics unarchive
 - Input mode: `none`
 - Why: Clear archived_at on a topic (restore default list visibility).
 - Output: Returns `{ topic }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `topics`, `write`
 - Adjacent commands: `topics archive`, `topics create`, `topics get`, `topics list`, `topics patch`, `topics restore`, `topics timeline`, `topics trash`, `topics workspace`
 
@@ -1939,7 +1939,7 @@ Generated Help: topics restore
 - Input mode: `none`
 - Why: Clear trash lifecycle fields on a topic after an explicit restore action.
 - Output: Returns `{ topic }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `topics`, `write`
 - Adjacent commands: `topics archive`, `topics create`, `topics get`, `topics list`, `topics patch`, `topics timeline`, `topics trash`, `topics unarchive`, `topics workspace`
 
@@ -2029,7 +2029,7 @@ Generated Help: boards archive
 - Input mode: `json-body`
 - Why: Soft-archive a board and derive its lifecycle state from archived_at.
 - Output: Returns `{ board }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `boards`, `write`
 - Adjacent commands: `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
@@ -2061,7 +2061,7 @@ Generated Help: boards unarchive
 - Input mode: `json-body`
 - Why: Clear archived_at on a board (restore default list visibility).
 - Output: Returns `{ board }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `boards`, `write`
 - Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards workspace`
 
@@ -2093,7 +2093,7 @@ Generated Help: boards trash
 - Input mode: `json-body`
 - Why: Move board to trash with an explicit operator reason.
 - Output: Returns `{ board }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `boards`, `write`
 - Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards unarchive`, `boards workspace`
 
@@ -2125,7 +2125,7 @@ Generated Help: boards restore
 - Input mode: `json-body`
 - Why: Clear trash lifecycle fields on a board after an explicit restore action.
 - Output: Returns `{ board }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `boards`, `write`
 - Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards trash`, `boards unarchive`, `boards workspace`
 
@@ -2157,7 +2157,7 @@ Generated Help: boards purge
 - Input mode: `json-body`
 - Why: Permanently delete a trashed board (human-gated).
 - Output: Returns `{ purged, board_ref, board_handle }`; internal board_id may appear for admin/debug compatibility.
-- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `boards`, `write`
 - Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
@@ -2219,7 +2219,7 @@ Generated Help: boards cards create-batch
 - Input mode: `json-body`
 - Why: Create multiple cards in one transaction using a single board concurrency token.
 - Output: Returns `{ board, cards }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `boards`, `cards`, `write`
 - Adjacent commands: `boards archive`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
@@ -2368,7 +2368,7 @@ Generated Help: docs archive
 - Input mode: `json-body`
 - Why: Soft-archive a document lineage (orthogonal to head revision content).
 - Output: Returns `{ document, revision }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `docs`, `write`
 - Adjacent commands: `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
 - Examples:
@@ -2402,7 +2402,7 @@ Generated Help: docs unarchive
 - Input mode: `json-body`
 - Why: Clear archived_at on a document so it returns to default visibility.
 - Output: Returns `{ document, revision }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `docs`, `write`
 - Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`
 - Examples:
@@ -2436,7 +2436,7 @@ Generated Help: docs restore
 - Input mode: `json-body`
 - Why: Clear trash state on a document after an explicit restore action.
 - Output: Returns `{ document, revision }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `docs`, `write`
 - Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
 - Examples:
@@ -2470,7 +2470,7 @@ Generated Help: docs purge
 - Input mode: `json-body`
 - Why: Permanently delete a trashed document (human-gated).
 - Output: Returns `{ purged, document_ref, document_handle }`; internal document_id may appear for admin/debug compatibility.
-- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `docs`, `write`
 - Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
 - Examples:
@@ -2591,7 +2591,7 @@ Generated Help: cards archive
 - Input mode: `json-body`
 - Why: Soft-delete a first-class card by setting archived_at (board concurrency via if_board_updated_at).
 - Output: Returns `{ board, card }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `already_trashed`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `already_trashed`, `quota_exceeded`
 - Concepts: `cards`, `write`
 - Adjacent commands: `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
 
@@ -2625,7 +2625,7 @@ Generated Help: cards purge
 - Input mode: `json-body`
 - Why: Permanently delete an archived or trashed card (human-gated).
 - Output: Returns `{ purged, card_ref, card_handle }`; internal card_id may appear for admin/debug compatibility.
-- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `cards`, `write`
 - Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
 
@@ -2656,7 +2656,7 @@ Generated Help: cards restore
 - Input mode: `json-body`
 - Why: Clear archive or trash lifecycle fields on a card so it reappears on boards.
 - Output: Returns `{ board, card }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `cards`, `write`
 - Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
 
@@ -2867,7 +2867,7 @@ Generated Help: events create
 - Input mode: `json-body`
 - Why: Append an event that links first-class resources and evidence through typed refs.
 - Output: Returns `{ event }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `quota_exceeded`
 - Concepts: `events`, `write`
 - Adjacent commands: `debug events archive`, `debug events get`, `debug events list`, `debug events restore`, `debug events stream`, `debug events trash`, `debug events unarchive`
 
@@ -2984,7 +2984,7 @@ Generated Help: events archive
 - Input mode: `json-body`
 - Why: Set archived_at on an append-only event record for filtered views.
 - Output: Returns `{ event }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `events`, `write`
 - Adjacent commands: `debug events create`, `debug events get`, `debug events list`, `debug events restore`, `debug events stream`, `debug events trash`, `debug events unarchive`
 
@@ -3016,7 +3016,7 @@ Generated Help: events unarchive
 - Input mode: `json-body`
 - Why: Clear archived_at on an event.
 - Output: Returns `{ event }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `events`, `write`
 - Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events list`, `debug events restore`, `debug events stream`, `debug events trash`
 
@@ -3048,7 +3048,7 @@ Generated Help: events trash
 - Input mode: `json-body`
 - Why: Move event to trash with an explicit operator reason.
 - Output: Returns `{ event }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `quota_exceeded`
 - Concepts: `events`, `write`
 - Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events list`, `debug events restore`, `debug events stream`, `debug events unarchive`
 
@@ -3080,7 +3080,7 @@ Generated Help: events restore
 - Input mode: `json-body`
 - Why: Clear trash state on an event after an explicit restore action.
 - Output: Returns `{ event }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `events`, `write`
 - Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events list`, `debug events stream`, `debug events trash`, `debug events unarchive`
 
@@ -3141,7 +3141,7 @@ Generated Help: inbox respond
 - Input mode: `json-body`
 - Why: A human principal records one response per request, closes the human attention item, and optionally notifies the selected requester/replacement agent.
 - Output: Returns `{ event, notify }`.
-- Error codes: `auth_required`, `human_required`, `invalid_request`, `invalid_token`, `notification_target_required`, `not_found`, `conflict`, `idempotency_conflict`
+- Error codes: `auth_required`, `human_required`, `invalid_request`, `invalid_token`, `notification_target_required`, `not_found`, `conflict`, `idempotency_conflict`, `quota_exceeded`
 - Concepts: `inbox`, `write`
 - Adjacent commands: `inbox get`, `inbox list`, `inbox stream`, `inbox summary`
 
@@ -3345,7 +3345,7 @@ Generated Help: artifacts archive
 - Input mode: `json-body`
 - Why: Set archived_at on artifact metadata (orthogonal to trash lifecycle).
 - Output: Returns `{ artifact }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `artifacts`, `write`
 - Adjacent commands: `artifacts attachments create`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
 
@@ -3377,7 +3377,7 @@ Generated Help: artifacts unarchive
 - Input mode: `json-body`
 - Why: Clear archived_at on artifact metadata.
 - Output: Returns `{ artifact }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `artifacts`, `write`
 - Adjacent commands: `artifacts archive`, `artifacts attachments create`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`
 
@@ -3409,7 +3409,7 @@ Generated Help: artifacts trash
 - Input mode: `json-body`
 - Why: Move artifact metadata to trash with an explicit operator reason.
 - Output: Returns `{ artifact }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `quota_exceeded`
 - Concepts: `artifacts`, `write`
 - Adjacent commands: `artifacts archive`, `artifacts attachments create`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts unarchive`
 
@@ -3441,7 +3441,7 @@ Generated Help: artifacts restore
 - Input mode: `json-body`
 - Why: Clear trash lifecycle fields on an artifact after an explicit restore action.
 - Output: Returns `{ artifact }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `artifacts`, `write`
 - Adjacent commands: `artifacts archive`, `artifacts attachments create`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts trash`, `artifacts unarchive`
 
@@ -3473,7 +3473,7 @@ Generated Help: artifacts purge
 - Input mode: `json-body`
 - Why: Permanently delete a trashed artifact (human-gated).
 - Output: Returns `{ purged, artifact_ref, artifact_handle }`; internal artifact_id may appear for admin/debug compatibility.
-- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `artifacts`, `write`
 - Adjacent commands: `artifacts archive`, `artifacts attachments create`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
 
@@ -4819,7 +4819,7 @@ Generated Help: work create
 - Input mode: `json-body`
 - Why: Register a card-backed commitment. board_ref is optional; omitted uses the workspace default board.
 - Output: Returns `WorkResponse`.
-- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
 - Adjacent commands: `work capabilities`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
@@ -4967,7 +4967,7 @@ Generated Help: work patch
 - Input mode: `json-body`
 - Why: Update local commitment annotations.
 - Output: Returns `WorkResponse`.
-- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
 - Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work presence`, `work refresh get`, `work refresh request`
@@ -5097,7 +5097,7 @@ Generated Help: work observations submit
 - Input mode: `json-body`
 - Why: Submit an attributed source observation.
 - Output: Returns `WorkObservationResponse`.
-- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
 - Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
@@ -5197,7 +5197,7 @@ Generated Help: work participants register
 - Input mode: `json-body`
 - Why: Register or refresh nonlocking task participation without assigning, moving, or completing work.
 - Output: Returns `WorkParticipantResponse`.
-- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `sessions_unavailable`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `sessions_unavailable`, `quota_exceeded`
 - Concepts: `cards`, `evidence`
 - Agent notes: Existing bearer authentication is required, including in development mode. Registration and participation writes require an agent principal and never mint credentials. Sessions are private to that principal. Task reads expose only explicitly shared participation metadata; native session identifiers and other task links are never shared. Upserts refresh server-clock activity leases of 120 seconds. A session heartbeat does not refresh task participation. Session closure is terminal and never changes work state, assignees, source authority, or ownership. Session identity is independent of per-attempt /runs. Capabilities are caller-reported, not server-verified support.
 - Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
@@ -5273,7 +5273,7 @@ Generated Help: work refresh request
 - Input mode: `json-body`
 - Why: Queue or coalesce a read-only refresh.
 - Output: Returns `WorkRefreshResponse`.
-- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
 - Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`
@@ -6155,7 +6155,7 @@ Generated Help: topics create
 - Input mode: `json-body`
 - Why: Create a first-class durable topic before attaching cards, docs, or artifacts.
 - Output: Returns `{ topic }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `quota_exceeded`
 - Concepts: `topics`, `write`
 - Agent notes: Replay-safe when the same request key and body are reused.
 - Adjacent commands: `topics archive`, `topics get`, `topics list`, `topics patch`, `topics restore`, `topics timeline`, `topics trash`, `topics unarchive`, `topics workspace`
@@ -6221,7 +6221,7 @@ Generated Help: topics patch
 - Input mode: `json-body`
 - Why: Update topic state with provenance and optimistic concurrency.
 - Output: Returns `{ topic }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `topics`, `write`, `concurrency`
 - Adjacent commands: `topics archive`, `topics create`, `topics get`, `topics list`, `topics restore`, `topics timeline`, `topics trash`, `topics unarchive`, `topics workspace`
 
@@ -6283,7 +6283,7 @@ Generated Help: topics trash
 - Input mode: `flags`
 - Why: Move topic to trash with an explicit operator reason.
 - Output: Returns `{ topic }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `topics`, `write`
 - Adjacent commands: `topics archive`, `topics create`, `topics get`, `topics list`, `topics patch`, `topics restore`, `topics timeline`, `topics unarchive`, `topics workspace`
 
@@ -6436,7 +6436,7 @@ Generated Help: boards patch
 - Input mode: `json-body`
 - Why: Update board metadata with optimistic concurrency.
 - Output: Returns `{ board }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `boards`, `write`, `concurrency`
 - Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
@@ -6494,7 +6494,7 @@ Generated Help: boards create
 - Input mode: `json-body`
 - Why: Create a durable board over topics and cards.
 - Output: Returns `{ board }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `quota_exceeded`
 - Concepts: `boards`, `write`
 - Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
@@ -6630,7 +6630,7 @@ Generated Help: docs create
 - Input mode: `json-body`
 - Why: Create a canonical document lineage anchored to a typed subject ref.
 - Output: Returns `{ document, revision }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `quota_exceeded`
 - Concepts: `docs`, `write`
 - Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
 - Examples:
@@ -6754,7 +6754,7 @@ Generated Help: docs put
 - Input mode: `json-body`
 - Why: Idempotent write of document body and metadata keyed by handle, so agents can republish knowledge without duplicating lineages.
 - Output: Returns `{ document, revision }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`, `quota_exceeded`
 - Concepts: `docs`, `write`
 - Agent notes: Path `{document_id}` is the public handle (or `document:<handle>`). If that handle exists, a new revision is appended and metadata (`title`, `source`, `tags`, `hosts`, `verified_at`) is updated. If it does not exist, the document is created with that handle. Visibility/lifecycle is unchanged. CLI `anx docs put -` reads the body from stdin.
 - Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
@@ -6852,7 +6852,7 @@ Generated Help: docs comment
 - Input mode: `json-body`
 - Why: Post a comment on a document so another agent can read it later.
 - Output: Returns `{ comment }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `quota_exceeded`
 - Concepts: `docs`, `write`
 - Agent notes: Posts a `message_posted` event on the document backing thread. Optional `reply_to` or `parent_id` creates a reply. Comment refs (`event:<handle>`) are stable across document revisions and are the deep-link identity.
 - Adjacent commands: `docs archive`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
@@ -6954,7 +6954,7 @@ Generated Help: docs comments reply
 - Input mode: `json-body`
 - Why: Reply in a document comment thread without leaving the docs surface.
 - Output: Returns `{ comment }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `quota_exceeded`
 - Concepts: `docs`, `write`
 - Agent notes: Posts a reply `message_posted` event with `reply_to` set to `{comment_id}`. Prefer `docs comment --reply-to` from the CLI.
 - Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
@@ -7055,7 +7055,7 @@ Generated Help: docs comments edit
 - Input mode: `json-body`
 - Why: Edit a comment you authored without changing its stable ref.
 - Output: Returns `{ comment }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `forbidden`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `forbidden`, `quota_exceeded`
 - Concepts: `docs`, `write`
 - Agent notes: Updates the comment body in place. Only the original author may edit. The comment `ref`/`handle` stay the same so UI deep-links remain valid across edits and document revisions.
 - Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
@@ -7106,7 +7106,7 @@ Generated Help: docs comments delete
 - Input mode: `none`
 - Why: Remove a comment you authored from the document discussion.
 - Output: Returns `{ comment }` with the trashed comment.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `forbidden`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `forbidden`, `quota_exceeded`
 - Concepts: `docs`, `write`
 - Agent notes: Trashes the backing `message_posted` event. Only the original author may delete. The comment ref stays stable; list omits trashed comments.
 - Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
@@ -7139,7 +7139,7 @@ Generated Help: cards create
 - Input mode: `json-body`
 - Why: Create a card by supplying board_ref or board_handle in the request body. Use this canonical card workflow path for single-card creation.
 - Output: Returns `{ board, card }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `cards`, `boards`, `write`
 - Adjacent commands: `cards archive`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
 
@@ -7220,7 +7220,7 @@ Generated Help: cards patch
 - Input mode: `json-body`
 - Why: Update card fields, including resolution and resolution refs.
 - Output: Returns `{ card }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `cards`, `write`, `concurrency`
 - Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
 
@@ -7382,7 +7382,7 @@ Generated Help: cards revise
 - Input mode: `json-body`
 - Why: Append a new immutable card content revision and advance the card head.
 - Output: Returns `{ card, revision }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `cards`, `revisions`, `write`
 - Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revision get`, `cards timeline`, `cards trash`
 
@@ -7506,7 +7506,7 @@ Generated Help: cards move
 - Input mode: `json-body`
 - Why: Reposition a card within a board column using the card's first-class identity.
 - Output: Returns `{ card }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `cards`, `boards`, `write`
 - Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
 
@@ -7658,7 +7658,7 @@ Generated Help: cards trash
 - Input mode: `json-body`
 - Why: Move a card to trash with an explicit operator reason while keeping archive lifecycle distinct.
 - Output: Returns `{ board, card }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `cards`, `write`
 - Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`
 
@@ -7811,7 +7811,7 @@ Generated Help: artifacts create
 - Input mode: `json-body`
 - Why: Store content-addressed artifact metadata and payload (bytes, text, or structured JSON).
 - Output: Returns `{ artifact }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`, `quota_exceeded`
 - Concepts: `artifacts`, `write`
 - Adjacent commands: `artifacts archive`, `artifacts attachments create`, `artifacts content`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
 
@@ -7865,7 +7865,7 @@ Generated Help: artifacts attachments create
 - Input mode: `multipart-form`
 - Why: Create kind=attachment via multipart form (efficient binary upload; previews use GET /artifacts/{artifact_id}/content, where the path segment accepts artifact ref or handle).
 - Output: Returns `{ artifact }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`, `unsupported_mime`, `payload_too_large`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`, `unsupported_mime`, `payload_too_large`, `quota_exceeded`
 - Concepts: `artifacts`, `write`
 - Agent notes: Multipart/form-data upload; generated HTTP Invoke helpers JSON-encode bodies and are not suitable—use UI, curl -F, or a multipart-aware client.
 - Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
@@ -8163,7 +8163,7 @@ Generated Help: docs revise
 - Input mode: `json-body`
 - Why: Append a new immutable revision and advance the document head.
 - Output: Returns `{ document, revision }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `docs`, `revisions`, `write`
 - Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
 - Examples:
@@ -8224,7 +8224,7 @@ Generated Help: docs trash
 - Input mode: `json-body`
 - Why: Move a document lineage to trash with an explicit operator reason.
 - Output: Returns `{ document, revision }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `docs`, `write`
 - Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs unarchive`
 - Examples:

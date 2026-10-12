@@ -313,6 +313,9 @@ func handlePatchDocument(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	}
 	document, revision, err := opts.primitiveStore.PatchDocument(r.Context(), actorID, documentID, req.Patch, req.IfUpdatedAt)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		switch {
 		case errors.Is(err, primitives.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "document not found")
@@ -752,6 +755,9 @@ func handleTrashDocument(w http.ResponseWriter, r *http.Request, opts handlerOpt
 
 	document, revision, err := opts.primitiveStore.TrashDocument(r.Context(), actorID, documentID, req.Reason)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "document not found")
 			return
@@ -804,6 +810,9 @@ func handleArchiveDocument(w http.ResponseWriter, r *http.Request, opts handlerO
 
 	document, revision, err := opts.primitiveStore.ArchiveDocumentIfUpdatedAt(r.Context(), actorID, documentID, req.IfUpdatedAt)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "document not found")
 			return
@@ -852,6 +861,9 @@ func handleUnarchiveDocument(w http.ResponseWriter, r *http.Request, opts handle
 
 	document, revision, err := opts.primitiveStore.UnarchiveDocument(r.Context(), actorID, documentID)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "document not found")
 			return
@@ -901,6 +913,9 @@ func handleRestoreDocument(w http.ResponseWriter, r *http.Request, opts handlerO
 
 	document, revision, err := opts.primitiveStore.RestoreDocument(r.Context(), actorID, documentID, req.Reason)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "document not found")
 			return
@@ -946,6 +961,9 @@ func handlePurgeDocument(w http.ResponseWriter, r *http.Request, opts handlerOpt
 
 	err := opts.primitiveStore.PurgeDocument(r.Context(), documentID)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "document not found")
 			return
@@ -1226,6 +1244,9 @@ func handleCreateDocumentComment(w http.ResponseWriter, r *http.Request, opts ha
 	}
 	comment, err := opts.primitiveStore.CreateDocumentComment(r.Context(), actorID, documentID, req.Text, parentID)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "document not found")
 			return
@@ -1292,6 +1313,9 @@ func handleDeleteDocumentComment(w http.ResponseWriter, r *http.Request, opts ha
 }
 
 func writeDocumentCommentMutationError(w http.ResponseWriter, err error, fallback string) {
+	if writePrimitiveQuotaViolationError(w, err) {
+		return
+	}
 	if errors.Is(err, primitives.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "not_found", "comment not found")
 		return

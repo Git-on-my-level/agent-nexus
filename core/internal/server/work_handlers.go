@@ -51,6 +51,9 @@ func workRouteAccess(r *http.Request) routeAccessRequirement {
 	return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: valid}
 }
 func workStoreError(w http.ResponseWriter, r *http.Request, err error) {
+	if writePrimitiveQuotaViolationError(w, err) {
+		return
+	}
 	switch {
 	case errors.Is(err, primitives.ErrNotFound):
 		writeError(w, 404, "not_found", "work not found")

@@ -39,6 +39,9 @@ func handleAskSubscription(w http.ResponseWriter, r *http.Request, opts handlerO
 	}
 	out, err := store.CreateAskSubscription(r.Context(), p.ActorID, askRef, in)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrForbidden) || errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, 404, "not_found", "ask not found")
 		} else if errors.Is(err, primitives.ErrInvalidWorkRequest) {
@@ -76,6 +79,9 @@ func handleAskDeliveryReceipt(w http.ResponseWriter, r *http.Request, opts handl
 	}
 	err := store.RecordAskDelivery(r.Context(), p.ActorID, in.Subscription, askRef, in.State, strings.TrimSpace(in.Reason), in.Attempts)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrNotFound) || errors.Is(err, primitives.ErrForbidden) {
 			writeError(w, 404, "not_found", "delivery not found")
 		} else {

@@ -187,6 +187,9 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		stored, err = opts.primitiveStore.AppendEvent(r.Context(), actorID, req.Event)
 	}
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrHumanAttentionAlreadyResponded) {
 			writeError(w, http.StatusConflict, "conflict", "human attention request is already resolved")
 			return
@@ -309,6 +312,9 @@ func handleArchiveEvent(w http.ResponseWriter, r *http.Request, opts handlerOpti
 
 	event, err := opts.primitiveStore.ArchiveEvent(r.Context(), actorID, eventID)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "event not found")
 			return
@@ -344,6 +350,9 @@ func handleUnarchiveEvent(w http.ResponseWriter, r *http.Request, opts handlerOp
 
 	event, err := opts.primitiveStore.UnarchiveEvent(r.Context(), actorID, eventID)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "event not found")
 			return
@@ -380,6 +389,9 @@ func handleTrashEvent(w http.ResponseWriter, r *http.Request, opts handlerOption
 
 	event, err := opts.primitiveStore.TrashEvent(r.Context(), actorID, eventID, req.Reason)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "event not found")
 			return
@@ -412,6 +424,9 @@ func handleRestoreEvent(w http.ResponseWriter, r *http.Request, opts handlerOpti
 
 	event, err := opts.primitiveStore.RestoreEvent(r.Context(), actorID, eventID)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "event not found")
 			return
@@ -680,6 +695,9 @@ func handleRestoreArtifact(w http.ResponseWriter, r *http.Request, opts handlerO
 
 	artifact, err := opts.primitiveStore.RestoreArtifact(r.Context(), actorID, artifactID)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "artifact not found")
 			return
@@ -760,6 +778,9 @@ func handlePurgeArtifact(w http.ResponseWriter, r *http.Request, opts handlerOpt
 
 	err := opts.primitiveStore.PurgeTrashedArtifact(r.Context(), artifactID)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "artifact not found")
 			return
@@ -1051,6 +1072,9 @@ func handleTrashArtifact(w http.ResponseWriter, r *http.Request, opts handlerOpt
 
 	artifact, err := opts.primitiveStore.TrashArtifact(r.Context(), actorID, artifactID, req.Reason)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "artifact not found")
 			return
@@ -1082,6 +1106,9 @@ func handleArchiveArtifact(w http.ResponseWriter, r *http.Request, opts handlerO
 
 	artifact, err := opts.primitiveStore.ArchiveArtifact(r.Context(), actorID, artifactID)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "artifact not found")
 			return
@@ -1117,6 +1144,9 @@ func handleUnarchiveArtifact(w http.ResponseWriter, r *http.Request, opts handle
 
 	artifact, err := opts.primitiveStore.UnarchiveArtifact(r.Context(), actorID, artifactID)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "artifact not found")
 			return

@@ -133,6 +133,9 @@ func handleCreateTopic(w http.ResponseWriter, r *http.Request, opts handlerOptio
 
 	result, err := opts.primitiveStore.CreateTopic(r.Context(), actorID, req.Topic)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrConflict) && strings.TrimSpace(req.RequestKey) != "" {
 			topicID := firstNonEmptyString(req.Topic["id"])
 			if topicID != "" {
@@ -257,6 +260,9 @@ func handlePatchTopic(w http.ResponseWriter, r *http.Request, opts handlerOption
 
 	result, err := opts.primitiveStore.PatchTopic(r.Context(), actorID, topicID, req.Patch, req.IfUpdatedAt)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		switch {
 		case errors.Is(err, primitives.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "topic not found")
@@ -794,6 +800,9 @@ func topicBoardDocumentIDs(board map[string]any) []string {
 }
 
 func writeTopicLifecycleStoreError(w http.ResponseWriter, err error) bool {
+	if writePrimitiveQuotaViolationError(w, err) {
+		return true
+	}
 	switch {
 	case errors.Is(err, primitives.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found", "topic not found")

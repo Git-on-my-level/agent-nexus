@@ -509,23 +509,28 @@ func writeDetailedError(w http.ResponseWriter, status int, code string, message 
 }
 
 func writeQuotaViolationError(w http.ResponseWriter, violation primitives.QuotaViolation) {
-	status := http.StatusInsufficientStorage
-	if violation.Code == "request_too_large" {
-		status = http.StatusRequestEntityTooLarge
+	metric := violation.Metric
+	label := metric
+	switch metric {
+	case "artifact_count":
+		metric, label = "artifacts", "artifact"
+	case "document_count":
+		metric, label = "documents", "document"
+	case "revision_count":
+		metric, label = "revisions", "revision"
+	case "storage_bytes":
+		metric, label = "blob_bytes", "storage byte"
+	case "upload_bytes":
+		label = "upload byte"
 	}
-	details := map[string]any{
+	delta := violation.Projected - violation.Current
+	message := fmt.Sprintf("Workspace %s limit reached (%d/%d). This operation needs %d more. Remove content or raise the configured workspace limit.", label, violation.Current, violation.Limit, delta)
+	writeDetailedError(w, http.StatusConflict, "quota_exceeded", message, map[string]any{
 		"quota": map[string]any{
-			"metric":    violation.Metric,
-			"limit":     violation.Limit,
-			"current":   violation.Current,
-			"projected": violation.Projected,
+			"metric": metric, "limit": violation.Limit, "current": violation.Current,
+			"delta": delta, "projected": violation.Projected,
 		},
-	}
-	message := "workspace quota exceeded"
-	if violation.Code == "request_too_large" {
-		message = "request body exceeds the configured upload limit"
-	}
-	writeDetailedError(w, status, violation.Code, message, details)
+	})
 }
 
 func writePrimitiveQuotaViolationError(w http.ResponseWriter, err error) bool {

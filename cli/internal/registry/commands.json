@@ -407,7 +407,8 @@
       "error_codes": [
         "not_found",
         "auth_required",
-        "invalid_request"
+        "invalid_request",
+        "quota_exceeded"
       ],
       "concepts": [
         "inbox",
@@ -841,7 +842,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "artifacts",
@@ -898,7 +900,8 @@
         "invalid_token",
         "conflict",
         "unsupported_mime",
-        "payload_too_large"
+        "payload_too_large",
+        "quota_exceeded"
       ],
       "concepts": [
         "artifacts",
@@ -980,7 +983,8 @@
         "auth_required",
         "invalid_request",
         "invalid_token",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "artifacts",
@@ -1122,7 +1126,8 @@
         "human_only",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "artifacts",
@@ -1174,7 +1179,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "artifacts",
@@ -1229,7 +1235,8 @@
         "auth_required",
         "invalid_request",
         "invalid_token",
-        "not_found"
+        "not_found",
+        "quota_exceeded"
       ],
       "concepts": [
         "artifacts",
@@ -1287,7 +1294,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "artifacts",
@@ -1341,7 +1349,8 @@
       "error_codes": [
         "not_found",
         "auth_required",
-        "invalid_request"
+        "invalid_request",
+        "quota_exceeded"
       ],
       "concepts": [
         "inbox",
@@ -1475,7 +1484,8 @@
       "error_codes": [
         "not_found",
         "auth_required",
-        "invalid_request"
+        "invalid_request",
+        "quota_exceeded"
       ],
       "concepts": [
         "inbox",
@@ -2807,7 +2817,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "boards",
@@ -2866,7 +2877,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "boards",
@@ -3025,7 +3037,8 @@
       "error_codes": [
         "auth_required",
         "invalid_request",
-        "invalid_token"
+        "invalid_token",
+        "quota_exceeded"
       ],
       "concepts": [
         "boards",
@@ -3211,7 +3224,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "boards",
@@ -3305,7 +3319,8 @@
         "human_only",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "boards",
@@ -3360,7 +3375,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "boards",
@@ -3419,7 +3435,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "boards",
@@ -3480,7 +3497,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "boards",
@@ -3585,7 +3603,8 @@
         "invalid_token",
         "not_found",
         "conflict",
-        "already_trashed"
+        "already_trashed",
+        "quota_exceeded"
       ],
       "concepts": [
         "cards",
@@ -3652,7 +3671,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "cards",
@@ -3904,7 +3924,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "cards",
@@ -3997,7 +4018,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "cards",
@@ -4112,7 +4134,8 @@
         "human_only",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "cards",
@@ -4167,7 +4190,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "cards",
@@ -4226,7 +4250,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "cards",
@@ -4452,7 +4477,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "cards",
@@ -4545,7 +4571,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "docs",
@@ -4615,7 +4642,8 @@
         "auth_required",
         "invalid_request",
         "invalid_token",
-        "not_found"
+        "not_found",
+        "quota_exceeded"
       ],
       "concepts": [
         "docs",
@@ -4697,7 +4725,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "forbidden"
+        "forbidden",
+        "quota_exceeded"
       ],
       "concepts": [
         "docs",
@@ -4815,7 +4844,8 @@
         "auth_required",
         "invalid_request",
         "invalid_token",
-        "not_found"
+        "not_found",
+        "quota_exceeded"
       ],
       "concepts": [
         "docs",
@@ -4898,7 +4928,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "forbidden"
+        "forbidden",
+        "quota_exceeded"
       ],
       "concepts": [
         "docs",
@@ -4971,7 +5002,8 @@
       "error_codes": [
         "auth_required",
         "invalid_request",
-        "invalid_token"
+        "invalid_token",
+        "quota_exceeded"
       ],
       "concepts": [
         "docs",
@@ -5232,7 +5264,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "docs",
@@ -5326,7 +5359,8 @@
         "human_only",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "docs",
@@ -5392,7 +5426,8 @@
         "auth_required",
         "invalid_request",
         "invalid_token",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "docs",
@@ -5523,7 +5558,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "docs",
@@ -5594,7 +5630,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "docs",
@@ -5864,7 +5901,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "docs",
@@ -5937,7 +5975,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "docs",
@@ -6008,7 +6047,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "events",
@@ -6061,7 +6101,8 @@
       "error_codes": [
         "auth_required",
         "invalid_request",
-        "invalid_token"
+        "invalid_token",
+        "quota_exceeded"
       ],
       "concepts": [
         "events",
@@ -6254,7 +6295,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "events",
@@ -6344,7 +6386,8 @@
         "auth_required",
         "invalid_request",
         "invalid_token",
-        "not_found"
+        "not_found",
+        "quota_exceeded"
       ],
       "concepts": [
         "events",
@@ -6400,7 +6443,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "events",
@@ -7486,7 +7530,8 @@
         "notification_target_required",
         "not_found",
         "conflict",
-        "idempotency_conflict"
+        "idempotency_conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "inbox",
@@ -8122,7 +8167,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "cards",
@@ -11465,7 +11511,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "topics",
@@ -11519,7 +11566,8 @@
       "error_codes": [
         "auth_required",
         "invalid_request",
-        "invalid_token"
+        "invalid_token",
+        "quota_exceeded"
       ],
       "concepts": [
         "topics",
@@ -11697,7 +11745,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "topics",
@@ -11797,7 +11846,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "topics",
@@ -11907,7 +11957,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "topics",
@@ -11970,7 +12021,8 @@
         "invalid_request",
         "invalid_token",
         "not_found",
-        "conflict"
+        "conflict",
+        "quota_exceeded"
       ],
       "concepts": [
         "topics",
@@ -12134,6 +12186,7 @@
       },
       "output_envelope": "Returns `WorkResponse`.",
       "error_codes": [
+        "quota_exceeded",
         "invalid_request",
         "not_found",
         "conflict",
@@ -12469,6 +12522,7 @@
       },
       "output_envelope": "Returns `WorkObservationResponse`.",
       "error_codes": [
+        "quota_exceeded",
         "invalid_request",
         "not_found",
         "conflict",
@@ -12674,7 +12728,8 @@
         "invalid_request",
         "not_found",
         "conflict",
-        "sessions_unavailable"
+        "sessions_unavailable",
+        "quota_exceeded"
       ],
       "concepts": [
         "cards",
@@ -12739,6 +12794,7 @@
       },
       "output_envelope": "Returns `WorkResponse`.",
       "error_codes": [
+        "quota_exceeded",
         "invalid_request",
         "not_found",
         "conflict",
@@ -12905,6 +12961,7 @@
       },
       "output_envelope": "Returns `WorkRefreshResponse`.",
       "error_codes": [
+        "quota_exceeded",
         "invalid_request",
         "not_found",
         "conflict",
@@ -12994,7 +13051,8 @@
         "auth_required",
         "invalid_request",
         "invalid_token",
-        "not_found"
+        "not_found",
+        "quota_exceeded"
       ],
       "concepts": [
         "home",
