@@ -29,6 +29,18 @@ func TestAskTextValidation(t *testing.T) {
 	}
 }
 
+func TestAskErrorCodesAreRecoverable(t *testing.T) {
+	for _, code := range []string{"ask_title_invalid", "ask_title_too_long", "ask_body_invalid"} {
+		payload := errorPayload(code, "test")
+		if payload["recoverable"] != true {
+			t.Fatalf("%s recoverable=%v", code, payload["recoverable"])
+		}
+		if hint, _ := payload["hint"].(string); hint == "" || hint == "Review error details and endpoint usage, then retry if appropriate." {
+			t.Fatalf("%s used unknown-code metadata: %#v", code, payload)
+		}
+	}
+}
+
 func TestAskTextHTTPValidation(t *testing.T) {
 	requireIntegrationTest(t)
 	h := newPrimitivesTestServer(t)
@@ -49,8 +61,12 @@ func TestAskTextHTTPValidation(t *testing.T) {
 			t.Fatal(err)
 		}
 		resp.Body.Close()
-		if data["error"].(map[string]any)["code"] != tc.code {
+		errObj := data["error"].(map[string]any)
+		if errObj["code"] != tc.code {
 			t.Fatalf("%#v", data)
+		}
+		if errObj["recoverable"] != true {
+			t.Fatalf("%s recoverable=%v payload=%#v", tc.code, errObj["recoverable"], data)
 		}
 	}
 }

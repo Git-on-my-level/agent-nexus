@@ -2287,7 +2287,7 @@
     "../server/docs_handlers.go:parseOptionalBoolQuery": "0c6cebfd0c8acec72db441f60e91516fc2538d317be604f97a07fb19363321e4",
     "../server/docs_handlers.go:writeDocumentCommentMutationError": "5d5e4863d81923025f2f12b47b7e66877bec68092d6b67b2af988cfd4c5db92d",
     "../server/docs_handlers.go:writeInvalidDocumentRequest": "2f998d00bd311a8cd799647506ad20d606634997835ac9e8187916fd377535aa",
-    "../server/error_catalog.go:defaultErrorMetadata": "1de559e6786c35f899a51016cee8a944f7bf5d694909253f8aa6ddbd5fbcec85",
+    "../server/error_catalog.go:defaultErrorMetadata": "3446aa0b844f4866626359aad84efbd2ea655da07720072ee1efa9f099619288",
     "../server/handler.go:NewHandler": "7970cd3733608ab56f876fcb5d302113ea2c709f36a75cb6c10c2e6079dca948",
     "../server/handler.go:checkReadiness": "0c420a49c4b001573e6b17620e125f010a378f5c21f7ec75f8479cbe07a2eae8",
     "../server/handler.go:clientCLIVersion": "372fde3425dc725cfec7683f1524176f23b2f4de5b8f8c9c8997db490753ee73",
