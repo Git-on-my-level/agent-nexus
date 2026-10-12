@@ -9,6 +9,7 @@
   import { formatTime } from "$lib/time/format.js";
   import { liveWorkspaceEvents } from "$lib/liveWorkspaceEvents.js";
   import { initializeAuthSession } from "$lib/authSession.js";
+  import { resourceRouteSegment } from "$lib/resourceIdentity.js";
   import { reliableRead } from "$lib/reliableRead.js";
 
   import {
@@ -21,6 +22,7 @@
     formatPartialCount,
     mergeDashboardReports,
     loadOverview,
+    parseReportDocumentContent,
   } from "$lib/overview.js";
   import DashboardPicker from "$lib/components/overview/DashboardPicker.svelte";
   import RecentChanges from "$lib/components/overview/RecentChanges.svelte";
@@ -49,7 +51,7 @@
     scope,
     key: cacheKey,
     currentScope: readerScopeKey,
-    read: (signal) => loadOverview(createWorkspaceReadClient(signal)),
+    read: readOverviewSnapshot,
     beforeRead: () => initializeAuthSession({ authDriver: "layout" }),
     onSuccess: resetReportChoices,
   });
@@ -258,29 +260,36 @@
     return "text-fg";
   }
 
+  function reportMatches(entry, wanted) {
+    return (
+      entry.id === wanted ||
+      entry.segment === wanted ||
+      entry.requested_as === wanted
+    );
+  }
+
   let selectedReport = $derived.by(() => {
     const wanted = $page.url.searchParams.get("dashboard") || "";
     return (
-      reports.find(
-        (entry) => entry.id === wanted || entry.segment === wanted,
-      ) ||
+      reports.find((entry) => reportMatches(entry, wanted)) ||
       reports[0] ||
       null
     );
   });
 
   let request = 0;
+  let reportsController;
+  const resolvedReportQueries = new Set();
   let requestedReportLoad = $state("");
   $effect(() => {
     const wanted = $page.url.searchParams.get("dashboard") || "";
     const key = `${request}:${wanted}:${reportChoicesLoaded ? model?.reports?.next_cursor || "end" : "first"}`;
     if (
       wanted &&
+      !resolvedReportQueries.has(wanted) &&
       model?.reports?.status === "ok" &&
       model.reports.has_more &&
-      !reports.some(
-        (entry) => entry.id === wanted || entry.segment === wanted,
-      ) &&
+      !reports.some((entry) => reportMatches(entry, wanted)) &&
       requestedReportLoad !== key &&
       !loadingMoreReports
     ) {
@@ -289,8 +298,66 @@
     }
   });
 
+  function rememberReportQuery(wanted) {
+    if (!wanted) return;
+    resolvedReportQueries.delete(wanted);
+    resolvedReportQueries.add(wanted);
+    if (resolvedReportQueries.size > 12)
+      resolvedReportQueries.delete(resolvedReportQueries.values().next().value);
+  }
+
+  async function readOverviewSnapshot(signal) {
+    const previous = fetched;
+    const wanted = $page.url.searchParams.get("dashboard") || "";
+    const client = createWorkspaceReadClient(signal);
+    const next = await loadOverview(client);
+    if (
+      wanted &&
+      previous?.reports?.status === "ok" &&
+      next.reports?.status === "ok" &&
+      !next.reports.reports.some((entry) => reportMatches(entry, wanted))
+    ) {
+      // Returning to a bookmark must not repeat an O(catalog) cursor walk.
+      // Revalidate one document, including a previously missing bookmark.
+      rememberReportQuery(wanted);
+      const known = previous.reports.reports.find((entry) =>
+        reportMatches(entry, wanted),
+      );
+      try {
+        const got = await client.getDocument(wanted);
+        const parsed = parseReportDocumentContent(got?.revision?.content);
+        const id = got?.document?.id || known?.id;
+        if (id && parsed.report) {
+          next.reports.reports = next.reports.reports.filter(
+            (entry) => entry.id !== id,
+          );
+          next.reports.reports.push({
+            ...known,
+            ...got.document,
+            id,
+            ref: got.document?.ref || known?.ref || `document:${id}`,
+            segment:
+              resourceRouteSegment(got.document, "document") ||
+              known?.segment ||
+              id,
+            requested_as: wanted,
+            report: parsed.report,
+            revision_ref: got.revision?.ref || "",
+          });
+        }
+      } catch (error) {
+        // A deleted or denied document must not survive in a refreshed model.
+        // Access denials still revoke the entire snapshot via reliableRead.
+        if (![400, 404].includes(error?.status ?? error?.coreHttpStatus))
+          throw error;
+      }
+    }
+    return next;
+  }
+
   function resetReportChoices() {
     request++;
+    reportsController?.abort();
     reportChoicesLoaded = false;
     requestedReportLoad = "";
     loadingMoreReports = false;
@@ -305,7 +372,7 @@
     pinError = "";
     try {
       await coreClient.setWorkspaceDashboard({ document_ref: ref });
-      await refresh();
+      await overviewRead.refresh({ replace: true });
     } catch (error) {
       pinError =
         error instanceof Error
@@ -329,21 +396,27 @@
     if (section?.status !== "ok" || !section.has_more || loadingMoreReports)
       return;
     const id = request;
+    const controller = new AbortController();
+    reportsController = controller;
     loadingMoreReports = true;
     try {
       const more = await reliableRead(
-        () =>
-          coreClient.getDashboardReports({
+        (signal) =>
+          createWorkspaceReadClient(signal).getDashboardReports({
             cursor: reportChoicesLoaded ? section.next_cursor : undefined,
           }),
-        { cacheScope: scope },
+        { cacheScope: scope, signal: controller.signal },
       );
       if (id !== request || fetched?.reports !== section) return;
       if (scope !== readerScopeKey()) return;
-      overviewRead.setData({
-        ...fetched,
-        reports: mergeDashboardReports(section, more),
-      });
+      const merged = mergeDashboardReports(section, more);
+      const wanted = $page.url.searchParams.get("dashboard") || "";
+      if (
+        !merged.has_more ||
+        merged.reports.some((entry) => reportMatches(entry, wanted))
+      )
+        rememberReportQuery(wanted);
+      overviewRead.setData({ ...fetched, reports: merged });
       reportChoicesLoaded = true;
     } catch (error) {
       if (id === request)
@@ -358,6 +431,7 @@
 
   onDestroy(() => {
     overviewRead.destroy();
+    reportsController?.abort();
     request += 1;
     fanOutRequest += 1;
   });

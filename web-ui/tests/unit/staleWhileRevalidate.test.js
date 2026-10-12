@@ -196,3 +196,37 @@ it("bounds a silent auth refresh that never answers", async () => {
   expect(read).not.toHaveBeenCalled();
   view.destroy();
 });
+
+it("a confirmed mutation supersedes older reads without losing the new flight", async () => {
+  let finishOld, finishNew, oldSignal;
+  const read = vi
+    .fn()
+    .mockResolvedValueOnce({ pinned: "initial" })
+    .mockImplementationOnce((signal) => {
+      oldSignal = signal;
+      return new Promise((resolve) => {
+        finishOld = resolve;
+      });
+    })
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishNew = resolve;
+        }),
+    );
+  const view = setup(read);
+  await view.refresh();
+  const oldFlight = view.refresh();
+  await vi.waitFor(() => expect(finishOld).toBeTypeOf("function"));
+  const newFlight = view.refresh({ replace: true });
+  await vi.waitFor(() => expect(finishNew).toBeTypeOf("function"));
+  expect(oldSignal.aborted).toBe(true);
+  expect(await oldFlight).toBe(false);
+  expect(view.refresh()).toBe(newFlight);
+  finishNew({ pinned: "confirmed" });
+  await newFlight;
+  finishOld({ pinned: "initial" });
+  expect(get(view).data).toEqual({ pinned: "confirmed" });
+  expect(readWorkspaceView("reader:overview")).toEqual({ pinned: "confirmed" });
+  view.destroy();
+});

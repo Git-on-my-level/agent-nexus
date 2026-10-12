@@ -52,11 +52,14 @@ export function staleWhileRevalidate({
     writeWorkspaceView(key, data, updatedAt ?? Date.now());
   }
 
-  function refresh({ force = true } = {}) {
+  // Confirmed mutations must replace reads that started before the write.
+  function refresh({ force = true, replace = false } = {}) {
     if (!valid()) return Promise.resolve(false);
-    if (pending) return pending;
+    if (pending && !replace) return pending;
+    if (replace) controller?.abort();
     const previous = get(state);
     if (
+      !replace &&
       !force &&
       previous.updatedAt !== null &&
       Date.now() - previous.updatedAt < maxAgeMs
@@ -99,7 +102,7 @@ export function staleWhileRevalidate({
       } finally {
         if (valid() && ticket === generation)
           state.update((value) => ({ ...value, refreshing: false }));
-        pending = null;
+        if (ticket === generation) pending = null;
       }
     })();
     return pending;

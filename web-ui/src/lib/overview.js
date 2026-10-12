@@ -529,7 +529,13 @@ export function mergeDashboardReports(current, next) {
   for (const entry of [...(current?.reports || []), ...(next?.reports || [])]) {
     const parsed = parseVisualReport(JSON.stringify(entry.report));
     if (parsed.report)
-      reports.set(entry.id, { ...entry, report: parsed.report });
+      reports.set(entry.id, {
+        ...entry,
+        ...(reports.get(entry.id)?.requested_as
+          ? { requested_as: reports.get(entry.id).requested_as }
+          : {}),
+        report: parsed.report,
+      });
   }
   return {
     ...current,

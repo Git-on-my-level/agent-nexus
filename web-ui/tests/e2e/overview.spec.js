@@ -321,6 +321,22 @@ async function installOverview(
     if (path === "/inbox") return route.fulfill({ json: { items: asks } });
     if (path === "/docs/demo-dashboard")
       return route.fulfill({ json: dashboard });
+    if (path === "/docs/older-dashboard")
+      return route.fulfill({
+        json: {
+          document: {
+            ...dashboard.document,
+            id: "older-dashboard",
+            handle: "older-dashboard",
+            ref: "document:older-dashboard",
+            title: "Earlier dashboard",
+          },
+          revision: {
+            content: JSON.stringify({ ...report, title: "Earlier dashboard" }),
+            content_type: "text",
+          },
+        },
+      });
     return route.fallback();
   });
   state.snapshot = snapshot;
@@ -975,4 +991,192 @@ test("a principal change never restores the previous reader's Overview", async (
       key.includes('"first"'),
     ),
   ).toBe(false);
+});
+
+test("a confirmed dashboard pin supersedes a stalled return refresh", async ({
+  page,
+}) => {
+  const api = await installOverview(page);
+  await page.clock.install();
+  await page.goto(OVERVIEW);
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(6);
+  const gate = deferred();
+  let reads = 0;
+  let released = false;
+  await page.route("**/overview?**", async (route) => {
+    reads++;
+    if (reads !== 1) return route.fallback();
+    const oldSnapshot = api.snapshot();
+    await gate.promise;
+    await route.fulfill({ json: oldSnapshot });
+    released = true;
+  });
+  await page.clock.setSystemTime(Date.now() + 31_000);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect.poll(() => reads).toBe(1);
+  await picker(page).click();
+  await page.getByRole("menuitem", { name: "Pin as dashboard" }).click();
+  await expect(page.locator("[data-overview-report-pinned]")).toBeVisible();
+  expect(api.writes[0].document_ref).toBe("document:demo-dashboard");
+  expect(reads).toBe(2);
+  gate.resolve();
+  await expect.poll(() => released).toBe(true);
+  await expect(page.locator("[data-overview-report-pinned]")).toBeVisible();
+});
+
+for (const wanted of ["older-dashboard", "missing-dashboard"]) {
+  test(`tab return revalidates ${wanted} without another catalog scan`, async ({
+    page,
+  }) => {
+    const api = await installOverview(page, { paged: true });
+    await page.clock.install();
+    await page.goto(`${OVERVIEW}?dashboard=${wanted}`);
+    await expect(
+      page.getByRole("heading", {
+        name:
+          wanted === "older-dashboard" ? "Earlier dashboard" : "Demo dashboard",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect.poll(() => api.selectorReads).toBe(2);
+    const catalogReads = api.selectorReads;
+    let documentReads = 0;
+    await page.route(`**/docs/${wanted}`, async (route) => {
+      documentReads++;
+      if (wanted === "missing-dashboard")
+        return route.fulfill({
+          status: 404,
+          json: { error: { message: "Not found" } },
+        });
+      return route.fallback();
+    });
+    await page.clock.setSystemTime(Date.now() + 31_000);
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect.poll(() => documentReads).toBe(1);
+    await expect(
+      page.locator("[data-overview-refresh-status]"),
+    ).not.toContainText("refreshing…");
+    expect(api.selectorReads).toBe(catalogReads);
+    await expect(
+      page.getByRole("heading", {
+        name:
+          wanted === "older-dashboard" ? "Earlier dashboard" : "Demo dashboard",
+        exact: true,
+      }),
+    ).toBeVisible();
+  });
+}
+
+test("a bookmarked document denial revokes the last-known Overview on return", async ({
+  page,
+}) => {
+  await installOverview(page);
+  await page.clock.install();
+  await page.goto(`${OVERVIEW}?dashboard=older-dashboard`);
+  await expect(
+    page.getByRole("heading", { name: "Earlier dashboard", exact: true }),
+  ).toBeVisible();
+  await page.route("**/docs/older-dashboard", (route) =>
+    route.fulfill({
+      status: 403,
+      json: { error: { message: "Read permission denied" } },
+    }),
+  );
+  await page.clock.setSystemTime(Date.now() + 31_000);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect(page.getByRole("alert").first()).toContainText(
+    "Read permission denied",
+  );
+  await expect(
+    page.getByRole("heading", { name: "Earlier dashboard", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(0);
+});
+
+test("a bookmarked document converted to a note falls back safely on return", async ({
+  page,
+}) => {
+  await installOverview(page);
+  await page.clock.install();
+  await page.goto(`${OVERVIEW}?dashboard=older-dashboard`);
+  await expect(
+    page.getByRole("heading", { name: "Earlier dashboard", exact: true }),
+  ).toBeVisible();
+  await page.route("**/docs/older-dashboard", (route) =>
+    route.fulfill({
+      json: {
+        document: { id: "older-dashboard", handle: "older-dashboard" },
+        revision: { content: "An ordinary note", content_type: "text" },
+      },
+    }),
+  );
+  await page.clock.setSystemTime(Date.now() + 31_000);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect(
+    page.locator("[data-overview-refresh-status]"),
+  ).not.toContainText("refreshing…");
+  await expect(
+    page.getByRole("heading", { name: "Demo dashboard", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator("[data-workspace-render-error]")).toHaveCount(0);
+});
+
+test("a resolved bookmark keeps its canonical link and selection when the catalog reloads", async ({
+  page,
+}) => {
+  const api = await installOverview(page);
+  let renamed = false;
+  const older = () => ({
+    id: "older-dashboard",
+    ref: "document:older-dashboard",
+    segment: renamed ? "renamed-dashboard" : "dashboard-alias",
+    title: "Earlier dashboard",
+    report: { ...report, title: "Earlier dashboard" },
+  });
+  await page.route("**/workspace/dashboard/reports**", (route) =>
+    route.fulfill({
+      json: {
+        ...api.snapshot().dashboard,
+        has_more: false,
+        reports: [...api.snapshot().dashboard.reports, older()],
+      },
+    }),
+  );
+  await page.route("**/docs/dashboard-alias", (route) =>
+    route.fulfill({
+      json: {
+        document: {
+          id: "older-dashboard",
+          handle: "renamed-dashboard",
+          ref: "document:older-dashboard",
+          title: "Earlier dashboard",
+        },
+        revision: {
+          content: JSON.stringify({ ...report, title: "Earlier dashboard" }),
+        },
+      },
+    }),
+  );
+  await page.clock.install();
+  await page.goto(`${OVERVIEW}?dashboard=dashboard-alias`);
+  await expect(
+    page.getByRole("heading", { name: "Earlier dashboard", exact: true }),
+  ).toBeVisible();
+  renamed = true;
+  await page.clock.setSystemTime(Date.now() + 31_000);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect(
+    page.getByRole("link", { name: "Open document", exact: true }),
+  ).toHaveAttribute("href", "/o/local/w/local/docs/renamed-dashboard");
+  await picker(page).click();
+  await expect(
+    page.locator("[data-overview-report-choice='older-dashboard']"),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("heading", { name: "Earlier dashboard", exact: true }),
+  ).toBeVisible();
 });
