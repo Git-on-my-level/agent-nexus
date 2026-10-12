@@ -20,6 +20,7 @@ export function staleWhileRevalidate({
   read,
   beforeRead = () => {},
   onSuccess = () => {},
+  onReturnFailure = () => {},
   maxAgeMs = 30_000,
   readOptions = {},
 }) {
@@ -34,14 +35,22 @@ export function staleWhileRevalidate({
   let disposed = false;
   let denied = false;
   let generation = 0;
+  let flight;
+  function reportReturnFailure(error) {
+    if (!valid() || !flight?.returning || flight.reported) return;
+    flight.reported = true;
+    onReturnFailure(error, flight.updatedAt);
+  }
   const valid = () => !disposed && currentScope() === scope;
   function clear(error = "") {
     generation++;
     controller?.abort();
     pending = null;
+    flight = null;
     state.set({ data: null, updatedAt: null, refreshing: false, error });
   }
   const stopDenied = onWorkspaceViewsDenied(scope, (error) => {
+    reportReturnFailure(error);
     denied = true;
     clear(error?.message || "Read permission denied");
   });
@@ -53,9 +62,12 @@ export function staleWhileRevalidate({
   }
 
   // Confirmed mutations must replace reads that started before the write.
-  function refresh({ force = true, replace = false } = {}) {
+  function refresh({ force = true, replace = false, returning = false } = {}) {
     if (!valid()) return Promise.resolve(false);
-    if (pending && !replace) return pending;
+    if (pending && !replace) {
+      if (returning) flight.returning = true;
+      return pending;
+    }
     if (replace) controller?.abort();
     const previous = get(state);
     if (
@@ -67,6 +79,7 @@ export function staleWhileRevalidate({
       return Promise.resolve(false);
     denied = false;
     const ticket = ++generation;
+    flight = { returning, updatedAt: previous.updatedAt, reported: false };
     controller = new AbortController();
     const signal = controller.signal;
     state.update((value) => ({
@@ -93,16 +106,21 @@ export function staleWhileRevalidate({
         onSuccess();
         return true;
       } catch (error) {
-        if (valid() && ticket === generation && !signal.aborted)
+        if (valid() && ticket === generation && !signal.aborted) {
+          reportReturnFailure(error);
           state.update((value) => ({
             ...value,
             error: error?.message || "Couldn’t refresh",
           }));
+        }
         return false;
       } finally {
         if (valid() && ticket === generation)
           state.update((value) => ({ ...value, refreshing: false }));
-        if (ticket === generation) pending = null;
+        if (ticket === generation) {
+          pending = null;
+          flight = null;
+        }
       }
     })();
     return pending;
@@ -111,13 +129,13 @@ export function staleWhileRevalidate({
   /** Mount on the client. Reconnect subscriptions after a hidden/offline gap. */
   function mount({ connect = () => () => {} } = {}) {
     let stopLive = () => {};
-    const resume = (force = false) => {
+    const resume = (force = false, returning = true) => {
       if (document.visibilityState === "hidden" || !valid()) return;
       stopLive();
       stopLive = connect(() => {
         if (!denied) void refresh();
       });
-      if (!denied) void refresh({ force });
+      if (!denied) void refresh({ force, returning });
     };
     const visibility = () => {
       if (document.visibilityState === "hidden") stopLive();
@@ -126,7 +144,7 @@ export function staleWhileRevalidate({
     document.addEventListener("visibilitychange", visibility);
     const online = () => resume();
     window.addEventListener("online", online);
-    resume(true);
+    resume(true, false);
     return () => {
       stopLive();
       document.removeEventListener("visibilitychange", visibility);

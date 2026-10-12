@@ -780,6 +780,30 @@ test("Overview restores its snapshot on reload while revalidation is held", asyn
   revalidation.resolve();
 });
 
+async function captureRecoveryWarnings(page) {
+  await page.addInitScript(() => {
+    const warn = console.warn;
+    console.warn = (...args) => {
+      if (args[0] === "anx.overview.recovered") {
+        const entries = JSON.parse(
+          sessionStorage.getItem("test.recovery-warnings") || "[]",
+        );
+        entries.push(args[1]);
+        sessionStorage.setItem(
+          "test.recovery-warnings",
+          JSON.stringify(entries),
+        );
+      }
+      warn(...args);
+    };
+  });
+}
+async function recoveryWarnings(page) {
+  return page.evaluate(() =>
+    JSON.parse(sessionStorage.getItem("test.recovery-warnings") || "[]"),
+  );
+}
+
 async function setOverviewVisibility(page, visibility) {
   await page.evaluate((value) => {
     Object.defineProperty(document, "visibilityState", {
@@ -833,6 +857,7 @@ test("tab return keeps the last snapshot through a slow refresh, then updates", 
 test("online refresh failure keeps content and Retry recovers", async ({
   page,
 }) => {
+  await captureRecoveryWarnings(page);
   await installOverview(page);
   await page.clock.install();
   await page.goto(OVERVIEW);
@@ -853,6 +878,9 @@ test("online refresh failure keeps content and Retry recovers", async ({
   await expect(
     page.getByRole("status", { name: "Loading overview" }),
   ).toHaveCount(0);
+  expect(await recoveryWarnings(page)).toEqual([
+    { kind: "refresh-return", ageMs: expect.any(Number), status: 500 },
+  ]);
   await page.unroute("**/overview?**", fail);
   await page.getByRole("button", { name: "Retry", exact: true }).click();
   await expect(page.locator("[data-overview-refresh-status]")).toContainText(
@@ -883,6 +911,7 @@ test("failed first load has an error and no permanent skeleton", async ({
 test("a missing navigation chunk gets one controlled reload", async ({
   page,
 }) => {
+  await captureRecoveryWarnings(page);
   await installOverview(page);
   await page.goto(OVERVIEW);
   await expect(
@@ -918,11 +947,15 @@ test("a missing navigation chunk gets one controlled reload", async ({
   await expect(
     page.locator('[aria-label="Open initiatives"] > li'),
   ).toHaveCount(6);
+  expect(await recoveryWarnings(page)).toEqual([
+    { kind: "chunk-load", ageMs: null, status: null },
+  ]);
 });
 
 test("a render exception leaves an actionable page and Retry revalidates", async ({
   page,
 }) => {
+  await captureRecoveryWarnings(page);
   const api = await installOverview(page);
   const broken = (route) => {
     const snapshot = api.snapshot();
@@ -936,6 +969,9 @@ test("a render exception leaves an actionable page and Retry revalidates", async
     "This page could not be displayed",
   );
   await expect(page.locator("aside").first()).toBeVisible();
+  expect(await recoveryWarnings(page)).toEqual([
+    { kind: "render-boundary", ageMs: expect.any(Number), status: null },
+  ]);
   await page.unroute("**/overview?**", broken);
   await page.getByRole("button", { name: "Retry", exact: true }).click();
   await expect(

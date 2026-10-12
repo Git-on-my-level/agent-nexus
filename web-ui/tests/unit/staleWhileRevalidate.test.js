@@ -230,3 +230,32 @@ it("a confirmed mutation supersedes older reads without losing the new flight", 
   expect(readWorkspaceView("reader:overview")).toEqual({ pinned: "confirmed" });
   view.destroy();
 });
+
+it.each([500, 401, 403])(
+  "reports one return failure for %s, including denial before cache revocation",
+  async (status) => {
+    const onReturnFailure = vi.fn();
+    const error = Object.assign(new Error("private message"), { status });
+    const view = staleWhileRevalidate({
+      scope: "reader",
+      key: "reader:overview",
+      currentScope: () => "reader",
+      read: vi
+        .fn()
+        .mockResolvedValueOnce({ private: true })
+        .mockRejectedValue(error),
+      onReturnFailure,
+      readOptions: { failureWindowMs: 0 },
+    });
+    await view.refresh();
+    const updatedAt = get(view).updatedAt;
+    const pending = view.refresh({ returning: true });
+    expect(view.refresh({ returning: true })).toBe(pending);
+    await pending;
+    expect(onReturnFailure).toHaveBeenCalledTimes(1);
+    expect(onReturnFailure).toHaveBeenCalledWith(error, updatedAt);
+    await view.refresh();
+    expect(onReturnFailure).toHaveBeenCalledTimes(1);
+    view.destroy();
+  },
+);

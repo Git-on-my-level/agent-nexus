@@ -5,6 +5,7 @@
 
   import { readerScopeKey } from "$lib/readerScope.js";
   import { onWorkspaceViewsDenied } from "$lib/workspaceViewCache.js";
+  import { warnOverviewRecovery } from "$lib/chunkRecovery.js";
   import { staleWhileRevalidate } from "$lib/staleWhileRevalidate.js";
   import { formatTime } from "$lib/time/format.js";
   import { liveWorkspaceEvents } from "$lib/liveWorkspaceEvents.js";
@@ -54,6 +55,8 @@
     read: readOverviewSnapshot,
     beforeRead: () => initializeAuthSession({ authDriver: "layout" }),
     onSuccess: resetReportChoices,
+    onReturnFailure: (error, updatedAt) =>
+      warnOverviewRecovery("refresh-return", updatedAt, error),
   });
   let fetched = $derived($overviewRead.data);
   let model = $derived(fetched);

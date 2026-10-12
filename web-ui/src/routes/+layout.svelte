@@ -1,8 +1,13 @@
 <script>
-  import { recoverStaleChunk } from "$lib/chunkRecovery.js";
+  import {
+    recoverStaleChunk,
+    isStaleChunkError,
+    warnOverviewRecovery,
+  } from "$lib/chunkRecovery.js";
   import {
     activateWorkspaceViewScope,
     clearWorkspaceViews,
+    workspaceViewUpdatedAt,
   } from "$lib/workspaceViewCache.js";
   import { readerScope } from "$lib/readerScope.js";
   import { browser } from "$app/environment";
@@ -115,7 +120,14 @@
   let { children, data } = $props();
 
   function onWorkspaceRenderError(error) {
-    console.error("Workspace page failed to render", error);
+    if (currentAppPath === "/overview" || currentAppPath === "/") {
+      if (!isStaleChunkError(error))
+        warnOverviewRecovery(
+          "render-boundary",
+          workspaceViewUpdatedAt(`${$readerScope}:overview`),
+          error,
+        );
+    } else console.error("Workspace page failed to render", error);
     recoverStaleChunk(error);
   }
 
