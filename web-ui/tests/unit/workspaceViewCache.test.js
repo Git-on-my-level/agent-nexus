@@ -83,6 +83,22 @@ it("keeps navigation usable when browser storage throws", () => {
   spy.mockRestore();
 });
 
+it("clears leftover localStorage snapshots on sign-out without hydrating them", async () => {
+  localStorage.setItem(
+    "anx.workspace-views.v1",
+    JSON.stringify({
+      version: 1,
+      entries: [["old:overview", { at: Date.now(), value: { private: true } }]],
+    }),
+  );
+  sessionStorage.removeItem("anx.workspace-views.v1");
+  vi.resetModules();
+  const fresh = await import("../../src/lib/workspaceViewCache.js");
+  fresh.clearWorkspaceViews();
+  expect(localStorage.getItem("anx.workspace-views.v1")).toBeNull();
+  expect(fresh.readWorkspaceView("old:overview")).toBeNull();
+});
+
 it("deletes legacy localStorage snapshots without reading their private contents", async () => {
   localStorage.setItem(
     "anx.workspace-views.v1",

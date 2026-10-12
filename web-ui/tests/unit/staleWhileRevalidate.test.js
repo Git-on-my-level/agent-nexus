@@ -85,6 +85,77 @@ it.each([401, 403])("revokes existing data after %s", async (status) => {
   });
   view.destroy();
 });
+it("keeps a first-load error visible while a retry is in flight", async () => {
+  let finish;
+  const read = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("unavailable"))
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+  const view = setup(read);
+  await view.refresh();
+  expect(get(view)).toMatchObject({
+    data: null,
+    error: "unavailable",
+    refreshing: false,
+  });
+  const pending = view.refresh();
+  expect(get(view)).toMatchObject({
+    data: null,
+    error: "unavailable",
+    refreshing: true,
+  });
+  await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+  finish({ title: "ok" });
+  await pending;
+  expect(get(view)).toMatchObject({
+    data: { title: "ok" },
+    error: "",
+    refreshing: false,
+  });
+  view.destroy();
+});
+
+it("does not auto-refresh after a confirmed denial", async () => {
+  const read = vi
+    .fn()
+    .mockRejectedValueOnce(Object.assign(new Error("denied"), { status: 401 }))
+    .mockResolvedValue({ title: "ok" });
+  const view = setup(read);
+  let notify = () => {};
+  const stop = view.mount({
+    connect: (onChange) => {
+      notify = onChange;
+      return () => {};
+    },
+  });
+  await vi.waitFor(() =>
+    expect(get(view)).toMatchObject({
+      data: null,
+      error: "denied",
+      refreshing: false,
+    }),
+  );
+  const calls = read.mock.calls.length;
+  notify();
+  document.dispatchEvent(new Event("visibilitychange"));
+  window.dispatchEvent(new Event("online"));
+  expect(read).toHaveBeenCalledTimes(calls);
+  expect(get(view)).toMatchObject({
+    data: null,
+    error: "denied",
+    refreshing: false,
+  });
+  await view.refresh();
+  expect(get(view)).toMatchObject({ data: { title: "ok" }, error: "" });
+  stop();
+  view.destroy();
+});
+
 it("returns an actionable first-load failure and enforces the return freshness window", async () => {
   vi.useFakeTimers();
   const read = vi

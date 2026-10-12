@@ -4,6 +4,7 @@
   import { page } from "$app/stores";
 
   import { readerScopeKey } from "$lib/readerScope.js";
+  import { onWorkspaceViewsDenied } from "$lib/workspaceViewCache.js";
   import { staleWhileRevalidate } from "$lib/staleWhileRevalidate.js";
   import { formatTime } from "$lib/time/format.js";
   import { liveWorkspaceEvents } from "$lib/liveWorkspaceEvents.js";
@@ -368,6 +369,13 @@
   });
 
   onMount(() => {
+    const stopDenied = onWorkspaceViewsDenied(scope, () => {
+      if (scope !== readerScopeKey()) return;
+      fanOutRequest += 1;
+      otherWorkspaceAsks = [];
+      fannedOut = false;
+      detailOpen = false;
+    });
     const stopRefresh = overviewRead.mount({
       connect: (onChange) =>
         liveWorkspaceEvents({ client: coreClient, onChange }),
@@ -380,6 +388,7 @@
     return () => {
       clearInterval(clock);
       stopRefresh();
+      stopDenied();
     };
   });
 </script>

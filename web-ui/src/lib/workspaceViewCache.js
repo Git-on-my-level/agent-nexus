@@ -120,6 +120,11 @@ export function clearWorkspaceViews() {
   entries.clear();
   hydrated = true;
   try {
+    window.localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* Legacy snapshots may already be gone. */
+  }
+  try {
     window.sessionStorage.removeItem(STORAGE_KEY);
   } catch {
     /* Optional. */

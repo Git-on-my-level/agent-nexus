@@ -32,20 +32,23 @@ export function staleWhileRevalidate({
   let controller;
   let pending;
   let disposed = false;
+  let denied = false;
   let generation = 0;
   const valid = () => !disposed && currentScope() === scope;
   function clear(error = "") {
     generation++;
     controller?.abort();
+    pending = null;
     state.set({ data: null, updatedAt: null, refreshing: false, error });
   }
-  const stopDenied = onWorkspaceViewsDenied(scope, (error) =>
-    clear(error?.message || "Read permission denied"),
-  );
+  const stopDenied = onWorkspaceViewsDenied(scope, (error) => {
+    denied = true;
+    clear(error?.message || "Read permission denied");
+  });
 
   function setData(data, updatedAt = get(state).updatedAt) {
     if (!valid()) return;
-    state.update((value) => ({ ...value, data, updatedAt }));
+    state.update((value) => ({ ...value, data, updatedAt, error: "" }));
     writeWorkspaceView(key, data, updatedAt ?? Date.now());
   }
 
@@ -59,10 +62,15 @@ export function staleWhileRevalidate({
       Date.now() - previous.updatedAt < maxAgeMs
     )
       return Promise.resolve(false);
+    denied = false;
     const ticket = ++generation;
     controller = new AbortController();
     const signal = controller.signal;
-    state.update((value) => ({ ...value, refreshing: true, error: "" }));
+    state.update((value) => ({
+      ...value,
+      refreshing: true,
+      error: value.data ? "" : value.error,
+    }));
     pending = (async () => {
       try {
         const data = await reliableRead(
@@ -103,8 +111,10 @@ export function staleWhileRevalidate({
     const resume = (force = false) => {
       if (document.visibilityState === "hidden" || !valid()) return;
       stopLive();
-      stopLive = connect(() => void refresh());
-      void refresh({ force });
+      stopLive = connect(() => {
+        if (!denied) void refresh();
+      });
+      if (!denied) void refresh({ force });
     };
     const visibility = () => {
       if (document.visibilityState === "hidden") stopLive();
