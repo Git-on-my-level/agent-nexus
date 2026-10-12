@@ -66,7 +66,9 @@ function hydrate() {
   if (hydrated || typeof window === "undefined") return;
   hydrated = true;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    // Delete legacy cross-tab private snapshots; never hydrate them.
+    window.localStorage.removeItem(STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(STORAGE_KEY);
     if (!raw || raw.length > MAX_BYTES) return;
     const stored = JSON.parse(raw);
     if (stored.version !== 1 || !Array.isArray(stored.entries)) return;
@@ -86,7 +88,7 @@ function persist() {
       entries.delete(entries.keys().next().value);
       raw = JSON.stringify({ version: 1, entries: [...entries] });
     }
-    window.localStorage.setItem(STORAGE_KEY, raw);
+    window.sessionStorage.setItem(STORAGE_KEY, raw);
   } catch {
     /* Display caching must never prevent navigation. */
   }
@@ -118,8 +120,26 @@ export function clearWorkspaceViews() {
   entries.clear();
   hydrated = true;
   try {
-    window.localStorage.removeItem(STORAGE_KEY);
+    window.sessionStorage.removeItem(STORAGE_KEY);
   } catch {
     /* Optional. */
   }
+}
+
+/** Preserve the fetch time when restoring a display snapshot. */
+export function workspaceViewUpdatedAt(key) {
+  if (!readWorkspaceView(key)) return null;
+  return entries.get(key)?.at ?? null;
+}
+
+let activeScope = "";
+/** Called by the shell before using snapshots for a new reader. */
+export function activateWorkspaceViewScope(scope) {
+  hydrate();
+  if (
+    (activeScope && activeScope !== scope) ||
+    [...entries.keys()].some((key) => !key.startsWith(`${scope}:`))
+  )
+    clearWorkspaceViews();
+  activeScope = scope;
 }

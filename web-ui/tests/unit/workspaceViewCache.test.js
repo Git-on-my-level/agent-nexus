@@ -31,7 +31,7 @@ it.each([401, 403])(
     for (const view of ["inbox", "overview", "tasks:a", "tasks:b"])
       expect(readWorkspaceView(`reader:${view}`)).toBeNull();
     expect(readWorkspaceView("other:tasks:a")).toEqual({ restricted: false });
-    expect(localStorage.getItem("anx.workspace-views.v1")).not.toContain(
+    expect(sessionStorage.getItem("anx.workspace-views.v1")).not.toContain(
       "reader:",
     );
     stop();
@@ -50,17 +50,17 @@ it("isolates snapshots by workspace and principal and retains them through a tra
 it("persists a versioned snapshot and removes storage at sign-out", () => {
   writeWorkspaceView("reader:inbox", { items: ["ask"] });
   expect(
-    JSON.parse(localStorage.getItem("anx.workspace-views.v1")),
+    JSON.parse(sessionStorage.getItem("anx.workspace-views.v1")),
   ).toMatchObject({
     version: 1,
     entries: [["reader:inbox", { value: { items: ["ask"] } }]],
   });
   clearWorkspaceViews();
-  expect(localStorage.getItem("anx.workspace-views.v1")).toBeNull();
+  expect(sessionStorage.getItem("anx.workspace-views.v1")).toBeNull();
 });
 it("bounds total cache size and tolerates unavailable storage", () => {
   writeWorkspaceView("large", { body: "a".repeat(2_000_001) });
-  expect(localStorage.getItem("anx.workspace-views.v1").length).toBeLessThan(
+  expect(sessionStorage.getItem("anx.workspace-views.v1").length).toBeLessThan(
     2_000_000,
   );
   for (let i = 0; i < 20; i++) writeWorkspaceView(`reader:${i}`, { i });
@@ -81,4 +81,29 @@ it("keeps navigation usable when browser storage throws", () => {
   writeWorkspaceView("reader:tasks", { records: [1] });
   expect(readWorkspaceView("reader:tasks")).toEqual({ records: [1] });
   spy.mockRestore();
+});
+
+it("deletes legacy localStorage snapshots without reading their private contents", async () => {
+  localStorage.setItem(
+    "anx.workspace-views.v1",
+    JSON.stringify({
+      version: 1,
+      entries: [["old:overview", { at: Date.now(), value: { private: true } }]],
+    }),
+  );
+  sessionStorage.removeItem("anx.workspace-views.v1");
+  vi.resetModules();
+  const fresh = await import("../../src/lib/workspaceViewCache.js");
+  expect(fresh.readWorkspaceView("old:overview")).toBeNull();
+  expect(localStorage.getItem("anx.workspace-views.v1")).toBeNull();
+  fresh.clearWorkspaceViews();
+});
+
+it("clears snapshots when switching the workspace/principal scope", async () => {
+  const cache = await import("../../src/lib/workspaceViewCache.js");
+  cache.activateWorkspaceViewScope("first");
+  cache.writeWorkspaceView("first:overview", { private: true });
+  cache.activateWorkspaceViewScope("second");
+  expect(cache.readWorkspaceView("first:overview")).toBeNull();
+  expect(sessionStorage.getItem("anx.workspace-views.v1")).toBeNull();
 });

@@ -54,14 +54,17 @@ export function captureInboxResponseSender() {
   return client.respondInboxItem.bind(client);
 }
 
-/** Bind all Inbox pages to one scope and abort outstanding reads at its deadline. */
-export function createInboxSourceClient(signal) {
+/** Bind reads to one reader/workspace and propagate cancellation to fetch. */
+export function createWorkspaceReadClient(signal) {
   const fetchFn = globalThis.fetch.bind(globalThis);
   return createAnxCoreClient({
     ...getInboxResponseClientOptions(),
     fetchFn: (url, init) => fetchFn(url, { ...init, signal }),
   });
 }
+
+/** Bind all Inbox pages to one scope and abort outstanding reads at its deadline. */
+export const createInboxSourceClient = createWorkspaceReadClient;
 
 function resolveBrowserClient() {
   if (!browser) {

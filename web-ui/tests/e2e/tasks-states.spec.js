@@ -972,7 +972,8 @@ for (const status of [401, 403]) {
       .poll(() =>
         page.evaluate(() =>
           JSON.parse(
-            localStorage.getItem("anx.workspace-views.v1") || '{"entries":[]}',
+            sessionStorage.getItem("anx.workspace-views.v1") ||
+              '{"entries":[]}',
           ).entries.some(([key]) => key.includes(":tasks:")),
         ),
       )
@@ -991,7 +992,8 @@ for (const status of [401, 403]) {
       .poll(() =>
         page.evaluate(() =>
           JSON.parse(
-            localStorage.getItem("anx.workspace-views.v1") || '{"entries":[]}',
+            sessionStorage.getItem("anx.workspace-views.v1") ||
+              '{"entries":[]}',
           ).entries.some(([key]) => key.includes(":tasks:")),
         ),
       )
@@ -1031,7 +1033,7 @@ test("a sidebar denial clears Tasks and rejects a pending snapshot", async ({
     .poll(() =>
       page.evaluate(() =>
         JSON.parse(
-          localStorage.getItem("anx.workspace-views.v1") || '{"entries":[]}',
+          sessionStorage.getItem("anx.workspace-views.v1") || '{"entries":[]}',
         ).entries.some(([key]) => key.includes(":tasks:")),
       ),
     )

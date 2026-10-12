@@ -15,7 +15,9 @@ for (const status of [401, 403]) {
     await expect
       .poll(() =>
         page.evaluate(() =>
-          localStorage.getItem("anx.workspace-views.v1")?.includes("overview"),
+          sessionStorage
+            .getItem("anx.workspace-views.v1")
+            ?.includes("overview"),
         ),
       )
       .toBe(true);
@@ -35,7 +37,8 @@ for (const status of [401, 403]) {
       .poll(() =>
         page.evaluate(() =>
           JSON.parse(
-            localStorage.getItem("anx.workspace-views.v1") || '{"entries":[]}',
+            sessionStorage.getItem("anx.workspace-views.v1") ||
+              '{"entries":[]}',
           ).entries.some(([key]) => key.endsWith(":overview")),
         ),
       )
@@ -80,7 +83,7 @@ test("a sidebar denial clears Overview and rejects a pending snapshot", async ({
     .poll(() =>
       page.evaluate(() =>
         JSON.parse(
-          localStorage.getItem("anx.workspace-views.v1") || '{"entries":[]}',
+          sessionStorage.getItem("anx.workspace-views.v1") || '{"entries":[]}',
         ).entries.some(([key]) => key.endsWith(":overview")),
       ),
     )
@@ -320,6 +323,7 @@ async function installOverview(
       return route.fulfill({ json: dashboard });
     return route.fallback();
   });
+  state.snapshot = snapshot;
   return state;
 }
 
@@ -630,7 +634,9 @@ test("failed snapshot reports an error", async ({ page }) => {
   test.setTimeout(60_000);
   await installOverview(page, { failure: true });
   await page.goto(OVERVIEW);
-  await expect(page.getByText("Reconnecting…", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("status", { name: "Loading overview" }),
+  ).toBeVisible();
   await expect(page.getByRole("alert")).toContainText(
     "Overview could not be loaded",
     { timeout: 45_000 },
@@ -695,7 +701,7 @@ test("dashboard pagination denial revokes the cached Overview", async ({
     .poll(() =>
       page.evaluate(() =>
         JSON.parse(
-          localStorage.getItem("anx.workspace-views.v1") || '{"entries":[]}',
+          sessionStorage.getItem("anx.workspace-views.v1") || '{"entries":[]}',
         ).entries.some(([key]) => key.endsWith(":overview")),
       ),
     )
@@ -752,6 +758,221 @@ test("Overview restores its snapshot on reload while revalidation is held", asyn
   await expect(
     page.locator('[aria-label="Open initiatives"] > li'),
   ).toHaveCount(6);
-  await expect(page.getByText("Refreshing…", { exact: true })).toBeVisible();
+  await expect(page.locator("[data-overview-refresh-status]")).toContainText(
+    "refreshing…",
+  );
   revalidation.resolve();
+});
+
+async function setOverviewVisibility(page, visibility) {
+  await page.evaluate((value) => {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value,
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }, visibility);
+}
+
+test("tab return keeps the last snapshot through a slow refresh, then updates", async ({
+  page,
+}) => {
+  const api = await installOverview(page);
+  await page.clock.install();
+  await page.goto(OVERVIEW);
+  const initiatives = page.locator('[aria-label="Open initiatives"] > li');
+  await expect(initiatives).toHaveCount(6);
+  const updated = await page
+    .locator("[data-overview-refresh-status]")
+    .textContent();
+  expect(updated).toContain("Updated");
+  await setOverviewVisibility(page, "hidden");
+  await page.clock.setSystemTime(Date.now() + 2 * 60 * 60 * 1000);
+  const gate = deferred();
+  let reads = 0;
+  await page.route("**/overview?**", async (route) => {
+    reads++;
+    await gate.promise;
+    const snapshot = api.snapshot();
+    snapshot.initiatives.items[0].title = "Updated customer pilot";
+    await route.fulfill({ json: snapshot });
+  });
+  await setOverviewVisibility(page, "visible");
+  await expect.poll(() => reads).toBe(1);
+  await expect(initiatives).toHaveCount(6);
+  await expect(page.locator("[data-overview-refresh-status]")).toContainText(
+    "refreshing…",
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  expect(reads).toBe(1);
+  gate.resolve();
+  await expect(
+    initiatives.filter({ hasText: "Updated customer pilot" }),
+  ).toHaveCount(1);
+  await expect(
+    page.locator("[data-overview-refresh-status]"),
+  ).not.toContainText("refreshing…");
+});
+
+test("online refresh failure keeps content and Retry recovers", async ({
+  page,
+}) => {
+  await installOverview(page);
+  await page.clock.install();
+  await page.goto(OVERVIEW);
+  const initiatives = page.locator('[aria-label="Open initiatives"] > li');
+  await expect(initiatives).toHaveCount(6);
+  await page.clock.setSystemTime(Date.now() + 31_000);
+  const fail = (route) =>
+    route.fulfill({
+      status: 500,
+      json: { error: { message: "Refresh unavailable" } },
+    });
+  await page.route("**/overview?**", fail);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect(page.locator("[data-overview-refresh-status]")).toContainText(
+    "Couldn't refresh",
+  );
+  await expect(initiatives).toHaveCount(6);
+  await expect(
+    page.getByRole("status", { name: "Loading overview" }),
+  ).toHaveCount(0);
+  await page.unroute("**/overview?**", fail);
+  await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(page.locator("[data-overview-refresh-status]")).toContainText(
+    "Updated just now",
+  );
+});
+
+test("failed first load has an error and no permanent skeleton", async ({
+  page,
+}) => {
+  await installOverview(page);
+  await page.route("**/overview?**", (route) =>
+    route.fulfill({
+      status: 500,
+      json: { error: { message: "First load unavailable" } },
+    }),
+  );
+  await page.goto(OVERVIEW);
+  await expect(page.getByRole("alert")).toContainText("First load unavailable");
+  await expect(
+    page.getByRole("button", { name: "Retry", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("status", { name: "Loading overview" }),
+  ).toHaveCount(0);
+});
+
+test("a missing navigation chunk gets one controlled reload", async ({
+  page,
+}) => {
+  await installOverview(page);
+  await page.goto(OVERVIEW);
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(6);
+  let failedChunks = 0;
+  await page.route("**/*", (route) => {
+    const path = decodeURIComponent(new URL(route.request().url()).pathname);
+    if (
+      !failedChunks &&
+      (path.includes("/_app/immutable/nodes/") ||
+        path.includes("/tasks/+page.svelte"))
+    ) {
+      failedChunks++;
+      return route.abort("failed");
+    }
+    return route.fallback();
+  });
+  const reloaded = page.waitForEvent("domcontentloaded");
+  await page.evaluate(() => {
+    document.querySelector('a[href="/o/local/w/local/tasks"]').click();
+  });
+  await reloaded;
+  await expect.poll(() => failedChunks).toBe(1);
+  await expect
+    .poll(() =>
+      page.evaluate(() => sessionStorage.getItem("anx.chunk-recovery.v1")),
+    )
+    .toBe("1");
+  await expect(
+    page.getByRole("heading", { name: "Overview", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(6);
+});
+
+test("a render exception leaves an actionable page and Retry revalidates", async ({
+  page,
+}) => {
+  const api = await installOverview(page);
+  const broken = (route) => {
+    const snapshot = api.snapshot();
+    // A malformed section throws during rendering in both dev and production.
+    snapshot.initiatives = null;
+    return route.fulfill({ json: snapshot });
+  };
+  await page.route("**/overview?**", broken);
+  await page.goto(OVERVIEW);
+  await expect(page.locator("[data-workspace-render-error]")).toContainText(
+    "This page could not be displayed",
+  );
+  await expect(page.locator("aside").first()).toBeVisible();
+  await page.unroute("**/overview?**", broken);
+  await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(6);
+  await expect(page.locator("[data-workspace-render-error]")).toHaveCount(0);
+});
+
+test("a principal change never restores the previous reader's Overview", async ({
+  page,
+}) => {
+  await installOverview(page);
+  let principal = "first";
+  await page.route("**/auth/session", (route) =>
+    route.fulfill({
+      json: {
+        authenticated: true,
+        agent: {
+          agent_id: principal,
+          actor_id: principal,
+          username: principal,
+          principal_kind: "human",
+        },
+      },
+    }),
+  );
+  await page.clock.install();
+  await page.goto(OVERVIEW);
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(6);
+  principal = "second";
+  await page.route("**/overview?**", (route) =>
+    route.fulfill({
+      status: 500,
+      json: { error: { message: "New reader unavailable" } },
+    }),
+  );
+  await page.clock.setSystemTime(Date.now() + 31_000);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect(page.getByRole("alert")).toContainText("New reader unavailable");
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("Launch the customer pilot", { exact: true }),
+  ).toHaveCount(0);
+  const snapshots = await page.evaluate(() =>
+    sessionStorage.getItem("anx.workspace-views.v1"),
+  );
+  expect(
+    JSON.parse(snapshots || '{"entries":[]}').entries.some(([key]) =>
+      key.includes('"first"'),
+    ),
+  ).toBe(false);
 });

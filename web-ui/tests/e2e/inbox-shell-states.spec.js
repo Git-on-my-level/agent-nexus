@@ -1367,7 +1367,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       // Earlier visits now persist known receipts across full navigation;
       // exercise the cold state rather than discarding that known delivery.
       await page.evaluate(() =>
-        localStorage.removeItem("anx.workspace-views.v1"),
+        sessionStorage.removeItem("anx.workspace-views.v1"),
       );
       // The badge lives on the list row, which the pane replaces below lg.
       api.fail = { actions: { message: `receipts unavailable ${LONG_HASH}` } };

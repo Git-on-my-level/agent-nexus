@@ -39,7 +39,7 @@ it("persists a confirmed answer and advances the revision that guards earlier re
     "completed",
   );
   const stored = JSON.parse(
-    localStorage.getItem("anx.workspace-views.v1"),
+    sessionStorage.getItem("anx.workspace-views.v1"),
   ).entries.find(([key]) => key === "reader:inbox")[1].value;
   expect(stored[3].value.items).toEqual([]);
   expect(stored[4].value.items[0].responded_at).toBe("now");
