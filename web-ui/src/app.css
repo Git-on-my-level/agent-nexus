@@ -1489,6 +1489,37 @@
     margin-bottom: 0;
   }
 
+  /*
+   * An inbox ask body. Asks are read once, under time pressure, and they are
+   * long: a decision, the context behind it, the options and the evidence. So
+   * this gets a measure that stays readable (around 70 characters per line),
+   * looser leading than the surrounding chrome, and visible air above each
+   * `## Decision` / `## Options` heading so the sections read as sections.
+   */
+  .markdown-rendered.markdown-rendered--ask {
+    max-width: 68ch;
+    line-height: 1.6;
+  }
+
+  .markdown-rendered.markdown-rendered--ask > :first-child {
+    margin-top: 0;
+  }
+
+  .markdown-rendered.markdown-rendered--ask > :last-child {
+    margin-bottom: 0;
+  }
+
+  .markdown-rendered.markdown-rendered--ask h1,
+  .markdown-rendered.markdown-rendered--ask h2,
+  .markdown-rendered.markdown-rendered--ask h3,
+  .markdown-rendered.markdown-rendered--ask h4 {
+    margin-top: 0.9rem;
+  }
+
+  .markdown-rendered.markdown-rendered--ask li {
+    margin: 0.3rem 0;
+  }
+
   /* Status surfaces (errors, warnings, confirmations) quote core messages that
      embed raw ids, refs and URLs. Let those wrap instead of being clipped by
      the shell, which hides horizontal overflow. */

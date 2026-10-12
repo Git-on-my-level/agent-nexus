@@ -2,6 +2,7 @@
   import { agentRegistry, findAgentSummary } from "$lib/actorSession";
   import AgentPresenceLine from "$lib/components/agents/AgentPresenceLine.svelte";
   import WorkSummary from "$lib/components/WorkSummary.svelte";
+  import { subjectTitleRepeatsAsk } from "$lib/inboxItemText.js";
   import Time from "$lib/time/Time.svelte";
 
   /**
@@ -11,11 +12,18 @@
    * `presenceActorId` names the requester; when it is an agent with a
    * presence note (`anx work note`), that note renders between the subject
    * and the last message.
+   *
+   * `askText` is the item's own title. `anx ask` auto-creates the card it
+   * blocks and titles it with the ask, so this box used to reprint the whole
+   * ask directly beneath the heading. When that is what the card title is,
+   * the box says the card exists and links to it; the ask is never written
+   * twice.
    */
   let {
     relation = "On",
     subject = null,
     subjectHref = "",
+    askText = "",
     note = null,
     noteAuthor = "",
     loading = false,
@@ -31,6 +39,12 @@
       ).trim(),
     ),
   );
+  let repeatsAsk = $derived(
+    Boolean(subject) && subjectTitleRepeatsAsk(subject?.title, askText),
+  );
+  let subjectLabel = $derived(
+    repeatsAsk ? "Card created for this ask" : String(subject?.title ?? ""),
+  );
 </script>
 
 {#if subject || note || loading || presence}
@@ -39,18 +53,17 @@
     data-inbox-context
   >
     {#if subject}
-      <p class="[overflow-wrap:anywhere]">
-        {relation}
-        {#if subjectHref}
-          <a
+      <p
+        class="line-clamp-2 [overflow-wrap:anywhere]"
+        data-inbox-context-subject
+        data-inbox-context-repeats-ask={repeatsAsk ? "true" : undefined}
+      >
+        {#if !repeatsAsk}{relation}{" "}{/if}{#if subjectHref}<a
             class="font-medium text-fg hover:underline"
             href={subjectHref}
-            data-inbox-shortcut="open">{subject.title}</a
-          >
-        {:else}
-          <span class="font-medium text-fg">{subject.title}</span>
-        {/if}
-        {#if subject.status}<span class="text-fg-subtle">{" · "}</span
+            data-inbox-shortcut="open">{subjectLabel}</a
+          >{:else}<span class="font-medium text-fg">{subjectLabel}</span
+          >{/if}{#if subject.status}<span class="text-fg-subtle">{" · "}</span
           >{subject.status}{/if}
       </p>
       {#if subject.summary}
@@ -60,7 +73,7 @@
         <WorkSummary
           summary={subject.summary}
           density="row"
-          title={subject.title}
+          title={subjectLabel}
           {now}
         />
       {/if}

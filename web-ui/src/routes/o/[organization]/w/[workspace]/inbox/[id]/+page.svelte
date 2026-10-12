@@ -21,6 +21,7 @@
   import InboxDelivery from "$lib/components/inbox/InboxDelivery.svelte";
   import InboxDocPanel from "$lib/components/inbox/InboxDocPanel.svelte";
   import InboxEvidence from "$lib/components/inbox/InboxEvidence.svelte";
+  import InboxItemHeading from "$lib/components/inbox/InboxItemHeading.svelte";
   import InboxRespondPanel from "$lib/components/inbox/InboxRespondPanel.svelte";
   import InboxUndoToast from "$lib/components/inbox/InboxUndoToast.svelte";
   import KeyboardShortcutsDialog from "$lib/components/KeyboardShortcutsDialog.svelte";
@@ -43,6 +44,7 @@
     linkifyAskEvidence,
     supportsNeedsContext,
   } from "$lib/askDelivery.js";
+  import { inboxItemText } from "$lib/inboxItemText.js";
   import { inboxItemIsReminder, inboxItemSubject } from "$lib/inboxMailbox.js";
   import {
     captureInboxResponseBinding,
@@ -530,13 +532,20 @@
       : null,
   );
   /*
+   * Heading and body, separated. An ask that put its whole question in the
+   * title keeps a heading-length heading here and renders the rest as body
+   * prose, so options and a recommendation read as sections instead of
+   * several hundred characters of bold.
+   */
+  let askText = $derived(inboxItemText(item ?? {}));
+  /*
    * The question, with every name the ask itself backed with evidence turned
    * into a link; prose that names nothing is left exactly as written.
    */
   let askBody = $derived(
-    item?.body && askEvidence && !askEvidence.empty
-      ? linkifyAskEvidence(item.body, askEvidence, { hrefFor: refHref })
-      : (item?.body ?? ""),
+    askText.body && askEvidence && !askEvidence.empty
+      ? linkifyAskEvidence(askText.body, askEvidence, { hrefFor: refHref })
+      : askText.body,
   );
   let supersedesLink = $derived.by(() => {
     const ref = askEvidence?.supersedes || "";
@@ -888,21 +897,15 @@
             </span>
           {/if}
         </div>
-        <!--
-          Subjects are written by the asking agent and routinely carry a bare
-          64-char correlation id, a ref or a URL — nothing for the browser to
-          break on. Without this the title escapes the column and scrolls the
-          page sideways at phone width. Matches the inbox list pane, whose
-          detail headings were hardened the same way.
-        -->
-        <h1
-          class="text-subtitle font-semibold leading-tight text-fg [overflow-wrap:anywhere]"
-        >
-          {item.title}
-        </h1>
+        <InboxItemHeading
+          level={1}
+          text={askText.heading}
+          full={askText.fullTitle}
+        />
         <InboxContextStrip
           relation={contextRelation}
           subject={contextSubject}
+          askText={item.title}
           subjectHref={subjectHref(subject)}
           note={context?.note || null}
           noteAuthor={context?.note
@@ -931,9 +934,11 @@
         {#if askBody}
           <div
             class="rounded-md border border-line bg-panel px-3 py-2 text-meta leading-relaxed text-fg"
+            data-inbox-body
           >
             <MarkdownRenderer
               source={askBody}
+              class="markdown-rendered--ask"
               {organizationSlug}
               {workspaceSlug}
             />
