@@ -3,6 +3,7 @@ package primitives
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -126,5 +127,30 @@ func TestAskSubjectBoardAllocationRollsBackAndSerializes(t *testing.T) {
 			t.Fatal("concurrent allocation created extra boards")
 		}
 		first = id
+	}
+}
+
+func TestAskCardTitleDerivationAndLegacyRead(t *testing.T) {
+	s, _, card, _ := askDeliveryFixture(t)
+	ctx := context.Background()
+	detail := strings.Repeat("Context and consequences. ", 30)
+	event := map[string]any{"type": "human_attention_requested", "thread_id": card["thread_id"], "summary": detail, "refs": []string{"thread:" + anyStringValue(card["thread_id"])}, "payload": map[string]any{"subject_ref": "thread:" + anyStringValue(card["thread_id"]), "title": "Accept the change?", "body": detail, "requester_actor_id": "requester"}}
+	ask, err := s.AppendTaskAttentionEvent(ctx, "requester", event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	work, err := s.GetWork(ctx, anyStringValue(asMapValue(ask["payload"])["subject_ref"]))
+	if err != nil || work["title"] != "Accept the change?" {
+		t.Fatalf("card title: %#v %v", work, err)
+	}
+	// Historical import remains permissive; new-write HTTP validation never rewrites it.
+	event["payload"].(map[string]any)["title"] = detail
+	legacy, err := s.AppendEvent(ctx, "requester", event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := s.GetEvent(ctx, anyStringValue(legacy["id"]))
+	if err != nil || asMapValue(saved["payload"])["title"] != detail {
+		t.Fatalf("legacy title: %#v %v", saved, err)
 	}
 }

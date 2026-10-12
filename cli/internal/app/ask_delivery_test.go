@@ -127,11 +127,14 @@ func TestAskCreatesSubjectAndKeepsCommandLocal(t *testing.T) {
 	}))
 	defer server.Close()
 	a, out := dailyTestApp(t, server.URL)
-	if code := a.Run([]string{"--json", "--as", "worker", "ask", "Proceed?", "--recommend", "Proceed", "--on-answer", "private-local-command"}); code != 0 {
+	if code := a.Run([]string{"--json", "--as", "worker", "ask", "Proceed?", "--body", askDecisionTemplate, "--recommend", "Proceed", "--on-answer", "private-local-command"}); code != 0 {
 		t.Fatalf("exit%d %s", code, out.String())
 	}
 	if gotWork["phase"] != "ready" || asMap(asMap(gotEvent["event"])["payload"])["subject_ref"] != "card:new-ask" {
 		t.Fatalf("subject %#v %#v", gotWork, gotEvent)
+	}
+	if gotWork["title"] != "Proceed?" || gotWork["summary"] != strings.TrimSpace(askDecisionTemplate) || asMap(asMap(gotEvent["event"])["payload"])["body"] != strings.TrimSpace(askDecisionTemplate) {
+		t.Fatalf("short card title and Markdown body: %#v %#v", gotWork, gotEvent)
 	}
 	raw, _ := json.Marshal(gotEvent)
 	if strings.Contains(string(raw), "private-local-command") {

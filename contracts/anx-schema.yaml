@@ -746,6 +746,11 @@ reference_conventions:
     human_attention_requested:
       refs_must_include: ["thread:<thread_id>"]
       payload_must_include: ["kind", "title", "subject_ref", "requester_actor_id", "response_proposals"]
+      authoring: >
+        Reuse payload.title for a one-line decision (recommended maximum 100 Unicode
+        characters; hard maximum 160 on new writes) and payload.body for Markdown
+        context, options with consequences, recommendation and evidence. Missing
+        body warns in the CLI. Historical titles remain readable without migration.
 
     human_attention_responded:
       refs_must_include: ["inbox:<inbox_item_id>"]

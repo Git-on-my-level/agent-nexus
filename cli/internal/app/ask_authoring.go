@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 type askEvidenceLink struct {
@@ -12,24 +13,38 @@ type askEvidenceLink struct {
 	URL   string `json:"url" yaml:"url"`
 }
 
+const askDecisionTemplate = `## Decision
+State the decision in one line.
+
+## Context
+Explain why now and what is affected in 2–5 sentences.
+
+## Options with consequences
+- Accept: explain the effect.
+- Wait: explain the effect.
+
+## Recommendation
+Accept, because …
+
+## Evidence
+Use typed refs and labelled URLs; link code with commit-pinned line URLs.
+`
+
 const askAuthoringTemplate = `---
 title: Decision in one line
-recommended_response: Proceed
+recommended_response: Accept
 proposals: [Wait]
 refs: []
 evidence: []
 ---
-## Decision
-State the decision in one line.
-## Context
-Explain why now and what is affected in 2–5 sentences.
-## What each option does
-Proceed: explain the effect.
-Wait: explain the effect.
-## Evidence
-Use typed document:, card:, topic: refs and labelled external URLs.
-Summarise code; never paste it. Link a PR or a commit-pinned file permalink with lines.
-`
+` + askDecisionTemplate
+
+func lintAskTitle(title string) error {
+	if utf8.RuneCountInString(title) > 100 {
+		return fmt.Errorf("ask title exceeds 100 characters; keep the decision on one line and move context/options into --body or --body-file ask.md (hard maximum 160)")
+	}
+	return nil
+}
 
 var askNamedPR = regexp.MustCompile(`(?i)\bPR\s*#?(\d+)\b`)
 var askNamedRef = regexp.MustCompile("(?i)\\b(doc(?:ument)?|card|topic|file)\\s+[`\"]([^`\"\\n]+)[`\"]")
@@ -73,9 +88,12 @@ func lintAskAuthoring(body string, refs []string, links []askEvidenceLink) ([]st
 		}
 	}
 	warnings := []string{}
-	for _, section := range []string{"Decision", "Context", "What each option does", "Evidence"} {
+	if strings.TrimSpace(body) == "" {
+		return []string{"Missing decision body; use anx ask --template decision > ask.md, fill in Decision / Context / Options with consequences / Recommendation / Evidence, then pass --body-file ask.md"}, nil
+	}
+	for _, section := range []string{"Decision", "Context", "Options", "Recommendation", "Evidence"} {
 		if !strings.Contains(strings.ToLower(body), strings.ToLower(section)) {
-			warnings = append(warnings, "Missing "+section+" section; use anx ask --help for the template")
+			warnings = append(warnings, "Missing "+section+" section; use anx ask --template decision")
 		}
 	}
 	if strings.Contains(body, "```") {

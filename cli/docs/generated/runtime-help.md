@@ -4,6 +4,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 
 ## Topics
 
+- `ask` (manual): Request a decision with a short title and Markdown body; print a decision template offline.
 - `onboarding` (manual): Offline quick-start mental model and first command flow.
 - `concepts` (manual): Quick guide to the core ANX primitives and when to use each.
 - `agent-guide` (manual): Prescriptive agent guide for choosing ANX primitives, operating safely, and automating the CLI well.
@@ -292,6 +293,22 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `work freshness` (command): Inspect last observed, source activity and meaningful progress independently.
 
 
+## `ask`
+
+Request a decision with a short title and Markdown body; print a decision template offline.
+
+```text
+anx ask "Accept merge at 40a2b0f?" --body-file ask.md --recommend "Accept"
+Use a one-line title (aim for at most 100 characters; hard maximum 160) and a Markdown body via --body or --body-file.
+anx ask --template decision > ask.md prints the Decision / Context / Options with consequences / Recommendation / Evidence skeleton.
+ask|review|escalate share these flags: --recommend <answer>, --alt <other> (repeatable), --subject-ref card:<ref>, --evidence <label=url>, --supersedes event:<old-ask>.
+Subject defaults to the current card or creates a ready card on the default board. --from-file <path.md> reads a request with YAML frontmatter.
+Supply 1–6 distinct responses; each may contain at most 240 Unicode characters.
+Use --dry-run to validate and preview without sending it. --force --reason <explanation> overrides authoring lint, never the hard title limit.
+Withdraw: anx ask withdraw <event:ask-id> --reason <text>.
+Delivery: --on-answer <command> (host-only), --webhook <https-url>; run anx bridge run. Await: anx await <ask-id> or anx await --answers. Read: anx inbox list --status answered; anx inbox read <ask-id>.
+```
+
 ## `onboarding`
 
 Offline quick-start mental model and first command flow.
@@ -305,7 +322,7 @@ Every ANX reader is a CEO by default: group execution detail into a small set of
 2. Run anx config workspaces when unsure; set a default with anx config use <alias>. Do not hardcode --base-url in agent prompts. Let agentctl supply adapter context, or select ANX_AS / --as.
 3. Run anx orient. Confirm your handle, host, assigned work and next actions.
 4. Run anx work start card:<slug>, then anx work note "Progress" as you go.
-5. When blocked, use anx ask "Question" --recommend "Answer" and anx await <ask-id>. After anx auth access-requests request, run anx await access-request:<id> (exit 0 approved, exit 9 denied).
+5. When blocked, use anx ask "One-line decision?" --body-file ask.md --recommend "Answer" and anx await <ask-id>. After anx auth access-requests request, run anx await access-request:<id> (exit 0 approved, exit 9 denied).
 6. Run anx work done --evidence <url|ref> when the card is complete.
 7. Label agentctl runs anx.card.<card-slug> to link execution with the card.
 
@@ -437,8 +454,8 @@ Executive workspace
 Asking for decisions
 
 - Every ask, review and escalation belongs to a card. Without a current card, the CLI creates one on ANX_ASK_DEFAULT_BOARD or the workspace default. Documents and topics belong in evidence refs.
-- Use anx ask --from-file with Decision (one line), Context (2–5 sentences), What each option does, and Evidence sections. Include every named document/card/topic as a typed ref and every named PR/file as a labelled URL. Summarise code and link a PR or commit-pinned file with line anchors instead of pasting source. See anx ask --help for the full template.
-- Pointer-only asks and obvious missing evidence fail before publishing. Incomplete context produces warnings; --force --reason records a deliberate lint override. External evidence is structured as {label,url}; native evidence remains in related_refs.
+- Use anx ask with a one-line decision title and --body-file ask.md for Context (2–5 sentences), Options with consequences, Recommendation and Evidence. Include every named document/card/topic as a typed ref and every named PR/file as a labelled URL. Summarise code and link a PR or commit-pinned file with line anchors instead of pasting source. Use anx ask --template decision to start.
+- Use a one-line title (aim for ≤100 characters; hard limit 160) and Markdown --body-file ask.md by default. Start with anx ask --template decision; include Decision, Context, Options with consequences, Recommendation and Evidence. Pointer-only asks and obvious missing evidence fail before publishing. Incomplete context produces warnings; --force --reason records a deliberate lint override. External evidence is structured as {label,url}; native evidence remains in related_refs.
 - Answers atomically record a decision on the card and route next action to its owner/requester/board role. Only a matching sole ask blocker moves blocked to ready; resolved explicitly completes native work. needs_context returns the note to the owner and exits await with 10; re-ask with --supersedes event:<old-ask>.
 - Closed subjects withdraw their asks through bounded durable maintenance. Await exits 11 for withdrawal and 12 for expiry. Optional --on-answer or ANX_RESUME_CMD registers a host-local command for anx bridge run; answer JSON goes to stdin, never shell interpolation. Webhook subscriptions return a once-only signing secret. The task remains authoritative even if delivery fails.
 
@@ -454,7 +471,7 @@ Daily loop
 1. Run `anx orient` to see your identity, assigned work, asks and answers, notifications, stale work, and next commands.
 2. Read `anx work context card:<slug>` and register participation when doing substantive work. Use `anx work start card:<slug>` only when explicitly taking ownership of a Nexus-native task: it adds an assignee and marks in progress.
 3. Post `anx cards message card:<slug> --body "What changed and why"` after meaningful progress. Include evidence, decisions, blockers, uncertainty and next steps; avoid raw chat copies and repeated unchanged updates. Always name the task explicitly: participation does not change legacy current-card selection.
-4. Report execution blockers on the card. For a consequential human decision, create one recommended ask with `anx ask "Question" --subject-ref card:<slug> --recommend "Preferred answer"`; keep `next_actor` on the agent and do not also block the card for that question. Withdraw an ask that is no longer needed with `anx ask withdraw <event:ask-id> --reason "<short reason>"`. Use `anx work block` only for an authorized Nexus-native task blocked by an execution issue, not as a duplicate of a human ask.
+4. Report execution blockers on the card. For a consequential human decision, create one recommended ask with `anx ask "Question" --body-file ask.md --subject-ref card:<slug> --recommend "Preferred answer"`; keep `next_actor` on the agent and do not also block the card for that question. Withdraw an ask that is no longer needed with `anx ask withdraw <event:ask-id> --reason "<short reason>"`. Use `anx work block` only for an authorized Nexus-native task blocked by an execution issue, not as a duplicate of a human ask.
 5. Run `anx await <ask-id>` when one answer gates the next step. After `anx auth access-requests request`, run the returned `anx await access-request:<id>`: exit 0 means approved and exit 9 means denied. The decision uses the same answer notification and wake as an ask. For a batch, use `anx await --answers`; `anx orient` and `anx inbox list --status answered` also show replies. Exit 8 means timeout; exit 9 means an individual answer was rejected.
 6. Agent wakeups use the same workspace-local notification across supported harnesses: on wake, read `anx inbox list --unread` or `anx orient`, then mark each processed answer with `anx inbox read event:<ask-id>`. `inbox read` marks that answer only, including before wake delivery; `anx notifications read --wakeup-id <id>` separately marks the wake notification read.
 7. Verify acceptance criteria before changing task completion. For an authorized Nexus-native task, `anx work done card:<slug> --evidence <url|event:ref|artifact:ref>` resolves that explicit task and clears legacy presence. Report source-owned completion as attributed evidence for its authorized source workflow. Closing a session or finishing a run never completes a task.
@@ -2867,7 +2884,7 @@ Generated Help: events create
 - Input mode: `json-body`
 - Why: Append an event that links first-class resources and evidence through typed refs.
 - Output: Returns `{ event }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `quota_exceeded`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `quota_exceeded`, `ask_title_invalid`, `ask_title_too_long`, `ask_body_invalid`
 - Concepts: `events`, `write`
 - Adjacent commands: `debug events archive`, `debug events get`, `debug events list`, `debug events restore`, `debug events stream`, `debug events trash`, `debug events unarchive`
 

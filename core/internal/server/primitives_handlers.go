@@ -124,6 +124,13 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 
+	if typeValue == humanAttentionRequestedEventType {
+		payload, _ := req.Event["payload"].(map[string]any)
+		if code, message := validateAskText(payload); code != "" {
+			writeError(w, http.StatusBadRequest, code, message)
+			return
+		}
+	}
 	if err := validateEventReferenceConventions(opts.contract, req.Event, refs); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
