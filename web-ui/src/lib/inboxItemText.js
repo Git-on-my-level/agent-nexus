@@ -42,6 +42,20 @@ function singleLine(value) {
     .trim();
 }
 
+/**
+ * Core titles a completed item "Human response recorded: <ask>". Presentation
+ * drops that prefix — the Handled mailbox already says it was answered —
+ * before the heading split and the card-repeat check.
+ *
+ * @param {string | null | undefined} title
+ * @returns {string}
+ */
+export function stripHandledInboxTitle(title) {
+  return String(title ?? "")
+    .replace(/^Human response recorded:?\s*/i, "")
+    .trim();
+}
+
 function normalizeSource(value) {
   return String(value ?? "")
     .replace(/\r\n?/g, "\n")
@@ -143,12 +157,13 @@ export function clampInboxHeading(title, { maxChars } = {}) {
  * }}
  */
 export function inboxItemText(item, options = {}) {
-  const { heading, rest, truncated } = clampInboxHeading(item?.title, options);
+  const title = stripHandledInboxTitle(item?.title);
+  const { heading, rest, truncated } = clampInboxHeading(title, options);
   const body = normalizeSource(item?.body);
   return {
     heading,
     body: [rest, body].filter(Boolean).join("\n\n").trim(),
-    fullTitle: singleLine(item?.title),
+    fullTitle: singleLine(title),
     movedFromTitle: Boolean(rest),
     truncated,
   };
@@ -183,8 +198,8 @@ export function subjectTitleRepeatsAsk(
   askText,
   { minPrefix = 40 } = {},
 ) {
-  const subject = comparableText(subjectTitle);
-  const ask = comparableText(askText);
+  const subject = comparableText(stripHandledInboxTitle(subjectTitle));
+  const ask = comparableText(stripHandledInboxTitle(askText));
   if (!subject || !ask) return false;
   if (subject === ask) return true;
   const [shorter, longer] =

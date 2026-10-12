@@ -4,6 +4,7 @@ import {
   INBOX_HEADING_MAX_CHARS,
   clampInboxHeading,
   inboxItemText,
+  stripHandledInboxTitle,
   subjectTitleRepeatsAsk,
 } from "../../src/lib/inboxItemText.js";
 
@@ -158,6 +159,18 @@ describe("inboxItemText", () => {
       truncated: false,
     });
   });
+
+  it("drops core's handled prefix before splitting the title", () => {
+    const text = inboxItemText({
+      title: `Human response recorded: ${LEGACY_ASK_TITLE}`,
+      body: "",
+    });
+    const unprefixed = inboxItemText({ title: LEGACY_ASK_TITLE, body: "" });
+    expect(text.heading).toBe(unprefixed.heading);
+    expect(text.body).toBe(unprefixed.body);
+    expect(text.fullTitle).toBe(unprefixed.fullTitle);
+    expect(text.heading).not.toMatch(/Human response recorded/i);
+  });
 });
 
 describe("subjectTitleRepeatsAsk", () => {
@@ -200,5 +213,28 @@ describe("subjectTitleRepeatsAsk", () => {
   it("is false when either side is missing", () => {
     expect(subjectTitleRepeatsAsk("", LEGACY_ASK_TITLE)).toBe(false);
     expect(subjectTitleRepeatsAsk(LEGACY_ASK_TITLE, "")).toBe(false);
+  });
+
+  it("still matches when core prefixed the handled ask", () => {
+    expect(
+      subjectTitleRepeatsAsk(
+        LEGACY_ASK_TITLE,
+        `Human response recorded: ${LEGACY_ASK_TITLE}`,
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("stripHandledInboxTitle", () => {
+  it("drops core's handled prefix and leaves other titles alone", () => {
+    expect(
+      stripHandledInboxTitle("Human response recorded: Confirm quest"),
+    ).toBe("Confirm quest");
+    expect(
+      stripHandledInboxTitle("Human response recorded Confirm quest"),
+    ).toBe("Confirm quest");
+    expect(stripHandledInboxTitle("Approve the rollout window")).toBe(
+      "Approve the rollout window",
+    );
   });
 });

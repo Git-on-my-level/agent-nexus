@@ -49,6 +49,21 @@ describe("InboxContextStrip duplication", () => {
     );
   });
 
+  it("still hides the card title when core prefixed a handled ask", () => {
+    const { container } = strip({
+      subject: { title: ASK },
+      askText: `Human response recorded: ${ASK}`,
+    });
+    expect(
+      container
+        .querySelector("[data-inbox-context-subject]")
+        ?.getAttribute("data-inbox-context-repeats-ask"),
+    ).toBe("true");
+    expect(
+      container.querySelector("[data-inbox-context-subject]")?.textContent,
+    ).toContain("Card created for this ask");
+  });
+
   it("catches a card title that is the ask clipped short", () => {
     const { container } = strip({
       subject: { title: `${ASK.slice(0, 120)}…` },

@@ -3,7 +3,7 @@ import { formatElapsed } from "$lib/time/format.js";
 import { NEEDS_CONTEXT_OUTCOME } from "./askDelivery.js";
 import { isHumanNextActor } from "./humanActors.js";
 import { updateDigest } from "./inboxDigest.js";
-import { clampInboxHeading } from "./inboxItemText.js";
+import { clampInboxHeading, stripHandledInboxTitle } from "./inboxItemText.js";
 import {
   enrichInboxItem,
   getInboxSubjectRef,
@@ -616,9 +616,7 @@ export function buildInboxRows({
     // Core titles a completed row "Human response recorded: <ask>"; the
     // Handled mailbox already says it was answered.
     const title =
-      String(item.title || item.summary || "")
-        .replace(/^Human response recorded:?\s*/i, "")
-        .trim() || "Inbox item";
+      stripHandledInboxTitle(item.title || item.summary || "") || "Inbox item";
     rows.push({
       id: inboxItemMailboxId(item),
       kind: "inbox",

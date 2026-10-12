@@ -28,6 +28,14 @@
     Number.isInteger(level) && level >= 1 && level <= 6 ? `h${level}` : "h2",
   );
 
+  // The heading instance is reused across inbox items. An unfold belongs to
+  // the text that needed it, not to the next item that inherits this node.
+  $effect.pre(() => {
+    void headingText;
+    expanded = false;
+    clipped = false;
+  });
+
   function measure() {
     // Only measurable while the clamp is on; expanded keeps the last answer so
     // the control that expanded it does not vanish under the reader.

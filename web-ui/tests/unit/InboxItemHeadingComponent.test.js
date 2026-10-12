@@ -96,4 +96,26 @@ describe("InboxItemHeading", () => {
       container.querySelector("[data-inbox-heading]")?.className,
     ).toContain("line-clamp-2");
   });
+
+  it("folds again when the heading text changes after an expand", async () => {
+    stubClipped(30);
+    const view = render(InboxItemHeading, {
+      text: "Should we ship the inbox rendering fix in 0.12.58 or hold it?",
+    });
+    view.container.querySelector("[data-inbox-heading-expand]").click();
+    await Promise.resolve();
+    expect(
+      view.container.querySelector("[data-inbox-heading]")?.className,
+    ).not.toContain("line-clamp-2");
+
+    stubClipped(0);
+    await view.rerender({ text: "Approve the rollout window" });
+    await Promise.resolve();
+    expect(
+      view.container.querySelector("[data-inbox-heading]")?.className,
+    ).toContain("line-clamp-2");
+    expect(
+      view.container.querySelector("[data-inbox-heading-expand]"),
+    ).toBeNull();
+  });
 });
