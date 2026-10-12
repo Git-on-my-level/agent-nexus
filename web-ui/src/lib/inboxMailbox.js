@@ -3,6 +3,7 @@ import { formatElapsed } from "$lib/time/format.js";
 import { NEEDS_CONTEXT_OUTCOME } from "./askDelivery.js";
 import { isHumanNextActor } from "./humanActors.js";
 import { updateDigest } from "./inboxDigest.js";
+import { clampInboxHeading } from "./inboxItemText.js";
 import {
   enrichInboxItem,
   getInboxSubjectRef,
@@ -612,15 +613,22 @@ export function buildInboxRows({
       String(item.requester_label ?? "").trim() ||
       nameFor(requesterId);
     const responderId = String(item.responding_actor_id ?? "").trim();
+    // Core titles a completed row "Human response recorded: <ask>"; the
+    // Handled mailbox already says it was answered.
+    const title =
+      String(item.title || item.summary || "")
+        .replace(/^Human response recorded:?\s*/i, "")
+        .trim() || "Inbox item";
     rows.push({
       id: inboxItemMailboxId(item),
       kind: "inbox",
-      // Core titles a completed row "Human response recorded: <ask>"; the
-      // Handled mailbox already says it was answered.
-      title:
-        String(item.title || item.summary || "")
-          .replace(/^Human response recorded:?\s*/i, "")
-          .trim() || "Inbox item",
+      title,
+      /*
+       * The list line. `title` stays whole — the detail pane splits it into a
+       * heading and body prose — so the row leads with the heading rather
+       * than the first inch of a title that is the entire ask.
+       */
+      headline: clampInboxHeading(title).heading,
       // Name the subject when we know it; a raw ref is a last resort.
       source: subject ? `${subject.noun}: ${subject.title}` : "",
       subject,

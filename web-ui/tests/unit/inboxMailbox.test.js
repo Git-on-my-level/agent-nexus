@@ -214,6 +214,39 @@ describe("inbox mailboxes", () => {
     expect(rows[0].source).not.toContain("card:");
     expect(rows[0].ref).toBe("card:blocked");
   });
+
+  it("leads an inbox row with the heading and keeps the whole title", () => {
+    const title =
+      "Should we ship the inbox rendering fix in 0.12.58 or hold it for the " +
+      "next minor? Context: the heading prints the entire ask in bold. " +
+      "Recommendation: ship now.";
+    const rows = buildInboxRows({
+      inboxItems: [
+        { id: "inbox:ask-long", kind: "ask", status: "open", title },
+      ],
+    });
+    expect(rows[0].headline).toBe(
+      "Should we ship the inbox rendering fix in 0.12.58 or hold it for the " +
+        "next minor?",
+    );
+    // The detail pane splits the title itself, so the row keeps all of it.
+    expect(rows[0].title).toBe(title);
+  });
+
+  it("leaves a short inbox title as its own list line", () => {
+    const rows = buildInboxRows({
+      inboxItems: [
+        {
+          id: "inbox:ask-short",
+          kind: "ask",
+          status: "open",
+          title: "Which launch date?",
+        },
+      ],
+    });
+    expect(rows[0].headline).toBe("Which launch date?");
+    expect(rows[0].headline).toBe(rows[0].title);
+  });
 });
 
 describe("inbox row badges", () => {

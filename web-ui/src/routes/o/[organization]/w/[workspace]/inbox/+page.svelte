@@ -33,6 +33,7 @@
   import { navIconPath } from "$lib/icons.js";
   import { openCommandPalette } from "$lib/stores/commandPalette.js";
   import { INBOX_CATEGORY_LABELS, splitTypedRef } from "$lib/inboxUtils.js";
+  import { inboxItemText } from "$lib/inboxItemText.js";
   import {
     INBOX_MAILBOXES,
     buildInboxRows,
@@ -115,6 +116,7 @@
   import InboxDelivery from "$lib/components/inbox/InboxDelivery.svelte";
   import InboxDocPanel from "$lib/components/inbox/InboxDocPanel.svelte";
   import InboxEvidence from "$lib/components/inbox/InboxEvidence.svelte";
+  import InboxItemHeading from "$lib/components/inbox/InboxItemHeading.svelte";
   import InboxRespondPanel from "$lib/components/inbox/InboxRespondPanel.svelte";
   import InboxUndoToast from "$lib/components/inbox/InboxUndoToast.svelte";
 
@@ -476,15 +478,25 @@
       : null,
   );
   /*
+   * Heading and body, separated: an ask that put its whole question in the
+   * title keeps a heading-length heading and renders the rest as body prose.
+   */
+  let askText = $derived(
+    selected?.kind === "inbox"
+      ? inboxItemText({ title: selected.title, body: selected.body })
+      : inboxItemText({ title: selected?.title }),
+  );
+  /*
    * The question, with every name the ask itself backed with evidence turned
    * into a link. Nothing is guessed: a name only becomes a link when the ask
    * carries a matching ref or pull-request URL.
    */
-  let askBody = $derived(
-    selected?.kind === "inbox" && askEvidence && !askEvidence.empty
-      ? linkifyAskEvidence(selected.body, askEvidence, { hrefFor: refHref })
-      : selected?.body || "",
-  );
+  let askBody = $derived.by(() => {
+    if (selected?.kind !== "inbox" || !askText.body) return "";
+    return askEvidence && !askEvidence.empty
+      ? linkifyAskEvidence(askText.body, askEvidence, { hrefFor: refHref })
+      : askText.body;
+  });
   /* The ask this one replaces, when the agent re-asked after a context request. */
   let supersedesLink = $derived.by(() => {
     const ref = askEvidence?.supersedes || "";
@@ -1751,9 +1763,15 @@
               aria-current={selectedId === row.id ? "page" : undefined}
             >
               <div class="flex min-w-0 items-center gap-2">
+                <!-- The heading, not the whole ask: a legacy ask carries its
+                     context and options in the title, and the row showed the
+                     first inch of that. The full text is on hover. -->
                 <span
                   class="min-w-0 flex-1 truncate text-meta font-medium text-fg"
-                  >{row.title}</span
+                  title={row.headline && row.headline !== row.title
+                    ? row.title
+                    : undefined}
+                  data-inbox-row-title>{row.headline || row.title}</span
                 >
                 {#if badge}
                   <SignalBadge tone={badge.tone} class="shrink-0"
@@ -2060,12 +2078,15 @@
                     >
                   {/if}
                 </div>
-                <h2 class="text-subtitle text-fg [overflow-wrap:anywhere]">
-                  {selected.title}
-                </h2>
+                <InboxItemHeading
+                  level={2}
+                  text={askText.heading}
+                  full={askText.fullTitle}
+                />
                 <InboxContextStrip
                   relation={contextRelation}
                   subject={contextSubject}
+                  askText={selected.title}
                   {now}
                   subjectHref={subjectHref(selected.subject)}
                   note={context?.note || null}
@@ -2101,12 +2122,14 @@
                   </p>
                 {/if}
                 {#if askBody}
-                  <MarkdownRenderer
-                    source={askBody}
-                    class="text-meta leading-relaxed text-fg [overflow-wrap:anywhere]"
-                    organizationSlug={$page.params.organization}
-                    workspaceSlug={$page.params.workspace}
-                  />
+                  <div data-inbox-body>
+                    <MarkdownRenderer
+                      source={askBody}
+                      class="markdown-rendered--ask text-meta leading-relaxed text-fg [overflow-wrap:anywhere]"
+                      organizationSlug={$page.params.organization}
+                      workspaceSlug={$page.params.workspace}
+                    />
+                  </div>
                 {/if}
                 <InboxEvidence
                   evidence={askEvidence}

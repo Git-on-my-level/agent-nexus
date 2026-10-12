@@ -562,8 +562,68 @@ const RENDERED_REPORT = {
   ],
 };
 
+/**
+ * The ask shape the Inbox detail pane was called ugly for: an agent that put
+ * the whole question — context, options and a recommendation — into the
+ * title, and a card auto-created from that same text.
+ */
+const LEGACY_ASK_CARD_REF = "card:ask-card";
+const LEGACY_ASK_TITLE =
+  "Should the inbox rendering fix ship in 0.12.58 or hold for the next " +
+  "minor? Context: the detail pane prints the whole ask as one bold heading, " +
+  `about 600 characters including the commit ${"4f1c9ad".repeat(8)}, and ` +
+  "readers called it ugly and overwhelming. Options: ship now, which is " +
+  "renderer-only and additive; hold for the next minor and land it with the " +
+  "data contract; or split the contract out first. Recommendation: ship now, " +
+  "because the data contract lands separately in core.";
+
+/** The same ask, written the way the CLI asks agents to write one. */
+const WELL_FORMED_ASK_BODY = `## Decision
+Ship the inbox rendering fix in 0.12.58, or hold it for the next minor.
+
+## Options
+- **Ship now** — renderer-only and additive, so nothing else moves.
+- **Hold for the next minor** — lands together with the data contract.
+- **Split the contract out first** — nothing ships today.
+
+## Evidence
+- Commit \`${"4f1c9ad".repeat(8)}\`
+- ${CARD_REF}`;
+
 /** Two asks and an update: enough for the Inbox to have a shape. */
 const INBOX_ITEMS = [
+  {
+    id: "inbox:legacy-ask",
+    kind: "ask",
+    mailbox: "needs-you",
+    title: LEGACY_ASK_TITLE,
+    body: "",
+    severity: "high",
+    state: "open",
+    created_at: iso(-5),
+    requester: { id: "actor-codex", name: "Codex Sol" },
+    requester_label: "Codex Sol",
+    subject_ref: LEGACY_ASK_CARD_REF,
+    related_refs: [LEGACY_ASK_CARD_REF],
+  },
+  {
+    id: "inbox:well-formed-ask",
+    kind: "ask",
+    mailbox: "needs-you",
+    title: "Ship the inbox rendering fix in 0.12.58?",
+    body: WELL_FORMED_ASK_BODY,
+    state: "open",
+    created_at: iso(-1),
+    requester: { id: "actor-claude", name: "Claude" },
+    requester_label: "Claude",
+    related_refs: [CARD_REF],
+    subject_ref: CARD_REF,
+    response_proposals: [
+      "Ship now in 0.12.58.",
+      "Hold for the next minor.",
+      "Split the data contract out first.",
+    ],
+  },
   {
     id: "inbox:rollback",
     kind: "ask",
@@ -675,6 +735,20 @@ async function installFixture(
   await page.clock.setFixedTime(new Date(NOW));
   await installWorkspaceApi(page, {
     documents: [DASHBOARD_DOCUMENT],
+    // So the Inbox list and its pane know the ask card's title, which is the
+    // ask text over again.
+    work: [
+      {
+        id: "ask-card",
+        ref: LEGACY_ASK_CARD_REF,
+        handle: "ask-card",
+        title: LEGACY_ASK_TITLE,
+        phase: "in_progress",
+        updated_at: iso(-5),
+        source: { authority: "nexus" },
+        freshness: { last_observed_at: iso(-0.5) },
+      },
+    ],
     ...(pmTurns
       ? {
           conversations: [pmConversation ?? PM_CONVERSATION],
@@ -720,6 +794,24 @@ async function installFixture(
     }
     if (path === "/inbox") {
       return json({ items: INBOX_ITEMS, total: INBOX_ITEMS.length });
+    }
+    if (path.startsWith("/inbox/") && request.method() === "GET") {
+      const id = path.slice("/inbox/".length);
+      return json({
+        item: INBOX_ITEMS.find((item) => item.id === id) ?? null,
+      });
+    }
+    // The card `anx ask` auto-creates for an ask, titled with the ask text.
+    if (path === `/work/${LEGACY_ASK_CARD_REF}` && request.method() === "GET") {
+      return json({
+        work: {
+          ref: LEGACY_ASK_CARD_REF,
+          handle: "ask-card",
+          title: LEGACY_ASK_TITLE,
+          phase: "in_progress",
+          source: { authority: "nexus" },
+        },
+      });
     }
     if (path === "/agents" && request.method() === "GET") {
       return json({ agents: ROSTER });
@@ -865,6 +957,44 @@ for (const { label, width, height } of WIDTHS) {
       contentType: "image/png",
     });
   });
+
+  /*
+   * The two shapes an inbox item arrives in. `legacy-ask` is the one the
+   * detail pane was called ugly for — the whole ask in the title, and a card
+   * auto-created from the same text. `well-formed-ask` is the shape the CLI
+   * asks for, and is here to show the sections rendering as sections.
+   */
+  for (const item of [
+    { name: "inbox-item-legacy", id: "inbox:legacy-ask" },
+    { name: "inbox-item-well-formed", id: "inbox:well-formed-ask" },
+  ]) {
+    test(`capture ${item.name} @ ${label}`, async ({ page }, testInfo) => {
+      test.skip(!LABEL, "set REVIEW_CAPTURES=before|after to capture");
+      test.setTimeout(120_000);
+      await installFixture(page);
+      await page.setViewportSize({ width, height });
+      await page.goto(`${WORKSPACE}/inbox/${encodeURIComponent(item.id)}`);
+      // The composer, not the heading: this settle has to work on the base
+      // commit too, where the heading carries no marker of its own.
+      await expect(page.locator('[data-inbox-shortcut="reply"]')).toBeVisible({
+        timeout: 60_000,
+      });
+      await waitForAppReady(page);
+      await nextPaint(page);
+      await page.evaluate(() => document.fonts?.ready);
+      await mkdir(OUT, { recursive: true });
+      const file = `${OUT}/${LABEL}-${item.name}-${label}.png`;
+      await page.screenshot({
+        path: file,
+        animations: "disabled",
+        fullPage: true,
+      });
+      await testInfo.attach(`${LABEL}-${item.name}-${label}`, {
+        path: file,
+        contentType: "image/png",
+      });
+    });
+  }
 
   for (const pm of [
     { name: "pm-empty", turns: null, settle: "Nothing asked yet" },
