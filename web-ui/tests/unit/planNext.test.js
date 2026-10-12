@@ -160,6 +160,79 @@ describe("nextActionOvertaken reads a hand-written note against the plan", () =>
     ).toBe(true);
   });
 
+  it("does not let a step named after a status swallow a note about one", () => {
+    /*
+     * A step titled "In review" is named after a column, and those are the
+     * same words any note about state uses. Stripping the grammar first
+     * collapsed the title to `review` and hid "Leave this in review until
+     * Friday" — a note that is still true, on a card where nothing had moved
+     * past it.
+     */
+    const statusy = {
+      steps: [
+        { id: "draft", title: "Draft the policy", after: [] },
+        { id: "in-review", title: "In review", after: ["draft"] },
+      ],
+    };
+    const state = {
+      steps: [
+        { id: "draft", status: "done" },
+        { id: "in-review", status: "done" },
+      ],
+      next_steps: [],
+    };
+    expect(
+      nextActionOvertaken("Leave this in review until Friday", statusy, state),
+    ).toBe(false);
+  });
+
+  it("needs a phrase, not one word the note happens to share", () => {
+    const plans = {
+      steps: [{ id: "rollout", title: "Roll the change out", after: [] }],
+    };
+    const state = { steps: [{ id: "rollout", status: "done" }] };
+    // "change" is one word of a three-word title, and the note is about a
+    // different change entirely.
+    expect(
+      nextActionOvertaken(
+        "Ask David which change we are keeping",
+        plans,
+        state,
+      ),
+    ).toBe(false);
+    // The title quoted as the author wrote it still counts.
+    expect(nextActionOvertaken("Roll the change out", plans, state)).toBe(true);
+  });
+
+  it("takes a handle as the exact reference it is", () => {
+    const handles = {
+      steps: [
+        {
+          id: "phase-1-inventory",
+          title: "Inventory",
+          after: [],
+          ref: "card:omi-inventory",
+        },
+      ],
+    };
+    const state = { steps: [{ id: "phase-1-inventory", status: "done" }] };
+    // A one-word title is never enough on its own...
+    expect(nextActionOvertaken("Finish the inventory", handles, state)).toBe(
+      false,
+    );
+    // ...but a slug or a ref in a sentence was typed on purpose.
+    expect(
+      nextActionOvertaken("Waiting on phase-1-inventory", handles, state),
+    ).toBe(true);
+    expect(
+      nextActionOvertaken("Blocked by card:omi-inventory", handles, state),
+    ).toBe(true);
+    // And a handle inside a longer word is not that handle.
+    expect(
+      nextActionOvertaken("See phase-1-inventory-v2 instead", handles, state),
+    ).toBe(false);
+  });
+
   it("has no opinion on an empty note or a card with no plan", () => {
     expect(nextActionOvertaken("", plan, planState)).toBe(false);
     expect(nextActionOvertaken("Anything", null, null)).toBe(false);

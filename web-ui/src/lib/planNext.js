@@ -17,8 +17,17 @@
 
 const asText = (value) => String(value ?? "").trim();
 
-/** Words too common to identify a step by. */
-const STOP_WORDS = new Set([
+/**
+ * Words too common to identify a step by.
+ *
+ * Two sets, because a title can fail to identify a step in two different
+ * ways. The first is grammar: "the", "to", "with" are in every sentence. The
+ * second is status: a step titled "In review" is named after the state it is
+ * in, and those are exactly the words a note about state uses too — "leave
+ * this in review until Friday" is about a different thing entirely, and
+ * matching it on "in review" hides a note that is still true.
+ */
+const COMMON_WORDS = new Set([
   "a",
   "an",
   "and",
@@ -47,14 +56,59 @@ const STOP_WORDS = new Set([
   "with",
 ]);
 
-/** Comparable words: case folded, punctuation dropped, stop words removed. */
+const STATE_WORDS = new Set([
+  "active",
+  "blocked",
+  "closed",
+  "complete",
+  "completed",
+  "done",
+  "finished",
+  "next",
+  "open",
+  "pending",
+  "progress",
+  "ready",
+  "review",
+  "reviewed",
+  "started",
+  "todo",
+  "waiting",
+  "wip",
+]);
+
+/**
+ * Comparable words, in order: case folded, punctuation dropped.
+ *
+ * Nothing is removed. Stripping the common words first is what let a title of
+ * "In review" collapse to the single word `review` and match any sentence
+ * containing it; a phrase is only evidence if it is matched as the author
+ * wrote it.
+ */
 function words(value) {
   return asText(value)
     .toLocaleLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim()
     .split(" ")
-    .filter((word) => word && !STOP_WORDS.has(word));
+    .filter(Boolean);
+}
+
+/**
+ * Do these words pick out a step, or could they be any sentence about state?
+ *
+ * Two words at least, and at least one of them has to carry meaning of its
+ * own. "Phase 1 inventory" names something; "In review" names a column.
+ *
+ * Used for a title and for a handle a note spells out in words, because the
+ * hazard is the same either way: a step whose id is `in-review` is no more
+ * identifiable written as "in review" than its title is.
+ */
+function identifies(parts) {
+  return (
+    parts.length >= 2 &&
+    parts.some((word) => !COMMON_WORDS.has(word) && !STATE_WORDS.has(word))
+  );
 }
 
 /** Step status by id, as core computed it; `""` where it said nothing. */
@@ -124,37 +178,109 @@ export function planNextSteps(plan, planState, options = {}) {
  * context if that disappears — while "Phase 1 inventory, assigned to Luna" on a
  * plan whose only mention is a done step is simply out of date.
  *
- * Matched on a step's title words rather than its exact sentence, so a note
- * that quotes a step loosely is still recognised. A one-word title is only
- * matched when the word is long enough to identify something: "ship" in a
- * sentence is not evidence that a step called "Ship" is what it means. A
- * step id is matched only when it is more than one word after stop-word
- * stripping — a slug such as `approach` is not a name, so a note that
- * merely uses that word still stands.
+ * A step is named two ways, and never by one ordinary word. Either the note
+ * quotes its title as a phrase — two words or more, in the author's order,
+ * carrying at least one word that is neither grammar nor a status — or it
+ * names the step's id or ref, which are handles nobody types by accident.
+ *
+ * A handle counts written either way: `phase-1-inventory` as the author
+ * spelled it, or "phase 1 inventory" as a sentence would. Both are several
+ * tokens in a row, which is the part that matters — a one-word slug like
+ * `approach` is an ordinary verb, and a note that merely uses that word is
+ * not naming the step.
  *
  * @param {string} nextAction
- * @param {{steps?: Array<{id?: string, title?: string}>}|null} plan
+ * @param {{steps?: Array<{id?: string, title?: string, ref?: string}>}|null} plan
  * @param {{steps?: Array<{id?: string, status?: string}>}|null} planState
  */
 export function nextActionOvertaken(nextAction, plan, planState) {
   const note = words(nextAction);
   if (!note.length) return false;
-  const haystack = ` ${note.join(" ")} `;
+  const phrases = ` ${note.join(" ")} `;
+  // Handles keep their punctuation: `card:release-b` is one token to a
+  // reader, and splitting it into words would match "release" in prose.
+  const literal = asText(nextAction).toLocaleLowerCase();
+  const tokens = handleTokens(nextAction);
   const status = statusById(planState);
 
   let namesDone = false;
   for (const step of Array.isArray(plan?.steps) ? plan.steps : []) {
     const id = asText(step?.id);
     const title = words(step?.title);
-    const idWords = words(id);
-    const identifying =
-      title.length > 1 || (title.length === 1 && title[0].length >= 6);
     const named =
-      (identifying && haystack.includes(` ${title.join(" ")} `)) ||
-      (idWords.length > 1 && haystack.includes(` ${idWords.join(" ")} `));
+      (identifies(title) && phrases.includes(` ${title.join(" ")} `)) ||
+      namesHandle(literal, tokens, id) ||
+      namesHandle(literal, tokens, asText(step?.ref));
     if (!named) continue;
     if (status.get(id) === "done") namesDone = true;
     else return false;
   }
   return namesDone;
+}
+
+/**
+ * Is this exact handle in the note?
+ *
+ * A handle is an address — `phase-1-inventory`, `card:release-b`, a URL — and
+ * one of those in a sentence was put there on purpose, so one is enough where
+ * one word of a title is not. It has to carry a separator to qualify: a step
+ * whose id is the bare word `ship` is indistinguishable from the verb, and
+ * "ship the docs rewrite" is a note about shipping something else.
+ *
+ * Bounded on both sides by anything a handle could continue with, not just by
+ * letters: `phase-1-inventory-v2` is a different step from
+ * `phase-1-inventory`, and so is the pull request one path segment deeper. A
+ * full stop is a sentence ending rather than a continuation, so a handle at
+ * the end of a sentence still counts.
+ */
+const HANDLE_CHAR = /[\p{L}\p{N}_:/-]/u;
+
+/**
+ * The note as a reader's tokens, with a hyphenated handle left whole.
+ *
+ * `see phase-1-inventory-v2 instead` is three tokens, and the middle one is
+ * not the handle `phase-1-inventory` — which is the whole point of keeping
+ * the hyphens that `words` drops.
+ */
+function handleTokens(value) {
+  return asText(value)
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}-]+/gu, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean);
+}
+
+function namesHandle(literal, tokens, handle) {
+  const text = handle.toLocaleLowerCase();
+  if (text.length < 4) return false;
+  const parts = text.split(/[-_.:/]+/).filter(Boolean);
+  if (parts.length < 2) return false;
+
+  // As written: bounded, so `phase-1-inventory` is not found inside
+  // `phase-1-inventory-v2`, nor a pull request inside a deeper path.
+  const at = literal.indexOf(text);
+  if (at >= 0) {
+    const bounded = (ch) => ch === undefined || !HANDLE_CHAR.test(ch);
+    if (bounded(literal[at - 1]) && bounded(literal[at + text.length])) {
+      return true;
+    }
+  }
+
+  /*
+   * As a sentence spells it: the same parts, in order, as whole words. A
+   * hyphenated token stays whole, so `phase-1-inventory-v2` is still a
+   * different handle rather than this one followed by a stray word.
+   *
+   * Spelled out, a handle is held to what a title is held to. Written as
+   * written, `in-review` in a note is a reference somebody typed; written as
+   * "in review" it is the two commonest words in any sentence about state,
+   * and "leave this in review until Friday" is not about that step.
+   */
+  if (!identifies(parts)) return false;
+  return tokens.some(
+    (_, index) =>
+      index + parts.length <= tokens.length &&
+      parts.every((part, offset) => tokens[index + offset] === part),
+  );
 }

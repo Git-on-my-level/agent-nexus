@@ -120,11 +120,12 @@
      * so this is fresher than the one the card row carried; the header shows
      * whichever it has.
      */
-    planSummary = $state(null),
-    planError = $state("");
+    planSummary = $state(null);
   /** Ticks so a relative age on screen does not go quietly out of date. */
   let now = $state(Date.now());
   let requestId = 0;
+  /** Monotonic per plan read; only the newest one may write. */
+  let planReadId = 0;
   let refPreview = $state();
 
   /**
@@ -175,6 +176,23 @@
     planNextSteps(plan, effectivePlanState, {
       preferred: cardSummary?.next?.id ?? "",
     }),
+  );
+  /**
+   * Every card this plan points at.
+   *
+   * A step's status is computed from the card behind it, and `card_moved` for
+   * that card carries only *its* ref — so a page filtering the stream on its
+   * own ref alone sat there with a step reading "In progress" minutes after
+   * the card behind it was marked done. The set comes from the plan already in
+   * memory, so matching an event against it costs nothing per event and reads
+   * nothing extra.
+   */
+  let planCardRefs = $derived(
+    new Set(
+      (Array.isArray(plan?.steps) ? plan.steps : [])
+        .map((step) => String(step?.ref ?? "").trim())
+        .filter(Boolean),
+    ),
   );
   /** How many ready steps fit before the rest become a count. */
   const NEXT_PREVIEW = 3;
@@ -315,15 +333,31 @@
    * card body to know what else to chip.
    */
   function loadPlanRequest(ticket, id) {
+    /*
+     * Plan reads are serialised by a ticket of their own.
+     *
+     * `requestId` changes when the page opens another card, which a live
+     * refresh never does — so two refreshes that overlapped both passed its
+     * check, and whichever *landed* last won. On a busy card that is routinely
+     * the older read: it writes its stale steps over the newer ones, and with
+     * no Reload button there is nothing that puts them right.
+     */
+    const planTicket = ++planReadId;
+    const current = () => ticket === requestId && planTicket === planReadId;
     return Promise.resolve()
       .then(() => coreClient.getCardPlan(id))
       .then((result) => {
-        if (ticket !== requestId) return [];
+        if (!current()) return null;
         const steps = Array.isArray(result?.plan?.steps)
           ? result.plan.steps
           : [];
-        // A successful empty read must clear the last plan. Failed reads
-        // stay in the catch and keep whatever this page already has.
+        /*
+         * Whatever came back is what is on screen, an empty plan included. A
+         * plan whose steps were cleared, and a card that has none, both answer
+         * successfully with no steps; keeping the previous ones left the page
+         * drawing work the card no longer has. A read that *failed* is a
+         * different thing and stays in the catch below.
+         */
         plan = steps.length ? result.plan : null;
         planState = steps.length ? (result.plan_state ?? null) : null;
         planSummary =
@@ -334,9 +368,18 @@
         return steps;
       })
       .catch(() => {
-        // A card without a plan is the common case, not a failure worth
-        // shouting about; only a card that has one and could not be read is.
-        return [];
+        /*
+         * A read that failed is not a plan that is gone. Core answers a card
+         * with no plan with a 200 and no steps, so this path is a real
+         * failure — a dropped connection, a refused read — and blanking a
+         * plan the page has already read and still believes would be the
+         * wrong answer to it. What is on screen stays, and the steps it is
+         * drawing are handed on so their chips are resolved with the rest of
+         * the page rather than turning into "not found" because one request
+         * did not land.
+         */
+        if (!current()) return null;
+        return Array.isArray(plan?.steps) ? plan.steps : [];
       });
   }
 
@@ -348,7 +391,10 @@
    */
   async function filePlan(ticket, stepsPromise) {
     const steps = await stepsPromise;
-    if (ticket !== requestId) return;
+    // `null` is a read another one has already overtaken: its steps are not
+    // on screen, so resolving their refs would file chips for a plan nobody
+    // is looking at over the ones that are.
+    if (steps === null || ticket !== requestId) return;
     const refs = collectPageRefs(
       [
         workProse(work),
@@ -485,7 +531,6 @@
     planSummary = null;
     planRefs = new Map();
     planReadAt = "";
-    planError = "";
 
     /*
      * The row the list already had, painted before anything is requested. The
@@ -679,8 +724,11 @@
     const stopLive = liveWorkspaceEvents({
       client: coreClient,
       types: TASK_LIST_EVENT_TYPES,
-      filter: (event) =>
-        Array.isArray(event.refs) && event.refs.includes(work?.ref || workId),
+      filter: (event) => {
+        if (!Array.isArray(event.refs)) return false;
+        const own = work?.ref || workId;
+        return event.refs.some((ref) => ref === own || planCardRefs.has(ref));
+      },
       onChange: () => {
         if (ready && work) void refreshWorkRecord();
       },
@@ -830,21 +878,17 @@
                 />
               </div>
             </div>
-            {#if planError}
-              <p class="mt-2 text-meta text-fg-muted">{planError}</p>
-            {:else}
-              <div class="mt-3">
-                <PlanView
-                  {plan}
-                  {planState}
-                  resolved={planRefs}
-                  organizationSlug={$page.params.organization}
-                  workspaceSlug={$page.params.workspace}
-                  onpreview={(model, anchor) => refPreview?.open(model, anchor)}
-                  onpreviewclose={() => refPreview?.requestClose()}
-                />
-              </div>
-            {/if}
+            <div class="mt-3">
+              <PlanView
+                {plan}
+                {planState}
+                resolved={planRefs}
+                organizationSlug={$page.params.organization}
+                workspaceSlug={$page.params.workspace}
+                onpreview={(model, anchor) => refPreview?.open(model, anchor)}
+                onpreviewclose={() => refPreview?.requestClose()}
+              />
+            </div>
           </section>
         {:else if cardProse}
           <MarkdownRenderer
@@ -976,7 +1020,10 @@
           {workspaceHref}
           hideWhenEmpty
         />
-        <section class={evidenceWorthShowing ? "" : "hidden"}>
+        <section
+          class={evidenceWorthShowing ? "" : "hidden"}
+          data-task-evidence
+        >
           <h2 class="ui-label">Evidence</h2>
           <EvidenceHandoff
             {observations}

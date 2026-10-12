@@ -72,17 +72,55 @@ const geometry = (shape, nodes, collapsed = 0) => ({
   collapsed_nodes: collapsed,
 });
 
+/** A promise somebody else resolves. */
+function deferred() {
+  let resolve;
+  const promise = new Promise((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
 /**
  * @param {import("@playwright/test").Page} page
  * @param {{work?: object, plan?: object, planState?: object}} [overrides] the
  *   authored plan, the card record and the computed plan state, so a case can
  *   be about one of them.
+ * @returns {object} the live fixture: swap `plan` / `planState` between reads,
+ *   `hold` a plan read open, and `emit` a workspace event.
  */
 async function installInitiativePage(page, overrides = {}) {
   await page.clock.setFixedTime(new Date(NOW));
   await installWorkspaceApi(page, {});
-  const authored = overrides.plan ?? plan;
-  const state = { ...planState, ...(overrides.planState ?? {}) };
+  const api = {
+    plan: overrides.plan ?? plan,
+    planState: { ...planState, ...(overrides.planState ?? {}) },
+    /** Plan reads served, so a case can speak about "the second one". */
+    planReads: 0,
+    /** `{ at, gate }`: hold the nth plan read open until the gate resolves. */
+    hold: null,
+    /** Stream connections waiting for something to deliver. */
+    waiters: [],
+    /** Events with no connection to deliver them on yet. */
+    queued: [],
+    emitted: 0,
+  };
+  /**
+   * Push one workspace event down the stream, the way core does: one event
+   * per connection, and the client reconnects for the next.
+   */
+  api.emit = (refs, type = "card_moved") => {
+    api.emitted += 1;
+    const event = {
+      id: `evt-${api.emitted}`,
+      type,
+      ts: new Date().toISOString(),
+      refs,
+    };
+    const waiter = api.waiters.shift();
+    if (waiter) waiter.resolve(event);
+    else api.queued.push(event);
+  };
   await page.route("**/*", async (route) => {
     const request = route.request();
     if (!["fetch", "xhr"].includes(request.resourceType())) {
@@ -106,7 +144,32 @@ async function installInitiativePage(page, overrides = {}) {
       return json({ observations: [], next_cursor: "" });
     }
     if (path.endsWith("/plan") && request.method() === "GET") {
-      return json({ plan: authored, plan_state: state });
+      api.planReads += 1;
+      // Snapshot at request time, so a read held open answers with the plan
+      // that was true when it was issued rather than with the latest one.
+      const body = { plan: api.plan, plan_state: api.planState };
+      if (api.hold && api.hold.at === api.planReads) {
+        await api.hold.gate.promise;
+      }
+      return json(body);
+    }
+    if (path === "/events" && request.method() === "GET") {
+      // The cursor seed: the stream starts after the newest event core has.
+      return json({ events: [] });
+    }
+    if (path === "/stream/events") {
+      const waiter = deferred();
+      const queued = api.queued.shift();
+      if (queued) waiter.resolve(queued);
+      else api.waiters.push(waiter);
+      const event = await waiter.promise;
+      return route
+        .fulfill({
+          status: 200,
+          contentType: "text/event-stream",
+          body: `id: ${event.id}\nevent: event\ndata: ${JSON.stringify({ event })}\n\n`,
+        })
+        .catch(() => {});
     }
     if (path === "/refs/resolve" && request.method() === "POST") {
       return json({
@@ -145,6 +208,7 @@ async function installInitiativePage(page, overrides = {}) {
     }
     return route.fallback();
   });
+  return api;
 }
 
 test("initiative page leads with the plan, and the card body follows", async ({
@@ -234,9 +298,17 @@ test("initiative page leads with the plan, and the card body follows", async ({
     page.locator("[data-next-note] [data-anx-provenance]"),
   ).toHaveText(/^Hand-written$/);
 
-  // Nothing to report is not worth a heading: no participation, no evidence.
+  /*
+   * Nothing to report is not worth a heading: no participation section at
+   * all, and the Evidence section itself hidden. Asserted on the section,
+   * which is always in the markup — an assertion on the empty-state line
+   * inside it would pass just as happily if the line had never rendered.
+   */
   await expect(page.locator("[data-participation]")).toHaveCount(0);
-  await expect(page.locator("[data-evidence-quiet]")).toBeHidden();
+  const evidence = page.locator("[data-task-evidence]");
+  await expect(evidence).toHaveCount(1);
+  await expect(evidence).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Evidence" })).toBeHidden();
 
   // Computed beside hand-written: the plan says it was read just now, and the
   // prose below it says a person wrote it. Before this, a reader had no way to
@@ -366,6 +438,118 @@ test("Next follows the plan, and drops a note the plan has passed", async ({
     "on_track",
   );
   await expect(summary.locator("[data-summary-reason]")).toHaveCount(0);
+});
+
+/**
+ * The three things the live stream has to get right now that Reload is gone:
+ * a plan that was emptied, two refreshes that overlap, and a change to a card
+ * a step points at rather than to this card.
+ */
+test("a cleared plan leaves the page, rather than staying on screen", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const api = await installInitiativePage(page);
+  await page.goto(CARD_PATH);
+  await expect(page.locator("[data-initiative-plan]")).toBeVisible({
+    timeout: 60_000,
+  });
+  await expect(page.locator(".plan-track--tree > li")).toHaveCount(4);
+
+  /*
+   * Somebody emptied the plan. That reads back as a successful response with
+   * no steps — not as an error — and the page used to apply only a plan that
+   * had some, so four steps nobody has stayed on screen with nothing left to
+   * clear them.
+   */
+  api.plan = { steps: [] };
+  api.planState = {
+    ...api.planState,
+    steps: [],
+    progress: { done: 0, total: 0 },
+  };
+  api.emit([CARD_REF]);
+
+  await expect(page.locator("[data-initiative-plan]")).toHaveCount(0, {
+    timeout: 20_000,
+  });
+  // And the card body takes the space the plan had.
+  await expect(
+    page.getByText("The card body sits below the plan."),
+  ).toBeVisible();
+});
+
+test("an older plan read cannot overwrite a newer one", async ({ page }) => {
+  test.setTimeout(90_000);
+  const api = await installInitiativePage(page);
+  await page.goto(CARD_PATH);
+  await expect(page.locator(".plan-track--tree > li")).toHaveCount(4, {
+    timeout: 60_000,
+  });
+
+  // The next read is held open, so the refresh it belongs to is still in
+  // flight when the one after it is issued.
+  const slow = deferred();
+  api.hold = { at: 2, gate: slow };
+  api.emit([CARD_REF]);
+  await expect.poll(() => api.planReads, { timeout: 20_000 }).toBe(2);
+
+  // A second refresh, with the plan as it now stands: one step fewer.
+  api.hold = null;
+  api.plan = { steps: plan.steps.slice(0, 3) };
+  api.planState = {
+    ...api.planState,
+    steps: api.planState.steps.slice(0, 3),
+    progress: { done: 1, total: 3 },
+  };
+  api.emit([CARD_REF]);
+  await expect(page.locator(".plan-track--tree > li")).toHaveCount(3, {
+    timeout: 20_000,
+  });
+
+  /*
+   * Now the held read answers — with what was true when it was issued. It is
+   * the older of the two, and the page has to ignore it: both refreshes ran
+   * under the same page ticket, so whichever landed last used to win, and on
+   * a busy card that is routinely the stale one.
+   */
+  slow.resolve();
+  await expect.poll(() => api.planReads, { timeout: 20_000 }).toBe(3);
+  await page.waitForTimeout(1_000);
+  await expect(page.locator(".plan-track--tree > li")).toHaveCount(3);
+});
+
+test("a linked card moving re-reads this card's plan", async ({ page }) => {
+  test.setTimeout(90_000);
+  const api = await installInitiativePage(page);
+  await page.goto(CARD_PATH);
+  const rows = page.locator(".plan-track--tree > li");
+  await expect(rows).toHaveCount(4, { timeout: 60_000 });
+  await expect(rows.nth(1).locator(".plan-node__status")).toHaveText(
+    "In progress",
+  );
+
+  /*
+   * `card:contracts` is the card behind step one. Finishing it is what moves
+   * this plan, and the event for it carries that card's ref and not this
+   * one's — so a page filtering the stream on its own ref alone sat here with
+   * a step still reading "In progress".
+   */
+  api.planState = {
+    ...api.planState,
+    steps: [
+      { id: "contracts", status: "done", resolvable: true },
+      { id: "plan-model", status: "done", resolvable: false },
+      { id: "ui-chips", status: "blocked", resolvable: false },
+      { id: "tiles", status: "not_started", resolvable: false },
+    ],
+    progress: { done: 2, total: 4 },
+  };
+  api.emit(["card:contracts"]);
+
+  await expect(rows.nth(1).locator(".plan-node__status")).toHaveText("Done", {
+    timeout: 20_000,
+  });
 });
 
 test("a named owner is who the card is waiting on, on the line and in Next", async ({
