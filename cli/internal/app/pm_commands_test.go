@@ -167,12 +167,14 @@ func TestPMTurnLeaseIdentityDoesNotChangeOtherCommandsOrIncompleteLease(t *testi
 
 func TestPMContextUsesLeaseAgentWhenANXASIsDifferent(t *testing.T) {
 	for _, tc := range []struct {
-		name  string
-		args  []string
-		envAs string
+		name        string
+		args        []string
+		envAs       string
+		wantWarning bool
 	}{
-		{name: "ANX_AS", args: []string{"pm", "context"}, envAs: "hermes"},
-		{name: "flag", args: []string{"--as", "hermes", "pm", "context"}},
+		{name: "ANX_AS mismatch", args: []string{"pm", "context"}, envAs: "hermes", wantWarning: true},
+		{name: "flag mismatch", args: []string{"--as", "hermes", "pm", "context"}, wantWarning: true},
+		{name: "labels match but inherited token is foreign", args: []string{"pm", "context"}, envAs: "pm"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var requestAgent, requestAuth, tokenAgent string
@@ -191,7 +193,8 @@ func TestPMContextUsesLeaseAgentWhenANXASIsDifferent(t *testing.T) {
 					}
 					requestAgent = r.Header.Get("X-ANX-Agent")
 					requestAuth = r.Header.Get("Authorization")
-					_, _ = w.Write([]byte(`{"items":[]}`))
+					w.WriteHeader(http.StatusForbidden)
+					_, _ = w.Write([]byte(`{"error":{"code":"forbidden","message":"PM permission denied"}}`))
 				default:
 					t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
 					http.NotFound(w, r)
@@ -224,8 +227,9 @@ func TestPMContextUsesLeaseAgentWhenANXASIsDifferent(t *testing.T) {
 			var stdout, stderr strings.Builder
 			a.Stdout = &stdout
 			a.Stderr = &stderr
-			if code := a.Run(tc.args); code != 0 {
-				t.Fatalf("exit %d; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+			args := append([]string{"--json"}, tc.args...)
+			if code := a.Run(args); code == 0 {
+				t.Fatalf("expected forbidden response; stdout=%s stderr=%s", stdout.String(), stderr.String())
 			}
 			if requestAgent != "pm" {
 				t.Fatalf("request acted as %q, want pm", requestAgent)
@@ -233,7 +237,13 @@ func TestPMContextUsesLeaseAgentWhenANXASIsDifferent(t *testing.T) {
 			if tokenAgent != "pm" || requestAuth != "Bearer pm-token" {
 				t.Fatalf("credential selection agent=%q authorization=%q, want pm token", tokenAgent, requestAuth)
 			}
-			wantWarning := "warning: ignoring explicit identity `hermes`; this PM turn lease is bound to `pm`, so acting as `pm`.\n"
+			if !strings.Contains(stdout.String(), "Acting as `pm` with credentials from the PM host-key exchange.") {
+				t.Fatalf("403 hint does not name the authenticated PM identity: %s", stdout.String())
+			}
+			wantWarning := ""
+			if tc.wantWarning {
+				wantWarning = "warning: ignoring explicit identity `hermes`; this PM turn lease is bound to `pm`, so acting as `pm`.\n"
+			}
 			if stderr.String() != wantWarning {
 				t.Fatalf("warning %q, want one line %q", stderr.String(), wantWarning)
 			}
@@ -252,7 +262,7 @@ func TestPMLeaseIdentityFailsClearlyWhenPMCredentialsAreUnavailable(t *testing.T
 	env := map[string]string{
 		"ANX_BASE_URL":       srv.URL,
 		"ANX_ACCESS_TOKEN":   "hermes-token",
-		"ANX_AS":             "hermes",
+		"ANX_AS":             "pm",
 		"HOME":               home,
 		"ANX_PM_TURN_ID":     "turn",
 		"ANX_PM_LEASE_TOKEN": "lease",
