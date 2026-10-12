@@ -1041,7 +1041,7 @@ Daily loop:
   work participants register <card> --from-file <path>  Join without assigning or moving work (remote_coordination_write)
   work start [card]       Assign me, mark in progress, and set current card (remote_coordination_write)
   work note <text> [card] Post progress and refresh presence (remote_coordination_write)
-  work block <why> [card] Mark blocked; add --ask --recommend <text> to ask (remote_coordination_write)
+  work block <why> [card] Mark blocked; add --ask --recommend <text> [--body <markdown> | --body-file <path|->] [--force --reason <text>] to ask (remote_coordination_write)
   work done [card] --evidence <url|ref>  Resolve with evidence (remote_coordination_write)
   ask|review|escalate <title> --recommend <text>  Request operator attention (remote_coordination_write)
   await <ask-id|card-ref|access-request:<id>>  Wait on the ask stream for an answer or access decision (read_only)
@@ -1166,7 +1166,7 @@ func helpTopicTextRaw(topic string) (string, bool) {
 		return "anx move card <ref> --to <workspace-alias> [--connection-map <source-id>=<destination-id>] [--dry-run]; anx move topic <ref> --to <workspace-alias> [--connection-map <source-id>=<destination-id>] [--dry-run]. Topic moves journal source revisions, rewrite refs, verify every destination resource, and only then archive or tombstone the source.\n", true
 	}
 	if topic == "work" {
-		return "Daily work: anx work start [card]; anx work note <text> [card]; anx work block <why> [card] [--ask --recommend <answer>]; anx work done [card] --evidence <url|ref>. Omitted cards use presence. For inventory use anx work list.\n", true
+		return "Daily work: anx work start [card]; anx work note <text> [card]; anx work block <why> [card] [--ask --recommend <answer> [--body <markdown> | --body-file <path|->] [--force --reason <text>]]; anx work done [card] --evidence <url|ref>. Omitted cards use presence. For inventory use anx work list.\n", true
 	}
 	if strings.HasPrefix(topic, "work ") && isDailyWorkVerb(strings.TrimPrefix(topic, "work ")) {
 		return "anx " + topic + " [card]: use anx help work for the daily loop.\n", true

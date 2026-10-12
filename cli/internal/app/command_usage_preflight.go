@@ -553,7 +553,7 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		"await":      {"until": {kind: preflightFlagString}, "timeout": {kind: preflightFlagString}, "answers": {kind: preflightFlagBool}},
 		"work start": {},
 		"work note":  {},
-		"work block": {"ask": {kind: preflightFlagBool}, "recommend": {kind: preflightFlagString}, "alt": {kind: preflightFlagString}},
+		"work block": {"ask": {kind: preflightFlagBool}, "recommend": {kind: preflightFlagString}, "alt": {kind: preflightFlagString}, "body": {kind: preflightFlagString}, "body-file": {kind: preflightFlagString}, "force": {kind: preflightFlagBool}, "reason": {kind: preflightFlagString}},
 		"work done":  {"evidence": {kind: preflightFlagString}},
 	})
 	for _, kind := range []string{"ask", "review", "escalate"} {
