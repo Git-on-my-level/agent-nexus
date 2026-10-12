@@ -4,6 +4,7 @@ import (
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"agent-nexus-cli/internal/hostidentity"
 )
 
 func TestPMProposalPreflight(t *testing.T) {
@@ -172,19 +175,42 @@ func TestPMContextUsesLeaseAgentWhenANXASIsDifferent(t *testing.T) {
 		{name: "flag", args: []string{"--as", "hermes", "pm", "context"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			var requestAgent string
+			var requestAgent, requestAuth, tokenAgent string
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != http.MethodPost || r.URL.Path != "/pm/turns/turn/context" {
-					t.Errorf("request %s %s", r.Method, r.URL.Path)
+				switch r.URL.Path {
+				case "/auth/token":
+					var body map[string]any
+					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+						t.Error(err)
+					}
+					tokenAgent = anyString(body["agent_name"])
+					_, _ = w.Write([]byte(`{"agent":{"id":"agent-pm","actor_id":"actor-pm","handle":"pm"},"tokens":{"access_token":"pm-token","expires_in":900}}`))
+				case "/pm/turns/turn/context":
+					if r.Method != http.MethodPost {
+						t.Errorf("method %s", r.Method)
+					}
+					requestAgent = r.Header.Get("X-ANX-Agent")
+					requestAuth = r.Header.Get("Authorization")
+					_, _ = w.Write([]byte(`{"items":[]}`))
+				default:
+					t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+					http.NotFound(w, r)
 				}
-				requestAgent = r.Header.Get("X-ANX-Agent")
-				_, _ = w.Write([]byte(`{"items":[]}`))
 			}))
 			defer srv.Close()
+			home := t.TempDir()
+			_, hostKey, err := ed25519.GenerateKey(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := hostidentity.Save(home, hostidentity.Host{ID: "host-1", KeyID: "key-1", WorkspaceID: "ws-test", BaseURL: srv.URL}, hostKey); err != nil {
+				t.Fatal(err)
+			}
 
 			env := map[string]string{
 				"ANX_BASE_URL":       srv.URL,
-				"ANX_ACCESS_TOKEN":   "fixture",
+				"ANX_ACCESS_TOKEN":   "hermes-token",
+				"HOME":               home,
 				"ANX_PM_TURN_ID":     "turn",
 				"ANX_PM_LEASE_TOKEN": "lease",
 				"ANX_PM_AGENT":       "pm",
@@ -194,6 +220,7 @@ func TestPMContextUsesLeaseAgentWhenANXASIsDifferent(t *testing.T) {
 			}
 			a := New()
 			a.Getenv = func(key string) string { return env[key] }
+			a.UserHomeDir = func() (string, error) { return home, nil }
 			var stdout, stderr strings.Builder
 			a.Stdout = &stdout
 			a.Stderr = &stderr
@@ -203,11 +230,48 @@ func TestPMContextUsesLeaseAgentWhenANXASIsDifferent(t *testing.T) {
 			if requestAgent != "pm" {
 				t.Fatalf("request acted as %q, want pm", requestAgent)
 			}
+			if tokenAgent != "pm" || requestAuth != "Bearer pm-token" {
+				t.Fatalf("credential selection agent=%q authorization=%q, want pm token", tokenAgent, requestAuth)
+			}
 			wantWarning := "warning: ignoring explicit identity `hermes`; this PM turn lease is bound to `pm`, so acting as `pm`.\n"
 			if stderr.String() != wantWarning {
 				t.Fatalf("warning %q, want one line %q", stderr.String(), wantWarning)
 			}
 		})
+	}
+}
+
+func TestPMLeaseIdentityFailsClearlyWhenPMCredentialsAreUnavailable(t *testing.T) {
+	var requests int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	home := t.TempDir()
+	env := map[string]string{
+		"ANX_BASE_URL":       srv.URL,
+		"ANX_ACCESS_TOKEN":   "hermes-token",
+		"ANX_AS":             "hermes",
+		"HOME":               home,
+		"ANX_PM_TURN_ID":     "turn",
+		"ANX_PM_LEASE_TOKEN": "lease",
+		"ANX_PM_AGENT":       "pm",
+	}
+	a := New()
+	a.Getenv = func(key string) string { return env[key] }
+	a.UserHomeDir = func() (string, error) { return home, nil }
+	var stdout, stderr strings.Builder
+	a.Stdout = &stdout
+	a.Stderr = &stderr
+	if code := a.Run([]string{"--json", "pm", "context"}); code == 0 {
+		t.Fatalf("expected credential resolution failure; output=%s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "host is not enrolled") {
+		t.Fatalf("missing clear credential failure: %s", stdout.String())
+	}
+	if requests != 0 {
+		t.Fatalf("sent %d request(s) with the discarded Hermes token", requests)
 	}
 }
 

@@ -39,6 +39,14 @@ func (a *App) resolvePMTurnLeaseIdentity(args []string, cfg config.Resolved) (co
 	}
 
 	explicitAgent := strings.TrimSpace(cfg.As)
+	rebinding := strings.TrimSpace(cfg.Agent) != turnAgent || explicitAgent != "" && explicitAgent != turnAgent
+	if rebinding {
+		cfg.AccessToken = ""
+		cfg.AccessTokenExpiresAt = ""
+		cfg.AgentID = ""
+		cfg.ActorID = ""
+		cfg.Username = ""
+	}
 	cfg.As = turnAgent
 	cfg.Agent = turnAgent
 	cfg.IdentitySource = "pm:turn-lease"

@@ -648,9 +648,12 @@ func TestPMRunnerChildEnvPrependsResolvedExecutableDirectory(t *testing.T) {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 
-	env, err := pmRunnerChildEnv(config.Resolved{Agent: "pm", BaseURL: "http://localhost:8000"}, []string{"PATH=/other/bin:/usr/bin"}, link)
+	env, warning, err := pmRunnerChildEnv(config.Resolved{Agent: "pm", BaseURL: "http://localhost:8000"}, []string{"PATH=/other/bin:/usr/bin"}, link)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if warning != "" {
+		t.Fatalf("unexpected PATH warning: %s", warning)
 	}
 	resolvedTargetDir, err := filepath.EvalSymlinks(targetDir)
 	if err != nil {
@@ -676,9 +679,12 @@ func TestPMRunnerChildEnvPrependsInheritedWindowsPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	env, err := pmRunnerChildEnv(config.Resolved{Agent: "pm", BaseURL: "http://localhost:8000"}, []string{`Path=C:\Windows\system32`, "FOO=bar"}, target)
+	env, warning, err := pmRunnerChildEnv(config.Resolved{Agent: "pm", BaseURL: "http://localhost:8000"}, []string{`Path=C:\Windows\system32`, "FOO=bar"}, target)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if warning != "" {
+		t.Fatalf("unexpected PATH warning: %s", warning)
 	}
 	resolvedTargetDir, err := filepath.EvalSymlinks(targetDir)
 	if err != nil {
@@ -702,6 +708,55 @@ func TestPMRunnerChildEnvPrependsInheritedWindowsPath(t *testing.T) {
 	if pathEntries != 1 {
 		t.Fatalf("path entries=%d env=%v", pathEntries, env)
 	}
+}
+
+func TestPMRunnerChildEnvSkipsUnsafeExecutableDirectories(t *testing.T) {
+	t.Run("path list separator", func(t *testing.T) {
+		root := t.TempDir()
+		unsafeDir := filepath.Join(root, "installed"+string(os.PathListSeparator)+"relative", "bin")
+		if err := os.MkdirAll(unsafeDir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		executable := filepath.Join(unsafeDir, "anx")
+		if err := os.WriteFile(executable, []byte("anx"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+
+		base := []string{"PATH=/existing/bin"}
+		env, warning, err := pmRunnerChildEnv(config.Resolved{Agent: "pm", BaseURL: "http://localhost:8000"}, base, executable)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := envValue(env, "PATH"); got != "/existing/bin" {
+			t.Fatalf("PATH=%q, want unchanged inherited path", got)
+		}
+		if !strings.Contains(warning, "skipping anx executable directory") || !strings.Contains(warning, string(os.PathListSeparator)) {
+			t.Fatalf("warning=%q, want unsafe-directory warning", warning)
+		}
+	})
+
+	t.Run("relative directory", func(t *testing.T) {
+		root, err := os.MkdirTemp(".", ".pm-runner-relative-")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(root) })
+		if err := os.WriteFile(filepath.Join(root, "anx"), []byte("anx"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+
+		base := []string{"PATH=/existing/bin"}
+		env, warning, err := pmRunnerChildEnv(config.Resolved{Agent: "pm", BaseURL: "http://localhost:8000"}, base, filepath.Join(root, "anx"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := envValue(env, "PATH"); got != "/existing/bin" {
+			t.Fatalf("PATH=%q, want unchanged inherited path", got)
+		}
+		if !strings.Contains(warning, "skipping anx executable directory") || !strings.Contains(warning, "absolute") {
+			t.Fatalf("warning=%q, want relative-directory warning", warning)
+		}
+	})
 }
 
 func TestOverlayEnvReplacesWindowsPathInPlace(t *testing.T) {

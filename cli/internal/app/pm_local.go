@@ -551,9 +551,12 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 	if err != nil {
 		return nil, errnorm.Wrap(errnorm.KindLocal, "runner_path_failed", "failed to resolve the anx executable for the PM runner", err)
 	}
-	env, err := pmRunnerChildEnv(cfg, os.Environ(), executable)
+	env, pathWarning, err := pmRunnerChildEnv(cfg, os.Environ(), executable)
 	if err != nil {
 		return nil, errnorm.Wrap(errnorm.KindLocal, "runner_path_failed", "failed to prepare PATH for the PM runner", err)
+	}
+	if pathWarning != "" {
+		a.pmLog("pm serve: warning: %s\n", pathWarning)
 	}
 	if !writerIsTTY(a.Stderr) {
 		prev := harnessLogWriter
@@ -2377,21 +2380,20 @@ func harnessChildEnv(cfg config.Resolved, base []string) []string {
 	return env
 }
 
-func pmRunnerChildEnv(cfg config.Resolved, base []string, executable string) ([]string, error) {
+func pmRunnerChildEnv(cfg config.Resolved, base []string, executable string) ([]string, string, error) {
 	env := harnessChildEnv(cfg, base)
 	resolved, err := filepath.EvalSymlinks(executable)
 	if err != nil {
-		return nil, fmt.Errorf("resolve anx executable symlinks: %w", err)
+		return nil, "", fmt.Errorf("resolve anx executable symlinks: %w", err)
 	}
-	abs, err := filepath.Abs(resolved)
-	if err != nil {
-		return nil, fmt.Errorf("resolve anx executable path: %w", err)
+	path := filepath.Dir(resolved)
+	if !filepath.IsAbs(path) || strings.ContainsRune(path, os.PathListSeparator) {
+		return env, fmt.Sprintf("skipping anx executable directory %q when prepending runner PATH; it must be absolute and must not contain %q", path, string(os.PathListSeparator)), nil
 	}
-	path := filepath.Dir(abs)
 	if existing := lookupEnvValue(env, "PATH"); existing != "" {
 		path += string(os.PathListSeparator) + existing
 	}
-	return overlayEnv(env, "PATH", path), nil
+	return overlayEnv(env, "PATH", path), "", nil
 }
 
 func lookupEnvValue(env []string, key string) string {
