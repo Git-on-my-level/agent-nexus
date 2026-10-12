@@ -308,18 +308,27 @@ test("badges stay compact and show their full text at once on hover", async ({
   expect(clipped).toBe(false);
 
   /*
-   * Age: two characters, green because the plan moved eight hours ago and an
-   * initiative is expected to move every three days. The verb, the exact
-   * instant and the expectation are in the tooltip.
+   * Age: green, because the plan moved eight hours ago and an initiative is
+   * expected to move every three days. On a page header it says what the
+   * date is about — a bare "8 h ago" beside a status badge and a "Live ·
+   * updated just now" chip is the one thing on the line a reader cannot
+   * place. A table cell has a column heading for that and keeps the badge to
+   * two characters; the exact instant and the expectation stay in the
+   * tooltip either way.
    */
   const age = summary.locator("[data-freshness]").first();
-  await expect(age).toHaveText("8 h ago");
+  await expect(age).toHaveText("moved 8 h ago");
   await expect(age).toHaveClass(/ui-badge--ok/);
   await expect(age).toHaveAttribute(
     "data-tooltip",
     /^Moved .*\(8 h ago\) — within the expected 3d$/,
   );
   await expect(age).toHaveAttribute("datetime", planState.last_movement_at);
+  // Longer, and still a pill rather than a clipped one: the badge does not
+  // wrap by design, so growing its text is exactly what would truncate it.
+  expect(
+    await age.evaluate((node) => node.scrollWidth > node.clientWidth + 1),
+  ).toBe(false);
 
   /*
    * The tooltip itself: the browser's own takes about a second and paints a
@@ -350,31 +359,38 @@ test("the task page is quiet where there is nothing to say", async ({
   test.setTimeout(90_000);
   await openCard(page);
 
-  // Participation and evidence have nothing to report, so each is one line
-  // rather than a paragraph about an absence.
-  await expect(page.locator("[data-participation-quiet]")).toContainText(
-    "No activity",
-  );
-  await expect(page.locator("[data-evidence-quiet]")).toContainText(
-    "No activity",
-  );
+  /*
+   * Nothing to report is not worth a line. Participation and Evidence each
+   * used to answer with one — "Participation · No activity · Check again"
+   * directly above "Evidence / No activity" — which is two headings, a
+   * button and two tips for one absence, and on a card nobody has run
+   * against that was most of what the page showed.
+   *
+   * Participation is not rendered at all; Evidence keeps its section in the
+   * markup and hides it, so a reader who later has reads to see gets it back
+   * without the page re-laying itself out around a new heading.
+   */
+  await expect(page.locator("[data-participation]")).toHaveCount(0);
+  const evidence = page.locator("[data-task-evidence]");
+  await expect(evidence).toHaveCount(1);
+  await expect(evidence).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Evidence" })).toBeHidden();
+  // The line is still in the markup, inside the hidden section — what
+  // changed is that a reader never meets it.
+  await expect(page.getByText("No activity")).toBeHidden();
 
   /*
-   * The disclaimers are still reachable, as tooltips rather than folds. Each
-   * used to cost a visible `▶ What evidence means` line under a section that
-   * had nothing else in it, which is most of what a quiet task page showed.
+   * The disclaimers those sections carried are not lost, only unreachable
+   * where there is nothing for them to qualify: `EvidenceHandoff` still
+   * renders its quiet line and its "What evidence means" tip, and
+   * `TaskParticipationComponent.test.js` asserts both on the component
+   * directly. What this page decides is whether to show the section at all.
    */
-  const evidenceTip = page.getByRole("button", {
-    name: /What evidence means/,
-  });
-  await expect(evidenceTip).toBeVisible();
-  await expect(page.locator("[data-anx-tooltip]")).toHaveCount(0);
-  await evidenceTip.hover();
-  const tipText = page.locator("[data-anx-tooltip]");
-  await expect(tipText).toContainText("not evidence that the work is done");
-  // "Created here, so there is nothing to read back from" is the second half
-  // of the same answer, so it is the same tip rather than a second glyph a
-  // thumb away from the first.
-  await expect(tipText).toContainText("no outside tracker to read back from");
-  await page.mouse.move(0, 0);
+  await expect(
+    page.getByRole("button", { name: /What evidence means/ }),
+  ).toBeHidden();
+
+  // And the sections that do have something keep their headings.
+  await expect(page.getByRole("heading", { name: "Plan" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Next" })).toBeVisible();
 });

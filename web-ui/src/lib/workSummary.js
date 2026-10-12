@@ -257,8 +257,19 @@ function reasonAddsToLabel(reason, label) {
   const body = words(reason);
   if (!body.length) return false;
   const name = new Set(words(label));
-  // "the", "card", "is", "marked" carry nothing on their own; a reason built
-  // only from those and the label's own words is the label again.
+  /*
+   * "the", "card", "is", "marked" carry nothing on their own; a reason built
+   * only from those and the label's own words is the label again.
+   *
+   * "open", "step(s)" and "progressing" are here for the same reason, one
+   * level up: core answers "why is this card in this state" for every card,
+   * including the ones where the answer is that nothing is wrong, and the
+   * healthy answer is one fixed sentence — "Open steps are progressing."
+   * Printed under a badge reading `In progress` it is a line that can never
+   * tell a reader something the badge did not. A reason that names a cause —
+   * blocked, overdue, stale, a step that is waiting — keeps its words and so
+   * keeps its line.
+   */
   const filler = new Set([
     "the",
     "a",
@@ -266,9 +277,14 @@ function reasonAddsToLabel(reason, label) {
     "this",
     "card",
     "is",
+    "are",
     "was",
     "marked",
     "currently",
+    "open",
+    "step",
+    "steps",
+    "progressing",
   ]);
   return body.some((word) => !filler.has(word) && !name.has(word));
 }

@@ -25,6 +25,17 @@
      * quiet height; on an agent page the section is the point, so it stays.
      */
     quietWhenEmpty = false,
+    /**
+     * Render nothing at all when there is nothing to show.
+     *
+     * One step past `quietWhenEmpty`, for a surface that already answers the
+     * question somewhere else. On the task page the one quiet line sat above
+     * an Evidence section whose own empty state said "No activity": two
+     * headings, two tips and a button, for one absence. A reader who wants to
+     * know whether anything is running opens the agent page, where the
+     * section is the point.
+     */
+    hideWhenEmpty = false,
     agentId = "",
     workspaceHref = (path) => path,
     client = coreClient,
@@ -48,14 +59,17 @@
   );
   let summary = $derived(participationSummary(groups, now));
   let scope = $derived(agentId ? "Recent task participation" : "Participation");
-  /** Nothing reported, nothing unavailable, and no longer loading. */
-  let empty = $derived(
-    !loading &&
-      (!selected.length ||
-        groups.every(
-          (group) => !group.unavailable && !group.participants.length,
-        )),
+  /**
+   * Nothing reported and nothing unavailable. Loading is not content: a
+   * surface that asked to hide when empty must stay gone while a read is in
+   * flight, or the periodic refresh remounts the empty section.
+   */
+  let vacant = $derived(
+    !selected.length ||
+      groups.every((group) => !group.unavailable && !group.participants.length),
   );
+  /** Vacant, and no longer loading — for the quiet one-line empty state. */
+  let empty = $derived(!loading && vacant);
 
   async function load(key = scopeKey, force = false) {
     if (inFlightKey === key) return;
@@ -114,7 +128,9 @@
   );
 </script>
 
-{#if quietWhenEmpty && empty}
+{#if hideWhenEmpty && vacant}
+  <!-- Nothing: an absence is not news. -->
+{:else if quietWhenEmpty && empty}
   <!-- One line, not a section: an empty participation panel used to be four
        lines of explanation about an absence. -->
   <section aria-label={scope} data-participation data-participation-quiet>

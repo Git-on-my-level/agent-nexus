@@ -20,8 +20,10 @@
 
 import {
   CHIP_REF_PREFIXES,
+  classifyLink,
   classifyWorkUrl,
   isChipRef,
+  shortLinkLabel,
   tokenizeRefText,
 } from "./refText.js";
 import { parseRef } from "./typedRefs.js";
@@ -34,7 +36,14 @@ import { hasWorkSummary, workSummaryModel } from "./workSummary.js";
  * plain-Node report conformance check. Re-exported here because this is the
  * module callers already import ref vocabulary from.
  */
-export { CHIP_REF_PREFIXES, classifyWorkUrl, isChipRef, tokenizeRefText };
+export {
+  CHIP_REF_PREFIXES,
+  classifyLink,
+  classifyWorkUrl,
+  isChipRef,
+  shortLinkLabel,
+  tokenizeRefText,
+};
 
 /** The batch resolve contract takes at most this many refs per request. */
 export const MAX_BATCH_REFS = 200;
@@ -207,7 +216,13 @@ function normalizeProgress(value) {
 export function refChipModel(ref, resolved, context = {}) {
   const raw = asText(ref);
   const hit = resolved?.get?.(raw) ?? null;
-  const external = classifyWorkUrl(raw);
+  /*
+   * A pull request or an issue is named by what it is; any other link is named
+   * by its host and the path segment that identifies it. Both are real
+   * destinations, so neither can read "not found", and a reader gets a short
+   * label with the whole URL on hover instead of a line of raw URL on screen.
+   */
+  const external = classifyWorkUrl(raw) ?? classifyLink(raw);
   const { prefix, value } = parseRef(raw);
 
   const authority = asText(hit?.authority) || external?.source || "";

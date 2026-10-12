@@ -86,7 +86,6 @@
             resolved={resolvedItemRefs}
             {organizationSlug}
             {workspaceSlug}
-            stepsExpanded
             {onpreview}
             {onpreviewclose}
           />

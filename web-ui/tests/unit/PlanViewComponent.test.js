@@ -176,7 +176,7 @@ describe("PlanView", () => {
   it("shows dates where they are given and no marker when none are", () => {
     const dated = mount({ steps: [step("a", [], { due: "2026-11-02" })] });
     expect(dated.container.querySelector(".plan-node__due").textContent).toBe(
-      "2026-11-02",
+      "due 2026-11-02",
     );
     dated.unmount();
 
@@ -224,26 +224,77 @@ describe("PlanView", () => {
     );
   });
 
-  it("always offers the step list, which is the diagram's fallback", () => {
+  it("writes the tree's rows out under the diagram, never behind a fold", () => {
     const plan = { steps: [step("a"), step("b", ["a"]), step("c", ["a"])] };
     const { container } = mount(plan, {
       planState: stateFor(plan, { shape: "dag", critical_path: ["a", "b"] }),
     });
-    const details = container.querySelector(".plan-steps");
-    expect(details.querySelector("summary").textContent).toContain(
-      "View plan steps",
-    );
-    const items = details.querySelectorAll("li");
+    // No second, collapsed copy of the plan: the rows are simply there.
+    expect(container.querySelector("details")).toBeNull();
+    expect(container.textContent).not.toContain("View plan steps");
+
+    const items = container.querySelectorAll(".plan-track--tree > li");
     expect(items).toHaveLength(3);
     // The dependency an edge draws is also written out in words.
     expect(
       [...items].some((item) => item.textContent.includes("after a")),
     ).toBe(true);
+    // And the critical path is named, not only drawn as a heavier edge.
     expect(
-      [...items].some((item) =>
-        item.textContent.includes("on the critical path"),
-      ),
-    ).toBe(true);
+      container.querySelectorAll(".plan-track--tree [data-plan-critical]"),
+    ).toHaveLength(2);
+  });
+
+  it("gives every step its status word, done ones included", () => {
+    /*
+     * The dot carries the status as a colour, which a screen reader cannot
+     * read and a colour-blind reader cannot tell apart. The first step of the
+     * omi card was a green dot and nothing else, because a step with a ref
+     * used to show the chip *instead of* its status.
+     */
+    const plan = {
+      steps: [
+        step("done-step", [], { ref: "card:shared-report-contracts" }),
+        step("live", ["done-step"]),
+      ],
+    };
+    const { container } = mount(plan, {
+      planState: stateFor(plan, {
+        steps: [
+          { id: "done-step", status: "done", resolvable: true },
+          { id: "live", status: "active", resolvable: false },
+        ],
+      }),
+    });
+    const rows = [...container.querySelectorAll(".plan-track--timeline > li")];
+    const words = rows.map(
+      (row) => row.querySelector(".plan-node__status")?.textContent,
+    );
+    expect(words).toEqual(["Done", "In progress"]);
+    // The ref is still a chip on the same row, not a replacement for it.
+    expect(
+      rows[0].querySelector("[data-anx-ref='card:shared-report-contracts']"),
+    ).not.toBeNull();
+  });
+
+  it("lists a step once, whatever the shape", () => {
+    const plan = { steps: [step("spec"), step("ship", ["spec"])] };
+    for (const shape of ["chain", "lanes", "dag"]) {
+      const { container, unmount } = mount(plan, {
+        planState: stateFor(plan, { shape }),
+      });
+      expect(
+        container.querySelectorAll('[data-plan-node="ship"]').length,
+        shape,
+      ).toBe(shape === "dag" ? 2 : 1);
+      // The tree's second appearance is its picture; every shape has exactly
+      // one row list for the step.
+      expect(
+        container.querySelectorAll('li[data-plan-node="ship"]').length,
+        shape,
+      ).toBe(1);
+      unmount();
+    }
   });
 
   it("hides only the edge layer from assistive tech, never the nodes", () => {
@@ -319,7 +370,7 @@ describe("PlanView names steps rather than refs", () => {
     expect(node.querySelector("[data-anx-ref]")).not.toBeNull();
   });
 
-  it("folds a finished prefix in the timeline and says how many", () => {
+  it("folds a finished prefix in the timeline and says how many", async () => {
     const long = {
       steps: [
         step("a", [], { title: "A" }),
@@ -342,10 +393,18 @@ describe("PlanView names steps rather than refs", () => {
     // The remaining step is drawn; the folded ones are not.
     expect(container.querySelector('[data-plan-node="c"]')).not.toBeNull();
     expect(container.querySelector('[data-plan-node="a"]')).toBeNull();
-    // They are still listed in the fallback, so nothing is actually lost.
-    const list = container.querySelector(".plan-steps");
-    expect(list.textContent).toContain("A");
-    expect(list.textContent).toContain("B");
+
+    /*
+     * And the fold opens. This list is the only place the steps appear now, so
+     * folding them may not lose them — it used to be safe only because a
+     * second list further down repeated the whole plan.
+     */
+    const toggle = fold.querySelector("button");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    toggle.click();
+    await Promise.resolve();
+    expect(container.querySelector('[data-plan-node="a"]')).not.toBeNull();
+    expect(container.querySelector('[data-plan-node="b"]')).not.toBeNull();
   });
 
   it("shows an external step as a chip with its status, never not-found", () => {

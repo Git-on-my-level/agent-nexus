@@ -20,8 +20,12 @@
    *   here turned every Tasks row two lines tall.
    * - `card` — the Overview card: a status line with its age, any hints, a
    *   progress bar, the step lists or the next step, and a meta line.
-   * - `header` — a page header, which has room for words: the status with its
-   *   computed reason, any hints, progress with its unit, due, age and asks.
+   * - `header` — a page header, which has room for words: one status line
+   *   carrying the status, progress with its unit, the age with the verb that
+   *   says what it is about, and who the next step is with; then, under it,
+   *   the computed reason — but only when core named a cause, because a
+   *   reason that restates its badge is dropped from the model itself. Then
+   *   any hints, due and asks.
    *
    * There is no branching on whether the card is an initiative, which board
    * it is on, or who is looking. A part is shown when core sent it and the
@@ -44,6 +48,16 @@
     title = "",
     /** Owner display name; omitted where the surface has its own column. */
     ownerLabel = "",
+    /**
+     * Who the next step is with, as the caller resolved it: "waiting on
+     * David". Header density only, and on the status line rather than under
+     * it — the point of the line is that there is one of it.
+     *
+     * Like `ownerLabel`, this is a display string the page owns. The model
+     * carries core's actor refs; which of them is the one acting next, and
+     * what that person is called, is the page's question to answer.
+     */
+    waitingLabel = "",
     /** Where the card lives, when the surface tells several apart. */
     placeLabel = "",
     now = Date.now(),
@@ -160,12 +174,36 @@
           data-summary-source-status>{summary.sourceStatus}</span
         >
       {/if}
+      {#if density === "header" && progress}
+        <!--
+          Progress belongs with the badges, not under them: it states where the
+          card is, which is what the badge beside it does, and the line below is
+          for the one thing that explains it. `3/7` reads as a date to a screen
+          reader, so the sentence is the accessible name.
+        -->
+        <span
+          class="summary__count"
+          data-summary-progress
+          role="img"
+          aria-label={progressLabel}
+          use:tooltip={progressLabel}>{progress.label}</span
+        >
+      {/if}
+      {#if density === "header" && waitingLabel}
+        <span class="summary__waiting" data-summary-waiting
+          >· {waitingLabel}</span
+        >
+      {/if}
       {#if density !== "row" && summary.freshness}
+        <!-- On a page header the badge says what the date is about. A bare
+             "yesterday" next to a status badge and a "Live · updated just
+             now" chip is the one thing on the line a reader cannot place. -->
         <FreshnessBadge
           at={summary.lastMovementAt}
           kind={summary.freshnessKind}
           expectationHours={summary.expectationHours}
           verb="moved"
+          verbose={density === "header"}
           {now}
         />
       {/if}
@@ -185,7 +223,7 @@
       </span>
     {/if}
 
-    {#if progress}
+    {#if progress && density !== "header"}
       {#if density === "card"}
         <span class="summary__viz" data-summary-shape={summary.shape || null}>
           {#if summary.segments.length}
@@ -371,6 +409,7 @@
   .summary__set,
   .summary__reason,
   .summary__meta,
+  .summary__waiting,
   .summary__foot {
     color: var(--fg-muted);
     font-size: 12px;
@@ -453,6 +492,10 @@
   .summary--header .summary__count {
     color: var(--fg-muted);
     font-size: 12px;
+  }
+  .summary__waiting {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
   .summary__partial,
   .summary__shape {

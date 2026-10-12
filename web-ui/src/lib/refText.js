@@ -102,6 +102,63 @@ export function classifyWorkUrl(value) {
   return null;
 }
 
+/** How long a shortened link label may get before it is clipped. */
+const LINK_LABEL_MAX = 44;
+
+/**
+ * A short, readable name for a link that no matcher above recognises.
+ *
+ * A plan step may point at any HTTP(S) URL the plan contract accepts, and most
+ * of them are not pull requests: a repository, a runbook, a design doc. Those
+ * used to render as the whole URL, which on a phone is most of a line of text
+ * for a destination the reader cannot read anyway. So the label is the host and
+ * the part of the path that names the thing — the repo, the file — and the full
+ * URL stays on the chip's `title`, where a reader who wants it can hover.
+ *
+ * `…` marks a dropped middle rather than a dropped end: the last segment is
+ * usually the name, so `github.com/…/plan.md` beats `github.com/Git-on-my-l…`.
+ */
+export function shortLinkLabel(value) {
+  const raw = asText(value);
+  if (!raw) return "";
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    return raw;
+  }
+  const host = url.hostname.replace(/^www\./i, "");
+  const segments = url.pathname.split("/").filter(Boolean);
+  const path =
+    segments.length <= 2
+      ? segments.join("/")
+      : `…/${segments[segments.length - 1]}`;
+  const label = path ? `${host}/${path}` : host;
+  return label.length > LINK_LABEL_MAX
+    ? `${label.slice(0, LINK_LABEL_MAX - 1)}…`
+    : label;
+}
+
+/**
+ * Any safe HTTP(S) link, as the same `{kind, source, label, url}` shape
+ * `classifyWorkUrl` returns for the URLs it recognises.
+ *
+ * Deliberately separate from `classifyWorkUrl`: that answers "is this URL a
+ * piece of work", which is what decides whether a bare URL in prose becomes a
+ * chip at all, and every URL is not. This answers the narrower question a chip
+ * already rendering a known ref has — "what do I call this link" — so it is for
+ * callers handed a ref, not for scanning text.
+ *
+ * @returns {{kind: string, source: string, label: string, url: string}|null}
+ */
+export function classifyLink(value) {
+  const url = asText(value);
+  if (!/^https?:\/\//i.test(url)) return null;
+  const label = shortLinkLabel(url);
+  if (!label) return null;
+  return { kind: "link", source: "", label, url };
+}
+
 /** A ref-shaped token, so callers can test one string without scanning. */
 export function isChipRef(value) {
   const { prefix, value: id } = parseRef(asText(value));

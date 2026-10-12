@@ -897,15 +897,13 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await page.getByRole("button", { name: "Older observations" }).click();
       await expectCleanLayout(page, "detail older observations", bothEnds);
 
-      api.hold.getWork = deferred();
-      await page.getByRole("button", { name: "Reload" }).click();
-      await expect(page.getByText("Loading…")).toBeVisible();
-      await expectCleanLayout(page, "detail reloading");
-      api.hold.getWork.resolve();
-      api.hold = {};
-      await expect(
-        page.getByRole("heading", { name: LONG_TITLE }),
-      ).toBeVisible();
+      /*
+       * No Reload button on a card either. The page re-reads its record and
+       * its plan off the workspace event stream, and the held-read loading
+       * layout is the "detail loading" state above — which is the one a
+       * reader actually meets, on opening the card.
+       */
+      await expect(page.getByRole("button", { name: "Reload" })).toHaveCount(0);
 
       // Evidence and decisions fail independently of the task itself.
       api.fail.observations = { message: LONG_ERROR };

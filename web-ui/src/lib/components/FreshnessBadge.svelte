@@ -26,6 +26,16 @@
     row = null,
     /** What happened then: "moved", "updated", "checked". */
     verb = "updated",
+    /**
+     * Say the verb on the badge, not only in its tooltip.
+     *
+     * A bare `yesterday` beside a status badge is a date with no claim
+     * attached: a reader cannot tell whether it is when the card moved, when
+     * the page read it, or when it is due. Two characters is the right size in
+     * a table cell, where the column heading supplies the verb; a page header
+     * has room to say "moved yesterday" and no heading to lean on.
+     */
+    verbose = false,
     /** Reference time. Omit it to follow the shared clock. */
     now = undefined,
     class: extraClass = "",
@@ -49,6 +59,11 @@
     freshnessModel(at, { kind, expectationHours, row, verb, now: current }),
   );
   let title = $derived(client && model ? model.title : "");
+  let text = $derived.by(() => {
+    if (!client || !model) return "";
+    const action = String(verb ?? "").trim();
+    return verbose && action ? `${action} ${model.age}` : model.age;
+  });
 </script>
 
 {#if model}
@@ -59,7 +74,7 @@
     data-freshness-kind={kind}
     title={title || undefined}
     aria-label={title || undefined}
-    use:tooltip={title}>{client ? model.age : ""}</time
+    use:tooltip={title}>{text}</time
   >
 {/if}
 

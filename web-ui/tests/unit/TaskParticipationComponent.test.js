@@ -65,6 +65,72 @@ describe("participation panel", () => {
     expect(screen.queryByText("Offline")).toBeNull();
     expect(screen.queryByText("Completed")).toBeNull();
   });
+  it("renders nothing at all when a surface asks it to stay out of the way", async () => {
+    /*
+     * On the task page an empty participation section was one quiet line
+     * directly above an Evidence section whose own empty state said "No
+     * activity" — two headings and a button for one absence. A reader who
+     * wants to know whether anything is running opens the agent page, where
+     * the section is the point and `quietWhenEmpty` still applies.
+     */
+    const client = clientFor([]);
+    const { container } = render(TaskParticipation, {
+      tasks,
+      client,
+      hideWhenEmpty: true,
+    });
+    await waitFor(() =>
+      expect(container.querySelector("[data-participation]")).toBeNull(),
+    );
+    expect(container.textContent).not.toContain("No activity");
+    expect(container.textContent).not.toContain("Loading shared participation");
+    expect(container.textContent).not.toContain("No shared participation");
+
+    // And it comes back the moment there is something to report.
+    cleanup();
+    const busy = render(TaskParticipation, {
+      tasks,
+      client: clientFor([participant("p1")]),
+      hideWhenEmpty: true,
+    });
+    await screen.findByText("1 session participating · 1 currently active");
+    expect(busy.container.querySelector("[data-participation]")).not.toBeNull();
+  });
+  it("stays hidden while an empty participation read is in flight", async () => {
+    /*
+     * hideWhenEmpty must not treat loading as content. Opening a quiet card
+     * used to flash the heading, and the 30s refresh remounted "No shared
+     * participation reported" over groups that were already empty.
+     */
+    vi.useFakeTimers();
+    let release;
+    const client = {
+      listWorkParticipants: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
+      ),
+    };
+    const { container } = render(TaskParticipation, {
+      tasks,
+      client,
+      hideWhenEmpty: true,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    await tick();
+    expect(container.querySelector("[data-participation]")).toBeNull();
+    expect(container.textContent).not.toContain("Loading shared participation");
+    release({ participants: [], next_cursor: "" });
+    await vi.advanceTimersByTimeAsync(0);
+    await tick();
+    expect(container.querySelector("[data-participation]")).toBeNull();
+    await vi.advanceTimersByTimeAsync(30_000);
+    await tick();
+    expect(container.querySelector("[data-participation]")).toBeNull();
+    expect(container.textContent).not.toContain("No shared participation");
+    expect(client.listWorkParticipants).toHaveBeenCalledTimes(2);
+  });
   it("does not label denied task existence or render raw error bodies", async () => {
     const client = {
       listWorkParticipants: vi

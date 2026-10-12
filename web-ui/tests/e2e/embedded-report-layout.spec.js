@@ -17,8 +17,8 @@ import {
  * tree eight layers wide, step titles a sentence long, a dependency list that
  * names every predecessor. On the initiative page those fit, because the plan
  * has the page to itself. Embedded, they ran off the right edge: nodes and
- * connector lines cut mid-stroke, the "View plan steps" rows truncated by the
- * shell's own `overflow: hidden`, and no scrollbar anywhere to say so.
+ * connector lines cut mid-stroke, the step rows truncated by the shell's own
+ * `overflow: hidden`, and no scrollbar anywhere to say so.
  *
  * The rule this pins: **over-tall beats clipped**. Content either fits the
  * width it is given, or scrolls inside a box that shows it can be scrolled.
@@ -421,7 +421,11 @@ test("a plan too wide to fit scrolls inside its own box, and says so", async ({
     await scroller.evaluate((node) => {
       node.scrollLeft = node.scrollWidth;
     });
-    await expect(page.locator('[data-plan-node="ship-it"]')).toBeInViewport();
+    // The box, not the row: the same step is a node in the diagram and a row
+    // in the list under it, and this is about the diagram.
+    await expect(
+      page.locator('.plan-node[data-plan-node="ship-it"]'),
+    ).toBeInViewport();
   }
 });
 

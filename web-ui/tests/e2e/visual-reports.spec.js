@@ -1180,7 +1180,10 @@ for (const viewport of [
     await expect(
       initiativePlan.getByRole("link", { name: "Finish review" }),
     ).toHaveAttribute("href", /tasks\/card%3Areview$/i);
-    await expect(initiativePlan.getByText("View plan steps")).toBeVisible();
+    // One plan list, on the page rather than behind a fold: a panel used to
+    // open the same steps a second time under "View plan steps".
+    await expect(initiativePlan.locator(".plan-track > li")).not.toHaveCount(0);
+    await expect(initiativePlan.getByText("View plan steps")).toHaveCount(0);
     await expect(report).toContainText("On it: actor:agent-reviewer");
     await expect(report).toContainText("2 h ago");
     await expect(

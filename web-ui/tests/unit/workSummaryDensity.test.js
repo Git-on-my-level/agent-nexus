@@ -110,6 +110,21 @@ describe("density decides how much fits", () => {
     expect(el.querySelector("[data-tile-next]")).toBeNull();
   });
 
+  it("says what the header's date is about, where a card's badge need not", () => {
+    /*
+     * A bare "2 h ago" next to a status badge and a "Live · updated just now"
+     * chip is the one thing on the line a reader cannot place: it could be
+     * when the card moved, when the page read it, or when it is due. A card
+     * tile has a layout that says; a page header has to use words.
+     */
+    expect(at("header").querySelector("[data-freshness]").textContent).toBe(
+      "moved 2 h ago",
+    );
+    expect(at("card").querySelector("[data-freshness]").textContent).toBe(
+      "2 h ago",
+    );
+  });
+
   it("gives a header the computed reason on screen, not only on hover", () => {
     const el = at("header");
     expect(el.querySelector("[data-summary-reason]").textContent).toContain(
@@ -119,6 +134,42 @@ describe("density decides how much fits", () => {
     expect(el.querySelector("[data-summary-progress]").textContent).toContain(
       "2/5 steps",
     );
+  });
+
+  it("keeps the header to a status line and the one line that explains it", () => {
+    /*
+     * The point of the line is that there is one of it. Progress states where
+     * the card is, which is the badge's own job, so it sits beside the badge;
+     * the line under them is for the cause core named, and for nothing else.
+     * Before this the header was four stacked facts: a badge, a sentence, a
+     * count and an unexplained date.
+     */
+    const el = at("header");
+    const line = el.querySelector(".summary__status-line");
+    expect(line.querySelector("[data-summary-progress]")).not.toBeNull();
+    expect(line.querySelector("[data-freshness]")).not.toBeNull();
+    expect(line.querySelector("[data-summary-reason]")).toBeNull();
+  });
+
+  it("puts who the next step is with on that same line, when a page knows", () => {
+    const { container } = render(WorkSummary, {
+      summary: workSummaryModel(row, { now: NOW }),
+      density: "header",
+      waitingLabel: "waiting on David",
+      now: NOW,
+    });
+    expect(
+      container.querySelector(".summary__status-line [data-summary-waiting]")
+        .textContent,
+    ).toContain("waiting on David");
+    // A list row has no room for it, and no page to resolve the name either.
+    const rowEl = render(WorkSummary, {
+      summary: workSummaryModel(row, { now: NOW }),
+      density: "row",
+      waitingLabel: "waiting on David",
+      now: NOW,
+    });
+    expect(rowEl.container.querySelector("[data-summary-waiting]")).toBeNull();
   });
 });
 
