@@ -15,6 +15,48 @@ import (
 	"testing"
 )
 
+func TestQuotaErrorVisibleCounts(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		projected int64
+		message   string
+	}{
+		{"below limit", 997, "Workspace artifact limit reached (limit 1000). Remove content or raise the configured workspace limit."},
+		{"at limit", 1000, "Workspace artifact limit reached (limit 1000). Remove content or raise the configured workspace limit."},
+		{"above limit", 1001, "Workspace artifact limit reached (996/1000). This operation needs 5 more. Remove content or raise the configured workspace limit."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			err := fmt.Errorf("nested write: %w", &primitives.QuotaViolation{
+				Code: "workspace_quota_exceeded", Metric: "artifact_count", Current: 996, Limit: 1000, Projected: tc.projected,
+			})
+			if !writePrimitiveQuotaViolationError(w, err) {
+				t.Fatal("wrapped quota violation was not handled")
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+				t.Fatal(err)
+			}
+			e := payload["error"].(map[string]any)
+			if w.Code != http.StatusConflict || e["code"] != "quota_exceeded" || e["recoverable"] != false || e["message"] != tc.message {
+				t.Fatalf("status=%d payload=%v", w.Code, payload)
+			}
+			quota := payload["quota"].(map[string]any)
+			if quota["metric"] != "artifacts" || quota["limit"] != float64(1000) {
+				t.Fatalf("bad quota details: %v", quota)
+			}
+			if tc.projected > 1000 {
+				if len(quota) != 5 || quota["current"] != float64(996) || quota["delta"] != float64(5) || quota["projected"] != float64(1001) {
+					t.Fatalf("missing explanatory counts: %v", quota)
+				}
+			} else if len(quota) != 2 {
+				t.Fatalf("unexplained visible counts included: %v", quota)
+			}
+		})
+	}
+}
+
 func TestQuotaErrorsOnWriteRoutes(t *testing.T) {
 	requireIntegrationTest(t)
 	t.Parallel()
