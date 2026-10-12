@@ -233,19 +233,26 @@
     };
   });
   /**
-   * "waiting on David", for the single status line.
+   * How the card stands with whoever acts next.
    *
    * The verb follows the lead step's computed status: a step somebody is
-   * already working is not one anybody is waiting on.
+   * already working is not one anybody is waiting on. The status line and the
+   * Next section both use it, so the page says one thing in two places.
    */
-  let waitingLabel = $derived.by(() => {
+  let waitingVerb = $derived(
+    shownNextSteps.length && stepStatus.get(shownNextSteps[0].id) === "active"
+      ? "with"
+      : "waiting on",
+  );
+  /** "waiting on David", for the single status line. */
+  let waitingLabel = $derived(
     // A real name or nothing: a role the registries cannot place belongs in
     // the Next section, where there is room to say that nobody is named, not
     // on a status line that would then read "waiting on agent".
-    if (!nextActor?.named || !shownNextSteps.length) return "";
-    const lead = stepStatus.get(shownNextSteps[0].id);
-    return `${lead === "active" ? "with" : "waiting on"} ${nextActor.label}`;
-  });
+    nextActor?.named && shownNextSteps.length
+      ? `${waitingVerb} ${nextActor.label}`
+      : "",
+  );
   /**
    * The hand-written next action, where the plan has not already passed it.
    *
@@ -737,22 +744,20 @@
             when the board disagrees, what it is filed as. The header used to
             print the stored phase on its own, which is exactly the thing the
             Tasks table and the Overview could then contradict.
+
+            One line of it: the badge, the step count, the age and who the
+            next step is with. The generic health sentence that used to sit
+            under it ("Open steps are progressing.") is gone from the model
+            itself — it restated the badge — so the line below this one
+            appears only when core named a cause worth reading.
           -->
           <WorkSummary
             summary={cardSummary}
             density="header"
             title={work.title}
+            {waitingLabel}
             {now}
           />
-          {#if waitingLabel}
-            <!-- The second half of the one status line: how far the plan is,
-                 then who the next step is with. The generic health sentence
-                 that used to sit under this ("Open steps are progressing.")
-                 is gone from the model itself — it restated the badge. -->
-            <span class="text-meta text-fg-muted" data-task-waiting
-              >· {waitingLabel}</span
-            >
-          {/if}
           {#if !nexusOwned}
             <SignalBadge tone={signal.tone}>{signal.label}</SignalBadge>
           {/if}
@@ -887,11 +892,11 @@
                   label={nextActor.label}
                   seed={nextActor.id}
                   size="xs"
-                  prefix={shownNextSteps.length ? "waiting on" : "owner"}
+                  prefix={shownNextSteps.length ? waitingVerb : "owner"}
                 />{:else if nextActor}<span
                   class="min-w-0 break-words text-fg [overflow-wrap:anywhere]"
                   data-next-actor-role
-                  >Waiting on {nextActor.label} — no principal named</span
+                  >Next actor: {nextActor.label} — no principal named</span
                 >{:else}<span class="text-fg-muted">Nobody assigned</span>{/if}
             </p>
             {#if shownNextSteps.length}

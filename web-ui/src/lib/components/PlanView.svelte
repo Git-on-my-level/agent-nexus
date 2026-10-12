@@ -590,9 +590,15 @@
   }
   .plan-track li {
     display: flex;
-    align-items: center;
+    /* A row wraps on a phone, so the dot aligns with the title's line rather
+       than floating against the middle of a three-line row. */
+    align-items: flex-start;
     gap: 8px;
     min-width: 0;
+  }
+  .plan-track li.plan-today,
+  .plan-track li.plan-done-row {
+    align-items: center;
   }
   .plan-track__body {
     display: flex;
@@ -603,10 +609,16 @@
   }
   .plan-track__dot {
     flex: none;
+    /* Centred on the first line of the row, not on the row. */
+    margin-top: 5px;
     width: 8px;
     height: 8px;
     border-radius: 50%;
     background: var(--line-strong);
+  }
+  /* The fold's own dot sits against a one-line row. */
+  .plan-track li.plan-done-row .plan-track__dot {
+    margin-top: 0;
   }
   .plan-track__dot--done,
   .plan-track li[data-status="done"] .plan-track__dot {

@@ -353,7 +353,7 @@ test("Next follows the plan, and drops a note the plan has passed", async ({
   await expect(page.locator("[data-next-actor-role]")).toContainText(
     "no principal named",
   );
-  await expect(page.locator("[data-task-waiting]")).toHaveCount(0);
+  await expect(page.locator("[data-summary-waiting]")).toHaveCount(0);
 
   /*
    * The generic health sentence is gone with it. "Open steps are
@@ -366,6 +366,32 @@ test("Next follows the plan, and drops a note the plan has passed", async ({
     "on_track",
   );
   await expect(summary.locator("[data-summary-reason]")).toHaveCount(0);
+});
+
+test("a named owner is who the card is waiting on, on the line and in Next", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await installInitiativePage(page, {
+    // The workspace's own actor, which the registry names "Operator".
+    work: { owner: "actor-operator" },
+  });
+  await page.goto(CARD_PATH);
+  await expect(page.locator("[data-initiative-plan]")).toBeVisible({
+    timeout: 60_000,
+  });
+
+  /*
+   * The lead ready step is in progress, so the verb is "with": a step
+   * somebody is already working is not one anybody is waiting on. Both the
+   * status line and the Next section name the same person.
+   */
+  await expect(page.locator("[data-summary-waiting]")).toHaveText(
+    "· with Operator",
+  );
+  await expect(page.locator("[data-next-steps]")).toBeVisible();
+  await expect(page.locator("[data-next-actor-role]")).toHaveCount(0);
+  await expect(page.getByText("Nobody assigned")).toHaveCount(0);
 });
 
 test("a step pointing at a plain URL reads as a name, not a URL", async ({

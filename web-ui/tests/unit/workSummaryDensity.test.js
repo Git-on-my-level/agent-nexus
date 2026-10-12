@@ -135,6 +135,42 @@ describe("density decides how much fits", () => {
       "2/5 steps",
     );
   });
+
+  it("keeps the header to a status line and the one line that explains it", () => {
+    /*
+     * The point of the line is that there is one of it. Progress states where
+     * the card is, which is the badge's own job, so it sits beside the badge;
+     * the line under them is for the cause core named, and for nothing else.
+     * Before this the header was four stacked facts: a badge, a sentence, a
+     * count and an unexplained date.
+     */
+    const el = at("header");
+    const line = el.querySelector(".summary__status-line");
+    expect(line.querySelector("[data-summary-progress]")).not.toBeNull();
+    expect(line.querySelector("[data-freshness]")).not.toBeNull();
+    expect(line.querySelector("[data-summary-reason]")).toBeNull();
+  });
+
+  it("puts who the next step is with on that same line, when a page knows", () => {
+    const { container } = render(WorkSummary, {
+      summary: workSummaryModel(row, { now: NOW }),
+      density: "header",
+      waitingLabel: "waiting on David",
+      now: NOW,
+    });
+    expect(
+      container.querySelector(".summary__status-line [data-summary-waiting]")
+        .textContent,
+    ).toContain("waiting on David");
+    // A list row has no room for it, and no page to resolve the name either.
+    const rowEl = render(WorkSummary, {
+      summary: workSummaryModel(row, { now: NOW }),
+      density: "row",
+      waitingLabel: "waiting on David",
+      now: NOW,
+    });
+    expect(rowEl.container.querySelector("[data-summary-waiting]")).toBeNull();
+  });
 });
 
 describe("hints are a note, never the status", () => {
