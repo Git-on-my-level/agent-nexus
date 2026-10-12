@@ -297,6 +297,35 @@ export function actorDisplayLabel(
   return humanizeUnmappedActorIdForUi(id) || id;
 }
 
+/**
+ * Does a registry actually name this actor, or is the label just the field's
+ * own text read back?
+ *
+ * `next_actor` is a free-text annotation: it holds an actor id on a card an
+ * agent filed properly, and the word "agent" on one where somebody wrote down
+ * a role. Both come back from `actorDisplayLabel` as something renderable, and
+ * a caller that draws an avatar beside the second gets "AG agent" — initials
+ * for a word that names nobody. So a caller that needs a real principal asks
+ * here first and falls back to an owner it can name.
+ */
+export function isKnownActor(
+  value,
+  actors,
+  principals = get(principalRegistry),
+  agents = get(agentRegistry),
+) {
+  const id = String(value ?? "")
+    .trim()
+    .replace(/^actor:/, "");
+  if (!id) {
+    return false;
+  }
+  if (isReservedSystemActorId(id)) {
+    return true;
+  }
+  return buildActorNameMap(actors, principals, agents).has(id);
+}
+
 function pickBetterActorDisplayLabel(existing, candidate) {
   const e = String(existing ?? "").trim();
   const c = String(candidate ?? "").trim();

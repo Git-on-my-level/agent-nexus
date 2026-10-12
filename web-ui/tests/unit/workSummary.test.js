@@ -1057,6 +1057,21 @@ describe("a reason that only restates the badge", () => {
     ).toBe("");
   });
 
+  it("drops the healthy answer, which names no cause at all", () => {
+    /*
+     * `on_track` carries one fixed sentence, and it is the absence of a
+     * problem written as a sentence. Under a badge reading `In progress` it
+     * was the line the task header spent on telling a reader nothing.
+     */
+    expect(
+      reasonOf({
+        state: "on_track",
+        label: "In progress",
+        reason: "Open steps are progressing.",
+      }),
+    ).toBe("");
+  });
+
   it("keeps a reason that names a cause", () => {
     expect(
       reasonOf({
@@ -1065,6 +1080,29 @@ describe("a reason that only restates the badge", () => {
         reason: "Blocked waiting on review.",
       }),
     ).toBe("Blocked waiting on review.");
+    // Core's own wording for each unhealthy state, which all name something.
+    expect(
+      reasonOf({
+        state: "blocked",
+        label: "Blocked",
+        reason: "An unfinished step or dependency is blocked.",
+      }),
+    ).toBe("An unfinished step or dependency is blocked.");
+    expect(
+      reasonOf({
+        state: "stale",
+        label: "Stale",
+        reason:
+          "No card, plan or step activity within the configured stale threshold.",
+      }),
+    ).not.toBe("");
+    expect(
+      reasonOf({
+        state: "done",
+        label: "Done",
+        reason: "All plan steps are complete.",
+      }),
+    ).toBe("All plan steps are complete.");
     expect(
       reasonOf({ state: "at_risk", label: "At risk", reason: "Overdue." }),
     ).toBe("Overdue.");

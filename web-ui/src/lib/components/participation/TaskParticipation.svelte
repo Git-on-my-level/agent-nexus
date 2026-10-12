@@ -25,6 +25,17 @@
      * quiet height; on an agent page the section is the point, so it stays.
      */
     quietWhenEmpty = false,
+    /**
+     * Render nothing at all when there is nothing to show.
+     *
+     * One step past `quietWhenEmpty`, for a surface that already answers the
+     * question somewhere else. On the task page the one quiet line sat above
+     * an Evidence section whose own empty state said "No activity": two
+     * headings, two tips and a button, for one absence. A reader who wants to
+     * know whether anything is running opens the agent page, where the
+     * section is the point.
+     */
+    hideWhenEmpty = false,
     agentId = "",
     workspaceHref = (path) => path,
     client = coreClient,
@@ -114,7 +125,9 @@
   );
 </script>
 
-{#if quietWhenEmpty && empty}
+{#if hideWhenEmpty && empty}
+  <!-- Nothing: an absence is not news. -->
+{:else if quietWhenEmpty && empty}
   <!-- One line, not a section: an empty participation panel used to be four
        lines of explanation about an absence. -->
   <section aria-label={scope} data-participation data-participation-quiet>

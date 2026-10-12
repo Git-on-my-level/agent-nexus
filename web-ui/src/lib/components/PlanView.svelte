@@ -16,13 +16,20 @@
    * the page actually has, so the remaining steps and the critical path are on
    * screen rather than past the right edge.
    *
+   * **One list.** Every shape renders its steps through one row renderer, and
+   * a step appears once. A timeline and a set of lanes *are* that list; a tech
+   * tree is a picture of it, so there the same rows follow the diagram as its
+   * text layer. There used to be a second, collapsed copy — "View plan steps
+   * (N)" — under every shape, which on a timeline meant the page listed the
+   * same four steps twice and a reader had to open a fold to find out which
+   * step was blocked and what it was waiting on. Those facts are on the row
+   * now: the status word on every step including the done ones, the critical
+   * path marker, and "after X" where a step has a dependency.
+   *
    * Accessibility is not a separate mode. Nodes are in declaration order in
    * the DOM and the titles are real text, so they are focusable and readable in
    * every shape; only the SVG edge layer is hidden from assistive tech, and the
-   * dependencies it draws are also written out in the step list below. That
-   * list is the fallback the tech tree needs, and it is the same markup
-   * `dependency-diagram` panels already render — it also still lists the
-   * collapsed steps, so nothing is hidden from it.
+   * dependencies it draws are written out in words on the rows below it.
    */
   import { tooltip } from "$lib/actions/tooltip.js";
   import AnxRefChip from "$lib/components/AnxRefChip.svelte";
@@ -48,8 +55,6 @@
     workspaceSlug = "",
     /** Reference time, injectable so the today marker is testable. */
     now = Date.now(),
-    /** Expand the full checklist in report and document previews. */
-    stepsExpanded = false,
     onpreview = null,
     onpreviewclose = null,
   } = $props();
@@ -84,6 +89,10 @@
   /**
    * A timeline's finished prefix folds the same way a tree's does, and for the
    * same reason: a 12-step plan with 9 done is three steps of news.
+   *
+   * It folds rather than drops. This list is the only place the steps appear
+   * now, so the finished ones stay one click away instead of living in a
+   * second list further down the page.
    */
   let chainView = $derived.by(() => {
     let prefix = 0;
@@ -96,10 +105,15 @@
     // Nothing left to show means the plan is finished; draw it in full. And
     // folding one step saves nothing, so it takes two.
     if (prefix < PLAN_COLLAPSE_MIN || prefix === chainOrder.length) {
-      return { doneCount: 0, steps: chainOrder };
+      return { done: [], steps: chainOrder };
     }
-    return { doneCount: prefix, steps: chainOrder.slice(prefix) };
+    return {
+      done: chainOrder.slice(0, prefix),
+      steps: chainOrder.slice(prefix),
+    };
   });
+  /** The folded finished steps, once a reader has asked for them. */
+  let doneShown = $state(false);
   let markerIndex = $derived(todayMarkerIndex(chainView.steps, now));
 
   const STATUS_LABELS = {
@@ -138,8 +152,9 @@
 </script>
 
 {#snippet stepBody(node)}
-  <!-- Title first, ref beneath: the words the author wrote, then where they
-       point. A step with no ref is just its title. -->
+  <!-- A node box in the tech tree: title, ref beneath. Two lines of a fixed
+       box, so it carries the author's words and where they point; the row for
+       the same step below the diagram carries the rest. -->
   <span class="plan-node__title" title={node.title}>{node.title}</span>
   <span class="plan-node__meta">
     {#if node.ref}
@@ -154,6 +169,44 @@
       />
     {:else}
       <span class="plan-node__status">{statusLabel(node.status)}</span>
+    {/if}
+  </span>
+{/snippet}
+
+{#snippet stepRow(node)}
+  <!--
+    One step, as one row, in every shape.
+
+    The status word is on every step, done ones included: the dot carries it as
+    a colour, and a colour is not a fact a screen reader or a colour-blind
+    reader can read. A step's ref renders as the chip it is — a short label for
+    a repo, a PR or a doc, with the whole URL on its hover — rather than as a
+    line of raw URL. The critical-path marker and "after X" are only on the
+    steps they are true of.
+  -->
+  <span class="plan-track__dot" aria-hidden="true"></span>
+  <span class="plan-track__body">
+    <span class="plan-node__title" title={node.title}>{node.title}</span>
+    <span class="plan-node__status">{statusLabel(node.status)}</span>
+    {#if node.ref}
+      <AnxRefChip
+        refValue={node.ref}
+        {resolved}
+        {organizationSlug}
+        {workspaceSlug}
+        showKind={false}
+        {onpreview}
+        {onpreviewclose}
+      />
+    {/if}
+    {#if node.due}<span class="plan-node__due">due {node.due}</span>{/if}
+    {#if node.onCriticalPath}
+      <span class="plan-node__flag" data-plan-critical>critical path</span>
+    {/if}
+    {#if node.after.length}
+      <span class="plan-node__after"
+        >after {dependencyTitles(node).join(", ")}</span
+      >
     {/if}
   </span>
 {/snippet}
@@ -215,7 +268,7 @@
               style:top="{geometry.collapsed.y}px"
               style:width="{geometry.collapsed.width}px"
               style:height="{geometry.collapsed.height}px"
-              use:tooltip={`${doneSummary(geometry.collapsed.count)} — listed under View plan steps`}
+              use:tooltip={`${doneSummary(geometry.collapsed.count)} — listed in full below`}
             >
               <span class="plan-done-column__check" aria-hidden="true">✓</span>
               <span class="plan-done-column__count"
@@ -247,15 +300,36 @@
           Scroll to see the rest of the plan
         </p>
       {/if}
+      <!--
+        The tree's rows. A diagram is a picture of the plan, not a reading of
+        it: the edges are hidden from assistive tech, a folded prefix is a
+        single box, and a 60px node has room for a title and a chip. So the
+        same rows every other shape renders follow it, in dependency order,
+        with the dependencies written out as words.
+      -->
+      <ol class="plan-track plan-track--tree">
+        {#each chainOrder as node (node.id)}
+          <li
+            data-status={node.status}
+            data-plan-node={node.id}
+            class:plan-critical={node.onCriticalPath}
+          >
+            {@render stepRow(node)}
+          </li>
+        {/each}
+      </ol>
     {:else if shape === "lanes"}
       <div class="plan-lanes">
         {#each layout.lanes as lane, index (lane.join("+"))}
           <section class="plan-lane" aria-label={`Lane ${index + 1}`}>
             <ol class="plan-track">
               {#each laneSteps(lane) as node (node.id)}
-                <li data-status={node.status} data-plan-node={node.id}>
-                  <span class="plan-track__dot" aria-hidden="true"></span>
-                  <span class="plan-track__body">{@render stepBody(node)}</span>
+                <li
+                  data-status={node.status}
+                  data-plan-node={node.id}
+                  class:plan-critical={node.onCriticalPath}
+                >
+                  {@render stepRow(node)}
                 </li>
               {/each}
             </ol>
@@ -264,16 +338,37 @@
       </div>
     {:else}
       <ol class="plan-track plan-track--timeline">
-        {#if chainView.doneCount}
-          <li class="plan-done-row" data-plan-done-count={chainView.doneCount}>
+        {#if chainView.done.length}
+          <!-- The finished prefix, as one row that opens. The steps are in
+               this list and nowhere else, so folding them may not lose
+               them. -->
+          <li
+            class="plan-done-row"
+            data-plan-done-count={chainView.done.length}
+          >
             <span
               class="plan-track__dot plan-track__dot--done"
               aria-hidden="true"
             ></span>
-            <span class="plan-done-row__label"
-              >{doneSummary(chainView.doneCount)}</span
+            <button
+              class="plan-done-row__toggle"
+              type="button"
+              aria-expanded={doneShown}
+              onclick={() => (doneShown = !doneShown)}
+              >{doneSummary(chainView.done.length)}</button
             >
           </li>
+          {#if doneShown}
+            {#each chainView.done as node (node.id)}
+              <li
+                data-status={node.status}
+                data-plan-node={node.id}
+                class:plan-critical={node.onCriticalPath}
+              >
+                {@render stepRow(node)}
+              </li>
+            {/each}
+          {/if}
         {/if}
         {#each chainView.steps as node, index (node.id)}
           {#if index === markerIndex}
@@ -287,11 +382,7 @@
             data-plan-node={node.id}
             class:plan-critical={node.onCriticalPath}
           >
-            <span class="plan-track__dot" aria-hidden="true"></span>
-            <span class="plan-track__body">
-              {@render stepBody(node)}
-              {#if node.due}<span class="plan-node__due">{node.due}</span>{/if}
-            </span>
+            {@render stepRow(node)}
           </li>
         {/each}
         {#if markerIndex === chainView.steps.length}
@@ -310,33 +401,6 @@
         {/each}
       </ul>
     {/if}
-
-    <!--
-      The step list: the tech tree's screen-reader fallback, the only place the
-      dependencies drawn as edges are written out as words, and the place the
-      collapsed done steps are still listed in full.
-    -->
-    <details class="plan-steps" open={stepsExpanded}>
-      <summary>View plan steps <span>({layout.nodes.length})</span></summary>
-      <ol>
-        {#each layout.nodes as node (node.id)}
-          <li>
-            <span class="plan-node__title">{node.title}</span>
-            <span class="plan-node__status">{statusLabel(node.status)}</span>
-            {#if node.due}<span class="plan-node__due">due {node.due}</span
-              >{/if}
-            {#if node.after.length}
-              <span class="plan-node__after"
-                >after {dependencyTitles(node).join(", ")}</span
-              >
-            {/if}
-            {#if node.onCriticalPath}
-              <span class="plan-node__after">on the critical path</span>
-            {/if}
-          </li>
-        {/each}
-      </ol>
-    </details>
   </div>
 {/if}
 
@@ -436,6 +500,18 @@
     color: var(--fg-muted);
     font-size: 10px;
   }
+  /* The spine of the plan, named rather than only drawn: the tree shows it as
+     a highlighted edge, and a timeline has no edges to highlight. */
+  .plan-node__flag {
+    flex: none;
+    padding: 0 4px;
+    border: 1px solid var(--accent-solid);
+    border-radius: 3px;
+    color: var(--accent-text);
+    font-size: 10px;
+    line-height: 1.5;
+    white-space: nowrap;
+  }
 
   /* The folded finished prefix. */
   .plan-done-column {
@@ -470,8 +546,29 @@
     color: var(--fg-muted);
     font-size: 11px;
   }
-  .plan-done-row__label {
+  /* The fold is a control, so it reads as the row's own text rather than as a
+     button bolted to it. */
+  .plan-done-row__toggle {
+    padding: 0;
+    border: 0;
+    background: none;
     color: var(--fg-muted);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .plan-done-row__toggle::before {
+    content: "▸ ";
+  }
+  .plan-done-row__toggle[aria-expanded="true"]::before {
+    content: "▾ ";
+  }
+  .plan-done-row__toggle:hover {
+    color: var(--fg);
+  }
+  .plan-done-row__toggle:focus-visible {
+    outline: 2px solid var(--accent-solid);
+    outline-offset: 2px;
   }
 
   .plan-lanes {
@@ -544,40 +641,22 @@
     color: var(--warn-text);
     font-size: 11px;
   }
-  .plan-steps {
-    margin-top: 12px;
+  /* The tree's rows, under its picture rather than beside it. */
+  .plan-track--tree {
+    margin-top: 10px;
     border-top: 1px solid var(--line-subtle);
-  }
-  .plan-steps summary {
-    cursor: pointer;
-    padding: 8px 0;
-    color: var(--fg-muted);
-    font-size: 11px;
-  }
-  .plan-steps summary span {
-    color: var(--fg-subtle);
-  }
-  .plan-steps ol {
-    display: grid;
-    /* An implicit column sizes to its widest child's max-content. */
-    grid-template-columns: minmax(0, 1fr);
-    gap: 6px;
-    margin: 0 0 8px;
-    padding-left: 18px;
-    font-size: 11px;
-  }
-  .plan-steps li {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 2px 8px;
-    min-width: 0;
+    padding-top: 10px;
   }
 
-  /* On a phone the node's own status word is the first thing to go: the dot
-     and the column already carry it. */
-  @media (max-width: 640px) {
-    .plan-track__body .plan-node__status {
-      display: none;
-    }
+  /*
+   * A row's title wraps rather than being clipped. The fixed-width node box in
+   * the tree has to ellipsise — a box is a box — but a row has the column's
+   * whole width, and clipping "Decide which observability stack su…" in the
+   * one place the step is written out is clipping the plan.
+   */
+  .plan-track__body .plan-node__title {
+    overflow: visible;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 </style>

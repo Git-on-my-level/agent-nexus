@@ -24,6 +24,8 @@
   import {
     actorDisplayLabel,
     actorRegistry,
+    agentRegistry,
+    isKnownActor,
     principalRegistry,
   } from "$lib/actorSession";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
@@ -59,6 +61,7 @@
     connectionName,
   } from "$lib/pm/presentation.js";
   import { workProse, workSummaryModel } from "$lib/workSummary.js";
+  import { nextActionOvertaken, planNextSteps } from "$lib/planNext.js";
   import { authoredProvenance, liveProvenance } from "$lib/reportProvenance.js";
   import {
     panelAutoCollapsed,
@@ -149,8 +152,115 @@
    * where the body should be.
    */
   let cardProse = $derived(workProse(work));
-  /** "Next" comes from the computed next step, with the plan's own title. */
-  let nextStep = $derived(cardSummary?.next ?? null);
+  /**
+   * The computed plan state this page is reading.
+   *
+   * The plan read is the fresher of the two — core recomputes status, the
+   * critical path and the next steps on every one — and the card row's copy
+   * is what the page has until that lands.
+   */
+  let effectivePlanState = $derived(planState ?? work?.plan_state ?? null);
+  /**
+   * What happens next, from the plan rather than from an annotation.
+   *
+   * Core recomputes `next_steps` on every plan read — the steps whose
+   * dependencies are all done and which are neither done nor blocked — and
+   * `planNextSteps` only names and orders the ids it sent, with core's own
+   * `next` first so this page and the Tasks row cannot pick different ones.
+   * The page used to print `next_action`, a field somebody typed once: on a
+   * card whose first phase had since finished, that was the page's most
+   * confident wrong sentence.
+   */
+  let nextSteps = $derived(
+    planNextSteps(plan, effectivePlanState, {
+      preferred: cardSummary?.next?.id ?? "",
+    }),
+  );
+  /** How many ready steps fit before the rest become a count. */
+  const NEXT_PREVIEW = 3;
+  let shownNextSteps = $derived(nextSteps.slice(0, NEXT_PREVIEW));
+  let moreNextSteps = $derived(Math.max(0, nextSteps.length - NEXT_PREVIEW));
+  /** Computed step status by id, for the one word the header needs. */
+  let stepStatus = $derived(
+    new Map(
+      (Array.isArray(effectivePlanState?.steps)
+        ? effectivePlanState.steps
+        : []
+      ).map((step) => [String(step?.id ?? ""), String(step?.status ?? "")]),
+    ),
+  );
+  /**
+   * Who acts next.
+   *
+   * `next_actor` is a free-text annotation, so it holds an actor on a card an
+   * agent filed properly and the word "agent" on one where somebody wrote
+   * down a role — which the avatar then rendered as "AG agent", initials for
+   * nobody. So it is used when a registry can actually name it, and the card's
+   * owner answers otherwise. A role nobody can name is still shown, as the
+   * word it is: it says a person is not holding this, which is a fact worth
+   * having. Nothing here invents a name.
+   */
+  let nextActor = $derived.by(() => {
+    for (const candidate of [
+      work?.next_actor,
+      work?.owner,
+      cardSummary?.owner,
+    ]) {
+      const value = String(candidate ?? "").trim();
+      if (
+        value &&
+        isKnownActor(value, $actorRegistry, $principalRegistry, $agentRegistry)
+      ) {
+        return {
+          id: value,
+          label: actorDisplayLabel(value, $actorRegistry, $principalRegistry),
+          named: true,
+        };
+      }
+    }
+    const role = String(work?.next_actor ?? "").trim();
+    if (!role) return null;
+    /*
+     * Still through `actorDisplayLabel`: it is what turns a synthetic handle
+     * — `agent_ext_0123…`, which is a machine identifier and not a name — into
+     * "Workspace member". A role somebody typed comes back as the word they
+     * typed, which is the honest answer for it.
+     */
+    return {
+      id: "",
+      label: actorDisplayLabel(role, $actorRegistry, $principalRegistry),
+      named: false,
+    };
+  });
+  /**
+   * "waiting on David", for the single status line.
+   *
+   * The verb follows the lead step's computed status: a step somebody is
+   * already working is not one anybody is waiting on.
+   */
+  let waitingLabel = $derived.by(() => {
+    // A real name or nothing: a role the registries cannot place belongs in
+    // the Next section, where there is room to say that nobody is named, not
+    // on a status line that would then read "waiting on agent".
+    if (!nextActor?.named || !shownNextSteps.length) return "";
+    const lead = stepStatus.get(shownNextSteps[0].id);
+    return `${lead === "active" ? "with" : "waiting on"} ${nextActor.label}`;
+  });
+  /**
+   * The hand-written next action, where the plan has not already passed it.
+   *
+   * A note that names a finished step and no open one has been overtaken, and
+   * showing it beside a computed next step would be the page contradicting
+   * itself. There is no honest age to date it with either — `updated_at` is
+   * the card's concurrency token, which a phase move bumps — so a note that
+   * still stands is marked as hand-written rather than stamped with a time
+   * nobody wrote it at.
+   */
+  let nextNote = $derived.by(() => {
+    const note = String(work?.next_action ?? "").trim();
+    if (!note) return "";
+    return nextActionOvertaken(note, plan, effectivePlanState) ? "" : note;
+  });
 
   /**
    * The right rail collapses, remembered per viewer. It stacks below the
@@ -168,6 +278,7 @@
       panel: SHELL_PANELS.RAIL,
       preference: railPreference,
       viewportWidth,
+      defaultCollapsed: !railWorthShowing,
     }),
   );
   let railAutoCollapsed = $derived(
@@ -299,11 +410,47 @@
   let mirrors = $state([]);
   let hasNext = $derived(
     Boolean(
-      nextStep ||
-      work?.next_actor ||
-      work?.next_action ||
+      nextSteps.length ||
+      nextActor ||
+      nextNote ||
       work?.blockers?.length ||
       work?.wake_condition,
+    ),
+  );
+  /**
+   * Is the Evidence section saying anything, or offering anything to do?
+   *
+   * A task created here with no reader attached answers "No activity" and
+   * nothing else — a heading, a tip and an absence. A task with an outside
+   * source always has something to offer, because the reader can be asked to
+   * check it now.
+   */
+  let evidenceWorthShowing = $derived(
+    Boolean(
+      !nexusOwned ||
+      sources.length ||
+      observations.length ||
+      evidenceError ||
+      refreshError ||
+      notice,
+    ),
+  );
+  /**
+   * Does the rail have anything in it?
+   *
+   * With no outside source and nothing waiting on the reader, the rail is a
+   * heading, a tip about an absence and a link to an empty Inbox view — 18rem
+   * of the window spent saying nothing. It starts collapsed there; the
+   * viewer's own choice still wins, because `panelCollapsed` reads this only
+   * as the default.
+   */
+  let railWorthShowing = $derived(
+    Boolean(
+      sourceDetailsWorthShowing ||
+      work?.project_ref ||
+      work?.start_at ||
+      work?.due_at ||
+      cardSummary?.attention,
     ),
   );
   let hasDetails = $derived(
@@ -381,16 +528,26 @@
     } else evidenceError = errorMessage(results[1].reason);
     loading = false;
   }
-  // The record only, in place: a live change must not blank the page the
-  // operator is reading.
+  /**
+   * The record and the plan, in place: a live change must not blank the page
+   * the operator is reading.
+   *
+   * The plan is re-read here and not only on a full load because this page has
+   * no Reload button any more. The plan is the page's lead content and the
+   * thing an agent changes most — a step going from active to done is exactly
+   * the event that just fired — so a live page that re-read only the card
+   * record would keep drawing a plan it knew was stale.
+   */
   async function refreshWorkRecord() {
     const ticket = requestId;
     try {
       const result = await coreClient.getWork(workId, { summary: 1 });
       if (ticket === requestId && result?.work) work = result.work;
     } catch {
-      // The next change or Reload tries again.
+      // The next change tries again.
     }
+    if (ticket !== requestId) return;
+    void filePlan(ticket, loadPlanRequest(ticket, workId));
   }
   /** Every page of one paginated PM list, in order. */
   async function readAllPages(read) {
@@ -510,7 +667,8 @@
   onMount(() => {
     let disposed = false;
     // A move or assignment made elsewhere (the ⌘K palette, an agent, the
-    // board) re-reads this task; evidence still refreshes on Reload.
+    // board) re-reads this task's record and its plan. Reader reports are
+    // refreshed by "Check <source> now" and by re-opening the card.
     const stopLive = liveWorkspaceEvents({
       client: coreClient,
       types: TASK_LIST_EVENT_TYPES,
@@ -586,6 +744,15 @@
             title={work.title}
             {now}
           />
+          {#if waitingLabel}
+            <!-- The second half of the one status line: how far the plan is,
+                 then who the next step is with. The generic health sentence
+                 that used to sit under this ("Open steps are progressing.")
+                 is gone from the model itself — it restated the badge. -->
+            <span class="text-meta text-fg-muted" data-task-waiting
+              >· {waitingLabel}</span
+            >
+          {/if}
           {#if !nexusOwned}
             <SignalBadge tone={signal.tone}>{signal.label}</SignalBadge>
           {/if}
@@ -617,11 +784,15 @@
           title={work.ref}
           onclick={() => navigator.clipboard?.writeText(work.ref)}
           >Copy ref</button
-        ><button
-          class="ui-btn-secondary"
-          onclick={() => load()}
-          disabled={loading}>{loading ? "Reloading…" : "Reload"}</button
-        >{#if pmVisible}<a class="ui-btn-primary" href={pmHref}>Ask PM</a
+        >{#if pmVisible}<!--
+            Named for what it does, and it carries this card: the sidebar's
+            "Ask PM" opens an empty thread, so two buttons a thumb apart
+            reading the same three words looked like one of them was a
+            mistake. No Reload beside them — the card, its plan and its chips
+            re-read themselves off the workspace event stream.
+          --><a
+            class="ui-btn-primary"
+            href={pmHref}>Ask PM about this</a
           >{/if}{/snippet}
     </WorkspacePageHeader>
     <div
@@ -706,43 +877,79 @@
         {#if hasNext}
           <section>
             <h2 class="ui-label">Next</h2>
-            {#if nextStep}
-              <!-- The step core computed, named by the plan's own title rather
-                   than by its raw id. -->
-              <p class="text-meta text-fg" data-next-step>
-                {nextStep.title}{#if nextStep.more}<span class="text-fg-muted"
-                    >{" "}+{nextStep.more} more</span
-                  >{/if}
-                {#if nextStep.ref}
-                  <span class="ml-1 align-middle">
-                    <AnxRefChip
-                      refValue={nextStep.ref}
-                      resolved={planRefs}
-                      organizationSlug={$page.params.organization}
-                      workspaceSlug={$page.params.workspace}
-                      showKind={false}
-                      onpreview={(model, anchor) =>
-                        refPreview?.open(model, anchor)}
-                      onpreviewclose={() => refPreview?.requestClose()}
-                    />
-                  </span>
+            <!--
+              Who acts next, as a name a reader recognises. A `next_actor` no
+              registry can name is a role, not a principal, so it is written
+              as the word it is rather than given initials and an avatar.
+            -->
+            <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-meta">
+              {#if nextActor?.named}<ActorLabel
+                  label={nextActor.label}
+                  seed={nextActor.id}
+                  size="xs"
+                  prefix={shownNextSteps.length ? "waiting on" : "owner"}
+                />{:else if nextActor}<span
+                  class="min-w-0 break-words text-fg [overflow-wrap:anywhere]"
+                  data-next-actor-role
+                  >Waiting on {nextActor.label} — no principal named</span
+                >{:else}<span class="text-fg-muted">Nobody assigned</span>{/if}
+            </p>
+            {#if shownNextSteps.length}
+              <!-- The steps core computed as ready: their dependencies are
+                   done and nothing about them is blocked. Named by the plan's
+                   own titles rather than by their raw ids. -->
+              <ul
+                class="mt-1 list-disc space-y-1 break-words pl-5 text-meta text-fg"
+                data-next-steps
+              >
+                {#each shownNextSteps as step (step.id)}
+                  <li data-next-step={step.id}>
+                    {step.title}
+                    {#if step.ref}
+                      <span class="ml-1 align-middle">
+                        <AnxRefChip
+                          refValue={step.ref}
+                          resolved={planRefs}
+                          organizationSlug={$page.params.organization}
+                          workspaceSlug={$page.params.workspace}
+                          showKind={false}
+                          onpreview={(model, anchor) =>
+                            refPreview?.open(model, anchor)}
+                          onpreviewclose={() => refPreview?.requestClose()}
+                        />
+                      </span>
+                    {/if}
+                  </li>
+                {/each}
+                {#if moreNextSteps}
+                  <li class="text-fg-muted" data-next-more>
+                    +{moreNextSteps} more ready
+                  </li>
                 {/if}
+              </ul>
+            {:else if plan}
+              <!-- The plan has steps left and core says none of them is ready.
+                   Why is the status badge's job, not a second opinion here. -->
+              <p class="mt-1 text-meta text-fg-muted" data-next-none>
+                No step is ready to start.
               </p>
             {/if}
-            <p class="text-meta text-fg">
-              {#if work.next_actor}<ActorLabel
-                  label={actorDisplayLabel(
-                    work.next_actor,
-                    $actorRegistry,
-                    $principalRegistry,
-                  )}
-                  seed={work.next_actor}
-                  size="xs"
-                />{:else}<span class="text-fg-muted">Nobody assigned</span>{/if}
-              {#if work.next_action}
-                <span class="ml-1">— {work.next_action}</span>
-              {/if}
-            </p>
+            {#if nextNote}
+              <div
+                class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1"
+                data-next-note
+              >
+                <p class="min-w-0 break-words text-meta text-fg-muted">
+                  {nextNote}
+                </p>
+                <!-- Hand-written, beside steps that are computed. No date: a
+                     card's `updated_at` is its concurrency token, so stamping
+                     this note with it would claim a rewrite nobody made. -->
+                <ProvenanceChip
+                  model={authoredProvenance({ reviewable: false })}
+                />
+              </div>
+            {/if}
             {#if work.blockers?.length}
               <ul
                 class="mt-2 list-disc space-y-1 break-words pl-5 text-meta text-warn-text"
@@ -755,12 +962,16 @@
               </p>{/if}
           </section>
         {/if}
+        <!-- Nothing to report is not worth a line. An empty Participation
+             section on a card nobody has run against said "No activity ·
+             Check again", directly above an Evidence section saying "No
+             activity" — two headings for one absence. -->
         <TaskParticipation
           tasks={[{ ref: work.ref || workId, title: work.title }]}
           {workspaceHref}
-          quietWhenEmpty
+          hideWhenEmpty
         />
-        <section>
+        <section class={evidenceWorthShowing ? "" : "hidden"}>
           <h2 class="ui-label">Evidence</h2>
           <EvidenceHandoff
             {observations}
@@ -1256,11 +1467,21 @@
           </section>
           <section>
             <h2 class="ui-label">Inbox</h2>
+            <!-- What is actually waiting, when core says something is. The
+                 count is the viewer's own open asks on this card, from the
+                 same `attention` part every other surface badges; "Inbox for
+                 this task" is the link to read when there are none. -->
             <a
-              class="mt-2 inline-block text-accent-text hover:underline"
+              class="mt-2 inline-block {cardSummary?.attention
+                ? 'text-warn-text'
+                : 'text-accent-text'} hover:underline"
+              data-task-inbox-waiting={cardSummary?.attention?.count ?? null}
               href={workspaceHref(
-                `/inbox?mailbox=watching&work_ref=${encodeURIComponent(work.ref || workId)}`,
-              )}>Inbox for this task →</a
+                `/inbox?mailbox=${cardSummary?.attention ? "needs-you" : "watching"}&work_ref=${encodeURIComponent(work.ref || workId)}`,
+              )}
+              >{cardSummary?.attention
+                ? `${cardSummary.attention.label.replace(/ asks?$/, "")} waiting on you →`
+                : "Inbox for this task →"}</a
             >
           </section>
         {/if}

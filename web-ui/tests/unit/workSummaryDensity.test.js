@@ -110,6 +110,21 @@ describe("density decides how much fits", () => {
     expect(el.querySelector("[data-tile-next]")).toBeNull();
   });
 
+  it("says what the header's date is about, where a card's badge need not", () => {
+    /*
+     * A bare "2 h ago" next to a status badge and a "Live · updated just now"
+     * chip is the one thing on the line a reader cannot place: it could be
+     * when the card moved, when the page read it, or when it is due. A card
+     * tile has a layout that says; a page header has to use words.
+     */
+    expect(at("header").querySelector("[data-freshness]").textContent).toBe(
+      "moved 2 h ago",
+    );
+    expect(at("card").querySelector("[data-freshness]").textContent).toBe(
+      "2 h ago",
+    );
+  });
+
   it("gives a header the computed reason on screen, not only on hover", () => {
     const el = at("header");
     expect(el.querySelector("[data-summary-reason]").textContent).toContain(

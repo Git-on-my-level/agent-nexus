@@ -161,11 +161,15 @@
         >
       {/if}
       {#if density !== "row" && summary.freshness}
+        <!-- On a page header the badge says what the date is about. A bare
+             "yesterday" next to a status badge and a "Live · updated just
+             now" chip is the one thing on the line a reader cannot place. -->
         <FreshnessBadge
           at={summary.lastMovementAt}
           kind={summary.freshnessKind}
           expectationHours={summary.expectationHours}
           verb="moved"
+          verbose={density === "header"}
           {now}
         />
       {/if}

@@ -72,9 +72,17 @@ const geometry = (shape, nodes, collapsed = 0) => ({
   collapsed_nodes: collapsed,
 });
 
-async function installInitiativePage(page) {
+/**
+ * @param {import("@playwright/test").Page} page
+ * @param {{work?: object, plan?: object, planState?: object}} [overrides] the
+ *   authored plan, the card record and the computed plan state, so a case can
+ *   be about one of them.
+ */
+async function installInitiativePage(page, overrides = {}) {
   await page.clock.setFixedTime(new Date(NOW));
   await installWorkspaceApi(page, {});
+  const authored = overrides.plan ?? plan;
+  const state = { ...planState, ...(overrides.planState ?? {}) };
   await page.route("**/*", async (route) => {
     const request = route.request();
     if (!["fetch", "xhr"].includes(request.resourceType())) {
@@ -89,8 +97,16 @@ async function installInitiativePage(page) {
         body: JSON.stringify(body),
       });
 
+    if (path.endsWith("/participants") && request.method() === "GET") {
+      // Nobody is running against this card. An empty read is an absence; a
+      // failed one is not, and the two must not render the same way.
+      return json({ participants: [], next_cursor: "" });
+    }
+    if (path.endsWith("/observations") && request.method() === "GET") {
+      return json({ observations: [], next_cursor: "" });
+    }
     if (path.endsWith("/plan") && request.method() === "GET") {
-      return json({ plan, plan_state: planState });
+      return json({ plan: authored, plan_state: state });
     }
     if (path === "/refs/resolve" && request.method() === "POST") {
       return json({
@@ -123,6 +139,7 @@ async function installInitiativePage(page) {
           ],
           next_action: "Wire the Overview tiles",
           source: { authority: "nexus" },
+          ...(overrides.work ?? {}),
         },
       });
     }
@@ -157,6 +174,17 @@ test("initiative page leads with the plan, and the card body follows", async ({
   );
   await expect(planSection.locator("[data-health]")).toHaveCount(0);
 
+  /*
+   * And the header is that badge plus one line. There is no Reload — the card,
+   * its plan and its chips re-read themselves off the event stream — and the
+   * PM button says what it does, so it no longer reads as a copy of the
+   * sidebar's "Ask PM" with a different destination.
+   */
+  await expect(page.getByRole("button", { name: "Reload" })).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "Ask PM about this" }),
+  ).toHaveAttribute("href", /\/pm\?work_ref=card%3Arelease-b$/);
+
   // The plan's shape picks the view: this one branches, so it is a tree.
   await expect(page.locator("[data-plan-shape='dag']")).toBeVisible();
   await expect(page.locator(".plan-node")).toHaveCount(4);
@@ -166,6 +194,49 @@ test("initiative page leads with the plan, and the card body follows", async ({
   await expect(
     page.locator(".plan-node [data-anx-ref='card:contracts']"),
   ).toContainText("Shared report contracts");
+
+  /*
+   * One plan list. The tree is a picture of the plan, and the rows under it
+   * are the plan — there is no second, collapsed copy of the same four steps
+   * to open. Each row carries what the fold used to hide: the status word on
+   * every step including the done one, the critical-path marker, and "after X"
+   * only where a step has a dependency.
+   */
+  await expect(page.getByText("View plan steps")).toHaveCount(0);
+  const rows = page.locator(".plan-track--tree > li");
+  await expect(rows).toHaveCount(4);
+  await expect(rows.locator(".plan-node__status")).toHaveText([
+    "Done",
+    "In progress",
+    "Blocked",
+    "Not started",
+  ]);
+  await expect(rows.locator("[data-plan-critical]")).toHaveCount(2);
+  await expect(
+    rows.filter({ hasText: "after Shared report contracts" }),
+  ).toHaveCount(2);
+  // The dependency list names steps, and only the steps that have one.
+  await expect(rows.nth(0).locator(".plan-node__after")).toHaveCount(0);
+
+  /*
+   * "Next" is the plan's answer, not a sentence somebody typed: core's
+   * `next_steps` says one step is ready, and that is the step named here.
+   */
+  const next = page.locator("[data-next-steps]");
+  await expect(next.locator("[data-next-step]")).toHaveCount(1);
+  await expect(next).toContainText("Plan model on cards");
+  // The hand-written note still stands — it names a step the plan has not
+  // passed — and says what it is rather than passing for computed state.
+  await expect(page.locator("[data-next-note]")).toContainText(
+    "Wire the Overview tiles",
+  );
+  await expect(
+    page.locator("[data-next-note] [data-anx-provenance]"),
+  ).toHaveText(/^Hand-written$/);
+
+  // Nothing to report is not worth a heading: no participation, no evidence.
+  await expect(page.locator("[data-participation]")).toHaveCount(0);
+  await expect(page.locator("[data-evidence-quiet]")).toBeHidden();
 
   // Computed beside hand-written: the plan says it was read just now, and the
   // prose below it says a person wrote it. Before this, a reader had no way to
@@ -214,13 +285,13 @@ test("the plan diagram keeps a readable fallback and a focusable chip", async ({
     timeout: 60_000,
   });
 
-  // Edges are decoration; the dependencies they draw are also written out.
+  // Edges are decoration; the dependencies they draw are also written out,
+  // on rows that are simply on the page rather than behind a fold.
   await expect(page.locator(".plan-tree__edges")).toHaveAttribute(
     "aria-hidden",
     "true",
   );
-  await page.getByText("View plan steps").click();
-  const steps = page.locator(".plan-steps li");
+  const steps = page.locator(".plan-track--tree > li");
   await expect(steps).toHaveCount(4);
   await expect(
     steps.filter({ hasText: "after Shared report contracts" }),
@@ -232,6 +303,108 @@ test("the plan diagram keeps a readable fallback and a focusable chip", async ({
   await expect(chip).toBeFocused();
   await expect(page.locator(".anx-ref-preview")).toBeVisible();
   await expect(page.locator(".anx-ref-preview")).toContainText("Codex Luna");
+});
+
+/**
+ * The case David found on the omi card: the first phase is done, and the
+ * page was still printing the sentence somebody typed when it was not.
+ */
+test("Next follows the plan, and drops a note the plan has passed", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await installInitiativePage(page, {
+    work: {
+      // A role, not a principal. The avatar rendered this as "AG agent" —
+      // initials for nobody — so the page names the owner it can resolve
+      // instead and says plainly when it cannot.
+      next_actor: "agent",
+      next_action: "Phase 1: shared report contracts, with Luna",
+    },
+    planState: {
+      steps: [
+        { id: "contracts", status: "done", resolvable: true },
+        { id: "plan-model", status: "active", resolvable: false },
+        { id: "ui-chips", status: "not_started", resolvable: false },
+        { id: "tiles", status: "not_started", resolvable: false },
+      ],
+      next_steps: ["plan-model", "ui-chips"],
+      critical_path: ["plan-model", "tiles"],
+      health: "on_track",
+    },
+  });
+  await page.goto(CARD_PATH);
+  await expect(page.locator("[data-initiative-plan]")).toBeVisible({
+    timeout: 60_000,
+  });
+
+  // Both ready steps, core's own pick first.
+  const next = page.locator("[data-next-steps]");
+  await expect(next.locator("[data-next-step]")).toHaveCount(2);
+  await expect(next.locator("[data-next-step]").first()).toContainText(
+    "Plan model on cards",
+  );
+
+  // The note names only a step core says is done, so it is gone rather than
+  // sitting under a computed next step and contradicting it.
+  await expect(page.locator("[data-next-note]")).toHaveCount(0);
+
+  // And nobody is given initials they do not have.
+  await expect(page.locator("[data-next-actor-role]")).toContainText(
+    "no principal named",
+  );
+  await expect(page.locator("[data-task-waiting]")).toHaveCount(0);
+
+  /*
+   * The generic health sentence is gone with it. "Open steps are
+   * progressing." under a badge reading "In progress" was the header's
+   * second line and could never tell a reader anything.
+   */
+  const summary = page.locator('[data-work-summary="header"]');
+  await expect(summary.locator("[data-health]").first()).toHaveAttribute(
+    "data-health",
+    "on_track",
+  );
+  await expect(summary.locator("[data-summary-reason]")).toHaveCount(0);
+});
+
+test("a step pointing at a plain URL reads as a name, not a URL", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const url =
+    "https://github.com/Git-on-my-level/agent-nexus/blob/main/README.md";
+  await installInitiativePage(page, {
+    // The second step points at a doc rather than at a card.
+    plan: {
+      steps: plan.steps.map((step) =>
+        step.id === "plan-model" ? { ...step, ref: url } : step,
+      ),
+    },
+    planState: {
+      steps: [
+        { id: "contracts", status: "done", resolvable: true },
+        { id: "plan-model", status: "active", resolvable: true },
+        { id: "ui-chips", status: "not_started", resolvable: false },
+        { id: "tiles", status: "not_started", resolvable: false },
+      ],
+    },
+  });
+  await page.goto(CARD_PATH);
+  await expect(page.locator("[data-initiative-plan]")).toBeVisible({
+    timeout: 60_000,
+  });
+  const chip = page.locator(`.plan-track--tree [data-anx-ref="${url}"]`);
+  /*
+   * A short label on screen, the whole URL on hover, and a working link.
+   * Nothing core resolves answers for this ref — it is not a card, a doc or a
+   * topic — so it used to render as the raw URL, dashed and marked "not
+   * found", while linking perfectly well.
+   */
+  await expect(chip).toContainText("github.com/…/README.md");
+  await expect(chip).not.toContainText("not found");
+  await expect(chip).toHaveAttribute("title", url);
+  await expect(chip).toHaveAttribute("href", url);
 });
 
 test("initiative page has no accessibility violations", async ({ page }) => {
@@ -268,6 +441,25 @@ test("the plan reads at phone width", async ({ page }, testInfo) => {
     () => document.documentElement.scrollWidth > window.innerWidth + 1,
   );
   expect(documentOverflows).toBe(false);
+
+  /*
+   * The rows below it keep their status words at 390px. They used to be the
+   * first thing dropped on a phone, on the grounds that the dot carried the
+   * status — which it does, as a colour, to readers who can see it.
+   */
+  const rows = page.locator(".plan-track--tree > li");
+  await expect(rows.locator(".plan-node__status")).toHaveText([
+    "Done",
+    "In progress",
+    "Blocked",
+    "Not started",
+  ]);
+  // And the rail is not 18rem of nothing: this card has no outside source and
+  // nothing waiting on the reader, so it starts collapsed.
+  await expect(page.locator("[data-task-rail]")).toHaveAttribute(
+    "data-task-rail",
+    "collapsed",
+  );
 
   await mkdir(".screenshots/review", { recursive: true });
   await page.screenshot({

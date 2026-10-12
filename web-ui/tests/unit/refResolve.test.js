@@ -7,11 +7,13 @@ import {
   resolveRefsInBatches,
   safeRefDestination,
   CHIP_REF_PREFIXES,
+  classifyLink,
   classifyWorkUrl,
   collectPageRefs,
   indexResolvedRefs,
   isChipRef,
   refChipModel,
+  shortLinkLabel,
   tokenizeRefText,
 } from "../../src/lib/refResolve.js";
 import {
@@ -80,6 +82,52 @@ describe("classifyWorkUrl", () => {
       classifyWorkUrl("https://github.com/Git-on-my-level/agent-nexus"),
     ).toBeNull();
     expect(classifyWorkUrl("")).toBeNull();
+  });
+});
+
+describe("shortLinkLabel", () => {
+  /*
+   * A plan step may point at any HTTP(S) URL. Most of them are not pull
+   * requests — a repo, a runbook, a doc — and those rendered as the whole URL,
+   * which on a 390px screen is most of a line for a destination the reader
+   * cannot read anyway. The chip keeps the full URL on its hover.
+   */
+  it("names a repository by its host and path", () => {
+    expect(
+      shortLinkLabel("https://github.com/Git-on-my-level/agent-nexus"),
+    ).toBe("github.com/Git-on-my-level/agent-nexus");
+  });
+
+  it("keeps the last segment of a deep path and drops the middle", () => {
+    expect(
+      shortLinkLabel(
+        "https://github.com/Git-on-my-level/agent-nexus/blob/main/docs/plan.md",
+      ),
+    ).toBe("github.com/…/plan.md");
+  });
+
+  it("drops the scheme, www, the query and the fragment", () => {
+    expect(shortLinkLabel("https://www.example.com/?q=1#top")).toBe(
+      "example.com",
+    );
+  });
+
+  it("clips a label too long to sit on one row", () => {
+    const label = shortLinkLabel(`https://example.com/one/${"a".repeat(80)}`);
+    expect(label.length).toBeLessThanOrEqual(44);
+    expect(label.endsWith("…")).toBe(true);
+  });
+
+  it("answers for a link only, so prose keeps its own rule", () => {
+    // `classifyWorkUrl` decides which URLs in prose become chips at all, and
+    // every URL is not work. This only answers "what do I call this link" for
+    // a caller already holding a ref.
+    expect(classifyLink("https://example.com/docs/readme")).toMatchObject({
+      kind: "link",
+      label: "example.com/docs/readme",
+    });
+    expect(classifyLink("card:release-b")).toBeNull();
+    expect(classifyLink("javascript:alert(1)")).toBeNull();
   });
 });
 
@@ -376,6 +424,36 @@ describe("refChipModel", () => {
       priority: "high",
       nextStep: "Ship it",
       lastMovedAt: "2026-10-04T09:12:00Z",
+    });
+  });
+});
+
+describe("a plan step pointing at a plain link", () => {
+  const url = "https://github.com/Git-on-my-level/agent-nexus";
+
+  it("is a short label and a real link, never 'not found'", () => {
+    /*
+     * Nothing resolves it — core resolves cards, docs and topics, and a bare
+     * repository URL is none of those — so it used to render dashed, labelled
+     * with the whole URL and marked not found while linking perfectly well.
+     */
+    const model = refChipModel(url, new Map(), context);
+    expect(model).toMatchObject({
+      title: "github.com/Git-on-my-level/agent-nexus",
+      resolvable: true,
+      isExternal: true,
+      href: url,
+    });
+    // The whole URL is what the chip carries on its hover.
+    expect(model.raw).toBe(url);
+  });
+
+  it("leaves a pull request to the matcher that knows what it is", () => {
+    const pr = "https://github.com/Git-on-my-level/agent-nexus/pull/246";
+    expect(refChipModel(pr, new Map(), context)).toMatchObject({
+      kind: "pull_request",
+      kindLabel: "PR",
+      title: "Git-on-my-level/agent-nexus#246",
     });
   });
 });

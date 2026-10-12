@@ -50,10 +50,17 @@ describe("the Overview card reads core's serialized initiative", () => {
       reason: "Open steps are progressing.",
       since: "2026-10-04T12:00:00Z",
     });
+    /*
+     * And drops that reason rather than printing it. Core answers "why is
+     * this card in this state" for every card, including the ones where the
+     * answer is that nothing is wrong; under a badge reading `In progress`,
+     * "Open steps are progressing." is a line that can never tell a reader
+     * something the badge did not. A reason that names a cause keeps its line.
+     */
     expect(model().status).toMatchObject({
       state: "on_track",
       label: "In progress",
-      reason: "Open steps are progressing.",
+      reason: "",
       tone: "ok",
     });
   });
