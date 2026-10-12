@@ -351,6 +351,9 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(
         page.getByText("Unavailable", { exact: true }),
       ).toBeVisible();
+      await expect(page.locator("[data-workspace-render-error]")).toHaveCount(
+        0,
+      );
       await expectCleanLayout(page, "populated conversation", bothEnds);
       await expectNoClippedContent(page, "populated conversation");
 
