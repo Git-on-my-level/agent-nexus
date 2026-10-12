@@ -187,11 +187,15 @@ function comparableText(value) {
  * the writing side clips long titles, so the card often holds a prefix of the
  * ask rather than all of it.
  *
+ * A card title that is *longer* than the ask does not count, even when it
+ * opens with it: the extra words are the card saying something the ask does
+ * not, and they must stay on screen.
+ *
  * @param {string} subjectTitle
  * @param {string} askText
- * @param {{ minPrefix?: number }} [options] how much of a shared prefix is
- *   enough to call it a repeat; short titles that merely start the same way
- *   ("Fix login") are coincidence, not duplication.
+ * @param {{ minPrefix?: number }} [options] how much of the ask a clipped card
+ *   title must carry to count as a repeat; short titles that merely start the
+ *   same way ("Fix login") are coincidence, not duplication.
  */
 export function subjectTitleRepeatsAsk(
   subjectTitle,
@@ -202,7 +206,9 @@ export function subjectTitleRepeatsAsk(
   const ask = comparableText(stripHandledInboxTitle(askText));
   if (!subject || !ask) return false;
   if (subject === ask) return true;
-  const [shorter, longer] =
-    subject.length <= ask.length ? [subject, ask] : [ask, subject];
-  return shorter.length >= minPrefix && longer.startsWith(shorter);
+  // One direction only. A card title that merely *starts* with the ask and
+  // then says something the ask does not — "… Rollout owner is Dana" — is a
+  // title of its own, and replacing it with "Card created for this ask" would
+  // hide the part the reader needs.
+  return subject.length >= minPrefix && ask.startsWith(subject);
 }

@@ -76,6 +76,16 @@ describe("InboxContextStrip duplication", () => {
     ).toBe("Card created for this ask");
   });
 
+  it("keeps a card title that opens with the ask and then says more", () => {
+    const { container } = strip({
+      subject: { title: `${ASK} Rollout owner is Dana.`, status: "blocked" },
+      askText: ASK,
+    });
+    const line = container.querySelector("[data-inbox-context-subject]");
+    expect(line?.hasAttribute("data-inbox-context-repeats-ask")).toBe(false);
+    expect(line?.textContent).toContain("Rollout owner is Dana.");
+  });
+
   it("renders the card title as plain text when the card has no page", () => {
     const { container } = strip({
       subject: { title: ASK },

@@ -195,6 +195,23 @@ describe("subjectTitleRepeatsAsk", () => {
     ).toBe(true);
   });
 
+  it("keeps a card title that opens with the ask and then says more", () => {
+    // The suffix is the card saying something the ask does not. Replacing the
+    // line with "Card created for this ask" would hide it.
+    expect(
+      subjectTitleRepeatsAsk(
+        `${LEGACY_ASK_TITLE} Rollout owner is Dana.`,
+        LEGACY_ASK_TITLE,
+      ),
+    ).toBe(false);
+    expect(
+      subjectTitleRepeatsAsk(
+        "Approve the rollout window — blocked on the legal signer",
+        "Approve the rollout window",
+      ),
+    ).toBe(false);
+  });
+
   it("does not call a short shared opening a repeat", () => {
     expect(
       subjectTitleRepeatsAsk(
