@@ -128,6 +128,38 @@ describe("nextActionOvertaken reads a hand-written note against the plan", () =>
     );
   });
 
+  it("does not read a one-word step id as a step reference", () => {
+    // Slugs are ordinary verbs. A note that uses "approach" is not naming
+    // the finished step whose id happens to be that word.
+    const done = {
+      ...planState,
+      steps: planState.steps.map((step) =>
+        step.id === "approach" ? { ...step, status: "done" } : step,
+      ),
+      next_steps: ["consolidate"],
+    };
+    expect(
+      nextActionOvertaken(
+        "Ask David which approach we are keeping",
+        plan,
+        done,
+      ),
+    ).toBe(false);
+  });
+
+  it("still recognises a multi-word step id in a note", () => {
+    const slugged = {
+      steps: [{ id: "phase-1-inventory", title: "Inventory", after: [] }],
+    };
+    const state = {
+      steps: [{ id: "phase-1-inventory", status: "done" }],
+      next_steps: [],
+    };
+    expect(
+      nextActionOvertaken("Finish the phase 1 inventory", slugged, state),
+    ).toBe(true);
+  });
+
   it("has no opinion on an empty note or a card with no plan", () => {
     expect(nextActionOvertaken("", plan, planState)).toBe(false);
     expect(nextActionOvertaken("Anything", null, null)).toBe(false);

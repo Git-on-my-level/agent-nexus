@@ -127,7 +127,10 @@ export function planNextSteps(plan, planState, options = {}) {
  * Matched on a step's title words rather than its exact sentence, so a note
  * that quotes a step loosely is still recognised. A one-word title is only
  * matched when the word is long enough to identify something: "ship" in a
- * sentence is not evidence that a step called "Ship" is what it means.
+ * sentence is not evidence that a step called "Ship" is what it means. A
+ * step id is matched only when it is more than one word after stop-word
+ * stripping — a slug such as `approach` is not a name, so a note that
+ * merely uses that word still stands.
  *
  * @param {string} nextAction
  * @param {{steps?: Array<{id?: string, title?: string}>}|null} plan
@@ -143,11 +146,12 @@ export function nextActionOvertaken(nextAction, plan, planState) {
   for (const step of Array.isArray(plan?.steps) ? plan.steps : []) {
     const id = asText(step?.id);
     const title = words(step?.title);
+    const idWords = words(id);
     const identifying =
       title.length > 1 || (title.length === 1 && title[0].length >= 6);
     const named =
       (identifying && haystack.includes(` ${title.join(" ")} `)) ||
-      (id.length >= 6 && haystack.includes(` ${words(id).join(" ")} `));
+      (idWords.length > 1 && haystack.includes(` ${idWords.join(" ")} `));
     if (!named) continue;
     if (status.get(id) === "done") namesDone = true;
     else return false;

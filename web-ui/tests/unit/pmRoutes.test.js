@@ -442,6 +442,100 @@ describe("PM operator interactions", () => {
       expect(within(header).getByText(badge)).toBeTruthy();
     },
   );
+  it("clears a live plan when the next read has no steps", async () => {
+    let emit;
+    client.streamEvents.mockImplementation(
+      ({ onEvent, signal }) =>
+        new Promise((resolve) => {
+          emit = onEvent;
+          signal?.addEventListener("abort", resolve);
+        }),
+    );
+    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    client.getWork.mockResolvedValue({
+      work: work("card:one", "Planned work"),
+    });
+    client.listWorkObservations.mockResolvedValue({ observations: [] });
+    client.getCardPlan
+      .mockResolvedValueOnce({
+        plan: { steps: [{ id: "ship", title: "Ship", after: [] }] },
+        plan_state: {
+          steps: [{ id: "ship", status: "active" }],
+          progress: { done: 0, total: 1 },
+          next_steps: ["ship"],
+        },
+      })
+      .mockResolvedValueOnce({ plan: null, plan_state: null });
+    render(WorkDetail);
+    await screen.findByRole("heading", { name: "Plan", exact: true });
+    await waitFor(() => expect(emit).toBeTypeOf("function"));
+    emit({
+      id: "evt-plan-cleared",
+      event: "event",
+      data: {
+        event: {
+          id: "evt-plan-cleared",
+          type: "card_updated",
+          ts: new Date().toISOString(),
+          refs: ["card:one"],
+        },
+      },
+    });
+    await waitFor(
+      () =>
+        expect(
+          screen.queryByRole("heading", { name: "Plan", exact: true }),
+        ).toBeNull(),
+      { timeout: 3000 },
+    );
+  });
+  it("keeps the last plan when a live reread fails", async () => {
+    let emit;
+    client.streamEvents.mockImplementation(
+      ({ onEvent, signal }) =>
+        new Promise((resolve) => {
+          emit = onEvent;
+          signal?.addEventListener("abort", resolve);
+        }),
+    );
+    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    client.getWork.mockResolvedValue({
+      work: work("card:one", "Planned work"),
+    });
+    client.listWorkObservations.mockResolvedValue({ observations: [] });
+    client.getCardPlan
+      .mockResolvedValueOnce({
+        plan: { steps: [{ id: "ship", title: "Ship", after: [] }] },
+        plan_state: {
+          steps: [{ id: "ship", status: "active" }],
+          progress: { done: 0, total: 1 },
+          next_steps: ["ship"],
+        },
+      })
+      .mockRejectedValueOnce(new Error("temporary"));
+    render(WorkDetail);
+    await screen.findByRole("heading", { name: "Plan", exact: true });
+    await waitFor(() => expect(emit).toBeTypeOf("function"));
+    emit({
+      id: "evt-plan-failed",
+      event: "event",
+      data: {
+        event: {
+          id: "evt-plan-failed",
+          type: "card_updated",
+          ts: new Date().toISOString(),
+          refs: ["card:one"],
+        },
+      },
+    });
+    await waitFor(() => expect(client.getCardPlan).toHaveBeenCalledTimes(2), {
+      timeout: 3000,
+    });
+    expect(
+      screen.getByRole("heading", { name: "Plan", exact: true }),
+    ).toBeTruthy();
+    expect(document.querySelector('[data-plan-node="ship"]')).toBeTruthy();
+  });
   it("does not promote the claimed verification field, and refresh only queues", async () => {
     state.route("/tasks/card%3Aone", { workId: "card:one" });
     client.getWork.mockResolvedValue({

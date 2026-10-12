@@ -322,15 +322,15 @@
         const steps = Array.isArray(result?.plan?.steps)
           ? result.plan.steps
           : [];
-        if (steps.length) {
-          plan = result.plan;
-          planState = result.plan_state ?? null;
-          planSummary =
-            result.summary && typeof result.summary === "object"
-              ? result.summary
-              : null;
-          planReadAt = new Date().toISOString();
-        }
+        // A successful empty read must clear the last plan. Failed reads
+        // stay in the catch and keep whatever this page already has.
+        plan = steps.length ? result.plan : null;
+        planState = steps.length ? (result.plan_state ?? null) : null;
+        planSummary =
+          steps.length && result.summary && typeof result.summary === "object"
+            ? result.summary
+            : null;
+        planReadAt = steps.length ? new Date().toISOString() : "";
         return steps;
       })
       .catch(() => {

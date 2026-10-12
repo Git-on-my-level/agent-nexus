@@ -59,14 +59,17 @@
   );
   let summary = $derived(participationSummary(groups, now));
   let scope = $derived(agentId ? "Recent task participation" : "Participation");
-  /** Nothing reported, nothing unavailable, and no longer loading. */
-  let empty = $derived(
-    !loading &&
-      (!selected.length ||
-        groups.every(
-          (group) => !group.unavailable && !group.participants.length,
-        )),
+  /**
+   * Nothing reported and nothing unavailable. Loading is not content: a
+   * surface that asked to hide when empty must stay gone while a read is in
+   * flight, or the periodic refresh remounts the empty section.
+   */
+  let vacant = $derived(
+    !selected.length ||
+      groups.every((group) => !group.unavailable && !group.participants.length),
   );
+  /** Vacant, and no longer loading — for the quiet one-line empty state. */
+  let empty = $derived(!loading && vacant);
 
   async function load(key = scopeKey, force = false) {
     if (inFlightKey === key) return;
@@ -125,7 +128,7 @@
   );
 </script>
 
-{#if hideWhenEmpty && empty}
+{#if hideWhenEmpty && vacant}
   <!-- Nothing: an absence is not news. -->
 {:else if quietWhenEmpty && empty}
   <!-- One line, not a section: an empty participation panel used to be four
