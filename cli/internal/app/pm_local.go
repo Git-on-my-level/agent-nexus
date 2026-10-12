@@ -547,7 +547,17 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 	if err != nil {
 		return nil, err
 	}
-	env := harnessChildEnv(cfg, os.Environ())
+	executable, err := os.Executable()
+	if err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "runner_path_failed", "failed to resolve the anx executable for the PM runner", err)
+	}
+	env, pathWarning, err := pmRunnerChildEnv(cfg, os.Environ(), executable)
+	if err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "runner_path_failed", "failed to prepare PATH for the PM runner", err)
+	}
+	if pathWarning != "" {
+		a.pmLog("pm serve: warning: %s\n", pathWarning)
+	}
 	if !writerIsTTY(a.Stderr) {
 		prev := harnessLogWriter
 		harnessLogWriter = a.Stderr
@@ -908,11 +918,11 @@ func (a *App) runClaimedTurn(ctx, shutdownCtx context.Context, cfg config.Resolv
 	a.turnMem().noteHarnessRun(turnID)
 	env = overlayEnv(env, "ANX_PM_LEASE_TOKEN", leaseToken)
 	env = overlayEnv(env, "ANX_PM_TURN_ID", turnID)
+	env = overlayEnv(env, "ANX_PM_AGENT", cfg.Agent)
 	if progress != nil {
 		env = overlayEnv(env, "ANX_PM_TURN_ID", turnID)
 		env = overlayEnv(env, "ANX_PM_ACTIVITY_ENABLED", "1")
 		env = overlayEnv(env, "ANX_PM_BASE_URL", cfg.BaseURL)
-		env = overlayEnv(env, "ANX_PM_AGENT", cfg.Agent)
 	}
 	base := harnessBase
 	if base == nil {
@@ -2347,14 +2357,14 @@ func overlayEnv(env []string, key, value string) []string {
 		return env
 	}
 	out := append([]string{}, env...)
-	prefix := key + "="
 	for i, item := range out {
-		if strings.HasPrefix(item, prefix) {
-			out[i] = prefix + value
+		itemKey, _, ok := splitEnvItem(item)
+		if ok && envKeyEqual(itemKey, key) {
+			out[i] = itemKey + "=" + value
 			return out
 		}
 	}
-	return append(out, prefix+value)
+	return append(out, key+"="+value)
 }
 
 func harnessChildEnv(cfg config.Resolved, base []string) []string {
@@ -2368,6 +2378,45 @@ func harnessChildEnv(cfg config.Resolved, base []string) []string {
 	setEnv("ANX_AS", cfg.Agent)
 	setEnv("ANX_BASE_URL", cfg.BaseURL)
 	return env
+}
+
+func pmRunnerChildEnv(cfg config.Resolved, base []string, executable string) ([]string, string, error) {
+	env := harnessChildEnv(cfg, base)
+	resolved, err := filepath.EvalSymlinks(executable)
+	if err != nil {
+		return nil, "", fmt.Errorf("resolve anx executable symlinks: %w", err)
+	}
+	path := filepath.Dir(resolved)
+	if !filepath.IsAbs(path) || strings.ContainsRune(path, os.PathListSeparator) {
+		return env, fmt.Sprintf("skipping anx executable directory %q when prepending runner PATH; it must be absolute and must not contain %q", path, string(os.PathListSeparator)), nil
+	}
+	if existing := lookupEnvValue(env, "PATH"); existing != "" {
+		path += string(os.PathListSeparator) + existing
+	}
+	return overlayEnv(env, "PATH", path), "", nil
+}
+
+func lookupEnvValue(env []string, key string) string {
+	for _, item := range env {
+		itemKey, value, ok := splitEnvItem(item)
+		if ok && envKeyEqual(itemKey, key) {
+			return value
+		}
+	}
+	return ""
+}
+
+func splitEnvItem(item string) (key, value string, ok bool) {
+	eq := strings.IndexByte(item, '=')
+	if eq < 0 {
+		return "", "", false
+	}
+	return item[:eq], item[eq+1:], true
+}
+
+func envKeyEqual(a, b string) bool {
+	// Windows process environments are case-insensitive (PATH vs Path).
+	return strings.EqualFold(a, b)
 }
 
 func passwdHome() string {

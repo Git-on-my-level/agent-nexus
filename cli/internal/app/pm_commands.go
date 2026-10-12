@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"regexp"
 	"sort"
@@ -18,6 +19,44 @@ import (
 type pmProposalOptions struct {
 	ref, status, note, why string
 	evidence               trackedStrings
+}
+
+const pmTurnLeaseIdentitySource = "pm:turn-lease"
+
+func (a *App) resolvePMTurnLeaseIdentity(args []string, cfg config.Resolved) (config.Resolved, string) {
+	if len(args) < 2 || args[0] != "pm" {
+		return cfg, ""
+	}
+	switch args[1] {
+	case "context", "card", "propose":
+	default:
+		return cfg, ""
+	}
+
+	turnID := strings.TrimSpace(a.Getenv("ANX_PM_TURN_ID"))
+	leaseToken := strings.TrimSpace(a.Getenv("ANX_PM_LEASE_TOKEN"))
+	turnAgent := strings.TrimSpace(a.Getenv("ANX_PM_AGENT"))
+	if turnID == "" || leaseToken == "" || turnAgent == "" {
+		return cfg, ""
+	}
+
+	explicitAgent := strings.TrimSpace(cfg.As)
+	cfg.AccessToken = ""
+	cfg.AccessTokenExpiresAt = ""
+	cfg.AgentID = ""
+	cfg.ActorID = ""
+	cfg.Username = ""
+	cfg.As = turnAgent
+	cfg.Agent = turnAgent
+	cfg.IdentitySource = pmTurnLeaseIdentitySource
+	if cfg.Sources == nil {
+		cfg.Sources = map[string]string{}
+	}
+	cfg.Sources["agent"] = cfg.IdentitySource
+	if explicitAgent != "" && explicitAgent != turnAgent {
+		return cfg, fmt.Sprintf("warning: ignoring explicit identity `%s`; this PM turn lease is bound to `%s`, so acting as `%s`.", explicitAgent, turnAgent, turnAgent)
+	}
+	return cfg, ""
 }
 
 func parsePMProposal(args []string) (pmProposalOptions, error) {
@@ -81,7 +120,7 @@ func (a *App) runPMCardRead(ctx context.Context, args []string, cfg config.Resol
 	}
 	r, err := a.invokeRawJSON(ctx, cfg, name, "POST", "/pm/turns/"+url.PathEscape(id)+"/context", body)
 	if err != nil {
-		return nil, pmCommandError(err)
+		return nil, pmCommandError(err, cfg.Agent, a.Getenv("ANX_PM_AGENT"), cfg.IdentitySource)
 	}
 	if commandResultBody(r) == nil {
 		return nil, errnorm.Internal("invalid_response", "PM card context is unavailable")
@@ -132,7 +171,7 @@ func (a *App) runPMPropose(ctx context.Context, args []string, cfg config.Resolv
 	}
 	r, err := a.invokeRawJSON(ctx, cfg, "pm propose", "POST", "/pm/turns/"+url.PathEscape(id)+"/decisions", map[string]any{"lease_token": token, "request_key": hex.EncodeToString(key), "work_ref": ref, "scope": scope, "target_revision": revision, "instruction": o.why, "payload": payload})
 	if err != nil {
-		return r, pmCommandError(err)
+		return r, pmCommandError(err, cfg.Agent, a.Getenv("ANX_PM_AGENT"), cfg.IdentitySource)
 	}
 	r.Text = fmt.Sprintf("Proposed for %s; awaiting your decision in Inbox.\n", ref)
 	asMap(r.Data)["body"] = pmFacingValue(commandResultBody(r))
@@ -244,11 +283,16 @@ func validatePMCardArgs(args []string) error {
 
 var pmPlumbingWord = regexp.MustCompile(`\b(work_ref|work|task|commitment)\b`)
 
-func pmCommandError(err error) error {
+func pmCommandError(err error, actingAgent, turnAgent, identitySource string) error {
 	var e *errnorm.Error
 	if errors.As(err, &e) {
 		e.Message = pmPlumbingWord.ReplaceAllString(e.Message, "card")
 		e.Hint = "Start with `anx pm context`; inspect one with `anx pm card <card-ref>`."
+		if httpStatusFromErr(err) == http.StatusForbidden && identitySource == pmTurnLeaseIdentitySource && strings.TrimSpace(turnAgent) != "" {
+			e.Hint = fmt.Sprintf("Acting as `%s` with credentials from the PM host-key exchange.", strings.TrimSpace(turnAgent))
+		} else if httpStatusFromErr(err) == http.StatusForbidden && strings.TrimSpace(actingAgent) != "" && strings.TrimSpace(turnAgent) != "" && strings.TrimSpace(actingAgent) != strings.TrimSpace(turnAgent) {
+			e.Hint = fmt.Sprintf("Acting as `%s`, but this turn belongs to `%s`; run the anx CLI the runner started.", strings.TrimSpace(actingAgent), strings.TrimSpace(turnAgent))
+		}
 		e.Details = pmFacingValue(e.Details)
 	}
 	return err

@@ -55,6 +55,7 @@ type operation struct {
 	Stability   string       `yaml:"x-anx-stability"`
 	Surface     string       `yaml:"x-anx-surface"`
 	AgentNotes  string       `yaml:"x-anx-agent-notes"`
+	Adjacent    []string     `yaml:"x-anx-adjacent-commands"`
 	RequestBody *requestBody `yaml:"requestBody"`
 }
 
@@ -791,6 +792,7 @@ func collectCommands(doc openAPIDocument, schemaDoc anxSchemaDocument) []command
 				Stability:     strings.TrimSpace(pair.op.Stability),
 				Surface:       strings.TrimSpace(pair.op.Surface),
 				AgentNotes:    strings.TrimSpace(pair.op.AgentNotes),
+				Adjacent:      compactStrings(pair.op.Adjacent),
 				Examples:      compactExamples(pair.op.Examples),
 				BodySchema:    deriveBodySchema(doc, schemaDoc, commandID, pair.op),
 				PathParams:    extractPathParams(path),
@@ -841,6 +843,9 @@ func collectCommands(doc openAPIDocument, schemaDoc anxSchemaDocument) []command
 			groupCommandIDs = append(groupCommandIDs, commands[index].CommandID)
 		}
 		for _, index := range indexes {
+			if len(commands[index].Adjacent) > 0 {
+				continue
+			}
 			adjacent := make([]string, 0, len(groupCommandIDs)-1)
 			for _, commandID := range groupCommandIDs {
 				if commandID == commands[index].CommandID {

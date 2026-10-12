@@ -440,11 +440,36 @@ func TestPMTurnsProposeInjectsLeaseTokenFromEnv(t *testing.T) {
 	}
 }
 
-func TestPMContextHelpDocumentsCursor(t *testing.T) {
+func TestPMContextHelpLeadsWithInTurnUsageAndScopesLegacyFilters(t *testing.T) {
 	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "help", "pm", "context"}))
 	raw := fmt.Sprint(payload["result"])
-	if !strings.Contains(raw, "--cursor") {
-		t.Errorf("pm context help missing --cursor: %s", raw)
+	outside := strings.Index(raw, "Outside a claimed turn")
+	if outside < 0 {
+		t.Fatalf("pm context help missing Outside a claimed turn section: %s", raw)
+	}
+	inside := raw[:outside]
+	for _, needle := range []string{"Usage: anx pm context", "run with no flags", "anx pm card <card-ref>", "anx pm propose", "Adjacent commands: `pm card`, `pm propose`"} {
+		if !strings.Contains(inside, needle) {
+			t.Errorf("in-turn help missing %q: %s", needle, inside)
+		}
+	}
+	for _, flag := range []string{"--work-ref", "--query", "--limit", "--cursor"} {
+		if strings.Contains(inside, flag) {
+			t.Errorf("legacy flag %s appears before outside-turn section: %s", flag, inside)
+		}
+		if !strings.Contains(raw[outside:], flag) {
+			t.Errorf("outside-turn section missing %s: %s", flag, raw[outside:])
+		}
+	}
+	for _, needle := range []string{"next_cursor", "unchanged", "workspace, principal and record kind"} {
+		if !strings.Contains(raw[outside:], needle) {
+			t.Errorf("outside-turn cursor guidance missing %q: %s", needle, raw[outside:])
+		}
+	}
+	for _, clutter := range []string{"HTTP:", "Error codes:", "pm actions", "pm turns"} {
+		if strings.Contains(raw, clutter) {
+			t.Errorf("pm context help contains generated clutter %q: %s", clutter, raw)
+		}
 	}
 }
 

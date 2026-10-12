@@ -623,6 +623,7 @@ paths:
       - evidence
       x-anx-stability: beta
       x-anx-agent-notes: Direct reads use ordinary principal visibility; PM designation grants no private access. Inside a claimed turn use requester-scoped context with its lease.
+      x-anx-adjacent-commands: [pm card, pm propose]
       parameters:
       - name: work_ref
         in: query

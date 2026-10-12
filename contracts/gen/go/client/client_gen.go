@@ -1934,7 +1934,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"cards", "evidence"},
-		Adjacent:  []string{"pm.actions.acknowledge", "pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.connect", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.disconnect", "pm.presence", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get", "pm.turns.heartbeat", "pm.turns.release"},
+		Adjacent:  []string{"pm card", "pm propose"},
 	},
 	{
 		CommandID: "pm.conversations.create",
