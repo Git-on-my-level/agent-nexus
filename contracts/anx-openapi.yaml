@@ -4985,7 +4985,7 @@ paths:
     post:
       operationId: createEvent
       summary: Create event
-      description: Generic attention asks are stored against an open subject card. For compatibility, legacy typed non-card subjects (including thread, document and topic) create a ready card atomically with the ask; the original subject and references remain evidence. Existing card subjects resolve canonically and must be effectively open, including source-owned work.
+      description: New human_attention_requested payloads reuse title for a one-line decision (recommended maximum 100 Unicode characters, hard maximum 160) and optional body for Markdown detail. Invalid titles return ask_title_invalid or ask_title_too_long; non-string bodies return ask_body_invalid. Historical data is unchanged. Generic attention asks are stored against an open subject card. For compatibility, legacy typed non-card subjects (including thread, document and topic) create a ready card atomically with the ask; the original subject and references remain evidence. Existing card subjects resolve canonically and must be effectively open, including source-owned work.
       tags: [events]
       x-anx-surface: canonical
       x-anx-command-id: events.create
@@ -4994,7 +4994,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ event }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, quota_exceeded]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, quota_exceeded, ask_title_invalid, ask_title_too_long, ask_body_invalid]
       x-anx-concepts: [events, write]
       x-anx-stability: beta
       requestBody:

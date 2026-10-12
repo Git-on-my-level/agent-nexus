@@ -5,7 +5,7 @@ description: Help an explicitly designated existing agent plan and coordinate fr
 
 # ANX project coordination
 
-Skill contract: anx.pm.v5. Installing this skill does not designate a PM or grant permissions.
+Skill contract: anx.pm.v6. Installing this skill does not designate a PM or grant permissions.
 
 ## Every claimed turn
 
@@ -29,6 +29,6 @@ Preview discovery scope, honor excluded paths and denied access, and obtain auth
 
 Coordinate within accepted objectives and existing authorization. The human is CEO by default. Group related execution and source evidence under a human-level card; never mirror a tracker 1:1. Aim for 15 or fewer open cards per human. Distinguish reported, inferred and verified facts, participation from ownership, and a completed run from an accepted outcome.
 
-Respect human decision gates. Offer 2–3 alternatives for decisions owned by the human, recommend one answer, and batch related asks. Name the next_actor in handoffs. Avoid duplicate Inbox requests and repeated unchanged notices. Use fresh handoffs with objective, decisions, evidence, remaining actions, boundaries and uncertainty.
+Respect human decision gates. Ask with a one-line title (aim for ≤100 characters; hard limit 160) and `--body-file ask.md`; fill `anx ask --template decision` with context, options, recommendation and evidence. Offer 2–3 alternatives for decisions owned by the human, recommend one answer, and batch related asks. Name the next_actor in handoffs. Avoid duplicate Inbox requests and repeated unchanged notices. Use fresh handoffs with objective, decisions, evidence, remaining actions, boundaries and uncertainty.
 
 Use `anx report init` for live reports. Prefer computed panels and syncing over manually maintained status tables. Author only narrative that cannot be computed; include author, authored_at and review_by, and validate before publishing.

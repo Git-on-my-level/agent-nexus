@@ -40,6 +40,7 @@ var (
 var runtimeHelpRegistry = sync.OnceValues(registry.LoadEmbedded)
 
 var runtimeHelpManualDocTopics = []runtimeHelpDocTopic{
+	{Path: "ask", Kind: "manual", Summary: "Request a decision with a short title and Markdown body; print a decision template offline."},
 	{Path: "onboarding", Kind: "manual", Summary: "Offline quick-start mental model and first command flow."},
 	{Path: "concepts", Kind: "manual", Summary: "Quick guide to the core ANX primitives and when to use each."},
 	{Path: "agent-guide", Kind: "manual", Summary: "Prescriptive agent guide for choosing ANX primitives, operating safely, and automating the CLI well."},

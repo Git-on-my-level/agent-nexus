@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
@@ -18,16 +19,16 @@ import (
 const humanAttentionRequestedEventType = "human_attention_requested"
 
 func humanUsageText() string {
-	return strings.TrimSpace(`Ask an operator: anx ask|review|escalate "<title>" --recommend "<answer>" [--alt "<other>"] [--subject-ref <ref>] [--dry-run].
-Subject defaults to the current card; without one, creates a ready card on ANX_ASK_DEFAULT_BOARD or the workspace default. Use --from-file <path.md> for a Markdown request with frontmatter.
-The recommended response and each alternative are trimmed, empty entries are dropped, and exact duplicates are removed. Supply 1–6 distinct responses; each may contain at most 240 Unicode characters.
-Use --dry-run to validate and preview the request without sending it.
-Withdraw your still-open ask with anx ask withdraw <event:ask-id> --reason "<short reason>".
-Delivery: --on-answer <command> stores a host-only 0600 resume command; ANX_RESUME_CMD or AGENTCTL_EXECUTION_ID can register it automatically. Run anx bridge run on that host. --webhook <https-url> creates a signed subscription. --evidence <label=url> adds external evidence; --supersedes event:<old-ask> links a re-ask.
-The result contains an ask id and a runnable anx await next action. For multiple answers use anx await --answers; inspect and mark batches with anx inbox list --status answered and anx inbox read <ask-id>.
-
-Authoring template (--from-file); use --force --reason only to override lint with an audit reason:
-`) + "\n" + askAuthoringTemplate
+	return strings.TrimSpace(`anx ask "Accept merge at 40a2b0f?" --body-file ask.md --recommend "Accept"
+Use a one-line title (aim for at most 100 characters; hard maximum 160) and a Markdown body via --body or --body-file.
+anx ask --template decision > ask.md prints the Decision / Context / Options with consequences / Recommendation / Evidence skeleton.
+ask|review|escalate share these flags: --recommend <answer>, --alt <other> (repeatable), --subject-ref card:<ref>, --evidence <label=url>, --supersedes event:<old-ask>.
+Subject defaults to the current card or creates a ready card on the default board. --from-file <path.md> reads a request with YAML frontmatter.
+Supply 1–6 distinct responses; each may contain at most 240 Unicode characters.
+Use --dry-run to validate and preview without sending it. --force --reason <explanation> overrides authoring lint, never the hard title limit.
+Withdraw: anx ask withdraw <event:ask-id> --reason <text>.
+Delivery: --on-answer <command> (host-only), --webhook <https-url>; run anx bridge run. Await: anx await <ask-id> or anx await --answers. Read: anx inbox list --status answered; anx inbox read <ask-id>.
+`)
 }
 
 func rejectHumanFromFileFlagConflicts(
@@ -71,6 +72,16 @@ func rejectHumanFromFileFlagConflicts(
 }
 
 func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []string, cfg config.Resolved) (*commandResult, error) {
+	if hasAskTemplate(args) {
+		if err := validateAskTemplate(args); err != nil {
+			return nil, err
+		}
+		if !cfg.JSON {
+			a.writeOutput(a.Stdout, askDecisionTemplate)
+			return &commandResult{RawWritten: true}, nil
+		}
+		return &commandResult{Data: map[string]any{"text": askDecisionTemplate}}, nil
+	}
 	leadingPositionals, flagArgs := splitLeadingPositionals(args)
 
 	fs := newSilentFlagSet(kind)
@@ -219,7 +230,16 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 		}
 		links = append(links, askEvidenceLink{Label: label, URL: u})
 	}
+	if strings.ContainsAny(title, "\r\n") {
+		return nil, errnorm.Usage("ask_title_invalid", "ask title must be one line; move detail into --body or --body-file ask.md")
+	}
+	if utf8.RuneCountInString(title) > 160 {
+		return nil, errnorm.Usage("ask_title_too_long", "ask title exceeds the hard maximum of 160 characters; move detail into --body or --body-file ask.md")
+	}
 	warnings, lintErr := lintAskAuthoring(body, relatedRefs, links)
+	if titleErr := lintAskTitle(title); titleErr != nil {
+		lintErr = titleErr
+	}
 	if forceFlag.value && strings.TrimSpace(reasonFlag.value) == "" {
 		return nil, errnorm.Usage("invalid_request", "--force requires --reason")
 	}
@@ -235,7 +255,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 				return nil, err
 			}
 			if dryRunFlag.value {
-				return &commandResult{Data: map[string]any{"auto_create_subject": true, "title": title, "default_board": a.Getenv("ANX_ASK_DEFAULT_BOARD"), "body": body}}, nil
+				return &commandResult{Data: map[string]any{"auto_create_subject": true, "title": title, "default_board": a.Getenv("ANX_ASK_DEFAULT_BOARD"), "body": body}, Warnings: askAuthoringWarnings(warnings)}, nil
 			}
 			input := map[string]any{"title": title, "summary": body, "phase": "ready", "owner": requesterActorID}
 			if board := strings.TrimSpace(a.Getenv("ANX_ASK_DEFAULT_BOARD")); board != "" {
@@ -355,7 +375,9 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 		return nil, err
 	}
 	if dryRunFlag.set && dryRunFlag.value {
-		return dryRunResult(kind, "events.create", nil, nil, bodyMap), nil
+		result := dryRunResult(kind, "events.create", nil, nil, bodyMap)
+		result.Warnings = append(result.Warnings, askAuthoringWarnings(warnings)...)
+		return result, nil
 	}
 	// Allocate the local registry key before publishing the ask. The command
 	// never enters event JSON or a request to the server.
@@ -488,4 +510,32 @@ func splitLeadingPositionals(args []string) (leading []string, rest []string) {
 		leading = append(leading, arg)
 	}
 	return leading, []string{}
+}
+
+func hasAskTemplate(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--template" || strings.HasPrefix(arg, "--template=") {
+			return true
+		}
+		// String flag values can themselves be "--template". Leave unknown flags
+		// to normal usage validation; the only boolean authoring flags are below.
+		if strings.HasPrefix(arg, "--") && !strings.Contains(arg, "=") && arg != "--force" && arg != "--dry-run" {
+			i++
+		}
+	}
+	return false
+}
+func validateAskTemplate(args []string) error {
+	if (len(args) == 2 && args[0] == "--template" && args[1] == "decision") || (len(args) == 1 && args[0] == "--template=decision") {
+		return nil
+	}
+	return errnorm.Usage("invalid_flags", "usage: anx ask --template decision (prints Markdown; cannot combine with publishing flags)")
+}
+func askAuthoringWarnings(warnings []string) []output.Warning {
+	out := make([]output.Warning, 0, len(warnings))
+	for _, warning := range warnings {
+		out = append(out, output.Warning{Code: "ask_authoring", Message: warning})
+	}
+	return out
 }

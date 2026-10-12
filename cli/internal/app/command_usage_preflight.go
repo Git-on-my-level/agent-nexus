@@ -52,6 +52,9 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 	if isDiagnosticGroup(args[0]) && !debug {
 		return args[0], errnorm.Usage("unknown_command", "unknown command "+args[0]+"; use anx debug "+args[0])
 	}
+	if (args[0] == "ask" || args[0] == "review" || args[0] == "escalate") && hasAskTemplate(args[1:]) {
+		return args[0], validateAskTemplate(args[1:])
+	}
 	if args[0] == "ask" && len(args) >= 2 && args[1] == "withdraw" {
 		commandName := "ask withdraw"
 		if err := preflightFlagUsage(args[2:], map[string]preflightFlagSpec{
@@ -555,7 +558,7 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 	})
 	for _, kind := range []string{"ask", "review", "escalate"} {
 		addLayer(map[string]map[string]preflightFlagSpec{kind: {
-			"force": {kind: preflightFlagBool}, "reason": {kind: preflightFlagString}, "supersedes": {kind: preflightFlagString}, "evidence": {kind: preflightFlagString}, "on-answer": {kind: preflightFlagString}, "webhook": {kind: preflightFlagString},
+			"template": {kind: preflightFlagString}, "force": {kind: preflightFlagBool}, "reason": {kind: preflightFlagString}, "supersedes": {kind: preflightFlagString}, "evidence": {kind: preflightFlagString}, "on-answer": {kind: preflightFlagString}, "webhook": {kind: preflightFlagString},
 			"recommend": {kind: preflightFlagString}, "alt": {kind: preflightFlagString},
 			"from-file": {kind: preflightFlagString}, "subject-ref": {kind: preflightFlagString},
 			"thread-id": {kind: preflightFlagString}, "ref": {kind: preflightFlagString},

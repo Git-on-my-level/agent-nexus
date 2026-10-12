@@ -281,6 +281,9 @@ func needsAgentIdentity(args []string) bool {
 	if args[0] == "debug" && len(args) > 1 && args[1] == "meta" {
 		return false
 	}
+	if (args[0] == "ask" || args[0] == "review" || args[0] == "escalate") && hasAskTemplate(args[1:]) {
+		return false
+	}
 	if args[0] == "report" && len(args) > 1 && (args[1] == "schema" || args[1] == "validate" || args[1] == "templates" || args[1] == "init") {
 		return false
 	}

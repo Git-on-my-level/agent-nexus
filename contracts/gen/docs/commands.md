@@ -1322,7 +1322,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Append an event that links first-class resources and evidence through typed refs.
 - Concepts: `events`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `quota_exceeded`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `quota_exceeded`, `ask_title_invalid`, `ask_title_too_long`, `ask_body_invalid`
 - Output: Returns `{ event }`.
 
 ## `events.get`
