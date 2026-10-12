@@ -489,3 +489,38 @@ it("forwards the dashboard report cursor to the scoped API", async () => {
     "http://core.test/workspace/dashboard/reports?cursor=page-two",
   ]);
 });
+
+it.each(["createWork", "createDocument"])(
+  "%s preserves actionable quota errors",
+  async (method) => {
+    const message =
+      "Workspace artifact limit reached (996/1000). This operation needs 5 more. Remove content or raise the configured workspace limit.";
+    const body = {
+      error: { code: "quota_exceeded", message, recoverable: false },
+      quota: {
+        metric: "artifacts",
+        current: 996,
+        limit: 1000,
+        delta: 5,
+        projected: 1001,
+      },
+    };
+    const client = createAnxCoreClient({
+      baseUrl: "http://core.test",
+      actorIdProvider: () => "actor-1",
+      fetchFn: async () =>
+        new Response(JSON.stringify(body), {
+          status: 409,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+    await expect(
+      client[method]({
+        title: "New task",
+        document: { title: "New doc" },
+        content: "content",
+        content_type: "text",
+      }),
+    ).rejects.toMatchObject({ message, status: 409, body });
+  },
+);

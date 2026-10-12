@@ -126,3 +126,17 @@ func tokenizeHintCommand(cmd string) []string {
 	}
 	return fields
 }
+
+func TestRenderQuotaError(t *testing.T) {
+	t.Parallel()
+	message := "Workspace artifact limit reached (996/1000). This operation needs 5 more. Remove content or raise the configured workspace limit."
+	err := errnorm.FromHTTPFailure(409, []byte(`{"error":{"code":"quota_exceeded","message":"`+message+`","recoverable":false},"quota":{"metric":"artifacts","current":996,"limit":1000,"delta":5,"projected":1001}}`))
+	var stderr bytes.Buffer
+	a := &App{Stderr: &stderr}
+	if exit := a.renderError(machineCommandIdentity{Command: "work create", CommandID: "work.create"}, false, err); exit != 4 {
+		t.Fatalf("exit=%d", exit)
+	}
+	if !strings.Contains(stderr.String(), message) || strings.Contains(strings.ToLower(stderr.String()), "retry once") || errnorm.RecoverableValue(err) {
+		t.Fatalf("bad quota output: %s", stderr.String())
+	}
+}

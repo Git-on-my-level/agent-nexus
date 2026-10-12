@@ -144,6 +144,9 @@ func handleCreateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 
 	board, err := opts.primitiveStore.CreateBoard(r.Context(), actorID, boardInput)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrConflict) && strings.TrimSpace(req.RequestKey) != "" && derivedBoardID {
 			boardID := firstNonEmptyString(req.Board["id"])
 			existing, loadErr := opts.primitiveStore.GetBoard(r.Context(), boardID)
@@ -313,6 +316,9 @@ func handleUpdateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 
 	updatedBoard, err := opts.primitiveStore.UpdateBoard(r.Context(), actorID, boardID, patchInput, &ifUpdatedAt)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		switch {
 		case errors.Is(err, primitives.ErrInvalidBoardRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -337,6 +343,9 @@ func handleUpdateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 }
 
 func writeBoardLifecycleStoreError(w http.ResponseWriter, err error) bool {
+	if writePrimitiveQuotaViolationError(w, err) {
+		return true
+	}
 	switch {
 	case errors.Is(err, primitives.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found", "board not found")
@@ -697,6 +706,9 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	}
 	result, err := opts.primitiveStore.CreateBoardCard(r.Context(), actorID, boardID, input)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrConflict) && strings.TrimSpace(req.RequestKey) != "" {
 			status, payload, replayed, replayErr := readIdempotencyReplay(r.Context(), opts.primitiveStore, idempotencyOp, actorID, req.RequestKey, replayRequest)
 			if writeIdempotencyError(w, replayErr) {
@@ -885,6 +897,9 @@ func handleBatchAddBoardCards(w http.ResponseWriter, r *http.Request, opts handl
 
 	results, err := opts.primitiveStore.CreateBoardCardsBatch(r.Context(), actorID, boardID, ifBoardTok, inputs)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		switch {
 		case errors.Is(err, primitives.ErrInvalidBoardRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -1026,6 +1041,9 @@ func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 
 	result, err := opts.primitiveStore.UpdateBoardCard(r.Context(), actorID, boardID, cardKey, patchInput)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		switch {
 		case errors.Is(err, primitives.ErrInvalidBoardRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -1161,6 +1179,7 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 	})
 	if err != nil {
 		switch {
+		case writePrimitiveQuotaViolationError(w, err):
 		case errors.Is(err, primitives.ErrInvalidBoardRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrNotFound):
@@ -1222,6 +1241,7 @@ func handleRemoveBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 	})
 	if err != nil {
 		switch {
+		case writePrimitiveQuotaViolationError(w, err):
 		case errors.Is(err, primitives.ErrInvalidBoardRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrNotFound):
@@ -1294,6 +1314,7 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 	})
 	if err != nil {
 		switch {
+		case writePrimitiveQuotaViolationError(w, err):
 		case errors.Is(err, primitives.ErrInvalidBoardRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrNotFound):
@@ -1356,6 +1377,7 @@ func handleTrashBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOp
 	})
 	if err != nil {
 		switch {
+		case writePrimitiveQuotaViolationError(w, err):
 		case errors.Is(err, primitives.ErrInvalidBoardRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrNotFound):

@@ -227,6 +227,9 @@ function normalizeRequestError(error, { target, commandId, method, path }) {
   const generatedFailure = parseGeneratedFailure(error, commandId);
 
   if (generatedFailure) {
+    if (generatedFailure.body?.error?.code === "quota_exceeded") {
+      return buildRawRequestError(generatedFailure, { target, method, path });
+    }
     const detailSuffix = generatedFailure.details
       ? ` - ${generatedFailure.details}`
       : "";
@@ -260,7 +263,9 @@ function buildRawRequestError(
       ? " anx-core may be unavailable; verify backend startup and base URL."
       : "";
   const requestError = new Error(
-    `anx-core request failed at ${target}: ${method} ${path} (${status})${detailSuffix}${guidanceSuffix}`,
+    body?.error?.code === "quota_exceeded"
+      ? body.error.message
+      : `anx-core request failed at ${target}: ${method} ${path} (${status})${detailSuffix}${guidanceSuffix}`,
   );
   requestError.status = status;
   requestError.details = details;

@@ -39,6 +39,9 @@ func sessionsRouteAccess(r *http.Request) routeAccessRequirement {
 	return routeAccessRequirement{bucket: routeAccessAuthenticatedPrincipal, supported: method != "" && r.Method == method}
 }
 func sessionStoreError(w http.ResponseWriter, err error) {
+	if writePrimitiveQuotaViolationError(w, err) {
+		return
+	}
 	switch {
 	case errors.Is(err, primitives.ErrNotFound):
 		writeError(w, 404, "not_found", "session or task participation not found")

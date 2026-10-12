@@ -620,3 +620,17 @@ route/lease checks: route dispatch is constant work, token checks examine one
 indexed turn, and existing scoped SQL, epoch-validated denial caches and page
 indexes remain responsible for resource visibility. Cold denial closure cost
 retains the existing authorization baseline documented in `performance.md`.
+
+### Configured workspace limits
+
+Every write path maps a store quota violation to HTTP `409`, code
+`quota_exceeded`, with `error.recoverable: false`. Display `error.message`;
+do not retry an unchanged request. The top-level `quota` object provides
+`metric` (`artifacts`, `documents`, `revisions`, `blob_bytes`, or `upload_bytes`),
+`current`, `limit`, `delta` (attempted growth), and `projected`. `blob_bytes`
+represents the configured storage budget, including canonical content and blobs.
+Usage retains the store's principal visibility policy. Remove content or raise
+the configured limit before resubmitting; archiving alone need not reclaim quota.
+Request-body transport safety bounds continue to return `413 request_too_large`
+independently of configured workspace/upload quotas. Unconfigured quotas have no
+impact on writes. Formatting the error adds no store queries or workspace scans.

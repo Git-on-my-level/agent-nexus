@@ -306,6 +306,9 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 	}
 	storedResponse, replayed, err := responseStore.AppendHumanAttentionResponse(r.Context(), actorID, sourceEventID, inboxItemID, req.IdempotencyKey, requestHash, responseEvent, initialNotify)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrInvalidAccessDecision) || errors.Is(err, auth.ErrInvalidRequest) || errors.Is(err, auth.ErrAgentNotFound) {
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 			return

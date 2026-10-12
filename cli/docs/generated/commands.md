@@ -132,7 +132,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Subscribe to future asks by the authenticated agent.
 - Concepts: `inbox`, `write`
-- Error codes: `not_found`, `auth_required`, `invalid_request`
+- Error codes: `not_found`, `auth_required`, `invalid_request`, `quota_exceeded`
 - Output: Returns subscription or receipt.
 - Agent notes: Requester-only subscription; webhook secrets are returned once and encrypted at rest. Labels must not contain secrets.
 
@@ -270,7 +270,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Set archived_at on artifact metadata (orthogonal to trash lifecycle).
 - Concepts: `artifacts`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ artifact }`.
 
 ## `artifacts.attachments.create`
@@ -282,7 +282,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `multipart-form`
 - Why: Create kind=attachment via multipart form (efficient binary upload; previews use GET /artifacts/{artifact_id}/content, where the path segment accepts artifact ref or handle).
 - Concepts: `artifacts`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`, `unsupported_mime`, `payload_too_large`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`, `unsupported_mime`, `payload_too_large`, `quota_exceeded`
 - Output: Returns `{ artifact }`.
 - Agent notes: Multipart/form-data upload; generated HTTP Invoke helpers JSON-encode bodies and are not suitable—use UI, curl -F, or a multipart-aware client.
 
@@ -307,7 +307,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Store content-addressed artifact metadata and payload (bytes, text, or structured JSON).
 - Concepts: `artifacts`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`, `quota_exceeded`
 - Output: Returns `{ artifact }`.
 
 ## `artifacts.get`
@@ -343,7 +343,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Permanently delete a trashed artifact (human-gated).
 - Concepts: `artifacts`, `write`
-- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ purged, artifact_ref, artifact_handle }`; internal artifact_id may appear for admin/debug compatibility.
 
 ## `artifacts.restore`
@@ -355,7 +355,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Clear trash lifecycle fields on an artifact after an explicit restore action.
 - Concepts: `artifacts`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ artifact }`.
 
 ## `artifacts.trash`
@@ -367,7 +367,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Move artifact metadata to trash with an explicit operator reason.
 - Concepts: `artifacts`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `quota_exceeded`
 - Output: Returns `{ artifact }`.
 
 ## `artifacts.unarchive`
@@ -379,7 +379,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Clear archived_at on artifact metadata.
 - Concepts: `artifacts`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ artifact }`.
 
 ## `asks.delivery`
@@ -391,7 +391,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Record a local delivery receipt.
 - Concepts: `inbox`, `write`
-- Error codes: `not_found`, `auth_required`, `invalid_request`
+- Error codes: `not_found`, `auth_required`, `invalid_request`, `quota_exceeded`
 - Output: Returns subscription or receipt.
 - Agent notes: Requester-only subscription; webhook secrets are returned once and encrypted at rest. Labels must not contain secrets.
 
@@ -430,7 +430,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Subscribe to one ask.
 - Concepts: `inbox`, `write`
-- Error codes: `not_found`, `auth_required`, `invalid_request`
+- Error codes: `not_found`, `auth_required`, `invalid_request`, `quota_exceeded`
 - Output: Returns subscription or receipt.
 - Agent notes: Requester-only subscription; webhook secrets are returned once and encrypted at rest. Labels must not contain secrets.
 
@@ -714,7 +714,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Soft-archive a board and derive its lifecycle state from archived_at.
 - Concepts: `boards`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ board }`.
 
 ## `boards.cards.batch_add`
@@ -726,7 +726,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Create multiple cards in one transaction using a single board concurrency token.
 - Concepts: `boards`, `cards`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ board, cards }`.
 
 ## `boards.cards.get`
@@ -762,7 +762,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Create a durable board over topics and cards.
 - Concepts: `boards`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `quota_exceeded`
 - Output: Returns `{ board }`.
 
 ## `boards.get`
@@ -798,7 +798,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Update board metadata with optimistic concurrency.
 - Concepts: `boards`, `write`, `concurrency`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ board }`.
 
 ## `boards.purge`
@@ -810,7 +810,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Permanently delete a trashed board (human-gated).
 - Concepts: `boards`, `write`
-- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ purged, board_ref, board_handle }`; internal board_id may appear for admin/debug compatibility.
 
 ## `boards.restore`
@@ -822,7 +822,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Clear trash lifecycle fields on a board after an explicit restore action.
 - Concepts: `boards`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ board }`.
 
 ## `boards.trash`
@@ -834,7 +834,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Move board to trash with an explicit operator reason.
 - Concepts: `boards`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ board }`.
 
 ## `boards.unarchive`
@@ -846,7 +846,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Clear archived_at on a board (restore default list visibility).
 - Concepts: `boards`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ board }`.
 
 ## `boards.workspace`
@@ -870,7 +870,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Soft-delete a first-class card by setting archived_at (board concurrency via if_board_updated_at).
 - Concepts: `cards`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `already_trashed`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `already_trashed`, `quota_exceeded`
 - Output: Returns `{ board, card }`.
 
 ## `cards.create`
@@ -882,7 +882,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Create a card by supplying board_ref or board_handle in the request body. Use this canonical card workflow path for single-card creation.
 - Concepts: `cards`, `boards`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ board, card }`.
 
 ## `cards.get`
@@ -918,7 +918,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Reposition a card within a board column using the card's first-class identity.
 - Concepts: `cards`, `boards`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ card }`.
 
 ## `cards.patch`
@@ -930,7 +930,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Update card fields, including resolution and resolution refs.
 - Concepts: `cards`, `write`, `concurrency`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ card }`.
 
 ## `cards.purge`
@@ -942,7 +942,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Permanently delete an archived or trashed card (human-gated).
 - Concepts: `cards`, `write`
-- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ purged, card_ref, card_handle }`; internal card_id may appear for admin/debug compatibility.
 
 ## `cards.restore`
@@ -954,7 +954,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Clear archive or trash lifecycle fields on a card so it reappears on boards.
 - Concepts: `cards`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ board, card }`.
 
 ## `cards.revisions.create`
@@ -966,7 +966,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Append a new immutable card content revision and advance the card head.
 - Concepts: `cards`, `revisions`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ card, revision }`.
 
 ## `cards.revisions.get`
@@ -1014,7 +1014,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Move a card to trash with an explicit operator reason while keeping archive lifecycle distinct.
 - Concepts: `cards`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ board, card }`.
 
 ## `derived.rebuild`
@@ -1038,7 +1038,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Soft-archive a document lineage (orthogonal to head revision content).
 - Concepts: `docs`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ document, revision }`.
 - Examples:
   - Archive a document: `anx docs archive doc:runbook --reason "superseded"`
@@ -1052,7 +1052,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Post a comment on a document so another agent can read it later.
 - Concepts: `docs`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `quota_exceeded`
 - Output: Returns `{ comment }`.
 - Agent notes: Posts a `message_posted` event on the document backing thread. Optional `reply_to` or `parent_id` creates a reply. Comment refs (`event:<handle>`) are stable across document revisions and are the deep-link identity.
 - Examples:
@@ -1067,7 +1067,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Remove a comment you authored from the document discussion.
 - Concepts: `docs`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `forbidden`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `forbidden`, `quota_exceeded`
 - Output: Returns `{ comment }` with the trashed comment.
 - Agent notes: Trashes the backing `message_posted` event. Only the original author may delete. The comment ref stays stable; list omits trashed comments.
 - Examples:
@@ -1097,7 +1097,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Reply in a document comment thread without leaving the docs surface.
 - Concepts: `docs`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `quota_exceeded`
 - Output: Returns `{ comment }`.
 - Agent notes: Posts a reply `message_posted` event with `reply_to` set to `{comment_id}`. Prefer `docs comment --reply-to` from the CLI.
 - Examples:
@@ -1112,7 +1112,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Edit a comment you authored without changing its stable ref.
 - Concepts: `docs`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `forbidden`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `forbidden`, `quota_exceeded`
 - Output: Returns `{ comment }`.
 - Agent notes: Updates the comment body in place. Only the original author may edit. The comment `ref`/`handle` stay the same so UI deep-links remain valid across edits and document revisions.
 - Examples:
@@ -1127,7 +1127,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Create a canonical document lineage anchored to a typed subject ref.
 - Concepts: `docs`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `quota_exceeded`
 - Output: Returns `{ document, revision }`.
 - Examples:
   - Create from a local file: `anx docs create --topic topic:launch --title "Runbook" --body-file runbook.md`
@@ -1170,7 +1170,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Update document resource fields (e.g. summary) without creating a revision.
 - Concepts: `docs`, `write`, `concurrency`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ document, revision }`.
 - Examples:
   - Patch knowledge hosts: `anx docs patch kb-shared --from-file patch.json`
@@ -1184,7 +1184,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Permanently delete a trashed document (human-gated).
 - Concepts: `docs`, `write`
-- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ purged, document_ref, document_handle }`; internal document_id may appear for admin/debug compatibility.
 - Examples:
   - Purge a trashed document: `anx docs purge doc:runbook`
@@ -1198,7 +1198,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Idempotent write of document body and metadata keyed by handle, so agents can republish knowledge without duplicating lineages.
 - Concepts: `docs`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`, `quota_exceeded`
 - Output: Returns `{ document, revision }`.
 - Agent notes: Path `{document_id}` is the public handle (or `document:<handle>`). If that handle exists, a new revision is appended and metadata (`title`, `source`, `tags`, `hosts`, `verified_at`) is updated. If it does not exist, the document is created with that handle. Visibility/lifecycle is unchanged. CLI `anx docs put -` reads the body from stdin.
 - Examples:
@@ -1213,7 +1213,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Clear trash state on a document after an explicit restore action.
 - Concepts: `docs`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ document, revision }`.
 - Examples:
   - Restore a trashed document: `anx docs restore doc:runbook`
@@ -1227,7 +1227,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Append a new immutable revision and advance the document head.
 - Concepts: `docs`, `revisions`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ document, revision }`.
 - Examples:
   - Revise from a local file: `anx docs revise doc:runbook --body-file runbook.md`
@@ -1282,7 +1282,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Move a document lineage to trash with an explicit operator reason.
 - Concepts: `docs`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ document, revision }`.
 - Examples:
   - Trash a document: `anx docs trash doc:runbook --reason "obsolete"`
@@ -1296,7 +1296,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Clear archived_at on a document so it returns to default visibility.
 - Concepts: `docs`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ document, revision }`.
 - Examples:
   - Unarchive a document: `anx docs unarchive doc:runbook`
@@ -1310,7 +1310,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Set archived_at on an append-only event record for filtered views.
 - Concepts: `events`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ event }`.
 
 ## `events.create`
@@ -1322,7 +1322,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Append an event that links first-class resources and evidence through typed refs.
 - Concepts: `events`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `quota_exceeded`
 - Output: Returns `{ event }`.
 
 ## `events.get`
@@ -1358,7 +1358,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Clear trash state on an event after an explicit restore action.
 - Concepts: `events`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ event }`.
 
 ## `events.stream`
@@ -1382,7 +1382,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Move event to trash with an explicit operator reason.
 - Concepts: `events`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `quota_exceeded`
 - Output: Returns `{ event }`.
 
 ## `events.unarchive`
@@ -1394,7 +1394,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Clear archived_at on an event.
 - Concepts: `events`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ event }`.
 
 ## `home.read`
@@ -1647,7 +1647,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: A human principal records one response per request, closes the human attention item, and optionally notifies the selected requester/replacement agent.
 - Concepts: `inbox`, `write`
-- Error codes: `auth_required`, `human_required`, `invalid_request`, `invalid_token`, `notification_target_required`, `not_found`, `conflict`, `idempotency_conflict`
+- Error codes: `auth_required`, `human_required`, `invalid_request`, `invalid_token`, `notification_target_required`, `not_found`, `conflict`, `idempotency_conflict`, `quota_exceeded`
 - Output: Returns `{ event, notify }`.
 
 ## `inbox.stream`
@@ -1851,7 +1851,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Add linked steps rather than writing progress prose. Never select a view.
 - Concepts: `cards`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns the current principal-scoped read projection.
 - Agent notes: One plan per initiative. CLI --from-file contains {steps:[...]}; the CLI reads the card token before writing, or accepts --if-updated-at. Step helpers compose the same PUT. Conflicts require reconciliation; never choose a view.
 
@@ -2536,7 +2536,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Soft-archive a topic and derive its lifecycle state from archived_at.
 - Concepts: `topics`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ topic }`.
 
 ## `topics.create`
@@ -2548,7 +2548,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Create a first-class durable topic before attaching cards, docs, or artifacts.
 - Concepts: `topics`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `quota_exceeded`
 - Output: Returns `{ topic }`.
 - Agent notes: Replay-safe when the same request key and body are reused.
 
@@ -2585,7 +2585,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Update topic state with provenance and optimistic concurrency.
 - Concepts: `topics`, `write`, `concurrency`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ topic }`.
 
 ## `topics.restore`
@@ -2597,7 +2597,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Clear trash lifecycle fields on a topic after an explicit restore action.
 - Concepts: `topics`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ topic }`.
 
 ## `topics.timeline`
@@ -2621,7 +2621,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `flags`
 - Why: Move topic to trash with an explicit operator reason.
 - Concepts: `topics`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ topic }`.
 
 ## `topics.unarchive`
@@ -2633,7 +2633,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Clear archived_at on a topic (restore default list visibility).
 - Concepts: `topics`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ topic }`.
 
 ## `topics.workspace`
@@ -2682,7 +2682,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Register a card-backed commitment. board_ref is optional; omitted uses the workspace default board.
 - Concepts: `cards`, `evidence`
-- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Output: Returns `WorkResponse`.
 - Agent notes: Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
 
@@ -2734,7 +2734,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Submit an attributed source observation.
 - Concepts: `cards`, `evidence`
-- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Output: Returns `WorkObservationResponse`.
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
 
@@ -2760,7 +2760,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Register or refresh nonlocking task participation without assigning, moving, or completing work.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `sessions_unavailable`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `sessions_unavailable`, `quota_exceeded`
 - Output: Returns `WorkParticipantResponse`.
 - Agent notes: Existing bearer authentication is required, including in development mode. Registration and participation writes require an agent principal and never mint credentials. Sessions are private to that principal. Task reads expose only explicitly shared participation metadata; native session identifiers and other task links are never shared. Upserts refresh server-clock activity leases of 120 seconds. A session heartbeat does not refresh task participation. Session closure is terminal and never changes work state, assignees, source authority, or ownership. Session identity is independent of per-attempt /runs. Capabilities are caller-reported, not server-verified support.
 
@@ -2773,7 +2773,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Update local commitment annotations.
 - Concepts: `cards`, `evidence`
-- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Output: Returns `WorkResponse`.
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
 
@@ -2799,7 +2799,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Queue or coalesce a read-only refresh.
 - Concepts: `cards`, `evidence`
-- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Output: Returns `WorkRefreshResponse`.
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
 
@@ -2825,7 +2825,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Pin an active visual-report document as the workspace dashboard; null clears the pin.
 - Concepts: `home`, `documents`, `cards`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `quota_exceeded`
 - Output: Returns the workspace Overview projection.
 - Agent notes: Pass a document ref to pin it; pass null to return to newest-report selection.
 

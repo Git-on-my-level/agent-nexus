@@ -1725,7 +1725,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: {mode: none}
       x-anx-output-envelope: Returns `WorkParticipantResponse`.
-      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, not_found, conflict, sessions_unavailable]
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, not_found, conflict, sessions_unavailable, quota_exceeded]
       x-anx-concepts: [cards, evidence]
       x-anx-stability: beta
       x-anx-agent-notes: >
@@ -1747,6 +1747,8 @@ paths:
             schema:
               $ref: '#/components/schemas/WorkParticipantRequest'
       responses:
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
         '200':
           description: Register or refresh nonlocking task participation
           content:
@@ -1885,6 +1887,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `WorkResponse`.
       x-anx-error-codes:
+      - quota_exceeded
       - invalid_request
       - not_found
       - conflict
@@ -1903,6 +1906,8 @@ paths:
             schema:
               $ref: '#/components/schemas/WorkCreateRequest'
       responses:
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
         '201':
           description: Register a card-backed commitment
           content:
@@ -1995,6 +2000,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `WorkResponse`.
       x-anx-error-codes:
+      - quota_exceeded
       - invalid_request
       - not_found
       - conflict
@@ -2018,6 +2024,8 @@ paths:
             schema:
               $ref: '#/components/schemas/WorkPatchRequest'
       responses:
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
         '200':
           description: Update local commitment annotations
           content:
@@ -2103,6 +2111,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `WorkObservationResponse`.
       x-anx-error-codes:
+      - quota_exceeded
       - invalid_request
       - not_found
       - conflict
@@ -2126,6 +2135,8 @@ paths:
             schema:
               $ref: '#/components/schemas/WorkObservationRequest'
       responses:
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
         '200':
           description: Submit an attributed source observation
           content:
@@ -2184,6 +2195,7 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `WorkRefreshResponse`.
       x-anx-error-codes:
+      - quota_exceeded
       - invalid_request
       - not_found
       - conflict
@@ -2207,6 +2219,8 @@ paths:
             schema:
               $ref: '#/components/schemas/WorkRefreshRequest'
       responses:
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
         '202':
           description: Queue or coalesce a read-only refresh
           content:
@@ -2350,7 +2364,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ topic }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, quota_exceeded]
       x-anx-concepts: [topics, write]
       x-anx-stability: beta
       x-anx-agent-notes: "Replay-safe when the same request key and body are reused."
@@ -2361,6 +2375,8 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateTopicRequest'
       responses:
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
         '201':
           description: Topic created
           content:
@@ -2411,7 +2427,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ topic }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [topics, write, concurrency]
       x-anx-stability: beta
       requestBody:
@@ -2513,7 +2529,7 @@ paths:
         body_optional: true
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ topic }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [topics, write]
       x-anx-stability: beta
       parameters:
@@ -2555,7 +2571,7 @@ paths:
         body_optional: true
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ topic }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [topics, write]
       x-anx-stability: beta
       parameters:
@@ -2601,7 +2617,7 @@ paths:
             description: Operator-visible trash reason.
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ topic }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [topics, write]
       x-anx-stability: beta
       parameters:
@@ -2643,7 +2659,7 @@ paths:
         body_optional: true
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ topic }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [topics, write]
       x-anx-stability: beta
       parameters:
@@ -2986,7 +3002,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ document, revision }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, quota_exceeded]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
       x-anx-examples:
@@ -2999,6 +3015,8 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateDocumentRequest'
       responses:
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
         '201':
           description: Document created
           content:
@@ -3198,7 +3216,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ document, revision }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [docs, write, concurrency]
       x-anx-stability: beta
       x-anx-examples:
@@ -3238,7 +3256,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ document, revision }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, conflict, quota_exceeded]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
       x-anx-examples:
@@ -3289,7 +3307,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ document, revision }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
       x-anx-examples:
@@ -3331,7 +3349,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ document, revision }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
       x-anx-examples:
@@ -3373,7 +3391,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ document, revision }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
       x-anx-examples:
@@ -3415,7 +3433,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ document, revision }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
       x-anx-examples:
@@ -3457,7 +3475,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ purged, document_ref, document_handle }`; internal document_id may appear for admin/debug compatibility."
-      x-anx-error-codes: [auth_required, human_only, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, human_only, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
       x-anx-examples:
@@ -3529,7 +3547,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ document, revision }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [docs, revisions, write]
       x-anx-stability: beta
       x-anx-examples:
@@ -3647,7 +3665,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ comment }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, quota_exceeded]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
       x-anx-examples:
@@ -3666,6 +3684,8 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateDocumentCommentRequest'
       responses:
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
         '201':
           description: Comment created
           content:
@@ -3691,7 +3711,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ comment }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, forbidden]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, forbidden, quota_exceeded]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
       x-anx-examples:
@@ -3710,6 +3730,8 @@ paths:
             schema:
               $ref: '#/components/schemas/UpdateDocumentCommentRequest'
       responses:
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
         '200':
           description: Comment updated
           content:
@@ -3735,7 +3757,7 @@ paths:
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ comment }` with the trashed comment."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, forbidden]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, forbidden, quota_exceeded]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
       x-anx-examples:
@@ -3748,6 +3770,8 @@ paths:
         - $ref: '#/components/parameters/DocumentID'
         - $ref: '#/components/parameters/CommentID'
       responses:
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
         '200':
           description: Comment deleted
           content:
@@ -3773,7 +3797,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ comment }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, quota_exceeded]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
       x-anx-examples:
@@ -3792,6 +3816,8 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateDocumentCommentRequest'
       responses:
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
         '201':
           description: Reply created
           content:
@@ -3872,7 +3898,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ board }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, quota_exceeded]
       x-anx-concepts: [boards, write]
       x-anx-stability: beta
       requestBody:
@@ -3882,6 +3908,8 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateBoardRequest'
       responses:
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
         '201':
           description: Board created
           content:
@@ -3932,7 +3960,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ board }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [boards, write, concurrency]
       x-anx-stability: beta
       parameters:
@@ -4001,7 +4029,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ board }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [boards, write]
       x-anx-stability: beta
       parameters:
@@ -4040,7 +4068,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ board }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [boards, write]
       x-anx-stability: beta
       parameters:
@@ -4079,7 +4107,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ board }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [boards, write]
       x-anx-stability: beta
       parameters:
@@ -4118,7 +4146,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ board }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [boards, write]
       x-anx-stability: beta
       parameters:
@@ -4157,7 +4185,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ purged, board_ref, board_handle }`; internal board_id may appear for admin/debug compatibility."
-      x-anx-error-codes: [auth_required, human_only, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, human_only, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [boards, write]
       x-anx-stability: beta
       parameters:
@@ -4255,7 +4283,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ board, cards }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [boards, cards, write]
       x-anx-stability: beta
       parameters:
@@ -4365,7 +4393,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ board, card }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [cards, boards, write]
       x-anx-stability: beta
       requestBody:
@@ -4423,7 +4451,7 @@ paths:
       x-anx-command-id: plan.set
       x-anx-streaming: {mode: none}
       x-anx-output-envelope: Returns the current principal-scoped read projection.
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-agent-notes: One plan per initiative. CLI --from-file contains {steps:[...]}; the CLI reads the card token before writing, or accepts --if-updated-at. Step helpers compose the same PUT. Conflicts require reconciliation; never choose a view.
       x-anx-cli-path: plan set
       x-anx-why: Add linked steps rather than writing progress prose. Never select a view.
@@ -4523,7 +4551,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ card }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [cards, write, concurrency]
       x-anx-stability: beta
       parameters:
@@ -4619,7 +4647,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ card, revision }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [cards, revisions, write]
       x-anx-stability: beta
       parameters:
@@ -4688,7 +4716,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ board, card }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, already_trashed]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, already_trashed, quota_exceeded]
       x-anx-concepts: [cards, write]
       x-anx-stability: beta
       parameters:
@@ -4727,7 +4755,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ board, card }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [cards, write]
       x-anx-stability: beta
       parameters:
@@ -4766,7 +4794,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ card }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [cards, boards, write]
       x-anx-stability: beta
       parameters:
@@ -4805,7 +4833,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ board, card }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [cards, write]
       x-anx-stability: beta
       parameters:
@@ -4844,7 +4872,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ purged, card_ref, card_handle }`; internal card_id may appear for admin/debug compatibility."
-      x-anx-error-codes: [auth_required, human_only, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, human_only, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [cards, write]
       x-anx-stability: beta
       parameters:
@@ -4966,7 +4994,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ event }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, quota_exceeded]
       x-anx-concepts: [events, write]
       x-anx-stability: beta
       requestBody:
@@ -4976,6 +5004,8 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateEventRequest'
       responses:
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
         '201':
           description: Event created
           content:
@@ -5091,7 +5121,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns the workspace Overview projection."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, quota_exceeded]
       x-anx-concepts: [home, documents, cards]
       x-anx-stability: beta
       requestBody:
@@ -5105,6 +5135,8 @@ paths:
                 document_ref: { type: string, nullable: true }
                 actor_id: { type: string }
       responses:
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
         '200':
           description: Workspace projection
           content:
@@ -5240,7 +5272,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ event }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [events, write]
       x-anx-stability: beta
       parameters:
@@ -5279,7 +5311,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ event }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [events, write]
       x-anx-stability: beta
       parameters:
@@ -5318,7 +5350,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ event }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, quota_exceeded]
       x-anx-concepts: [events, write]
       x-anx-stability: beta
       parameters:
@@ -5330,6 +5362,8 @@ paths:
             schema:
               $ref: '#/components/schemas/TopicTrashRequest'
       responses:
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
         '200':
           description: Event moved to trash
           content:
@@ -5355,7 +5389,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ event }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [events, write]
       x-anx-stability: beta
       parameters:
@@ -5471,7 +5505,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ artifact }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, conflict, quota_exceeded]
       x-anx-concepts: [artifacts, write]
       x-anx-stability: beta
       requestBody:
@@ -5507,7 +5541,7 @@ paths:
       x-anx-input-mode: multipart-form
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ artifact }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, conflict, unsupported_mime, payload_too_large]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, conflict, unsupported_mime, payload_too_large, quota_exceeded]
       x-anx-concepts: [artifacts, write]
       x-anx-stability: beta
       requestBody:
@@ -5588,7 +5622,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ artifact }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, quota_exceeded]
       x-anx-concepts: [artifacts, write]
       x-anx-stability: beta
       parameters:
@@ -5600,6 +5634,8 @@ paths:
             schema:
               $ref: '#/components/schemas/TopicTrashRequest'
       responses:
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
         '200':
           description: Artifact moved to trash
           content:
@@ -5625,7 +5661,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ artifact }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [artifacts, write]
       x-anx-stability: beta
       parameters:
@@ -5664,7 +5700,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ artifact }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [artifacts, write]
       x-anx-stability: beta
       parameters:
@@ -5703,7 +5739,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ artifact }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [artifacts, write]
       x-anx-stability: beta
       parameters:
@@ -5742,7 +5778,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ purged, artifact_ref, artifact_handle }`; internal artifact_id may appear for admin/debug compatibility."
-      x-anx-error-codes: [auth_required, human_only, invalid_token, not_found, conflict]
+      x-anx-error-codes: [auth_required, human_only, invalid_token, not_found, conflict, quota_exceeded]
       x-anx-concepts: [artifacts, write]
       x-anx-stability: beta
       parameters:
@@ -5784,7 +5820,7 @@ paths:
       x-anx-concepts: [inbox, write]
       x-anx-stability: beta
       x-anx-output-envelope: Returns subscription or receipt.
-      x-anx-error-codes: [not_found, auth_required, invalid_request]
+      x-anx-error-codes: [not_found, auth_required, invalid_request, quota_exceeded]
       parameters:
         - {name: ask_id, in: path, required: true, description: "Event id, event:<id>, public event handle, event:<handle>, or access-request:<id>. An access-request event resolves only for the requesting agent.", schema: {type: string}}
       requestBody:
@@ -5793,6 +5829,8 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/AskSubscriptionInput'}
       responses:
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
         '201':
           description: Subscription registered; secret appears only in this response.
           content:
@@ -5813,13 +5851,15 @@ paths:
       x-anx-concepts: [inbox, write]
       x-anx-stability: beta
       x-anx-output-envelope: Returns subscription or receipt.
-      x-anx-error-codes: [not_found, auth_required, invalid_request]
+      x-anx-error-codes: [not_found, auth_required, invalid_request, quota_exceeded]
       requestBody:
         required: true
         content:
           application/json:
             schema: {$ref: '#/components/schemas/AskSubscriptionInput'}
       responses:
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
         '201':
           description: Subscription registered; secret appears only in this response.
           content:
@@ -5840,7 +5880,7 @@ paths:
       x-anx-concepts: [inbox, write]
       x-anx-stability: beta
       x-anx-output-envelope: Returns subscription or receipt.
-      x-anx-error-codes: [not_found, auth_required, invalid_request]
+      x-anx-error-codes: [not_found, auth_required, invalid_request, quota_exceeded]
       parameters:
         - {name: ask_id, in: path, required: true, description: "Event id, event:<id>, public event handle, event:<handle>, or access-request:<id>. An access-request event resolves only for the requesting agent.", schema: {type: string}}
       requestBody:
@@ -5849,6 +5889,8 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/AskDeliveryReceipt'}
       responses:
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
         '200':
           description: Receipt recorded.
           content:
@@ -6004,7 +6046,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ event, notify }`."
-      x-anx-error-codes: [auth_required, human_required, invalid_request, invalid_token, notification_target_required, not_found, conflict, idempotency_conflict]
+      x-anx-error-codes: [auth_required, human_required, invalid_request, invalid_token, notification_target_required, not_found, conflict, idempotency_conflict, quota_exceeded]
       x-anx-concepts: [inbox, write]
       x-anx-stability: beta
       parameters:
@@ -8231,7 +8273,14 @@ paths:
 components:
   responses:
     ErrorResponse:
-      description: Error payload
+      description: >
+        Error payload. Every write may return HTTP 409 quota_exceeded when a configured
+        workspace or upload limit would be exceeded. This error is not retryable
+        (error.recoverable=false). The top-level quota object contains metric
+        (artifacts, documents, revisions, blob_bytes, upload_bytes), current, limit,
+        delta (attempted growth), and projected. Limits are deployment configuration;
+        blob_bytes includes canonical content as well as blobs. Clients display
+        error.message. Reclaim content or change the configured limit before resubmitting.
       content:
         application/json:
           schema:

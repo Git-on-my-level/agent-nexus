@@ -116,7 +116,7 @@ func ExitCode(err error) int {
 	switch typed.Code {
 	case "not_found", "draft_not_found", "profile_not_found":
 		return 3
-	case "conflict", "source_revision_changed", "lease_mismatch", "actor_exists", "username_taken":
+	case "quota_exceeded", "conflict", "source_revision_changed", "lease_mismatch", "actor_exists", "username_taken":
 		return 4
 	case "auth_admin_required", "human_required", "host_self_revoke", "auth_required", "authentication_required", "authorization_denied", "forbidden", "invalid_token", "key_mismatch", "agent_revoked", "wake_proof_required":
 		return 5
@@ -257,6 +257,7 @@ var defaultMetadataByCode = map[string]Metadata{
 	"unknown_command":               {Recoverable: true, Hint: "Run `anx help` to list available commands."},
 	"username_taken":                {Recoverable: true, Hint: "Choose a different username and retry."},
 	"wake_proof_required":           {Recoverable: true, Hint: "Hosted workspace wake requires a recoverable auth token exchange or a control-plane session. Run `anx auth token-status`, then `anx auth whoami` or `anx auth rotate` for this profile."},
+	"quota_exceeded":                {Recoverable: false, Hint: "Remove content or raise the configured workspace limit."},
 	"internal_error":                {Recoverable: false, Hint: "Retry once; if it persists, escalate with logs and request details."},
 	"schema_unavailable":            {Recoverable: false, Hint: "Core schema subsystem is unavailable; retry later or escalate to operator."},
 	"primitives_unavailable":        {Recoverable: false, Hint: "Core storage subsystem is unavailable; retry later or escalate to operator."},

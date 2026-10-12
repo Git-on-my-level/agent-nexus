@@ -401,7 +401,8 @@ export const commandRegistry = [
         "error_codes": [
             "not_found",
             "auth_required",
-            "invalid_request"
+            "invalid_request",
+            "quota_exceeded"
         ],
         "concepts": [
             "inbox",
@@ -835,7 +836,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "artifacts",
@@ -892,7 +894,8 @@ export const commandRegistry = [
             "invalid_token",
             "conflict",
             "unsupported_mime",
-            "payload_too_large"
+            "payload_too_large",
+            "quota_exceeded"
         ],
         "concepts": [
             "artifacts",
@@ -974,7 +977,8 @@ export const commandRegistry = [
             "auth_required",
             "invalid_request",
             "invalid_token",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "artifacts",
@@ -1116,7 +1120,8 @@ export const commandRegistry = [
             "human_only",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "artifacts",
@@ -1168,7 +1173,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "artifacts",
@@ -1223,7 +1229,8 @@ export const commandRegistry = [
             "auth_required",
             "invalid_request",
             "invalid_token",
-            "not_found"
+            "not_found",
+            "quota_exceeded"
         ],
         "concepts": [
             "artifacts",
@@ -1281,7 +1288,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "artifacts",
@@ -1335,7 +1343,8 @@ export const commandRegistry = [
         "error_codes": [
             "not_found",
             "auth_required",
-            "invalid_request"
+            "invalid_request",
+            "quota_exceeded"
         ],
         "concepts": [
             "inbox",
@@ -1469,7 +1478,8 @@ export const commandRegistry = [
         "error_codes": [
             "not_found",
             "auth_required",
-            "invalid_request"
+            "invalid_request",
+            "quota_exceeded"
         ],
         "concepts": [
             "inbox",
@@ -2801,7 +2811,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "boards",
@@ -2860,7 +2871,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "boards",
@@ -3019,7 +3031,8 @@ export const commandRegistry = [
         "error_codes": [
             "auth_required",
             "invalid_request",
-            "invalid_token"
+            "invalid_token",
+            "quota_exceeded"
         ],
         "concepts": [
             "boards",
@@ -3205,7 +3218,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "boards",
@@ -3299,7 +3313,8 @@ export const commandRegistry = [
             "human_only",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "boards",
@@ -3354,7 +3369,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "boards",
@@ -3413,7 +3429,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "boards",
@@ -3474,7 +3491,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "boards",
@@ -3579,7 +3597,8 @@ export const commandRegistry = [
             "invalid_token",
             "not_found",
             "conflict",
-            "already_trashed"
+            "already_trashed",
+            "quota_exceeded"
         ],
         "concepts": [
             "cards",
@@ -3646,7 +3665,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "cards",
@@ -3898,7 +3918,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "cards",
@@ -3991,7 +4012,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "cards",
@@ -4106,7 +4128,8 @@ export const commandRegistry = [
             "human_only",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "cards",
@@ -4161,7 +4184,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "cards",
@@ -4220,7 +4244,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "cards",
@@ -4446,7 +4471,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "cards",
@@ -4539,7 +4565,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "docs",
@@ -4609,7 +4636,8 @@ export const commandRegistry = [
             "auth_required",
             "invalid_request",
             "invalid_token",
-            "not_found"
+            "not_found",
+            "quota_exceeded"
         ],
         "concepts": [
             "docs",
@@ -4691,7 +4719,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "forbidden"
+            "forbidden",
+            "quota_exceeded"
         ],
         "concepts": [
             "docs",
@@ -4809,7 +4838,8 @@ export const commandRegistry = [
             "auth_required",
             "invalid_request",
             "invalid_token",
-            "not_found"
+            "not_found",
+            "quota_exceeded"
         ],
         "concepts": [
             "docs",
@@ -4892,7 +4922,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "forbidden"
+            "forbidden",
+            "quota_exceeded"
         ],
         "concepts": [
             "docs",
@@ -4965,7 +4996,8 @@ export const commandRegistry = [
         "error_codes": [
             "auth_required",
             "invalid_request",
-            "invalid_token"
+            "invalid_token",
+            "quota_exceeded"
         ],
         "concepts": [
             "docs",
@@ -5226,7 +5258,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "docs",
@@ -5320,7 +5353,8 @@ export const commandRegistry = [
             "human_only",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "docs",
@@ -5386,7 +5420,8 @@ export const commandRegistry = [
             "auth_required",
             "invalid_request",
             "invalid_token",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "docs",
@@ -5517,7 +5552,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "docs",
@@ -5588,7 +5624,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "docs",
@@ -5858,7 +5895,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "docs",
@@ -5931,7 +5969,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "docs",
@@ -6002,7 +6041,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "events",
@@ -6055,7 +6095,8 @@ export const commandRegistry = [
         "error_codes": [
             "auth_required",
             "invalid_request",
-            "invalid_token"
+            "invalid_token",
+            "quota_exceeded"
         ],
         "concepts": [
             "events",
@@ -6248,7 +6289,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "events",
@@ -6338,7 +6380,8 @@ export const commandRegistry = [
             "auth_required",
             "invalid_request",
             "invalid_token",
-            "not_found"
+            "not_found",
+            "quota_exceeded"
         ],
         "concepts": [
             "events",
@@ -6394,7 +6437,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "events",
@@ -7480,7 +7524,8 @@ export const commandRegistry = [
             "notification_target_required",
             "not_found",
             "conflict",
-            "idempotency_conflict"
+            "idempotency_conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "inbox",
@@ -8116,7 +8161,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "cards",
@@ -11459,7 +11505,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "topics",
@@ -11513,7 +11560,8 @@ export const commandRegistry = [
         "error_codes": [
             "auth_required",
             "invalid_request",
-            "invalid_token"
+            "invalid_token",
+            "quota_exceeded"
         ],
         "concepts": [
             "topics",
@@ -11691,7 +11739,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "topics",
@@ -11791,7 +11840,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "topics",
@@ -11901,7 +11951,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "topics",
@@ -11964,7 +12015,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "quota_exceeded"
         ],
         "concepts": [
             "topics",
@@ -12128,6 +12180,7 @@ export const commandRegistry = [
         },
         "output_envelope": "Returns `WorkResponse`.",
         "error_codes": [
+            "quota_exceeded",
             "invalid_request",
             "not_found",
             "conflict",
@@ -12463,6 +12516,7 @@ export const commandRegistry = [
         },
         "output_envelope": "Returns `WorkObservationResponse`.",
         "error_codes": [
+            "quota_exceeded",
             "invalid_request",
             "not_found",
             "conflict",
@@ -12668,7 +12722,8 @@ export const commandRegistry = [
             "invalid_request",
             "not_found",
             "conflict",
-            "sessions_unavailable"
+            "sessions_unavailable",
+            "quota_exceeded"
         ],
         "concepts": [
             "cards",
@@ -12733,6 +12788,7 @@ export const commandRegistry = [
         },
         "output_envelope": "Returns `WorkResponse`.",
         "error_codes": [
+            "quota_exceeded",
             "invalid_request",
             "not_found",
             "conflict",
@@ -12899,6 +12955,7 @@ export const commandRegistry = [
         },
         "output_envelope": "Returns `WorkRefreshResponse`.",
         "error_codes": [
+            "quota_exceeded",
             "invalid_request",
             "not_found",
             "conflict",
@@ -12988,7 +13045,8 @@ export const commandRegistry = [
             "auth_required",
             "invalid_request",
             "invalid_token",
-            "not_found"
+            "not_found",
+            "quota_exceeded"
         ],
         "concepts": [
             "home",

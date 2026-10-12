@@ -463,6 +463,7 @@ func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handl
 	})
 	if err != nil {
 		switch {
+		case writePrimitiveQuotaViolationError(w, err):
 		case errors.Is(err, primitives.ErrInvalidBoardRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrNotFound):
@@ -541,6 +542,9 @@ func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions
 
 	result, err := opts.primitiveStore.UpdateBoardCard(r.Context(), actorID, "", cardID, patchInput)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		switch {
 		case errors.Is(err, primitives.ErrInvalidBoardRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -577,6 +581,9 @@ func handleTrashCard(w http.ResponseWriter, r *http.Request, opts handlerOptions
 }
 
 func writeBoardCardPurgeStoreError(w http.ResponseWriter, err error) bool {
+	if writePrimitiveQuotaViolationError(w, err) {
+		return true
+	}
 	switch {
 	case errors.Is(err, primitives.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found", "card not found")
@@ -625,6 +632,7 @@ func handleRestoreArchivedCard(w http.ResponseWriter, r *http.Request, opts hand
 	})
 	if err != nil {
 		switch {
+		case writePrimitiveQuotaViolationError(w, err):
 		case errors.Is(err, primitives.ErrInvalidBoardRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrNotFound):
