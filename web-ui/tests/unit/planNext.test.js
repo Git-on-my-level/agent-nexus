@@ -231,6 +231,15 @@ describe("nextActionOvertaken reads a hand-written note against the plan", () =>
     expect(
       nextActionOvertaken("See phase-1-inventory-v2 instead", handles, state),
     ).toBe(false);
+    // Even where the longer one is written first: the note still names this
+    // step, and the scan may not stop at the occurrence that is not it.
+    expect(
+      nextActionOvertaken(
+        "Superseded by phase-1-inventory-v2, closing phase-1-inventory",
+        handles,
+        state,
+      ),
+    ).toBe(true);
   });
 
   it("has no opinion on an empty note or a card with no plan", () => {

@@ -120,12 +120,46 @@
      * so this is fresher than the one the card row carried; the header shows
      * whichever it has.
      */
-    planSummary = $state(null);
+    planSummary = $state(null),
+    /**
+     * Has a plan read answered for this card yet?
+     *
+     * `plan === null` cannot tell "this card has no plan" from "nothing has
+     * come back yet", and the header read it as the second: after a plan was
+     * cleared it fell back to the `plan_state` the card row happened to carry
+     * and put the steps of a plan that is gone back on screen. A successful
+     * read sets this, empty or not; a failed one leaves it, because a dropped
+     * request is not news about the plan.
+     */
+    planLoaded = $state(false);
   /** Ticks so a relative age on screen does not go quietly out of date. */
   let now = $state(Date.now());
   let requestId = 0;
-  /** Monotonic per plan read; only the newest one may write. */
-  let planReadId = 0;
+  /**
+   * The newest read of this card's record, its plan, and the chips they name.
+   *
+   * `requestId` says which card is open, and a live event re-reading the card
+   * already on screen never changes it — so two refreshes that overlapped both
+   * passed it, and whichever *landed* last won. That is routinely the older
+   * one, and with no Reload button nothing puts it right.
+   *
+   * One ticket covers all three writes, because they are one answer about one
+   * card. Guarding the plan alone was not enough: an older `work.get` could
+   * still land after a newer one and bring back the record — and with it the
+   * `plan_state` and summary — of a plan that had since been cleared.
+   */
+  let readId = 0;
+  /**
+   * A ticket for one read of this card. It stops being live when the page
+   * opens another card, or when a newer read of this one is issued.
+   *
+   * @returns {{live: () => boolean}}
+   */
+  function beginRead() {
+    const card = requestId;
+    const read = ++readId;
+    return { live: () => card === requestId && read === readId };
+  }
   let refPreview = $state();
 
   /**
@@ -141,7 +175,7 @@
   let cardSummary = $derived.by(() => {
     if (!work) return null;
     return workSummaryModel(
-      { ...work, plan_state: planState ?? work.plan_state ?? null },
+      { ...work, plan_state: effectivePlanState },
       { now, summary: planSummary },
     );
   });
@@ -158,9 +192,14 @@
    *
    * The plan read is the fresher of the two — core recomputes status, the
    * critical path and the next steps on every one — and the card row's copy
-   * is what the page has until that lands.
+   * is what the page has until that lands. Once a read has answered, its
+   * answer stands, "there is no plan" included: the row's copy is from
+   * whenever the record was read, and falling back to it after a successful
+   * empty read is what put a cleared plan's steps back on screen.
    */
-  let effectivePlanState = $derived(planState ?? work?.plan_state ?? null);
+  let effectivePlanState = $derived(
+    planLoaded ? planState : (work?.plan_state ?? null),
+  );
   /**
    * What happens next, from the plan rather than from an annotation.
    *
@@ -332,22 +371,11 @@
    * lands; the refs it names are resolved by `filePlan`, which does need the
    * card body to know what else to chip.
    */
-  function loadPlanRequest(ticket, id) {
-    /*
-     * Plan reads are serialised by a ticket of their own.
-     *
-     * `requestId` changes when the page opens another card, which a live
-     * refresh never does — so two refreshes that overlapped both passed its
-     * check, and whichever *landed* last won. On a busy card that is routinely
-     * the older read: it writes its stale steps over the newer ones, and with
-     * no Reload button there is nothing that puts them right.
-     */
-    const planTicket = ++planReadId;
-    const current = () => ticket === requestId && planTicket === planReadId;
+  function loadPlanRequest(read, id) {
     return Promise.resolve()
       .then(() => coreClient.getCardPlan(id))
       .then((result) => {
-        if (!current()) return null;
+        if (!read.live()) return null;
         const steps = Array.isArray(result?.plan?.steps)
           ? result.plan.steps
           : [];
@@ -365,6 +393,13 @@
             ? result.summary
             : null;
         planReadAt = steps.length ? new Date().toISOString() : "";
+        /*
+         * Read, and answered — even when the answer is that there is no plan.
+         * Everything downstream reads this rather than testing `plan` for
+         * null, which cannot tell "this card has none" from "nothing has come
+         * back yet" and so fell back to the card row's own stale copy.
+         */
+        planLoaded = true;
         return steps;
       })
       .catch(() => {
@@ -378,7 +413,7 @@
          * the page rather than turning into "not found" because one request
          * did not land.
          */
-        if (!current()) return null;
+        if (!read.live()) return null;
         return Array.isArray(plan?.steps) ? plan.steps : [];
       });
   }
@@ -389,12 +424,12 @@
    * plan whose body also names six tasks is one request rather than
    * twenty-six.
    */
-  async function filePlan(ticket, stepsPromise) {
+  async function filePlan(read, stepsPromise) {
     const steps = await stepsPromise;
     // `null` is a read another one has already overtaken: its steps are not
     // on screen, so resolving their refs would file chips for a plan nobody
     // is looking at over the ones that are.
-    if (steps === null || ticket !== requestId) return;
+    if (steps === null || !read.live()) return;
     const refs = collectPageRefs(
       [
         workProse(work),
@@ -410,10 +445,10 @@
       const resolved = await resolveRefsInBatches(refs, (batch) =>
         coreClient.resolveRefs(batch),
       );
-      if (ticket === requestId) planRefs = resolved;
+      if (read.live()) planRefs = resolved;
     } catch {
       // Chips fall back to "not found" rather than the plan failing to render.
-      if (ticket === requestId) planRefs = indexResolvedRefs({}, refs);
+      if (read.live()) planRefs = indexResolvedRefs({}, refs);
     }
   }
   let workspaceHref = $derived(
@@ -515,6 +550,7 @@
   });
   async function load(id = workId) {
     const ticket = ++requestId;
+    const read = beginRead();
     loading = true;
     error = "";
     evidenceError = "";
@@ -531,6 +567,7 @@
     planSummary = null;
     planRefs = new Map();
     planReadAt = "";
+    planLoaded = false;
 
     /*
      * The row the list already had, painted before anything is requested. The
@@ -548,7 +585,7 @@
      * one round trip into three in sequence — neither of them needs the card
      * record to be issued, only to be filed.
      */
-    const planLoaded = loadPlanRequest(ticket, id);
+    const planRead = loadPlanRequest(read, id);
     const decisionsLoaded = decisionsRequest(ticket);
     const results = await Promise.allSettled([
       // `summary=1`: core computes the shared summary only when asked.
@@ -557,16 +594,25 @@
     ]);
     if (ticket !== requestId) return;
     if (results[0].status === "fulfilled") {
-      work = results[0].value.work;
-      workPartial = false;
-      if (!work) error = "The workspace did not return this task.";
-      else {
-        cacheWorkRecord(work);
-        void loadMirrors(ticket, work);
-        void fileDecisions(ticket, work, decisionsLoaded);
-        void filePlan(ticket, planLoaded);
+      const record = results[0].value.work;
+      /*
+       * A live refresh issued while this load was in flight has already
+       * answered with a newer record; this one is history and must not be
+       * written over it. The reads it feeds still run — they are filed
+       * against the same ticket and drop out on their own if it has moved.
+       */
+      if (read.live()) {
+        work = record;
+        workPartial = false;
       }
-    } else {
+      if (!record) error = "The workspace did not return this task.";
+      else {
+        cacheWorkRecord(record);
+        void loadMirrors(ticket, record);
+        void fileDecisions(ticket, record, decisionsLoaded);
+        void filePlan(read, planRead);
+      }
+    } else if (read.live()) {
       error = errorMessage(results[0].reason);
       // A failed read must not leave a list row on screen looking like one.
       work = null;
@@ -591,15 +637,15 @@
    * record would keep drawing a plan it knew was stale.
    */
   async function refreshWorkRecord() {
-    const ticket = requestId;
+    const read = beginRead();
     try {
       const result = await coreClient.getWork(workId, { summary: 1 });
-      if (ticket === requestId && result?.work) work = result.work;
+      if (read.live() && result?.work) work = result.work;
     } catch {
       // The next change tries again.
     }
-    if (ticket !== requestId) return;
-    void filePlan(ticket, loadPlanRequest(ticket, workId));
+    if (!read.live()) return;
+    void filePlan(read, loadPlanRequest(read, workId));
   }
   /** Every page of one paginated PM list, in order. */
   async function readAllPages(read) {

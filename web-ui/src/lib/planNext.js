@@ -257,11 +257,21 @@ function namesHandle(literal, tokens, handle) {
   const parts = text.split(/[-_.:/]+/).filter(Boolean);
   if (parts.length < 2) return false;
 
-  // As written: bounded, so `phase-1-inventory` is not found inside
-  // `phase-1-inventory-v2`, nor a pull request inside a deeper path.
-  const at = literal.indexOf(text);
-  if (at >= 0) {
-    const bounded = (ch) => ch === undefined || !HANDLE_CHAR.test(ch);
+  /*
+   * As written: bounded, so `phase-1-inventory` is not found inside
+   * `phase-1-inventory-v2`, nor a pull request inside a deeper path.
+   *
+   * Every occurrence, not the first: a note that mentions the longer handle
+   * before the shorter one — "superseded by phase-1-inventory-v2, see
+   * phase-1-inventory" — does name the shorter one, and stopping at the
+   * first hit missed it.
+   */
+  const bounded = (ch) => ch === undefined || !HANDLE_CHAR.test(ch);
+  for (
+    let at = literal.indexOf(text);
+    at >= 0;
+    at = literal.indexOf(text, at + 1)
+  ) {
     if (bounded(literal[at - 1]) && bounded(literal[at + text.length])) {
       return true;
     }

@@ -95,10 +95,19 @@ async function installInitiativePage(page, overrides = {}) {
   const api = {
     plan: overrides.plan ?? plan,
     planState: { ...planState, ...(overrides.planState ?? {}) },
+    /**
+     * The computed summary the card record carries, as core puts it there.
+     * Null leaves the key off, which is the planless shape.
+     */
+    workSummary: overrides.workSummary ?? null,
     /** Plan reads served, so a case can speak about "the second one". */
     planReads: 0,
+    /** Card reads served, counted the same way. */
+    cardReads: 0,
     /** `{ at, gate }`: hold the nth plan read open until the gate resolves. */
     hold: null,
+    /** The same, for the nth card read. */
+    holdCard: null,
     /** Stream connections waiting for something to deliver. */
     waiters: [],
     /** Events with no connection to deliver them on yet. */
@@ -187,8 +196,22 @@ async function installInitiativePage(page, overrides = {}) {
       });
     }
     if (path.startsWith("/work/") && request.method() === "GET") {
+      api.cardReads += 1;
+      /*
+       * Snapshot at request time, like the plan read: a card read held open
+       * answers with the record that was true when it was issued, which is
+       * the whole point of holding it.
+       */
+      const carried = {
+        plan_state: api.planState,
+        ...(api.workSummary ? { work_summary: api.workSummary } : {}),
+      };
+      if (api.holdCard && api.holdCard.at === api.cardReads) {
+        await api.holdCard.gate.promise;
+      }
       return json({
         work: {
+          ...carried,
           ref: CARD_REF,
           handle: "release-b",
           title: "Release B",
@@ -517,6 +540,89 @@ test("an older plan read cannot overwrite a newer one", async ({ page }) => {
   await expect.poll(() => api.planReads, { timeout: 20_000 }).toBe(3);
   await page.waitForTimeout(1_000);
   await expect(page.locator(".plan-track--tree > li")).toHaveCount(3);
+});
+
+test("an older card read cannot bring a cleared plan's header back", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  /*
+   * The card record carries its own copy of the computed state, which is the
+   * copy that goes stale: core puts `plan_state` and `work_summary` on every
+   * card-bearing read, and a read issued before a plan was cleared answers
+   * with the plan that was there.
+   */
+  const api = await installInitiativePage(page, {
+    workSummary: {
+      status: { state: "blocked", label: "Blocked" },
+      progress: { done: 1, total: 4, unit: "steps" },
+    },
+  });
+  await page.goto(CARD_PATH);
+  await expect(page.locator(".plan-track--tree > li")).toHaveCount(4, {
+    timeout: 60_000,
+  });
+  await expect(page.locator("[data-summary-progress]")).toHaveText("1/4 steps");
+
+  // Refresh A: its *card* read is held open, with the plan still in place.
+  const slowCard = deferred();
+  api.holdCard = { at: 2, gate: slowCard };
+  api.emit([CARD_REF]);
+  await expect.poll(() => api.cardReads, { timeout: 20_000 }).toBe(2);
+
+  // The plan is cleared, and refresh B reads the card and the plan as they
+  // now stand. The page follows it: no plan, and no step count.
+  api.holdCard = null;
+  api.plan = { steps: [] };
+  api.planState = null;
+  api.workSummary = { status: { state: "in_progress", label: "In progress" } };
+  api.emit([CARD_REF]);
+  await expect(page.locator("[data-initiative-plan]")).toHaveCount(0, {
+    timeout: 20_000,
+  });
+  await expect(page.locator("[data-summary-progress]")).toHaveCount(0);
+
+  /*
+   * Now A's card read lands, carrying the record from before the clear. Its
+   * ticket covers the card read as well as the plan read, so it writes
+   * nothing: guarding the plan alone left this read free to put the old
+   * summary — and the old `plan_state` the header falls back to — back on
+   * screen until the next event happened along.
+   */
+  slowCard.resolve();
+  await expect.poll(() => api.cardReads, { timeout: 20_000 }).toBe(3);
+  await page.waitForTimeout(1_000);
+  await expect(page.locator("[data-summary-progress]")).toHaveCount(0);
+  await expect(page.locator("[data-initiative-plan]")).toHaveCount(0);
+  await expect(page.locator(".plan-track--tree > li")).toHaveCount(0);
+});
+
+test("a read that found no plan is not overruled by the record's own copy", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const api = await installInitiativePage(page);
+  await page.goto(CARD_PATH);
+  await expect(page.locator(".plan-track--tree > li")).toHaveCount(4, {
+    timeout: 60_000,
+  });
+  await expect(page.locator("[data-summary-progress]")).toHaveText("1/4 steps");
+
+  /*
+   * The plan is cleared, but the card record still carries the `plan_state`
+   * core computed for it a moment earlier — two reads of a card mid-change
+   * disagree, and the dedicated plan read is the one that asked about the
+   * plan. `plan === null` could not tell "this card has none" from "nothing
+   * has come back yet", so the header read the record's copy and put the
+   * step count of a plan that is gone back on the line.
+   */
+  api.plan = { steps: [] };
+  api.emit([CARD_REF]);
+
+  await expect(page.locator("[data-initiative-plan]")).toHaveCount(0, {
+    timeout: 20_000,
+  });
+  await expect(page.locator("[data-summary-progress]")).toHaveCount(0);
 });
 
 test("a linked card moving re-reads this card's plan", async ({ page }) => {
