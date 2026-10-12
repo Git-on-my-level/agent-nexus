@@ -4,19 +4,26 @@
   import { page } from "$app/stores";
 
   import { readerScopeKey } from "$lib/readerScope.js";
+  import { onWorkspaceViewsDenied } from "$lib/workspaceViewCache.js";
+  import { warnOverviewRecovery } from "$lib/chunkRecovery.js";
+  import { staleWhileRevalidate } from "$lib/staleWhileRevalidate.js";
+  import { formatTime } from "$lib/time/format.js";
+  import { liveWorkspaceEvents } from "$lib/liveWorkspaceEvents.js";
+  import { initializeAuthSession } from "$lib/authSession.js";
+  import { resourceRouteSegment } from "$lib/resourceIdentity.js";
   import { reliableRead } from "$lib/reliableRead.js";
-  import {
-    readWorkspaceView,
-    writeWorkspaceView,
-    onWorkspaceViewsDenied,
-  } from "$lib/workspaceViewCache";
 
-  import { coreClient, workspaceScopedCoreClient } from "$lib/coreClient";
+  import {
+    coreClient,
+    workspaceScopedCoreClient,
+    createWorkspaceReadClient,
+  } from "$lib/coreClient";
   import {
     WORK_ROW_CAP,
     formatPartialCount,
     mergeDashboardReports,
     loadOverview,
+    parseReportDocumentContent,
   } from "$lib/overview.js";
   import DashboardPicker from "$lib/components/overview/DashboardPicker.svelte";
   import RecentChanges from "$lib/components/overview/RecentChanges.svelte";
@@ -41,12 +48,20 @@
 
   const scope = readerScopeKey();
   const cacheKey = `${scope}:overview`;
-  let readController;
-  let reconnecting = $state(false);
-  let readError = $state("");
-  let fetched = $state(readWorkspaceView(cacheKey));
+  const overviewRead = staleWhileRevalidate({
+    scope,
+    key: cacheKey,
+    currentScope: readerScopeKey,
+    read: readOverviewSnapshot,
+    beforeRead: () => initializeAuthSession({ authDriver: "layout" }),
+    onSuccess: resetReportChoices,
+    onReturnFailure: (error, updatedAt) =>
+      warnOverviewRecovery("refresh-return", updatedAt, error),
+  });
+  let fetched = $derived($overviewRead.data);
   let model = $derived(fetched);
-  let refreshing = $state(false);
+  let readError = $derived($overviewRead.error);
+  let refreshing = $derived($overviewRead.refreshing);
   let loadingMoreReports = $state(false);
   let reportChoicesLoaded = $state(false);
   let pinning = $state(false);
@@ -142,6 +157,9 @@
 
   /** Ticks so a freshness badge on screen does not go quietly out of date. */
   let now = $state(Date.now());
+  $effect(() => {
+    if ($overviewRead) now = Date.now();
+  });
 
   let initiativeCardList = $derived(
     model?.initiatives?.status === "ok"
@@ -245,29 +263,36 @@
     return "text-fg";
   }
 
+  function reportMatches(entry, wanted) {
+    return (
+      entry.id === wanted ||
+      entry.segment === wanted ||
+      entry.requested_as === wanted
+    );
+  }
+
   let selectedReport = $derived.by(() => {
     const wanted = $page.url.searchParams.get("dashboard") || "";
     return (
-      reports.find(
-        (entry) => entry.id === wanted || entry.segment === wanted,
-      ) ||
+      reports.find((entry) => reportMatches(entry, wanted)) ||
       reports[0] ||
       null
     );
   });
 
   let request = 0;
+  let reportsController;
+  const resolvedReportQueries = new Set();
   let requestedReportLoad = $state("");
   $effect(() => {
     const wanted = $page.url.searchParams.get("dashboard") || "";
     const key = `${request}:${wanted}:${reportChoicesLoaded ? model?.reports?.next_cursor || "end" : "first"}`;
     if (
       wanted &&
+      !resolvedReportQueries.has(wanted) &&
       model?.reports?.status === "ok" &&
       model.reports.has_more &&
-      !reports.some(
-        (entry) => entry.id === wanted || entry.segment === wanted,
-      ) &&
+      !reports.some((entry) => reportMatches(entry, wanted)) &&
       requestedReportLoad !== key &&
       !loadingMoreReports
     ) {
@@ -276,43 +301,73 @@
     }
   });
 
-  async function refresh() {
-    const id = ++request;
-    readController?.abort();
-    readController = new AbortController();
-    refreshing = true;
-    readError = "";
-    try {
-      const next = await reliableRead(() => loadOverview(coreClient), {
-        signal: readController.signal,
-        cacheScope: scope,
-        onRetry: () => {
-          reconnecting = true;
-        },
-      });
-      if (id === request && scope === readerScopeKey()) {
-        reconnecting = false;
-        fetched = next;
-        reportChoicesLoaded = false;
-        requestedReportLoad = "";
-        writeWorkspaceView(cacheKey, next);
+  function rememberReportQuery(wanted) {
+    if (!wanted) return;
+    resolvedReportQueries.delete(wanted);
+    resolvedReportQueries.add(wanted);
+    if (resolvedReportQueries.size > 12)
+      resolvedReportQueries.delete(resolvedReportQueries.values().next().value);
+  }
+
+  async function readOverviewSnapshot(signal) {
+    const previous = fetched;
+    const wanted = $page.url.searchParams.get("dashboard") || "";
+    const client = createWorkspaceReadClient(signal);
+    const next = await loadOverview(client);
+    if (
+      wanted &&
+      previous?.reports?.status === "ok" &&
+      next.reports?.status === "ok" &&
+      !next.reports.reports.some((entry) => reportMatches(entry, wanted))
+    ) {
+      // Returning to a bookmark must not repeat an O(catalog) cursor walk.
+      // Revalidate one document, including a previously missing bookmark.
+      rememberReportQuery(wanted);
+      const known = previous.reports.reports.find((entry) =>
+        reportMatches(entry, wanted),
+      );
+      try {
+        const got = await client.getDocument(wanted);
+        const parsed = parseReportDocumentContent(got?.revision?.content);
+        const id = got?.document?.id || known?.id;
+        if (id && parsed.report) {
+          next.reports.reports = next.reports.reports.filter(
+            (entry) => entry.id !== id,
+          );
+          next.reports.reports.push({
+            ...known,
+            ...got.document,
+            id,
+            ref: got.document?.ref || known?.ref || `document:${id}`,
+            segment:
+              resourceRouteSegment(got.document, "document") ||
+              known?.segment ||
+              id,
+            requested_as: wanted,
+            report: parsed.report,
+            revision_ref: got.revision?.ref || "",
+          });
+        }
+      } catch (error) {
+        // A deleted or denied document must not survive in a refreshed model.
+        // Access denials still revoke the entire snapshot via reliableRead.
+        if (![400, 404].includes(error?.status ?? error?.coreHttpStatus))
+          throw error;
       }
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Overview could not be loaded.";
-      if (
-        id !== request ||
-        scope !== readerScopeKey() ||
-        readController.signal.aborted
-      )
-        return;
-      reconnecting = false;
-      readError = message;
-    } finally {
-      if (id === request) refreshing = false;
     }
+    return next;
+  }
+
+  function resetReportChoices() {
+    request++;
+    reportsController?.abort();
+    reportChoicesLoaded = false;
+    requestedReportLoad = "";
+    loadingMoreReports = false;
+  }
+
+  function refresh() {
+    return overviewRead.refresh();
   }
 
   async function pinDashboard(ref) {
@@ -320,7 +375,7 @@
     pinError = "";
     try {
       await coreClient.setWorkspaceDashboard({ document_ref: ref });
-      await refresh();
+      await overviewRead.refresh({ replace: true });
     } catch (error) {
       pinError =
         error instanceof Error
@@ -344,19 +399,28 @@
     if (section?.status !== "ok" || !section.has_more || loadingMoreReports)
       return;
     const id = request;
+    const controller = new AbortController();
+    reportsController = controller;
     loadingMoreReports = true;
     try {
       const more = await reliableRead(
-        () =>
-          coreClient.getDashboardReports({
+        (signal) =>
+          createWorkspaceReadClient(signal).getDashboardReports({
             cursor: reportChoicesLoaded ? section.next_cursor : undefined,
           }),
-        { cacheScope: scope, signal: readController?.signal },
+        { cacheScope: scope, signal: controller.signal },
       );
-      if (id !== request || !fetched?.reports) return;
-      fetched = { ...fetched, reports: mergeDashboardReports(section, more) };
+      if (id !== request || fetched?.reports !== section) return;
+      if (scope !== readerScopeKey()) return;
+      const merged = mergeDashboardReports(section, more);
+      const wanted = $page.url.searchParams.get("dashboard") || "";
+      if (
+        !merged.has_more ||
+        merged.reports.some((entry) => reportMatches(entry, wanted))
+      )
+        rememberReportQuery(wanted);
+      overviewRead.setData({ ...fetched, reports: merged });
       reportChoicesLoaded = true;
-      writeWorkspaceView(cacheKey, fetched);
     } catch (error) {
       if (id === request)
         pinError =
@@ -369,7 +433,8 @@
   }
 
   onDestroy(() => {
-    readController?.abort();
+    overviewRead.destroy();
+    reportsController?.abort();
     request += 1;
     fanOutRequest += 1;
   });
@@ -381,18 +446,17 @@
   });
 
   onMount(() => {
-    const stopDenied = onWorkspaceViewsDenied(scope, (error) => {
+    const stopDenied = onWorkspaceViewsDenied(scope, () => {
       if (scope !== readerScopeKey()) return;
-      request++;
-      readController?.abort();
-      fanOutRequest++;
-      fetched = null;
+      fanOutRequest += 1;
       otherWorkspaceAsks = [];
-      refreshing = false;
-      reconnecting = false;
-      readError = error?.message || "Read permission denied";
+      fannedOut = false;
+      detailOpen = false;
     });
-    void refresh();
+    const stopRefresh = overviewRead.mount({
+      connect: (onChange) =>
+        liveWorkspaceEvents({ client: coreClient, onChange }),
+    });
     // Freshness badges colour themselves against the clock, so the clock has
     // to move: a tile left open overnight must not still read "2h, green".
     const clock = setInterval(() => {
@@ -400,6 +464,7 @@
     }, 60_000);
     return () => {
       clearInterval(clock);
+      stopRefresh();
       stopDenied();
     };
   });
@@ -428,23 +493,46 @@
     {/snippet}
   </WorkspacePageHeader>
 
-  {#if readError}
+  {#if model}
+    {#if readError}
+      <div
+        class="text-meta text-warn-text"
+        role="status"
+        data-overview-refresh-status
+      >
+        Couldn't refresh · showing data from {formatTime(
+          $overviewRead.updatedAt,
+          { now },
+        )}.
+        <button
+          class="text-accent-text hover:underline"
+          type="button"
+          disabled={refreshing}
+          onclick={refresh}>Retry</button
+        >
+      </div>
+    {:else}
+      <p
+        class="text-micro text-fg-muted"
+        role="status"
+        data-overview-refresh-status
+      >
+        Updated {formatTime($overviewRead.updatedAt, { now })}{refreshing
+          ? " · refreshing…"
+          : ""}
+      </p>
+    {/if}
+  {:else if readError}
     <StateError
       title="Overview could not be loaded"
       message={readError}
-      onretry={() => refresh()}
+      onretry={refresh}
       retrying={refreshing}
     />
-  {:else if reconnecting || (refreshing && model)}
-    <p class="text-micro text-fg-muted" role="status">
-      {reconnecting ? "Reconnecting…" : "Refreshing…"}
-    </p>
-  {/if}
-  {#if !model}
-    <div role="status" aria-label="Loading overview">
-      <Skeleton rows={6} />
-    </div>
   {:else}
+    <div role="status" aria-label="Loading overview"><Skeleton rows={6} /></div>
+  {/if}
+  {#if model}
     <!--
       Initiatives, worst first: blocked, at risk, stale, on track, done. The
       sort lives in `planHealth.js` so this section and the band above it

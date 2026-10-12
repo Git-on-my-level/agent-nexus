@@ -1072,7 +1072,9 @@ for (const status of [401, 403]) {
     await expect
       .poll(() =>
         page.evaluate(() =>
-          localStorage.getItem("anx.workspace-views.v1")?.includes("scale-ask"),
+          sessionStorage
+            .getItem("anx.workspace-views.v1")
+            ?.includes("scale-ask"),
         ),
       )
       .toBe(true);
@@ -1090,7 +1092,7 @@ for (const status of [401, 403]) {
       .poll(() =>
         page.evaluate(
           () =>
-            localStorage
+            sessionStorage
               .getItem("anx.workspace-views.v1")
               ?.includes("scale-ask") || false,
         ),
@@ -1112,7 +1114,7 @@ test("a confirmed answer stays gone after reload with failing reads", async ({
   await expect
     .poll(() =>
       page.evaluate(() =>
-        localStorage.getItem("anx.workspace-views.v1")?.includes("scale-ask"),
+        sessionStorage.getItem("anx.workspace-views.v1")?.includes("scale-ask"),
       ),
     )
     .toBe(true);
@@ -1143,7 +1145,7 @@ test("a selected decision denial revokes cached Inbox rows", async ({
   await expect
     .poll(() =>
       page.evaluate(() =>
-        localStorage.getItem("anx.workspace-views.v1")?.includes("scale-ask"),
+        sessionStorage.getItem("anx.workspace-views.v1")?.includes("scale-ask"),
       ),
     )
     .toBe(true);
@@ -1163,7 +1165,7 @@ test("a selected decision denial revokes cached Inbox rows", async ({
     .poll(() =>
       page.evaluate(
         () =>
-          localStorage
+          sessionStorage
             .getItem("anx.workspace-views.v1")
             ?.includes("scale-ask") || false,
       ),
@@ -1180,7 +1182,7 @@ test("a persisted visit paints immediately while Inbox is slow", async ({
   await expect
     .poll(() =>
       page.evaluate(() =>
-        localStorage.getItem("anx.workspace-views.v1")?.includes("scale-ask"),
+        sessionStorage.getItem("anx.workspace-views.v1")?.includes("scale-ask"),
       ),
     )
     .toBe(true);
@@ -1202,7 +1204,9 @@ test("a cold Inbox keeps the known badge as one skeleton until confirmed", async
   await page.goto(`${ROOT}/tasks`);
   await expect(page.locator("[data-inbox-nav-count]").first()).toHaveText("1");
   // Simulate a badge without a cached payload (for example storage was denied).
-  await page.evaluate(() => localStorage.removeItem("anx.workspace-views.v1"));
+  await page.evaluate(() =>
+    sessionStorage.removeItem("anx.workspace-views.v1"),
+  );
   const slowInbox = deferred();
   await page.route("**/inbox?**", async (route) => {
     await slowInbox.promise;

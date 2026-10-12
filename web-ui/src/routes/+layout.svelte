@@ -1,4 +1,14 @@
 <script>
+  import {
+    recoverStaleChunk,
+    isStaleChunkError,
+    warnOverviewRecovery,
+  } from "$lib/chunkRecovery.js";
+  import {
+    activateWorkspaceViewScope,
+    clearWorkspaceViews,
+    workspaceViewUpdatedAt,
+  } from "$lib/workspaceViewCache.js";
   import { readerScope } from "$lib/readerScope.js";
   import { browser } from "$app/environment";
   import { goto, preloadData } from "$app/navigation";
@@ -108,6 +118,28 @@
   } from "$lib/pm/presence.js";
 
   let { children, data } = $props();
+
+  function onWorkspaceRenderError(error) {
+    if (currentAppPath === "/overview" || currentAppPath === "/") {
+      if (!isStaleChunkError(error))
+        warnOverviewRecovery(
+          "render-boundary",
+          workspaceViewUpdatedAt(`${$readerScope}:overview`),
+          error,
+        );
+    } else console.error("Workspace page failed to render", error);
+    recoverStaleChunk(error);
+  }
+
+  $effect(() => {
+    if (
+      browser &&
+      identityReady &&
+      hydratedWorkspaceSlug ===
+        `${activeOrganizationSlug}/${activeWorkspaceSlug}`
+    )
+      activateWorkspaceViewScope($readerScope);
+  });
 
   let actorError = $state("");
   let loadingActors = $state(false);
@@ -1588,7 +1620,23 @@
               </div>
             {:else}
               {#key $readerScope}
-                {@render children?.()}
+                <svelte:boundary onerror={onWorkspaceRenderError}>
+                  {@render children?.()}
+                  {#snippet failed(error, reset)}
+                    <div class="p-6" role="alert" data-workspace-render-error>
+                      <p>This page could not be displayed.</p>
+                      <button
+                        class="btn-secondary mt-3"
+                        type="button"
+                        onclick={() => {
+                          recoverStaleChunk(error);
+                          clearWorkspaceViews();
+                          reset();
+                        }}>Retry</button
+                      >
+                    </div>
+                  {/snippet}
+                </svelte:boundary>
               {/key}
             {/if}
           </div>

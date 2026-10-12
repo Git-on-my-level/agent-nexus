@@ -118,7 +118,10 @@
         extraRefs: [
           ...contextRefs,
           ...turns.flatMap((turn) => evidenceRefsForTurn(turn)),
-          ...Object.values(decisionRecords).map((record) => record.work_ref),
+          // Unavailable decision lookups are cached as null.
+          ...Object.values(decisionRecords).flatMap((record) =>
+            record?.work_ref ? [record.work_ref] : [],
+          ),
           ...conversations.flatMap((item) => pinnedRefs(item)),
         ],
       },

@@ -8,3 +8,6 @@ test-results
 # Generated mirrors. The commit hook byte-compares these against a fresh
 # `contract-gen` run, so reflowing them is drift.
 src/lib/generated
+
+# pnpm owns the lockfile's serialization; retain its generated format.
+../pnpm-lock.yaml

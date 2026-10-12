@@ -15,7 +15,9 @@ for (const status of [401, 403]) {
     await expect
       .poll(() =>
         page.evaluate(() =>
-          localStorage.getItem("anx.workspace-views.v1")?.includes("overview"),
+          sessionStorage
+            .getItem("anx.workspace-views.v1")
+            ?.includes("overview"),
         ),
       )
       .toBe(true);
@@ -35,7 +37,8 @@ for (const status of [401, 403]) {
       .poll(() =>
         page.evaluate(() =>
           JSON.parse(
-            localStorage.getItem("anx.workspace-views.v1") || '{"entries":[]}',
+            sessionStorage.getItem("anx.workspace-views.v1") ||
+              '{"entries":[]}',
           ).entries.some(([key]) => key.endsWith(":overview")),
         ),
       )
@@ -80,7 +83,7 @@ test("a sidebar denial clears Overview and rejects a pending snapshot", async ({
     .poll(() =>
       page.evaluate(() =>
         JSON.parse(
-          localStorage.getItem("anx.workspace-views.v1") || '{"entries":[]}',
+          sessionStorage.getItem("anx.workspace-views.v1") || '{"entries":[]}',
         ).entries.some(([key]) => key.endsWith(":overview")),
       ),
     )
@@ -318,8 +321,25 @@ async function installOverview(
     if (path === "/inbox") return route.fulfill({ json: { items: asks } });
     if (path === "/docs/demo-dashboard")
       return route.fulfill({ json: dashboard });
+    if (path === "/docs/older-dashboard")
+      return route.fulfill({
+        json: {
+          document: {
+            ...dashboard.document,
+            id: "older-dashboard",
+            handle: "older-dashboard",
+            ref: "document:older-dashboard",
+            title: "Earlier dashboard",
+          },
+          revision: {
+            content: JSON.stringify({ ...report, title: "Earlier dashboard" }),
+            content_type: "text",
+          },
+        },
+      });
     return route.fallback();
   });
+  state.snapshot = snapshot;
   return state;
 }
 
@@ -630,7 +650,9 @@ test("failed snapshot reports an error", async ({ page }) => {
   test.setTimeout(60_000);
   await installOverview(page, { failure: true });
   await page.goto(OVERVIEW);
-  await expect(page.getByText("Reconnecting…", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("status", { name: "Loading overview" }),
+  ).toBeVisible();
   await expect(page.getByRole("alert")).toContainText(
     "Overview could not be loaded",
     { timeout: 45_000 },
@@ -695,7 +717,7 @@ test("dashboard pagination denial revokes the cached Overview", async ({
     .poll(() =>
       page.evaluate(() =>
         JSON.parse(
-          localStorage.getItem("anx.workspace-views.v1") || '{"entries":[]}',
+          sessionStorage.getItem("anx.workspace-views.v1") || '{"entries":[]}',
         ).entries.some(([key]) => key.endsWith(":overview")),
       ),
     )
@@ -752,6 +774,445 @@ test("Overview restores its snapshot on reload while revalidation is held", asyn
   await expect(
     page.locator('[aria-label="Open initiatives"] > li'),
   ).toHaveCount(6);
-  await expect(page.getByText("Refreshing…", { exact: true })).toBeVisible();
+  await expect(page.locator("[data-overview-refresh-status]")).toContainText(
+    "refreshing…",
+  );
   revalidation.resolve();
+});
+
+async function captureRecoveryWarnings(page) {
+  await page.addInitScript(() => {
+    const warn = console.warn;
+    console.warn = (...args) => {
+      if (args[0] === "anx.overview.recovered") {
+        const entries = JSON.parse(
+          sessionStorage.getItem("test.recovery-warnings") || "[]",
+        );
+        entries.push(args[1]);
+        sessionStorage.setItem(
+          "test.recovery-warnings",
+          JSON.stringify(entries),
+        );
+      }
+      warn(...args);
+    };
+  });
+}
+async function recoveryWarnings(page) {
+  return page.evaluate(() =>
+    JSON.parse(sessionStorage.getItem("test.recovery-warnings") || "[]"),
+  );
+}
+
+async function setOverviewVisibility(page, visibility) {
+  await page.evaluate((value) => {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value,
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }, visibility);
+}
+
+test("tab return keeps the last snapshot through a slow refresh, then updates", async ({
+  page,
+}) => {
+  const api = await installOverview(page);
+  await page.clock.install();
+  await page.goto(OVERVIEW);
+  const initiatives = page.locator('[aria-label="Open initiatives"] > li');
+  await expect(initiatives).toHaveCount(6);
+  const updated = await page
+    .locator("[data-overview-refresh-status]")
+    .textContent();
+  expect(updated).toContain("Updated");
+  await setOverviewVisibility(page, "hidden");
+  await page.clock.setSystemTime(Date.now() + 2 * 60 * 60 * 1000);
+  const gate = deferred();
+  let reads = 0;
+  await page.route("**/overview?**", async (route) => {
+    reads++;
+    await gate.promise;
+    const snapshot = api.snapshot();
+    snapshot.initiatives.items[0].title = "Updated customer pilot";
+    await route.fulfill({ json: snapshot });
+  });
+  await setOverviewVisibility(page, "visible");
+  await expect.poll(() => reads).toBe(1);
+  await expect(initiatives).toHaveCount(6);
+  await expect(page.locator("[data-overview-refresh-status]")).toContainText(
+    "refreshing…",
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  expect(reads).toBe(1);
+  gate.resolve();
+  await expect(
+    initiatives.filter({ hasText: "Updated customer pilot" }),
+  ).toHaveCount(1);
+  await expect(
+    page.locator("[data-overview-refresh-status]"),
+  ).not.toContainText("refreshing…");
+});
+
+test("online refresh failure keeps content and Retry recovers", async ({
+  page,
+}) => {
+  await captureRecoveryWarnings(page);
+  await installOverview(page);
+  await page.clock.install();
+  await page.goto(OVERVIEW);
+  const initiatives = page.locator('[aria-label="Open initiatives"] > li');
+  await expect(initiatives).toHaveCount(6);
+  await page.clock.setSystemTime(Date.now() + 31_000);
+  const fail = (route) =>
+    route.fulfill({
+      status: 500,
+      json: { error: { message: "Refresh unavailable" } },
+    });
+  await page.route("**/overview?**", fail);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect(page.locator("[data-overview-refresh-status]")).toContainText(
+    "Couldn't refresh",
+  );
+  await expect(initiatives).toHaveCount(6);
+  await expect(
+    page.getByRole("status", { name: "Loading overview" }),
+  ).toHaveCount(0);
+  expect(await recoveryWarnings(page)).toEqual([
+    { kind: "refresh-return", ageMs: expect.any(Number), status: 500 },
+  ]);
+  await page.unroute("**/overview?**", fail);
+  await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(page.locator("[data-overview-refresh-status]")).toContainText(
+    "Updated just now",
+  );
+});
+
+test("failed first load has an error and no permanent skeleton", async ({
+  page,
+}) => {
+  await installOverview(page);
+  await page.route("**/overview?**", (route) =>
+    route.fulfill({
+      status: 500,
+      json: { error: { message: "First load unavailable" } },
+    }),
+  );
+  await page.goto(OVERVIEW);
+  await expect(page.getByRole("alert")).toContainText("First load unavailable");
+  await expect(
+    page.getByRole("button", { name: "Retry", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("status", { name: "Loading overview" }),
+  ).toHaveCount(0);
+});
+
+test("a missing navigation chunk gets one controlled reload", async ({
+  page,
+}) => {
+  await captureRecoveryWarnings(page);
+  await installOverview(page);
+  await page.goto(OVERVIEW);
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(6);
+  let failedChunks = 0;
+  await page.route("**/*", (route) => {
+    const path = decodeURIComponent(new URL(route.request().url()).pathname);
+    if (
+      !failedChunks &&
+      (path.includes("/_app/immutable/nodes/") ||
+        path.includes("/tasks/+page.svelte"))
+    ) {
+      failedChunks++;
+      return route.abort("failed");
+    }
+    return route.fallback();
+  });
+  const reloaded = page.waitForEvent("domcontentloaded");
+  await page.evaluate(() => {
+    document.querySelector('a[href="/o/local/w/local/tasks"]').click();
+  });
+  await reloaded;
+  await expect.poll(() => failedChunks).toBe(1);
+  await expect
+    .poll(() =>
+      page.evaluate(() => sessionStorage.getItem("anx.chunk-recovery.v1")),
+    )
+    .toBe("1");
+  await expect(
+    page.getByRole("heading", { name: "Overview", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(6);
+  expect(await recoveryWarnings(page)).toEqual([
+    { kind: "chunk-load", ageMs: null, status: null },
+  ]);
+});
+
+test("a render exception leaves an actionable page and Retry revalidates", async ({
+  page,
+}) => {
+  await captureRecoveryWarnings(page);
+  const api = await installOverview(page);
+  const broken = (route) => {
+    const snapshot = api.snapshot();
+    // A malformed section throws during rendering in both dev and production.
+    snapshot.initiatives = null;
+    return route.fulfill({ json: snapshot });
+  };
+  await page.route("**/overview?**", broken);
+  await page.goto(OVERVIEW);
+  await expect(page.locator("[data-workspace-render-error]")).toContainText(
+    "This page could not be displayed",
+  );
+  await expect(page.locator("aside").first()).toBeVisible();
+  expect(await recoveryWarnings(page)).toEqual([
+    { kind: "render-boundary", ageMs: expect.any(Number), status: null },
+  ]);
+  await page.unroute("**/overview?**", broken);
+  await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(6);
+  await expect(page.locator("[data-workspace-render-error]")).toHaveCount(0);
+});
+
+test("a principal change never restores the previous reader's Overview", async ({
+  page,
+}) => {
+  await installOverview(page);
+  let principal = "first";
+  await page.route("**/auth/session", (route) =>
+    route.fulfill({
+      json: {
+        authenticated: true,
+        agent: {
+          agent_id: principal,
+          actor_id: principal,
+          username: principal,
+          principal_kind: "human",
+        },
+      },
+    }),
+  );
+  await page.clock.install();
+  await page.goto(OVERVIEW);
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(6);
+  principal = "second";
+  await page.route("**/overview?**", (route) =>
+    route.fulfill({
+      status: 500,
+      json: { error: { message: "New reader unavailable" } },
+    }),
+  );
+  await page.clock.setSystemTime(Date.now() + 31_000);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect(page.getByRole("alert")).toContainText("New reader unavailable");
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("Launch the customer pilot", { exact: true }),
+  ).toHaveCount(0);
+  const snapshots = await page.evaluate(() =>
+    sessionStorage.getItem("anx.workspace-views.v1"),
+  );
+  expect(
+    JSON.parse(snapshots || '{"entries":[]}').entries.some(([key]) =>
+      key.includes('"first"'),
+    ),
+  ).toBe(false);
+});
+
+test("a confirmed dashboard pin supersedes a stalled return refresh", async ({
+  page,
+}) => {
+  const api = await installOverview(page);
+  await page.clock.install();
+  await page.goto(OVERVIEW);
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(6);
+  const gate = deferred();
+  let reads = 0;
+  let released = false;
+  await page.route("**/overview?**", async (route) => {
+    reads++;
+    if (reads !== 1) return route.fallback();
+    const oldSnapshot = api.snapshot();
+    await gate.promise;
+    await route.fulfill({ json: oldSnapshot });
+    released = true;
+  });
+  await page.clock.setSystemTime(Date.now() + 31_000);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect.poll(() => reads).toBe(1);
+  await picker(page).click();
+  await page.getByRole("menuitem", { name: "Pin as dashboard" }).click();
+  await expect(page.locator("[data-overview-report-pinned]")).toBeVisible();
+  expect(api.writes[0].document_ref).toBe("document:demo-dashboard");
+  expect(reads).toBe(2);
+  gate.resolve();
+  await expect.poll(() => released).toBe(true);
+  await expect(page.locator("[data-overview-report-pinned]")).toBeVisible();
+});
+
+for (const wanted of ["older-dashboard", "missing-dashboard"]) {
+  test(`tab return revalidates ${wanted} without another catalog scan`, async ({
+    page,
+  }) => {
+    const api = await installOverview(page, { paged: true });
+    await page.clock.install();
+    await page.goto(`${OVERVIEW}?dashboard=${wanted}`);
+    await expect(
+      page.getByRole("heading", {
+        name:
+          wanted === "older-dashboard" ? "Earlier dashboard" : "Demo dashboard",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect.poll(() => api.selectorReads).toBe(2);
+    const catalogReads = api.selectorReads;
+    let documentReads = 0;
+    await page.route(`**/docs/${wanted}`, async (route) => {
+      documentReads++;
+      if (wanted === "missing-dashboard")
+        return route.fulfill({
+          status: 404,
+          json: { error: { message: "Not found" } },
+        });
+      return route.fallback();
+    });
+    await page.clock.setSystemTime(Date.now() + 31_000);
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect.poll(() => documentReads).toBe(1);
+    await expect(
+      page.locator("[data-overview-refresh-status]"),
+    ).not.toContainText("refreshing…");
+    expect(api.selectorReads).toBe(catalogReads);
+    await expect(
+      page.getByRole("heading", {
+        name:
+          wanted === "older-dashboard" ? "Earlier dashboard" : "Demo dashboard",
+        exact: true,
+      }),
+    ).toBeVisible();
+  });
+}
+
+test("a bookmarked document denial revokes the last-known Overview on return", async ({
+  page,
+}) => {
+  await installOverview(page);
+  await page.clock.install();
+  await page.goto(`${OVERVIEW}?dashboard=older-dashboard`);
+  await expect(
+    page.getByRole("heading", { name: "Earlier dashboard", exact: true }),
+  ).toBeVisible();
+  await page.route("**/docs/older-dashboard", (route) =>
+    route.fulfill({
+      status: 403,
+      json: { error: { message: "Read permission denied" } },
+    }),
+  );
+  await page.clock.setSystemTime(Date.now() + 31_000);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect(page.getByRole("alert").first()).toContainText(
+    "Read permission denied",
+  );
+  await expect(
+    page.getByRole("heading", { name: "Earlier dashboard", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.locator('[aria-label="Open initiatives"] > li'),
+  ).toHaveCount(0);
+});
+
+test("a bookmarked document converted to a note falls back safely on return", async ({
+  page,
+}) => {
+  await installOverview(page);
+  await page.clock.install();
+  await page.goto(`${OVERVIEW}?dashboard=older-dashboard`);
+  await expect(
+    page.getByRole("heading", { name: "Earlier dashboard", exact: true }),
+  ).toBeVisible();
+  await page.route("**/docs/older-dashboard", (route) =>
+    route.fulfill({
+      json: {
+        document: { id: "older-dashboard", handle: "older-dashboard" },
+        revision: { content: "An ordinary note", content_type: "text" },
+      },
+    }),
+  );
+  await page.clock.setSystemTime(Date.now() + 31_000);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect(
+    page.locator("[data-overview-refresh-status]"),
+  ).not.toContainText("refreshing…");
+  await expect(
+    page.getByRole("heading", { name: "Demo dashboard", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator("[data-workspace-render-error]")).toHaveCount(0);
+});
+
+test("a resolved bookmark keeps its canonical link and selection when the catalog reloads", async ({
+  page,
+}) => {
+  const api = await installOverview(page);
+  let renamed = false;
+  const older = () => ({
+    id: "older-dashboard",
+    ref: "document:older-dashboard",
+    segment: renamed ? "renamed-dashboard" : "dashboard-alias",
+    title: "Earlier dashboard",
+    report: { ...report, title: "Earlier dashboard" },
+  });
+  await page.route("**/workspace/dashboard/reports**", (route) =>
+    route.fulfill({
+      json: {
+        ...api.snapshot().dashboard,
+        has_more: false,
+        reports: [...api.snapshot().dashboard.reports, older()],
+      },
+    }),
+  );
+  await page.route("**/docs/dashboard-alias", (route) =>
+    route.fulfill({
+      json: {
+        document: {
+          id: "older-dashboard",
+          handle: "renamed-dashboard",
+          ref: "document:older-dashboard",
+          title: "Earlier dashboard",
+        },
+        revision: {
+          content: JSON.stringify({ ...report, title: "Earlier dashboard" }),
+        },
+      },
+    }),
+  );
+  await page.clock.install();
+  await page.goto(`${OVERVIEW}?dashboard=dashboard-alias`);
+  await expect(
+    page.getByRole("heading", { name: "Earlier dashboard", exact: true }),
+  ).toBeVisible();
+  renamed = true;
+  await page.clock.setSystemTime(Date.now() + 31_000);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect(
+    page.getByRole("link", { name: "Open document", exact: true }),
+  ).toHaveAttribute("href", "/o/local/w/local/docs/renamed-dashboard");
+  await picker(page).click();
+  await expect(
+    page.locator("[data-overview-report-choice='older-dashboard']"),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("heading", { name: "Earlier dashboard", exact: true }),
+  ).toBeVisible();
 });
